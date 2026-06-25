@@ -23,11 +23,15 @@ class RefundChargeDialog extends StatefulWidget {
 
   const RefundChargeDialog({super.key, required this.charge});
 
-  static Future<void> show({
+  /// Resolves to `true` once a refund is submitted (the bloc commit is
+  /// dispatched), `null` when dismissed — so a caller can chain a
+  /// follow-up (e.g. the one-time "also end?" prompt). Callers that only
+  /// fire-and-forget can ignore the result.
+  static Future<bool?> show({
     required BuildContext context,
     required PaymentRecord charge,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
@@ -94,7 +98,7 @@ class _RefundChargeDialogState extends State<RefundChargeDialog> {
             amount: amount,
           ),
         );
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(true);
   }
 
   @override

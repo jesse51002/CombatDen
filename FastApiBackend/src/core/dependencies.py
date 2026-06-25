@@ -39,6 +39,9 @@ from src.memberships.service.memberships_reprice import (
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
 )
+from src.memberships.service.memberships_upgrade import (
+    MemberMembershipsUpgrade,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
     PaymentsStripeDiscountService,
@@ -325,6 +328,19 @@ class DependencyInjector(containers.DeclarativeContainer):
         paying_lock=paying_member_lock,
     )
 
+    # ── Upgrade operation (memberships — cross-plan, charge difference) ──
+    # The cross-plan sibling of reprice: cancel the old row + insert a
+    # successor on a DIFFERENT plan, then the convergent sync with proration
+    # nets the (new - old) prorated difference. Shares the Transition-base
+    # machinery; standalone (no batch), takes its own family lock.
+    memberships_upgrade = providers.Factory(
+        MemberMembershipsUpgrade,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+        gym_stripe_service=gym_stripe_service,
+        paying_lock=paying_member_lock,
+    )
+
     # ── Tasks (tracked background operations) ────────────────────
     # The generic engine: TasksService (store/read + the in-task guard) and
     # TasksExecutor (run) are SEPARATE providers so the memberships↔tasks
@@ -360,6 +376,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
         reprice_service=memberships_reprice,
+        upgrade_service=memberships_upgrade,
         members_management_service=members_management_service,
     )
     member_memberships_refund_service = providers.Factory(

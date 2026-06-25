@@ -9,7 +9,7 @@ flowchart TB
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
-    r_mm["<b>memberships</b> · /api/v1/member_memberships · 13 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (single, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /preview<br/>POST /cancel/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card<br/>POST /refund"]
+    r_mm["<b>memberships</b> · /api/v1/member_memberships · 16 routes<br/>DELETE / (cancel recurring)<br/>POST /end (one-time/trial early-end)<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (same-plan reprice, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /upgrade (cross-plan, charge diff)<br/>POST /upgrade/preview<br/>POST /preview<br/>POST /cancel/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card<br/>POST /refund"]
     r_plan["<b>plans</b> · /api/v1/membership_plans · 7 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>GET /{plan_id}/prices<br/>POST /price"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
@@ -40,7 +40,8 @@ flowchart TB
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
     tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (ops self-revert)<br/>crash recovery via the reconciler's stale-task sweep"]
-    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (imports NOTHING from tasks):<br/>reprice (optional target → else plan active)<br/>cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
+    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC same-plan reprice (imports NOTHING from tasks):<br/>reprice (optional target → else plan active)<br/>extends MemberMembershipsTransitionBase: cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
+    memberships_upgrade["MemberMembershipsUpgrade<br/>src/memberships/ · CROSS-PLAN upgrade (standalone, no batch):<br/>upgrade/upgrade_preview → successor on a DIFFERENT plan, charge the prorated difference (downgrade = no charge)<br/>shares MemberMembershipsTransitionBase with reprice"]
     membership_reprice_task_handler["MembershipRepriceTaskHandler<br/>src/tasks/ · the ONE tasks↔memberships bridge (tasks → memberships):<br/>create_batch (discover targets + enqueue one item/membership) · execute_item (run + record successor)"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
@@ -87,11 +88,14 @@ flowchart TB
     r_mm -->|"in-task guard (item ops)"| tasks_service
     r_mm -->|"fire batch run"| tasks_executor
     member_memberships_service -->|"single reprice (direct)"| memberships_reprice
+    member_memberships_service -->|"cross-plan upgrade (direct)"| memberships_upgrade
     membership_reprice_task_handler -->|"enqueue"| tasks_service
     tasks_executor -->|"membership_reprice handler"| membership_reprice_task_handler
     membership_reprice_task_handler --> memberships_reprice
     memberships_reprice --> payment_sync_service
     memberships_reprice --> gym_stripe_service
+    memberships_upgrade --> payment_sync_service
+    memberships_upgrade --> gym_stripe_service
     stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
     stripe_webhooks_service -->|"invoice_payment.paid → retrieve PaymentIntent for charge id"| Payments
     members_billing_detail_service --> streak_service
@@ -138,7 +142,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,membership_reprice_task_handler svc;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

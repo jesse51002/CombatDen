@@ -5,6 +5,7 @@ deleted) after the cancel and asserts that no surprise charges
 landed on the member's customer balance.
 """
 
+from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,6 +16,9 @@ from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
+)
+from src.memberships.service.memberships_cancel import (
+    MemberMembershipsCancel,
 )
 from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
@@ -409,3 +413,102 @@ async def test_cancel_one_time_raises(
         )
     finally:
         await delete_member_data(db_pool, member.member_id)
+
+
+async def test_end_one_time_membership(
+    memberships_service,
+    db_pool,
+    gym_id,
+    created,
+):
+    """Ending a one-time membership sets end_date=today → status 'ended'.
+
+    A one-time pack is a terminal invoice with no subscription line, so this is
+    a pure DB date write — no Stripe action.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="one_time",
+        plan_name="One-Time End Test",
+        price_cents=2000,
+    )
+    try:
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+        async with db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT item_id FROM member_memberships "
+                        "WHERE member_id = :id AND plan_id = :plan_id"
+                    ),
+                    {"id": str(member.member_id), "plan_id": str(plan.plan_id)},
+                )
+            ).mappings().fetchone()
+        item_id = UUID(str(row["item_id"]))
+
+        end_date = await memberships_service.end_one_time(
+            item_id, member.member_id,
+        )
+        assert end_date is not None
+
+        async with db_pool.session() as session:
+            persisted = (
+                await session.execute(
+                    text(
+                        "SELECT end_date FROM member_memberships_unfiltered "
+                        "WHERE item_id = :id"
+                    ),
+                    {"id": str(item_id)},
+                )
+            ).mappings().one()
+            status_row = (
+                await session.execute(
+                    text(
+                        "SELECT status FROM member_memberships_status "
+                        "WHERE item_id = :id"
+                    ),
+                    {"id": str(item_id)},
+                )
+            ).mappings().one()
+        assert persisted["end_date"] == end_date
+        assert status_row["status"] == "ended"
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+def test_end_one_time_rejects_recurring_unit():
+    """The end-one-time guard refuses a RECURRING membership (use cancel)."""
+    row = {
+        "plan_type": "recurring",
+        "cancel_date": None,
+        "end_date": None,
+        "timezone": "America/Chicago",
+    }
+    with pytest.raises(ValueError, match="recurring"):
+        MemberMembershipsCancel._validate_end_one_time(row, uuid4(), uuid4())
+
+
+def test_end_one_time_rejects_already_ended_unit():
+    """The end-one-time guard refuses an already-ended membership."""
+    row = {
+        "plan_type": "one_time",
+        "cancel_date": None,
+        "end_date": date(2020, 1, 1),
+        "timezone": "America/Chicago",
+    }
+    with pytest.raises(ValueError, match="already ended"):
+        MemberMembershipsCancel._validate_end_one_time(row, uuid4(), uuid4())

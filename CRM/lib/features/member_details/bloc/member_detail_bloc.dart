@@ -13,6 +13,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
@@ -55,6 +56,8 @@ class MemberDetailBloc
     );
     on<CancelMembershipRequested>(_onCancelMembership);
     on<UpdatePriceRequested>(_onUpdatePrice);
+    on<UpgradeMembershipRequested>(_onUpgradeMembership);
+    on<EndMembershipRequested>(_onEndMembership);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
@@ -381,6 +384,46 @@ class MemberDetailBloc
           prorationBehavior: event.prorationBehavior,
           idempotencyKey: const Uuid().v4(),
         ),
+      ),
+    );
+  }
+
+  Future<void> _onUpgradeMembership(
+    UpgradeMembershipRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    await _runMutation(
+      actionLabel: 'Upgrade membership',
+      emit: emit,
+      // An upgrade charges the prorated difference now, settled via a
+      // Stripe webhook — poll so the invoice surfaces without a reload.
+      pollInvoices: true,
+      action: () => _repository.upgradeMembership(
+        MemberMembershipsUpgradeRequest(
+          itemId: event.itemId,
+          memberId: event.memberId,
+          targetPlanId: event.targetPlanId,
+          prorationBehavior: event.prorationBehavior,
+          idempotencyKey: const Uuid().v4(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onEndMembership(
+    EndMembershipRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    await _runMutation(
+      actionLabel: 'End membership',
+      emit: emit,
+      action: () => _repository.endMembership(
+        itemId: event.itemId,
+        memberId: event.memberId,
       ),
     );
   }

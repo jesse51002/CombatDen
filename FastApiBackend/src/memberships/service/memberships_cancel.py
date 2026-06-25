@@ -152,7 +152,68 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             ),
         )
 
+    async def end_one_time(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> date:
+        """End a one-time / trial membership early (set ``end_date = today``).
+
+        A one-time / trial membership is a TERMINAL invoice with no subscription
+        line, so ending it is a PURE DB write — no Stripe converge and no payer
+        lock (unlike the recurring ``cancel``, which removes the Stripe line).
+        Recurring memberships are rejected (they must use ``cancel``). An
+        already-ended / -cancelled membership is rejected. Status becomes
+        ``ended`` (the status view derives it from ``end_date``).
+
+        Returns the resolved ``end_date`` (today).
+
+        Raises:
+            ValueError: not found, recurring, or already ended/cancelled.
+        """
+        row = await self._get_membership(item_id, member_id)
+        self._validate_end_one_time(row, item_id, member_id)
+
+        today = gym_today(row["timezone"])
+        sql = load_sql(SQL_DIR / "member_memberships_end.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "item_id": str(item_id),
+                    "member_id": str(member_id),
+                    "gym_today": today,
+                },
+            )
+            end_date = result.scalar_one()
+            await session.commit()
+        return end_date
+
     # ── Private ────────────────────────────────────────────────
+
+    @staticmethod
+    def _validate_end_one_time(
+        row: dict,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> None:
+        """Validate a one-time / trial membership can be ended early."""
+        if row["plan_type"] == PlanType.recurring:
+            raise ValueError(
+                f"Cannot end a recurring membership here — use cancel: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
+        today = gym_today(row["timezone"])
+        if row["cancel_date"] is not None and row["cancel_date"] <= today:
+            raise ValueError(
+                f"Membership already cancelled: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
+        if row["end_date"] is not None and row["end_date"] <= today:
+            raise ValueError(
+                f"Membership already ended: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
 
     @staticmethod
     def _validate_cancel(

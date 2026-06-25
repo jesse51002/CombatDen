@@ -23,6 +23,9 @@ from src.memberships.service.memberships_reprice import (
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
 )
+from src.memberships.service.memberships_upgrade import (
+    MemberMembershipsUpgrade,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
     PaymentsStripeDiscountService,
@@ -229,6 +232,7 @@ def build_member_memberships_service(
         one_time_svc,
         discounts_svc,
         build_memberships_reprice(db_pool, stripe_client),
+        build_memberships_upgrade(db_pool, stripe_client),
         management_svc,
     )
 
@@ -278,6 +282,25 @@ def build_memberships_reprice(
     paying_lock = build_paying_member_lock(db_pool)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MemberMembershipsReprice(
+        db_pool=db_pool,
+        payment_sync_service=sync_svc,
+        gym_stripe_service=gym_stripe_svc,
+        paying_lock=paying_lock,
+    )
+
+
+def build_memberships_upgrade(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsUpgrade:
+    """Build the cross-plan upgrade service.
+
+    Mirrors ``src/core/dependencies.py`` (memberships_upgrade).
+    """
+    gym_stripe_svc = GymStripeService(db_pool)
+    paying_lock = build_paying_member_lock(db_pool)
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
+    return MemberMembershipsUpgrade(
         db_pool=db_pool,
         payment_sync_service=sync_svc,
         gym_stripe_service=gym_stripe_svc,

@@ -65,6 +65,9 @@ if TYPE_CHECKING:
     from src.memberships.service.memberships_reprice import (
         MemberMembershipsReprice,
     )
+    from src.memberships.service.memberships_upgrade import (
+        MemberMembershipsUpgrade,
+    )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
@@ -103,6 +106,7 @@ class MemberMembershipsService:
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
         reprice_service: MemberMembershipsReprice,
+        upgrade_service: MemberMembershipsUpgrade,
         members_management_service: MembersManagementService,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
@@ -115,9 +119,10 @@ class MemberMembershipsService:
         # here would deadlock to LockBusyError.
         self._db_pool = db_pool
         self._paying_lock = paying_lock
-        # The reprice op is standalone and takes its own family lock; the
-        # facade only exposes its read-only preview.
+        # The reprice + upgrade ops are standalone and take their own family
+        # lock; the facade delegates to them bare (like update_price).
         self._reprice = reprice_service
+        self._upgrade = upgrade_service
         deps = (
             db_pool,
             payment_sync_service,
@@ -193,6 +198,20 @@ class MemberMembershipsService:
         payer_id = await self._get_payer_for_item(item_id)
         async with self._paying_lock.lock([payer_id]):
             return await self._cancel.preview_cancel(item_id, member_id)
+
+    async def end_one_time(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> date:
+        """End a one-time / trial membership early (set ``end_date`` = today).
+
+        Delegated BARE — no payer lock: a one-time / trial membership is a
+        terminal invoice with no subscription line, so ending it is a pure DB
+        date write (no Stripe converge, nothing for a concurrent sync to race).
+        Recurring memberships use ``cancel`` instead.
+        """
+        return await self._cancel.end_one_time(item_id, member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
 
@@ -293,6 +312,46 @@ class MemberMembershipsService:
         return await self._reprice.reprice(
             member_id=member_id,
             old_item_id=item_id,
+            proration_behavior=proration_behavior,
+        )
+
+    # ── Upgrade (cross-plan, charge the prorated difference) ───
+    #
+    # Move a membership to a DIFFERENT plan's active price and charge the
+    # prorated difference now (downgrade charges nothing). A direct,
+    # synchronous op like reprice — there is no batch upgrade. The op takes
+    # its own family lock, so the facade delegates bare.
+
+    async def upgrade(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        target_plan_id: UUID,
+        proration_behavior: ProrationBehavior,
+        idempotency_key: UUID,
+    ) -> UUID:
+        """Upgrade ONE membership to ``target_plan_id``'s active price; returns
+        the successor row id."""
+        return await self._upgrade.upgrade(
+            member_id=member_id,
+            old_item_id=item_id,
+            target_plan_id=target_plan_id,
+            proration_behavior=proration_behavior,
+            idempotency_key=idempotency_key,
+        )
+
+    async def upgrade_preview(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        target_plan_id: UUID,
+        proration_behavior: ProrationBehavior,
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview what upgrading to ``target_plan_id`` would charge now."""
+        return await self._upgrade.upgrade_preview(
+            member_id=member_id,
+            old_item_id=item_id,
+            target_plan_id=target_plan_id,
             proration_behavior=proration_behavior,
         )
 

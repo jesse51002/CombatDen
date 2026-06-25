@@ -15,6 +15,8 @@ from src.memberships.memberships_schema import (
     MemberMembershipsBatchRepriceResponse,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
+    MemberMembershipsEndRequest,
+    MemberMembershipsEndResponse,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsRefundRequest,
@@ -26,6 +28,9 @@ from src.memberships.memberships_schema import (
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
     MemberMembershipsUpdatePriceResponse,
+    MemberMembershipsUpgradePreviewRequest,
+    MemberMembershipsUpgradeRequest,
+    MemberMembershipsUpgradeResponse,
 )
 from src.memberships.service.memberships_refund import (
     MemberMembershipsRefund,
@@ -442,6 +447,234 @@ async def update_membership_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update membership price",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/upgrade",
+    response_model=MemberMembershipsUpgradeResponse,
+    summary="Upgrade ONE membership to a different plan (charge difference)",
+    description=(
+        "Moves a membership to a DIFFERENT plan's currently active price (a "
+        "cross-plan upgrade) and charges the prorated DIFFERENCE now when "
+        "``proration_behavior`` is ``prorate_to_anchor`` and the new price is "
+        "higher; a downgrade/equal charges nothing. A DIRECT, synchronous op "
+        "(cancel-old-row + insert-successor-on-the-new-plan + Stripe converge), "
+        "like reprice. Returns the successor membership id. The target must be "
+        "a DIFFERENT recurring plan on the same billing interval (same-plan "
+        "moves use PUT /price). A membership inside an unfinished batch task is "
+        "rejected (409)."
+    ),
+    responses={
+        200: {"description": "Upgraded; the successor membership id"},
+        400: {"description": "Invalid request (same plan / window / state)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        409: {"description": "Membership is inside an unfinished task"},
+        502: {"description": "Stripe error"},
+    },
+)
+@inject
+async def upgrade_membership(
+    request: MemberMembershipsUpgradeRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
+) -> MemberMembershipsUpgradeResponse:
+    """Upgrade one membership to a different plan (direct; 200 + successor id).
+
+    Args:
+        request: Upgrade request (target_plan_id + proration_behavior).
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard — a
+            membership mid-batch-task is rejected 409).
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
+        new_item_id = await memberships_service.upgrade(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            target_plan_id=request.target_plan_id,
+            proration_behavior=request.proration_behavior,
+            idempotency_key=request.idempotency_key,
+        )
+        return MemberMembershipsUpgradeResponse(item_id=new_item_id)
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to upgrade membership: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upgrade membership",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/upgrade/preview",
+    response_model=DueNowVsRecurringPreview | None,
+    summary="Preview upgrading a membership to a different plan",
+    description=(
+        "Dry-run of the upgrade endpoint: runs every validation and returns "
+        "the due-now prorated difference (``due_now``, null on a "
+        "downgrade/equal) plus the new steady-state monthly bill "
+        "(``recurring``). Writes and bills nothing."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        400: {"description": "Invalid request (same plan / window / state)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def preview_upgrade_membership(
+    request: MemberMembershipsUpgradePreviewRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> DueNowVsRecurringPreview | None:
+    """Preview what upgrading a membership to a different plan would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        return await memberships_service.upgrade_preview(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            target_plan_id=request.target_plan_id,
+            proration_behavior=request.proration_behavior,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview membership upgrade: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview membership upgrade",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/end",
+    response_model=MemberMembershipsEndResponse,
+    summary="End a one-time / trial membership early",
+    description=(
+        "Ends a ONE-TIME / TRIAL membership now by setting its end_date to "
+        "today (→ status 'ended'). A one-time pack is a terminal invoice with "
+        "no subscription line, so this is a pure DB write — NO Stripe action "
+        "and no money movement (a refund is the separate POST /refund flow). "
+        "Recurring memberships are rejected (use DELETE / to cancel)."
+    ),
+    responses={
+        200: {"description": "Ended; the resolved end_date"},
+        400: {"description": "Recurring / already ended / already cancelled"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Membership not found"},
+    },
+)
+@inject
+async def end_membership(
+    request: MemberMembershipsEndRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> MemberMembershipsEndResponse:
+    """End a one-time / trial membership early (200 + the resolved end_date).
+
+    Args:
+        request: The membership to end (item_id + member_id).
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        memberships_service: Injected memberships service.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        end_date = await memberships_service.end_one_time(
+            request.item_id,
+            request.member_id,
+        )
+        return MemberMembershipsEndResponse(end_date=end_date)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to end membership: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to end membership",
         ) from None
 
 

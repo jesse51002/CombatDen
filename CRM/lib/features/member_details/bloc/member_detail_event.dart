@@ -169,6 +169,42 @@ class UpdatePriceRequested extends MemberDetailEvent {
       [itemId, memberId, prorationBehavior];
 }
 
+/// Cross-plan upgrade: move [itemId] to [targetPlanId]'s active price,
+/// charging the prorated difference when [prorationBehavior] prorates
+/// (a downgrade charges nothing). [memberId] is the covered member.
+class UpgradeMembershipRequested extends MemberDetailEvent {
+  final String itemId;
+  final String memberId;
+  final String targetPlanId;
+  final ProrationBehavior prorationBehavior;
+
+  const UpgradeMembershipRequested({
+    required this.itemId,
+    required this.memberId,
+    required this.targetPlanId,
+    this.prorationBehavior = ProrationBehavior.prorateToAnchor,
+  });
+
+  @override
+  List<Object?> get props =>
+      [itemId, memberId, targetPlanId, prorationBehavior];
+}
+
+/// End a ONE-TIME / TRIAL membership early — sets its end date to
+/// today. No charge, no Stripe action. [memberId] is the covered member.
+class EndMembershipRequested extends MemberDetailEvent {
+  final String itemId;
+  final String memberId;
+
+  const EndMembershipRequested({
+    required this.itemId,
+    required this.memberId,
+  });
+
+  @override
+  List<Object?> get props => [itemId, memberId];
+}
+
 class FreezeAccountRequested extends MemberDetailEvent {
   final int freezeMonths;
   const FreezeAccountRequested(this.freezeMonths);

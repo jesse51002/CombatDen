@@ -1,30 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/freeze/freeze_account_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/freeze/unfreeze_account_dialog.dart';
-import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/member_details/presentation/dialogs/edit_membership_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
-/// Account-level actions for the membership carousel:
-/// Freeze / Unfreeze (label flips when any membership is
-/// frozen) and Cancel membership (opens the two-step cancel
-/// wizard, which resolves who and what to cancel itself).
+/// The membership card's single action entry point: an "Edit membership"
+/// button that opens [EditMembershipDialog] — a menu of the actions valid
+/// for the shown membership's type and status (upgrade plan, migrate to
+/// current price, cancel, freeze for recurring; end, refund for
+/// one-time / trial). Disabled while the membership is mid-task or before
+/// its row resolves.
 class MembershipActionsRow extends StatelessWidget {
   final MemberDetailResponse member;
 
-  /// The membership the carousel is currently showing — used
-  /// only to seed the cancel wizard's default participant.
+  /// The membership the carousel is currently showing — the one the
+  /// edit menu acts on.
   final MembershipInfo? currentMembership;
 
-  /// When true the membership's item is part of an in-progress
-  /// upgrade task — all mutation actions are disabled.
+  /// When true the membership's item is part of an in-progress task —
+  /// editing is disabled.
   final bool isInTask;
 
   const MembershipActionsRow({
@@ -34,73 +30,22 @@ class MembershipActionsRow extends StatelessWidget {
     this.isInTask = false,
   });
 
-  bool get _anyFrozen => member.memberships.any(
-        (m) => m.status == MembershipStatus.frozen,
-      );
-
-  /// Whether the member has any recurring membership the
-  /// cancel wizard could act on. The wizard owns the
-  /// per-person / per-membership eligibility; this only gates
-  /// whether the button is live at all.
-  bool get _hasCancellable => member.memberships.any(
-        (m) =>
-            m.planType == 'recurring' &&
-            m.members.isNotEmpty &&
-            const {
-              MembershipStatus.active,
-              MembershipStatus.trial,
-              MembershipStatus.frozen,
-              MembershipStatus.overdue,
-            }.contains(m.status),
-      );
-
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        AppOutlineButton(
-          fullWidth: true,
-          text: _anyFrozen
-              ? 'Unfreeze account'
-              : 'Freeze account',
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: isInTask ? null : () => _onFreezeTap(context),
-        ),
-        AppOutlineButton(
-          fullWidth: true,
-          text: 'Cancel membership',
-          borderColor: DesignConstants.badRed,
-          textColor: DesignConstants.badRed,
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: (!isInTask && _hasCancellable)
-              ? () => CancelMembershipDialog.show(
-                    context: context,
-                    member: member,
-                    initialMembership: currentMembership,
-                  )
-              : null,
-        ),
-      ],
-    );
-  }
-
-  Future<void> _onFreezeTap(BuildContext context) async {
-    if (_anyFrozen) {
-      final bloc = context.read<MemberDetailBloc>();
-      final confirmed = await UnfreezeAccountDialog.show(
-        context: context,
-        member: member,
-      );
-      if (confirmed) {
-        bloc.add(const UnfreezeAccountRequested());
-      }
-      return;
-    }
-    await FreezeAccountDialog.show(
-      context: context,
-      member: member,
+    final membership = currentMembership;
+    return AppOutlineButton(
+      fullWidth: true,
+      text: 'Edit membership',
+      borderRadius: DesignConstants.radiusSmall,
+      onPressed: (isInTask || membership == null)
+          ? null
+          : () => EditMembershipDialog.show(
+                context: context,
+                member: member,
+                membership: membership,
+                coveredMemberId: member.memberId,
+                coveredMemberName: member.fullName,
+              ),
     );
   }
 }
