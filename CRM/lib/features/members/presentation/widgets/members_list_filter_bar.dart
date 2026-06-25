@@ -106,6 +106,8 @@ class MembersListFilterBar extends StatelessWidget {
         ));
       case 'date':
         bloc.add(const MembersListDateRangeFilterCleared());
+      default:
+        throw ArgumentError('Unknown filter chip type: ${chip.type}');
     }
   }
 }
