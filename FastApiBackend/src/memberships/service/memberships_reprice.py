@@ -141,9 +141,14 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
         member_id: UUID,
     ) -> None:
         """Validate the membership can be repriced."""
+        # A set cancel_date (already effective OR a future, still-active
+        # scheduled cancellation) blocks the reprice — the successor would have
+        # no cancel_date, silently dropping the pending cancellation. Staff
+        # clear the cancellation first.
         if row["cancel_date"] is not None:
             raise ValueError(
-                f"Cannot reprice cancelled membership: "
+                f"Cannot reprice a membership with a pending cancellation "
+                f"— clear the cancellation first: "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
         if (

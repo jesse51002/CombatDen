@@ -273,9 +273,14 @@ class MemberMembershipsUpgrade(MemberMembershipsTransitionBase):
                 f"Can only upgrade a recurring membership: "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
+        # A set cancel_date (whether already effective OR a future, still-
+        # active scheduled cancellation) blocks the upgrade — upgrading would
+        # create a fresh successor with no cancel_date, silently dropping the
+        # pending cancellation. Staff clear the cancellation first.
         if row["cancel_date"] is not None:
             raise ValueError(
-                f"Cannot upgrade cancelled membership: "
+                f"Cannot upgrade a membership with a pending cancellation "
+                f"— clear the cancellation first: "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
         if (
