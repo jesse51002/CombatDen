@@ -63,9 +63,7 @@ class MembershipDetailsTable extends StatelessWidget {
           membershipLabel('Type:'),
           Text(
             planTypeLabel,
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
           ),
         ),
         (
@@ -78,9 +76,7 @@ class MembershipDetailsTable extends StatelessWidget {
               membership.durationUnit,
               membership.planType,
             ),
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
           ),
         ),
         (
@@ -94,9 +90,7 @@ class MembershipDetailsTable extends StatelessWidget {
           membershipLabel('Usage:'),
           Text(
             _usageText(),
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
           ),
         ),
         (
@@ -169,9 +163,7 @@ class _PaidByValue extends StatelessWidget {
         Flexible(
           child: Text(
             name,
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -213,7 +205,6 @@ class _ExitStatus extends StatelessWidget {
         text,
         style: DesignConstants.h2.copyWith(
           color: DesignConstants.okYellow,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

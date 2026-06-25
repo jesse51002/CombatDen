@@ -44,7 +44,6 @@ Widget statusValue(MembershipStatus status) {
       status.displayLabel,
       style: DesignConstants.h2.copyWith(
         color: statusColor(status),
-        fontWeight: FontWeight.w600,
       ),
     ),
   );
@@ -79,9 +78,7 @@ List<MembershipInfo> fundedRecurringMemberships(
 Widget costValue(int amount) {
   return Text(
     formatMinorUnits(amount),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
-    ),
+    style: DesignConstants.h2Bold,
   );
 }
 
@@ -162,8 +159,6 @@ Widget dateValue(DateTime? date) {
   }
   return Text(
     formatDay(date),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
-    ),
+    style: DesignConstants.h2Bold,
   );
 }

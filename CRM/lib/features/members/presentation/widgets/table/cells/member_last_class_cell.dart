@@ -29,7 +29,7 @@ class MemberLastClassCell extends StatelessWidget {
       children: [
         Container(
           width: 5,
-          height: 22,
+          height: DesignConstants.statusAccentBarHeight,
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(

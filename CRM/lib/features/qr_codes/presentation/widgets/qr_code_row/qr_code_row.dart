@@ -21,8 +21,8 @@ class QrCodeRow extends StatelessWidget {
       spacing: DesignConstants.spacingBig,
       children: [
         SizedBox(
-          width: 120,
-          height: 120,
+          width: DesignConstants.qrThumbnailSize,
+          height: DesignConstants.qrThumbnailSize,
           child: QrCodeImage(imageAsset: qrCode.imageAsset),
         ),
         Expanded(

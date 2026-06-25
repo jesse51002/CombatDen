@@ -148,7 +148,7 @@ class _StartPreviewStepState
             ConnectionState.done) {
           return const _PreviewPanel(
             child: SizedBox(
-              height: 160,
+              height: DesignConstants.dialogProcessingHeight,
               child: Center(child: AppSpinner()),
             ),
           );

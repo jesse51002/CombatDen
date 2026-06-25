@@ -42,8 +42,8 @@ class DateRangePill extends StatelessWidget {
             ),
           ),
           Container(
-            width: 1,
-            height: 16,
+            width: DesignConstants.dividerThickness,
+            height: DesignConstants.verticalDividerHeight,
             color: DesignConstants.text3rd,
           ),
           InkWell(
