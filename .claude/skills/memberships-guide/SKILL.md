@@ -509,13 +509,11 @@ minutes later). Webhooks + the twice-daily reconciler sweep remain backstops.
 | `POST /mark-paid-cash` | pay the open invoice out of band (204) |
 | `POST /charge-card` | ad-hoc card/cash charge |
 
-Plan endpoints (`plans_router.py`) call `verify_gym_employee` before
-acting; membership endpoints (`memberships_router.py`) call
-`verify_can_view_member` (on the payer + every item member for start/preview; on
-the member for member-scoped ops) — the membership routes are all member-scoped,
-so they gate on access to those members rather than on gym-employee status).
+Plan endpoints (`plans_router.py`) call `verify_gym_employee`; membership
+endpoints (`memberships_router.py`) gate on member access via
+`verify_can_view_member`, except the staff-only writes below.
 
-**Money-moving endpoints use a stricter guard.** `mark-paid-cash`, `charge-card`, `refund`, and `freeze`/`unfreeze` are gated by `verify_gym_employee_for_member` (staff-only; excludes the member themselves), not `verify_can_view_member`. A member must not be able to self-settle or self-freeze.
+**Money-moving + signup endpoints use a stricter guard.** `start` / `start-preview`, `mark-paid-cash`, `charge-card`, `refund`, and `freeze`/`unfreeze` are gated by `verify_gym_employee_for_member` (staff-only; excludes the member themselves), not `verify_can_view_member` — membership signup is staff-managed, so a member must not self-enroll, self-settle, or self-freeze.
 
 ---
 

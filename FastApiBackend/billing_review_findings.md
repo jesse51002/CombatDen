@@ -65,7 +65,7 @@
 | C-066 | ✅ fixed | `_mark_deleted` points at the real `src/sync/sql/…` path |
 | C-070 | ✅ fixed *(interim)* | rowcount guard → loud failure on gym_id mismatch *(deeper "derive gym_id server-side" remedy needs `memberships_service.py`, not done)* |
 | C-075 | ✅ fixed | `LockBusyError` → **409** via global handler |
-| C-079 | ✅ fixed | staff-only `verify_gym_employee_for_member` on freeze/unfreeze/mark-paid-cash/charge-card/refund |
+| C-079 | ✅ fixed | staff-only `verify_gym_employee_for_member` on start/preview + freeze/unfreeze/mark-paid-cash/charge-card/refund (signup is staff-managed) |
 | C-081 | ✅ fixed | `SELECT … FOR UPDATE` re-check before recording a refund (+ existing tests updated) |
 | C-082 | ✅ fixed | unmodeled Stripe refund status → recorded `pending`, no 500 |
 | C-083 | ✅ fixed · **⚠ MIGRATION** | partial unique index dedups cash charges *(migration must dedupe existing rows first)* |
@@ -104,7 +104,7 @@
 **Location:** `src/memberships/memberships_router.py:1155` (mark-paid-cash), `:1232` (charge-card), `:1296` (refund), `:246` (freeze) + `src/shared/auth.py:168` (`verify_can_view_member`)
 **What's wrong:** These money/billing endpoints are gated **only** by `verify_can_view_member`, which returns success when `member.user_id == auth_user_id` — i.e. the member themselves (auth.py:168). So a member with a valid token can: mark their own invoice paid-by-cash (free service), record a cash refund on their own charges, invoke charge-card, or **freeze their own membership to $0** (the rejection-audit added freeze — it rides the sync as a synthetic 100%-off). A stricter helper, `verify_gym_employee_for_member` (auth.py:193-229), already exists and explicitly excludes self-access "for staff-managed billing writes" — but it isn't used on these endpoints.
 **Why it matters:** A member can waive their own payment obligation, self-refund, or zero out their bill — an unguarded revenue-loss / financial-control gap across four endpoints.
-**Fix:** Gate mark-paid-cash, refund, charge-card, and freeze/unfreeze with `verify_gym_employee_for_member` (staff-only). Reserve `verify_can_view_member` for read/self-view endpoints.
+**Fix:** Gate mark-paid-cash, refund, charge-card, freeze/unfreeze — and `start` / `start-preview` (membership signup is staff-managed; extended in the round-2 review) — with `verify_gym_employee_for_member` (staff-only). Reserve `verify_can_view_member` for read/self-view endpoints.
 **Validation:** Confirmed by direct reading + adversarial validator; the freeze endpoint was added during the rejection-audit and confirmed by direct reading (router:246). See also **C-070** (same freeze endpoint also trusts a client `gym_id`).
 
 ### C-058 · bug · `set_price` deactivates the old price before the Stripe create — failure leaves the plan with no active price

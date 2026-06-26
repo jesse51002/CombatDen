@@ -23,6 +23,7 @@ from src.memberships.memberships_router import (
     charge_member_card,
     freeze_membership,
     mark_membership_paid_cash,
+    preview_start_membership,
     refund_charge,
     start_membership,
     unfreeze_membership,
@@ -157,6 +158,25 @@ async def test_start_uses_staff_only_guard() -> None:
     await start_membership(
         request=request,
         response=MagicMock(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    auth.verify_gym_employee_for_member.assert_awaited()
+    auth.verify_can_view_member.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_preview_start_uses_staff_only_guard() -> None:
+    auth = _make_auth()
+    service = MagicMock()
+    service.preview_start = AsyncMock(return_value=MagicMock())
+    request = MagicMock()
+    request.memberships = [MagicMock(member_id="m1")]
+
+    await preview_start_membership(
+        request=request,
         credentials=MagicMock(),
         auth=auth,
         memberships_service=service,
