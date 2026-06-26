@@ -33,8 +33,6 @@ from src.waivers.waivers_router import waivers_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
-    # The twice-daily reconciler sweep also recovers stale tasks (re-runs
-    # unfinished tasks whose in-process execution died) as one of its steps.
     scheduler = None
     if settings.reconciler_enabled:
         scheduler = build_scheduler(app.container)
@@ -45,8 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
-        # Cancel + await any in-flight on-demand invoice fetches so the loop
-        # isn't torn down mid-fetch with the DB pool already disposed.
+        # Drain in-flight fetches before pool disposal.
         await MembershipsInvoiceFetchRunner.drain()
         await app.container.db_pool().engine.dispose()
 
@@ -55,14 +52,7 @@ async def _handle_lock_busy_error(
     request: Request,
     exc: LockBusyError,
 ) -> JSONResponse:
-    """Map a busy payer lock to 409 Conflict (the documented contract).
-
-    ``LockBusyError`` is raised when another billing op already holds the
-    payer's lease. The contract (``settings.lock_acquire_timeout_seconds``)
-    is 409 so the caller retries; without this handler it would surface as an
-    unhandled 500. 409 is NOT in the proxy auto-retry family, so a mutating
-    billing op is never silently replayed.
-    """
+    """Map a busy payer lock to 409 Conflict (not in the proxy auto-retry family)."""
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": str(exc)},
@@ -102,16 +92,11 @@ def create_app() -> FastAPI:
     application.include_router(rewards_router)
     application.include_router(waivers_router)
 
-    # === CRM billing routers (restored) ===
-    # The payments package is a pure service core (no router); it is
-    # injected by the billing domains rather than mounted directly.
     application.include_router(discounts_router)
     application.include_router(member_memberships_router)
     application.include_router(membership_plans_router)
     application.include_router(stripe_webhooks_router)
-    # === end CRM billing routers ===
 
-    # Tracked background operations (read-only polling endpoints).
     application.include_router(tasks_router)
 
     return application

@@ -161,11 +161,7 @@ class PaymentsStripeMembersService:
             options=opts,
         )
 
-        # Only detach the previous default once we know it is a *different*
-        # payment method than the one we just set as default. If the caller
-        # passes the customer's current default as the new payment_method_id,
-        # detaching ``old_pm_id`` would strip the card we just made default,
-        # leaving the customer with no payment method.
+        # Skip detach if the caller passed the existing default as the new one.
         if old_pm_id and old_pm_id != request.payment_method_id:
             await self._stripe.v1.payment_methods.detach_async(
                 old_pm_id,
@@ -188,15 +184,7 @@ class PaymentsStripeMembersService:
         *,
         idempotency_key: str,
     ) -> None:
-        """Attach a payment method to a customer WITHOUT making it default.
-
-        Stripe requires a payment method to belong to the customer before an
-        invoice can be paid with it, so the one-time charge path attaches the
-        card the member entered for this purchase, charges it, then detaches it
-        (see ``detach_payment_method``) — the customer's default payment method
-        is never touched. Idempotent: re-attaching an already-attached method to
-        the same customer is a no-op success, so a retried charge is safe.
-        """
+        """Attach a payment method without making it the customer default."""
         await self._stripe.v1.payment_methods.attach_async(
             payment_method_id,
             params=PaymentMethodAttachParams(customer=stripe_customer_id),
@@ -213,11 +201,7 @@ class PaymentsStripeMembersService:
         *,
         idempotency_key: str,
     ) -> None:
-        """Detach a payment method from its customer.
-
-        A detached payment method can NEVER be re-attached, so callers detach
-        only after the charge they needed it for has already succeeded.
-        """
+        """Detach a payment method from its customer."""
         await self._stripe.v1.payment_methods.detach_async(
             payment_method_id,
             options=self._client.connect_opts(
@@ -307,14 +291,7 @@ class PaymentsStripeMembersService:
         ]
 
     def _extract_subscription_id(self, invoice) -> str | None:
-        """Return the subscription id tied to an invoice, or None.
-
-        Newer Stripe API versions removed the top-level ``subscription``
-        attribute on Invoice. The subscription id now lives under
-        ``parent.subscription_details.subscription``. Older versions
-        still expose the legacy attribute. Handle both so the listing
-        endpoint keeps working across API version bumps.
-        """
+        """Return the subscription id for an invoice (handles old and new Stripe shape)."""
         # New shape: parent.subscription_details.subscription
         parent = getattr(invoice, "parent", None)
         if parent is not None:
@@ -326,9 +303,7 @@ class PaymentsStripeMembersService:
                 if sub is not None:
                     return getattr(sub, "id", None)
 
-        # Legacy shape: top-level ``subscription``. Use ``in`` rather
-        # than ``getattr`` because ``Invoice.__getattr__`` raises
-        # AttributeError for missing keys instead of returning ``None``.
+        # Legacy shape: top-level subscription (Invoice.__getattr__ raises on missing).
         try:
             legacy = invoice["subscription"]  # type: ignore[index]
         except KeyError, TypeError:

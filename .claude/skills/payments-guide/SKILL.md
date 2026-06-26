@@ -664,7 +664,7 @@ invoice (`paid_for`), not here. The CHECK constraints (the contract):
 | `refund_has_parent` | refund → `refunds_charge_id IS NOT NULL` |
 | `refund_has_no_charge_id` | refund → `stripe_charge_id IS NULL` |
 
-`member_charge_insert.sql` is `ON CONFLICT DO NOTHING RETURNING charge_id`.
+`member_charge_insert.sql` is `ON CONFLICT DO NOTHING RETURNING charge_id`. Cash charges (`stripe_charge_id IS NULL`) also have a partial unique index on `(invoice_id) WHERE stripe_charge_id IS NULL AND kind='payment' AND status='succeeded' AND payment_method_type='cash'` — the reconciler's `record()` re-sweep hits `ON CONFLICT DO NOTHING` instead of double-counting cash revenue.
 
 **`member_invoice_line_items`** — what's on the bill. PK `line_item_id VARCHAR`
 **reuses the Stripe line-item id (`il_…`)** directly — line items always
@@ -682,8 +682,7 @@ identifier), `amount_off INTEGER CHECK (>= 0)` (the **dollars it took off this
 invoice**, captured as-of-invoice), and `discount_id` (**nullable, left NULL** — we
 deliberately do **not** resolve back to a CRM `gym_discount`, since the
 value-signature coupon is shared across discounts; the FK is kept only for a
-possible future link). `UNIQUE (invoice_id, stripe_coupon_id)` makes the capture
-idempotent. **This is explicitly distinct from
+possible future link). `line_item_id` (`VARCHAR NOT NULL`, the Stripe `il_` invoice-line id — an audit value, not FK-enforced, since proration-credit lines aren't persisted as line-item rows) ties each discount row to a specific invoice line. `UNIQUE (invoice_id, stripe_coupon_id, line_item_id)` makes the capture idempotent; the `invoice.paid` capture reads per-line `line.discount_amounts` (with the line id), so a coupon shared across sibling family lines records one row per line instead of collapsing to one. **This is explicitly distinct from
 `member_membership_applied_discounts`** (the slim, versioned applied-discount row
 that pins a membership to a discount *value version* — owned by `discounts-guide`).
 This audit table records *what a specific invoice actually discounted (by coupon)*;

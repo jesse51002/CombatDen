@@ -1,17 +1,4 @@
-"""Charge a payer's PENDING one-time memberships on one consolidated invoice.
-
-A one-time membership is billed by a single invoice line, discounted at creation
-and **terminal** (charged exactly once). This service is the one-time counterpart
-of the recurring ``PaymentSyncService`` — but a one-shot charge, not a
-re-derive-and-converge reconciler. It **reuses** the recurring engine's shared
-pieces (the read queries and ``PaymentSyncDiscounts.resolve`` — the discount math,
-unchanged) and leaves ``PaymentSyncService`` untouched.
-
-Each membership is its own invoice line (its own line id + its exact discount): a
-Stripe invoice has no one-item-per-price constraint like a subscription, so there
-is no consolidation and no ÷quantity averaging — the discount engine is fed
-per-membership (qty-1) groups, where its averaging is a no-op (÷1).
-"""
+"""Charge a payer's PENDING one-time memberships on one consolidated invoice."""
 
 import logging
 from uuid import UUID
@@ -52,12 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class PaymentSyncOneTime:
-    """Charge a payer's pending one-time memberships (own invoice, reuses resolve).
-
-    Independent of ``PaymentSyncService`` (recurring): own read filter + own
-    per-membership grouping + own invoice execute + own writeback, sharing only
-    the read queries and the discount resolution.
-    """
+    """Charge a payer's pending one-time memberships on a single invoice."""
 
     def __init__(
         self,
@@ -78,22 +60,7 @@ class PaymentSyncOneTime:
         paid_with_cash: bool = False,
         payment_method_id: str | None = None,
     ) -> None:
-        """Charge the payer's PENDING one-time memberships on ONE invoice.
-
-        Resolves the payer's own profile, builds the desired invoice (one line
-        per pending one-time membership the payer bills, item-level discounts),
-        charges it once on the payer's customer, and writes back each
-        membership's line id + invoice id + price + the applied discounts. A
-        **no-op** when the payer has no pending one-time memberships (never cuts
-        an empty invoice). Returns ``None`` — the caller reads the DB (the
-        ``applied`` status) to confirm. One-time memberships are terminal, so
-        re-running finds no ``not_added`` rows and charges nothing again.
-
-        ``payment_method_id`` charges a SPECIFIC one-off card (entered at
-        checkout) instead of the payer's saved default — the payment service
-        attaches → pays → detaches it (a one-off is never kept; saving a card as
-        the default is a separate up-front step). Ignored on a cash settle.
-        """
+        """Charge the payer's PENDING one-time memberships; no-op when none pending."""
         payer, stripe_account_id = await self._payer.resolve_payer_with_account(
             payer_member_id,
         )
@@ -114,17 +81,8 @@ class PaymentSyncOneTime:
     ) -> PreviewInvoice | None:
         """Preview the payer's STAGED one-time invoice (no charge, no writes).
 
-        The caller stages the membership(s) being previewed as ``preview_add``
-        first; this reads that staged state (``preview=True``), resolves the
-        coupons (idempotent gym-wide find-or-create), and returns the discounted
-        invoice preview. ``None`` when nothing is staged. Writes nothing back.
-
-        Stripe's ``invoices.create_preview`` previews the customer's NEXT
-        invoice, so for a payer with a live subscription it returns the staged
-        ad-hoc invoice-item lines AND the subscription's upcoming recurring
-        lines. This preview is the ONE-TIME purchase only, so the
-        subscription-derived lines are stripped (``_one_time_only``) and the
-        totals recomputed from the kept lines before returning.
+        Strips subscription lines from the Stripe preview so only ad-hoc
+        one-time lines remain; returns None when nothing is staged.
         """
         payer, stripe_account_id = await self._payer.resolve_payer_with_account(
             payer_member_id,
@@ -144,17 +102,7 @@ class PaymentSyncOneTime:
 
     @staticmethod
     def _one_time_only(preview: PreviewInvoice) -> PreviewInvoice:
-        """Keep only the staged one-time invoice-item lines; recompute totals.
-
-        A subscription-derived line carries a ``stripe_subscription_item_id``
-        and/or the ``is_proration`` flag; a pure invoice-item (one-time) line
-        carries neither. The customer-level preview mixes the live
-        subscription's upcoming lines in with the staged invoice items, so this
-        drops the subscription lines and rebuilds ``subtotal`` / ``total`` /
-        ``amount_due`` from the kept ones — the discounted one-time sum the CRM
-        renders. ``next_payment_date`` is dropped (it described the recurring
-        cycle, which is no longer part of this preview).
-        """
+        """Drop subscription/proration lines from a customer preview; recompute totals."""
         kept = [
             line
             for line in preview.lines
@@ -178,18 +126,7 @@ class PaymentSyncOneTime:
         stripe_account_id: str,
         preview: bool = False,
     ) -> OneTimeInvoicePlan:
-        """Read the payer's PENDING one-time memberships → the desired invoice.
-
-        One invoice line **per membership**: reads the payer's one-time rows
-        (``not_added``, plus ``preview_add`` when ``preview``) each carrying its
-        discounts, groups
-        them one-per-membership so the **unchanged** ``PaymentSyncDiscounts.resolve``
-        runs ÷1 (no averaging — each membership keeps its exact discount), and
-        assembles the ordered ``OneTimeInvoicePlan`` (one item per membership,
-        item-level coupons percent→dollar) plus the ``applied_discount_id →
-        coupon_id`` links. No DB writes (coupon find-or-create is an idempotent
-        gym-wide Stripe op).
-        """
+        """Build the one-time invoice plan: one line per pending membership."""
         today = gym_today(payer.timezone)
         memberships = await self._queries.get_active_one_time(
             payer.member_id, today, preview
@@ -225,14 +162,7 @@ class PaymentSyncOneTime:
     def _group_per_membership(
         memberships: list[ActiveMembershipRow],
     ) -> dict[UUID, list[ActiveMembershipRow]]:
-        """Group one-time memberships ONE-per-group, keyed by ``item_id``.
-
-        Each membership is its own invoice line (its own line id + its own
-        item-level discount) — a Stripe invoice has no one-item-per-price
-        constraint like a subscription, so we never consolidate or average across
-        members. A singleton group makes the shared discount math's ÷quantity a
-        no-op (÷1), so ``resolve`` is reused unchanged.
-        """
+        """One singleton group per membership so resolve's ÷quantity is a no-op."""
         return {membership.item_id: [membership] for membership in memberships}
 
     @staticmethod
@@ -251,14 +181,7 @@ class PaymentSyncOneTime:
 
     @staticmethod
     def _beneficiaries(plan: OneTimeInvoicePlan) -> list[UUID]:
-        """Distinct beneficiary owners across the invoice's membership lines.
-
-        The payer (``plan.payer.member_id``) bills one or more memberships,
-        each owned by a member (often the payer, sometimes a linked child).
-        ``paid_for`` is that distinct owner set, in line order, so a one-time
-        membership invoice surfaces on each beneficiary's page (not just the
-        payer's).
-        """
+        """Distinct membership owners across all invoice lines, in order."""
         seen: set[UUID] = set()
         out: list[UUID] = []
         for item in plan.items:
@@ -274,15 +197,7 @@ class PaymentSyncOneTime:
         paid_with_cash: bool,
         payment_method_id: str | None = None,
     ) -> PaymentsInvoicePaymentResponse:
-        """Charge the assembled invoice — one price line per membership.
-
-        One consolidated invoice on the payer's customer (invoice-level metadata =
-        the payer + the distinct beneficiary owners + gym; per-membership provenance
-        rides each line's ``stripe_item_id`` after the writeback). ``line_item_ids``
-        / ``line_amounts`` come back in the same order as ``plan.items``. When
-        ``payment_method_id`` is set the payment service attaches that one-off card,
-        charges it, and detaches it — the payer's saved default is never touched.
-        """
+        """Create and charge the invoice on the payer's Stripe customer."""
         request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=plan.payer.stripe_customer_id,
             items=self._to_item_specs(plan),
@@ -305,25 +220,7 @@ class PaymentSyncOneTime:
         plan: OneTimeInvoicePlan,
         result: PaymentsInvoicePaymentResponse,
     ) -> None:
-        """Persist the one-time charge result — best-effort, NEVER raises.
-
-        Runs AFTER a successful charge, so it must never propagate: a
-        post-charge exception here would unwind into the start op's blanket
-        ``except`` and DELETE the just-charged rows — un-billing a successful
-        charge, which is forbidden. Every write therefore runs under its own
-        guard (logged on failure, then skipped), mirroring the recurring
-        ``PaymentSyncWriteback`` swallow-and-log policy. A row that does not get
-        stamped stays un-``applied``; the caller's verify then marks it
-        failed-but-KEPT (its invoice line is billed and is never un-billed) and
-        the reconciler / next sync heals the Stripe-confirmation stamp.
-
-        Maps each membership 1:1 to its invoice line by order (``plan.items[i]``
-        ↔ ``result.line_item_ids[i]`` / ``line_amounts[i]``): stamps the line id +
-        invoice id + post-discount ``total_price`` + ``applied`` on each row, then
-        reuses the recurring coupon-link writeback (the resolved coupon onto each
-        contributing applied-discount row). A one-time membership is terminal
-        (one invoice), so there is no consumption stamp.
-        """
+        """Persist the charge result — best-effort, never raises (charge already happened)."""
         await self._writeback_membership_rows(plan, result)
         await self._writeback_coupon_links(plan)
 
@@ -332,23 +229,14 @@ class PaymentSyncOneTime:
         plan: OneTimeInvoicePlan,
         result: PaymentsInvoicePaymentResponse,
     ) -> None:
-        """Stamp each membership row from its invoice line — guarded per row.
-
-        Pairs ``plan.items`` with the returned line id + amount by order. A
-        line-count mismatch (Stripe billed a different number of lines than we
-        sent) is logged loud and the overlap still stamped best-effort — never
-        raised, because the charge already happened (a raise here would route
-        the start op to its delete branch and un-bill a real charge). Each row
-        is stamped under its own guard so one bad row never blocks the rest.
-        """
+        """Stamp line id + amount onto each membership row; guarded per row."""
         if (
             len(result.line_item_ids) != len(plan.items)
             or len(result.line_amounts) != len(plan.items)
         ):
             logger.error(
-                "One-time writeback: Stripe returned %d line ids / %d amounts "
-                "for %d membership items on invoice %s; stamping the overlap "
-                "best-effort (charge already happened, never un-billing)",
+                "One-time writeback: line count mismatch (%d ids / %d amounts "
+                "for %d items) on invoice %s; stamping overlap best-effort",
                 len(result.line_item_ids),
                 len(result.line_amounts),
                 len(plan.items),
@@ -358,7 +246,7 @@ class PaymentSyncOneTime:
             plan.items,
             result.line_item_ids,
             result.line_amounts,
-            strict=False,  # mismatch already logged above; stamp the overlap
+            strict=False,  # mismatch logged above; stamp the overlap
         ):
             try:
                 await self._queries.apply_one_time_membership_sync(
@@ -381,12 +269,7 @@ class PaymentSyncOneTime:
         self,
         plan: OneTimeInvoicePlan,
     ) -> None:
-        """Link each resolved coupon onto its applied-discount row — guarded.
-
-        Mirrors the recurring ``PaymentSyncWriteback`` coupon-link writeback:
-        one bad row is logged and skipped so the others still land, and nothing
-        here raises (the charge is already done).
-        """
+        """Write coupon id onto each applied-discount row; guarded per row."""
         for applied_discount_id, coupon_id in plan.coupon_links.items():
             try:
                 await self._queries.set_applied_discount_coupon_id(

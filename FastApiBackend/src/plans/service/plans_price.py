@@ -39,22 +39,7 @@ class MembershipPlansPrice(MembershipPlansBase):
         self,
         request: MembershipPlanPriceRequest,
     ) -> MembershipPlanPriceResponse:
-        """Insert CRM price row, create Stripe Price, then set stripe ID.
-
-        Existing members keep their old price. Use migrate endpoints
-        to move them to the new price.
-
-        Args:
-            request: Plan ID, gym ID, and new price in cents.
-
-        Returns:
-            The newly created price.
-
-        Raises:
-            ValueError: If the plan is not found or has no Stripe product.
-            StripeOrphanError: If Stripe succeeds but the DB
-                update fails after retries.
-        """
+        """Insert CRM price row, create Stripe Price, then set stripe ID."""
         plan = await self._get_plan(request.plan_id, request.gym_id)
 
         stripe_product_id = plan.get("stripe_product_id")
@@ -82,13 +67,8 @@ class MembershipPlansPrice(MembershipPlansBase):
             SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
         )
 
-        # Deactivate the old price, insert the new one, and create the Stripe
-        # Price all inside ONE transaction that is not committed until the
-        # Stripe Price is confirmed. Creating the Stripe Price *before* the
-        # commit means a Stripe failure rolls the whole transaction back —
-        # re-activating the old price — so the plan is never left with zero
-        # active prices, and the old price is never *durably* deactivated until
-        # its replacement is confirmed on Stripe.
+        # All three steps run in one transaction; Stripe failure rolls back
+        # the deactivation so the plan is never left with zero active prices.
         async with self._db_pool.session() as session:
             deact_result = await session.execute(
                 text(deactivate_all_sql),
@@ -112,10 +92,6 @@ class MembershipPlansPrice(MembershipPlansBase):
             new_price_row = dict(insert_result.mappings().one())
             price_id = str(new_price_row["price_id"])
 
-            # Create & verify the Stripe Price while the deactivation is still
-            # uncommitted. On failure the transaction rolls back (old price
-            # restored) and the original error propagates — no orphan price and
-            # no zero-active-price window.
             stripe_resp = await self._stripe_prices.create_price(
                 PaymentsPriceCreateRequest(
                     stripe_product_id=stripe_product_id,
@@ -132,10 +108,7 @@ class MembershipPlansPrice(MembershipPlansBase):
                 stripe_account_id,
             )
 
-            # The Stripe Price now exists; a DB failure past here is a true
-            # orphan, so surface it as StripeOrphanError. The rollback keeps the
-            # old price active in the DB, consistent with Stripe holding the new
-            # (unrecorded) price.
+            # DB failure here means Stripe has the price but we don't — surface as orphan.
             try:
                 set_result = await session.execute(
                     text(set_price_sql),
@@ -154,12 +127,8 @@ class MembershipPlansPrice(MembershipPlansBase):
                     crm_pk=price_id,
                 ) from exc
 
-        # ── Stripe: point the product at the new price; keep the old ACTIVE ─
-        # We never archive a Stripe price. A gym can update a price while a
-        # subscription migration onto it is mid-flight, and archiving the old
-        # price would break that migration. The DB
-        # (``membership_plan_prices.is_active``) is the single gate for which
-        # price is current; every Stripe price stays active forever.
+        # Point the product at the new default price. Never archive old Stripe
+        # prices — the DB is the gate; migrations may still reference the old one.
         if old_price and old_price.get("stripe_price_id"):
             try:
                 await self._stripe_prices.set_product_default_price(
@@ -185,11 +154,7 @@ class MembershipPlansPrice(MembershipPlansBase):
         gym_id: UUID,
         exclude_price_id: UUID,
     ) -> dict | None:
-        """Deactivate old active price rows, excluding the new one.
-
-        Returns:
-            The deactivated price row, or None if there was none.
-        """
+        """Deactivate old active price rows, excluding the new one."""
         deactivate_sql = load_sql(
             SQL_DIR / "membership_plans_price_deactivate.sql",
         )

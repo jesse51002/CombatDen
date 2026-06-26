@@ -58,7 +58,7 @@
 | C-048 | ✅ fixed | read `payment_intent` from dahlia `parent…` path + fallback |
 | C-049 | ✅ fixed · **⚠ MIGRATION** | discount-audit uniqueness gains `line_item_id` |
 | C-050 | ✅ fixed | `next_due_date` skips proration lines / uses period end correctly |
-| C-053 | ✅ fixed | Stripe PI retrieve moved out of the open webhook txn |
+| C-053 | ⚠ partial | seam added (`resolve_charge` pre-txn hook); caller wiring deferred (low-sev, critical webhook dispatch) |
 | C-058 | ✅ fixed | Stripe price created/verified **before** the DB deactivate, one txn *(reviewer note: holds a pooled conn across the Stripe call)* |
 | C-059 | ✅ fixed | recreated `stripe_product_id` now persisted |
 | C-064 | ✅ fixed | stable reprice idempotency key (derived once, reused on retry) |
@@ -290,3 +290,4 @@ The funnel evaluated **89 candidate clusters**; 69 were rejected as non-material
 - **Confidence:** every confirmed finding was re-verified against the code; the high-severity items and the two reopened mediums (C-066, C-079-freeze) were read directly. The 69 rejections were audited for false negatives (62 held).
 - **Suggested triage order:** the 4 highs first (C-079 and C-025 are sharpest — a member self-settle/self-freeze hole and silent revenue loss), then the medium money/idempotency/correctness cluster (C-026, C-066, C-081, C-083, C-086, C-012), then the NEEDS DECISION items (C-012, C-064, C-078, C-088), then the lows. C-089 (regression tests) rides along with each fix.
 - **Process note:** per repo rules, the payment-sync / memberships engine is edited **one approved piece at a time** — triage and fix these individually, not as a batch.
+- **Post-review validation (2026-06-26):** the full service-layer integration suite (reset+seeded DB + Stripe test account) confirmed the fixes and caught **2 regressions** the unit tests missed — C-086's new insert param broke the reprice/upgrade/family-sweep insert paths, and C-049's per-line capture needed the test event to carry per-line discounts; both fixed, suite green. The auto PR-review's actionable items were addressed: `_all_invoice_lines` inverted guard + migration empty-table guard fixed; C-053 downgraded to partial; C-058 / `_capture_discounts` truncation / `_revert` DRY replied with rationale.

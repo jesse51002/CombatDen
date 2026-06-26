@@ -13,10 +13,16 @@
 --   line rather than collapsing into one.
 -- ============================================================
 
--- 1a. Add the new column.
---     Assumes table is EMPTY (data is reset before this migration is applied).
---     No DEFAULT is added: the column is NOT NULL and the reset guarantees no
---     existing rows need backfilling.
+-- 1a. Add the new column. Guard the empty-table assumption (data is reset
+--     before applying) so a populated table fails loud, not partway.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM member_invoice_applied_discounts) THEN
+        RAISE EXCEPTION
+            'member_invoice_applied_discounts non-empty; line_item_id NOT NULL needs a backfill';
+    END IF;
+END $$;
+
 ALTER TABLE member_invoice_applied_discounts
     ADD COLUMN line_item_id VARCHAR NOT NULL;
 

@@ -260,6 +260,7 @@ class MemberMembershipsTransitionBase(MemberMembershipsBase):
                 # insert SQL since PR #32 added the quantity column.
                 "quantities": [row["quantity"]],
                 "sync_statuses": [sync_status.value],
+                "idempotency_keys": [None],  # successor is not a one-time start
             },
         )
         return UUID(str(result.mappings().one()["item_id"]))

@@ -888,6 +888,8 @@ charge) so the one-time invoice just bills the new saved default — no explicit
    `plan.coupon_links`). **No** `next_due_date`, **no** freeze, **no** mark-deleted —
    none apply to a terminal one-time line.
 
+**Writeback is best-effort** (`_writeback` catches and logs per step, mirroring `PaymentSyncWriteback`; never raises into the start op's cleanup/delete branch) — this preserves the "a successfully billed one-time row is NEVER un-billed" invariant. Also: the reprice op passes a deterministic idempotency key to its `update_payments_recurring` call (matching cancel's pattern), so a retried reprice converge is Stripe-deduped and generates no duplicate proration.
+
 ### `preview_one_time(member_id) -> PreviewInvoice | None`
 
 The dry-run. The caller (the start preview) stages the previewed membership(s) as

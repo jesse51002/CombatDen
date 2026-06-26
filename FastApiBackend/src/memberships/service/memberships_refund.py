@@ -1,19 +1,7 @@
-"""Refund a prior charge on a member's payment history.
+"""Refund a prior charge: Stripe call + immediate negative member_charges row.
 
-A refund hits Stripe (for a card charge) and is recorded **immediately** as a
-negative ``member_charges`` row — the endpoint writes the row itself rather than
-waiting for the ``refund.*`` webhook. The webhook then only matters for the
-cases the endpoint can't see synchronously: an async refund that comes back
-``pending`` and succeeds later, and a refund initiated from the Stripe Dashboard.
-Both write paths are idempotent on ``stripe_refund_id``.
-
-A cash charge has no Stripe charge to reverse, so it is refunded as a
-recordkeeping-only negative cash row with no Stripe call.
-
-Sibling of the charge-card op (``memberships_charge_card.py``): both are ad-hoc
-money-movement actions the CRM triggers from a member's billing history. It is a
-standalone service (not part of the ``MemberMembershipsService`` facade) because
-it touches no subscription state — no payment-sync, no paying-lock.
+Cash refunds skip the Stripe call; async/dashboard refunds are handled by the
+refund.* webhook. Both write paths are idempotent on stripe_refund_id.
 """
 
 from __future__ import annotations
@@ -132,8 +120,7 @@ class MemberMembershipsRefund:
             ),
             account_id,
         )
-        # A pending async refund is recorded later by the refund.* webhook when
-        # it succeeds; only a succeeded refund is written here.
+        # Pending refunds are recorded later by the refund.* webhook.
         refund_charge_id: UUID | None = None
         if refund.status == ChargeStatus.succeeded:
             refund_charge_id = await self._record_refund(
@@ -153,14 +140,7 @@ class MemberMembershipsRefund:
 
     @staticmethod
     def _safe_charge_status(stripe_status: str) -> ChargeStatus:
-        """Map a Stripe refund status to a modeled ``ChargeStatus``.
-
-        Stripe can return refund statuses outside our
-        ``pending`` / ``succeeded`` / ``failed`` set (e.g. ``requires_action``,
-        ``canceled``). Record any unmodeled status as ``pending`` instead of
-        raising ``ValueError`` (which would 500 the request with no DB row); the
-        ``refund.*`` webhook resolves the final state later.
-        """
+        """Map Stripe refund status; unrecognized values fall back to pending."""
         try:
             return ChargeStatus(stripe_status)
         except ValueError:
@@ -231,20 +211,10 @@ class MemberMembershipsRefund:
         charge_id: UUID,
         amount: int,
     ) -> None:
-        """Lock the parent charge and re-check the refundable balance.
+        """SELECT … FOR UPDATE the charge row, then re-check refundable balance.
 
-        Serializes concurrent refunds on the same charge: locks the parent
-        payment row (``SELECT ... FOR UPDATE``), then -- in a fresh snapshot
-        taken after the lock is granted -- sums the refunds already linked to it
-        and raises if this refund would exceed the remaining balance. Without
-        this, two concurrent cash refunds (NULL ``stripe_refund_id``, so the
-        ``UNIQUE`` constraint never fires) would each insert a full refund and
-        over-refund the charge. The lock holds until the surrounding
-        transaction commits, so the loser blocks here and then re-checks.
-
-        Raises:
-            ValueError: the charge vanished, is already fully refunded, or the
-                amount exceeds the remaining refundable balance.
+        Serializes concurrent cash refunds (no UNIQUE stripe_refund_id to guard them).
+        Raises ValueError if the charge is gone, fully refunded, or amount exceeds balance.
         """
         lock_sql = load_sql(SQL_DIR / "member_charge_lock.sql")
         refunded_sql = load_sql(SQL_DIR / "member_charge_refunded_total.sql")

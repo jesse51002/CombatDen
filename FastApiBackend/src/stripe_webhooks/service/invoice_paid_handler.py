@@ -45,25 +45,8 @@ STRIPE_METADATA_TRUE = "true"
 class InvoicePaidHandler:
     """Apply an ``invoice.paid`` event to the CRM database.
 
-    Writes:
-      - Upsert ``member_invoices`` row to ``status='paid'``.
-      - Insert one ``member_invoice_line_items`` row per Stripe line
-        (name / amount / quantity; membership lines carry their item_id),
-        so the bill is itemized.
-      - Update ``member_memberships`` for each billed subscription item
-        (``last_paid_date``, ``next_due_date``).
-
-    The succeeded ``member_charges`` row is NOT written here — a paid
-    invoice's payment(s) arrive on the separate ``invoice_payment.paid``
-    event (one per payment, partial or full), which
-    ``InvoicePaymentPaidHandler`` records. This handler owns the bill;
-    that handler owns the money movement.
-
-    Metadata is read directly from the raw invoice envelope — the
-    webhook is a pure reader at the Stripe boundary. The typed
-    ``StripeSubscriptionMetadata`` / ``StripeMembershipOneTimeMetadata``
-    / ``StripeAdHocInvoiceMetadata`` models guard the *write* side;
-    here we only pull out a small set of flow-control fields.
+    Upserts the invoice row, inserts line items, updates membership dates.
+    Charges are written by ``InvoicePaymentPaidHandler`` (``invoice_payment.paid``).
     """
 
     def __init__(
@@ -93,13 +76,7 @@ class InvoicePaidHandler:
         *,
         stripe_account_id: str | None = None,
     ) -> None:
-        """Apply a paid invoice (object) to the CRM.
-
-        The seam shared by the webhook dispatcher (``handle`` unwraps the event
-        envelope) and the reconciler invoice fetcher (which passes the listed
-        invoice object directly). Idempotent via the upsert / line-item /
-        discount-audit unique constraints.
-        """
+        """Apply a paid invoice object to the CRM. Idempotent via upsert/unique constraints."""
         stripe_invoice_id = invoice.get("id")
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
@@ -161,21 +138,7 @@ class InvoicePaidHandler:
         raw_metadata: dict[str, str],
         is_one_time: bool,
     ) -> tuple[UUID | None, list[UUID]]:
-        """Resolve ``(paid_by_member_id, paid_for)``.
-
-        ``paid_by_member_id`` is the payer (whose customer/card was
-        billed); ``paid_for`` is the list of beneficiary member_ids the
-        bill was FOR.
-
-        One-time invoices carry attribution in metadata (see
-        ``_attribution_from_metadata``). Subscription invoices are
-        resolved by matching each line's ``subscription_item`` against
-        ``member_memberships``: the payer is the membership's
-        ``paid_by_member_id`` (one Stripe subscription = one payer), and
-        ``paid_for`` is the distinct set of owners billed on the invoice.
-        A consolidated line (quantity > 1) maps to **multiple** memberships
-        (co-owners on one price), so every owner is collected — not just one.
-        """
+        """Resolve ``(paid_by_member_id, paid_for)``."""
         if is_one_time:
             return self._attribution_from_metadata(raw_metadata, invoice)
 
@@ -188,15 +151,7 @@ class InvoicePaidHandler:
         raw_metadata: dict[str, str],
         invoice: dict[str, Any],
     ) -> tuple[UUID, list[UUID]]:
-        """Attribution for a one-time invoice, read from its metadata.
-
-        Reads ``paid_by_member_id`` + ``paid_for`` — both one-time write
-        paths now stamp them (ad-hoc charge-card via
-        ``StripeAdHocInvoiceMetadata``; one-time membership via
-        ``StripeMembershipOneTimeMetadata``). Falls back to the legacy
-        single ``member_id`` (the bill owner, ``paid_for=[owner]``) only
-        for an in-flight invoice created before this split shipped.
-        """
+        """Read paid_by_member_id + paid_for from one-time invoice metadata."""
         payer_str = (
             raw_metadata.get("paid_by_member_id")
             or raw_metadata.get("member_id")
@@ -245,14 +200,7 @@ class InvoicePaidHandler:
 
     @staticmethod
     def _invoice_payment_intent_id(invoice: dict[str, Any]) -> str | None:
-        """Return the invoice's Stripe PaymentIntent id, or ``None``.
-
-        Dahlia removed the flat ``invoice.payment_intent`` (always NULL now)
-        and nests it under
-        ``invoice.parent.payment_intent_details.payment_intent``. Read the
-        new nested location first, fall back to the old flat field, so the
-        capture survives an API-version skew either way.
-        """
+        """PaymentIntent id. Dahlia: parent.payment_intent_details; legacy fallback: flat field."""
         parent = invoice.get("parent")
         if isinstance(parent, dict):
             details = parent.get("payment_intent_details")
@@ -269,15 +217,7 @@ class InvoicePaidHandler:
         gym_id: UUID,
         invoice_id: UUID,
     ) -> None:
-        """Persist each Stripe invoice line so the bill is itemized.
-
-        A line that maps to a membership (its ``subscription_item``
-        resolves to a ``member_memberships`` row) is stored as
-        ``item_type='membership'`` with that ``item_id``; everything
-        else is ``custom``. Idempotent on the Stripe line id. Negative
-        lines (proration credits) are skipped — the schema requires
-        ``amount >= 0``.
-        """
+        """Persist each invoice line. Membership lines carry item_id; negative lines skipped."""
         membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         insert_sql = load_sql(SQL_DIR / "member_invoice_line_item_insert.sql")
 
@@ -291,13 +231,7 @@ class InvoicePaidHandler:
 
             item_type = LINE_ITEM_TYPE_CUSTOM
             item_id: str | None = None
-            # A RECURRING line maps to its membership via its `subscription_item`.
-            # A ONE-TIME / trial line has NO subscription_item — but the
-            # membership's `stripe_item_id` IS the invoice line id, so fall back
-            # to the line id. Without this, one-time line items never carry their
-            # item_id (so the membership card can't find the charge to refund and
-            # Payment History can't match the line to the membership). A genuine
-            # custom/ad-hoc line matches neither and stays `custom`.
+            # Recurring: use subscription_item. One-time: stripe_item_id equals the line id.
             lookup_id = line_subscription_item(line) or line_item_id
             result = await session.execute(
                 text(membership_sql),
@@ -308,10 +242,7 @@ class InvoicePaidHandler:
             )
             rows = result.mappings().all()
             if rows:
-                # The line is ONE row with ONE item_id; a consolidated item
-                # has several co-owners, so store the first as the line's
-                # representative. The read path resolves every co-owner of
-                # the line for display via the shared stripe_item.
+                # Consolidated items have multiple co-owners; store the first as representative.
                 item_type = LINE_ITEM_TYPE_MEMBERSHIP
                 item_id = str(rows[0]["item_id"])
 
@@ -366,12 +297,7 @@ class InvoicePaidHandler:
             if not stripe_item_id:
                 continue
 
-            # A mid-cycle proration line's period.end is the proration
-            # window's end (often near/past), NOT the subscription's next
-            # billing date — using it would regress next_due_date on an
-            # upgrade. Skip it; the regular recurring line (or the prior
-            # sync writeback, which stamps current_period_end) carries the
-            # real next_due_date.
+            # Proration period.end is not the next billing date — skip it.
             if self._is_proration(line):
                 continue
 
@@ -398,8 +324,6 @@ class InvoicePaidHandler:
                 else None
             )
 
-            # A consolidated item bills several co-owners — advance the dates
-            # on every one, not just the first.
             for row in rows:
                 await session.execute(
                     text(update_sql),
@@ -420,27 +344,7 @@ class InvoicePaidHandler:
         *,
         stripe_account_id: str | None,
     ) -> None:
-        """Capture the invoice's discounts into ``member_invoice_applied_discounts``.
-
-        The webhook payload carries discount *amounts* but only opaque ``di_``
-        Discount ids — so we retrieve the invoice with the coupon expanded to map
-        each ``di_`` to its Stripe coupon id, and store
-        ``{line_item_id, amount_off, stripe_coupon_id}`` per **line-level**
-        application (no CRM-discount link — the coupon id is the identifier).
-
-        Capture is per Stripe **line** (``line.discount_amounts``), not the
-        invoice-level ``total_discount_amounts`` rollup: a coupon shared across
-        two family lines lands once per line, so each line-level application is
-        recorded as its own row instead of being collapsed into one. The
-        invoice-level rollup is still the cheap "are there any discounts?" gate
-        so a discount-free invoice makes no Stripe call.
-
-        Best-effort and isolated: a no-op when the invoice has no discounts (the
-        common case → no Stripe call); otherwise the retrieve + inserts run inside
-        a SAVEPOINT so any failure here rolls back ONLY the audit, never the
-        invoice / line-item writes. Idempotent on re-delivery via the row's
-        ``UNIQUE (invoice_id, stripe_coupon_id, line_item_id)``.
-        """
+        """Write per-line discount audit rows. Best-effort: failures roll back only the audit."""
         if not (invoice.get("total_discount_amounts") or []) or not stripe_account_id:
             return
 
@@ -491,15 +395,7 @@ class InvoicePaidHandler:
         stripe_invoice_id: str,
         stripe_account_id: str,
     ) -> dict[str, str]:
-        """Map each invoice Discount id (``di_``) to its Stripe coupon id.
-
-        Retrieves the invoice with its Discount objects expanded (the webhook
-        payload sends only ``di_`` ids) — both **invoice-level** ``discounts``
-        and per-**line** ``discounts``. Item-level coupons (a consolidated
-        one-time invoice discounts each membership line independently) live on
-        the lines, not the invoice, so both must be read. Returns ``{}`` if
-        nothing resolves.
-        """
+        """Retrieve the invoice with discounts expanded; return {di_id: coupon_id}."""
         opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
         retrieved = await self._stripe.v1.invoices.retrieve_async(
             stripe_invoice_id,
@@ -524,15 +420,10 @@ class InvoicePaidHandler:
         discounts: Any,
         coupon_by_discount: dict[str, str],
     ) -> None:
-        """Add each expanded Discount's ``di_ → coupon`` into the map.
-
-        Skips bare (unexpanded) ``di_`` id strings — only an expanded Discount
-        object resolves to a coupon. Shared by the invoice-level and per-line
-        discount reads.
-        """
+        """Add expanded Discount objects (di_ → coupon_id) into the map; skip bare id strings."""
         for discount in discounts or []:
             if isinstance(discount, str):
-                continue  # unexpanded id — can't resolve the coupon
+                continue
             discount_id = getattr(discount, "id", None)
             coupon_id = self._discount_coupon_id(discount)
             if discount_id and coupon_id:
@@ -540,14 +431,7 @@ class InvoicePaidHandler:
 
     @staticmethod
     def _discount_coupon_id(discount: Any) -> str | None:
-        """The coupon id off a Stripe Discount, dahlia-shaped.
-
-        Dahlia nests it: ``discount.source = {type: 'coupon', coupon: '<id>'}``
-        (``coupon`` is the id string). Falls back to the legacy
-        ``discount.coupon`` (object or id string) so the capture survives an
-        API-version skew either way. ``getattr(..., None)`` is safe on a
-        Stripe object — a missing field returns the default, not raises.
-        """
+        """Coupon id from a Discount. Dahlia: source.coupon; legacy fallback: discount.coupon."""
         source = getattr(discount, "source", None)
         coupon = getattr(source, "coupon", None) if source is not None else None
         if isinstance(coupon, str):
@@ -555,20 +439,14 @@ class InvoicePaidHandler:
         coupon_id = getattr(coupon, "id", None) if coupon is not None else None
         if coupon_id:
             return coupon_id
-        legacy = getattr(discount, "coupon", None)  # pre-dahlia fallback
+        legacy = getattr(discount, "coupon", None)
         if isinstance(legacy, str):
             return legacy
         return getattr(legacy, "id", None) if legacy is not None else None
 
     @staticmethod
     def _is_proration(line: dict[str, Any]) -> bool:
-        """Return ``True`` if the line is a mid-cycle proration adjustment.
-
-        Dahlia nests the flag under ``parent.subscription_item_details`` /
-        ``parent.invoice_item_details``; the legacy flat ``proration`` is the
-        fallback. A proration line's ``period.end`` must not drive
-        ``next_due_date`` (see ``_update_memberships``).
-        """
+        """True if the line is a proration (dahlia parent fields; flat proration fallback)."""
         parent = line.get("parent")
         if isinstance(parent, dict):
             sub_details = parent.get("subscription_item_details")

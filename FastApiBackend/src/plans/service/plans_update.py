@@ -51,22 +51,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
         self,
         request: MembershipPlanUpdateRequest,
     ) -> MembershipPlanResponse:
-        """Update plan metadata in Stripe then CRM.
-
-        Only provided (non-None) fields are updated. The merged
-        state is validated against DB CHECK constraints before
-        persisting.
-
-        Args:
-            request: Plan update data (partial).
-
-        Returns:
-            The updated plan with its active price.
-
-        Raises:
-            ValueError: If plan not found, no fields provided,
-                or merged state violates constraints.
-        """
+        """Update plan metadata in Stripe then CRM (non-None fields only)."""
         existing = await self._get_plan(request.plan_id, request.gym_id)
 
         changes = self._collect_changes(request.data)
@@ -100,9 +85,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
             stripe_product_id = new_stripe_product_id
 
         # ── CRM update ───────────────────────────────────────
-        # jsonb columns must use the functional cast CAST(:col AS JSONB); the
-        # shorthand colon-colon cast on a bind param breaks asyncpg binding
-        # (see CLAUDE.md → Database Patterns → SQL Files).
+        # jsonb uses CAST(:col AS JSONB); colon-colon cast breaks asyncpg.
         set_clause = ", ".join(
             f"{col} = CAST(:{col} AS JSONB)"
             if col in _JSONB_COLUMNS
@@ -126,9 +109,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
             row = result.mappings().fetchone()
             if not row:
                 raise ValueError(f"Plan {request.plan_id} not found")
-            # If the Stripe product was recreated (the old one was gone), the
-            # new stripe_product_id is NOT one of the user `changes`, so persist
-            # it here in the same transaction or it would be lost.
+            # Persist the new product id if the old one was gone and recreated.
             if product_recreated:
                 set_product_id_sql = load_sql(
                     SQL_DIR / "membership_plans_set_stripe_product_id.sql",
@@ -233,22 +214,14 @@ class MembershipPlansUpdate(MembershipPlansBase):
 
     @staticmethod
     def _bind_value(col: str, val: object) -> object:
-        """Map a change value to its SQL bind value.
-
-        jsonb columns are bound as JSON text (the SET clause casts them);
-        enums bind their `.value`; everything else binds as-is.
-        """
+        """Serialize a value for SQL binding (jsonb→JSON text, enum→value)."""
         if col == "waiver_ids":
             return json.dumps([str(u) for u in val])  # type: ignore[union-attr]
         return val.value if hasattr(val, "value") else val
 
     @staticmethod
     def _validate_merged_state(merged: dict) -> None:
-        """Validate merged plan state against DB CHECK constraints.
-
-        Raises:
-            ValueError: If the merged state violates constraints.
-        """
+        """Validate merged plan state against DB CHECK constraints."""
         plan_type = PlanType(merged["plan_type"])
         duration_unit = (
             DurationUnit(merged["duration_unit"]) if merged.get("duration_unit") else None

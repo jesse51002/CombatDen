@@ -285,16 +285,15 @@ class PaymentsStripePaymentService:
         common (<=10-item) case needs no extra request.
         """
         lines: list[stripe.InvoiceLineItem] = list(invoice.lines.data)
-        if not getattr(invoice.lines, "has_more", False) or not lines:
+        if not getattr(invoice.lines, "has_more", False):
             return lines
 
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
-        starting_after: str = lines[-1].id
+        starting_after: str | None = lines[-1].id if lines else None
         while True:
-            params: dict[str, Any] = {
-                "limit": INVOICE_LINE_ITEMS_PAGE_LIMIT,
-                "starting_after": starting_after,
-            }
+            params: dict[str, Any] = {"limit": INVOICE_LINE_ITEMS_PAGE_LIMIT}
+            if starting_after:
+                params["starting_after"] = starting_after
             page = await self._stripe.v1.invoices.line_items.list_async(
                 invoice.id,
                 params=params,

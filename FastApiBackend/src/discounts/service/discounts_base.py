@@ -1,9 +1,4 @@
-"""Shared dependencies and helpers for discount preset operations.
-
-Presets are plain gym config now (coupon-free), so this base holds only the
-DB pool — no Stripe service. Coupons are computed at sync-time and live on the
-applied-discount row, not the preset.
-"""
+"""Shared base for discount preset sub-services."""
 
 from __future__ import annotations
 
@@ -20,11 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class DiscountsBase:
-    """Base class for discount preset sub-services.
-
-    Holds the shared DB pool and reusable query methods used across
-    create, update, delete, and list operations.
-    """
+    """Base class for discount preset sub-services."""
 
     def __init__(
         self,
@@ -35,15 +26,7 @@ class DiscountsBase:
     # ── Shared Queries ─────────────────────────────────────────
 
     async def _get_discount(self, discount_id: UUID, gym_id: UUID) -> dict:
-        """Fetch a non-deleted preset row scoped to its owning gym.
-
-        The lookup is scoped to ``gym_id`` (the requester's own gym, from the
-        auth check) so an employee can never read or mutate a discount that
-        belongs to another gym — a cross-gym discount surfaces as not-found.
-
-        Raises:
-            ValueError: If the preset is not found in this gym.
-        """
+        """Fetch a non-deleted preset row scoped to its owning gym."""
         sql = load_sql(SQL_DIR / "discounts_get_by_id.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(

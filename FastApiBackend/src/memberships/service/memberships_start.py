@@ -1,25 +1,6 @@
-"""Start memberships: ONE list-based op, DB-first, at most two charges.
+"""Start memberships: validate → DB insert + discounts → one-time invoice + recurring converge.
 
-One request creates N memberships billed by ONE payer (a single
-membership = a one-item list — there is no separate single-start path).
-Per-membership discounts land BEFORE the charge, so the first (one-time:
-only) invoice is discounted. Billing is at most two charges: ONE
-consolidated one-time invoice (every non-recurring membership, one line
-each) + ONE recurring converge. The op never links accounts — every
-non-payer member must already be linked to the payer, which is what lets
-the whole request run under the payer's single family lock.
-
-Phases:
-- A — validate everything up-front (``MemberMembershipsStartValidation``,
-  shared with the preview); reject with nothing written or billed.
-- B — pure DB: one multi-row pending insert + per-item minted customs +
-  applied discounts; any failure undoes everything (nothing billed).
-- C — the one one-time invoice charge.
-- D — the one recurring converge.
-
-Failure granularity is the charge group: a group's members share its fate,
-a failed group never touches the other group's billed rows, and a
-successful charge is NEVER un-billed.
+At most two charges per request. Billed charges are never un-billed.
 """
 
 from __future__ import annotations
@@ -102,18 +83,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
     ) -> MemberMembershipsStartResponse:
-        """Create every membership in the request for the payer's family.
-
-        Validates everything up-front (any validation failure rejects the
-        whole request with nothing written or billed), inserts the pending
-        rows + discounts, then bills: one consolidated invoice for the
-        one-time group, one converge for the recurring group. Returns the
-        per-membership breakdown — a failed charge group surfaces there,
-        not as an exception.
-
-        Raises:
-            ValueError: If Phase A validation fails (nothing written).
-        """
+        """Create memberships for the payer's family; returns per-membership breakdown."""
         payer, plan_prices = await self._validation.validate(request)
 
         states = [
@@ -133,9 +103,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             s for s in states if s.plan_type == PlanType.recurring
         ]
 
-        # A card on a request that includes a recurring membership MUST be
-        # saved as the default — recurring can only bill the payer's saved
-        # default. Reject loudly before anything is written.
+        # Recurring billing requires the card be saved as default — reject early.
         payment = request.payment
         if payment is not None and recurring and not payment.set_default:
             raise ValueError(
@@ -144,20 +112,14 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 "default card",
             )
 
-        # Promote the card to the payer's saved default FIRST — before any
-        # pre-sync, insert, or charge. The one-time invoice and the recurring
-        # converge both bill the saved default, so it has to already be the new
-        # card. This is NOT best-effort: if it fails it RAISES, aborting the
-        # whole start with nothing written or charged — never leaving a
-        # membership applied while billing the old card.
+        # Promote card to default first — both charges bill the saved default.
         if payment is not None and payment.set_default:
             await self._set_default_card(
                 request.payer_member_id,
                 payment.payment_method_id,
             )
 
-        # Pre-sync only when a recurring converge will run: converge the
-        # payer's family to a clean DB↔Stripe baseline BEFORE inserting.
+        # Pre-sync before inserting to establish a clean DB↔Stripe baseline.
         if recurring:
             await self._pre_sync_payments(request.payer_member_id)
 
@@ -198,18 +160,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plan_prices: dict[UUID, dict],
         states: list[MemberMembershipsStartItemState],
     ) -> None:
-        """Phase B (pure DB): pending rows + minted customs + discounts.
-
-        All membership rows land in ONE multi-row insert; each item's inline
-        customs are minted and its discounts applied before any charge. Any
-        failure here undoes everything inserted so far and re-raises —
-        nothing has been billed yet.
-        """
+        """Insert pending rows + mint custom discounts + apply discounts (before any charge)."""
         start_date = gym_today(payer.timezone)
         rows = self._build_pending_rows(request, plan_prices, start_date)
-        # rows are built in request.memberships order, same as states, so each
-        # state takes its OWN row's id positionally. A (member, plan) lookup
-        # would collapse N stacked-pack rows to one id and strand the rest.
         item_ids = await self._crm_insert(rows)
         for state, item_id in zip(states, item_ids, strict=True):
             state.item_id = item_id
@@ -230,9 +183,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                             gym_id=request.gym_id,
                             discount_ids=all_discount_ids,
                             apply_date=start_date,
-                            # Minted by THIS start — the one flow allowed to
-                            # apply a custom (single-use, DB-enforced).
-                            allow_custom=True,
+                            allow_custom=True,  # Only start may apply custom discounts.
                         )
                     )
         except Exception:
@@ -244,19 +195,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         request: MemberMembershipsStartRequest,
         group: list[MemberMembershipsStartItemState],
     ) -> None:
-        """Phase C: ONE consolidated invoice sweeps the pending one-time rows.
-
-        The group shares the invoice's fate: an exception means nothing was
-        billed (per-step Stripe idempotency) → the whole group fails and is
-        cleaned up. After a successful charge an unconfirmed writeback marks
-        the row failed but KEEPS it — its line is billed; never un-bill.
-
-        A one-off card (``payment`` set, NOT ``set_default``) is charged
-        directly (attach → pay → detach). When ``set_default`` the card was
-        already promoted to the payer's default up-front in ``start()``, so the
-        one-time invoice just bills the saved default like any other charge —
-        no explicit payment method here.
-        """
+        """Charge one consolidated invoice for the one-time group.
+        Keeps rows on success — billed lines are never un-billed."""
         payment = request.payment
         one_off_pm = (
             payment.payment_method_id
@@ -266,9 +206,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
         try:
             await self._payment_sync_one_time.charge_one_time(
                 request.payer_member_id,
-                # Each charge group's key derives from the request's single
-                # key (named by its PlanType group), so a client retry of
-                # the same request dedups BOTH charges at Stripe.
                 idempotency_key=uuid5(
                     request.idempotency_key, PlanType.one_time.value,
                 ),
@@ -287,14 +224,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         payer_member_id: UUID,
         payment_method_id: str,
     ) -> None:
-        """Promote the card to the payer's saved default (attach → set default
-        → detach the old default → write the members card cache).
-
-        Called FIRST in ``start()``, before any insert or charge. It is **not**
-        best-effort: any failure propagates so the whole start aborts with
-        nothing written or charged — never a membership left billing the old
-        card. ``update_card`` is the same path the member page uses.
-        """
+        """Promote the card to the payer's saved default via update_card."""
         await self._members_management.update_card(
             payer_member_id,
             MembersBillingUpdateCardRequest(
@@ -307,13 +237,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         request: MemberMembershipsStartRequest,
         group: list[MemberMembershipsStartItemState],
     ) -> None:
-        """Phase D: ONE recurring converge adds the pending recurring rows.
-
-        An exception fails and cleans the whole group (the engine re-derives
-        from the DB, so removing the pending rows is the revert). A row whose
-        writeback is unconfirmed is reverted too — the next converge or the
-        scheduled reconciler self-heals the Stripe side.
-        """
+        """Converge the recurring group into Stripe; reverts unconfirmed rows."""
         try:
             await self._payment_sync.update_payments_recurring(
                 request.payer_member_id,
@@ -335,13 +259,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         group: list[MemberMembershipsStartItemState],
         keep_unverified: bool,
     ) -> None:
-        """Verify each row's writeback flipped it to ``applied``.
-
-        ``keep_unverified=True`` (one-time): the charge succeeded, so an
-        unconfirmed row is marked failed but kept — its invoice line is
-        already billed and is never un-billed. ``False`` (recurring): the
-        row is reverted; the reconciler / next converge heals Stripe.
-        """
+        """Check each row flipped to applied.
+        keep_unverified=True keeps billed-but-unconfirmed rows (never un-bill)."""
         for state in group:
             status = await self._get_sync_status(
                 state.item_id, state.member_id,
@@ -376,11 +295,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         states: list[MemberMembershipsStartItemState],
     ) -> None:
-        """Undo un-billed items: applied rows → minted customs → pending rows.
-
-        FK order matters (applied discounts RESTRICT on the membership row).
-        Only ever called for rows whose charge group did NOT bill.
-        """
+        """Delete un-billed rows: applied discounts → minted customs → pending rows (FK order)."""
         for state in states:
             if state.applied_ids:
                 await self._update_discounts.delete_applied_discounts(

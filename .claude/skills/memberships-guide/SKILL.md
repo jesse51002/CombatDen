@@ -246,6 +246,7 @@ flipped back to active. Starting again means INSERTing a new row.
 | `stripe_sync_status` | Stripe-sync confirmation enum (`not_added` default → `applied` / `deleted` / `preview_*`); `NOT NULL`. Drives the client view + the DB-first verify |
 | `total_price` | cents, `CHECK total_price >= 0` — this row's post-discount **line** total (unit price × `quantity`, minus its discounts; sync writeback) |
 | `quantity` | `INT NOT NULL DEFAULT 1 CHECK (> 0)` — how many units this row bills as. one_time/trial stack via `quantity > 1` (one row → one Stripe line of N units, `class_count × N` classes); recurring forced to 1 (trigger). Set at create, immutable |
+| `idempotency_key` | nullable UUID; one-time/trial START rows carry a deterministic per-row key `uuid5(request.idempotency_key, "<member_id>:<price_id>")`; recurring + preview rows carry NULL. A partial unique index + `ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING` drops duplicate rows on a retried start; a short `RETURNING` result signals a replay and `_crm_insert` raises (no partial re-charge). |
 | `created_at` | |
 
 **Triggers (exact names from the schema — what each enforces):**
@@ -513,6 +514,8 @@ acting; membership endpoints (`memberships_router.py`) call
 `verify_can_view_member` (on the payer + every item member for start/preview; on
 the member for member-scoped ops) — the membership routes are all member-scoped,
 so they gate on access to those members rather than on gym-employee status).
+
+**Money-moving endpoints use a stricter guard.** `mark-paid-cash`, `charge-card`, `refund`, and `freeze`/`unfreeze` are gated by `verify_gym_employee_for_member` (staff-only; excludes the member themselves), not `verify_can_view_member`. A member must not be able to self-settle or self-freeze.
 
 ---
 

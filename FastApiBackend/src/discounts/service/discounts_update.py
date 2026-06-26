@@ -1,17 +1,4 @@
-"""Update a regular discount.
-
-A discount has a stable IDENTITY (gym_discounts: name + type) and a chain of
-immutable VALUE versions (gym_discount_values). Editing splits accordingly:
-
-* renaming updates the identity row in place;
-* a value edit sends the COMPLETE new ``DiscountValue`` (never a partial merge)
-  and mints a NEW active version (deactivating the prior one) — value rows are
-  a permanent paper trail.
-
-Either way, edits affect only future applications — existing applied-discount
-rows reference the old version and are frozen. There is no Stripe coupon to
-swap (coupons are computed at sync) and no membership cascade.
-"""
+"""Update a discount's identity (rename) and/or mint a new value version."""
 
 from __future__ import annotations
 
@@ -43,27 +30,10 @@ class DiscountsUpdate(DiscountsBase):
         self,
         request: DiscountUpdateRequest,
     ) -> DiscountResponse:
-        """Apply an update; the request shape picks the destination.
-
-        `identity` renames the gym_discounts row in place; `value` mints a
-        new active gym_discount_values version from the complete spec sent.
-        Either may be omitted.
-
-        Args:
-            request: Discount update request (identity and/or value).
-
-        Returns:
-            The updated discount (identity + active value version).
-
-        Raises:
-            ValueError: If the discount is not found or the merged value
-                state is invalid.
-        """
+        """Rename identity and/or mint a new value version."""
         existing = await self._get_discount(request.discount_id, request.gym_id)
 
-        # A `custom` discount is one-shot (mint -> apply once -> archive) and
-        # single-owner, DB-enforced: it never gets a rename or a second value
-        # version. Reject the edit here for a clean error before the trigger.
+        # Custom discounts are one-shot; reject edits before the DB trigger fires.
         if existing["discount_type"] == DiscountType.custom.value:
             raise ValueError(
                 f"Custom discount {request.discount_id} is one-shot and "
@@ -74,9 +44,6 @@ class DiscountsUpdate(DiscountsBase):
         if not identity_changes and request.value is None:
             return DiscountResponse.from_row(existing)
 
-        # The identity UPDATE is built dynamically from the changed columns,
-        # so the guard does real work here (the value path is a static
-        # full-column version INSERT and needs no guard).
         if identity_changes:
             validate_mutable_columns(GYM_DISCOUNTS, set(identity_changes))
 
@@ -107,13 +74,7 @@ class DiscountsUpdate(DiscountsBase):
 
     @staticmethod
     def _collect_changes(model: BaseModel) -> dict[str, object]:
-        """Extract the non-None fields of the identity sub-model.
-
-        The sub-model's own field set is the source of truth, so adding a
-        future editable identity column is just a model field — no change
-        here. (The value path takes a complete ``DiscountValue``, never a
-        field-by-field change set.)
-        """
+        """Return the non-None fields of an identity sub-model."""
         return {
             field: value
             for field in type(model).model_fields
@@ -126,11 +87,7 @@ class DiscountsUpdate(DiscountsBase):
         discount_id: object,
         identity_changes: dict[str, object],
     ) -> dict:
-        """Update the discount identity row (dynamic SET from changes).
-
-        Column names come only from DiscountUpdateIdentity's fields (already
-        guarded against GYM_DISCOUNTS), never raw client strings.
-        """
+        """Update the identity row with a dynamic SET clause."""
         set_clause = ", ".join(f"{col} = :{col}" for col in identity_changes)
         sql = load_sql(
             SQL_DIR / "discounts_update.sql",
@@ -150,11 +107,7 @@ class DiscountsUpdate(DiscountsBase):
         gym_id: str,
         value: DiscountValue,
     ) -> dict:
-        """Deactivate the active value version and insert the sent one.
-
-        The request carries the complete new spec (the model already
-        validated it) — nothing is merged from the prior version.
-        """
+        """Deactivate the active value version and insert a new one."""
         deactivate_sql = load_sql(SQL_DIR / "discount_values_deactivate.sql")
         await session.execute(
             text(deactivate_sql),

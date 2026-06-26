@@ -38,47 +38,13 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         idempotency_key: UUID,
     ) -> dict[UUID, date]:
-        """Cancel ONE OR MORE of a member's recurring memberships (DB-first,
-        verified). Natively single or many — a single cancel is just a
-        one-element list.
+        """Cancel one or more recurring memberships (DB-first, payer-atomic).
 
-        **Processed one payer at a time, payer-atomically.** A member's
-        memberships may be funded by different payers; each distinct payer's
-        subscription is converged ONCE. For each payer in turn we set that
-        payer's items' ``cancel_date`` FIRST (status stays ``applied``), then
-        converge that payer (re-derives the desired state with the cancelled
-        rows excluded, removes the lines, stamps them ``deleted``) under its own
-        idempotency key — and only THEN move to the next payer. So a payer's
-        ``cancel_date`` is committed only once its converge confirms: a failed
-        payer's items are reverted by ``sync_or_revert`` (cancel_dates cleared),
-        and no later payer ever gets a stale ``cancel_date`` written, because we
-        never write theirs until the earlier payer converged. ``cancel_date``
-        only locks once a row is actually removed from Stripe (``deleted``);
-        while unconfirmed it stays clearable. ``stripe_item_id`` is left intact
-        (historical invoice-line record). Already-cancelled items are a no-op.
-
-        Returns a map of every input ``item_id`` → its resolved ``cancel_date``
-        (only on FULL success — every payer converged).
-
-        Raises:
-            ValueError: If a membership is not found, has ended, or is
-                non-recurring (validation runs before any DB write).
-            PartialCancelError: If a cancel_date write or a converge fails
-                AFTER an earlier payer already succeeded — the batch is partial
-                (earlier payers stay cancelled, the failed payer is reverted).
-                Carries the succeeded/failed map.
-            SyncNotConfirmedError / PaymentsStripeError / DB error: If the FIRST
-                payer's cancel_date write or converge fails (no payer succeeded
-                yet → no partial state, the underlying error propagates
-                unwrapped).
+        Processes one payer at a time: writes cancel_dates, converges Stripe,
+        then advances. A failure after earlier payers succeeded raises PartialCancelError.
+        Returns item_id → resolved cancel_date on full success.
         """
-        # 1) Validation pass — no DB writes. Read every row, record
-        #    already-cancelled items, validate the rest, and group the
-        #    still-cancellable items by payer. Each grouped item carries its
-        #    ACTUAL subject member_id (from the row, NOT the request actor — the
-        #    actor may be a payer cancelling a child's membership) plus its
-        #    gym-tz today, used to key the per-item ops and resolve its
-        #    cancel_date when we write it below.
+        # 1) Validation — no DB writes. Group cancellable items by payer.
         dates: dict[UUID, date] = {}
         by_payer: dict[UUID, list[tuple[UUID, UUID, date]]] = {}
         for item_id in item_ids:
@@ -92,27 +58,15 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 UUID(str(row["paid_by_member_id"])), []
             ).append((item_id, subject_member_id, gym_today(row["timezone"])))
 
-        # 2) Per-payer pass — payer-atomic. Write THIS payer's cancel_dates,
-        #    converge it, record its successes; only then advance to the next
-        #    payer. On a write failure the loop reverts the cancel_dates it
-        #    wrote; on a converge failure sync_or_revert has already reverted
-        #    them. Either way, if earlier payers succeeded the batch is partial
-        #    (surface the map), else the error propagates raw.
-        #    A payer's batch may span items with DIFFERENT subject member_ids
-        #    (the payer funds several children), so every per-item op is keyed
-        #    by the item's own subject — never the request actor.
+        # 2) Per-payer pass — write cancel_dates then converge, one payer at a time.
         succeeded: dict[UUID, date] = {}
         for payer_member_id, payer_items in by_payer.items():
             payer_keyed_items = [
                 (item_id, subject) for item_id, subject, _ in payer_items
             ]
             payer_dates: dict[UUID, date] = {}
-            # Write THIS payer's cancel_dates first. If a write fails mid-loop
-            # the converge below never runs, so the rows already written here
-            # would have NO sync_or_revert path — an orphan cancel_date with the
-            # Stripe line still live (a mis-bill). Clear the ones we wrote before
-            # propagating; nothing is 'deleted' until the converge runs, so
-            # _uncancel is always permitted by the cancel_date-immutable trigger.
+            # Clear any cancel_dates we wrote if the write loop fails mid-way
+            # (before converge runs — nothing is 'deleted' yet so _uncancel is safe).
             try:
                 for item_id, subject, today in payer_items:
                     payer_dates[item_id] = await self._crm_cancel(
@@ -125,16 +79,11 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 self._raise_payer_failure(
                     succeeded, payer_member_id, payer_keyed_items, exc
                 )
-            # Converge this payer once. On failure sync_or_revert has already
-            # reverted this payer's still-unconfirmed cancel_dates.
             try:
                 await self._converge_cancellations(
                     payer_keyed_items,
                     payer_member_id,
-                    # Distinct, deterministic key per payer's subscription update
-                    # so the per-payer Stripe ops never collide on one
-                    # idempotency key (and a retry derives the same per-payer
-                    # keys).
+                    # Distinct deterministic key per payer so retries dedup correctly.
                     uuid5(idempotency_key, str(payer_member_id)),
                 )
             except Exception as exc:
@@ -153,10 +102,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         payer_keyed_items: list[tuple[UUID, UUID]],
         exc: Exception,
     ) -> NoReturn:
-        """Propagate a payer's cancel failure. If no earlier payer succeeded
-        there is no partial state — re-raise the raw error; otherwise the batch
-        is partial, so wrap it in a PartialCancelError carrying the
-        succeeded/failed split (this payer's items are already reverted)."""
+        """Re-raise raw if no earlier payer succeeded; else wrap in PartialCancelError."""
         if not succeeded:
             raise exc
         raise PartialCancelError(
@@ -172,18 +118,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         payer_member_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Run ONE payer sync to drop the now-``cancel_date``'d items, verify
-        every one landed ``deleted``, and revert (uncancel) any that did not.
-
-        ``items`` is ``(item_id, subject_member_id)`` per cancelled membership.
-        Each per-item op (status read, uncancel) is keyed by the item's ACTUAL
-        subject — a payer's batch may fund several children with different
-        subject member_ids, so the request actor is never the key here.
-
-        One converge per distinct payer — ``cancel`` calls this once per payer
-        it batches; one sync re-derives that payer's desired state with all
-        their cancelled rows excluded and converges Stripe once.
-        """
+        """Converge one payer's subscription, verify items landed deleted,
+        revert any that didn't."""
         item_ids = [item_id for item_id, _ in items]
 
         async def _sync() -> None:
@@ -231,17 +167,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_ids: list[UUID],
         member_id: UUID,
     ) -> list[PayerInvoiceChange]:
-        """Preview cancelling ONE OR MORE of a member's recurring memberships.
-
-        Groups the items by payer and returns one entry per payer that funds any
-        of them — each ``affected`` (membership-level), carrying their
-        subscription recurring current → new. A single cancel is a one-element
-        list → a one-entry affected result. Already-cancelled items are skipped.
-        Read-only (staged then restored).
-
-        Raises:
-            ValueError: If a membership is not found / non-recurring.
-        """
+        """Preview cancel for one or more memberships; returns per-payer current→new. Read-only."""
         by_payer: dict[UUID, list[tuple[UUID, UUID]]] = {}
         for item_id in item_ids:
             row = await self._get_membership(item_id, member_id)
@@ -262,16 +188,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         items: list[tuple[UUID, UUID]],
         payer_member_id: UUID,
     ) -> PayerInvoiceChange:
-        """One payer's preview entry. ``items`` is ``(item_id, subject_member_id)``
-        per membership this payer funds that is being cancelled — each keyed by
-        its ACTUAL subject (a payer may fund several children). ``affected`` is
-        **membership-level** — True iff ``items`` is non-empty (this payer funds
-        ≥1 membership being cancelled), decided independently of cost. When
-        affected, stage those lines and preview the payer's recurring current →
-        new; when not, nothing is cancelled for them (``preview`` None). ALWAYS
-        returns an entry, so a caller can show "no change" for an unaffected
-        payer — e.g. removing an authorization that funds nothing.
-        """
+        """Build one payer's preview entry (affected=True if any items are being cancelled)."""
         affected = len(items) > 0
         preview = (
             await self._staged_cancel_preview(items, payer_member_id)
@@ -293,20 +210,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
     ) -> date:
-        """End a one-time / trial membership early (set ``end_date = today``).
-
-        A one-time / trial membership is a TERMINAL invoice with no subscription
-        line, so ending it is a PURE DB write — no Stripe converge and no payer
-        lock (unlike the recurring ``cancel``, which removes the Stripe line).
-        Recurring memberships are rejected (they must use ``cancel``). An
-        already-ended / -cancelled membership is rejected. Status becomes
-        ``ended`` (the status view derives it from ``end_date``).
-
-        Returns the resolved ``end_date`` (today).
-
-        Raises:
-            ValueError: not found, recurring, or already ended/cancelled.
-        """
+        """End a one-time/trial membership early (pure DB write). Returns the resolved end_date."""
         row = await self._get_membership(item_id, member_id)
         # One gym-local ``today`` for BOTH the guard and the end_date write, so
         # they can't straddle midnight (validate on day N, end on day N+1).
@@ -319,12 +223,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 text(sql),
                 {
                     "item_id": str(item_id),
-                    # Drive the UPDATE off the row's ACTUAL subject, not the
-                    # request actor — a payer ending a membership they fund for
-                    # someone else passes their own member_id (the _get_membership
-                    # auth allows it), so filtering the UPDATE by the actor would
-                    # match zero rows and scalar_one() would raise NoResultFound
-                    # (an opaque 500). Same subject-keying the cancel path uses.
+                    # Use the row's actual subject, not the request actor (payer may differ).
                     "member_id": str(row["member_id"]),
                     "gym_today": today,
                 },
@@ -339,8 +238,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         self,
         payer_member_ids: list[UUID],
     ) -> dict[UUID, tuple[str, str]]:
-        """(first_name, last_name) for each payer id — labels the per-payer
-        preview entries."""
+        """Return (first_name, last_name) for each payer id."""
         sql = load_sql(SQL_DIR / "member_names_by_ids.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
@@ -360,29 +258,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         items: list[tuple[UUID, UUID]],
         payer_member_id: UUID,
     ) -> DueNowVsRecurringPreview | None:
-        """Stage every (item_id, subject_member_id) in [items] ``preview_remove``,
-        preview ``payer_member_id``'s subscription with those lines dropped, restore
-        **each item to its own pre-stage status**. The staged-cancel-preview for
-        ONE payer; ``preview_cancel`` calls it once per payer it groups the items
-        into.
+        """Stage items preview_remove, preview the payer's subscription, restore original statuses.
 
-        The preview build drops ``preview_remove`` rows (preview=True excludes
-        them) while the real path never bills them; the window is bounded by
-        ``finally`` and the per-payer lock (#25) closes the race vs a concurrent
-        real sync. Self-heals stale preview rows for the payer before staging.
-
-        Cleanup restores each item to the status it carried **before** staging —
-        never blindly ``applied``. A cancellable membership can be ``not_added``
-        (pending, no ``stripe_item_id`` yet); restoring such a row to ``applied``
-        would corrupt it into a fake-synced state, so the original status is
-        captured per item before staging and restored verbatim.
+        Self-heals stale preview rows first. Restores pre-stage status verbatim
+        (not blindly ``applied`` — an item may be ``not_added``).
         """
-        # Self-heal: restore any stale preview_remove/preview_add rows for this
-        # payer left by a prior crashed preview, before staging our own.
         await self._sweep_stale_preview_rows(payer_member_id)
 
-        # Capture each item's ORIGINAL status after the self-heal sweep and
-        # before we stage preview_remove, so cleanup restores it verbatim.
+        # Capture statuses before staging so cleanup restores them verbatim.
         originals: dict[tuple[UUID, UUID], StripeSyncStatus] = {}
         for item_id, member_id in items:
             status = await self._get_sync_status(item_id, member_id)
@@ -399,9 +282,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             for item_id, member_id in items:
                 original = originals.get((item_id, member_id))
                 if original is None:
-                    # Row vanished between capture and cleanup — nothing to
-                    # restore (set_sync_status would be a no-op anyway).
-                    continue
+                    continue  # Row vanished between capture and cleanup.
                 await self._set_sync_status(item_id, member_id, original)
 
         return await staged_preview(
@@ -426,12 +307,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 f"Cannot end a recurring membership here — use cancel: "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        # ANY cancel_date (already-effective OR a future scheduled one) blocks
-        # ending: member_memberships_end.sql sets end_date WITHOUT clearing
-        # cancel_date, so a pending cancellation would leave the row with dual
-        # terminal dates (a ghost scheduled-cancel for downstream status /
-        # reconciler logic). Mirrors the upgrade/reprice guard — clear the
-        # cancellation first.
+        # Any cancel_date blocks ending — dual terminal dates corrupt status logic.
         if row["cancel_date"] is not None:
             raise ValueError(
                 f"Cannot end a membership with a pending cancellation "
@@ -461,9 +337,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         if row["end_date"] is not None and row["end_date"] <= gym_today(
             row["timezone"]
         ):
-            # A recurring membership should never carry an end_date; if one is
-            # already past, the Stripe item is gone — reject cleanly rather than
-            # writing cancel_date and converging against a dead item.
+            # Already-past end_date means the Stripe item is gone — reject cleanly.
             raise ValueError(
                 f"Cannot cancel an already-ended recurring membership "
                 f"(end_date={row['end_date']}): "
@@ -476,12 +350,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         today: date,
     ) -> date:
-        """Set ``cancel_date`` in the CRM database (status stays ``applied``).
-
-        Returns the resolved ``cancel_date`` (the date through which the
-        membership remains active). Only writes ``cancel_date`` —
-        ``stripe_item_id`` is left intact as the historical invoice-line record.
-        """
+        """Set cancel_date (status stays applied; stripe_item_id unchanged).
+        Returns the resolved date."""
         cancel_sql = load_sql(SQL_DIR / "member_memberships_cancel.sql")
         params = {
             "item_id": str(item_id),
@@ -499,12 +369,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
     ) -> None:
-        """Revert a cancel whose sync did not confirm: clear ``cancel_date``.
-
-        Permitted while the membership has not been removed from Stripe yet
-        (status is not ``deleted``) — the exact revert case. Status is left
-        ``applied``; ``stripe_item_id`` is left intact.
-        """
+        """Clear cancel_date when sync did not confirm (membership not yet deleted)."""
         sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
         params = {
             "item_id": str(item_id),
