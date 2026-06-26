@@ -17,11 +17,20 @@ from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
+from src.memberships.service.memberships_invoice_fetch import (
+    MemberMembershipsInvoiceFetch,
+)
+from src.memberships.service.memberships_invoice_fetch_runner import (
+    MembershipsInvoiceFetchRunner,
+)
 from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
+)
+from src.memberships.service.memberships_upgrade import (
+    MemberMembershipsUpgrade,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -49,6 +58,16 @@ from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
+from src.stripe_webhooks.service.invoice_paid_handler import (
+    InvoicePaidHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_failed_handler import (
+    InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import RefundHandler
 from src.sync.service.sync_builder import (
     PaymentSyncBuilder,
 )
@@ -173,13 +192,50 @@ def build_member_management_service(
     return MembersManagementService(db_pool, members_svc, subscription_svc)
 
 
+def build_invoice_fetch(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsInvoiceFetch:
+    """Build the on-demand / reconciler invoice fetch engine.
+
+    Mirrors ``src/core/dependencies.py`` (member_memberships_invoice_fetch).
+    """
+    payer_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
+    payment_service = PaymentsStripePaymentService(
+        stripe_client,
+        PaymentsStripeMembersService(stripe_client),
+    )
+    return MemberMembershipsInvoiceFetch(
+        db_pool,
+        payment_service,
+        InvoicePaidHandler(stripe_client=stripe_client),
+        InvoicePaymentPaidHandler(stripe_client=stripe_client),
+        InvoicePaymentFailedHandler(),
+        RefundHandler(),
+        payer_resolver,
+    )
+
+
+def build_invoice_fetch_runner(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MembershipsInvoiceFetchRunner:
+    """Build the fire-and-forget post-op invoice-fetch runner."""
+    return MembershipsInvoiceFetchRunner(
+        build_invoice_fetch(db_pool, stripe_client)
+    )
+
+
 def build_member_memberships_service(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
 ) -> MemberMembershipsService:
     """Build the full memberships service chain.
 
-    Mirrors ``src/core/dependencies.py`` (member_memberships_service).
+    Mirrors ``src/core/dependencies.py`` (member_memberships_service). The
+    on-demand invoice fetch the facade fires is a no-op in tests unless
+    ``settings.invoice_fetch_on_demand_enabled`` is set (conftest disables it),
+    so ops don't kick off real background Stripe fetches.
     """
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
@@ -213,8 +269,10 @@ def build_member_memberships_service(
         one_time_svc,
         discounts_svc,
         build_memberships_reprice(db_pool, stripe_client),
+        build_memberships_upgrade(db_pool, stripe_client),
         management_svc,
         waivers_svc,
+        build_invoice_fetch_runner(db_pool, stripe_client),
     )
 
 
@@ -263,6 +321,25 @@ def build_memberships_reprice(
     paying_lock = build_paying_member_lock(db_pool)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MemberMembershipsReprice(
+        db_pool=db_pool,
+        payment_sync_service=sync_svc,
+        gym_stripe_service=gym_stripe_svc,
+        paying_lock=paying_lock,
+    )
+
+
+def build_memberships_upgrade(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsUpgrade:
+    """Build the cross-plan upgrade service.
+
+    Mirrors ``src/core/dependencies.py`` (memberships_upgrade).
+    """
+    gym_stripe_svc = GymStripeService(db_pool)
+    paying_lock = build_paying_member_lock(db_pool)
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
+    return MemberMembershipsUpgrade(
         db_pool=db_pool,
         payment_sync_service=sync_svc,
         gym_stripe_service=gym_stripe_svc,

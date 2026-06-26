@@ -14,6 +14,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
@@ -62,6 +63,12 @@ class MemberDetailBloc
       _onCancelMembershipOutcomeCleared,
     );
     on<UpdatePriceRequested>(_onUpdatePrice);
+    on<UpgradeMembershipRequested>(_onUpgradeMembership);
+    on<UpgradeMembershipOutcomeCleared>(
+      _onUpgradeMembershipOutcomeCleared,
+    );
+    on<EndMembershipRequested>(_onEndMembership);
+    on<EndMembershipOutcomeCleared>(_onEndMembershipOutcomeCleared);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
@@ -104,6 +111,7 @@ class MemberDetailBloc
       emit(MemberDetailError(
         e.toString(),
         memberId: event.memberId,
+        statusCode: e is ServerException ? e.statusCode : null,
       ));
     }
   }
@@ -530,6 +538,149 @@ class MemberDetailBloc
         ),
       ),
     );
+  }
+
+  /// Cross-plan upgrade. Like [_onChargeCard], it rides a dedicated
+  /// channel ([isUpgrading] / [upgradeSuccess] / [upgradeError]) instead
+  /// of [_runMutation] so the screen-level overlay + error dialog never
+  /// fire while the upgrade dialog is open; the dialog flips to its own
+  /// success step on the bumped token. Member detail is re-fetched on
+  /// success so the carousel + Payment History refresh behind the
+  /// still-open step.
+  Future<void> _onUpgradeMembership(
+    UpgradeMembershipRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isUpgrading: true,
+      clearUpgradeOutcome: true,
+    ));
+    try {
+      await _repository.upgradeMembership(
+        MemberMembershipsUpgradeRequest(
+          itemId: event.itemId,
+          memberId: event.memberId,
+          targetPlanId: event.targetPlanId,
+          prorationBehavior: event.prorationBehavior,
+          idempotencyKey: const Uuid().v4(),
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Upgrade membership failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isUpgrading: false,
+        upgradeError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // The upgrade committed — the prorated difference (if any) is charged.
+    // Commit success now so a follow-up refresh failure can never make a
+    // real upgrade look failed. Mirrors [_onChargeCard].
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
+      isUpgrading: false,
+      upgradeSuccess: committed.upgradeSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
+    ));
+    // The prorated-difference invoice lands asynchronously (Stripe
+    // webhook), so poll to surface it without a reload.
+    _startInvoicePolling();
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Upgrade succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onUpgradeMembershipOutcomeCleared(
+    UpgradeMembershipOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearUpgradeOutcome: true));
+  }
+
+  /// End a one-time / trial membership. Like [_onUpgradeMembership], it
+  /// rides a dedicated channel ([isEnding] / [endSuccess] / [endError]) so
+  /// the end dialog owns its own processing → success step (the screen-level
+  /// overlay + error dialog never fire while it is open). No Stripe / no
+  /// invoice, so — unlike upgrade — it does NOT poll for an invoice.
+  Future<void> _onEndMembership(
+    EndMembershipRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isEnding: true,
+      clearEndOutcome: true,
+    ));
+    try {
+      await _repository.endMembership(
+        itemId: event.itemId,
+        memberId: event.memberId,
+      );
+    } catch (e, stackTrace) {
+      log('End membership failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isEnding: false,
+        endError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // The end committed. Commit success now so a follow-up refresh failure
+    // can't make a real end look failed. Mirrors [_onUpgradeMembership].
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
+      isEnding: false,
+      endSuccess: committed.endSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
+    ));
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'End succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onEndMembershipOutcomeCleared(
+    EndMembershipOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearEndOutcome: true));
   }
 
   Future<void> _onFreezeAccount(

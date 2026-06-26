@@ -3,9 +3,10 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The post-charge invoice poll is a fixed, dumb schedule: it fires at
-/// 5/10/15/30/60s and stops. A new charge mid-window restarts it (so
-/// only one sequence ever runs). `fakeAsync` drives virtual time so the
-/// 60s window is deterministic and instant.
+/// 5/10/15/30/60s and stops — a light client-side safety net (the backend
+/// now deterministically pulls the invoice from Stripe right after the op).
+/// A new charge mid-window restarts it (so only one sequence ever runs).
+/// `fakeAsync` drives virtual time so the 60s window is deterministic.
 void main() {
   group('InvoicePoller', () {
     test('fires once at each default beat (5/10/15/30/60s)', () {

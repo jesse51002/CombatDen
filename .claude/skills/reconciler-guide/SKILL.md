@@ -7,8 +7,10 @@ description: >-
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
   orchestrator running the five step-services in order; the generic ResourceLock
   the orphan cleanup uses), the five modular step-services run in order —
-  InvoiceFetchSweep (missed-webhook backfill that reuses the webhook handler
-  record() seam), StaleTaskSweep (re-runs unfinished tracked tasks whose
+  InvoiceFetchSweep (missed-webhook backstop: a thin gym-iteration caller that
+  delegates per gym to MemberMembershipsInvoiceFetch.sweep_account in memberships;
+  the fetch+apply engine lives in memberships — reconciler calls in, never the
+  reverse), StaleTaskSweep (re-runs unfinished tracked tasks whose
   in-process run died — the tasks domain's crash recovery, moved here),
   OrphanCleanupSweep (lock-guarded delete of stranded not_added
   rows), PaymentPushSweep (CRM→Stripe converge via the existing bulk_payment_sync,
@@ -21,16 +23,16 @@ description: >-
   (config drift → CRM wins / push; lifecycle/dunning drift → Stripe wins / the
   sync cancels a gone sub, never re-bill). Load this whenever you touch the
   reconciler sweep, the scheduler, the subscription-deleted webhook, the invoice
-  fetcher / the webhook handle→record seam, the synthetic failed-charge key, or
-  ask how/when the reconciler runs. Trigger on "reconciler", "scheduled sweep",
-  "twice daily", "APScheduler", "ResourceLock", "OrphanCleanupSweep",
-  "PaymentPushSweep", "InvoiceFetchSweep", "StaleTaskSweep",
-  "stale-task recovery", "SubscriptionOrphanSweep", "orphan subscription",
-  "cancel unlinked sub", "customer.subscription.deleted",
+  fetch sweep, the synthetic failed-charge key, or ask how/when the reconciler
+  runs. Trigger on "reconciler", "scheduled sweep", "twice daily", "APScheduler",
+  "ResourceLock", "OrphanCleanupSweep", "PaymentPushSweep", "InvoiceFetchSweep",
+  "StaleTaskSweep", "stale-task recovery", "SubscriptionOrphanSweep", "orphan
+  subscription", "cancel unlinked sub", "customer.subscription.deleted",
   "record seam", "synthetic charge key", "self-heal a gone sub", "dunning",
   "skip-if-equal", or any change to src/reconciler/. The payment-sync ENGINE the
   push step calls — including the gone-sub cancel (PaymentSyncCancel) — lives in
-  `sync-guide`; the webhook handlers it reuses live in `payments-guide`.
+  `sync-guide`; the on-demand post-op fetch engine + webhook record() seams live in
+  `memberships-guide` + `payments-guide`.
 ---
 
 # Scheduled Reconciler — the on-a-clock billing safety net
@@ -51,8 +53,12 @@ mechanics**. It does **not** own:
   → `sync-guide`. The push sweep *calls* `bulk_payment_sync`; it does not
   redocument it.
 - **The Stripe webhook handlers** (invoice paid/payment/failed/refund) and the
-  Stripe primitives → `payments-guide`. The invoice fetcher *reuses* their
+  Stripe primitives → `payments-guide`. The fetch engine *reuses* their
   `record()` methods; it does not redocument them.
+- **The fetch+apply engine** (`MemberMembershipsInvoiceFetch`) and the **on-demand
+  post-op fast path** (`MembershipsInvoiceFetchRunner`) → `memberships-guide`.
+  `InvoiceFetchSweep` calls into memberships; the reconciler does **not** own
+  the fetch loop.
 - **The membership lifecycle / cancel path** → `memberships-guide`.
 
 ---
@@ -217,33 +223,46 @@ backstop regardless).
 
 ---
 
-## 5. The invoice fetcher + the record seam + the synthetic failed-charge key
+## 5. The invoice fetch sweep + the record seam + the synthetic failed-charge key
 
-**`InvoiceFetchSweep`** is a missed-webhook backstop. Per gym Connect account
+**`InvoiceFetchSweep`** (`reconciler_invoice_fetch_sweep.py`) is a **thin gym-iteration
+caller** — it owns only the gym list + the lookback window. For the actual fetch+apply
+work it **delegates per gym** to `MemberMembershipsInvoiceFetch.sweep_account(gym_id,
+account_id, cutoff, result)` in `src/memberships/`. The fetch+apply engine lives in
+`memberships`; the reconciler calls in, **never** the reverse (there is no
+`memberships → reconciler` import edge). `SweepResult` is in `src/shared/sweep_result.py`
+so both the reconciler and the memberships engine can import it without a cycle.
+
+**`MemberMembershipsInvoiceFetch`** (the engine — `src/memberships/service/memberships_invoice_fetch.py`)
+is the single fetch+apply loop used by **both** the reconciler backstop (`sweep_account`,
+`customer=None` → whole account) and the on-demand post-op fast path (`fetch_for_payer`,
+`customer=<one payer>` → scoped to that payer; see `memberships-guide`). Per gym Connect account
 (`reconciler_gyms_with_connect.sql`) it lists the last
 `settings.reconciler_invoice_lookback_days` of invoices / payments / refunds (paginated)
-and re-records each through the SAME webhook handler logic — but driven by listed
+and re-records each through the SAME webhook handler `record()` seams — but driven by listed
 **objects** instead of events, so it **cannot** use the webhook event-log dedup.
 
 **The handle→record seam.** Each of the 4 webhook handlers
 (`invoice_paid`, `invoice_payment_paid`, `invoice_payment_failed`, `refund`) is
 split: `handle(session, event, gym_id)` is a thin adapter that unwraps the event
 envelope and calls `record(session, obj, gym_id, …)` carrying the body. The
-dispatcher still calls `handle` (webhook behavior unchanged); the fetcher calls
+dispatcher still calls `handle` (webhook behavior unchanged); the fetch engine calls
 `record` with listed objects. Routing: invoice `status='paid'` →
 `invoice_paid.record` (bill + line items + `next_due_date`, which is what clears a
 falsely-overdue member) then its succeeded `invoice_payments` →
 `invoice_payment_paid.record`; `status='open'` with `attempt_count>0` →
-`invoice_payment_failed.record`; refunds → `refund.record`. Each object is
-recorded in **its own DB transaction** (`_run_record`) so one bad object can't
-roll back the rest; `SubscriptionItemPendingError` / `InvoiceNotYetRecordedError`
-are caught per object (the next sweep retries once the prerequisite row exists).
+`invoice_payment_failed.record`; refunds → `refund.record` (full sweep only — the
+customer-scoped on-demand path skips refunds since refunds have their own op +
+webhook + the cron backstop). Each object is recorded in **its own DB transaction**
+(`_run_record`) so one bad object can't roll back the rest; `SubscriptionItemPendingError` /
+`InvoiceNotYetRecordedError` are caught per object (the next sweep retries once the
+prerequisite row exists).
 
 **Idempotency at the DB layer** (no event-log): invoice upsert on
 `stripe_invoice_id`; succeeded-charge `stripe_charge_id` UNIQUE; refund
 `stripe_refund_id` UNIQUE; and the **synthetic per-attempt failed-charge key**
 `failed_attempt:<invoice>:<attempt_count>`, stored in `stripe_charge_id` and
-shared by **both** the webhook failed handler and the fetcher, so a single
+shared by **both** the webhook failed handler and the fetch engine, so a single
 in-window failure records exactly once and a *new* attempt (Stripe increments
 `attempt_count`) gets its own row. It never collides with a real `ch_…` id.
 
@@ -316,15 +335,20 @@ write-reduction.
 ## Key files (where the reconciler actually lives)
 
 - **Orchestrator:** `src/reconciler/service/reconciler/reconciler_service.py`
-- **Sweeps:** `reconciler_invoice_fetch_sweep.py`,
+- **Sweeps:** `reconciler_invoice_fetch_sweep.py` (thin gym-iteration caller; delegates to memberships engine),
   `reconciler_orphan_cleanup_sweep.py`, `reconciler_payment_push_sweep.py`,
   `reconciler_subscription_orphan_sweep.py` — same folder
-- **Result models:** `reconciler_result.py`
+- **Result models:** `reconciler_result.py`; **`SweepResult`:** `src/shared/sweep_result.py`
+  (shared by reconciler + memberships engine; lives in `shared` to avoid a `memberships → reconciler` import edge)
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
 - **SQL:** `src/reconciler/sql/` (`reconciler_orphan_memberships.sql`,
   `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`,
   `reconciler_linked_item_ids.sql` — the subscription-orphan linkage read)
 - **Shared lock:** `src/shared/resource_lock.py`
+- **The fetch+apply engine (in memberships, owned by `memberships-guide`):**
+  `src/memberships/service/memberships_invoice_fetch.py` (`MemberMembershipsInvoiceFetch`) —
+  the `sweep_account` method is what `InvoiceFetchSweep` calls.
+  Dependency direction: `reconciler → memberships` (never the reverse)
 - **Gone-sub cancel (in the sync, see `sync-guide`):**
   `src/sync/service/sync_cancel.py`
   (+ `memberships/sql/member_memberships_family_cancellable.sql`)
@@ -333,7 +357,8 @@ write-reduction.
 - **The record seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
   `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
-  `reconciler_orphan_min_age_seconds` — all `Settings` fields)
+  `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch config
+  lives in `memberships-guide`)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
   (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 

@@ -76,6 +76,21 @@ class Settings(BaseSettings):
     # must age past any in-flight op before it can be judged an orphan.
     reconciler_orphan_min_age_seconds: int = 3600
 
+    # On-demand post-op invoice fetch: right after an invoice-creating
+    # membership op, pull that payer's new invoices straight from Stripe and
+    # apply them (deterministic) instead of waiting on the invoice.paid /
+    # invoice_payment.paid webhooks. Webhooks + the twice-daily reconciler sweep
+    # remain the backstops; this is an additive fast-path that reuses the same
+    # idempotent record() seams.
+    invoice_fetch_on_demand_enabled: bool = True
+    # Widen the created>= cutoff below the op's start time to absorb clock skew
+    # between our server clock and Stripe's invoice `created` timestamp.
+    invoice_fetch_buffer_seconds: int = 120
+    # Bounded retry: a just-created invoice may not be paid/listable the instant
+    # the op returns. Delays BETWEEN attempts (first attempt is immediate); the
+    # loop stops early once the bill this op cut is applied. ~51s total.
+    invoice_fetch_retry_delays_seconds: list[int] = [0, 3, 8, 15, 25]
+
     # Billing cycle anchors
     monthly_billing_anchor_day: int = 1  # 1st of month
     weekly_billing_anchor_weekday: int = 6  # Sunday (Python weekday: Mon=0, Sun=6)

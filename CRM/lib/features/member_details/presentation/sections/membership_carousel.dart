@@ -7,7 +7,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/sections/discounts_section.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_actions_row.dart';
-import 'package:crm/features/member_details/presentation/sections/membership_details_table.dart';
+import 'package:crm/features/member_details/presentation/sections/membership_details_loader.dart';
 import 'package:crm/features/member_details/presentation/sections/outdated_price_card.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
@@ -27,11 +27,17 @@ class MembershipCarousel extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
+  /// Bumped on every billing mutation (the bloc's refreshToken) — the
+  /// details table's one-time "Refunded" side read re-runs when it
+  /// changes so a fresh refund shows without a manual reload.
+  final Object? refreshKey;
+
   const MembershipCarousel({
     super.key,
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
+    this.refreshKey,
   });
 
   List<MembershipInfo> get _memberships => member.memberships;
@@ -104,13 +110,15 @@ class MembershipCarousel extends StatelessWidget {
               ? () => onPageChanged(index + 1)
               : null,
         ),
-        MembershipDetailsTable(
+        MembershipDetailsLoader(
           membership: membership,
+          memberId: member.memberId,
           // A "Paid by" row leads the table for a member in an
           // authorization relationship; null for a solo member
           // (they always pay their own way).
           payerName: payer?.name,
           payerPhotoUrl: payer?.photoUrl,
+          refreshKey: refreshKey,
         ),
         if (isInTask) const InTaskBadge(),
         if (showOutdated)

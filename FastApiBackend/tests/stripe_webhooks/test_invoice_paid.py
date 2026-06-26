@@ -12,7 +12,7 @@ payment(s) arrive on the separate ``invoice_payment.paid`` event, covered by
 
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -50,6 +50,20 @@ async def _fetch_membership_dates(db_pool, item_id) -> dict | None:
                 "WHERE item_id = :id"
             ),
             {"id": str(item_id)},
+        )
+        row = result.mappings().fetchone()
+    return dict(row) if row else None
+
+
+async def _fetch_line_item(db_pool, line_item_id: str) -> dict | None:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT item_type, item_id, amount, name "
+                "FROM member_invoice_line_items "
+                "WHERE line_item_id = :id"
+            ),
+            {"id": line_item_id},
         )
         row = result.mappings().fetchone()
     return dict(row) if row else None
@@ -355,3 +369,117 @@ async def test_invoice_paid_one_time_payment_records_invoice(
     assert dates is not None
     assert dates["last_paid_date"] is None
     assert dates["next_due_date"] is None
+
+
+async def test_invoice_paid_one_time_membership_line_carries_item_id(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    webhook_fixture,
+):
+    """A one-time membership's invoice line carries its membership item_id.
+
+    Regression: a one-time / trial line has NO ``subscription_item``, so the
+    line→membership resolver (which keyed only on ``subscription_item``) left
+    ``member_invoice_line_items.item_id`` NULL — the membership card then can't
+    find the charge to refund, and Payment History can't match the line to the
+    membership. A one-time membership's ``stripe_item_id`` IS the invoice line
+    id, so the resolver falls back to the line id. This proves the line lands
+    as ``item_type='membership'`` with the right ``item_id``.
+    """
+    buyer = await create_member(
+        db_pool, stripe_client, gym_id, connect_opts,
+        first_name="OneTime", last_name="Buyer",
+    )
+    # A one-time membership stores the invoice LINE id (il_...) as its
+    # stripe_item_id — not a si_ subscription item. Clone the fixture's
+    # plan/price (the resolver keys on stripe_item_id, never plan_type).
+    line_item_id = f"il_onetime_{buyer.member_id.hex[:12]}"
+    try:
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "INSERT INTO member_memberships_unfiltered ("
+                    " member_id, paid_by_member_id, gym_id, plan_id, price_id,"
+                    " start_date, stripe_item_id, total_price, "
+                    " stripe_sync_status) "
+                    "SELECT :member_id, :member_id, gym_id, plan_id, price_id, "
+                    " CURRENT_DATE, :stripe_item_id, total_price, 'applied' "
+                    "FROM member_memberships_unfiltered WHERE item_id = :base "
+                    "RETURNING item_id"
+                ),
+                {
+                    "member_id": str(buyer.member_id),
+                    "stripe_item_id": line_item_id,
+                    "base": str(webhook_fixture.item_id),
+                },
+            )
+            ot_item_id = UUID(str(result.mappings().fetchone()["item_id"]))
+            await session.commit()
+
+        event = make_invoice_paid_event(
+            stripe_account_id=stripe_account_id,
+            stripe_item_ids=[],
+            one_time_line_ids=[line_item_id],
+            amount_paid=2500,
+            metadata={
+                "crm_one_time_payment": "true",
+                "paid_by_member_id": str(buyer.member_id),
+                "paid_for": json.dumps([str(buyer.member_id)]),
+                "gym_id": str(gym_id),
+            },
+        )
+        await stripe_webhooks_service.handle_event(event)
+
+        # The one-time line resolved to its membership by the line-id fallback.
+        line = await _fetch_line_item(db_pool, line_item_id)
+        assert line is not None
+        assert line["item_type"] == "membership"
+        assert str(line["item_id"]) == str(ot_item_id)
+
+        # A one-time invoice still does not advance membership dates.
+        dates = await _fetch_membership_dates(db_pool, ot_item_id)
+        assert dates is not None
+        assert dates["last_paid_date"] is None
+        assert dates["next_due_date"] is None
+    finally:
+        await delete_member_data(db_pool, buyer.member_id)
+
+
+async def test_invoice_paid_one_time_adhoc_line_stays_custom(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    webhook_fixture,
+):
+    """A one-time line matching NO membership stays ``item_type='custom'``.
+
+    The line-id fallback must only stamp a line whose id equals a membership's
+    ``stripe_item_id``. A genuine ad-hoc charge-card line (its id matches no
+    membership) matches neither ``subscription_item`` nor a membership, so it
+    must stay ``custom`` with a NULL ``item_id`` — the fallback must not
+    over-claim arbitrary one-time lines.
+    """
+    line_item_id = "il_adhoc_no_membership"
+    event = make_invoice_paid_event(
+        stripe_account_id=stripe_account_id,
+        stripe_item_ids=[],
+        one_time_line_ids=[line_item_id],
+        amount_paid=2500,
+        metadata={
+            "crm_one_time_payment": "true",
+            "paid_by_member_id": str(webhook_fixture.member_id),
+            "paid_for": json.dumps([str(webhook_fixture.member_id)]),
+            "gym_id": str(gym_id),
+        },
+    )
+    await stripe_webhooks_service.handle_event(event)
+
+    line = await _fetch_line_item(db_pool, line_item_id)
+    assert line is not None
+    assert line["item_type"] == "custom"
+    assert line["item_id"] is None

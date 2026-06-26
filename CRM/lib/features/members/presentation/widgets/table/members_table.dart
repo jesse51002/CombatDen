@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/member_details/presentation/screens/member_detail_screen.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_contact_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_last_class_cell.dart';
@@ -55,6 +56,11 @@ class MembersTable extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
+                // Name the route with the member id so the URL becomes
+                // `/members/detail/<id>` and a reload restores this member.
+                settings: RouteSettings(
+                  name: AppRoutes.memberDetailPath(row.memberId),
+                ),
                 builder: (_) => MemberDetailScreen(
                   memberId: row.memberId,
                   gymId: gymId,
