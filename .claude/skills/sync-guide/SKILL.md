@@ -12,8 +12,9 @@ description: >-
   bucket), the read path (payer-scoped active recurring memberships each carrying
   their applied discounts in sync_queries.py), the discount service
   PaymentSyncDiscounts (the per-membership-sequential discount math + the
-  deterministic coupon find-or-create with validate-or-replace), the standalone
-  PaymentSyncFreeze (pause_collection from the DB freeze window), the coupon-link
+  deterministic coupon find-or-create with validate-or-replace), freeze via
+  the regular sync as a synthetic 100%-off (a frozen membership bills $0 through
+  the discount math in `_aggregate_line_values`), the coupon-link
   writebacks (set_applied_discount_coupon_id), execute_sync
   (create/update/cancel, explicit proration_behavior) in stripe.py,
   the post-discount price writeback (in sync_writeback.py), and the standalone
@@ -27,10 +28,10 @@ description: >-
   or the scheduled reconciler. Trigger on "payment sync",
   "update_payments_recurring", "re-derive desired state", "converge Stripe",
   "group by price", "resolve_payer", "paid_by_member_id", "discounts ride the
-  membership", "aggregate_line_values", "read before write",
-  "execute_sync", "price writeback", "preview sync", "bulk sync", "reconciler",
-  "one-time charge", "charge_one_time", "trial billing",
-  "why did this re-sync", or any change to the payment_sync engine.
+  membership", "aggregate_line_values", "is_frozen", "freeze as discount",
+  "read before write", "execute_sync", "price writeback", "preview sync",
+  "bulk sync", "reconciler", "one-time charge", "charge_one_time",
+  "trial billing", "why did this re-sync", or any change to the payment_sync engine.
 ---
 
 # Payment Sync — the re-derive-and-converge engine
@@ -153,6 +154,7 @@ converges Stripe to it.)
 | `memberships_reprice.py` | the task-agnostic **same-plan** reprice op (cancel old row + insert successor, then converge; verify-or-revert) |
 | `memberships_upgrade.py` | the **cross-plan** upgrade op (cancel old row + insert successor on a DIFFERENT plan, then converge with the effective `proration_behavior` — `prorate_to_anchor` nets the prorated difference, forced to `no_charge` on a downgrade; verify-or-revert) |
 | `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
+| `memberships_freeze.py` | freeze / unfreeze a subject member: re-converges every distinct payer billing that member's recurring memberships (one `update_payments_recurring` per payer, best-effort) |
 
 These callers all live in `src/memberships/service/`.
 (Link / unlink is **not** a sync caller — it is a pure DB change that never
@@ -169,15 +171,26 @@ group through `update_payments_recurring` here. The start preview mirrors this �
 `preview_update_payments_recurring` here for the recurring group — into a
 three-way `one_time / due_now / recurring` split (`memberships-guide`).
 
-**Freeze / unfreeze no longer flows through the main sync.** Freeze is **per
-payer**: the explicit freeze action writes the target member's OWN freeze window
-to the DB, then calls the standalone **`PaymentSyncFreeze`** service directly
-(§8) to pause that member's OWN subscription; the main sync does no freeze
-re-apply at all. The freeze caller (`memberships_freeze.py`) injects
-`PayerResolver` + `PaymentSyncFreeze`, writes the freeze window first,
-resolves the payer (so the profile carries the window + their sub), then
-converges Stripe. Freezing one payer never touches another payer's subscription,
-even within the same linked family.
+**Freeze rides the regular sync as a synthetic 100%-off.** The freeze caller
+(`memberships_freeze.py`) writes the subject member's freeze window to `members`,
+then re-converges every distinct payer that bills any of that member's memberships
+via the normal `update_payments_recurring` (best-effort per payer; the reconciler
+self-heals residuals). The membership facade discovers those payers
+(`_get_recurring_payers_for_member`, `member_memberships_recurring_payers_for_member.sql`)
+and locks the subject member + all affected payers before delegating (mirroring
+`cancel_many`). The sync reads `ActiveMembershipRow.is_frozen` (keyed on the
+membership's own `member_id` in `get_active_recurring.sql`, not the payer) and in
+`PaymentSyncDiscounts._aggregate_line_values` treats a frozen membership as
+effective fraction 1.0 (a full 100% off): its consolidated line bills $0, and on a
+shared line the ÷ quantity averaging charges only the non-frozen units. A frozen
+membership stays on the subscription with its real `stripe_item_id` and `applied`
+status — no `pause_collection`, no dropped line. Its applied-discount rows are
+still collected so they get coupon links + reach `applied` (freeze doesn't make
+them useless), and its `total_price` writeback stays its **real** standalone price
+(plan minus its own discounts) — freeze zeros the BILL, not the membership's own
+price. Unfreeze is the next converge without the 100%-off (full billing resumes).
+Freezing one subject member never directly touches another member's billing — only
+the payers of that member's memberships are re-converged.
 
 Plus **plan reprice**: `plans/service/plans_price.py`
 fans out via `bulk_payment_sync` — the one *deliberate* bulk price migration that
@@ -203,9 +216,9 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 1. **Write the desired state to the DB** — insert the pending membership
    (`not_added`), set `cancel_date`, write the new `price_id`, write the freeze
    window, or insert a `member_authorized_payers` row.
-2. **Call the param-less sync** (`update_payments_recurring`, or
-   `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
-   state from that DB write and converges Stripe, then writes back
+2. **Call the param-less sync** (`update_payments_recurring` for all ops —
+   freeze re-converges every affected payer the same way) — it re-derives the
+   desired state from that DB write and converges Stripe, then writes back
    `stripe_sync_status`. (Note: a prorating op — start / the reprice — thus runs
    **two** syncs: the pre-sync converge, then this post-change converge; the
    non-prorating ops run just this one.)
@@ -493,6 +506,21 @@ filter lives in SQL). For one consolidated line (a price group of memberships):
    0, so a partly-discounted line averages correctly.
 2. **Dollars summed.** Fixed-dollar offs are summed across the line's
    memberships (a fixed-dollar coupon applies to the whole quantity-N line).
+3. **Frozen membership → forced eff 1.0.** If `ActiveMembershipRow.is_frozen` is
+   set (the membership's own subject member has an active freeze window, keyed on
+   `member_id` in `get_active_recurring.sql`), that membership contributes an
+   effective fraction of 1.0 regardless of its applied discounts — a full 100% off —
+   so the ÷ quantity averaging makes its consolidated line bill $0. On a shared
+   line with k of N frozen, the averaging charges only the (N−k) active units. Two
+   things still run for a frozen membership: its applied-discount rows are
+   **collected** (their ids go into the line's `contributing_ids`, so the writeback
+   links a coupon + flips them to `applied` — freeze doesn't strand them), and its
+   own `total_price` is its **real** standalone price (plan minus its own
+   discounts) — freeze zeros the BILL, not the membership's own price. Its
+   fixed-$ off is NOT added to the line `dollar_sum` (a flat $-off would leak onto
+   the active units on a shared line). The frozen membership stays on the
+   subscription at `applied` with its real `stripe_item_id` — no `pause_collection`,
+   no dropped line.
 
 Dollar vs percent are **never** combined into one value — they become separate
 coupons (Stripe sequences them percent→dollar via attach order); the math is only
@@ -567,13 +595,11 @@ on the spot — so there is nothing to back-reference.
 
 ---
 
-## 8. `execute_sync` + freeze + price writeback
+## 8. `execute_sync` + price writeback
 
 ### `execute_sync` (`stripe.py`)
 
-`PaymentSyncStripe` is now **create / update / cancel only** — the freeze ops moved
-out to `PaymentSyncFreeze` (below), so its class and module docstrings describe it
-as the subscription-lifecycle dispatcher, not a freeze handler.
+`PaymentSyncStripe` is **create / update / cancel only** — the subscription-lifecycle dispatcher.
 `PaymentSyncStripe.execute_sync` dispatches off the bucket:
 
 - **bucket has items** → `_sync_bucket`: **update** if `existing_sub_id` is set,
@@ -600,39 +626,8 @@ as the subscription-lifecycle dispatcher, not a freeze handler.
 - **empty bucket + no sub** → `None` (nothing to do).
 
 Sub-operation **idempotency keys are suffixed** off the base key:
-`:sub_create`, `:sub_update`, `:sub_cancel`. The `:freeze` / `:unfreeze` suffixes
-now live in `PaymentSyncFreeze`, off the same base key. The create/update/cancel
+`:sub_create`, `:sub_update`, `:sub_cancel`. The create/update/cancel
 calls themselves are `payments-guide` primitives.
-
-### Freeze — the standalone `PaymentSyncFreeze` service
-
-Freeze is `pause_collection`, and it is now its own DI service,
-**`PaymentSyncFreeze`** (`sync_freeze.py`) — extracted out of
-`PaymentSyncStripe`. It is **DB-first and minimal**:
-`sync_freeze_state(payer, stripe_account_id, *, idempotency_key) -> bool`
-converges Stripe purely from **`payer.is_frozen`** (the DB freeze window on
-`PayerProfile`): frozen in the DB → pause collection (with the payer's
-`freeze_end_date` as the resume date), otherwise → resume. Freeze is **per
-payer** — pausing one payer's subscription never touches another payer's, even
-within the same linked family. There are **no
-explicit `freeze_end_date` / `unfreeze` flags** and **no DB writes** here — the
-freeze-date DB write happens *elsewhere*, in the freeze/unfreeze request handler,
-before this service is called. Freeze is a standalone subscription-level pause,
-independent of the membership sync, so there is no freeze-vs-membership-change
-conflict to validate.
-
-**One caller:** the **explicit freeze/unfreeze request** writes the freeze window
-to the DB, then calls `sync_freeze_state` **directly** with the resolved parent.
-The **main sync no longer does a maintenance re-apply** — `pause_collection` is
-subscription-level, so it persists across item changes; a membership op on a
-frozen account needs no re-apply, and the unconditional per-op unfreeze the sync
-used to issue on every non-frozen op was pure wasted Stripe I/O. A freeze window
-that ends naturally is resumed by Stripe's own `resumes_at` (set at freeze time).
-
-No-op (returns the DB state) when there's no `stripe_sub_id`. **Idempotent**
-(re-freezing updates the resume date; unfreezing a non-paused sub is a Stripe
-no-op) and it lets `PaymentsResourceNotFoundError` **propagate** — a missing sub
-when the CRM expects billing is an out-of-sync state that must surface.
 
 ### Price writeback (both in `PaymentSyncWriteback`)
 
@@ -714,8 +709,7 @@ Stripe preview) up to twice:
 
 So it's **one** Stripe preview call for a `no_charge` surface, **two** for a prorating
 one. Returns `None` for a pure cancellation / no-op (empty bucket — no upcoming
-invoice). Freeze/unfreeze is intentionally unsupported in preview (a
-`pause_collection` change produces no invoice). The idempotency key is a throwaway
+invoice). The idempotency key is a throwaway
 `uuid4()` (preview writes nothing). **Payments stays dumb** — it still exposes only
 the flat `preview_*_subscription` requests (each a single preview at a given
 `proration_behavior`); the engine owns the splitting. A one-time start has no engine
@@ -788,9 +782,8 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
   `stripe_item_id IS NOT NULL` + hides `preview_*`, so pending/preview rows never
   surface to clients — only the engine's unfiltered read sees them.
 - **Idempotency keys are suffixed per sub-operation** (`:sub_create`,
-  `:sub_update`, `:sub_cancel` in `PaymentSyncStripe`; `:freeze` / `:unfreeze` in
-  `PaymentSyncFreeze`) off one base key, so the several Stripe calls in one sync
-  don't collide. `bulk_payment_sync` mints a fresh `uuid4()` per member (each
+  `:sub_update`, `:sub_cancel` in `PaymentSyncStripe`) off one base key, so the
+  Stripe calls in one sync don't collide. `bulk_payment_sync` mints a fresh `uuid4()` per member (each
   member's sync is independent).
 - **Desired state is the DB read, never a delta** (§4) — there is no cancel
   filter and no add list; a cancel caller writes `cancel_date` first, so the row
@@ -914,7 +907,7 @@ writeback" boundary.
   `FastApiBackend/src/sync/service/sync_service.py`
   (`PaymentSyncService` — `update_payments_recurring(payer_member_id)` (**`-> None`**),
   `preview_update_payments_recurring(payer_member_id)`, `bulk_payment_sync(payer_member_ids)`;
-  injects `_payer` / `_freeze` / `_builder`, builds `_stripe` / `_writeback`).
+  injects `_payer` / `_builder`, builds `_stripe` / `_writeback`).
 - **Writeback:** `sync_writeback.py` (`PaymentSyncWriteback.write` →
   `_apply_membership_rows` / `_sync_payer_monthly_total` / `_mark_removed_deleted`;
   per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on
@@ -929,11 +922,8 @@ writeback" boundary.
 - **Shared payer resolver:** `src/shared/payer_resolver.py`
   (`PayerResolver` — `resolve_payer`, `resolve_payer_with_account`) + the
   `PayerProfile` model in `src/shared/payer_profile.py`. DI-registered; used by the
-  sync, the freeze service, and the lifecycle callers.
+  sync and the lifecycle callers.
   A direct payer-row lookup — **no `resolve_parent` / family resolution** (deleted).
-- **Freeze service:** `sync_freeze.py` (`PaymentSyncFreeze.sync_freeze_state`
-  → `_freeze` / `_unfreeze`) — DB-first, converges `pause_collection` to
-  `payer.is_frozen` (per payer).
 - **Builder service:** `sync_builder.py` (`PaymentSyncBuilder` —
   `build_sync_params(payer, …)` → `_group_by_price` / `_build_bucket`; reads the
   payer's memberships, groups by price, delegates to the discount service,
@@ -965,13 +955,15 @@ writeback" boundary.
 - **Stripe dispatch (create/update/cancel):** `sync_stripe.py`
   (`PaymentSyncStripe` — `execute_sync`, `preview_execute_sync`, `_sync_bucket`).
 - **Intermediate models:** `src/sync/sync_schema.py`
-  (`ActiveMembershipRow` (carries `discounts`), `AppliedDiscount`,
+  (`ActiveMembershipRow` (carries `discounts` and `is_frozen`), `AppliedDiscount`,
   `IntervalBucket`, `LineDiscountValue` (bounds + percent-XOR-dollar validators),
   `ResolvedDiscounts`, `SyncParams` (carries `payer`)). `PayerProfile` lives in
   `src/shared/payer_profile.py`.
 - **SQL (`src/shared/sql/`):** `resolve_payer.sql` (direct payer lookup;
   `resolve_parent.sql` deleted). **SQL (`src/sync/sql/`):** (`get_family_ids.sql`
-  deleted) `get_active_recurring.sql`, `get_active_one_time.sql` (the one-time read — both
+  deleted) `get_active_recurring.sql` (reads `is_frozen` keyed on the membership's
+  own `member_id`, not the payer — so a frozen subject member's rows appear frozen
+  regardless of who pays), `get_active_one_time.sql` (the one-time read — both
   `one_time` + `trial`, terminal `not_added`-only on the real path),
   `apply_one_time_membership_sync.sql` (the one-time per-row writeback: line id +
   `stripe_one_time_invoice_id` + post-discount price + `applied`),

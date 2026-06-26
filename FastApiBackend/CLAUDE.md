@@ -303,6 +303,7 @@ src/
 - Use `{variable_name}` for structural parts (e.g., WHERE clauses) and `:param_name` for bind parameters
 - Good: `load_sql(SQL_DIR / "all_view.sql", {"where_clause": where})` then pass params to SQLAlchemy
 - Bad: Inline SQL strings in service files
+- **Tests are exempt** (per the root `CLAUDE.md`): a short read/assert/setup query in an integration test may be inlined as a `text("SELECT …")`/`text("UPDATE …")` literal — directly in the test or in a `tests/helpers/db_reads.py` / `db_writes.py` helper (those helpers inline by design; `tests/helpers/sql/` holds only the cleanup `DELETE`s). This is the established test convention; application/service code never inlines SQL.
 - **NEVER cast a bind parameter with `:param::type`** (e.g. `:waiver_ids::jsonb`, `:id::uuid`). SQLAlchemy `text()` over asyncpg cannot bind a parameter that is immediately followed by `::`, so Postgres raises `syntax error at or near ":"` and the query 500s. **Always use the functional cast `CAST(:param AS TYPE)`** instead.
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
@@ -337,7 +338,10 @@ that derivation through a Postgres view rather than repeating the
 (in `Database/supabase/schemas/member_memberships.sql`) wraps
 `member_memberships` and derives `status`
 (`active` / `cancelled` / `ended` / `frozen`) from `cancel_date`,
-`end_date`, and the account's freeze window on `members`. The member
+`end_date`, and the **subject member's** freeze window on `members` (the
+view joins `members` on the membership's own `member_id`, NOT its
+`paid_by_member_id` — freezing a member pauses only that member's own
+memberships, regardless of who pays). The member
 read-paths (`src/members/sql/crm_views/*.sql`, `member_details/*.sql`)
 SELECT from this view; writes go directly to the underlying table.
 

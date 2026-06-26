@@ -12,7 +12,7 @@ flowchart TB
   %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
   %% external actors. Solid = live runtime call · dashed = future / delegation.
 
-  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start (RECURRING group only — one-time/trial group → PaymentSyncOneTime, §12)<br/>· cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
+  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start (RECURRING group only — one-time/trial group → PaymentSyncOneTime, §12)<br/>· cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>freeze/unfreeze → write member window → THIS sync per affected payer (frozen = 100% off, $0) · plan reprice → bulk"]
 
   subgraph engine["⚙️ PaymentSyncService — the sync engine"]
     direction TB
@@ -78,12 +78,12 @@ flowchart TB
   reconciler["🧹 Scheduled reconciler — BUILT (its own reconciler domain; see reconciler-guide)<br/>twice-daily sweep · drives bulk_payment_sync (push) + Stripe→CRM cancellation absorption<br/>mid-cycle end_date expiry enforced for idle members"]
 
   supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_payer · get_active_recurring (payer-scoped, + applied discounts, end_date-filtered)<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · set_member_post_discount_prices · sync_profile_monthly_total"]
-  stripe["💳 Stripe — gym Connect account<br/>create / update / cancel subscription · pause_collection<br/>coupons via PaymentsStripeDiscountService (find-or-create) · upcoming invoice (preview)"]
+  stripe["💳 Stripe — gym Connect account<br/>create / update / cancel subscription<br/>coupons via PaymentsStripeDiscountService (find-or-create; freeze = 100%-off) · upcoming invoice (preview)"]
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
   reconciler -->|"scheduled sweep → bulk sync (step C)"| engine
   engine -->|"read/write: payer · memberships + discounts · coupon_id · sync status · sub id · totals"| supabase
-  engine -->|"find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
+  engine -->|"find-or-create coupons · create / update / cancel sub · upcoming invoice"| stripe
 
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef prev fill:#eafff2,stroke:#2f8f53,color:#0c3a1f;

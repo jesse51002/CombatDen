@@ -249,6 +249,20 @@ some-but-not-all units is scaled to the line:
   one 10%-off membership on a quantity-2 line → `0.10 / 2 = 5%` on the line.
 - **Fixed dollars are summed** across the line's memberships (a fixed-dollar
   coupon applies to the whole quantity-`N` line).
+- **Frozen membership contributes full 100% off.** If a membership is frozen
+  (the subject member's own freeze window covers today — keyed on `member_id` in
+  `get_active_recurring.sql`), `_aggregate_line_values` treats it as effective
+  fraction 1.0 regardless of its applied discounts, so its consolidated line bills
+  $0. On a shared line the ÷ quantity averaging makes the line charge only the
+  non-frozen units. Its applied-discount rows are still **collected** (so the
+  writeback links their coupons + flips them to `applied` — freeze doesn't strand
+  them), and its `total_price` stays its **real** standalone price (freeze zeros
+  the BILL, not the membership's own price); a frozen membership's fixed-$ off is
+  not added to the line so it can't leak onto the active units. The frozen
+  membership stays on the subscription with its real `stripe_item_id` and `applied`
+  status; unfreeze is the next converge dropping the 100%-off. Freeze is
+  implemented as a sync path through the existing discount math — deep mechanics
+  live in `sync-guide` §7.
 
 Computed from the member's **own** memberships only — deterministic, no
 cross-member reshuffle.

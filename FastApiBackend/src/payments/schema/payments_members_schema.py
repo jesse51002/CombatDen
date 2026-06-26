@@ -1,5 +1,3 @@
-from datetime import date
-
 from pydantic import BaseModel, field_validator
 from schema.task import ProrationBehavior
 
@@ -117,21 +115,6 @@ class PaymentsSubscriptionItemResponse(BaseModel):
 # ── Subscription-Level Operations ───────────────────────────────
 
 
-class PaymentsSubscriptionFreezeRequest(BaseModel):
-    """Freeze (pause collection on) a subscription."""
-
-    stripe_subscription_id: str
-    freeze_end_date: date | None = None
-    idempotency_key: str
-
-
-class PaymentsSubscriptionUnfreezeRequest(BaseModel):
-    """Resume (unfreeze) a paused subscription."""
-
-    stripe_subscription_id: str
-    idempotency_key: str
-
-
 class PaymentsSubscriptionCancelRequest(BaseModel):
     """Cancel a subscription (immediately or at period end)."""
 
@@ -150,14 +133,6 @@ class PaymentsSubscriptionResponse(BaseModel):
     cancel_at_period_end: bool = False
     discounts: list[str] = []
     metadata: dict[str, str] = {}
-
-
-class PaymentsSubscriptionFreezeResponse(BaseModel):
-    """Response after freezing/pausing a subscription."""
-
-    stripe_subscription_id: str
-    pause_collection_behavior: str
-    resumes_at: int | None = None
 
 
 # ── Batch Migration ─────────────────────────────────────────────

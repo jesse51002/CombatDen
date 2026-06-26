@@ -38,7 +38,9 @@ from src.memberships.memberships_schema import (
 )
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
+    get_active_membership_item_id,
     get_applied_discounts,
+    get_payer_monthly_bill,
     get_profile_stripe_ids,
 )
 from tests.helpers.db_writes import authorize_payer
@@ -356,7 +358,7 @@ async def test_mixed_one_time_and_recurring_two_charges(
 # ── Test 3 — Phase-A validation gate (each rejects, nothing written) ──
 
 
-async def test_phase_a_payer_frozen_rejects(
+async def test_start_on_frozen_member_bills_zero(
     memberships_service,
     db_pool,
     gym_id,
@@ -364,11 +366,15 @@ async def test_phase_a_payer_frozen_rejects(
     connect_opts,
     created,
 ):
-    """3a: a frozen payer is rejected before anything is written.
+    """Starting a membership for an already-FROZEN member succeeds and bills $0.
 
-    The freeze window is written directly to ``members`` (the simplest way to
-    make ``PayerProfile.is_frozen`` true at validation time, with no live
-    subscription needed). ``_resolve_payer`` raises and no membership row lands.
+    Freeze is a synthetic 100%-off, not a backend block, so a (batch) start on a
+    frozen member is allowed: the new membership is created on a $0 subscription,
+    reaches ``applied`` with a real ``stripe_item_id``, and bills $0 until the
+    member unfreezes. The freeze window is written directly to ``members`` to
+    make the member frozen at start time with no prior subscription — exercising
+    the create-at-$0 path. (The CRM guards this in the UX; the backend stays open
+    so batch jobs never fail on a frozen member.)
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -387,22 +393,45 @@ async def test_phase_a_payer_frozen_rejects(
             )
             await session.commit()
 
-        with pytest.raises(ValueError, match="frozen"):
-            await memberships_service.start(
-                MemberMembershipsStartRequest(
-                    payer_member_id=member.member_id,
-                    gym_id=gym_id,
-                    idempotency_key=uuid4(),
-                    memberships=[
-                        MemberMembershipsStartItem(
-                            member_id=member.member_id,
-                            price_id=plan.price_id,
-                        ),
-                    ],
-                )
+        # No rejection — the start succeeds.
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
             )
+        )
 
-        assert await _count_membership_rows(db_pool, member.member_id) == 0
+        # The membership is live on Stripe at $0: applied, a real line id, $0.
+        item_id = await get_active_membership_item_id(
+            db_pool, member.member_id, gym_id,
+        )
+        row = await _read_membership_row(db_pool, item_id)
+        assert row["status"] == "applied"
+        assert row["stripe_item_id"] is not None
+        # total_price is the membership's real standalone price (freeze zeros the
+        # BILL, not the price); the actual bill is $0 (the 100%-off line).
+        assert row["total_price"] > 0
+
+        # A $0 subscription was created and is active (not paused/cancelled),
+        # and the payer's actual recurring bill is $0.
+        profile = await get_profile_stripe_ids(
+            db_pool, member.member_id, gym_id,
+        )
+        assert profile.stripe_sub_id_month is not None
+        sub = await fetch_subscription(
+            stripe_client, profile.stripe_sub_id_month, connect_opts,
+        )
+        assert sub.status == "active"
+        assert sub.pause_collection is None
+        bill = await get_payer_monthly_bill(db_pool, member.member_id)
+        assert bill == 0, "Frozen member's actual recurring bill must be $0"
     finally:
         await delete_member_data(db_pool, member.member_id)
 

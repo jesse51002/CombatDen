@@ -22,8 +22,6 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionDesiredItem,
-    PaymentsSubscriptionFreezeRequest,
-    PaymentsSubscriptionUnfreezeRequest,
     PaymentsSubscriptionUpdateRequest,
     SubscriptionItemDiscount,
 )
@@ -408,107 +406,6 @@ async def test_cancel_at_period_end(
     )
     assert sub.status == "active"
     assert sub.cancel_at_period_end is True
-
-
-async def test_freeze_subscription(
-    subscription_service,
-    members_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    customer_id = await _setup_customer(
-        members_service,
-        stripe_client,
-        stripe_account_id,
-        connect_opts,
-        created,
-    )
-    price_id = await _setup_price(membership_service, stripe_account_id, created)
-
-    created_resp = await subscription_service.create_subscription(
-        PaymentsSubscriptionCreateRequest(
-            stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
-            idempotency_key=str(uuid4()),
-            metadata=_subscription_metadata(),
-            gym_timezone="America/Chicago",
-        ),
-        stripe_account_id,
-    )
-
-    resp = await subscription_service.freeze_subscription(
-        PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    assert resp.stripe_subscription_id == created_resp.stripe_subscription_id
-    assert resp.pause_collection_behavior is not None
-
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created_resp.stripe_subscription_id,
-        options=connect_opts,
-    )
-    assert sub.pause_collection is not None
-
-
-async def test_unfreeze_subscription(
-    subscription_service,
-    members_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    customer_id = await _setup_customer(
-        members_service,
-        stripe_client,
-        stripe_account_id,
-        connect_opts,
-        created,
-    )
-    price_id = await _setup_price(membership_service, stripe_account_id, created)
-
-    created_resp = await subscription_service.create_subscription(
-        PaymentsSubscriptionCreateRequest(
-            stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
-            idempotency_key=str(uuid4()),
-            metadata=_subscription_metadata(),
-            gym_timezone="America/Chicago",
-        ),
-        stripe_account_id,
-    )
-    await subscription_service.freeze_subscription(
-        PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    resp = await subscription_service.unfreeze_subscription(
-        PaymentsSubscriptionUnfreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    assert resp.status == "active"
-
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created_resp.stripe_subscription_id,
-        options=connect_opts,
-    )
-    assert sub.status == "active"
-    assert sub.pause_collection is None
 
 
 async def test_preview_create_subscription(

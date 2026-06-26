@@ -79,9 +79,6 @@ if TYPE_CHECKING:
     from src.shared.gym_stripe_service import GymStripeService
     from src.shared.payer_resolver import PayerResolver
     from src.shared.paying_member_lock import PayingMemberLock
-    from src.sync.service.sync_freeze import (
-        PaymentSyncFreeze,
-    )
     from src.sync.service.sync_one_time import (
         PaymentSyncOneTime,
     )
@@ -109,7 +106,6 @@ class MemberMembershipsService:
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
         payer_resolver: PayerResolver,
-        freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
@@ -142,11 +138,7 @@ class MemberMembershipsService:
             gym_stripe_service,
         )
         self._cancel = MemberMembershipsCancel(*deps)
-        self._freeze = MemberMembershipsFreeze(
-            *deps,
-            payer_resolver=payer_resolver,
-            freeze_service=freeze_service,
-        )
+        self._freeze = MemberMembershipsFreeze(*deps)
         self._update_discounts = MemberMembershipsDiscounts(*deps)
         # Start + its preview share ONE validation instance so they can
         # never drift on what a valid request is.
@@ -283,10 +275,19 @@ class MemberMembershipsService:
         freeze_months: int,
         idempotency_key: UUID,
     ) -> None:
-        """Freeze a payer's billing (their own subscription)."""
-        async with self._paying_lock.lock([member_id]):
+        """Freeze a member's billing (their OWN memberships, any payer).
+
+        The member's memberships may be billed by several payers, so the lock is
+        taken over the member AND every distinct payer of their memberships (the
+        sub-service then re-converges each payer's subscription, dropping the
+        member's lines or pausing a wholly-frozen payer).
+        """
+        payer_ids = await self._get_recurring_payers_for_member(
+            member_id, gym_id,
+        )
+        async with self._paying_lock.lock([member_id, *payer_ids]):
             await self._freeze.freeze(
-                member_id, gym_id, freeze_months, idempotency_key,
+                member_id, gym_id, freeze_months, idempotency_key, payer_ids,
             )
 
     async def unfreeze(
@@ -295,9 +296,18 @@ class MemberMembershipsService:
         gym_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Unfreeze a payer's billing (their own subscription)."""
-        async with self._paying_lock.lock([member_id]):
-            await self._freeze.unfreeze(member_id, gym_id, idempotency_key)
+        """Unfreeze a member's billing (their OWN memberships, any payer).
+
+        Locks the member AND every distinct payer of their memberships, then
+        re-converges each payer (re-adding the lines / clearing the pause).
+        """
+        payer_ids = await self._get_recurring_payers_for_member(
+            member_id, gym_id,
+        )
+        async with self._paying_lock.lock([member_id, *payer_ids]):
+            await self._freeze.unfreeze(
+                member_id, gym_id, idempotency_key, payer_ids,
+            )
 
     # ── Start ──────────────────────────────────────────────────
 
@@ -732,3 +742,28 @@ class MemberMembershipsService:
                 f"Membership not found: item_ids={missing}",
             )
         return list(dict.fromkeys(payers.values()))
+
+    async def _get_recurring_payers_for_member(
+        self,
+        member_id: UUID,
+        gym_id: UUID,
+    ) -> list[UUID]:
+        """The DISTINCT payers billing ``member_id``'s recurring memberships.
+
+        The lock keys + re-converge set for a freeze/unfreeze of this member as
+        the SUBJECT: every distinct ``paid_by_member_id`` across the member's
+        live recurring memberships, regardless of who pays. Empty when the
+        member has none (the freeze still records the window — nothing to
+        converge). ``paid_by_member_id`` is immutable, so reading it before
+        locking is race-free.
+        """
+        sql = load_sql(
+            SQL_DIR / "member_memberships_recurring_payers_for_member.sql"
+        )
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_id": str(member_id), "gym_id": str(gym_id)},
+            )
+            rows = result.mappings().all()
+        return [UUID(str(row["paid_by_member_id"])) for row in rows]

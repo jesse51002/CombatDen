@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/unlink_payment_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/update_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/sections/linked_accounts_section.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
@@ -173,6 +174,9 @@ class _ActionButtonsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isFrozen = member.memberships.any(
+      (m) => m.status == MembershipStatus.frozen,
+    );
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: DesignConstants.spacingMedium,
@@ -221,11 +225,16 @@ class _ActionButtonsRow extends StatelessWidget {
         ),
         _ActionButton(
           label: 'Start Membership',
-          onPressed: () => StartMembershipsWizard.show(
-            context: context,
-            member: member,
-            onViewMember: onViewMember,
-          ),
+          onPressed: isFrozen
+              ? null
+              : () => StartMembershipsWizard.show(
+                    context: context,
+                    member: member,
+                    onViewMember: onViewMember,
+                  ),
+          tooltip: isFrozen
+              ? 'Unfreeze this member before adding a membership'
+              : null,
         ),
         _ActionButton(
           label: 'Edit',
@@ -242,24 +251,42 @@ class _ActionButtonsRow extends StatelessWidget {
 
 class _ActionButton extends StatelessWidget {
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+
+  /// When set, the button is wrapped in a [Tooltip] showing
+  /// this message — used to explain why it is disabled.
+  final String? tooltip;
 
   const _ActionButton({
     required this.label,
-    required this.onPressed,
+    this.onPressed,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AppOutlineButton(
+    // A null onPressed means disabled (e.g. Start Membership on a frozen
+    // member). AppOutlineButton bakes its colors in for every state, so mute
+    // the border + text here so the button visibly reads as inert — matching
+    // the disabled AppOutlineButton convention in plan_price_version_row.
+    final bool disabled = onPressed == null;
+    final button = AppOutlineButton(
       text: label,
       onPressed: onPressed,
       borderRadius: DesignConstants.radiusSmall,
       textStyle: DesignConstants.h3,
+      borderColor:
+          disabled ? DesignConstants.text2nd : DesignConstants.text,
+      textColor:
+          disabled ? DesignConstants.text2nd : DesignConstants.text,
       padding: const EdgeInsets.symmetric(
         horizontal: DesignConstants.spacingLarge,
         vertical: DesignConstants.spacingSmall,
       ),
     );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip!, child: button);
+    }
+    return button;
   }
 }

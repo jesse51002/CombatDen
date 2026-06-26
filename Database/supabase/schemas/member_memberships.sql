@@ -422,31 +422,31 @@ WHERE stripe_item_id IS NOT NULL
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 
--- View: derives status from date fields (cancel_date > end_date > payer freeze window > active)
--- Freeze is per PAYER: the membership is frozen when its paid_by_member_id's
--- freeze window (on members) is active — the payer's pause_collection covers
--- exactly the memberships their subscription bills. A parent-paid membership
--- follows the parent's window (paid_by = parent); a self-paid membership
--- follows the self-payer's own window, independent of the linked parent.
+-- View: derives status from date fields (cancel_date > end_date > member freeze window > active)
+-- Freeze is per SUBJECT MEMBER: the membership is frozen when its own member_id's
+-- freeze window (on members) is active — freezing a member pauses exactly that
+-- member's memberships, regardless of who pays for them. A member's freeze
+-- therefore covers only their own memberships, and a payer's freeze no longer
+-- sweeps up everyone they bill (the payer's other beneficiaries keep billing).
 CREATE VIEW member_memberships_status
 WITH (security_invoker = true)
 AS
 SELECT mm.*,
-    freeze_owner.freeze_start_date,
-    freeze_owner.freeze_end_date,
+    subject_member.freeze_start_date,
+    subject_member.freeze_end_date,
     CASE
         WHEN mm.cancel_date IS NOT NULL AND mm.cancel_date <= (now() AT TIME ZONE g.timezone)::date THEN 'cancelled'
         WHEN mm.end_date IS NOT NULL AND mm.end_date <= (now() AT TIME ZONE g.timezone)::date THEN 'ended'
-        WHEN freeze_owner.freeze_start_date IS NOT NULL
-             AND freeze_owner.freeze_end_date IS NOT NULL
-             AND freeze_owner.freeze_start_date <= (now() AT TIME ZONE g.timezone)::date
-             AND (now() AT TIME ZONE g.timezone)::date <= freeze_owner.freeze_end_date THEN 'frozen'
+        WHEN subject_member.freeze_start_date IS NOT NULL
+             AND subject_member.freeze_end_date IS NOT NULL
+             AND subject_member.freeze_start_date <= (now() AT TIME ZONE g.timezone)::date
+             AND (now() AT TIME ZONE g.timezone)::date <= subject_member.freeze_end_date THEN 'frozen'
         ELSE 'active'
     END AS status
 FROM member_memberships mm
 JOIN gyms g ON g.gym_id = mm.gym_id
-JOIN members freeze_owner
-    ON freeze_owner.member_id = mm.paid_by_member_id;
+JOIN members subject_member
+    ON subject_member.member_id = mm.member_id;
 
 -- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
 ALTER VIEW member_memberships_status SET (security_invoker = true);
