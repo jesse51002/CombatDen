@@ -38,6 +38,8 @@ class MembershipOverviewContext(BaseModel):
     has_frozen: bool
     has_overdue: bool
     paying_count: int  # active recurring count among the member's own
+    one_time_count: int = 0  # active one-time (class-pack) count
+    one_time_total: int = 0  # what was paid for them, minor units
 
 
 class MembersBillingGrouper:
@@ -142,10 +144,11 @@ class MembersBillingGrouper:
         """
         state = self._state_phrase(ctx)
         suffix = self._count_suffix(ctx.paying_count)
+        packs = self._pack_suffix(ctx)
         if state is None:
-            return f"Paying {format_minor_units(ctx.total)}/mo{suffix}"
+            return f"Paying {format_minor_units(ctx.total)}/mo{suffix}{packs}"
         if ctx.paying_count > 0:
-            return f"{state}{suffix}"
+            return f"{state}{suffix}{packs}"
         return state
 
     def _count_suffix(self, paying_count: int) -> str:
@@ -155,13 +158,37 @@ class MembersBillingGrouper:
         label = "Membership" if paying_count == 1 else "Memberships"
         return f" for {paying_count} {label}"
 
+    def _pack_label(self, count: int) -> str:
+        return "class pack" if count == 1 else "class packs"
+
+    def _pack_phrase(self, ctx: MembershipOverviewContext) -> str:
+        """``N active class pack(s) · $Y`` — the PRIMARY overview for a member
+        whose active memberships are one-time class packs (not recurring)."""
+        return (
+            f"{ctx.one_time_count} active "
+            f"{self._pack_label(ctx.one_time_count)} · "
+            f"{format_minor_units(ctx.one_time_total)}"
+        )
+
+    def _pack_suffix(self, ctx: MembershipOverviewContext) -> str:
+        """`` · N active class pack(s)`` appended when class packs accompany a
+        recurring membership; empty when the member has none."""
+        if ctx.one_time_count <= 0:
+            return ""
+        return (
+            f" · {ctx.one_time_count} active "
+            f"{self._pack_label(ctx.one_time_count)}"
+        )
+
     def _state_phrase(self, ctx: MembershipOverviewContext) -> str | None:
         """Salient account-state string, or ``None`` for normal paying.
 
         Returns ``None`` only for the normal positive-paying state so the
         caller supplies the price phrasing; every other state (frozen /
-        overdue / active-without-total / trial / cancelled / none) returns
-        its display string directly.
+        overdue / active-without-total / class packs / trial / cancelled /
+        none) returns its display string directly. Active one-time class packs
+        outrank trial / cancelled / none — a paid pack is a current membership,
+        so a pack-only member reads as their packs, not "No active memberships".
         """
         if ctx.has_frozen:
             return "Account is Frozen"
@@ -173,6 +200,8 @@ class MembersBillingGrouper:
             return None
         if ctx.paying_count > 0:
             return "Active"
+        if ctx.one_time_count > 0:
+            return self._pack_phrase(ctx)
         if ctx.has_trial:
             return "Member is on Trial"
         if ctx.has_cancelled:

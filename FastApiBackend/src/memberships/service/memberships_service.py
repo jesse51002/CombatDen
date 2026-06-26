@@ -6,6 +6,7 @@ the public API and constructor signature.
 
 from __future__ import annotations
 
+import time
 from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -63,8 +64,14 @@ if TYPE_CHECKING:
     from src.members.service.management.members_management_service import (
         MembersManagementService,
     )
+    from src.memberships.service.memberships_invoice_fetch_runner import (
+        MembershipsInvoiceFetchRunner,
+    )
     from src.memberships.service.memberships_reprice import (
         MemberMembershipsReprice,
+    )
+    from src.memberships.service.memberships_upgrade import (
+        MemberMembershipsUpgrade,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -107,8 +114,10 @@ class MemberMembershipsService:
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
         reprice_service: MemberMembershipsReprice,
+        upgrade_service: MemberMembershipsUpgrade,
         members_management_service: MembersManagementService,
         waivers_service: WaiversService,
+        invoice_fetch_runner: MembershipsInvoiceFetchRunner,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
         # across its pre-sync + DB write + sync) so no two ops converge the
@@ -120,9 +129,13 @@ class MemberMembershipsService:
         # here would deadlock to LockBusyError.
         self._db_pool = db_pool
         self._paying_lock = paying_lock
-        # The reprice op is standalone and takes its own family lock; the
-        # facade only exposes its read-only preview.
+        # Fires the deterministic post-op invoice fetch fire-and-forget AFTER
+        # the lock releases (see the op methods).
+        self._invoice_fetch_runner = invoice_fetch_runner
+        # The reprice + upgrade ops are standalone and take their own family
+        # lock; the facade delegates to them bare (like update_price).
         self._reprice = reprice_service
+        self._upgrade = upgrade_service
         deps = (
             db_pool,
             payment_sync_service,
@@ -247,6 +260,20 @@ class MemberMembershipsService:
         async with self._paying_lock.lock(payer_ids):
             return await self._cancel.preview_cancel(item_ids, member_id)
 
+    async def end_one_time(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> date:
+        """End a one-time / trial membership early (set ``end_date`` = today).
+
+        Delegated BARE — no payer lock: a one-time / trial membership is a
+        terminal invoice with no subscription line, so ending it is a pure DB
+        date write (no Stripe converge, nothing for a concurrent sync to race).
+        Recurring memberships use ``cancel`` instead.
+        """
+        return await self._cancel.end_one_time(item_id, member_id)
+
     # ── Freeze / Unfreeze ──────────────────────────────────────
 
     async def freeze(
@@ -288,8 +315,15 @@ class MemberMembershipsService:
         member_ids = [request.payer_member_id] + [
             item.member_id for item in request.memberships
         ]
+        op_start = int(time.time())
         async with self._paying_lock.lock(member_ids):
-            return await self._start.start(request)
+            result = await self._start.start(request)
+        # Deterministically pull the new invoice(s) from Stripe (fire-and-forget,
+        # AFTER the lock releases so it never extends the hold).
+        self._invoice_fetch_runner.start_for_payer(
+            request.payer_member_id, op_start
+        )
+        return result
 
     async def preview_start(
         self,
@@ -312,10 +346,13 @@ class MemberMembershipsService:
     ) -> None:
         """Mark a recurring membership's open Stripe invoice as paid via cash."""
         payer_id = await self._get_payer_for_item(item_id)
+        op_start = int(time.time())
         async with self._paying_lock.lock([payer_id]):
             await self._mark_paid_cash.mark_paid_cash(
                 item_id, member_id, idempotency_key,
             )
+        # Cash settles an open invoice → still finalizes invoice/charge rows.
+        self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
 
     # ── Charge Card (ad-hoc amount) ────────────────────────────
 
@@ -324,8 +361,12 @@ class MemberMembershipsService:
         request: MemberMembershipsChargeCardRequest,
     ) -> None:
         """Charge the request's explicit payer for an ad-hoc amount."""
+        op_start = int(time.time())
         async with self._paying_lock.lock([request.paid_by_member_id]):
             await self._charge_card.charge_card(request)
+        self._invoice_fetch_runner.start_for_payer(
+            request.paid_by_member_id, op_start
+        )
 
     # ── Reprice (single, direct — NOT a task) ──────────────────
     #
@@ -343,9 +384,67 @@ class MemberMembershipsService:
     ) -> UUID:
         """Reprice ONE membership to its plan's active price; returns the
         successor row id (== ``item_id`` when it was already on the price)."""
-        return await self._reprice.reprice(
+        # A no_charge reprice cuts no mid-cycle invoice, so skip the fetch; only
+        # a prorating reprice bills. Resolve the payer before the op (item_id is
+        # the live row) so the post-op fetch knows whose invoices to pull.
+        will_bill = proration_behavior != ProrationBehavior.no_charge
+        payer_id = (
+            await self._get_payer_for_item(item_id) if will_bill else None
+        )
+        op_start = int(time.time())
+        successor = await self._reprice.reprice(
             member_id=member_id,
             old_item_id=item_id,
+            proration_behavior=proration_behavior,
+        )
+        if payer_id is not None:
+            self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
+        return successor
+
+    # ── Upgrade (cross-plan, charge the prorated difference) ───
+    #
+    # Move a membership to a DIFFERENT plan's active price and charge the
+    # prorated difference now (downgrade charges nothing). A direct,
+    # synchronous op like reprice — there is no batch upgrade. The op takes
+    # its own family lock, so the facade delegates bare.
+
+    async def upgrade(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        target_plan_id: UUID,
+        proration_behavior: ProrationBehavior,
+        idempotency_key: UUID,
+    ) -> UUID:
+        """Upgrade ONE membership to ``target_plan_id``'s active price; returns
+        the successor row id."""
+        # Resolve the payer before the bare op (item_id is the live row); fire
+        # the post-op fetch after it returns. An effective downgrade charges
+        # nothing → the fetch simply finds no new bill (harmless, bounded).
+        payer_id = await self._get_payer_for_item(item_id)
+        op_start = int(time.time())
+        successor = await self._upgrade.upgrade(
+            member_id=member_id,
+            old_item_id=item_id,
+            target_plan_id=target_plan_id,
+            proration_behavior=proration_behavior,
+            idempotency_key=idempotency_key,
+        )
+        self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
+        return successor
+
+    async def upgrade_preview(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        target_plan_id: UUID,
+        proration_behavior: ProrationBehavior,
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview what upgrading to ``target_plan_id`` would charge now."""
+        return await self._upgrade.upgrade_preview(
+            member_id=member_id,
+            old_item_id=item_id,
+            target_plan_id=target_plan_id,
             proration_behavior=proration_behavior,
         )
 

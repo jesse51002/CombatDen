@@ -134,4 +134,8 @@ ORDER BY
         WHEN 'recurring' THEN 1
         WHEN 'one_time' THEN 2
         WHEN 'trial' THEN 3
-    END ASC
+    END ASC,
+    -- Tiebreaker within a plan-type group (the one-time / trial packs):
+    -- newest start first, so stacked class packs are date-ordered, not
+    -- left to heap order.
+    ms.start_date DESC

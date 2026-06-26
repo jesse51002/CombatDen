@@ -229,6 +229,53 @@ def test_overview_reflects_overdue_without_price():
     assert grouper.build_membership_overview(ctx) == "Overdue for 1 Membership"
 
 
+def test_overview_class_packs_only():
+    """A member whose active memberships are one-time packs reads as the
+    packs + what they paid — not 'No active memberships'."""
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(
+        total=0, paying_count=0, one_time_count=2, one_time_total=3000
+    )
+    assert (
+        grouper.build_membership_overview(ctx) == "2 active class packs · $30"
+    )
+
+
+def test_overview_single_class_pack_is_singular():
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(
+        total=0, paying_count=0, one_time_count=1, one_time_total=1500
+    )
+    assert (
+        grouper.build_membership_overview(ctx) == "1 active class pack · $15"
+    )
+
+
+def test_overview_recurring_plus_class_packs():
+    """Recurring stays primary; the packs are appended as a suffix."""
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(total=5000, paying_count=1, one_time_count=2)
+    assert (
+        grouper.build_membership_overview(ctx)
+        == "Paying $50/mo for 1 Membership · 2 active class packs"
+    )
+
+
+def test_overview_class_packs_outrank_cancelled():
+    """Active packs are current memberships — they beat a cancelled recurring."""
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(
+        total=0,
+        paying_count=0,
+        has_cancelled=True,
+        one_time_count=1,
+        one_time_total=2000,
+    )
+    assert (
+        grouper.build_membership_overview(ctx) == "1 active class pack · $20"
+    )
+
+
 def test_overview_frozen_wins_over_overdue():
     # A frozen account pauses billing, so frozen takes precedence.
     grouper = MembersBillingGrouper()

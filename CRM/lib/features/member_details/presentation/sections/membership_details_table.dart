@@ -23,11 +23,19 @@ class MembershipDetailsTable extends StatelessWidget {
   final String? payerName;
   final String? payerPhotoUrl;
 
+  /// How much of this membership's charge has been refunded (minor
+  /// units). When > 0 a "Refunded" row shows right under Cost; null /
+  /// 0 omits it. Resolved by [MembershipDetailsLoader] for one-time /
+  /// trial memberships only (a recurring membership's refunds live in
+  /// Payment History, so it is left null).
+  final int? refundedAmount;
+
   const MembershipDetailsTable({
     super.key,
     required this.membership,
     this.payerName,
     this.payerPhotoUrl,
+    this.refundedAmount,
   });
 
   @override
@@ -86,6 +94,11 @@ class MembershipDetailsTable extends StatelessWidget {
             membership.totalPrice,
           ),
         ),
+        if (refundedAmount != null && refundedAmount! > 0)
+          (
+            membershipLabel('Refunded:'),
+            refundedValue(refundedAmount!),
+          ),
         (
           membershipLabel('Usage:'),
           Text(

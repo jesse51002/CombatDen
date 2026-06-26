@@ -30,6 +30,12 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
+from src.memberships.service.memberships_invoice_fetch import (
+    MemberMembershipsInvoiceFetch,
+)
+from src.memberships.service.memberships_invoice_fetch_runner import (
+    MembershipsInvoiceFetchRunner,
+)
 from src.memberships.service.memberships_refund import (
     MemberMembershipsRefund,
 )
@@ -38,6 +44,9 @@ from src.memberships.service.memberships_reprice import (
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
+)
+from src.memberships.service.memberships_upgrade import (
+    MemberMembershipsUpgrade,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -314,6 +323,19 @@ class DependencyInjector(containers.DeclarativeContainer):
         paying_lock=paying_member_lock,
     )
 
+    # ── Upgrade operation (memberships — cross-plan, charge difference) ──
+    # The cross-plan sibling of reprice: cancel the old row + insert a
+    # successor on a DIFFERENT plan, then the convergent sync with proration
+    # nets the (new - old) prorated difference. Shares the Transition-base
+    # machinery; standalone (no batch), takes its own family lock.
+    memberships_upgrade = providers.Factory(
+        MemberMembershipsUpgrade,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+        gym_stripe_service=gym_stripe_service,
+        paying_lock=paying_member_lock,
+    )
+
     # ── Tasks (tracked background operations) ────────────────────
     # The generic engine: TasksService (store/read + the in-task guard) and
     # TasksExecutor (run) are SEPARATE providers so the memberships↔tasks
@@ -336,6 +358,49 @@ class DependencyInjector(containers.DeclarativeContainer):
         }),
     )
 
+    # ── Stripe invoice/charge record handlers (the apply seams) ──
+    # Defined here (not in the webhooks block below) because BOTH the on-demand
+    # invoice fetch + the webhook dispatcher reuse them, and the fetch must be
+    # wired before member_memberships_service (which injects its runner).
+    stripe_webhook_invoice_paid_handler = providers.Factory(
+        InvoicePaidHandler,
+        stripe_client=stripe_client,
+    )
+    stripe_webhook_invoice_payment_paid_handler = providers.Factory(
+        InvoicePaymentPaidHandler,
+        stripe_client=stripe_client,
+    )
+    stripe_webhook_invoice_payment_failed_handler = providers.Factory(
+        InvoicePaymentFailedHandler,
+    )
+    stripe_webhook_refund_handler = providers.Factory(
+        RefundHandler,
+    )
+
+    # ── On-demand post-op invoice fetch ──────────────────────────
+    # The deterministic fast-path that pulls a payer's new invoices from Stripe
+    # right after an op (fired fire-and-forget by the runner) AND the engine the
+    # reconciler's InvoiceFetchSweep delegates to. Reuses the record() seams.
+    member_memberships_invoice_fetch = providers.Factory(
+        MemberMembershipsInvoiceFetch,
+        db_pool=db_pool,
+        payment_service=payments_payment_service,
+        invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_paid_handler=(
+            stripe_webhook_invoice_payment_paid_handler
+        ),
+        invoice_payment_failed_handler=(
+            stripe_webhook_invoice_payment_failed_handler
+        ),
+        refund_handler=stripe_webhook_refund_handler,
+        payer_resolver=payer_resolver,
+    )
+    # Singleton so drain() on shutdown sees every in-flight fetch task.
+    memberships_invoice_fetch_runner = providers.Singleton(
+        MembershipsInvoiceFetchRunner,
+        invoice_fetch=member_memberships_invoice_fetch,
+    )
+
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
         MemberMembershipsService,
@@ -349,8 +414,10 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
         reprice_service=memberships_reprice,
+        upgrade_service=memberships_upgrade,
         members_management_service=members_management_service,
         waivers_service=waivers_service,
+        invoice_fetch_runner=memberships_invoice_fetch_runner,
     )
     member_memberships_refund_service = providers.Factory(
         MemberMembershipsRefund,
@@ -405,21 +472,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────
+    # The 4 record handlers (invoice_paid / invoice_payment_paid /
+    # invoice_payment_failed / refund) are defined ABOVE with the billing core
+    # (the on-demand invoice fetch reuses them); the dispatcher references them.
     stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
-    stripe_webhook_invoice_paid_handler = providers.Factory(
-        InvoicePaidHandler,
-        stripe_client=stripe_client,
-    )
-    stripe_webhook_invoice_payment_paid_handler = providers.Factory(
-        InvoicePaymentPaidHandler,
-        stripe_client=stripe_client,
-    )
-    stripe_webhook_invoice_payment_failed_handler = providers.Factory(
-        InvoicePaymentFailedHandler,
-    )
-    stripe_webhook_refund_handler = providers.Factory(
-        RefundHandler,
-    )
     stripe_webhook_account_updated_handler = providers.Factory(
         AccountUpdatedHandler,
     )
@@ -458,15 +514,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     reconciler_invoice_fetch_sweep = providers.Factory(
         InvoiceFetchSweep,
         db_pool=db_pool,
-        stripe_client=stripe_client,
-        invoice_paid_handler=stripe_webhook_invoice_paid_handler,
-        invoice_payment_paid_handler=(
-            stripe_webhook_invoice_payment_paid_handler
-        ),
-        invoice_payment_failed_handler=(
-            stripe_webhook_invoice_payment_failed_handler
-        ),
-        refund_handler=stripe_webhook_refund_handler,
+        invoice_fetch=member_memberships_invoice_fetch,
     )
     # Stale-task recovery: the reconciler re-runs unfinished tracked tasks
     # whose in-process execution died (the recovery loop lives in the
