@@ -86,10 +86,14 @@ class PaymentSyncService:
         Resolves the payer's own profile, computes and attaches each
         consolidated line's coupon, then reconciles the monthly subscription.
 
-        Freeze is out of this path entirely: the explicit freeze/unfreeze
-        action owns ``pause_collection`` (via ``PaymentSyncFreeze``), and
-        because the pause is subscription-level it persists across item changes
-        — so a membership op on a frozen payer needs no freeze re-apply here.
+        Freeze rides THIS path as a discount, not a pause or drop: a frozen
+        member's memberships stay in the desired bucket (the read flags each
+        row's subject-frozen state) but get a synthetic 100%-off on their line
+        (``PaymentSyncDiscounts``), so they bill $0 while keeping their Stripe
+        line id and `applied` status. A wholly-frozen payer's sub simply bills
+        $0; nothing is paused or cancelled. Resuming a member is just the next
+        converge dropping the 100%-off. The explicit freeze/unfreeze action
+        writes the member's window then re-drives this sync per affected payer.
 
         Args:
             payer_member_id: The PAYER whose subscription to converge (a

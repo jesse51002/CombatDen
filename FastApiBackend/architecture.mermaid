@@ -26,7 +26,7 @@ flowchart TB
     members_payments_service["MembersPaymentsService"]
     members_management_service["MembersManagementService"]
     member_memberships_refund_service["MemberMembershipsRefund<br/>src/memberships/ · card → Stripe refund + record; cash → record only"]
-    payment_sync_service["PaymentSyncService — src/sync/ · declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build), Freeze,<br/>OnceDiscounts settle, Stripe (execute), Writeback · -> None"]
+    payment_sync_service["PaymentSyncService — src/sync/ · declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build; freeze = 100%-off line),<br/>Stripe (execute), Writeback · -> None"]
     payment_sync_one_time["PaymentSyncOneTime — src/sync/ · one-shot one-time engine<br/>ONE consolidated invoice for pending one_time/trial memberships<br/>(start's non-recurring path) · reuses Discounts.resolve · NOT a converge"]
     payer_resolver["PayerResolver<br/>shared payer resolution (paid_by_member_id)"]
     membership_plans_service["MembershipPlansService<br/>src/plans/"]

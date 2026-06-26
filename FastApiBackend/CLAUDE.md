@@ -337,7 +337,10 @@ that derivation through a Postgres view rather than repeating the
 (in `Database/supabase/schemas/member_memberships.sql`) wraps
 `member_memberships` and derives `status`
 (`active` / `cancelled` / `ended` / `frozen`) from `cancel_date`,
-`end_date`, and the account's freeze window on `members`. The member
+`end_date`, and the **subject member's** freeze window on `members` (the
+view joins `members` on the membership's own `member_id`, NOT its
+`paid_by_member_id` — freezing a member pauses only that member's own
+memberships, regardless of who pays). The member
 read-paths (`src/members/sql/crm_views/*.sql`, `member_details/*.sql`)
 SELECT from this view; writes go directly to the underlying table.
 

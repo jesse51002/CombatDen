@@ -69,11 +69,23 @@ class ActiveMembershipRow(BaseModel):
     # None (a one-time plan can have no duration). Carried as metadata only — the
     # bucket interval is fixed monthly, so nothing in the build reads it.
     duration_unit: DurationUnit | None = None
+    # Whether this membership's SUBJECT member (member_id, not the payer) is
+    # frozen right now. A frozen membership stays in the bucket but bills $0 via
+    # a synthetic 100%-off on its line (PaymentSyncDiscounts), so it keeps its
+    # Stripe line id and stays `applied` — freeze is a discount, not a drop.
+    is_frozen: bool = False
     discounts: list[AppliedDiscount] = []
 
 
 class IntervalBucket(BaseModel):
-    """All items for one billing interval (discounts ride the items)."""
+    """All items for one billing interval (discounts ride the items).
+
+    Frozen memberships are NOT special-cased here — they stay in the bucket like
+    any membership and bill $0 via a synthetic 100%-off on their line (see
+    ``PaymentSyncDiscounts``), so a frozen row keeps its line id and stays
+    `applied`. The bucket is empty only when the payer has no active recurring
+    memberships at all — a genuine cancellation.
+    """
 
     interval: DurationUnit
     items: list[PaymentsSubscriptionDesiredItem]

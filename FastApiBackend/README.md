@@ -43,7 +43,7 @@ shared **`PayerResolver`** — see
 `mermaid-creation` skill).
 
 **For the payment-sync engine in depth** — the step-by-step orchestration flow of
-`update_payments_recurring` (resolve → freeze re-apply → settle once → build + resolve coupons →
+`update_payments_recurring` (resolve → build + resolve coupons (freeze = a 100%-off line) →
 execute → write back, returning `None`), plus the `preview` / `bulk` / deferred-reconciler branches —
 see
 **[`payment_sync.mermaid`](payment_sync.mermaid)**. The sync steps are grouped in one box with

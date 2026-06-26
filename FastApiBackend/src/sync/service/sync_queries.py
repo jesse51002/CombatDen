@@ -75,6 +75,7 @@ class PaymentSyncQueries:
                 text(sql),
                 {
                     "payer_member_id": str(payer_member_id),
+                    "today": today,
                     "excluded_statuses": _excluded_statuses(preview),
                 },
             )
@@ -98,7 +99,10 @@ class PaymentSyncQueries:
         one-time plan can have no duration. ``quantity`` is selected only by the
         one-time read (where one_time / trial packs stack as quantity > 1); the
         recurring read omits it, so it defaults to 1 — the DB-enforced recurring
-        value, and unused by the recurring build anyway.
+        value, and unused by the recurring build anyway. ``is_frozen`` is
+        surfaced only by the recurring read (the subject member's freeze window);
+        the one-time read omits it, so it defaults to False (a one-time charge is
+        terminal and never freezes).
         """
         duration_unit = row["duration_unit"]
         return ActiveMembershipRow(
@@ -113,6 +117,7 @@ class PaymentSyncQueries:
             duration_unit=(
                 DurationUnit(duration_unit) if duration_unit else None
             ),
+            is_frozen=row.get("is_frozen", False),
         )
 
     async def get_active_one_time(

@@ -118,9 +118,6 @@ from src.sync.service.sync_builder import (
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
-from src.sync.service.sync_freeze import (
-    PaymentSyncFreeze,
-)
 from src.sync.service.sync_one_time import (
     PaymentSyncOneTime,
 )
@@ -226,9 +223,9 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Payment sync ─────────────────────────────────────────────
-    # Shared payer resolver, injected wherever payer (or, temporarily, parent)
-    # resolution is needed: the sync, the freeze service, and the lifecycle /
-    # validation callers (start, freeze, charge_card, mark_paid_cash).
+    # Shared payer resolver, injected wherever payer resolution is needed: the
+    # sync and the lifecycle / validation callers (start, charge_card,
+    # mark_paid_cash).
     payer_resolver = providers.Factory(
         PayerResolver,
         db_pool=db_pool,
@@ -244,14 +241,6 @@ class DependencyInjector(containers.DeclarativeContainer):
     paying_member_lock = providers.Factory(
         PayingMemberLock,
         db_pool=db_pool,
-    )
-    # Standalone freeze service: the dedicated freeze/unfreeze request resolves
-    # the parent then calls this directly. The main sync no longer does a
-    # maintenance freeze re-apply (pause_collection is subscription-level and
-    # persists across item changes), so only the explicit action uses this.
-    payment_sync_freeze = providers.Factory(
-        PaymentSyncFreeze,
-        subscription_service=payments_subscription_service,
     )
     # Owns the discount math + resolves each line's coupons (find-or-create,
     # percent→dollar), for both real and preview. Coupon I/O is delegated to the
@@ -344,7 +333,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
         payer_resolver=payer_resolver,
-        freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,

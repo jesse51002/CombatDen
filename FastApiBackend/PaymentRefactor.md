@@ -48,12 +48,14 @@ anticipate this extension.
 
 ## 3. Paid-time-preserving freeze (not built)
 
-**Why the current freeze is insufficient.** Today freeze = Stripe
-`pause_collection` + a resume date. Pausing collection does **not** give the member
-back the time they were frozen — the billing clock keeps ticking through the pause,
-so they don't resume with exactly the remaining interval they had paid for. For
-monthly that was "close enough" to ship; for **weekly** (day/week precision) and
-**yearly** (a few frozen months is real money against a year) it is not.
+**Why the current freeze is insufficient.** Today freeze = a synthetic 100%-off
+on the frozen member's line (per-subject-member; the membership stays on the sub
+billing $0). It zeroes the bill while frozen but does **not** give the member back
+the time they were frozen — the billing clock keeps ticking, an absolute discount
+`end_date` keeps elapsing, and they don't resume with exactly the remaining
+interval they had paid for. For monthly that is "close enough"; for **weekly**
+(day/week precision) and **yearly** (a few frozen months is real money against a
+year) it is not.
 
 **What a correct freeze does:**
 1. **On freeze**, capture the **remaining time** until `next_due_date` — the credit

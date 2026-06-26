@@ -174,7 +174,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
     ) -> PayerProfile:
-        """Validate the payer is an in-gym, unfrozen billing profile.
+        """Validate the payer is an in-gym billing profile.
 
         The payer's OWN profile is resolved directly — a linked member may be
         the payer (self-pay); ``_check_links`` then enforces that every other
@@ -183,8 +183,15 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         customer; card presence is not pre-checked (a missing card surfaces as
         the charge's own failure, and ``paid_with_cash`` needs no card).
 
+        **Freeze is NOT a start blocker.** Freeze is now per SUBJECT member, so a
+        frozen payer's status is irrelevant to billing a different member's
+        membership, and a frozen SUBJECT simply starts un-billed (its line is
+        frozen-excluded by the sync — paused/dropped). Backend start must stay
+        open on frozen members so batch jobs never fail on them; the CRM guards
+        the UX instead.
+
         Raises:
-            ValueError: If the payer is in a different gym or is frozen.
+            ValueError: If the payer is in a different gym.
         """
         payer = await self._payer_resolver.resolve_payer(
             request.payer_member_id,
@@ -192,10 +199,6 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         if payer.gym_id != request.gym_id:
             raise ValueError(
                 f"Payer {request.payer_member_id} is not in gym {request.gym_id}",
-            )
-        if payer.is_frozen:
-            raise ValueError(
-                "Cannot start memberships: payer account is frozen",
             )
         return payer
 

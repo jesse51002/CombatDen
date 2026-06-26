@@ -49,6 +49,13 @@ class PaymentSyncDiscounts:
     order (we do only the percentage-level math; Stripe sequences percent→dollar
     on the line).
 
+    **Freeze rides this math** (it is not a pause/drop): a frozen membership
+    (``ActiveMembershipRow.is_frozen``) contributes a synthetic 100%-off to its
+    line, so it bills $0 while STAYING on the subscription with its line id — a
+    consolidated line bills only its non-frozen units. So a frozen member's row
+    is always `applied` with a real `stripe_item_id`, and unfreeze is just the
+    next converge dropping the synthetic 100%-off.
+
     The discounts arrive **already date-filtered by the read** (the query excludes
     any past its end_date as of the gym-timezone today), so the math has no date
     logic of its own. Runs inside the build for **both** the real sync and
@@ -201,6 +208,20 @@ class PaymentSyncDiscounts:
         membership_amounts: dict[UUID, int] = {}
 
         for membership in memberships:
+            if membership.is_frozen:
+                # FREEZE = a synthetic 100%-off on this membership. It bills $0
+                # while frozen, but STAYS on the subscription (keeps its line id,
+                # stays `applied`) — so nothing downstream that assumes
+                # `applied ⇒ on Stripe with an item id` breaks. Riding the
+                # existing percent ÷ quantity averaging below, a consolidated
+                # line with k of N frozen bills only the (N − k) active units; a
+                # sole frozen member's line is 100% off → $0. Its own real
+                # discounts are subsumed (frozen is $0 regardless), so they don't
+                # feed the line value or get a coupon link here — they resolve
+                # normally again on unfreeze. Its own post-discount price is 0.
+                effective_fraction += 1.0
+                membership_amounts[membership.item_id] = 0
+                continue
             mem_percents: list[float] = []
             mem_dollars = 0
             for discount in membership.discounts:

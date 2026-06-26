@@ -55,9 +55,6 @@ from src.sync.service.sync_builder import (
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
-from src.sync.service.sync_freeze import (
-    PaymentSyncFreeze,
-)
 from src.sync.service.sync_one_time import (
     PaymentSyncOneTime,
 )
@@ -129,8 +126,7 @@ def build_payment_sync_service(
     """Build the membership payment-sync service.
 
     Mirrors ``src/core/dependencies.py`` (payment_sync_service). PaymentSyncService
-    is a thin orchestrator: it takes the shared ``PayerResolver``, the
-    ``PaymentSyncFreeze`` sub-service, and a
+    is a thin orchestrator: it takes the shared ``PayerResolver`` and a
     ``PaymentSyncBuilder`` (which itself owns a ``PaymentSyncDiscounts`` coupon
     engine), and builds its Stripe-dispatch + writeback halves internally.
     """
@@ -185,22 +181,14 @@ def build_member_memberships_service(
 
     Mirrors ``src/core/dependencies.py`` (member_memberships_service).
     """
-    price_svc = PaymentsStripePriceService(stripe_client)
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     payment_svc = PaymentsStripePaymentService(
         stripe_client,
         members_svc,
     )
-    subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client,
-        members_svc,
-        price_svc,
-        discount_svc,
-    )
     gym_stripe_svc = GymStripeService(db_pool)
     payer_resolver = PayerResolver(db_pool, gym_stripe_svc)
-    freeze_service = PaymentSyncFreeze(subscription_svc)
     paying_lock = PayingMemberLock(db_pool)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
     one_time_svc = PaymentSyncOneTime(
@@ -221,7 +209,6 @@ def build_member_memberships_service(
         payment_svc,
         gym_stripe_svc,
         payer_resolver,
-        freeze_service,
         paying_lock,
         one_time_svc,
         discounts_svc,
