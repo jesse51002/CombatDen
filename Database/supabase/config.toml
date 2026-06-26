@@ -59,8 +59,8 @@ schema_paths = [
     "./schemas/gyms.sql",
     "./schemas/rank_presets.sql",
     "./schemas/gym_ranks.sql",
-    # Membership plans / prices / discounts load before members because the
-    # unified members table FKs gym_discounts (linked_discount_id).
+    # Membership plans / prices / discounts load before the member-scoped
+    # tables (member_memberships, applied discounts) that FK them.
     "./schemas/membership_plans.sql",
     "./schemas/membership_plan_prices.sql",
     "./schemas/gym_discounts.sql",

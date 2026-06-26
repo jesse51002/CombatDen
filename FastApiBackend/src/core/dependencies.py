@@ -456,7 +456,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         stripe_membership_service=payments_membership_service,
         stripe_price_service=payments_price_service,
-        discounts_service=discounts_service,
     )
 
     # ── Gyms (Stripe Express onboarding) ─────────────────────────

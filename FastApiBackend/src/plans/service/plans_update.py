@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # jsonb columns are bound as JSON text + cast to jsonb in the SET clause.
-_JSONB_COLUMNS = frozenset({"waiver_ids", "linked_discount_ids"})
+_JSONB_COLUMNS = frozenset({"waiver_ids"})
 
 
 class MembershipPlansUpdate(MembershipPlansBase):
@@ -70,14 +70,6 @@ class MembershipPlansUpdate(MembershipPlansBase):
         existing = await self._get_plan(request.plan_id, request.gym_id)
 
         changes = self._collect_changes(request.data)
-        # The CRM edits linked discounts as per-tier $/% off values; mint real
-        # `linked` discount entries and store their ids (the actual column).
-        if "linked_discount_values" in changes:
-            values = changes.pop("linked_discount_values")
-            changes["linked_discount_ids"] = await self._mint_linked_discounts(
-                request.gym_id,
-                values,  # type: ignore[arg-type]
-            )
         if not changes:
             return self._build_plan_response(
                 existing,
@@ -230,8 +222,6 @@ class MembershipPlansUpdate(MembershipPlansBase):
         """
         if col == "waiver_ids":
             return json.dumps([str(u) for u in val])  # type: ignore[union-attr]
-        if col == "linked_discount_ids":
-            return json.dumps(list(val))  # type: ignore[arg-type]
         return val.value if hasattr(val, "value") else val
 
     @staticmethod

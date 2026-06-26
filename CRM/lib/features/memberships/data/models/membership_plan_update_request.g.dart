@@ -15,10 +15,6 @@ Map<String, dynamic> _$MembershipPlanUpdateDataToJson(
   'duration_unit': ?instance.durationUnit?.toJson(),
   'is_public': ?instance.isPublic,
   'waiver_ids': ?instance.waiverIds,
-  'linked_discount_enabled': ?instance.linkedDiscountEnabled,
-  'linked_discount_values': ?instance.linkedDiscountValues
-      ?.map((e) => e.toJson())
-      .toList(),
 };
 
 Map<String, dynamic> _$MembershipPlanUpdateRequestToJson(

@@ -94,12 +94,9 @@ CREATE TRIGGER trg_prevent_stripe_customer_id_overwrite
     BEFORE UPDATE OF stripe_customer_id ON members
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_customer_id_overwrite();
 
--- Linked (family) discounts dissolved: a family discount is now a snapshot row
--- on member_membership_applied_discounts (discount_type = 'linked'), not a
--- person-level pointer. members.linked_discount_id and its type-check trigger
--- are gone; the family link itself moved to the member_authorized_payers
--- junction (the many-to-many authorization layer), so members carries no
--- link column or hierarchy trigger.
+-- The family link lives in the member_authorized_payers junction (the
+-- many-to-many authorization layer), so members carries no link column or
+-- hierarchy trigger.
 
 -- Filtered view: members with a completed Stripe customer sync. Billing flows
 -- read through this so half-synced rows are never surfaced. `members` is the

@@ -32,10 +32,4 @@ MembershipPlanResponse _$MembershipPlanResponseFromJson(
           ?.map((e) => e as String)
           .toList() ??
       [],
-  linkedDiscountEnabled: json['linked_discount_enabled'] as bool? ?? false,
-  linkedDiscountValues:
-      (json['linked_discount_values'] as List<dynamic>?)
-          ?.map((e) => LinkedDiscountValue.fromJson(e as Map<String, dynamic>))
-          .toList() ??
-      [],
 );

@@ -23,6 +23,7 @@ nothing from ``src.tasks``.
 
 from uuid import UUID, uuid4
 
+from schema.membership_plan import PlanType
 from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
@@ -141,6 +142,18 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
         member_id: UUID,
     ) -> None:
         """Validate the membership can be repriced."""
+        # A reprice re-anchors RECURRING billing onto a new price version.
+        # one_time / trial memberships are a single terminal invoice with no
+        # recurring subscription to re-anchor, so repricing one is meaningless.
+        # The batch path already excludes them in SQL; reject here so the op is
+        # the single chokepoint for the direct single-member path (and any
+        # future caller) too.
+        if row["plan_type"] != PlanType.recurring:
+            raise ValueError(
+                f"Can only reprice a recurring membership "
+                f"(plan_type={row['plan_type']}): "
+                f"item_id={old_item_id}, member_id={member_id}"
+            )
         # A set cancel_date (already effective OR a future, still-active
         # scheduled cancellation) blocks the reprice — the successor would have
         # no cancel_date, silently dropping the pending cancellation. Staff

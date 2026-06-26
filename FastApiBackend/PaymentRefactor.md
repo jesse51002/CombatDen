@@ -162,3 +162,49 @@ each rejected:
 - Webhook handling so a balance-covered future invoice records cleanly
   (`starting_balance`/`ending_balance`, reduced/zero card charge) instead of
   looking like an underpayment.
+
+## 6. Linked (family) discounts — per-plan family tiers (not built)
+
+> Pulled from the active codebase as unused MVP scope. This captures the
+> intended design so it can be rebuilt; nothing of it remains in code or schema.
+
+### Current state — no family discount
+The discount model is **preset + custom only**. A family pays together via the
+payer model (`member_authorized_payers` + `member_memberships.paid_by_member_id`),
+but every family member's membership bills at the full plan price — there is no
+automatic "2nd member 20% off, 3rd member 30% off" tier on a plan.
+
+### What it takes
+- **Plan-level family tiers.** A membership plan carries a per-tier discount
+  **value** for the 2nd / 3rd / 4th / 5th linked member (capped at 5 members),
+  each a `$ off` **or** `% off` (exactly one) — not a flat "member price".
+- **Real `linked` discount entries.** Each tier is a real discount: a
+  `gym_discounts` identity tagged `discount_type = 'linked'` with a versioned
+  value on `gym_discount_values`, so it gets versioning + a stable id like any
+  discount. The plan references them by id
+  (`membership_plans.linked_discount_ids`, one per tier, in order); plan reads
+  resolve the ids back to `{percentage_off, dollar_off}` for the CRM. The
+  `linked` tag keeps them out of the regular per-membership preset picker.
+- **Backend mint on plan write.** The CRM plan create/edit screen sends the
+  per-tier `linked_discount_values`; the backend mints one `linked` discount
+  entry per value (reusing `DiscountsService`) and stores their ids. Editing a
+  value mints a new active version on the same discount, so the stored id stays
+  stable.
+- **Apply like any discount.** The family/membership flow passes the linked
+  discount's id in `discount_ids`, pinning an applied-discount row to its active
+  value version — the same path as a preset. No special sync/coupon logic.
+- **Schema to restore.** The `'linked'` value back on the
+  `gym_discounts.discount_type` CHECK, and `linked_discount_enabled` +
+  `linked_discount_ids` columns back on `membership_plans`.
+
+**The thing we never want here:** a cross-member recalculation of the family-wide
+discount on every membership change — that produced "random-seeming" cross-member
+price moves and broke predictability. Each membership's billing is determined
+from that member's own memberships only.
+
+### Open questions
+- How the tiers map to *which* family member gets *which* tier (2nd vs 3rd) —
+  assignment ordering as members are added/removed.
+- Whether a **self-paying** linked member (own card) still earns the family tier.
+- Whether to constrain a linked discount to the **same plan** ("same membership
+  type") to keep the tier math unambiguous.

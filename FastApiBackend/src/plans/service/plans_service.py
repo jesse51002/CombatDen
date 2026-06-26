@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.discounts.service.discounts_service import (
-    DiscountsService,
-)
 from src.payments.service.payments_stripe_membership_service import (
     PaymentsStripeMembershipService,
 )
@@ -57,14 +54,12 @@ class MembershipPlansService:
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
-        discounts_service: DiscountsService,
     ) -> None:
         deps = (
             db_pool,
             gym_stripe_service,
             stripe_membership_service,
             stripe_price_service,
-            discounts_service,
         )
         self._create = MembershipPlansCreate(*deps)
         self._update = MembershipPlansUpdate(*deps)
