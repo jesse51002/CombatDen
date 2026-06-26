@@ -2,7 +2,7 @@
 
 Pure unit tests (no DB / Stripe / network):
 
-* **C-079** — the staff-managed billing writes (freeze, unfreeze,
+* **C-079** — the staff-managed billing writes (start, freeze, unfreeze,
   mark-paid-cash, charge-card, refund) must gate on
   ``verify_gym_employee_for_member`` (staff only), NOT
   ``verify_can_view_member`` (which lets the member themselves through).
@@ -24,6 +24,7 @@ from src.memberships.memberships_router import (
     freeze_membership,
     mark_membership_paid_cash,
     refund_charge,
+    start_membership,
     unfreeze_membership,
 )
 from src.memberships.service.memberships_freeze import (
@@ -142,6 +143,26 @@ async def test_refund_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
+    auth.verify_can_view_member.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_start_uses_staff_only_guard() -> None:
+    auth = _make_auth()
+    service = MagicMock()
+    service.start = AsyncMock(return_value=MagicMock())
+    request = MagicMock()
+    request.memberships = [MagicMock(member_id="m1")]
+
+    await start_membership(
+        request=request,
+        response=MagicMock(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    auth.verify_gym_employee_for_member.assert_awaited()
     auth.verify_can_view_member.assert_not_awaited()
 
 

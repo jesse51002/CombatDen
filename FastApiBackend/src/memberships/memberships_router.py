@@ -326,9 +326,11 @@ async def start_membership(
 ) -> MemberMembershipsStartResponse:
     """Start the request's memberships for the payer's family."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.payer_member_id, user_payload
+    )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_can_view_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
 
     try:
         result = await memberships_service.start(request)
@@ -736,9 +738,11 @@ async def preview_start_membership(
 ) -> MemberMembershipsStartPreviewResponse:
     """Preview what starting the request's memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.payer_member_id, user_payload
+    )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_can_view_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
 
     try:
         return await memberships_service.preview_start(request)
