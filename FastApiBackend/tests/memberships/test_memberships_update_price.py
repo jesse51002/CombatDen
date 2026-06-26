@@ -527,6 +527,63 @@ async def test_update_cancelled_raises(
         await delete_member_data(db_pool, member.member_id)
 
 
+@pytest.mark.parametrize("plan_type", ["one_time", "trial"])
+async def test_update_price_non_recurring_raises(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+    plan_type,
+):
+    """Repricing a non-recurring (one_time / trial) membership is rejected.
+
+    A one_time / trial membership is a single terminal invoice with no
+    recurring subscription to re-anchor, so a reprice is meaningless. The op
+    must raise and mutate nothing (no successor row, no invoice).
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id, plan_type=plan_type)
+
+    try:
+        item_id = await _start_and_get_item_id(
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
+        )
+        profile = await get_profile_stripe_ids(
+            db_pool,
+            member.member_id,
+            gym_id,
+        )
+
+        # Snapshot after start — the rejected reprice below must not create
+        # any invoice or mutate any membership row.
+        before = await snapshot_billing_state(
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
+        )
+
+        with pytest.raises(ValueError, match="recurring"):
+            await memberships_service.update_price(
+                item_id=item_id,
+                member_id=member.member_id,
+            )
+
+        await assert_no_unexpected_charges(
+            stripe_client,
+            before,
+            connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
 async def test_update_price_noop_unchanged(
     memberships_service,
     db_pool,

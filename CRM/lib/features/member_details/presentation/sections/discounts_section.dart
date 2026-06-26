@@ -88,13 +88,6 @@ class DiscountsSection extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            if (d.isLinked)
-              Text(
-                'Linked',
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text3rd,
-                ),
-              ),
           ],
         ),
         Text(
@@ -105,9 +98,7 @@ class DiscountsSection extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: InvoiceChip(
             label: d.discountLabel,
-            tone: d.isLinked
-                ? InvoiceChipTone.brand
-                : InvoiceChipTone.good,
+            tone: InvoiceChipTone.good,
           ),
         ),
       ],

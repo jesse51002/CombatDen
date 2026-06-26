@@ -84,7 +84,7 @@ CREATE INDEX idx_gym_discount_values_discount
 -- single-application trigger on member_membership_applied_discounts this makes
 -- the custom lifecycle explicit (mint -> apply once -> archive), so cleaning up
 -- a failed membership's minted customs can never touch another holder. Presets
--- and linked discounts version freely.
+-- version freely.
 CREATE FUNCTION prevent_custom_discount_second_value()
 RETURNS TRIGGER AS $$
 BEGIN

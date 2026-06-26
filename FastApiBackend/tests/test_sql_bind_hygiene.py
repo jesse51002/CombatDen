@@ -1,7 +1,7 @@
 """Hermetic regression guard for the `:param::type` SQL bind footgun.
 
 A production bug shipped where ``membership_plans_insert.sql`` cast bind
-parameters with ``:waiver_ids::jsonb`` / ``:linked_discount_ids::jsonb``.
+parameters with ``:waiver_ids::jsonb``.
 SQLAlchemy's ``text()`` bind-parameter parser refuses to match a ``:name``
 that is immediately followed by a colon (the ``::`` of a Postgres cast), so
 those binds were passed through to asyncpg **literally** — producing

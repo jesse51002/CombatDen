@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from schema.membership_plan import DurationUnit, PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.discounts.service.discounts_service import DiscountsService
 from src.payments.payments_exceptions import StripeOrphanError
 from src.payments.schema.metadata.stripe_price_metadata import (
     StripePriceMetadata,
@@ -27,40 +25,14 @@ from src.plans.plans_schema import (
 from src.plans.service.plans_base import (
     MembershipPlansBase,
 )
-from src.shared.database import DirectDatabasePool
 from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.sql_loader import load_sql
-
-if TYPE_CHECKING:
-    from src.payments.service.payments_stripe_membership_service import (
-        PaymentsStripeMembershipService,
-    )
-    from src.payments.service.payments_stripe_price_service import (
-        PaymentsStripePriceService,
-    )
-    from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
 
 
 class MembershipPlansPrice(MembershipPlansBase):
     """Set / update plan prices."""
-
-    def __init__(
-        self,
-        db_pool: DirectDatabasePool,
-        gym_stripe_service: GymStripeService,
-        stripe_membership_service: PaymentsStripeMembershipService,
-        stripe_price_service: PaymentsStripePriceService,
-        discounts_service: DiscountsService,
-    ) -> None:
-        super().__init__(
-            db_pool,
-            gym_stripe_service,
-            stripe_membership_service,
-            stripe_price_service,
-            discounts_service,
-        )
 
     # ── Set Price ──────────────────────────────────────────────
 

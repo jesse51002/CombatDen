@@ -7,18 +7,11 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from schema.gym_discount import DiscountType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.discounts.schema.discounts_schema import (
-    DiscountCreateRequest,
-    DiscountValue,
-)
-from src.discounts.service.discounts_service import DiscountsService
 from src.plans import SQL_DIR
 from src.plans.plans_schema import (
-    LinkedDiscountValue,
     MembershipPlanPriceResponse,
     MembershipPlanResponse,
 )
@@ -50,45 +43,13 @@ class MembershipPlansBase:
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
-        discounts_service: DiscountsService,
     ) -> None:
         self._db_pool = db_pool
         self._gym_stripe = gym_stripe_service
         self._stripe_memberships = stripe_membership_service
         self._stripe_prices = stripe_price_service
-        self._discounts = discounts_service
 
     # ── Shared Queries ─────────────────────────────────────────
-
-    async def _mint_linked_discounts(
-        self,
-        gym_id: UUID,
-        values: list[LinkedDiscountValue],
-    ) -> list[str]:
-        """Mint a real ``linked`` discount entry per entered tier value ($ off
-        or % off) via the discounts service; return the discount ids in tier
-        order.
-
-        The plan stores these in ``linked_discount_ids``; reads resolve them
-        back to values. Reuses the discounts service (identity + first active
-        value); editing the value later mints a new active version there, so
-        the stored id stays stable. Shared by create and update.
-        """
-        ids: list[str] = []
-        for tier, value in enumerate(values, start=2):
-            discount = await self._discounts.create_discount(
-                DiscountCreateRequest(
-                    gym_id=gym_id,
-                    discount_name=f"Family member {tier}",
-                    discount_type=DiscountType.linked,
-                    value=DiscountValue(
-                        percentage_off=value.percentage_off,
-                        dollar_off=value.dollar_off,
-                    ),
-                ),
-            )
-            ids.append(str(discount.discount_id))
-        return ids
 
     async def _get_plan(self, plan_id: UUID, gym_id: UUID) -> dict:
         """Fetch a non-deleted plan row (with active price columns).
@@ -173,11 +134,4 @@ class MembershipPlansBase:
             active_price=active_price,
             enrolled_count=plan_row.get("enrolled_count", 0),
             waiver_ids=MembershipPlansBase._json_list(plan_row.get("waiver_ids")),
-            linked_discount_enabled=plan_row.get("linked_discount_enabled", False),
-            linked_discount_ids=MembershipPlansBase._json_list(
-                plan_row.get("linked_discount_ids"),
-            ),
-            linked_discount_values=MembershipPlansBase._json_list(
-                plan_row.get("linked_discount_values"),
-            ),
         )

@@ -973,9 +973,9 @@ async def preview_cancel_membership(
     response_model=DueNowVsRecurringPreview | None,
     summary="Add applied-discount rows to a membership (or preview)",
     description=(
-        "Adds an applied-discount row per regular preset and per entered linked "
-        "discount, then re-syncs the Stripe subscription — no mid-cycle invoice "
-        "is cut. A preset already applied is left frozen. With ``preview=true`` "
+        "Adds an applied-discount row per discount id, then re-syncs the Stripe "
+        "subscription — no mid-cycle invoice is cut. A preset already applied is "
+        "left frozen. With ``preview=true`` "
         "nothing is committed: the adds are staged as preview rows, the "
         "resulting invoice preview is returned, and the staged rows are removed."
     ),

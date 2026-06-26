@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/presentation/sections/discounts_section.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_actions_row.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_details_loader.dart';
@@ -83,8 +84,13 @@ class MembershipCarousel extends StatelessWidget {
     };
     final isInTask = inTaskIds.contains(itemId);
 
+    // Reprice/migrate re-anchors recurring billing onto a new price version;
+    // a one_time / trial membership is a single terminal invoice with no sub
+    // to re-anchor, so the outdated-price → update affordance is recurring-only
+    // (matching the Edit-membership menu's gate; the backend rejects it too).
     final showOutdated = !isInTask &&
         !isTerminalStatus(status) &&
+        membership.planType == PlanType.recurring.value &&
         membership.onOutdatedPrice &&
         membership.currentActivePrice != null;
 

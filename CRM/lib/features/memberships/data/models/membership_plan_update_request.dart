@@ -1,7 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
-import 'package:crm/features/member_details/data/models/linked_discount_value.dart';
 
 part 'membership_plan_update_request.g.dart';
 
@@ -25,8 +24,6 @@ class MembershipPlanUpdateData {
   final DurationUnit? durationUnit;
   final bool? isPublic;
   final List<String>? waiverIds;
-  final bool? linkedDiscountEnabled;
-  final List<LinkedDiscountValue>? linkedDiscountValues;
 
   const MembershipPlanUpdateData({
     this.planName,
@@ -35,8 +32,6 @@ class MembershipPlanUpdateData {
     this.durationUnit,
     this.isPublic,
     this.waiverIds,
-    this.linkedDiscountEnabled,
-    this.linkedDiscountValues,
   });
 
   Map<String, dynamic> toJson() =>

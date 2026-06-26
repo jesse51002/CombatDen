@@ -392,8 +392,6 @@ Table membership_plans_unfiltered {
   is_deleted boolean [not null, default: false]
   stripe_product_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
   waiver_ids jsonb [not null, default: `'[]'`, note: 'array of waiver_id strings (multi-select; no FK)']
-  linked_discount_enabled boolean [not null, default: false]
-  linked_discount_ids jsonb [not null, default: `'[]'`, note: 'discount ids per linked tier (2nd..5th+), in order']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -420,7 +418,7 @@ Table gym_discounts_unfiltered {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null, note: 'editable identity']
-  discount_type varchar [not null, note: 'CHECK: preset | custom | linked (linked = a family discount entry a plan references by id)']
+  discount_type discount_type [not null, note: 'enum: preset | custom']
   is_deleted boolean [not null, default: false]
   created_at timestamptz [not null, default: `now()`]
   // IDENTITY only. The percent/dollar + lifetime live on gym_discount_values (versioned).
@@ -487,7 +485,6 @@ Table member_memberships_unfiltered {
 // gym_discount_values version (value_id = the provenance / version tag). Apply =
 // INSERT, remove = DELETE, never an edit. end_date + stripe_coupon_id are sync
 // writebacks. The view exposes only rows with stripe_coupon_id written back.
-// Linked discounts are per-plan pricing, not applied here.
 Table member_membership_applied_discounts_unfiltered {
   applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
   item_id uuid [not null, note: 'FK (item_id, gym_id) -> member_memberships_unfiltered']

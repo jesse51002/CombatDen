@@ -71,9 +71,6 @@ class DiscountInfo extends Equatable {
     return '';
   }
 
-  /// True when this applied-discount row is a family/linked discount.
-  bool get isLinked => discountType == DiscountType.linked;
-
   @override
   List<Object?> get props => [
         appliedDiscountId,

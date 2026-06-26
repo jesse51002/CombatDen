@@ -85,7 +85,7 @@ class MemberMembershipsStartItem(BaseModel):
     ``price_id`` alone identifies what is bought — a price belongs to
     exactly one plan, so the plan is derived server-side from the price row
     (no redundant plan field to mismatch). ``discount_ids`` reference
-    existing preset / linked discounts; ``custom_discounts`` are inline
+    existing preset discounts; ``custom_discounts`` are inline
     values minted as ``custom`` discounts. Both land before the charge, so
     the first (one-time: only) invoice is discounted.
 
@@ -471,9 +471,9 @@ class MemberMembershipsAddDiscountsRequest(BaseModel):
 
     An explicit add of immutable applied-discount rows — never a replace-set.
     ``discount_ids`` references live discounts whose ACTIVE value version is
-    frozen onto an applied-discount row (any discount, including a ``linked``
-    family discount). ``preview=True`` stages the adds as ``preview_add`` rows
-    and returns the resulting invoice preview without committing.
+    frozen onto an applied-discount row. ``preview=True`` stages the adds as
+    ``preview_add`` rows and returns the resulting invoice preview without
+    committing.
     """
 
     item_id: UUID
