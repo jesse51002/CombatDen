@@ -21,7 +21,9 @@ The tests assert:
    interval (future-proofing — today every recurring plan is monthly).
 """
 
+import contextlib
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -32,6 +34,9 @@ import src.shared.db_schema_path  # noqa: F401
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
+)
+from src.memberships.service.memberships_upgrade import (
+    MemberMembershipsUpgrade,
 )
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
@@ -389,3 +394,72 @@ async def test_upgrade_window_guard_rejects_mismatched_interval(
             uuid4(),
             target_plan,
         )
+
+
+async def test_upgrade_guards_the_subject_not_the_actor():
+    """``_check_no_existing`` must guard the membership's SUBJECT
+    (``row.member_id``), not the request actor.
+
+    ``_get_membership`` authorises the actor via
+    ``mm.member_id = :member_id OR mm.paid_by_member_id = :member_id``, so a
+    payer upgrading a child's membership passes their OWN member_id while the
+    returned row carries the child's. Guarding the actor would skip the child's
+    duplicate-recurring check. (API hardening — the CRM always passes the
+    subject, so this is unreachable through the UI, but a direct API call could
+    hit it.) Pure-mock so it runs without the DB.
+    """
+    svc = MemberMembershipsUpgrade(
+        db_pool=MagicMock(),
+        payment_sync_service=MagicMock(),
+        gym_stripe_service=MagicMock(),
+        paying_lock=MagicMock(),
+    )
+    actor, subject, gym = uuid4(), uuid4(), uuid4()
+    item, target = uuid4(), uuid4()
+
+    @contextlib.asynccontextmanager
+    async def _lock(_ids):
+        yield
+
+    svc._paying_lock.lock = _lock
+    svc._resolve_payer = AsyncMock(return_value=uuid4())
+    svc._get_membership = AsyncMock(
+        return_value={
+            "member_id": str(subject),
+            "gym_id": str(gym),
+            "plan_id": str(uuid4()),
+            "plan_type": "recurring",
+            "cancel_date": None,
+            "end_date": None,
+            "duration_unit": "month",
+            "duration_amount": 1,
+            "price": 1000,
+            "timezone": "America/Chicago",
+        }
+    )
+    svc._get_plan_recurring = AsyncMock(
+        return_value={
+            "is_deleted": False,
+            "plan_type": "recurring",
+            "duration_unit": "month",
+            "duration_amount": 1,
+        }
+    )
+    # Stop right after the guard so we can assert the argument it received
+    # (the price lookup / sync / DB write past this point need real infra).
+    svc._check_no_existing = AsyncMock(
+        side_effect=RuntimeError("stop-after-guard")
+    )
+
+    with pytest.raises(RuntimeError, match="stop-after-guard"):
+        await svc.upgrade(
+            actor,
+            item,
+            target,
+            ProrationBehavior.prorate_to_anchor,
+            uuid4(),
+        )
+
+    # First positional arg of _check_no_existing is the member to guard.
+    assert svc._check_no_existing.await_args.args[0] == subject
+    assert svc._check_no_existing.await_args.args[0] != actor

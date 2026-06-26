@@ -94,8 +94,12 @@ class MemberMembershipsUpgrade(MemberMembershipsTransitionBase):
             # The member keeps exactly one recurring membership per plan, so
             # they must not already hold an active/frozen recurring on the
             # TARGET plan (the old row is on a different plan, so it is unseen).
+            # Guard the membership's SUBJECT (row.member_id) — NOT the request
+            # actor: a payer upgrading a child's membership passes their own
+            # member_id, so checking the actor would skip the child's duplicate
+            # guard (the same subject-keying the cancel path uses).
             await self._check_no_existing(
-                member_id,
+                UUID(str(row["member_id"])),
                 UUID(str(row["gym_id"])),
                 [target_plan_id],
             )
@@ -188,7 +192,7 @@ class MemberMembershipsUpgrade(MemberMembershipsTransitionBase):
                 target_plan,
             )
             await self._check_no_existing(
-                member_id,
+                UUID(str(row["member_id"])),
                 UUID(str(row["gym_id"])),
                 [target_plan_id],
             )

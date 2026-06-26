@@ -318,7 +318,13 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 text(sql),
                 {
                     "item_id": str(item_id),
-                    "member_id": str(member_id),
+                    # Drive the UPDATE off the row's ACTUAL subject, not the
+                    # request actor — a payer ending a membership they fund for
+                    # someone else passes their own member_id (the _get_membership
+                    # auth allows it), so filtering the UPDATE by the actor would
+                    # match zero rows and scalar_one() would raise NoResultFound
+                    # (an opaque 500). Same subject-keying the cancel path uses.
+                    "member_id": str(row["member_id"]),
                     "gym_today": today,
                 },
             )
@@ -419,9 +425,16 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 f"Cannot end a recurring membership here — use cancel: "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        if row["cancel_date"] is not None and row["cancel_date"] <= today:
+        # ANY cancel_date (already-effective OR a future scheduled one) blocks
+        # ending: member_memberships_end.sql sets end_date WITHOUT clearing
+        # cancel_date, so a pending cancellation would leave the row with dual
+        # terminal dates (a ghost scheduled-cancel for downstream status /
+        # reconciler logic). Mirrors the upgrade/reprice guard — clear the
+        # cancellation first.
+        if row["cancel_date"] is not None:
             raise ValueError(
-                f"Membership already cancelled: "
+                f"Cannot end a membership with a pending cancellation "
+                f"— clear the cancellation first: "
                 f"item_id={item_id}, member_id={member_id}"
             )
         if row["end_date"] is not None and row["end_date"] <= today:

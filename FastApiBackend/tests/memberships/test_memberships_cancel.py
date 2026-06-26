@@ -5,7 +5,9 @@ deleted) after the cancel and asserts that no surprise charges
 landed on the member's customer balance.
 """
 
+import contextlib
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -818,3 +820,69 @@ def test_end_one_time_rejects_already_ended_unit():
         MemberMembershipsCancel._validate_end_one_time(
             row, uuid4(), uuid4(), date.today()
         )
+
+
+def test_end_one_time_rejects_pending_cancellation_unit():
+    """The end-one-time guard refuses ANY pending cancellation — even a FUTURE
+    cancel_date — because member_memberships_end.sql sets end_date WITHOUT
+    clearing cancel_date, so ending would leave dual terminal dates (a ghost
+    scheduled-cancel for downstream status / reconciler logic)."""
+    row = {
+        "plan_type": "one_time",
+        "cancel_date": date(2099, 1, 1),  # future, not yet effective
+        "end_date": None,
+        "timezone": "America/Chicago",
+    }
+    with pytest.raises(ValueError, match="pending cancellation"):
+        MemberMembershipsCancel._validate_end_one_time(
+            row, uuid4(), uuid4(), date.today()
+        )
+
+
+async def test_end_one_time_writes_subject_member_id():
+    """end_one_time drives the end UPDATE off the row's SUBJECT member_id, not
+    the request actor. A payer ending a one-time pack they fund for a child
+    passes their OWN member_id (the _get_membership auth allows it via
+    paid_by_member_id), so filtering the UPDATE by the actor would match zero
+    rows and scalar_one() would raise NoResultFound (an opaque 500)."""
+    svc = MemberMembershipsCancel(MagicMock(), MagicMock(), MagicMock())
+    actor, subject, item = uuid4(), uuid4(), uuid4()
+
+    # _get_membership authorises the actor but returns the SUBJECT's row.
+    svc._get_membership = AsyncMock(
+        return_value={
+            "member_id": str(subject),
+            "plan_type": "one_time",
+            "cancel_date": None,
+            "end_date": None,
+            "timezone": "America/Chicago",
+        }
+    )
+
+    captured: dict = {}
+
+    class _Result:
+        def scalar_one(self):
+            return date.today()
+
+    session = MagicMock()
+
+    async def _execute(_stmt, params):
+        captured.update(params)
+        return _Result()
+
+    session.execute = _execute
+    session.commit = AsyncMock()
+
+    @contextlib.asynccontextmanager
+    async def _session():
+        yield session
+
+    svc._db_pool.session = _session
+
+    await svc.end_one_time(item, actor)
+
+    # The UPDATE is keyed on the SUBJECT (child), not the request actor (payer).
+    assert captured["member_id"] == str(subject)
+    assert captured["member_id"] != str(actor)
+    assert captured["item_id"] == str(item)
