@@ -231,7 +231,7 @@ async def delete_discount(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await discounts_service.delete_discount(discount_id)
+        await discounts_service.delete_discount(discount_id, gym_id)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

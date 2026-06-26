@@ -26,20 +26,18 @@ class DiscountsDelete(DiscountsBase):
     async def delete_discount(
         self,
         discount_id: UUID,
+        gym_id: UUID,
     ) -> None:
-        """Archive a preset (is_deleted = true).
-
-        Args:
-            discount_id: The preset to archive.
+        """Archive a preset (is_deleted = true), scoped to the gym.
 
         Raises:
-            ValueError: If the preset is not found.
+            ValueError: If the preset is not found in this gym.
         """
         soft_delete_sql = load_sql(SQL_DIR / "discounts_soft_delete.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(soft_delete_sql),
-                {"discount_id": str(discount_id)},
+                {"discount_id": str(discount_id), "gym_id": str(gym_id)},
             )
             row = result.mappings().fetchone()
             if not row:

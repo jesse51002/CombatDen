@@ -15,6 +15,7 @@ from src.stripe_webhooks.service.stripe_attribution import (
     resolve_subscription_attribution,
 )
 from src.stripe_webhooks.service.stripe_invoice_fields import (
+    invoice_payment_intent_id,
     line_subscription_item,
 )
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
@@ -143,7 +144,7 @@ class InvoicePaymentFailedHandler:
             "total_amount": int(invoice.get("amount_due") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),
             "stripe_invoice_id": invoice["id"],
-            "stripe_payment_intent_id": invoice.get("payment_intent"),
+            "stripe_payment_intent_id": invoice_payment_intent_id(invoice),
             "invoice_time": stripe_ts_to_datetime(created_ts),
             "stripe_event_payload": dump_stripe_payload(invoice),
         }

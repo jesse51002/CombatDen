@@ -54,6 +54,7 @@ class DiscountsUpdate(DiscountsBase):
                     await self._update_identity(
                         session,
                         request.discount_id,
+                        request.gym_id,
                         identity_changes,
                     )
                 )
@@ -85,15 +86,20 @@ class DiscountsUpdate(DiscountsBase):
     async def _update_identity(
         session: AsyncSession,
         discount_id: object,
+        gym_id: object,
         identity_changes: dict[str, object],
     ) -> dict:
-        """Update the identity row with a dynamic SET clause."""
+        """Update the identity row (gym-scoped) with a dynamic SET clause."""
         set_clause = ", ".join(f"{col} = :{col}" for col in identity_changes)
         sql = load_sql(
             SQL_DIR / "discounts_update.sql",
             {"set_clause": set_clause},
         )
-        params = {**identity_changes, "discount_id": str(discount_id)}
+        params = {
+            **identity_changes,
+            "discount_id": str(discount_id),
+            "gym_id": str(gym_id),
+        }
         result = await session.execute(text(sql), params)
         row = result.mappings().fetchone()
         if not row:

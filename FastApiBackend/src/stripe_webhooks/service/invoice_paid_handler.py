@@ -19,6 +19,7 @@ from src.stripe_webhooks.service.stripe_attribution import (
 )
 from src.stripe_webhooks.service.stripe_invoice_fields import (
     invoice_metadata,
+    invoice_payment_intent_id,
     line_subscription_item,
 )
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
@@ -188,7 +189,7 @@ class InvoicePaidHandler:
             "total_amount": int(invoice.get("amount_paid") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),
             "stripe_invoice_id": invoice["id"],
-            "stripe_payment_intent_id": self._invoice_payment_intent_id(invoice),
+            "stripe_payment_intent_id": invoice_payment_intent_id(invoice),
             "invoice_time": stripe_ts_to_datetime(paid_at_ts),
             "stripe_event_payload": dump_stripe_payload(invoice),
         }
@@ -197,18 +198,6 @@ class InvoicePaidHandler:
         if row is None:
             raise RuntimeError(f"Failed to upsert invoice for stripe_invoice_id={invoice['id']}")
         return dict(row)
-
-    @staticmethod
-    def _invoice_payment_intent_id(invoice: dict[str, Any]) -> str | None:
-        """PaymentIntent id. Dahlia: parent.payment_intent_details; legacy fallback: flat field."""
-        parent = invoice.get("parent")
-        if isinstance(parent, dict):
-            details = parent.get("payment_intent_details")
-            if isinstance(details, dict):
-                payment_intent = details.get("payment_intent")
-                if payment_intent:
-                    return payment_intent
-        return invoice.get("payment_intent")
 
     async def _insert_line_items(
         self,
@@ -359,6 +348,8 @@ class InvoicePaidHandler:
             )
             async with session.begin_nested():
                 for line in self._lines(invoice):
+                    if self._is_proration(line):
+                        continue
                     line_item_id = line.get("id")
                     if not line_item_id:
                         continue
