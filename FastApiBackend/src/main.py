@@ -14,6 +14,9 @@ from src.members.members_router import members_router
 from src.memberships.memberships_router import (
     member_memberships_router,
 )
+from src.memberships.service.memberships_invoice_fetch_runner import (
+    MembershipsInvoiceFetchRunner,
+)
 from src.plans.plans_router import (
     membership_plans_router,
 )
@@ -40,6 +43,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        # Cancel + await any in-flight on-demand invoice fetches so the loop
+        # isn't torn down mid-fetch with the DB pool already disposed.
+        await MembershipsInvoiceFetchRunner.drain()
         await app.container.db_pool().engine.dispose()
 
 

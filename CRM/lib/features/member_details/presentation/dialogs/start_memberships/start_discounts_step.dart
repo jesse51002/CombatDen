@@ -68,7 +68,7 @@ class StartDiscountsStep extends StatelessWidget {
             if (snapshot.connectionState !=
                 ConnectionState.done) {
               return const SizedBox(
-                height: 120,
+                height: DesignConstants.dialogProcessingHeight,
                 child: Center(child: AppSpinner()),
               );
             }

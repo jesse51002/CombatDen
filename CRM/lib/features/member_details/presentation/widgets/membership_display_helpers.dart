@@ -44,7 +44,6 @@ Widget statusValue(MembershipStatus status) {
       status.displayLabel,
       style: DesignConstants.h2.copyWith(
         color: statusColor(status),
-        fontWeight: FontWeight.w600,
       ),
     ),
   );
@@ -79,8 +78,19 @@ List<MembershipInfo> fundedRecurringMemberships(
 Widget costValue(int amount) {
   return Text(
     formatMinorUnits(amount),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
+    style: DesignConstants.h2Bold,
+  );
+}
+
+/// Refunded-amount display for a one-time / trial membership — shown
+/// under Cost only when some of its charge has been refunded (minor
+/// units, > 0). Rendered in the money-out colour to read as a credit
+/// back to the member.
+Widget refundedValue(int amount) {
+  return Text(
+    formatMinorUnits(amount),
+    style: DesignConstants.h2Bold.copyWith(
+      color: DesignConstants.badRed,
     ),
   );
 }
@@ -162,8 +172,6 @@ Widget dateValue(DateTime? date) {
   }
   return Text(
     formatDay(date),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
-    ),
+    style: DesignConstants.h2Bold,
   );
 }

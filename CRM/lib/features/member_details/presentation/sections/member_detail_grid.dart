@@ -191,6 +191,7 @@ class _Grid extends StatelessWidget {
           member: member,
           currentIndex: currentIndex,
           onPageChanged: onPageChanged,
+          refreshKey: refreshToken,
         );
         final invoices = InvoicesSection(
           gymId: member.gymId,

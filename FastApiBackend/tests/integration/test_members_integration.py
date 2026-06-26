@@ -8,8 +8,10 @@ Covers the highest-value read paths against the live backend:
 Contract source of truth: Database/openapi.json
 
 Key OG changes from the old demo contract:
-- POST /list requires prev_view + requested_view (not just gym_id);
-  views are 'all' / 'trial' / 'frozen' / 'overdue' (no 'active'/'inactive').
+- POST /list takes a single 'view' (not just gym_id); views are
+  'all' / 'trial' / 'frozen' / 'overdue' (no 'active'/'inactive'). The view
+  and the filters are independent — the backend applies both as given and
+  does no view/filter reconciliation.
 - Response shape: {view, filters, data:[...rows]}  (no 'items'/'total').
 - Rows are discriminated on the 'view' field (AllViewRow / TrialViewRow /
   FrozenViewRow / OverdueViewRow) — not a uniform MemberListItem.
@@ -40,25 +42,18 @@ VALID_CRM_STATUSES = {
 
 def _list_payload(
     gym_id: str,
-    requested_view: str = "all",
-    prev_view: str = "all",
+    view: str = "all",
     **kwargs,
 ) -> dict:
     """Build a minimal CrmMembersListRequest body.
 
-    Both prev_view and requested_view are required by the OG contract.
-
-    The CRM reconciliation logic: when prev_view != requested_view the
-    backend performs a view-switch and returns rows for the requested view.
-    When prev_view == requested_view it performs a filter-change resolution
-    and may resolve back to 'all'.  Tests that want a specific view must
-    pass a prev_view different from the requested_view (e.g. prev_view='all'
-    when switching to 'trial' / 'frozen' / 'overdue').
+    The body is just gym_id + view (+ optional filters / pagination). The
+    view names the row shape and is honored as-is; any filters apply on top
+    independently (no reconciliation).
     """
     payload: dict = {
         "gym_id": gym_id,
-        "prev_view": prev_view,
-        "requested_view": requested_view,
+        "view": view,
     }
     payload.update(kwargs)
     return payload
@@ -160,6 +155,7 @@ class TestListMembersAll:
         assert resp.status_code == 200
         filters = resp.json()["filters"]
         assert "membership_status" in filters, "filters missing membership_status"
+        assert "plan_ids" in filters, "filters missing plan_ids"
         assert "date_range" in filters, "filters missing date_range"
         assert "name" in filters, "filters missing name"
 
@@ -169,10 +165,9 @@ class TestListMembersAll:
 
 class TestListMembersTrial:
     def test_returns_200(self, api: httpx.Client, gym_id: str) -> None:
-        # prev_view="all" triggers the view-switch path → returns trial rows
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "trial", prev_view="all"),
+            json=_list_payload(gym_id, "trial"),
         )
         assert resp.status_code == 200, (
             f"POST /list (trial) returned {resp.status_code}: {resp.text}"
@@ -181,14 +176,10 @@ class TestListMembersTrial:
     def test_all_items_are_trial_rows(
         self, api: httpx.Client, gym_id: str
     ) -> None:
-        """Every row returned for the trial view must be a TrialViewRow.
-
-        prev_view='all' != requested_view='trial' → view-switch path, which
-        injects membership_status=[trial] and routes to the trial service.
-        """
+        """Every row returned for the trial view must be a TrialViewRow."""
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "trial", prev_view="all"),
+            json=_list_payload(gym_id, "trial"),
         )
         assert resp.status_code == 200
         for item in resp.json()["data"]:
@@ -202,7 +193,7 @@ class TestListMembersFrozen:
     def test_returns_200(self, api: httpx.Client, gym_id: str) -> None:
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "frozen", prev_view="all"),
+            json=_list_payload(gym_id, "frozen"),
         )
         assert resp.status_code == 200, (
             f"POST /list (frozen) returned {resp.status_code}: {resp.text}"
@@ -214,7 +205,7 @@ class TestListMembersFrozen:
         """Every row returned for the frozen view must be a FrozenViewRow."""
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "frozen", prev_view="all"),
+            json=_list_payload(gym_id, "frozen"),
         )
         assert resp.status_code == 200
         for item in resp.json()["data"]:
@@ -228,7 +219,7 @@ class TestListMembersOverdue:
     def test_returns_200(self, api: httpx.Client, gym_id: str) -> None:
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "overdue", prev_view="all"),
+            json=_list_payload(gym_id, "overdue"),
         )
         assert resp.status_code == 200, (
             f"POST /list (overdue) returned {resp.status_code}: {resp.text}"
@@ -240,7 +231,7 @@ class TestListMembersOverdue:
         """Every row returned for the overdue view must be an OverdueViewRow."""
         resp = api.post(
             f"{BASE}/list",
-            json=_list_payload(gym_id, "overdue", prev_view="all"),
+            json=_list_payload(gym_id, "overdue"),
         )
         assert resp.status_code == 200
         for item in resp.json()["data"]:
@@ -254,36 +245,35 @@ class TestListMembersValidation:
     def test_invalid_view_returns_422(
         self, api: httpx.Client, gym_id: str
     ) -> None:
-        """A requested_view value outside the MembersListView enum must return 422."""
+        """A view value outside the MembersListView enum must return 422."""
         resp = api.post(
             f"{BASE}/list",
             json={
                 "gym_id": gym_id,
-                "prev_view": "all",
-                "requested_view": "active",  # not in MembersListView enum
+                "view": "active",  # not in MembersListView enum
             },
         )
         # 'active' is not a valid MembersListView (only all/trial/frozen/overdue)
         assert resp.status_code == 422, (
-            f"Invalid requested_view='active' should return 422, got {resp.status_code}"
+            f"Invalid view='active' should return 422, got {resp.status_code}"
         )
 
-    def test_missing_prev_view_returns_422(
+    def test_missing_view_returns_422(
         self, api: httpx.Client, gym_id: str
     ) -> None:
-        """prev_view is required; omitting it must return 422."""
+        """view is required; omitting it must return 422."""
         resp = api.post(
             f"{BASE}/list",
-            json={"gym_id": gym_id, "requested_view": "all"},
+            json={"gym_id": gym_id},
         )
         assert resp.status_code == 422, (
-            f"Missing prev_view should return 422, got {resp.status_code}"
+            f"Missing view should return 422, got {resp.status_code}"
         )
 
     def test_missing_gym_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
             f"{BASE}/list",
-            json={"prev_view": "all", "requested_view": "all"},
+            json={"view": "all"},
         )
         assert resp.status_code == 422
 
@@ -292,8 +282,7 @@ class TestListMembersValidation:
             f"{BASE}/list",
             json={
                 "gym_id": str(uuid.uuid4()),
-                "prev_view": "all",
-                "requested_view": "all",
+                "view": "all",
             },
         )
         assert resp.status_code == 403, (

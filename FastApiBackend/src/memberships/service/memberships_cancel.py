@@ -287,6 +287,51 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             preview=preview,
         )
 
+    async def end_one_time(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> date:
+        """End a one-time / trial membership early (set ``end_date = today``).
+
+        A one-time / trial membership is a TERMINAL invoice with no subscription
+        line, so ending it is a PURE DB write — no Stripe converge and no payer
+        lock (unlike the recurring ``cancel``, which removes the Stripe line).
+        Recurring memberships are rejected (they must use ``cancel``). An
+        already-ended / -cancelled membership is rejected. Status becomes
+        ``ended`` (the status view derives it from ``end_date``).
+
+        Returns the resolved ``end_date`` (today).
+
+        Raises:
+            ValueError: not found, recurring, or already ended/cancelled.
+        """
+        row = await self._get_membership(item_id, member_id)
+        # One gym-local ``today`` for BOTH the guard and the end_date write, so
+        # they can't straddle midnight (validate on day N, end on day N+1).
+        today = gym_today(row["timezone"])
+        self._validate_end_one_time(row, item_id, member_id, today)
+
+        sql = load_sql(SQL_DIR / "member_memberships_end.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "item_id": str(item_id),
+                    # Drive the UPDATE off the row's ACTUAL subject, not the
+                    # request actor — a payer ending a membership they fund for
+                    # someone else passes their own member_id (the _get_membership
+                    # auth allows it), so filtering the UPDATE by the actor would
+                    # match zero rows and scalar_one() would raise NoResultFound
+                    # (an opaque 500). Same subject-keying the cancel path uses.
+                    "member_id": str(row["member_id"]),
+                    "gym_today": today,
+                },
+            )
+            end_date = result.scalar_one()
+            await session.commit()
+        return end_date
+
     # ── Private ────────────────────────────────────────────────
 
     async def _payer_names(
@@ -366,6 +411,37 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 proration_behavior=ProrationBehavior.no_charge,
             ),
         )
+
+    @staticmethod
+    def _validate_end_one_time(
+        row: dict,
+        item_id: UUID,
+        member_id: UUID,
+        today: date,
+    ) -> None:
+        """Validate a one-time / trial membership can be ended early."""
+        if row["plan_type"] == PlanType.recurring:
+            raise ValueError(
+                f"Cannot end a recurring membership here — use cancel: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
+        # ANY cancel_date (already-effective OR a future scheduled one) blocks
+        # ending: member_memberships_end.sql sets end_date WITHOUT clearing
+        # cancel_date, so a pending cancellation would leave the row with dual
+        # terminal dates (a ghost scheduled-cancel for downstream status /
+        # reconciler logic). Mirrors the upgrade/reprice guard — clear the
+        # cancellation first.
+        if row["cancel_date"] is not None:
+            raise ValueError(
+                f"Cannot end a membership with a pending cancellation "
+                f"— clear the cancellation first: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
+        if row["end_date"] is not None and row["end_date"] <= today:
+            raise ValueError(
+                f"Membership already ended: "
+                f"item_id={item_id}, member_id={member_id}"
+            )
 
     @staticmethod
     def _validate_cancel(

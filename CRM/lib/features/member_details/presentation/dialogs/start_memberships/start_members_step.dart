@@ -38,7 +38,7 @@ class StartMembersStep extends StatelessWidget {
     final detail = payerDetail;
     if (detail == null) {
       return const SizedBox(
-        height: 160,
+        height: DesignConstants.dialogProcessingHeight,
         child: Center(child: AppSpinner()),
       );
     }

@@ -24,7 +24,7 @@ class DateRangePill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
       child: Container(
-        height: 40,
+        height: DesignConstants.pillControlHeight,
         padding: const EdgeInsets.symmetric(
           horizontal: DesignConstants.paddingSmall,
         ),

@@ -149,9 +149,8 @@ class _PaidBadge extends StatelessWidget {
         ),
         child: Text(
           'Paid',
-          style: DesignConstants.pSmall.copyWith(
+          style: DesignConstants.pSmallBold.copyWith(
             color: DesignConstants.primaryColor,
-            fontWeight: FontWeight.w700,
           ),
         ),
       ),

@@ -13,6 +13,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_request.dart';
@@ -75,8 +76,7 @@ class MemberRepository {
         '/api/v1/members/list',
         data: CrmMembersListRequest(
           gymId: gymId,
-          prevView: MembersListView.all,
-          requestedView: MembersListView.all,
+          view: MembersListView.all,
           count: pageSize,
           startIndex: startIndex,
         ).toJson(),
@@ -523,6 +523,60 @@ class MemberRepository {
     if (response.data == null) return null;
     return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/member_memberships/upgrade` — cross-plan upgrade.
+  ///
+  /// Moves the membership to the target plan's active price and charges
+  /// the prorated difference now. A membership in an in-progress task is
+  /// rejected (409 → [MembershipInTaskException], like reprice).
+  Future<void> upgradeMembership(
+    MemberMembershipsUpgradeRequest req,
+  ) async {
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/upgrade',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// `POST /api/v1/member_memberships/upgrade/preview`.
+  Future<DueNowVsRecurringPreview?> upgradePreview(
+    MemberMembershipsUpgradeRequest req,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/upgrade/preview',
+      data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/member_memberships/end` — end a ONE-TIME / TRIAL
+  /// membership early (sets its end date to today → status 'ended').
+  /// No Stripe action, no money movement (refund is the separate flow).
+  Future<void> endMembership({
+    required String itemId,
+    required String memberId,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/member_memberships/end',
+      data: {
+        'item_id': itemId,
+        'member_id': memberId,
+      },
     );
   }
 

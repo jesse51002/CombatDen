@@ -221,7 +221,7 @@ class _AppDataTableState extends State<AppDataTable> {
                       DesignConstants.spacingLarge,
                 ),
                 child: Container(
-                  height: 2,
+                  height: DesignConstants.tableRowSeparatorThickness,
                   color: dividerColor,
                 ),
               ),
@@ -235,8 +235,8 @@ class _AppDataTableState extends State<AppDataTable> {
                     ),
                     child: Center(
                       child: SizedBox(
-                        height: 20,
-                        width: 20,
+                        height: DesignConstants.spinnerSizeSmall,
+                        width: DesignConstants.spinnerSizeSmall,
                         child:
                             CircularProgressIndicator(
                           strokeWidth: 2,
@@ -431,7 +431,7 @@ class _AppDataTableState extends State<AppDataTable> {
               vertical: DesignConstants.spacingLarge,
             ),
             child: Container(
-              height: 2,
+              height: DesignConstants.tableRowSeparatorThickness,
               color: dividerColor,
             ),
           ),
@@ -513,7 +513,7 @@ class _AppDataTableState extends State<AppDataTable> {
               vertical: DesignConstants.spacingLarge,
             ),
             child: Container(
-              height: 2,
+              height: DesignConstants.tableRowSeparatorThickness,
               color: dividerColor,
             ),
           ),

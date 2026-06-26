@@ -272,23 +272,29 @@ class InvoicePaidHandler:
 
             item_type = LINE_ITEM_TYPE_CUSTOM
             item_id: str | None = None
-            stripe_item_id = line_subscription_item(line)
-            if stripe_item_id:
-                result = await session.execute(
-                    text(membership_sql),
-                    {
-                        "stripe_item_id": stripe_item_id,
-                        "gym_id": str(gym_id),
-                    },
-                )
-                rows = result.mappings().all()
-                if rows:
-                    # The line is ONE row with ONE item_id; a consolidated item
-                    # has several co-owners, so store the first as the line's
-                    # representative. The read path resolves every co-owner of
-                    # the line for display via the shared stripe_item.
-                    item_type = LINE_ITEM_TYPE_MEMBERSHIP
-                    item_id = str(rows[0]["item_id"])
+            # A RECURRING line maps to its membership via its `subscription_item`.
+            # A ONE-TIME / trial line has NO subscription_item — but the
+            # membership's `stripe_item_id` IS the invoice line id, so fall back
+            # to the line id. Without this, one-time line items never carry their
+            # item_id (so the membership card can't find the charge to refund and
+            # Payment History can't match the line to the membership). A genuine
+            # custom/ad-hoc line matches neither and stays `custom`.
+            lookup_id = line_subscription_item(line) or line_item_id
+            result = await session.execute(
+                text(membership_sql),
+                {
+                    "stripe_item_id": lookup_id,
+                    "gym_id": str(gym_id),
+                },
+            )
+            rows = result.mappings().all()
+            if rows:
+                # The line is ONE row with ONE item_id; a consolidated item
+                # has several co-owners, so store the first as the line's
+                # representative. The read path resolves every co-owner of
+                # the line for display via the shared stripe_item.
+                item_type = LINE_ITEM_TYPE_MEMBERSHIP
+                item_id = str(rows[0]["item_id"])
 
             await session.execute(
                 text(insert_sql),

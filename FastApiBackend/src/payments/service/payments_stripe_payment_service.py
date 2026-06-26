@@ -1,4 +1,8 @@
+import json
 import logging
+from collections.abc import Awaitable, Callable
+from functools import partial
+from typing import Any
 
 import stripe
 from stripe.params._invoice_create_params import InvoiceCreateParams
@@ -453,3 +457,101 @@ class PaymentsStripePaymentService:
             ) from exc
 
         return invoice.id
+
+    # ── Paginated read primitives (lists → plain nested dicts) ───
+    #
+    # A Stripe ``list`` yields StripeObjects; the callers (the on-demand /
+    # reconciler invoice fetch + the webhook record() seams) want the plain
+    # nested dict shape the webhook path gets from event JSON — StripeObject
+    # has no dict ``.get`` in this lib version. The object's ``str`` IS its
+    # canonical JSON, so this round-trips to exactly that shape.
+
+    async def _paginate(
+        self,
+        list_fn: Callable[..., Awaitable[Any]],
+        base_params: dict[str, Any],
+        stripe_account_id: str,
+    ) -> list[dict]:
+        """Collect every object across a paginated Stripe list, as plain dicts."""
+        opts = self._client.connect_opts_readonly(stripe_account_id)
+        out: list[dict] = []
+        starting_after: str | None = None
+        while True:
+            params = dict(base_params)
+            if starting_after:
+                params["starting_after"] = starting_after
+            page = await list_fn(params=params, options=opts)
+            data = list(page.data)
+            for obj in data:
+                out.append(json.loads(str(obj)))
+            if not data or not getattr(page, "has_more", False):
+                break
+            starting_after = data[-1].id
+        return out
+
+    async def list_invoices(
+        self,
+        stripe_account_id: str,
+        *,
+        created_gte: int,
+        limit: int,
+        customer: str | None = None,
+    ) -> list[dict]:
+        """List a Connect account's invoices created at/after ``created_gte``
+        (optionally scoped to one ``customer``), as plain dicts."""
+        params: dict[str, Any] = {
+            "created": {"gte": created_gte},
+            "limit": limit,
+        }
+        if customer is not None:
+            params["customer"] = customer
+        return await self._paginate(
+            self._stripe.v1.invoices.list_async, params, stripe_account_id
+        )
+
+    async def list_refunds(
+        self,
+        stripe_account_id: str,
+        *,
+        created_gte: int,
+        limit: int,
+    ) -> list[dict]:
+        """List a Connect account's refunds created at/after ``created_gte``,
+        as plain dicts. (refunds.list has no customer filter.)"""
+        params: dict[str, Any] = {
+            "created": {"gte": created_gte},
+            "limit": limit,
+        }
+        return await self._paginate(
+            self._stripe.v1.refunds.list_async, params, stripe_account_id
+        )
+
+    async def list_invoice_payments(
+        self,
+        stripe_account_id: str,
+        invoice_id: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """List one invoice's payments (InvoicePayment objects), as plain dicts."""
+        params: dict[str, Any] = {"invoice": invoice_id, "limit": limit}
+        return await self._paginate(
+            self._stripe.v1.invoice_payments.list_async,
+            params,
+            stripe_account_id,
+        )
+
+    async def list_invoice_line_items(
+        self,
+        stripe_account_id: str,
+        invoice_id: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """List ALL of one invoice's line items, as plain dicts. The endpoint
+        takes the invoice id positionally, so bind it for the paginator."""
+        return await self._paginate(
+            partial(self._stripe.v1.invoices.line_items.list_async, invoice_id),
+            {"limit": limit},
+            stripe_account_id,
+        )

@@ -232,6 +232,17 @@ back to active because the DB says it's current.
   which does the CRM write. (Note: Stripe does not propagate subscription
   metadata to generated invoices, so the webhook recovers `member_id` via
   sub-item lookup; only the cash flag rides on the invoice itself.)
+- **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,
+  limit, customer=None)`, `list_refunds(account_id, *, created_gte, limit)`,
+  `list_invoice_payments(account_id, invoice_id, *, limit)`,
+  `list_invoice_line_items(account_id, invoice_id, *, limit)`. Each auto-paginates
+  (`_paginate`: loop `starting_after` / `has_more` under `connect_opts_readonly`)
+  and returns a **list of plain nested dicts** — `json.loads(str(stripe_obj))`,
+  the same shape the webhook event JSON has, since a listed `StripeObject` has no
+  dict `.get`. These are the ONLY Stripe-list path: the on-demand / reconciler
+  invoice fetch (`MemberMembershipsInvoiceFetch`, see `memberships-guide` /
+  `reconciler-guide`) consumes them and never touches the Stripe client itself —
+  keeping all raw Stripe I/O inside this layer.
 
 **`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) — the
 **single owner of Stripe Coupon I/O AND the deterministic value→coupon
@@ -428,6 +439,17 @@ the separate `invoice_payment.paid` event). The handlers never read these
 inline — they go through the version-tolerant readers in
 `stripe_invoice_fields.py` (`line_subscription_item`, `invoice_metadata`), which
 read the nested location first and fall back to the old flat field.
+
+**The `handle/record` seam.** Each of the 4 invoice/payment/refund handlers
+(`InvoicePaidHandler`, `InvoicePaymentPaidHandler`, `InvoicePaymentFailedHandler`,
+`RefundHandler`) is split: `handle(session, event, gym_id)` unwraps the event
+envelope and calls `record(session, obj, gym_id, …)` with the plain body. The
+dispatcher calls `handle` (webhook behavior unchanged); the **on-demand post-op
+invoice fetch** (`MemberMembershipsInvoiceFetch` — `memberships-guide`) and the
+**reconciler backstop** (`InvoiceFetchSweep` — `reconciler-guide`) both call
+`record` directly with listed Stripe objects so they can apply invoices
+idempotently without a webhook event. Deep detail lives in those two skills;
+this section only documents what each handler writes.
 
 **Service** (`stripe_webhooks_service.py`): `StripeWebhooksService.handle_event`:
 

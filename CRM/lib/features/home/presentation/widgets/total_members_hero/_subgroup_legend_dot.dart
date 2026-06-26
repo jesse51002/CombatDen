@@ -21,8 +21,8 @@ class SubgroupLegendDot extends StatelessWidget {
       spacing: DesignConstants.spacingSmall,
       children: [
         Container(
-          width: 16,
-          height: 16,
+          width: DesignConstants.legendDotSize,
+          height: DesignConstants.legendDotSize,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         Text(

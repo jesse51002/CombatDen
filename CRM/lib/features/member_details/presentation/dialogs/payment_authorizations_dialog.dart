@@ -185,9 +185,8 @@ class _Description extends StatelessWidget {
       'Control who can pay for whom. Adding needs the payer to sign the gym’s '
       'waiver; removing a relationship cancels the recurring memberships it '
       'funds.',
-      style: DesignConstants.h3.copyWith(
+      style: DesignConstants.h3Regular.copyWith(
         color: DesignConstants.text2nd,
-        fontWeight: FontWeight.w400,
       ),
     );
   }

@@ -33,7 +33,7 @@ class StartPlanList extends StatelessWidget {
         if (snapshot.connectionState !=
             ConnectionState.done) {
           return const SizedBox(
-            height: 160,
+            height: DesignConstants.dialogProcessingHeight,
             child: Center(child: AppSpinner()),
           );
         }

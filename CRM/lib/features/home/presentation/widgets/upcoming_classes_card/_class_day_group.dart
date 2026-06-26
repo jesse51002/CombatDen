@@ -46,7 +46,12 @@ class _ClassesList extends StatelessWidget {
           onTap: () => Navigator.pushNamed(context, AppRoutes.schedule),
         ),
       );
-      children.add(Container(height: 1, color: DesignConstants.divider));
+      children.add(
+        Container(
+          height: DesignConstants.dividerThickness,
+          color: DesignConstants.divider,
+        ),
+      );
     }
 
     return Column(

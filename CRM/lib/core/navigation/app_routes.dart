@@ -34,5 +34,22 @@ class AppRoutes {
   // sign-up / check-in QR codes.
   static const String settings = '/settings';
 
+  /// Deep-link path for a specific member's detail page —
+  /// `/members/detail/<memberId>`. Opening a member writes this to the
+  /// URL so a reload restores that member; the id is parsed back out by
+  /// [memberIdFromPath] in `_onGenerateRoute`.
+  static String memberDetailPath(String memberId) =>
+      '$memberDetail/$memberId';
+
+  /// The member id from a `/members/detail/<id>` path, or null when
+  /// [path] is not a specific-member deep link (the bare [memberDetail]
+  /// route, or any other route). Round-trips with [memberDetailPath].
+  static String? memberIdFromPath(String path) {
+    const prefix = '$memberDetail/';
+    if (!path.startsWith(prefix)) return null;
+    final id = path.substring(prefix.length);
+    return id.isEmpty ? null : id;
+  }
+
   AppRoutes._();
 }

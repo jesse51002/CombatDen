@@ -156,11 +156,10 @@ class _RegisterLink extends StatelessWidget {
                   ),
           child: Text(
             'Sign up',
-            style: DesignConstants.p.copyWith(
+            style: DesignConstants.pSemibold.copyWith(
               color: isLoading
                   ? DesignConstants.primaryColor.withValues(alpha: 0.5)
                   : DesignConstants.primaryColor,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ),

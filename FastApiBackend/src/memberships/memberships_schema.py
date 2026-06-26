@@ -400,6 +400,72 @@ class MemberMembershipsBatchRepriceResponse(BaseModel):
     membership_count: int
 
 
+class MemberMembershipsUpgradeRequest(BaseModel):
+    """Upgrade ONE membership to a DIFFERENT plan's active price (cross-plan).
+
+    Moves the membership onto ``target_plan_id``'s currently active price and
+    charges the prorated DIFFERENCE now when ``proration_behavior`` is
+    ``prorate_to_anchor`` AND the new price is higher; a downgrade or equal
+    price charges nothing (the op forces ``no_charge``). A DIRECT, synchronous
+    op (NOT a task — there is no batch upgrade): the endpoint upgrades and
+    returns the new membership id. The target must be a DIFFERENT recurring
+    plan on the SAME billing interval (same-plan moves are a reprice). The
+    proration default is ``prorate_to_anchor`` (charging the difference is the
+    point); ``idempotency_key`` dedups the Stripe charge across client retries.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    target_plan_id: UUID
+    proration_behavior: ProrationBehavior = (
+        ProrationBehavior.prorate_to_anchor
+    )
+    idempotency_key: UUID
+
+
+class MemberMembershipsUpgradeResponse(BaseModel):
+    """The upgrade's successor membership row id (on the new target plan)."""
+
+    item_id: UUID
+
+
+class MemberMembershipsUpgradePreviewRequest(BaseModel):
+    """Preview an upgrade — the due-now difference + the new per-cycle bill.
+
+    Same target / proration as the upgrade, minus the idempotency key (a
+    preview writes nothing and bills nothing). The response's ``due_now`` is
+    the prorated difference charged now (``null`` on a downgrade/equal, where
+    nothing is charged now); ``recurring`` is the new steady-state monthly bill.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    target_plan_id: UUID
+    proration_behavior: ProrationBehavior = (
+        ProrationBehavior.prorate_to_anchor
+    )
+
+
+class MemberMembershipsEndRequest(BaseModel):
+    """End a ONE-TIME / TRIAL membership early.
+
+    A one-time / trial pack is a terminal invoice with no subscription line, so
+    ending it is a pure DB date write (``end_date`` = today → status ``ended``)
+    with NO Stripe action and no money movement (a refund is the separate
+    ``/refund`` flow). Recurring memberships use ``DELETE /`` (cancel) instead —
+    this endpoint rejects them.
+    """
+
+    item_id: UUID
+    member_id: UUID
+
+
+class MemberMembershipsEndResponse(BaseModel):
+    """The resolved ``end_date`` (today) the membership now ends on."""
+
+    end_date: date
+
+
 class MemberMembershipsAddDiscountsRequest(BaseModel):
     """Add applied-discount rows to a membership (or preview the addition).
 
