@@ -20,6 +20,8 @@ from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
     get_applied_discounts,
+    get_membership_total_price,
+    get_payer_monthly_bill,
     get_profile_stripe_ids,
 )
 from tests.helpers.db_writes import authorize_payer
@@ -28,44 +30,6 @@ from tests.helpers.stripe_assertions import (
     fetch_subscription,
     snapshot_billing_state,
 )
-
-
-async def _membership_total_price(db_pool, member_id, gym_id) -> int:
-    """The member's active membership stamped post-discount ``total_price``.
-
-    The membership's own STANDALONE price (plan minus its own discounts) — this
-    stays the real price even while frozen (freeze zeros the BILL, not the
-    membership's own price). Reads the filtered ``member_memberships`` view — a
-    frozen membership is still visible there because it keeps its
-    ``stripe_item_id`` (freeze is a discount, not a drop).
-    """
-    item_id = await get_active_membership_item_id(db_pool, member_id, gym_id)
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT total_price FROM member_memberships WHERE item_id = :id"
-            ),
-            {"id": str(item_id)},
-        )
-        return result.scalar_one()
-
-
-async def _payer_monthly_bill(db_pool, member_id) -> int:
-    """The payer's ACTUAL monthly recurring bill (``total_monthly_recurring_price``).
-
-    Written by the sync from Stripe's upcoming invoice, so it reflects the
-    freeze: a 100%-off line contributes $0, so a wholly-frozen payer's bill is 0
-    and a partially-frozen one bills only its active units.
-    """
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT total_monthly_recurring_price FROM members "
-                "WHERE member_id = :id"
-            ),
-            {"id": str(member_id)},
-        )
-        return result.scalar_one()
 
 
 async def test_freeze_account(
@@ -101,10 +65,10 @@ async def test_freeze_account(
         )
         assert profile.stripe_sub_id_month is not None
 
-        price_before = await _membership_total_price(
+        price_before = await get_membership_total_price(
             db_pool, member.member_id, gym_id,
         )
-        bill_before = await _payer_monthly_bill(db_pool, member.member_id)
+        bill_before = await get_payer_monthly_bill(db_pool, member.member_id)
         assert price_before > 0 and bill_before > 0
 
         before = await snapshot_billing_state(
@@ -143,10 +107,10 @@ async def test_freeze_account(
         # The membership's own total_price stays its real standalone price;
         # the BILL (the payer's monthly recurring) drops to $0.
         assert (
-            await _membership_total_price(db_pool, member.member_id, gym_id)
+            await get_membership_total_price(db_pool, member.member_id, gym_id)
         ) == price_before
         assert (
-            await _payer_monthly_bill(db_pool, member.member_id)
+            await get_payer_monthly_bill(db_pool, member.member_id)
         ) == 0, "Frozen member's actual bill must be $0"
         await assert_no_unexpected_charges(
             stripe_client,
@@ -235,7 +199,7 @@ async def test_freeze_updates_end_date(
         assert sub.pause_collection is None
         assert sub.status == "active"
         assert (
-            await _payer_monthly_bill(db_pool, member.member_id)
+            await get_payer_monthly_bill(db_pool, member.member_id)
         ) == 0, "Re-frozen member's actual bill must still be $0"
         await assert_no_unexpected_charges(
             stripe_client,
@@ -280,12 +244,12 @@ async def test_unfreeze_account(
         assert profile.stripe_sub_id_month is not None
 
         # The full (active) bill, to confirm it's restored on unfreeze.
-        full_bill = await _payer_monthly_bill(db_pool, member.member_id)
+        full_bill = await get_payer_monthly_bill(db_pool, member.member_id)
         assert full_bill > 0
 
         await memberships_service.freeze(member.member_id, gym_id, 2, idempotency_key=uuid4())
         # While frozen the BILL is $0 (the membership's own total_price stays real).
-        assert (await _payer_monthly_bill(db_pool, member.member_id)) == 0
+        assert (await get_payer_monthly_bill(db_pool, member.member_id)) == 0
 
         # Snapshot while frozen — the unfreeze itself must not invoice the
         # member; it just drops the 100%-off so the NEXT cycle bills full.
@@ -320,7 +284,7 @@ async def test_unfreeze_account(
         assert sub.status == "active"
         # Billing resumes: the 100%-off is gone and the bill is back to full.
         assert (
-            await _payer_monthly_bill(db_pool, member.member_id)
+            await get_payer_monthly_bill(db_pool, member.member_id)
         ) == full_bill
         await assert_no_unexpected_charges(
             stripe_client,
@@ -439,16 +403,16 @@ async def test_freeze_one_member_off_shared_line(
             )
         )
 
-        payer_full = await _membership_total_price(
+        payer_full = await get_membership_total_price(
             db_pool, payer.member_id, gym_id,
         )
-        child_full = await _membership_total_price(
+        child_full = await get_membership_total_price(
             db_pool, child.member_id, gym_id,
         )
         assert payer_full > 0 and child_full > 0
         # Both units bill before the freeze.
         assert (
-            await _payer_monthly_bill(db_pool, payer.member_id)
+            await get_payer_monthly_bill(db_pool, payer.member_id)
         ) == payer_full + child_full
 
         profile = await get_profile_stripe_ids(
@@ -467,13 +431,13 @@ async def test_freeze_one_member_off_shared_line(
         # BILL drops to just the active (payer's) unit — the child's share is $0.
         # The sub stays active (no pause) and nothing was charged by the freeze.
         assert (
-            await _membership_total_price(db_pool, child.member_id, gym_id)
+            await get_membership_total_price(db_pool, child.member_id, gym_id)
         ) == child_full
         assert (
-            await _membership_total_price(db_pool, payer.member_id, gym_id)
+            await get_membership_total_price(db_pool, payer.member_id, gym_id)
         ) == payer_full
         assert (
-            await _payer_monthly_bill(db_pool, payer.member_id)
+            await get_payer_monthly_bill(db_pool, payer.member_id)
         ) == payer_full, "Shared line must bill only the active unit"
         sub = await fetch_subscription(
             stripe_client, profile.stripe_sub_id_month, connect_opts,
@@ -558,7 +522,7 @@ async def test_frozen_membership_discount_still_reaches_writeback(
         )
         # ...and the membership genuinely bills $0 while frozen.
         assert (
-            await _payer_monthly_bill(db_pool, member.member_id)
+            await get_payer_monthly_bill(db_pool, member.member_id)
         ) == 0
     finally:
         await delete_member_data(db_pool, member.member_id)

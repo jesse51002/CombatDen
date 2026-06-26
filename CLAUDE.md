@@ -65,6 +65,7 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
 - Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.
 - This holds repo-wide and for every system, including ones not using prompts or SQL yet.
+- **Exception — short integration-test queries.** Tests are not production code: a short read/assert/setup query may be inlined as a `text("SELECT …")`/`text("UPDATE …")` literal directly in the test or a `tests/helpers/db_reads.py` / `db_writes.py` helper. This is the established, deliberate test convention (those helpers themselves inline; `tests/helpers/sql/` holds only the cleanup `DELETE`s). It applies to **test code only** — every query in application/service code still lives in its own `.sql` file with no exceptions.
 
 ## Organization
 - Each system (backend, frontend, database, etc.) lives in its own top-level directory.

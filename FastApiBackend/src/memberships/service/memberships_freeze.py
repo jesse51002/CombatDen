@@ -1,5 +1,6 @@
 """Freeze and unfreeze a MEMBER's billing (subject-keyed, DB-first)."""
 
+import asyncio
 import logging
 from datetime import date
 from uuid import UUID, uuid5
@@ -113,23 +114,30 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
 
         The freeze window is already written (the source of truth), so each
         converge just drives Stripe toward it. A per-payer key is derived off the
-        caller's key so a client retry dedups at Stripe. A failed payer is logged
-        and left for the reconciler push to re-converge — one transient error
-        must not abort the others or undo the freeze. The facade holds the lock
-        over every payer, so the converge runs unguarded here (no re-lock).
+        caller's key so a client retry dedups at Stripe. Payers are independent
+        subscriptions and the facade holds the lock over every one of them, so
+        the converges run **concurrently** (and unguarded — no re-lock).
+        ``return_exceptions=True`` isolates failures: a transient per-payer error
+        is logged and left for the reconciler push to re-converge — one error
+        must not abort the others or undo the freeze.
         """
-        for payer_id in payer_ids:
-            try:
-                await self._payment_sync.update_payments_recurring(
+        results = await asyncio.gather(
+            *(
+                self._payment_sync.update_payments_recurring(
                     payer_id,
                     idempotency_key=uuid5(idempotency_key, str(payer_id)),
                 )
-            except Exception:
+                for payer_id in payer_ids
+            ),
+            return_exceptions=True,
+        )
+        for payer_id, result in zip(payer_ids, results, strict=True):
+            if isinstance(result, Exception):
                 logger.error(
                     "Freeze converge failed for payer %s; the reconciler push "
                     "will re-converge it",
                     payer_id,
-                    exc_info=True,
+                    exc_info=result,
                 )
 
     async def _crm_freeze_profile(

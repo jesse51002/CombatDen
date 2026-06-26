@@ -40,6 +40,7 @@ from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
     get_applied_discounts,
+    get_payer_monthly_bill,
     get_profile_stripe_ids,
 )
 from tests.helpers.db_writes import authorize_payer
@@ -429,16 +430,7 @@ async def test_start_on_frozen_member_bills_zero(
         )
         assert sub.status == "active"
         assert sub.pause_collection is None
-        async with db_pool.session() as session:
-            bill = (
-                await session.execute(
-                    text(
-                        "SELECT total_monthly_recurring_price FROM members "
-                        "WHERE member_id = :id"
-                    ),
-                    {"id": str(member.member_id)},
-                )
-            ).scalar_one()
+        bill = await get_payer_monthly_bill(db_pool, member.member_id)
         assert bill == 0, "Frozen member's actual recurring bill must be $0"
     finally:
         await delete_member_data(db_pool, member.member_id)
