@@ -690,7 +690,7 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Freeze account',
+      actionLabel: 'Freeze member',
       emit: emit,
       action: () => _repository.freezeAccount(
         MemberMembershipsFreezeRequest(
@@ -710,7 +710,7 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Unfreeze account',
+      actionLabel: 'Unfreeze member',
       emit: emit,
       action: () => _repository.unfreezeAccount(
         MemberMembershipsUnfreezeRequest(

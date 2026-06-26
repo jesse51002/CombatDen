@@ -414,9 +414,12 @@ async def test_start_on_frozen_member_bills_zero(
         row = await _read_membership_row(db_pool, item_id)
         assert row["status"] == "applied"
         assert row["stripe_item_id"] is not None
-        assert row["total_price"] == 0
+        # total_price is the membership's real standalone price (freeze zeros the
+        # BILL, not the price); the actual bill is $0 (the 100%-off line).
+        assert row["total_price"] > 0
 
-        # A $0 subscription was created and is active (not paused/cancelled).
+        # A $0 subscription was created and is active (not paused/cancelled),
+        # and the payer's actual recurring bill is $0.
         profile = await get_profile_stripe_ids(
             db_pool, member.member_id, gym_id,
         )
@@ -426,6 +429,17 @@ async def test_start_on_frozen_member_bills_zero(
         )
         assert sub.status == "active"
         assert sub.pause_collection is None
+        async with db_pool.session() as session:
+            bill = (
+                await session.execute(
+                    text(
+                        "SELECT total_monthly_recurring_price FROM members "
+                        "WHERE member_id = :id"
+                    ),
+                    {"id": str(member.member_id)},
+                )
+            ).scalar_one()
+        assert bill == 0, "Frozen member's actual recurring bill must be $0"
     finally:
         await delete_member_data(db_pool, member.member_id)
 

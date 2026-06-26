@@ -150,7 +150,7 @@ class EditMembershipDialog extends StatelessWidget {
         ));
       }
       items.add(_button(
-        _anyFrozen ? 'Unfreeze account' : 'Freeze account',
+        _anyFrozen ? 'Unfreeze member' : 'Freeze member',
         () => _run(context, () => _freeze(context)),
       ));
     }

@@ -5,17 +5,16 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/data/models/pays_for_member.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/dialogs/freeze/months_stepper.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
-/// Collects a freeze duration (1–12 months) and shows, inline, exactly
-/// what the freeze pauses — every member + membership the viewed member
-/// pays for (their whole subscription, the member themselves included).
-/// Confirms in place (no separate popup) and dispatches
-/// [FreezeAccountRequested]; the bloc fills member id / gym id /
-/// idempotency key from state.
+/// Collects a freeze duration (1–12 months) and shows, inline, which of
+/// the member's own memberships will be paused (and who pays each when
+/// it is not the member themselves). Dispatches [FreezeAccountRequested];
+/// the bloc fills member id / gym id / idempotency key from state.
 class FreezeAccountDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
@@ -89,25 +88,37 @@ class _FreezeAccountDialogState
 
   @override
   Widget build(BuildContext context) {
-    final paysFor = widget.member.paysFor;
+    // Active and overdue are the memberships that will be paused.
+    // Frozen/cancelled/ended are excluded.
+    final toFreeze = widget.member.memberships
+        .where(
+          (m) =>
+              m.status == MembershipStatus.active ||
+              m.status == MembershipStatus.overdue,
+        )
+        .toList();
     return AppDialog(
-      title: 'Freeze account',
+      title: 'Freeze member',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
           Text(
-            'Freezing pauses every membership '
-            '${widget.member.firstName} pays for and suspends '
-            'recurring billing for the duration below. '
-            'Memberships resume automatically when the freeze '
-            'ends — no action required.',
+            'Freezing pauses all of '
+            '${widget.member.firstName}\'s memberships '
+            'and suspends recurring billing for the duration '
+            'below. Memberships resume automatically when the '
+            'freeze ends — no action required.',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text2nd,
             ),
           ),
-          if (paysFor.isNotEmpty)
-            _FreezeImpact(paysFor: paysFor),
+          if (toFreeze.isNotEmpty)
+            _FreezeImpact(
+              memberships: toFreeze,
+              viewedMemberId: widget.member.memberId,
+              nameForMember: widget.member.nameForMember,
+            ),
           MonthsStepper(
             controller: _controller,
             minMonths: _minMonths,
@@ -130,7 +141,7 @@ class _FreezeAccountDialogState
         ],
       ),
       actions: AppDialogActions(
-        primaryLabel: 'Freeze account',
+        primaryLabel: 'Freeze member',
         primaryColor: DesignConstants.okYellow,
         primaryOnPressed: _onFreeze,
         secondaryLabel: 'Cancel',
@@ -140,12 +151,19 @@ class _FreezeAccountDialogState
   }
 }
 
-/// The inline "what this freeze pauses" list: every member the viewed
-/// member pays for, each with the membership(s) that will pause.
+/// The inline "memberships paused" panel: every active / overdue
+/// membership the viewed member holds, with the payer name if it is
+/// not the member themselves (third-party-funded memberships).
 class _FreezeImpact extends StatelessWidget {
-  final List<PaysForMember> paysFor;
+  final List<MembershipInfo> memberships;
+  final String viewedMemberId;
+  final String? Function(String) nameForMember;
 
-  const _FreezeImpact({required this.paysFor});
+  const _FreezeImpact({
+    required this.memberships,
+    required this.viewedMemberId,
+    required this.nameForMember,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -165,69 +183,59 @@ class _FreezeImpact extends StatelessWidget {
         spacing: DesignConstants.spacingMedium,
         children: [
           Text(
-            'This freeze pauses',
+            'Memberships paused',
             style: DesignConstants.h3.copyWith(
               color: DesignConstants.text2nd,
             ),
           ),
-          ...paysFor.map((m) => _ImpactRow(member: m)),
+          ...memberships.map(
+            (m) => _MembershipRow(
+              membership: m,
+              viewedMemberId: viewedMemberId,
+              nameForMember: nameForMember,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _ImpactRow extends StatelessWidget {
-  final PaysForMember member;
+class _MembershipRow extends StatelessWidget {
+  final MembershipInfo membership;
+  final String viewedMemberId;
+  final String? Function(String) nameForMember;
 
-  const _ImpactRow({required this.member});
+  const _MembershipRow({
+    required this.membership,
+    required this.viewedMemberId,
+    required this.nameForMember,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final plans =
-        member.memberships.map((m) => m.planName).join(', ');
-    return Row(
+    final isSelfPay =
+        membership.paidByMemberId == viewedMemberId;
+    final payerName = isSelfPay
+        ? null
+        : nameForMember(membership.paidByMemberId);
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingTiny,
       children: [
-        CircleAvatar(
-          radius: DesignConstants.iconSizeSmall,
-          backgroundColor: DesignConstants.surface,
-          backgroundImage: member.photoUrl != null
-              ? NetworkImage(member.photoUrl!)
-              : null,
-          child: member.photoUrl == null
-              ? Text(
-                  member.firstName.isNotEmpty
-                      ? member.firstName[0].toUpperCase()
-                      : '?',
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text,
-                  ),
-                )
-              : null,
+        Text(
+          membership.planName,
+          style: DesignConstants.h3,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingTiny,
-            children: [
-              Text(
-                member.fullName,
-                style: DesignConstants.h3,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (plans.isNotEmpty)
-                Text(
-                  plans,
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text2nd,
-                  ),
-                ),
-            ],
+        if (payerName != null)
+          Text(
+            'Paid by $payerName',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
           ),
-        ),
       ],
     );
   }

@@ -208,20 +208,11 @@ class PaymentSyncDiscounts:
         membership_amounts: dict[UUID, int] = {}
 
         for membership in memberships:
-            if membership.is_frozen:
-                # FREEZE = a synthetic 100%-off on this membership. It bills $0
-                # while frozen, but STAYS on the subscription (keeps its line id,
-                # stays `applied`) — so nothing downstream that assumes
-                # `applied ⇒ on Stripe with an item id` breaks. Riding the
-                # existing percent ÷ quantity averaging below, a consolidated
-                # line with k of N frozen bills only the (N − k) active units; a
-                # sole frozen member's line is 100% off → $0. Its own real
-                # discounts are subsumed (frozen is $0 regardless), so they don't
-                # feed the line value or get a coupon link here — they resolve
-                # normally again on unfreeze. Its own post-discount price is 0.
-                effective_fraction += 1.0
-                membership_amounts[membership.item_id] = 0
-                continue
+            # Collect this membership's discounts FIRST, for EVERY membership
+            # (frozen included): a frozen membership's applied-discount rows still
+            # need to reach the writeback — their ids go into the line's
+            # contributing_ids so they get a coupon link + flip to `applied`.
+            # Freeze doesn't make them useless; it only zeros the bill.
             mem_percents: list[float] = []
             mem_dollars = 0
             for discount in membership.discounts:
@@ -231,11 +222,27 @@ class PaymentSyncDiscounts:
                 if discount.dollar_off:
                     dollar_ids.append(discount.applied_discount_id)
                     mem_dollars += discount.dollar_off
-            effective_fraction += 1 - self._remaining_after_percents(mem_percents)
-            dollar_sum += mem_dollars
+            # The membership's OWN post-discount price is always its real
+            # standalone price (plan minus its own discounts) — even when frozen.
+            # Freeze zeros the BILL (via the line below), not the membership's own
+            # price; the CRM surfaces the frozen status separately.
             membership_amounts[membership.item_id] = self._post_discount_amount(
                 membership.price, mem_percents, mem_dollars
             )
+            if membership.is_frozen:
+                # FREEZE = a synthetic 100%-off on this membership's line unit: it
+                # bills $0 but STAYS on the subscription (keeps its line id, stays
+                # `applied`), so nothing assuming `applied ⇒ on Stripe with an
+                # item id` breaks. Riding the percent ÷ quantity averaging below,
+                # a consolidated line with k of N frozen bills only the (N − k)
+                # active units. Its fixed-$ off is deliberately NOT added to the
+                # line's dollar_sum — a flat $-off would leak onto the active
+                # units on a shared line, and the 1.0 override already zeros this
+                # unit.
+                effective_fraction += 1.0
+                continue
+            effective_fraction += 1 - self._remaining_after_percents(mem_percents)
+            dollar_sum += mem_dollars
 
         values: list[LineDiscountValue] = []
         line_percent = effective_fraction / divisor * 100

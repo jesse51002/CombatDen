@@ -10,8 +10,8 @@ description: >-
   idempotency keys), the typed metadata models that pin each Stripe resource to a
   CRM row, the service primitives (members / membership-product / price / payment /
   low-level coupon find/create/delete I/O) and the subscription sub-services
-  (`PaymentsStripeSubscriptionService` facade + create/update/cancel/freeze/
-  migration/upcoming/retrieve/item delegates + `get_subscription` read primitive +
+  (`PaymentsStripeSubscriptionService` facade + create/update/cancel/migration/
+  upcoming/retrieve/item delegates + `get_subscription` read primitive +
   `_map_subscription` / `_consolidate_items` / `_build_reconcile_items` base
   helpers), plus the webhook ingestion (`/api/v1/stripe/webhooks` → signature
   verify → `StripeWebhooksService.handle_event` → gym resolution → `event_log` +
@@ -91,8 +91,8 @@ lives under a gym's connected account. That scoping is carried on every call as
 (`payments_stripe_client.py`):
 
 - `connect_opts(stripe_account_id, *, idempotency_key=None)` — a **write** call.
-  **Money-moving flows** (invoices, charges, subscription create/update/cancel/
-  freeze, refunds) **must pass an idempotency key** so Stripe dedups retries at
+  **Money-moving flows** (invoices, charges, subscription create/update/cancel,
+  refunds) **must pass an idempotency key** so Stripe dedups retries at
   the protocol level. Non-money-moving writes (product / price / coupon /
   customer CRUD) may omit it.
 - `connect_opts_readonly(stripe_account_id)` — a **read** call (retrieve / list /
@@ -117,7 +117,7 @@ so e.g. `paid_for` rides as `'["<uuid>", …]'`, `None` dropped) and
 | `StripeCustomerMetadata` | customer create/update | `member_id`, `gym_id` |
 | `StripeProductMetadata` | membership product create/update | `plan_id`, `gym_id` |
 | `StripePriceMetadata` | price create | `crm_price_id`, `plan_id`, `gym_id` |
-| `StripeSubscriptionMetadata` | sub create/update/freeze/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
+| `StripeSubscriptionMetadata` | sub create/update/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
 | `StripeMembershipOneTimeMetadata` | one-time membership invoice (invoice-level) | `member_id` (bill owner / payer), `gym_id`, `plan_id` (**optional** — `None` on a consolidated multi-plan invoice), `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
 | `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `paid_by_member_id` (payer), `paid_for` (beneficiary list, JSON-array string), `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
 
@@ -322,7 +322,6 @@ shared deps and the static/instance helpers.
 | `create_subscription` / `preview_create_subscription` | `PaymentsSubscriptionCreate` (`_create`) | new sub (flexible billing mode), monthly/weekday anchor, first charge verified synchronously (card → `error_if_incomplete`; cash → `default_incomplete` + first-invoice out-of-band) |
 | `update_subscription` / `preview_update_subscription` | `PaymentsSubscriptionUpdate` (`_update`) | reconcile a sub to a desired item/discount set; card path sends `error_if_incomplete` so a declined proration 402s + rolls back |
 | `cancel_subscription` | `PaymentsSubscriptionCancel` (`_cancel`) | cancel now or at period end; no-op if already `canceled` |
-| `freeze_subscription` / `unfreeze_subscription` | `PaymentsSubscriptionFreeze` (`_freeze`) | `pause_collection` (`behavior="void"`, optional `resumes_at`) / resume with `billing_cycle_anchor="unchanged"` |
 | `migrate_subscriptions_to_price` | `PaymentsSubscriptionMigration` (`_migration`) | sequential price migration across subs |
 | `fetch_upcoming_invoice` | `PaymentsSubscriptionUpcoming` (`_upcoming`) | next-invoice preview via `invoices.create_preview(subscription=…)` |
 | `get_subscription` | `PaymentsSubscriptionRetrieve` (`_retrieve`) | **read current items + discounts** (the sync's read primitive) |
@@ -779,7 +778,7 @@ is the exception: the refund endpoint above is its one caller.
   `payments_stripe_mappers.py`.
 - **Subscription sub-services:** `payments/service/subscription/`
   (`payments_subscription_facade.py` = `PaymentsStripeSubscriptionService`,
-  `payments_subscription_base.py`, and the create/update/cancel/freeze/migration/
+  `payments_subscription_base.py`, and the create/update/cancel/migration/
   upcoming/retrieve/item delegates). `payments_subscription_retrieve.py` holds
   `get_subscription`.
 - **Webhook router:** `payments/`… no router — the only router is
