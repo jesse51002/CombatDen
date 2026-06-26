@@ -626,3 +626,79 @@ async def test_frozen_membership_discount_still_reaches_writeback(
         ) == 0
     finally:
         await delete_member_data(db_pool, member.member_id)
+
+
+async def test_frozen_membership_dollar_discount_reaches_writeback(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A frozen membership's own FIXED-$ discount also reaches the writeback.
+
+    The percent path always emits a line value (the synthetic 100%-off), but a
+    DOLLAR discount only emits its own line value when ``dollar_sum > 0`` — which
+    a frozen membership never adds to. So when the only dollar discount on a line
+    belongs to a frozen membership, its applied-discount row must still be linked
+    + flipped to ``applied`` (it rides the 100%-off coupon), never stranded
+    ``not_added`` (invisible to clients + orphan-reaped). This is the exact case
+    the percent writeback test cannot catch.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
+    discount = await created.discount(
+        gym_id, name="Frozen $20", percentage_off=None, dollar_off=2000,
+    )
+
+    try:
+        # Freeze the member up front (no prior subscription).
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE members SET "
+                    "freeze_start_date = CURRENT_DATE - 1, "
+                    "freeze_end_date = CURRENT_DATE + 30 "
+                    "WHERE member_id = :id"
+                ),
+                {"id": str(member.member_id)},
+            )
+            await session.commit()
+
+        # Start WITH the fixed-$ discount: frozen ($0), but the discount row must
+        # still be resolved by the writeback.
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                        discount_ids=[discount.discount_id],
+                    ),
+                ],
+            )
+        )
+
+        item_id = await get_active_membership_item_id(
+            db_pool, member.member_id, gym_id,
+        )
+        applied = await get_applied_discounts(db_pool, item_id)
+        assert len(applied) == 1, f"expected 1 applied discount, got {len(applied)}"
+        # Non-null coupon = the writeback linked it AND flipped it to `applied`.
+        # A null coupon means the frozen membership's FIXED-$ discount was
+        # suppressed (no dollar line value emitted) and stranded.
+        assert applied[0]["stripe_coupon_id"] is not None, (
+            "a frozen membership's FIXED-$ discount must still get a coupon "
+            "link + reach `applied`, not strand as not_added"
+        )
+        # ...and the membership genuinely bills $0 while frozen.
+        assert (
+            await get_payer_monthly_bill(db_pool, member.member_id)
+        ) == 0
+    finally:
+        await delete_member_data(db_pool, member.member_id)

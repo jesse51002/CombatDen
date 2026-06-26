@@ -13,11 +13,12 @@
 -- Each row also carries is_frozen: whether the membership's SUBJECT member
 -- (mm.member_id, NOT the payer) is frozen as of :today (the gym-timezone date),
 -- joined to that member's own freeze window on members. Freeze is NOT filtered
--- out here — the row is surfaced WITH the flag so the builder can both exclude a
--- frozen membership from the desired bucket AND tell "the bucket is empty because
--- every membership is frozen" (→ pause the sub) from "empty because none are
--- left" (→ cancel). Freezing a member therefore pauses only that member's own
--- memberships, regardless of who pays.
+-- out here and the frozen row is NOT excluded from the bucket — it stays on the
+-- subscription with its line id and PaymentSyncDiscounts applies a synthetic
+-- 100%-off to its unit, so it bills $0 while remaining `applied` (no pause, no
+-- drop). The flag is surfaced so the discount math can zero just the frozen
+-- units. Freezing a member therefore zeros only that member's own memberships,
+-- regardless of who pays.
 SELECT
     mm.item_id,
     mm.member_id,
