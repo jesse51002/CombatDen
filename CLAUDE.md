@@ -59,6 +59,7 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - Where to read the review: it posts as an **issue comment** from `claude[bot]` — `gh api repos/<owner>/<repo>/issues/<pr>/comments`. Also check `.../pulls/<pr>/reviews` and `.../pulls/<pr>/comments` for any inline findings.
 - Triage **every** finding: fix the legitimate ones; for a finding that conflicts with a decision already made, is a false positive, or follows an established codebase convention, **reply with the rationale instead of silently applying it** (per *No assumptions* + challenging weak findings). Surface anything that needs a human decision.
 - A clean run is not enough — the workflow passing only means the review *ran*, not that its findings are resolved. Loop until the review is addressed (push fix → re-poll the new review).
+- **Correctness over quickness in the review cycle.** When addressing findings, optimize for the fully-correct fix, never the fastest patch that just silences the comment — fix the root cause (including any pre-existing issue the review surfaces, per *Don't silently inherit existing problems*), re-run the full verification (lint + tests + analyze + the live tests the change touches), and update the docs/skills the change affects. A slower, complete fix beats a fast, partial one; never trade correctness for review-loop turnaround.
 
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
