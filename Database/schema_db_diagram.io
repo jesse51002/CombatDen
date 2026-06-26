@@ -418,7 +418,7 @@ Table gym_discounts_unfiltered {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null, note: 'editable identity']
-  discount_type varchar [not null, note: 'CHECK: preset | custom | linked (linked = a family discount entry a plan references by id)']
+  discount_type discount_type [not null, note: 'enum: preset | custom']
   is_deleted boolean [not null, default: false]
   created_at timestamptz [not null, default: `now()`]
   // IDENTITY only. The percent/dollar + lifetime live on gym_discount_values (versioned).

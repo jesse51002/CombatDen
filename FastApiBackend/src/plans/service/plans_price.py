@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from schema.membership_plan import DurationUnit, PlanType
@@ -28,9 +27,6 @@ from src.plans.service.plans_base import (
 )
 from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.sql_loader import load_sql
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

@@ -170,7 +170,7 @@ each rejected:
 
 ### Current state — no family discount
 The discount model is **preset + custom only**. A family pays together via the
-payer model (`members.account_linked_to_id` / `member_memberships.paid_by_member_id`),
+payer model (`member_authorized_payers` + `member_memberships.paid_by_member_id`),
 but every family member's membership bills at the full plan price — there is no
 automatic "2nd member 20% off, 3rd member 30% off" tier on a plan.
 
