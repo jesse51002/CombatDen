@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from uuid import UUID
 
 from schema.membership_plan import DurationUnit, PlanType
 from sqlalchemy import text
@@ -67,8 +66,12 @@ class MembershipPlansPrice(MembershipPlansBase):
             SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
         )
 
-        # All three steps run in one transaction; Stripe failure rolls back
-        # the deactivation so the plan is never left with zero active prices.
+        # Deactivate-old + insert-new + Stripe create + set-id run in ONE txn so
+        # a Stripe failure rolls back the deactivation (never zero active prices).
+        # Do NOT move the Stripe call out of the session: the <=1-active-price
+        # constraint needs deactivate+insert atomic, so that reintroduces the
+        # strand bug. Cost: a pooled conn is held across the Stripe call (fine
+        # for this rare admin op).
         async with self._db_pool.session() as session:
             deact_result = await session.execute(
                 text(deactivate_all_sql),
@@ -147,30 +150,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         return self._build_price_response(new_price_row)
 
     # ── Private ────────────────────────────────────────────────
-
-    async def _deactivate_old_price(
-        self,
-        plan_id: UUID,
-        gym_id: UUID,
-        exclude_price_id: UUID,
-    ) -> dict | None:
-        """Deactivate old active price rows, excluding the new one."""
-        deactivate_sql = load_sql(
-            SQL_DIR / "membership_plans_price_deactivate.sql",
-        )
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(deactivate_sql),
-                {
-                    "plan_id": str(plan_id),
-                    "gym_id": str(gym_id),
-                    "exclude_price_id": str(exclude_price_id),
-                },
-            )
-            row = result.mappings().fetchone()
-            await session.commit()
-
-        return dict(row) if row else None
 
     @staticmethod
     def _resolve_interval(plan: dict) -> tuple[DurationUnit, int]:

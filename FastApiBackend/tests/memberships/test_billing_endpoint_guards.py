@@ -2,8 +2,9 @@
 
 Pure unit tests (no DB / Stripe / network):
 
-* **C-079** — the staff-managed billing writes (start, freeze, unfreeze,
-  mark-paid-cash, charge-card, refund) must gate on
+* **C-079** — the staff-managed billing writes (start, cancel, reprice,
+  upgrade, add/remove-discounts, freeze, unfreeze, mark-paid-cash,
+  charge-card, refund) must gate on
   ``verify_gym_employee_for_member`` (staff only), NOT
   ``verify_can_view_member`` (which lets the member themselves through).
 * **C-070** — the freeze / unfreeze profile write must fail loudly when the
@@ -20,6 +21,8 @@ import pytest
 
 from src.main import _handle_lock_busy_error
 from src.memberships.memberships_router import (
+    add_membership_discounts,
+    cancel_membership,
     charge_member_card,
     freeze_membership,
     mark_membership_paid_cash,
@@ -183,6 +186,47 @@ async def test_preview_start_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited()
+    auth.verify_can_view_member.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_uses_staff_only_guard() -> None:
+    auth = _make_auth()
+    service = MagicMock()
+    service.cancel_many = AsyncMock(return_value={})
+    tasks_service = MagicMock()
+    tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
+
+    await cancel_membership(
+        request=MagicMock(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    auth.verify_gym_employee_for_member.assert_awaited_once()
+    auth.verify_can_view_member.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_add_discounts_uses_staff_only_guard() -> None:
+    """A member must not be able to grant themselves a discount."""
+    auth = _make_auth()
+    service = MagicMock()
+    service.add_discounts = AsyncMock(return_value=None)
+    tasks_service = MagicMock()
+    tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
+
+    await add_membership_discounts(
+        request=MagicMock(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    auth.verify_gym_employee_for_member.assert_awaited_once()
     auth.verify_can_view_member.assert_not_awaited()
 
 

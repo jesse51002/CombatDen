@@ -97,7 +97,7 @@ async def cancel_membership(
 ) -> MemberMembershipsCancelResponse:
     """Cancel one or more memberships; partial success returns 207."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task(
@@ -409,7 +409,7 @@ async def update_membership_price(
 ) -> MemberMembershipsUpdatePriceResponse:
     """Reprice one membership to its plan's active price."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -485,7 +485,7 @@ async def upgrade_membership(
 ) -> MemberMembershipsUpgradeResponse:
     """Upgrade one membership to a different plan."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -554,7 +554,7 @@ async def preview_upgrade_membership(
 ) -> DueNowVsRecurringPreview | None:
     """Preview what upgrading a membership to a different plan would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await memberships_service.upgrade_preview(
@@ -619,7 +619,7 @@ async def end_membership(
 ) -> MemberMembershipsEndResponse:
     """End a one-time/trial membership early."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         end_date = await memberships_service.end_one_time(
@@ -796,7 +796,7 @@ async def preview_cancel_membership(
 ) -> list[PayerInvoiceChange]:
     """Preview what cancelling one or more memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await memberships_service.preview_cancel_many(
@@ -860,7 +860,7 @@ async def add_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -933,7 +933,7 @@ async def remove_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])

@@ -14,7 +14,8 @@
 -- ============================================================
 
 -- 1a. Add the new column. Guard the empty-table assumption (data is reset
---     before applying) so a populated table fails loud, not partway.
+--     before applying): on a populated table this aborts cleanly at step 1a
+--     with NO changes applied; a live-data rollout would need a backfill path.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM member_invoice_applied_discounts) THEN
@@ -26,9 +27,10 @@ END $$;
 ALTER TABLE member_invoice_applied_discounts
     ADD COLUMN line_item_id VARCHAR NOT NULL;
 
--- 1b. Drop the old 2-column unique constraint.
+-- 1b. Drop the old 2-column unique constraint (IF EXISTS: tolerate a reset DB
+--     where the predecessor name may differ / already be gone).
 ALTER TABLE member_invoice_applied_discounts
-    DROP CONSTRAINT uq_applied_discount_invoice_coupon;
+    DROP CONSTRAINT IF EXISTS uq_applied_discount_invoice_coupon;
 
 -- 1c. Add the replacement 3-column unique constraint.
 --     Idempotent on webhook re-delivery: one row per coupon per invoice LINE.
