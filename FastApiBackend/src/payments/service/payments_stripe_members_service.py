@@ -306,7 +306,7 @@ class PaymentsStripeMembersService:
         # Legacy shape: top-level subscription (Invoice.__getattr__ raises on missing).
         try:
             legacy = invoice["subscription"]  # type: ignore[index]
-        except KeyError, TypeError:
+        except (KeyError, TypeError):
             return None
         if isinstance(legacy, str):
             return legacy

@@ -397,6 +397,7 @@ MEMBER_INVOICE_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
         "discount_id",  # identity FK
         # Stripe columns — always set by backend
         "stripe_coupon_id",
+        "line_item_id",  # set-once Stripe invoice-line id (audit identity)
     }
 )
 

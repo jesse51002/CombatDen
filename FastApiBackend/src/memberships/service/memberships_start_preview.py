@@ -101,6 +101,7 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
         states = [
             MemberMembershipsStartItemState(
                 member_id=item.member_id,
+                gym_id=request.gym_id,
                 plan_id=plan_prices[item.price_id]["plan_id"],
                 plan_type=PlanType(
                     plan_prices[item.price_id]["plan_type"],
@@ -223,7 +224,7 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
                 )
                 state.applied_ids = []
             for discount_id in state.minted_ids:
-                await self._discounts.delete_discount(discount_id)
+                await self._discounts.delete_discount(discount_id, state.gym_id)
             state.minted_ids = []
         await self._delete_pending(
             [s.item_id for s in states if s.item_id is not None],

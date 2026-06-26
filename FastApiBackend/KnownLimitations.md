@@ -26,7 +26,7 @@ Each item is documented with its impact, why it was deferred, and the fix.
 ### 3. `set_price` holds a pooled DB connection across the Stripe call (C-058)
 - **What / impact:** `set_price` runs deactivate-old + insert-new + `create_price` + commit in one transaction, so a pooled asyncpg connection is held during the Stripe network call. Under concurrent admin repricing this can pressure a small pool.
 - **Why deferred:** The `idx_max_one_active_price_per_plan` constraint forbids two active prices, so deactivate + insert must be atomic, and keeping rollback-on-Stripe-failure forces the Stripe call inside that txn (the obvious "deactivate→commit→Stripe" alternative reintroduces the original strand bug). `set_price` is a rare admin op.
-- **Fix:** Create the Stripe price *first* (outside any txn) with a **client-generated `price_id`** threaded into the metadata, then one short txn for deactivate-old + insert-new. Needs an insert-SQL change to accept a provided `price_id`.
+- **Fix (future — the opposite of today's single-txn approach):** Create the Stripe price *first* (outside any txn) with a **client-generated `price_id`** threaded into the metadata, then one short txn for deactivate-old + insert-new. Needs an insert-SQL change to accept a provided `price_id`.
 
 ### 4. Freeze trusts the client-supplied `gym_id` (C-070)
 - **What / impact:** The freeze endpoint passes the client's `gym_id` into the freeze/payer lookups; `verify_can_view_member` never validates it. The **interim fix shipped** (a rowcount guard so a mismatch fails loudly instead of silently freezing 0 rows).
@@ -64,3 +64,11 @@ Each item is documented with its impact, why it was deferred, and the fix.
 
 ### 10. Page-limit constants could live in `config.py`
 - `INVOICE_LINE_ITEMS_PAGE_LIMIT` / `SUBSCRIPTION_OPEN_INVOICE_LIMIT` are module-level `UPPER_CASE` constants (CLAUDE.md-compliant), but moving them to `config.py` `Settings` fields would make them env-overridable in tests. Optional.
+
+### 11. `member_memberships.idempotency_key` has no immutability trigger
+- It's listed immutable in `immutable_columns.py` (protecting client paths), but unlike `price_id` / `stripe_item_id` etc. on the same table it has no `prevent_idempotency_key_overwrite` trigger, so a service-role UPDATE isn't DB-blocked. Low risk (service-role-managed, set once at INSERT).
+- **Fix:** Add a `trg_prevent_idempotency_key_overwrite` trigger in `member_memberships.sql` (+ migration), matching the other immutable columns.
+
+### 12. `_insert_line_items` doesn't skip proration lines
+- `_capture_discounts` and `_update_memberships` skip proration lines; `_insert_line_items` doesn't. Negative proration credits are already filtered by the `member_invoice_line_items.amount >= 0` CHECK, so a **zero-dollar** proration line is the only edge that would record a stray line item.
+- **Fix:** Mirror `if self._is_proration(line): continue` in `_insert_line_items`.
