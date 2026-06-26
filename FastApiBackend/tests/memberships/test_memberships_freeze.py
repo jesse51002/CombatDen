@@ -452,6 +452,106 @@ async def test_freeze_one_member_off_shared_line(
         await delete_member_data(db_pool, payer.member_id)
 
 
+async def test_freeze_child_on_separate_line(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Freeze a child whose membership is its OWN line under a different payer.
+
+    The payer self-pays plan A and ALSO pays for a child on a DIFFERENT plan B,
+    so the payer's subscription carries TWO separate lines (not one shared
+    quantity line). Freezing only the child applies a synthetic 100%-off to the
+    child's line — it bills $0 — while the payer's own plan-A line keeps billing
+    in full. This is the headline cross-payer freeze: the frozen SUBJECT is not
+    the payer, the payer is discovered via the recurring-payers query, and only
+    the subject's own line drops.
+    """
+    pm_id = await created.payment_method()
+    payer = await created.member(
+        gym_id, payment_method_id=pm_id,
+        first_name="Payer", last_name="Separate",
+    )
+    child = await created.member(
+        gym_id, first_name="Child", last_name="Separate",
+    )
+    plan_a = await created.plan(gym_id)
+    plan_b = await created.plan(gym_id)
+
+    try:
+        # Authorize the payer for the child, then start the payer on plan A and
+        # the child on plan B in one request → two SEPARATE lines on one sub.
+        await authorize_payer(db_pool, child.member_id, payer.member_id)
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=payer.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=payer.member_id,
+                        price_id=plan_a.price_id,
+                    ),
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan_b.price_id,
+                    ),
+                ],
+            )
+        )
+
+        payer_full = await get_membership_total_price(
+            db_pool, payer.member_id, gym_id,
+        )
+        child_full = await get_membership_total_price(
+            db_pool, child.member_id, gym_id,
+        )
+        assert payer_full > 0 and child_full > 0
+        # Both lines bill before the freeze.
+        assert (
+            await get_payer_monthly_bill(db_pool, payer.member_id)
+        ) == payer_full + child_full
+
+        profile = await get_profile_stripe_ids(
+            db_pool, payer.member_id, gym_id,
+        )
+        before = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts,
+        )
+
+        # Freeze ONLY the child (the subject, not the payer).
+        await memberships_service.freeze(
+            child.member_id, gym_id, 2, idempotency_key=uuid4(),
+        )
+
+        # Per-membership total_prices stay the real standalone price; the BILL
+        # drops to just the payer's own plan-A line — the child's line is $0.
+        # The sub stays active (no pause) and nothing was charged by the freeze.
+        assert (
+            await get_membership_total_price(db_pool, child.member_id, gym_id)
+        ) == child_full
+        assert (
+            await get_membership_total_price(db_pool, payer.member_id, gym_id)
+        ) == payer_full
+        assert (
+            await get_payer_monthly_bill(db_pool, payer.member_id)
+        ) == payer_full, "Only the frozen child's line drops; payer keeps paying"
+        sub = await fetch_subscription(
+            stripe_client, profile.stripe_sub_id_month, connect_opts,
+        )
+        assert sub.status == "active"
+        assert sub.pause_collection is None
+        await assert_no_unexpected_charges(
+            stripe_client, before, connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, child.member_id)
+        await delete_member_data(db_pool, payer.member_id)
+
+
 async def test_frozen_membership_discount_still_reaches_writeback(
     memberships_service,
     db_pool,

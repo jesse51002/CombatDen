@@ -265,11 +265,20 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A null onPressed means disabled (e.g. Start Membership on a frozen
+    // member). AppOutlineButton bakes its colors in for every state, so mute
+    // the border + text here so the button visibly reads as inert — matching
+    // the disabled AppOutlineButton convention in plan_price_version_row.
+    final bool disabled = onPressed == null;
     final button = AppOutlineButton(
       text: label,
       onPressed: onPressed,
       borderRadius: DesignConstants.radiusSmall,
       textStyle: DesignConstants.h3,
+      borderColor:
+          disabled ? DesignConstants.text2nd : DesignConstants.text,
+      textColor:
+          disabled ? DesignConstants.text2nd : DesignConstants.text,
       padding: const EdgeInsets.symmetric(
         horizontal: DesignConstants.spacingLarge,
         vertical: DesignConstants.spacingSmall,
