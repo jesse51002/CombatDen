@@ -25,7 +25,6 @@ from src.plans.plans_schema import (
 from src.plans.service.plans_base import (
     MembershipPlansBase,
 )
-from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -69,20 +68,27 @@ class MembershipPlansPrice(MembershipPlansBase):
             request.gym_id,
         )
 
-        # ── Step 1: Deactivate old price + insert new (single txn) ─
+        recurring_interval, recurring_interval_count = self._resolve_interval(
+            plan,
+        )
+
         deactivate_all_sql = load_sql(
             SQL_DIR / "membership_plans_price_deactivate_all.sql",
         )
         insert_sql = load_sql(
             SQL_DIR / "membership_plans_price_insert.sql",
         )
-        price_params = {
-            "plan_id": str(request.plan_id),
-            "gym_id": str(request.gym_id),
-            "stripe_price_id": None,
-            "price": request.price,
-        }
+        set_price_sql = load_sql(
+            SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
+        )
 
+        # Deactivate the old price, insert the new one, and create the Stripe
+        # Price all inside ONE transaction that is not committed until the
+        # Stripe Price is confirmed. Creating the Stripe Price *before* the
+        # commit means a Stripe failure rolls the whole transaction back —
+        # re-activating the old price — so the plan is never left with zero
+        # active prices, and the old price is never *durably* deactivated until
+        # its replacement is confirmed on Stripe.
         async with self._db_pool.session() as session:
             deact_result = await session.execute(
                 text(deactivate_all_sql),
@@ -94,21 +100,22 @@ class MembershipPlansPrice(MembershipPlansBase):
             old_price_row = deact_result.mappings().fetchone()
             old_price = dict(old_price_row) if old_price_row else None
 
-            result = await session.execute(
+            insert_result = await session.execute(
                 text(insert_sql),
-                price_params,
+                {
+                    "plan_id": str(request.plan_id),
+                    "gym_id": str(request.gym_id),
+                    "stripe_price_id": None,
+                    "price": request.price,
+                },
             )
-            new_price_row = dict(result.mappings().one())
-            await session.commit()
+            new_price_row = dict(insert_result.mappings().one())
+            price_id = str(new_price_row["price_id"])
 
-        price_id = str(new_price_row["price_id"])
-
-        # ── Step 2: Stripe create ─────────────────────────────
-        recurring_interval, recurring_interval_count = self._resolve_interval(
-            plan,
-        )
-
-        try:
+            # Create & verify the Stripe Price while the deactivation is still
+            # uncommitted. On failure the transaction rolls back (old price
+            # restored) and the original error propagates — no orphan price and
+            # no zero-active-price window.
             stripe_resp = await self._stripe_prices.create_price(
                 PaymentsPriceCreateRequest(
                     stripe_product_id=stripe_product_id,
@@ -124,36 +131,28 @@ class MembershipPlansPrice(MembershipPlansBase):
                 ),
                 stripe_account_id,
             )
-        except Exception:
-            await cleanup_pending_row(
-                delete_fn=lambda: self._delete_pending_price(
-                    price_id,
-                    str(request.plan_id),
-                ),
-                entity_name="membership_plan_price",
-                crm_pk=price_id,
-            )
-            raise
 
-        # ── Step 3: Set stripe_price_id ───────────────────────
-        set_price_sql = load_sql(
-            SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
-        )
-        try:
-            new_price_row = await self._db_pool.execute_with_retry(
-                set_price_sql,
-                {
-                    "price_id": price_id,
-                    "plan_id": str(request.plan_id),
-                    "stripe_price_id": stripe_resp.stripe_price_id,
-                },
-            )
-        except Exception as exc:
-            raise StripeOrphanError(
-                stripe_resource_type=StripeResourceType.price,
-                stripe_id=stripe_resp.stripe_price_id,
-                crm_pk=price_id,
-            ) from exc
+            # The Stripe Price now exists; a DB failure past here is a true
+            # orphan, so surface it as StripeOrphanError. The rollback keeps the
+            # old price active in the DB, consistent with Stripe holding the new
+            # (unrecorded) price.
+            try:
+                set_result = await session.execute(
+                    text(set_price_sql),
+                    {
+                        "price_id": price_id,
+                        "plan_id": str(request.plan_id),
+                        "stripe_price_id": stripe_resp.stripe_price_id,
+                    },
+                )
+                new_price_row = dict(set_result.mappings().one())
+                await session.commit()
+            except Exception as exc:
+                raise StripeOrphanError(
+                    stripe_resource_type=StripeResourceType.price,
+                    stripe_id=stripe_resp.stripe_price_id,
+                    crm_pk=price_id,
+                ) from exc
 
         # ── Stripe: point the product at the new price; keep the old ACTIVE ─
         # We never archive a Stripe price. A gym can update a price while a
@@ -179,22 +178,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         return self._build_price_response(new_price_row)
 
     # ── Private ────────────────────────────────────────────────
-
-    async def _delete_pending_price(
-        self,
-        price_id: str,
-        plan_id: str,
-    ) -> None:
-        """Hard-delete a pending price row (NULL stripe_price_id)."""
-        sql = load_sql(
-            SQL_DIR / "membership_plans_price_delete_pending.sql",
-        )
-        async with self._db_pool.session() as session:
-            await session.execute(
-                text(sql),
-                {"price_id": price_id, "plan_id": plan_id},
-            )
-            await session.commit()
 
     async def _deactivate_old_price(
         self,

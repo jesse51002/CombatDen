@@ -36,6 +36,17 @@ DISCOUNT_APPLICATION_ORDER: tuple[DiscountApplicationKind, ...] = (
     DiscountApplicationKind.dollar,
 )
 
+# Stripe `percent_off` carries at most 2 decimals, so its smallest representable
+# value is 0.01%. A computed line percent can fall below that — a tiny per-unit
+# percent averaged across a large consolidated line (÷ quantity), or a single
+# frozen unit on a very large line. Such a value still passes a bare ``> 0``
+# guard, but it rounds to ``percent_off=0.0`` under coupon id ``pct_0`` at emit,
+# and Stripe rejects a 0% coupon — crashing the sync. Floor the emit on Stripe's
+# precision: a percent that rounds to zero at 2 decimals is not a discount, so we
+# drop it rather than emit an invalid coupon.
+_PERCENT_OFF_DECIMALS = 2
+_MIN_LINE_PERCENT_OFF = 0.01
+
 
 class PaymentSyncDiscounts:
     """Owns the discount math and resolves each line's coupons at build time.
@@ -258,7 +269,10 @@ class PaymentSyncDiscounts:
 
         values: list[LineDiscountValue] = []
         line_percent = effective_fraction / divisor * 100
-        if line_percent > 0:
+        # Emit only a percent that survives Stripe's 2-decimal rounding as a
+        # positive value; one that rounds to 0.00% would become an invalid
+        # `pct_0` (0%) coupon and crash the sync (see _MIN_LINE_PERCENT_OFF).
+        if round(line_percent, _PERCENT_OFF_DECIMALS) >= _MIN_LINE_PERCENT_OFF:
             values.append(
                 LineDiscountValue(
                     percentage_off=line_percent,

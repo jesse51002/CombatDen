@@ -13,6 +13,7 @@ is no consolidation and no ÷quantity averaging — the discount engine is fed
 per-membership (qty-1) groups, where its averaging is a no-op (÷1).
 """
 
+import logging
 from uuid import UUID
 
 import src.shared.db_schema_path  # noqa: F401
@@ -46,6 +47,8 @@ from src.sync.sync_schema import (
     OneTimeInvoiceItem,
     OneTimeInvoicePlan,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PaymentSyncOneTime:
@@ -302,32 +305,99 @@ class PaymentSyncOneTime:
         plan: OneTimeInvoicePlan,
         result: PaymentsInvoicePaymentResponse,
     ) -> None:
-        """Persist the one-time charge result (real path).
+        """Persist the one-time charge result — best-effort, NEVER raises.
+
+        Runs AFTER a successful charge, so it must never propagate: a
+        post-charge exception here would unwind into the start op's blanket
+        ``except`` and DELETE the just-charged rows — un-billing a successful
+        charge, which is forbidden. Every write therefore runs under its own
+        guard (logged on failure, then skipped), mirroring the recurring
+        ``PaymentSyncWriteback`` swallow-and-log policy. A row that does not get
+        stamped stays un-``applied``; the caller's verify then marks it
+        failed-but-KEPT (its invoice line is billed and is never un-billed) and
+        the reconciler / next sync heals the Stripe-confirmation stamp.
 
         Maps each membership 1:1 to its invoice line by order (``plan.items[i]``
         ↔ ``result.line_item_ids[i]`` / ``line_amounts[i]``): stamps the line id +
-        invoice id + post-discount ``total_price`` + ``applied`` on each row. Then
+        invoice id + post-discount ``total_price`` + ``applied`` on each row, then
         reuses the recurring coupon-link writeback (the resolved coupon onto each
-        contributing applied-discount row, marked ``applied``). A one-time
-        membership is terminal (one invoice), so there is no consumption stamp.
-        ``strict=True`` fails loud if Stripe returned a different
-        line count than we sent.
+        contributing applied-discount row). A one-time membership is terminal
+        (one invoice), so there is no consumption stamp.
         """
+        await self._writeback_membership_rows(plan, result)
+        await self._writeback_coupon_links(plan)
+
+    async def _writeback_membership_rows(
+        self,
+        plan: OneTimeInvoicePlan,
+        result: PaymentsInvoicePaymentResponse,
+    ) -> None:
+        """Stamp each membership row from its invoice line — guarded per row.
+
+        Pairs ``plan.items`` with the returned line id + amount by order. A
+        line-count mismatch (Stripe billed a different number of lines than we
+        sent) is logged loud and the overlap still stamped best-effort — never
+        raised, because the charge already happened (a raise here would route
+        the start op to its delete branch and un-bill a real charge). Each row
+        is stamped under its own guard so one bad row never blocks the rest.
+        """
+        if (
+            len(result.line_item_ids) != len(plan.items)
+            or len(result.line_amounts) != len(plan.items)
+        ):
+            logger.error(
+                "One-time writeback: Stripe returned %d line ids / %d amounts "
+                "for %d membership items on invoice %s; stamping the overlap "
+                "best-effort (charge already happened, never un-billing)",
+                len(result.line_item_ids),
+                len(result.line_amounts),
+                len(plan.items),
+                result.stripe_invoice_id,
+            )
         for item, line_id, amount in zip(
             plan.items,
             result.line_item_ids,
             result.line_amounts,
-            strict=True,
+            strict=False,  # mismatch already logged above; stamp the overlap
         ):
-            await self._queries.apply_one_time_membership_sync(
-                item_id=item.item_id,
-                member_id=item.member_id,
-                stripe_item_id=line_id,
-                stripe_one_time_invoice_id=result.stripe_invoice_id,
-                total_price=amount,
-            )
+            try:
+                await self._queries.apply_one_time_membership_sync(
+                    item_id=item.item_id,
+                    member_id=item.member_id,
+                    stripe_item_id=line_id,
+                    stripe_one_time_invoice_id=result.stripe_invoice_id,
+                    total_price=amount,
+                )
+            except Exception:
+                logger.error(
+                    "One-time writeback: failed to stamp membership row "
+                    "item_id=%s member_id=%s; continuing",
+                    item.item_id,
+                    item.member_id,
+                    exc_info=True,
+                )
+
+    async def _writeback_coupon_links(
+        self,
+        plan: OneTimeInvoicePlan,
+    ) -> None:
+        """Link each resolved coupon onto its applied-discount row — guarded.
+
+        Mirrors the recurring ``PaymentSyncWriteback`` coupon-link writeback:
+        one bad row is logged and skipped so the others still land, and nothing
+        here raises (the charge is already done).
+        """
         for applied_discount_id, coupon_id in plan.coupon_links.items():
-            await self._queries.set_applied_discount_coupon_id(
-                applied_discount_id,
-                coupon_id,
-            )
+            try:
+                await self._queries.set_applied_discount_coupon_id(
+                    applied_discount_id,
+                    coupon_id,
+                )
+            except Exception:
+                logger.error(
+                    "One-time writeback: failed to link coupon %s onto applied "
+                    "discount %s; continuing",
+                    coupon_id,
+                    applied_discount_id,
+                    exc_info=True,
+                )

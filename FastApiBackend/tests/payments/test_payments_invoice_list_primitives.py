@@ -6,9 +6,14 @@ on-demand / reconciler invoice fetch consumes. No Stripe, no DB — a fake
 """
 
 import json
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.service.payments_stripe_payment_service import (
+    INVOICE_LINE_ITEMS_PAGE_LIMIT,
     PaymentsStripePaymentService,
 )
 
@@ -119,3 +124,112 @@ async def test_list_invoice_line_items_passes_invoice_positionally():
     assert seen["invoice"] == "in_42"  # bound positionally via partial
     assert seen["params"]["limit"] == 99
     assert [o["id"] for o in out] == ["il_1"]
+
+
+def _line(line_id: str, invoice_item_id: str, subtotal: int) -> SimpleNamespace:
+    """A minimal stand-in for a Stripe InvoiceLineItem — what ``_order_lines`` /
+    ``post_discount_amount`` read: ``id``, ``subtotal``, and the dahlia
+    ``parent.invoice_item_details.invoice_item`` back-reference."""
+    return SimpleNamespace(
+        id=line_id,
+        subtotal=subtotal,
+        amount=subtotal,
+        discount_amounts=[],
+        parent=SimpleNamespace(
+            invoice_item_details=SimpleNamespace(invoice_item=invoice_item_id),
+        ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# C-026 — itemized one-time invoice line pagination (>10 lines must not truncate)
+# --------------------------------------------------------------------------- #
+def test_order_lines_maps_all_items_in_request_order() -> None:
+    """Every item maps to its line, in request order, post-discount amount."""
+    item_ids = [f"ii_{i}" for i in range(15)]
+    lines = [
+        _line(f"il_{i}", f"ii_{i}", subtotal=100 + i)
+        for i in reversed(range(15))
+    ]
+
+    ordered = PaymentsStripePaymentService._order_lines(lines, item_ids)
+
+    assert [line_id for line_id, _ in ordered] == [f"il_{i}" for i in range(15)]
+    assert [amount for _, amount in ordered] == [100 + i for i in range(15)]
+
+
+def test_order_lines_raises_for_genuinely_missing_item() -> None:
+    """A truly absent item (not just paged out) still raises."""
+    lines = [_line("il_0", "ii_0", subtotal=500)]
+    with pytest.raises(PaymentsStripeError, match="ii_missing"):
+        PaymentsStripePaymentService._order_lines(lines, ["ii_0", "ii_missing"])
+
+
+async def test_all_invoice_lines_no_extra_call_when_no_more() -> None:
+    """<=10-item invoice (has_more False): use the embedded page, no request."""
+    service = _build_service()
+    service._stripe = MagicMock()
+    service._stripe.v1.invoices.line_items.list_async = AsyncMock()
+
+    embedded = [_line(f"il_{i}", f"ii_{i}", 100) for i in range(3)]
+    invoice = SimpleNamespace(
+        id="in_1",
+        lines=SimpleNamespace(data=embedded, has_more=False),
+    )
+
+    result = await service._all_invoice_lines(invoice, "acct_123")
+
+    assert [line.id for line in result] == ["il_0", "il_1", "il_2"]
+    service._stripe.v1.invoices.line_items.list_async.assert_not_called()
+
+
+async def test_all_invoice_lines_pages_past_first_page() -> None:
+    """>10-item invoice: embedded first page + every paged line, no truncation."""
+    service = _build_service()
+    service._client.connect_opts_readonly.return_value = {"opt": True}
+    service._stripe = MagicMock()
+
+    embedded = [_line(f"il_{i}", f"ii_{i}", 100) for i in range(10)]
+    page_two = [_line(f"il_{i}", f"ii_{i}", 100) for i in range(10, 18)]
+
+    list_async = AsyncMock(
+        return_value=SimpleNamespace(data=page_two, has_more=False),
+    )
+    service._stripe.v1.invoices.line_items.list_async = list_async
+
+    invoice = SimpleNamespace(
+        id="in_2",
+        lines=SimpleNamespace(data=embedded, has_more=True),
+    )
+
+    result = await service._all_invoice_lines(invoice, "acct_123")
+
+    assert [line.id for line in result] == [f"il_{i}" for i in range(18)]
+    _, kwargs = list_async.call_args
+    assert kwargs["params"]["starting_after"] == "il_9"
+    assert kwargs["params"]["limit"] == INVOICE_LINE_ITEMS_PAGE_LIMIT
+    assert kwargs["options"] == {"opt": True}
+
+
+async def test_all_invoice_lines_full_set_maps_without_truncation() -> None:
+    """A 13-item invoice maps every item — the pre-fix bug raised here because
+    only the first 10 embedded lines were seen."""
+    service = _build_service()
+    service._client.connect_opts_readonly.return_value = {}
+    service._stripe = MagicMock()
+
+    item_ids = [f"ii_{i}" for i in range(13)]
+    embedded = [_line(f"il_{i}", f"ii_{i}", 100) for i in range(10)]
+    rest = [_line(f"il_{i}", f"ii_{i}", 100) for i in range(10, 13)]
+    service._stripe.v1.invoices.line_items.list_async = AsyncMock(
+        return_value=SimpleNamespace(data=rest, has_more=False),
+    )
+    invoice = SimpleNamespace(
+        id="in_3",
+        lines=SimpleNamespace(data=embedded, has_more=True),
+    )
+
+    all_lines = await service._all_invoice_lines(invoice, "acct_123")
+    ordered = PaymentsStripePaymentService._order_lines(all_lines, item_ids)
+
+    assert [line_id for line_id, _ in ordered] == [f"il_{i}" for i in range(13)]

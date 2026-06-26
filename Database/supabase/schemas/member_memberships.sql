@@ -71,6 +71,20 @@ CREATE TABLE member_memberships_unfiltered (
     -- view.
     stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
 
+    -- Idempotency token for ONE-TIME / TRIAL start rows (C-086). The start op
+    -- derives it deterministically as uuid5(request.idempotency_key,
+    -- '<member_id>:<price_id>'), so the SAME start request retried (the
+    -- canonical "server finished but the 200 was lost" case) reproduces the
+    -- SAME key per row and collides on the partial unique index below — the
+    -- retry's duplicate one-time rows are dropped (the INSERT's ON CONFLICT)
+    -- instead of stacking into 2N membership rows for one payment. NULL for
+    -- RECURRING rows (a duplicate recurring insert is already blocked by
+    -- trg_recurring_no_active_memberships) and for PREVIEW-staging rows, so
+    -- neither is constrained; a genuinely distinct purchase carries a different
+    -- request key -> a different per-row key -> still stacks. Service_role
+    -- writeback only (the table is service_role-write-only); set once at INSERT.
+    idempotency_key UUID,
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (item_id),
     UNIQUE (item_id, member_id),
@@ -105,6 +119,17 @@ CREATE INDEX idx_member_memberships_member
 CREATE INDEX idx_member_memberships_paid_by
     ON member_memberships_unfiltered (paid_by_member_id)
     WHERE cancel_date IS NULL;
+
+-- Partial unique index backing the one-time start idempotency (C-086). A
+-- retried start request reproduces the same deterministic per-row
+-- idempotency_key, so this index makes its duplicate one-time rows collide; the
+-- INSERT (member_memberships_insert.sql) names this index via
+-- `ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`
+-- to drop them. Partial on NOT NULL so recurring + preview rows (NULL key) are
+-- unconstrained, and distinct purchases (different key) never collide.
+CREATE UNIQUE INDEX idx_member_memberships_idempotency_key
+    ON member_memberships_unfiltered (idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
 
 -- Discounts no longer live on the membership row: applying a discount writes a
 -- frozen snapshot into member_membership_applied_discounts (keyed by item_id).

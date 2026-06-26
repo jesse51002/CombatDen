@@ -1,8 +1,9 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.classes_router import classes_router
@@ -23,6 +24,7 @@ from src.plans.plans_router import (
 from src.ranks.ranks_router import ranks_router
 from src.reconciler.reconciler_scheduler import build_scheduler
 from src.rewards.rewards_router import rewards_router
+from src.shared.paying_member_lock import LockBusyError
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
 from src.tasks.tasks_router import tasks_router
 from src.waivers.waivers_router import waivers_router
@@ -49,6 +51,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await app.container.db_pool().engine.dispose()
 
 
+async def _handle_lock_busy_error(
+    request: Request,
+    exc: LockBusyError,
+) -> JSONResponse:
+    """Map a busy payer lock to 409 Conflict (the documented contract).
+
+    ``LockBusyError`` is raised when another billing op already holds the
+    payer's lease. The contract (``settings.lock_acquire_timeout_seconds``)
+    is 409 so the caller retries; without this handler it would surface as an
+    unhandled 500. 409 is NOT in the proxy auto-retry family, so a mutating
+    billing op is never silently replayed.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     container = DependencyInjector()
@@ -69,6 +89,10 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+    application.add_exception_handler(
+        LockBusyError, _handle_lock_busy_error
     )
 
     application.include_router(classes_router)

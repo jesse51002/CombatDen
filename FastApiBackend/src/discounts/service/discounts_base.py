@@ -34,17 +34,21 @@ class DiscountsBase:
 
     # ── Shared Queries ─────────────────────────────────────────
 
-    async def _get_discount(self, discount_id: UUID) -> dict:
-        """Fetch a non-deleted preset row.
+    async def _get_discount(self, discount_id: UUID, gym_id: UUID) -> dict:
+        """Fetch a non-deleted preset row scoped to its owning gym.
+
+        The lookup is scoped to ``gym_id`` (the requester's own gym, from the
+        auth check) so an employee can never read or mutate a discount that
+        belongs to another gym — a cross-gym discount surfaces as not-found.
 
         Raises:
-            ValueError: If the preset is not found.
+            ValueError: If the preset is not found in this gym.
         """
         sql = load_sql(SQL_DIR / "discounts_get_by_id.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"discount_id": str(discount_id)},
+                {"discount_id": str(discount_id), "gym_id": str(gym_id)},
             )
             row = result.mappings().fetchone()
 

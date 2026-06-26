@@ -21,7 +21,7 @@ phase and raises, leaving the membership exactly as it was. This module imports
 nothing from ``src.tasks``.
 """
 
-from uuid import UUID, uuid4
+from uuid import UUID, uuid5
 
 from schema.membership_plan import PlanType
 from schema.task import ProrationBehavior
@@ -32,6 +32,13 @@ from src.memberships.service.memberships_transition_base import (
 )
 from src.shared.db_first_helpers import sync_or_revert
 from src.shared.gym_timezone import gym_today
+
+# Fixed namespace for deriving a STABLE Stripe idempotency key per reprice op.
+# The key is ``uuid5(REPRICE_IDEMPOTENCY_NAMESPACE, successor_item_id)`` — the
+# successor row id is freshly minted, unique per reprice, and unchanged across
+# retries of the same op, so every retry re-derives the SAME key (real Stripe
+# idempotency) while two genuinely-different reprices never collide.
+REPRICE_IDEMPOTENCY_NAMESPACE = UUID("6b7c1f2a-0e4d-5a8b-9c3e-1d2f4a6b8c0d")
 
 
 class MemberMembershipsReprice(MemberMembershipsTransitionBase):
@@ -114,10 +121,20 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
                 target_price,
             )
 
+            # Derive the Stripe idempotency key ONCE, outside the sync lambda,
+            # from the (unique, immutable) successor item id. A retry of this
+            # same reprice re-enters with the same successor row and re-derives
+            # the identical key, so Stripe collapses the duplicate converge
+            # instead of re-billing.
+            reprice_idempotency_key = uuid5(
+                REPRICE_IDEMPOTENCY_NAMESPACE,
+                str(new_item_id),
+            )
+
             await sync_or_revert(
                 sync_fn=lambda: self._payment_sync.update_payments_recurring(
                     payer_id,
-                    idempotency_key=uuid4(),
+                    idempotency_key=reprice_idempotency_key,
                     proration_behavior=proration_behavior,
                 ),
                 revert_fn=lambda: self._revert_db_phase(

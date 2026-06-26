@@ -160,14 +160,27 @@ class MemberMembershipsTransitionBase(MemberMembershipsBase):
             )
             return
 
+        # All three writes share ONE transaction so the revert is
+        # all-or-nothing (matching ``_write_db_phase``); a crash mid-revert
+        # must never leave a half-reverted membership (a stranded ``not_added``
+        # successor, or the old row still cancelled). ``_delete_pending`` lives
+        # in ``MemberMembershipsBase`` and opens its own session, so its single
+        # delete is replicated inline here on the shared session (same SQL file)
+        # to keep it inside this transaction.
         async with self._db_pool.session() as session:
             await self._delete_copied_discounts(session, new_item_id)
-            await session.commit()
-        await self._delete_pending([new_item_id])
-        async with self._db_pool.session() as session:
-            sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
+            delete_pending_sql = load_sql(
+                SQL_DIR / "member_memberships_delete_pending.sql"
+            )
             await session.execute(
-                text(sql),
+                text(delete_pending_sql),
+                {"item_ids": [str(new_item_id)]},
+            )
+            uncancel_sql = load_sql(
+                SQL_DIR / "member_memberships_uncancel.sql"
+            )
+            await session.execute(
+                text(uncancel_sql),
                 {
                     "item_id": str(old_item_id),
                     "member_id": str(member_id),

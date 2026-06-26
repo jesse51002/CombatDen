@@ -87,14 +87,17 @@ class MembershipPlansUpdate(MembershipPlansBase):
 
         # ── Stripe first ──────────────────────────────────────
         stripe_product_id = existing["stripe_product_id"]
+        product_recreated = False
         if stripe_product_id:
-            stripe_product_id = await self._update_or_recreate_product(
+            new_stripe_product_id = await self._update_or_recreate_product(
                 stripe_product_id=stripe_product_id,
                 merged=merged,
                 stripe_account_id=stripe_account_id,
                 plan_id=request.plan_id,
                 gym_id=request.gym_id,
             )
+            product_recreated = new_stripe_product_id != stripe_product_id
+            stripe_product_id = new_stripe_product_id
 
         # ── CRM update ───────────────────────────────────────
         # jsonb columns must use the functional cast CAST(:col AS JSONB); the
@@ -123,6 +126,21 @@ class MembershipPlansUpdate(MembershipPlansBase):
             row = result.mappings().fetchone()
             if not row:
                 raise ValueError(f"Plan {request.plan_id} not found")
+            # If the Stripe product was recreated (the old one was gone), the
+            # new stripe_product_id is NOT one of the user `changes`, so persist
+            # it here in the same transaction or it would be lost.
+            if product_recreated:
+                set_product_id_sql = load_sql(
+                    SQL_DIR / "membership_plans_set_stripe_product_id.sql",
+                )
+                await session.execute(
+                    text(set_product_id_sql),
+                    {
+                        "plan_id": str(request.plan_id),
+                        "gym_id": str(request.gym_id),
+                        "stripe_product_id": stripe_product_id,
+                    },
+                )
             await session.commit()
 
         # Re-fetch to get the joined price columns

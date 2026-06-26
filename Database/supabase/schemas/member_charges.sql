@@ -81,3 +81,19 @@ CREATE INDEX idx_charges_payer_gym_time
 
 CREATE INDEX idx_charges_gym_time
     ON member_charges (gym_id, charge_time DESC);
+
+-- Cash-payment idempotency. A cash payment carries no stripe_charge_id, so the
+-- stripe_charge_id UNIQUE (NULLs unconstrained) gives it no dedup key: the
+-- twice-daily reconciler would re-record the same cash payment as a fresh row
+-- on every run (revenue double-count). This partial unique index makes a
+-- succeeded cash payment unique per invoice, so a re-record hits the insert's
+-- ON CONFLICT DO NOTHING (the target-less form already arbitrates on this
+-- index). Deliberately scoped to kind='payment' + cash + succeeded so it never
+-- collides with a cash REFUND or a NULL-charge-id FAILED card attempt on the
+-- same invoice -- both of which also leave stripe_charge_id NULL by design.
+CREATE UNIQUE INDEX idx_charges_cash_payment_dedup
+    ON member_charges (invoice_id)
+    WHERE stripe_charge_id IS NULL
+      AND kind = 'payment'
+      AND status = 'succeeded'
+      AND payment_method_type = 'cash';

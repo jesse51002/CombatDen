@@ -233,7 +233,7 @@ class InvoicePaidHandler:
             "total_amount": int(invoice.get("amount_paid") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),
             "stripe_invoice_id": invoice["id"],
-            "stripe_payment_intent_id": invoice.get("payment_intent"),
+            "stripe_payment_intent_id": self._invoice_payment_intent_id(invoice),
             "invoice_time": stripe_ts_to_datetime(paid_at_ts),
             "stripe_event_payload": dump_stripe_payload(invoice),
         }
@@ -242,6 +242,25 @@ class InvoicePaidHandler:
         if row is None:
             raise RuntimeError(f"Failed to upsert invoice for stripe_invoice_id={invoice['id']}")
         return dict(row)
+
+    @staticmethod
+    def _invoice_payment_intent_id(invoice: dict[str, Any]) -> str | None:
+        """Return the invoice's Stripe PaymentIntent id, or ``None``.
+
+        Dahlia removed the flat ``invoice.payment_intent`` (always NULL now)
+        and nests it under
+        ``invoice.parent.payment_intent_details.payment_intent``. Read the
+        new nested location first, fall back to the old flat field, so the
+        capture survives an API-version skew either way.
+        """
+        parent = invoice.get("parent")
+        if isinstance(parent, dict):
+            details = parent.get("payment_intent_details")
+            if isinstance(details, dict):
+                payment_intent = details.get("payment_intent")
+                if payment_intent:
+                    return payment_intent
+        return invoice.get("payment_intent")
 
     async def _insert_line_items(
         self,
@@ -347,6 +366,15 @@ class InvoicePaidHandler:
             if not stripe_item_id:
                 continue
 
+            # A mid-cycle proration line's period.end is the proration
+            # window's end (often near/past), NOT the subscription's next
+            # billing date — using it would regress next_due_date on an
+            # upgrade. Skip it; the regular recurring line (or the prior
+            # sync writeback, which stamps current_period_end) carries the
+            # real next_due_date.
+            if self._is_proration(line):
+                continue
+
             result = await session.execute(
                 text(membership_sql),
                 {
@@ -396,17 +424,24 @@ class InvoicePaidHandler:
 
         The webhook payload carries discount *amounts* but only opaque ``di_``
         Discount ids — so we retrieve the invoice with the coupon expanded to map
-        each ``di_`` to its Stripe coupon id, and store ``{amount_off, stripe_coupon_id}``
-        per discount (no CRM-discount link — the coupon id is the identifier).
+        each ``di_`` to its Stripe coupon id, and store
+        ``{line_item_id, amount_off, stripe_coupon_id}`` per **line-level**
+        application (no CRM-discount link — the coupon id is the identifier).
+
+        Capture is per Stripe **line** (``line.discount_amounts``), not the
+        invoice-level ``total_discount_amounts`` rollup: a coupon shared across
+        two family lines lands once per line, so each line-level application is
+        recorded as its own row instead of being collapsed into one. The
+        invoice-level rollup is still the cheap "are there any discounts?" gate
+        so a discount-free invoice makes no Stripe call.
 
         Best-effort and isolated: a no-op when the invoice has no discounts (the
         common case → no Stripe call); otherwise the retrieve + inserts run inside
         a SAVEPOINT so any failure here rolls back ONLY the audit, never the
         invoice / line-item writes. Idempotent on re-delivery via the row's
-        ``UNIQUE (invoice_id, stripe_coupon_id)``.
+        ``UNIQUE (invoice_id, stripe_coupon_id, line_item_id)``.
         """
-        discount_amounts = invoice.get("total_discount_amounts") or []
-        if not discount_amounts or not stripe_account_id:
+        if not (invoice.get("total_discount_amounts") or []) or not stripe_account_id:
             return
 
         try:
@@ -419,24 +454,29 @@ class InvoicePaidHandler:
                 SQL_DIR / "member_invoice_applied_discount_insert.sql"
             )
             async with session.begin_nested():
-                for entry in discount_amounts:
-                    discount_ref = entry.get("discount")
-                    coupon_id = (
-                        coupon_by_discount.get(discount_ref)
-                        if isinstance(discount_ref, str)
-                        else None
-                    )
-                    if not coupon_id:
+                for line in self._lines(invoice):
+                    line_item_id = line.get("id")
+                    if not line_item_id:
                         continue
-                    await session.execute(
-                        text(insert_sql),
-                        {
-                            "invoice_id": str(invoice_id),
-                            "gym_id": str(gym_id),
-                            "amount_off": int(entry.get("amount") or 0),
-                            "stripe_coupon_id": coupon_id,
-                        },
-                    )
+                    for entry in line.get("discount_amounts") or []:
+                        discount_ref = entry.get("discount")
+                        coupon_id = (
+                            coupon_by_discount.get(discount_ref)
+                            if isinstance(discount_ref, str)
+                            else None
+                        )
+                        if not coupon_id:
+                            continue
+                        await session.execute(
+                            text(insert_sql),
+                            {
+                                "invoice_id": str(invoice_id),
+                                "gym_id": str(gym_id),
+                                "line_item_id": line_item_id,
+                                "amount_off": int(entry.get("amount") or 0),
+                                "stripe_coupon_id": coupon_id,
+                            },
+                        )
         except Exception:
             logger.error(
                 "invoice.paid discount-audit capture failed "
@@ -519,6 +559,25 @@ class InvoicePaidHandler:
         if isinstance(legacy, str):
             return legacy
         return getattr(legacy, "id", None) if legacy is not None else None
+
+    @staticmethod
+    def _is_proration(line: dict[str, Any]) -> bool:
+        """Return ``True`` if the line is a mid-cycle proration adjustment.
+
+        Dahlia nests the flag under ``parent.subscription_item_details`` /
+        ``parent.invoice_item_details``; the legacy flat ``proration`` is the
+        fallback. A proration line's ``period.end`` must not drive
+        ``next_due_date`` (see ``_update_memberships``).
+        """
+        parent = line.get("parent")
+        if isinstance(parent, dict):
+            sub_details = parent.get("subscription_item_details")
+            if isinstance(sub_details, dict) and sub_details.get("proration"):
+                return True
+            item_details = parent.get("invoice_item_details")
+            if isinstance(item_details, dict) and item_details.get("proration"):
+                return True
+        return bool(line.get("proration"))
 
     @staticmethod
     def _lines(invoice: dict[str, Any]) -> list[dict[str, Any]]:

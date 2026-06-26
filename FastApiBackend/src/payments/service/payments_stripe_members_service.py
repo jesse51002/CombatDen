@@ -161,7 +161,12 @@ class PaymentsStripeMembersService:
             options=opts,
         )
 
-        if old_pm_id:
+        # Only detach the previous default once we know it is a *different*
+        # payment method than the one we just set as default. If the caller
+        # passes the customer's current default as the new payment_method_id,
+        # detaching ``old_pm_id`` would strip the card we just made default,
+        # leaving the customer with no payment method.
+        if old_pm_id and old_pm_id != request.payment_method_id:
             await self._stripe.v1.payment_methods.detach_async(
                 old_pm_id,
                 options=opts,

@@ -47,6 +47,10 @@ from src.payments.service.payments_stripe_members_service import (
 
 INVOICE_STATUS_OPEN = "open"
 SUBSCRIPTION_OPEN_INVOICE_LIMIT = 1
+# Stripe's max page size for the invoice line-items list. The embedded
+# ``invoice.lines`` page only holds Stripe's default 10, so a >10-item
+# itemized invoice (large family / class-pack) must be paged in full.
+INVOICE_LINE_ITEMS_PAGE_LIMIT = 100
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +139,8 @@ class PaymentsStripePaymentService:
                 stripe_account_id,
             )
 
-        ordered_lines = self._order_lines(invoice, invoice_item_ids)
+        all_lines = await self._all_invoice_lines(invoice, stripe_account_id)
+        ordered_lines = self._order_lines(all_lines, invoice_item_ids)
         return PaymentsInvoicePaymentResponse(
             stripe_invoice_id=invoice.id,
             stripe_customer_id=invoice.customer,
@@ -264,9 +269,47 @@ class PaymentsStripePaymentService:
             invoice_item_ids.append(created.id)
         return invoice_item_ids
 
+    async def _all_invoice_lines(
+        self,
+        invoice: stripe.Invoice,
+        stripe_account_id: str,
+    ) -> list[stripe.InvoiceLineItem]:
+        """Return EVERY line on a finalized invoice as Stripe objects.
+
+        The embedded ``invoice.lines.data`` is only Stripe's first page
+        (default 10), so a >10-item itemized invoice (large family /
+        class-pack) would silently truncate and ``_order_lines`` would then
+        raise for the dropped items **after** the invoice was already charged.
+        We keep the embedded first page and follow ``has_more`` through the
+        dedicated line-items endpoint so the item->line map is complete. The
+        common (<=10-item) case needs no extra request.
+        """
+        lines: list[stripe.InvoiceLineItem] = list(invoice.lines.data)
+        if not getattr(invoice.lines, "has_more", False) or not lines:
+            return lines
+
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        starting_after: str = lines[-1].id
+        while True:
+            params: dict[str, Any] = {
+                "limit": INVOICE_LINE_ITEMS_PAGE_LIMIT,
+                "starting_after": starting_after,
+            }
+            page = await self._stripe.v1.invoices.line_items.list_async(
+                invoice.id,
+                params=params,
+                options=read_opts,
+            )
+            data = list(page.data)
+            lines.extend(data)
+            if not data or not getattr(page, "has_more", False):
+                break
+            starting_after = data[-1].id
+        return lines
+
     @staticmethod
     def _order_lines(
-        invoice: stripe.Invoice,
+        lines: list[stripe.InvoiceLineItem],
         invoice_item_ids: list[str],
     ) -> list[tuple[str, int]]:
         """Map finalized invoice lines back to the InvoiceItems that created
@@ -275,12 +318,13 @@ class PaymentsStripePaymentService:
 
         Each line references its source InvoiceItem at
         ``line.parent.invoice_item_details.invoice_item`` (dahlia); the amount is
-        the line's net (post item-level discount) charge in cents. Raises if an
-        item has no matching line (e.g. the default 10-line page truncated — an
-        itemized invoice we build is far smaller).
+        the line's net (post item-level discount) charge in cents. ``lines`` must
+        be the FULL set of invoice lines (see ``_all_invoice_lines``), not just
+        Stripe's embedded first page — a missing line still raises, but only for
+        a genuinely absent item, never a paged-out one.
         """
         line_by_item: dict[str, stripe.InvoiceLineItem] = {}
-        for line in invoice.lines.data:
+        for line in lines:
             parent = getattr(line, "parent", None)
             details = getattr(parent, "invoice_item_details", None)
             invoice_item = getattr(details, "invoice_item", None)

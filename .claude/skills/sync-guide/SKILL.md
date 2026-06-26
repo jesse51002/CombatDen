@@ -438,7 +438,7 @@ functions:
   (`coupons_by_price.get(price_id, [])`). Wrap into one monthly `IntervalBucket`.
 
 Between those two, `build_sync_params` calls `PaymentSyncDiscounts.resolve(groups,
-account, today)` — **all** the discount math + coupon find-or-create lives there
+stripe_account_id)` — **all** the discount math + coupon find-or-create lives there
 (§7), not in the builder. The builder only groups and assembles.
 
 > **The percent÷quantity split is the consumer side of the
@@ -454,7 +454,7 @@ account, today)` — **all** the discount math + coupon find-or-create lives the
 ## 7. The discount service (`PaymentSyncDiscounts`) — math + coupons + links
 
 `PaymentSyncDiscounts` (`sync_discounts.py`) owns **all** the discount
-math and the coupon resolution. `resolve(groups, stripe_account_id, today)` takes
+math and the coupon resolution. `resolve(groups, stripe_account_id)` takes
 the price-grouped memberships (from the builder, §5) and returns a
 **`ResolvedDiscounts`** (`coupons_by_price` + `links` + `membership_amounts`). For
 each price line:

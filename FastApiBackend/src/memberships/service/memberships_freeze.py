@@ -147,7 +147,15 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         freeze_start_date: date,
         freeze_end_date: date,
     ) -> None:
-        """Set freeze dates on the member's OWN row."""
+        """Set freeze dates on the member's OWN row.
+
+        Raises:
+            ValueError: If no row matched ``(member_id, gym_id)`` — the
+                client-supplied ``gym_id`` did not match the member's gym, so
+                the write would silently affect 0 rows (and the freeze would
+                falsely report success). Asserting the rowcount turns that into
+                a loud 404 instead of a no-op 204.
+        """
         sql = load_sql(SQL_DIR / "member_memberships_freeze_profile.sql")
         params = {
             "member_id": str(member_id),
@@ -156,7 +164,12 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             "freeze_end_date": freeze_end_date,
         }
         async with self._db_pool.session() as session:
-            await session.execute(text(sql), params)
+            result = await session.execute(text(sql), params)
+            if result.rowcount != 1:
+                raise ValueError(
+                    f"Member not found for gym: member_id={member_id}, "
+                    f"gym_id={gym_id}",
+                )
             await session.commit()
 
     async def _crm_unfreeze_profile(
@@ -164,12 +177,24 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         member_id: UUID,
         gym_id: UUID,
     ) -> None:
-        """Clear freeze dates on the member's OWN row."""
+        """Clear freeze dates on the member's OWN row.
+
+        Raises:
+            ValueError: If no row matched ``(member_id, gym_id)`` — the
+                client-supplied ``gym_id`` did not match the member's gym, so
+                the clear would silently affect 0 rows and falsely report
+                success. Asserting the rowcount turns that into a loud 404.
+        """
         sql = load_sql(SQL_DIR / "member_memberships_unfreeze_profile.sql")
         params = {
             "member_id": str(member_id),
             "gym_id": str(gym_id),
         }
         async with self._db_pool.session() as session:
-            await session.execute(text(sql), params)
+            result = await session.execute(text(sql), params)
+            if result.rowcount != 1:
+                raise ValueError(
+                    f"Member not found for gym: member_id={member_id}, "
+                    f"gym_id={gym_id}",
+                )
             await session.commit()

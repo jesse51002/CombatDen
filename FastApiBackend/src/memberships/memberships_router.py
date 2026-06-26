@@ -243,7 +243,7 @@ async def freeze_membership(
         memberships_service: Injected memberships service.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.freeze(
@@ -313,7 +313,7 @@ async def unfreeze_membership(
         memberships_service: Injected memberships service.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.unfreeze(
@@ -1152,7 +1152,7 @@ async def mark_membership_paid_cash(
 ) -> None:
     """Mark a recurring membership's open invoice as paid via cash."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1229,7 +1229,7 @@ async def charge_member_card(
 ) -> None:
     """Charge a member's card (or mark as cash) for an ad-hoc amount."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.charge_card(request)
@@ -1277,7 +1277,7 @@ async def charge_member_card(
         200: {"description": "Refund processed"},
         400: {"description": "Charge is not refundable or amount invalid"},
         401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to view this member"},
+        403: {"description": "Not authorized to manage this member (staff only)"},
         404: {"description": "Member or charge not found"},
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
@@ -1293,7 +1293,7 @@ async def refund_charge(
 ) -> MemberMembershipsRefundResponse:
     """Refund a prior charge for a member (card via Stripe, or cash)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await refund_service.refund_charge(request)

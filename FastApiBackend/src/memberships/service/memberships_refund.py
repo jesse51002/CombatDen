@@ -23,6 +23,7 @@ from uuid import UUID
 
 from schema.member_charge import ChargeKind, ChargeStatus
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
@@ -147,8 +148,23 @@ class MemberMembershipsRefund:
             refund_charge_id=refund_charge_id,
             refunded_amount=refund.amount,
             payment_method=PAYMENT_METHOD_CARD,
-            status=ChargeStatus(refund.status),
+            status=self._safe_charge_status(refund.status),
         )
+
+    @staticmethod
+    def _safe_charge_status(stripe_status: str) -> ChargeStatus:
+        """Map a Stripe refund status to a modeled ``ChargeStatus``.
+
+        Stripe can return refund statuses outside our
+        ``pending`` / ``succeeded`` / ``failed`` set (e.g. ``requires_action``,
+        ``canceled``). Record any unmodeled status as ``pending`` instead of
+        raising ``ValueError`` (which would 500 the request with no DB row); the
+        ``refund.*`` webhook resolves the final state later.
+        """
+        try:
+            return ChargeStatus(stripe_status)
+        except ValueError:
+            return ChargeStatus.pending
 
     async def _refund_cash(
         self, charge: dict, amount: int
@@ -200,7 +216,49 @@ class MemberMembershipsRefund:
             "charge_time": charge_time,
         }
         async with self._db_pool.session() as session:
+            await self._assert_refundable_under_lock(
+                session, charge_id=charge["charge_id"], amount=amount
+            )
             result = await session.execute(text(sql), params)
             row = result.mappings().fetchone()
             await session.commit()
         return row["charge_id"] if row else None
+
+    async def _assert_refundable_under_lock(
+        self,
+        session: AsyncSession,
+        *,
+        charge_id: UUID,
+        amount: int,
+    ) -> None:
+        """Lock the parent charge and re-check the refundable balance.
+
+        Serializes concurrent refunds on the same charge: locks the parent
+        payment row (``SELECT ... FOR UPDATE``), then -- in a fresh snapshot
+        taken after the lock is granted -- sums the refunds already linked to it
+        and raises if this refund would exceed the remaining balance. Without
+        this, two concurrent cash refunds (NULL ``stripe_refund_id``, so the
+        ``UNIQUE`` constraint never fires) would each insert a full refund and
+        over-refund the charge. The lock holds until the surrounding
+        transaction commits, so the loser blocks here and then re-checks.
+
+        Raises:
+            ValueError: the charge vanished, is already fully refunded, or the
+                amount exceeds the remaining refundable balance.
+        """
+        lock_sql = load_sql(SQL_DIR / "member_charge_lock.sql")
+        refunded_sql = load_sql(SQL_DIR / "member_charge_refunded_total.sql")
+        params = {"charge_id": str(charge_id)}
+        lock_result = await session.execute(text(lock_sql), params)
+        lock_row = lock_result.mappings().fetchone()
+        if lock_row is None:
+            raise ValueError("Charge not found")
+        refunded_result = await session.execute(text(refunded_sql), params)
+        refunded_row = refunded_result.mappings().fetchone()
+        refundable = lock_row["amount"] - refunded_row["already_refunded"]
+        if refundable <= 0:
+            raise ValueError("Charge has already been fully refunded")
+        if amount > refundable:
+            raise ValueError(
+                f"Refund amount exceeds the {refundable} refundable balance"
+            )

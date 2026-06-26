@@ -89,6 +89,8 @@ async def test_full_card_refund(db_pool_mock: MagicMock):
     charge = _charge_row(amount=3000)
     session.execute.side_effect = [
         _result(charge),  # load
+        _result({"amount": 3000}),  # FOR UPDATE lock re-read
+        _result({"already_refunded": 0}),  # refunded-total under lock
         _result({"charge_id": uuid4()}),  # insert
     ]
     payments.refund_payment.return_value = _refund_resp(3000)
@@ -109,7 +111,12 @@ async def test_partial_card_refund(db_pool_mock: MagicMock):
     service, payments, _ = _service(db_pool_mock)
     session = db_pool_mock.session.return_value
     charge = _charge_row(amount=5000)
-    session.execute.side_effect = [_result(charge), _result({"charge_id": uuid4()})]
+    session.execute.side_effect = [
+        _result(charge),  # load
+        _result({"amount": 5000}),  # FOR UPDATE lock re-read
+        _result({"already_refunded": 0}),  # refunded-total under lock
+        _result({"charge_id": uuid4()}),  # insert
+    ]
     payments.refund_payment.return_value = _refund_resp(2000)
 
     resp = await service.refund_charge(_req(charge["charge_id"], amount=2000))
@@ -155,7 +162,12 @@ async def test_cash_refund_records_without_stripe(db_pool_mock: MagicMock):
     service, payments, gym_stripe = _service(db_pool_mock)
     session = db_pool_mock.session.return_value
     charge = _charge_row(stripe_charge_id=None, payment_method_type="cash")
-    session.execute.side_effect = [_result(charge), _result({"charge_id": uuid4()})]
+    session.execute.side_effect = [
+        _result(charge),  # load
+        _result({"amount": 3000}),  # FOR UPDATE lock re-read
+        _result({"already_refunded": 0}),  # refunded-total under lock
+        _result({"charge_id": uuid4()}),  # insert
+    ]
 
     resp = await service.refund_charge(_req(charge["charge_id"]))
 
@@ -197,3 +209,92 @@ async def test_non_succeeded_charge_rejected(db_pool_mock: MagicMock):
 
     with pytest.raises(ValueError, match="succeeded payment"):
         await service.refund_charge(_req(uuid4()))
+
+
+# --------------------------------------------------------------------------- #
+# C-081 — concurrent over-refund guard (``_assert_refundable_under_lock``)
+# C-082 — unmodeled Stripe refund status mapping (``_safe_charge_status``)
+# --------------------------------------------------------------------------- #
+def _make_refund_service() -> MemberMembershipsRefund:
+    return MemberMembershipsRefund(
+        db_pool=MagicMock(),
+        payment_service=MagicMock(),
+        gym_stripe_service=MagicMock(),
+    )
+
+
+def _session_returning(*rows: dict) -> MagicMock:
+    """A fake AsyncSession whose successive execute() calls yield ``rows``."""
+    session = MagicMock()
+    results = []
+    for row in rows:
+        result = MagicMock()
+        result.mappings.return_value.fetchone.return_value = row
+        results.append(result)
+    session.execute = AsyncMock(side_effect=results)
+    return session
+
+
+@pytest.mark.parametrize(
+    "stripe_status, expected",
+    [
+        ("succeeded", ChargeStatus.succeeded),
+        ("pending", ChargeStatus.pending),
+        ("failed", ChargeStatus.failed),
+        ("requires_action", ChargeStatus.pending),
+        ("canceled", ChargeStatus.pending),
+        ("something_new_from_stripe", ChargeStatus.pending),
+    ],
+)
+def test_safe_charge_status_maps_unmodeled_to_pending(
+    stripe_status: str, expected: ChargeStatus
+) -> None:
+    assert (
+        MemberMembershipsRefund._safe_charge_status(stripe_status) == expected
+    )
+
+
+async def test_lock_recheck_blocks_already_fully_refunded() -> None:
+    """The loser of a concurrent cash refund sees already_refunded == amount."""
+    service = _make_refund_service()
+    session = _session_returning({"amount": 10000}, {"already_refunded": 10000})
+    with pytest.raises(ValueError, match="already been fully refunded"):
+        await service._assert_refundable_under_lock(
+            session, charge_id=uuid4(), amount=10000
+        )
+
+
+async def test_lock_recheck_blocks_amount_over_remaining() -> None:
+    service = _make_refund_service()
+    session = _session_returning({"amount": 10000}, {"already_refunded": 8000})
+    with pytest.raises(ValueError, match="exceeds the 2000 refundable balance"):
+        await service._assert_refundable_under_lock(
+            session, charge_id=uuid4(), amount=5000
+        )
+
+
+async def test_lock_recheck_allows_within_remaining() -> None:
+    service = _make_refund_service()
+    session = _session_returning({"amount": 10000}, {"already_refunded": 8000})
+    # 2000 remaining, refunding exactly 2000 is allowed (no raise).
+    await service._assert_refundable_under_lock(
+        session, charge_id=uuid4(), amount=2000
+    )
+
+
+async def test_lock_recheck_charge_vanished() -> None:
+    service = _make_refund_service()
+    session = _session_returning(None)
+    with pytest.raises(ValueError, match="Charge not found"):
+        await service._assert_refundable_under_lock(
+            session, charge_id=uuid4(), amount=1000
+        )
+
+
+def test_lock_sql_uses_for_update() -> None:
+    """The serialization guard must actually take a row lock."""
+    from src.memberships import SQL_DIR
+    from src.shared.sql_loader import load_sql
+
+    sql = load_sql(SQL_DIR / "member_charge_lock.sql")
+    assert "FOR UPDATE" in sql.upper()

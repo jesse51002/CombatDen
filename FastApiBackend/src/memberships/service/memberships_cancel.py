@@ -24,6 +24,7 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
+from src.sync import SQL_DIR as SYNC_SQL_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -515,9 +516,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
     async def _mark_deleted(self, item_id: UUID) -> None:
         """Stamp a membership ``deleted`` (its Stripe line is already gone)."""
-        sql = load_sql(
-            SQL_DIR / "payment_sync" / "mark_membership_deleted.sql",
-        )
+        sql = load_sql(SYNC_SQL_DIR / "mark_membership_deleted.sql")
         async with self._db_pool.session() as session:
             await session.execute(text(sql), {"item_ids": [str(item_id)]})
             await session.commit()

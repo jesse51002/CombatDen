@@ -19,4 +19,5 @@ JOIN gym_discount_values v
     ON v.discount_id = d.discount_id
    AND v.is_active = true
 WHERE d.discount_id = :discount_id
+  AND d.gym_id = :gym_id
   AND d.is_deleted = false

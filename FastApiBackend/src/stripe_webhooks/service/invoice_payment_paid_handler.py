@@ -34,6 +34,9 @@ from src.stripe_webhooks.stripe_webhooks_exceptions import (
 
 logger = logging.getLogger(__name__)
 
+# (charge_id, payment_method_type, card_last_four) resolved from Stripe.
+ChargeDetails = tuple[str | None, str | None, str | None]
+
 EVENT_TYPE = "invoice_payment.paid"
 CHARGE_KIND_PAYMENT = "payment"
 CHARGE_STATUS_SUCCEEDED = "succeeded"
@@ -52,7 +55,11 @@ class InvoicePaymentPaidHandler:
     Stripe charge id is resolved from the payment's PaymentIntent
     (``latest_charge``); an out-of-band payment is recorded as cash with no
     charge id. The PaymentIntent retrieve is a read-only Stripe call on the
-    connected account (fast; runs inside the webhook transaction).
+    connected account. It can be resolved up front via :meth:`resolve_charge`
+    and handed to :meth:`record` as ``charge_details`` so the live Stripe call
+    is not held across the caller's open DB transaction; when omitted,
+    ``record`` resolves it internally (after confirming the invoice is
+    recorded).
     """
 
     def __init__(self, stripe_client: PaymentsStripeClient) -> None:
@@ -79,12 +86,20 @@ class InvoicePaymentPaidHandler:
         gym_id: UUID,
         *,
         stripe_account_id: str | None = None,
+        charge_details: ChargeDetails | None = None,
     ) -> None:
         """Record a succeeded payment (InvoicePayment object) as a charge.
 
         The seam shared by the webhook dispatcher (``handle`` unwraps the event)
         and the reconciler invoice fetcher (passes the listed InvoicePayment
         directly). Idempotent via ``member_charges.stripe_charge_id`` UNIQUE.
+
+        ``charge_details`` lets a caller pre-resolve the Stripe charge
+        (via :meth:`resolve_charge`) **before** opening its DB transaction, so
+        the live Stripe retrieve is not held across that transaction. When it is
+        ``None`` (the current callers), the charge is resolved internally only
+        after the invoice is confirmed recorded — avoiding a Stripe call on the
+        not-yet-recorded retry race.
         """
         if invoice_payment.get("status") != PAYMENT_STATUS_PAID:
             return
@@ -106,9 +121,11 @@ class InvoicePaymentPaidHandler:
                 gym_id=str(gym_id),
             )
 
-        charge_id, payment_method_type, card_last_four = (
-            await self._resolve_charge(invoice_payment, stripe_account_id)
-        )
+        if charge_details is None:
+            charge_details = await self._resolve_charge(
+                invoice_payment, stripe_account_id
+            )
+        charge_id, payment_method_type, card_last_four = charge_details
 
         amount_paid = int(invoice_payment.get("amount_paid") or 0)
         if charge_id is None and payment_method_type != PAYMENT_METHOD_TYPE_CASH:
@@ -153,11 +170,25 @@ class InvoicePaymentPaidHandler:
         row = result.mappings().fetchone()
         return dict(row) if row is not None else None
 
+    async def resolve_charge(
+        self,
+        invoice_payment: dict[str, Any],
+        stripe_account_id: str | None,
+    ) -> ChargeDetails:
+        """Public seam: resolve the charge details from Stripe with NO DB I/O.
+
+        A caller can run this **before** opening its DB transaction and pass the
+        result into :meth:`record` as ``charge_details`` so the live Stripe
+        retrieve is not wrapped by — and does not hold a connection across — the
+        webhook transaction (the C-053 fix; see the caller follow-up).
+        """
+        return await self._resolve_charge(invoice_payment, stripe_account_id)
+
     async def _resolve_charge(
         self,
         invoice_payment: dict[str, Any],
         stripe_account_id: str | None,
-    ) -> tuple[str | None, str | None, str | None]:
+    ) -> ChargeDetails:
         """Return ``(charge_id, payment_method_type, card_last_four)``.
 
         A card/bank payment carries a PaymentIntent — retrieve it with

@@ -59,7 +59,7 @@ class DiscountsUpdate(DiscountsBase):
             ValueError: If the discount is not found or the merged value
                 state is invalid.
         """
-        existing = await self._get_discount(request.discount_id)
+        existing = await self._get_discount(request.discount_id, request.gym_id)
 
         # A `custom` discount is one-shot (mint -> apply once -> archive) and
         # single-owner, DB-enforced: it never gets a rename or a second value
