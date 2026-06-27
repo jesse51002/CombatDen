@@ -1,0 +1,132 @@
+import 'dart:developer';
+
+import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/members/data/gym_detail.dart';
+import 'package:crm/features/members/data/video_feed.dart';
+
+/// Repository for reading real-gym content via the authed FastApiBackend.
+///
+/// Used in the admin preview path (when [selectedGym.gymId] is non-null) to
+/// fetch the gym's showcase data (classes, rewards, spec) and video feed from
+/// UUID-keyed endpoints that require a valid Supabase session.
+///
+/// Contrast with [VideoApiClient] / [GymApiClient] (public, package:http),
+/// which serve the slug-keyed template catalog used by the public theme browser.
+///
+/// Layered per CRM convention:
+///   Widget → GymContentRepository → ApiClient → backend.
+class GymContentRepository {
+  final ApiClient _apiClient;
+
+  GymContentRepository(ApiClient apiClient) : _apiClient = apiClient;
+
+  /// `GET /api/v1/gyms/{gymId}/showcase` — the real gym's showcase content
+  /// (spec, classes, rewards). Returns a [GymDetail] whose [GymDetail.gymId]
+  /// is the real UUID. The response uses key `spec` (not `specification`);
+  /// [GymDetail.fromJson] handles both via `specification ?? spec`.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<GymDetail> fetchShowcase(String gymId) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/showcase',
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const ServerException('Empty showcase response');
+      }
+      return GymDetail.fromJson(data);
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('fetchShowcase failed', error: e, stackTrace: st);
+      throw ServerException('Failed to load gym showcase: $e');
+    }
+  }
+
+  /// `GET /api/v1/gyms/{gymId}/videos/preview?per_tag=` — one [FeedSection]
+  /// per tag, each capped to [perTag] videos. Identical JSON shape to the
+  /// template preview endpoint; [FeedSection.fromJson] parses it unchanged.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<List<FeedSection>> fetchVideoPreview(
+    String gymId, {
+    int perTag = 10,
+  }) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos/preview',
+        queryParameters: {'per_tag': perTag},
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const ServerException('Empty preview response');
+      }
+      final raw = data['sections'];
+      if (raw is! List) {
+        throw const ServerException(
+          'Missing sections array in preview response',
+        );
+      }
+      return raw
+          .whereType<Map>()
+          .map((e) => FeedSection.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false);
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('fetchVideoPreview failed', error: e, stackTrace: st);
+      throw ServerException('Failed to load video preview: $e');
+    }
+  }
+
+  /// `GET /api/v1/gyms/{gymId}/videos?video_type=&limit=&offset=` — one page
+  /// of the real gym's video feed. Identical JSON shape to the template feed
+  /// endpoint; [Video.fromJson] parses it unchanged.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<VideoPage> fetchVideos(
+    String gymId, {
+    String? videoType,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos',
+        queryParameters: {
+          'limit': limit,
+          'offset': offset,
+          if (videoType != null && videoType.isNotEmpty)
+            'video_type': videoType,
+        },
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const ServerException('Empty videos response');
+      }
+      final raw = data['videos'];
+      if (raw is! List) {
+        throw const ServerException('Missing videos array in response');
+      }
+      final videos = raw
+          .whereType<Map>()
+          .map((e) => Video.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false);
+      final total = (data['total'] as int?) ?? videos.length;
+      return VideoPage(videos: videos, total: total);
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('fetchVideos failed', error: e, stackTrace: st);
+      throw ServerException('Failed to load gym videos: $e');
+    }
+  }
+}

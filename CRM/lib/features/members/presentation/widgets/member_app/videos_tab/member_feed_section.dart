@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/video_api_client.dart';
 import 'package:crm/features/members/data/video_feed.dart';
+import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_tile.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_wrap_grid.dart';
@@ -44,10 +46,20 @@ class _MemberFeedSectionState extends State<MemberFeedSection> {
   // One request powers the whole "All" view — each genre sampled server-side,
   // so there's no per-genre request storm. Cached per (gym, feed) so switching
   // gyms or toggling rejected swaps the sections and revisiting is instant.
-  Future<List<FeedSection>> _previewFor(String gymId, bool rejected) =>
-      _previewByKey['$gymId-$rejected'] ??= VideoApiClient(
-        gymId: gymId,
-      ).fetchPreview(rejected: rejected);
+  //
+  // In the admin context (real gymId set), fetches from the authed real-gym
+  // endpoint via ApiClient; in the public browser, uses the unauthenticated
+  // template path via VideoApiClient.
+  Future<List<FeedSection>> _previewFor(String gymId, bool rejected) {
+    final adminGymId = selectedGym.gymId;
+    if (adminGymId != null) {
+      return _previewByKey['$adminGymId-admin'] ??=
+          GymContentRepository(ApiClient()).fetchVideoPreview(adminGymId);
+    }
+    return _previewByKey['$gymId-$rejected'] ??= VideoApiClient(
+      gymId: gymId,
+    ).fetchPreview(rejected: rejected);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +75,10 @@ class _MemberFeedSectionState extends State<MemberFeedSection> {
             ),
           );
         }
+        // The rejected toggle is only meaningful on the public/template path —
+        // the real-gym feed endpoint has no `rejected` param.
+        final isAdmin = selectedGym.gymId != null;
+        final showRejected = isAdmin ? false : _showRejected;
         return SubtitleSection(
           title: 'Member feed',
           child: Column(
@@ -70,25 +86,26 @@ class _MemberFeedSectionState extends State<MemberFeedSection> {
             // Tuck the toggle right above the pills so it's easy to find.
             spacing: DesignConstants.spacingMedium,
             children: [
-              _RejectedToggle(
-                value: _showRejected,
-                // Switching feeds resets to "All": the approved and rejected
-                // feeds have different pills.
-                onChanged: (v) => setState(() {
-                  _showRejected = v;
-                  _selectedIndex = 0;
-                }),
-              ),
+              if (!isAdmin)
+                _RejectedToggle(
+                  value: _showRejected,
+                  // Switching feeds resets to "All": the approved and rejected
+                  // feeds have different pills.
+                  onChanged: (v) => setState(() {
+                    _showRejected = v;
+                    _selectedIndex = 0;
+                  }),
+                ),
               // Your videos (mock) shows only in the approved feed; the genres
               // degrade to a loading/error/empty message without hiding the
               // rest of the feed.
               FutureBuilder<List<FeedSection>>(
-                future: _previewFor(gymId, _showRejected),
+                future: _previewFor(gymId, showRejected),
                 builder: (context, snapshot) {
                   return _Feed(
                     gymId: gymId,
                     sections: snapshot.data ?? const <FeedSection>[],
-                    rejected: _showRejected,
+                    rejected: showRejected,
                     genresLoading:
                         snapshot.connectionState != ConnectionState.done,
                     genresErrored: snapshot.hasError,
@@ -342,12 +359,25 @@ class _TagPagerState extends State<_TagPager> {
       _errored = false;
     });
     try {
-      final page = await VideoApiClient(gymId: widget.gymId).fetchFeed(
-        videoType: widget.tag,
-        rejected: widget.rejected,
-        limit: _kPageSize,
-        offset: _videos.length,
-      );
+      final VideoPage page;
+      final adminGymId = selectedGym.gymId;
+      if (adminGymId != null) {
+        // Admin: authed real-gym endpoint (no rejected param).
+        page = await GymContentRepository(ApiClient()).fetchVideos(
+          adminGymId,
+          videoType: widget.tag,
+          limit: _kPageSize,
+          offset: _videos.length,
+        );
+      } else {
+        // Public browser: unauthenticated template endpoint.
+        page = await VideoApiClient(gymId: widget.gymId).fetchFeed(
+          videoType: widget.tag,
+          rejected: widget.rejected,
+          limit: _kPageSize,
+          offset: _videos.length,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _videos.addAll(page.videos);
