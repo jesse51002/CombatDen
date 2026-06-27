@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.sql_loader import load_sql
@@ -211,6 +212,9 @@ class InvoicePaidHandler:
         insert_sql = load_sql(SQL_DIR / "member_invoice_line_item_insert.sql")
 
         for line in self._lines(invoice):
+            # Proration lines (incl. the zero-dollar edge) are not real charges.
+            if self._is_proration(line):
+                continue
             line_item_id = line.get("id")
             if not line_item_id:
                 continue
@@ -346,8 +350,9 @@ class InvoicePaidHandler:
             insert_sql = load_sql(
                 SQL_DIR / "member_invoice_applied_discount_insert.sql"
             )
+            all_lines = await self._all_lines(invoice, stripe_account_id)
             async with session.begin_nested():
-                for line in self._lines(invoice):
+                for line in all_lines:
                     if self._is_proration(line):
                         continue
                     line_item_id = line.get("id")
@@ -380,6 +385,45 @@ class InvoicePaidHandler:
                 gym_id,
                 exc_info=True,
             )
+
+    async def _all_lines(
+        self,
+        invoice: dict[str, Any],
+        stripe_account_id: str,
+    ) -> list[dict[str, Any]]:
+        """Return EVERY invoice line as a plain dict.
+
+        ``self._lines`` reads only Stripe's embedded first page (default 10), so
+        a >10-line family / class-pack invoice would under-capture the discount
+        audit. We keep the embedded page and follow ``has_more`` through the
+        line-items endpoint (StripeObjects round-tripped to the webhook's dict
+        shape). The common (<=10-line) case makes no extra request.
+        """
+        lines = self._lines(invoice)
+        line_page = invoice.get("lines") or {}
+        if not line_page.get("has_more"):
+            return lines
+
+        opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
+        invoice_id = invoice["id"]
+        starting_after: str | None = lines[-1].get("id") if lines else None
+        while True:
+            params: dict[str, Any] = {
+                "limit": settings.invoice_line_items_page_limit
+            }
+            if starting_after:
+                params["starting_after"] = starting_after
+            page = await self._stripe.v1.invoices.line_items.list_async(
+                invoice_id,
+                params=params,
+                options=opts,
+            )
+            data = [json.loads(str(obj)) for obj in page.data]
+            lines.extend(data)
+            if not data or not getattr(page, "has_more", False):
+                break
+            starting_after = data[-1].get("id")
+        return lines
 
     async def _fetch_invoice_coupons(
         self,

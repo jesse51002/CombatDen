@@ -16,6 +16,9 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from src.stripe_webhooks.service.invoice_paid_handler import InvoicePaidHandler
+from src.stripe_webhooks.service.stripe_invoice_fields import (
+    invoice_payment_intent_id,
+)
 
 
 class _FakeStripeClient:
@@ -37,18 +40,18 @@ def test_payment_intent_id_reads_dahlia_nested_location() -> None:
         "parent": {"payment_intent_details": {"payment_intent": "pi_new"}},
         "payment_intent": "pi_legacy",  # would win pre-fix
     }
-    assert InvoicePaidHandler._invoice_payment_intent_id(invoice) == "pi_new"
+    assert invoice_payment_intent_id(invoice) == "pi_new"
 
 
 def test_payment_intent_id_falls_back_to_flat_field() -> None:
     invoice = {"payment_intent": "pi_legacy"}
-    assert InvoicePaidHandler._invoice_payment_intent_id(invoice) == "pi_legacy"
+    assert invoice_payment_intent_id(invoice) == "pi_legacy"
 
 
 def test_payment_intent_id_none_when_dahlia_drops_flat_field() -> None:
     # Dahlia: flat field removed (None), nested absent -> None, not a crash.
     invoice = {"parent": {"subscription_details": {}}, "payment_intent": None}
-    assert InvoicePaidHandler._invoice_payment_intent_id(invoice) is None
+    assert invoice_payment_intent_id(invoice) is None
 
 
 def test_payment_intent_id_nested_empty_falls_back() -> None:
@@ -57,7 +60,7 @@ def test_payment_intent_id_nested_empty_falls_back() -> None:
         "payment_intent": "pi_legacy",
     }
     assert (
-        InvoicePaidHandler._invoice_payment_intent_id(invoice) == "pi_legacy"
+        invoice_payment_intent_id(invoice) == "pi_legacy"
     )
 
 

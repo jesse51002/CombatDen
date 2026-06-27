@@ -56,6 +56,9 @@ class MembershipPlansPrice(MembershipPlansBase):
             plan,
         )
 
+        lock_sql = load_sql(
+            SQL_DIR / "membership_plans_lock.sql",
+        )
         deactivate_all_sql = load_sql(
             SQL_DIR / "membership_plans_price_deactivate_all.sql",
         )
@@ -66,13 +69,27 @@ class MembershipPlansPrice(MembershipPlansBase):
             SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
         )
 
-        # Deactivate-old + insert-new + Stripe create + set-id run in ONE txn so
-        # a Stripe failure rolls back the deactivation (never zero active prices).
-        # Do NOT move the Stripe call out of the session: the <=1-active-price
-        # constraint needs deactivate+insert atomic, so that reintroduces the
-        # strand bug. Cost: a pooled conn is held across the Stripe call (fine
-        # for this rare admin op).
+        # Lock the plan row FOR UPDATE first, then deactivate-old + insert-new +
+        # Stripe create + set-id run in ONE txn. The per-plan lock serializes
+        # concurrent set_price on the same plan (a second caller blocks until the
+        # first commits), so two callers never both create a Stripe price and
+        # strand the loser's — the prior race where the <=1-active-price index
+        # rejected the loser's commit AFTER its Stripe price already existed.
+        # The txn still rolls back the deactivation on a Stripe failure (never
+        # zero active prices); do NOT move the Stripe call out of it — deactivate
+        # + insert must stay atomic for that index. StripeOrphanError remains the
+        # backstop for a set-id failure after the price is created. Cost: a pooled
+        # conn held across the Stripe call (fine for this rare admin op; the lock
+        # also bounds same-plan connection-hold contention to one in-flight call).
         async with self._db_pool.session() as session:
+            await session.execute(
+                text(lock_sql),
+                {
+                    "plan_id": str(request.plan_id),
+                    "gym_id": str(request.gym_id),
+                },
+            )
+
             deact_result = await session.execute(
                 text(deactivate_all_sql),
                 {

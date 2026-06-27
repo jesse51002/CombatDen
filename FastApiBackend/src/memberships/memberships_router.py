@@ -9,7 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.memberships.memberships_exceptions import PartialCancelError
+from src.memberships.memberships_exceptions import (
+    MembershipStartReplayError,
+    PartialCancelError,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
@@ -311,6 +314,7 @@ async def unfreeze_membership(
         },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
+        409: {"description": "Retried start replayed — original stands"},
         500: {"description": "Total failure — nothing created (Stripe/sync)"},
     },
 )
@@ -334,6 +338,14 @@ async def start_membership(
 
     try:
         result = await memberships_service.start(request)
+    except MembershipStartReplayError as exc:
+        # Retried start detected as an idempotent replay — the original rows,
+        # discounts, and charge stand. A conflict, not a server error: 409
+        # (never auto-retried), matching the other billing conflicts here.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

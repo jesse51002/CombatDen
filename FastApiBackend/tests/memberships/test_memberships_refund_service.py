@@ -182,15 +182,22 @@ async def test_pending_card_refund_not_recorded(db_pool_mock: MagicMock):
     service, payments, _ = _service(db_pool_mock)
     session = db_pool_mock.session.return_value
     charge = _charge_row(amount=3000)
-    # Only the load runs; no insert for a pending refund.
-    session.execute.side_effect = [_result(charge)]
+    # Card refunds now lock + recheck BEFORE the Stripe call (F2), so even a
+    # pending refund runs load -> FOR UPDATE lock -> refunded-total; the pending
+    # Stripe status then skips the insert (webhook records it on success).
+    session.execute.side_effect = [
+        _result(charge),  # _load_charge
+        _result({"amount": 3000}),  # FOR UPDATE lock row
+        _result({"already_refunded": 0}),  # refunded-total
+    ]
     payments.refund_payment.return_value = _refund_resp(3000, status="pending")
 
     resp = await service.refund_charge(_req(charge["charge_id"]))
 
     assert resp.status == ChargeStatus.pending
     assert resp.refund_charge_id is None  # webhook records it on success
-    assert session.execute.await_count == 1  # load only, no insert
+    # load + lock + refunded-total ran; no insert for a pending refund.
+    assert session.execute.await_count == 3
 
 
 async def test_charge_not_found(db_pool_mock: MagicMock):

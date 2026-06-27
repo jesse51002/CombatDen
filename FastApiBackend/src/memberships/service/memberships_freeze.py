@@ -61,6 +61,27 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         await self._crm_unfreeze_profile(member_id, gym_id)
         await self._converge_payers(payer_ids, idempotency_key)
 
+    async def lookup_member_gym_id(self, member_id: UUID) -> UUID:
+        """Resolve the member's own gym server-side (C-070).
+
+        A member belongs to exactly one gym (immutable ``members.gym_id``), so
+        the freeze/unfreeze path derives the gym from this instead of trusting
+        the client-supplied value. The facade uses it for both payer discovery
+        and the profile write so neither can target another gym.
+
+        Raises:
+            ValueError: If the member does not exist.
+        """
+        sql = load_sql(SQL_DIR / "member_gym_id.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql), {"member_id": str(member_id)}
+            )
+            row = result.fetchone()
+        if row is None:
+            raise ValueError(f"Member not found: member_id={member_id}")
+        return UUID(str(row[0]))
+
     # ── Private ────────────────────────────────────────────────
 
     async def _converge_payers(

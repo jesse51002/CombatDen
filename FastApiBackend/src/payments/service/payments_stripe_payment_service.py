@@ -20,6 +20,7 @@ from stripe.params._invoice_pay_params import InvoicePayParams
 from stripe.params._invoice_update_params import InvoiceUpdateParams
 from stripe.params._refund_create_params import RefundCreateParams
 
+from src.core.config import settings
 from src.payments.payments_exceptions import (
     PaymentsResourceNotFoundError,
     PaymentsStripeError,
@@ -46,11 +47,6 @@ from src.payments.service.payments_stripe_members_service import (
 )
 
 INVOICE_STATUS_OPEN = "open"
-SUBSCRIPTION_OPEN_INVOICE_LIMIT = 1
-# Stripe's max page size for the invoice line-items list. The embedded
-# ``invoice.lines`` page only holds Stripe's default 10, so a >10-item
-# itemized invoice (large family / class-pack) must be paged in full.
-INVOICE_LINE_ITEMS_PAGE_LIMIT = 100
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +287,9 @@ class PaymentsStripePaymentService:
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
         starting_after: str | None = lines[-1].id if lines else None
         while True:
-            params: dict[str, Any] = {"limit": INVOICE_LINE_ITEMS_PAGE_LIMIT}
+            params: dict[str, Any] = {
+                "limit": settings.invoice_line_items_page_limit
+            }
             if starting_after:
                 params["starting_after"] = starting_after
             page = await self._stripe.v1.invoices.line_items.list_async(
@@ -442,7 +440,7 @@ class PaymentsStripePaymentService:
         list_params = InvoiceListParams(
             subscription=stripe_subscription_id,
             status=INVOICE_STATUS_OPEN,
-            limit=SUBSCRIPTION_OPEN_INVOICE_LIMIT,
+            limit=settings.subscription_open_invoice_limit,
         )
         try:
             invoice_list = await self._stripe.v1.invoices.list_async(

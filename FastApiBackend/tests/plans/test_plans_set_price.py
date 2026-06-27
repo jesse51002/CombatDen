@@ -109,6 +109,7 @@ async def test_set_price_stripe_failure_does_not_commit_deactivation(
     """C-058: Stripe failure must roll back — old price never deactivated."""
     session = _FakeSession(
         [
+            None,  # FOR UPDATE plan lock (result unused)
             _price_row("price_old"),  # deactivate_all -> old row (still active)
             _price_row(None),  # insert new (NULL stripe id)
         ],
@@ -141,6 +142,7 @@ async def test_set_price_success_commits_after_stripe(
     final_row = _price_row("price_new")
     session = _FakeSession(
         [
+            None,  # FOR UPDATE plan lock (result unused)
             _price_row("price_old"),  # deactivate_all
             _price_row(None),  # insert
             final_row,  # set stripe_price_id

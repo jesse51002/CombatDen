@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     # loop stops early once the bill this op cut is applied. ~51s total.
     invoice_fetch_retry_delays_seconds: list[int] = [0, 3, 8, 15, 25]
 
+    # Stripe invoice line-items pagination + open-invoice lookups. The embedded
+    # invoice.lines page holds only Stripe's default 10, so a >10-line invoice
+    # (large family / class-pack) is paged in full at this limit.
+    invoice_line_items_page_limit: int = 100
+    subscription_open_invoice_limit: int = 1
+
     # Billing cycle anchors
     monthly_billing_anchor_day: int = 1  # 1st of month
     weekly_billing_anchor_weekday: int = 6  # Sunday (Python weekday: Mon=0, Sun=6)

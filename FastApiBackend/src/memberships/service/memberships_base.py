@@ -11,9 +11,13 @@ from dateutil.relativedelta import relativedelta
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
+from src.memberships.memberships_exceptions import (
+    MembershipStartReplayError,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsStartRequest,
 )
@@ -395,13 +399,9 @@ class MemberMembershipsBase:
             #    dedup should make this impossible.
             # The partial unique index is the DB-level backstop for a race where
             # two concurrent retries both reach this INSERT.
-            raise RuntimeError(
-                f"member_memberships insert returned {len(by_key)} rows for "
-                f"{len(rows)} requested — either a duplicate-suppressed "
-                "idempotent start replay (one-time rows already exist for this "
-                "request's idempotency key) or two rows collapsed onto one "
-                "(member_id, price_id). The original memberships stand; nothing "
-                "was re-inserted, re-discounted, or re-charged.",
+            raise MembershipStartReplayError(
+                requested=len(rows),
+                returned=len(by_key),
             )
         return [by_key[(r["member_id"], r["price_id"])] for r in rows]
 
@@ -480,16 +480,35 @@ class MemberMembershipsBase:
         return rows
 
     async def _delete_pending(self, item_ids: list[UUID]) -> None:
-        """Hard-delete pending membership rows (NULL stripe_item_id)."""
+        """Hard-delete pending membership rows (NULL stripe_item_id).
+
+        Opens its own session and commits. A caller that needs the delete
+        inside an existing transaction uses ``_delete_pending_in_session``.
+        """
+        if not item_ids:
+            return
+        async with self._db_pool.session() as session:
+            await self._delete_pending_in_session(session, item_ids)
+            await session.commit()
+
+    async def _delete_pending_in_session(
+        self,
+        session: AsyncSession,
+        item_ids: list[UUID],
+    ) -> None:
+        """Hard-delete pending membership rows on a passed-in session (no commit).
+
+        The caller owns the transaction (and the commit), so the transition
+        revert can run this single delete inside its one all-or-nothing revert
+        txn while ``_delete_pending`` keeps the standalone open-and-commit shape.
+        """
         if not item_ids:
             return
         sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
-        async with self._db_pool.session() as session:
-            await session.execute(
-                text(sql),
-                {"item_ids": [str(item_id) for item_id in item_ids]},
-            )
-            await session.commit()
+        await session.execute(
+            text(sql),
+            {"item_ids": [str(item_id) for item_id in item_ids]},
+        )
 
     async def _sweep_stale_preview_rows(
         self,

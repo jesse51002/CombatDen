@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.core.config import settings
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.service.payments_stripe_payment_service import (
-    INVOICE_LINE_ITEMS_PAGE_LIMIT,
     PaymentsStripePaymentService,
 )
 
@@ -207,7 +207,7 @@ async def test_all_invoice_lines_pages_past_first_page() -> None:
     assert [line.id for line in result] == [f"il_{i}" for i in range(18)]
     _, kwargs = list_async.call_args
     assert kwargs["params"]["starting_after"] == "il_9"
-    assert kwargs["params"]["limit"] == INVOICE_LINE_ITEMS_PAGE_LIMIT
+    assert kwargs["params"]["limit"] == settings.invoice_line_items_page_limit
     assert kwargs["options"] == {"opt": True}
 
 

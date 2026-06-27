@@ -172,6 +172,23 @@ CREATE TRIGGER trg_prevent_stripe_one_time_invoice_id_overwrite
     BEFORE UPDATE OF stripe_one_time_invoice_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_one_time_invoice_id_overwrite();
 
+-- Trigger: idempotency_key is immutable once set (INSERT-time dedup token; NULL rows unaffected).
+CREATE OR REPLACE FUNCTION prevent_idempotency_key_overwrite()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.idempotency_key IS NOT NULL
+       AND NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+        RAISE EXCEPTION 'idempotency_key cannot be changed once set'
+            USING CONSTRAINT = 'idempotency_key_immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_idempotency_key_overwrite
+    BEFORE UPDATE OF idempotency_key ON member_memberships_unfiltered
+    FOR EACH ROW EXECUTE FUNCTION prevent_idempotency_key_overwrite();
+
 -- Trigger: recurring plans cannot have an end_date
 CREATE OR REPLACE FUNCTION check_recurring_no_end_date()
 RETURNS TRIGGER AS $$

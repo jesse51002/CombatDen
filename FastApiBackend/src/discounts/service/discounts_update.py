@@ -117,7 +117,7 @@ class DiscountsUpdate(DiscountsBase):
         deactivate_sql = load_sql(SQL_DIR / "discount_values_deactivate.sql")
         await session.execute(
             text(deactivate_sql),
-            {"discount_id": str(discount_id)},
+            {"discount_id": str(discount_id), "gym_id": gym_id},
         )
 
         insert_sql = load_sql(SQL_DIR / "discount_values_insert.sql")

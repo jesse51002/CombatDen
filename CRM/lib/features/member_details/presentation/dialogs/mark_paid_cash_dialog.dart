@@ -9,6 +9,10 @@ import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 
 /// Confirms marking an open invoice as paid in cash (out of band), then
 /// dispatches [MarkPaidCashRequested] for the resolved membership item.
+///
+/// TODO(C-078): if the open invoice is a consolidated family invoice (multiple
+/// co-billed members), warn that cash-settling forgives the WHOLE invoice, not
+/// just this member's line. Needs the invoice's paid_for span surfaced here.
 class MarkPaidCashDialog {
   MarkPaidCashDialog._();
 
