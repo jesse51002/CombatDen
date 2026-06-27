@@ -206,7 +206,6 @@ async def freeze_membership(
     try:
         await memberships_service.freeze(
             request.member_id,
-            request.gym_id,
             request.freeze_months,
             request.idempotency_key,
         )
@@ -266,7 +265,6 @@ async def unfreeze_membership(
     try:
         await memberships_service.unfreeze(
             request.member_id,
-            request.gym_id,
             request.idempotency_key,
         )
     except ValueError as exc:

@@ -271,7 +271,6 @@ class MemberMembershipsService:
     async def freeze(
         self,
         member_id: UUID,
-        gym_id: UUID,
         freeze_months: int,
         idempotency_key: UUID,
     ) -> None:
@@ -282,8 +281,8 @@ class MemberMembershipsService:
         sub-service then re-converges each payer's subscription, dropping the
         member's lines or pausing a wholly-frozen payer).
 
-        C-070: the client-supplied ``gym_id`` is IGNORED — the gym is derived
-        from the member's own row (immutable ``members.gym_id``) so the payer
+        C-070: the gym is derived server-side from the member's own row
+        (immutable ``members.gym_id``) — no caller-supplied gym_id — so the payer
         discovery + profile write can never target another gym.
         """
         resolved_gym_id = await self._freeze.lookup_member_gym_id(member_id)
@@ -302,7 +301,6 @@ class MemberMembershipsService:
     async def unfreeze(
         self,
         member_id: UUID,
-        gym_id: UUID,
         idempotency_key: UUID,
     ) -> None:
         """Unfreeze a member's billing (their OWN memberships, any payer).
@@ -310,8 +308,8 @@ class MemberMembershipsService:
         Locks the member AND every distinct payer of their memberships, then
         re-converges each payer (re-adding the lines / clearing the pause).
 
-        C-070: the client-supplied ``gym_id`` is IGNORED — the gym is derived
-        from the member's own row (see :meth:`freeze`).
+        C-070: the gym is derived server-side from the member's own row
+        (see :meth:`freeze`) — no caller-supplied gym_id.
         """
         resolved_gym_id = await self._freeze.lookup_member_gym_id(member_id)
         payer_ids = await self._get_recurring_payers_for_member(

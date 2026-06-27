@@ -15,8 +15,8 @@ from src.payments.service.payments_stripe_discount_service import (
     PaymentsStripeDiscountService,
 )
 from src.sync.service.sync_discounts import (
-    _MIN_LINE_PERCENT_OFF,
-    _PERCENT_OFF_DECIMALS,
+    MIN_LINE_PERCENT_OFF,
+    PERCENT_OFF_DECIMALS,
     PaymentSyncDiscounts,
 )
 from src.sync.sync_schema import ActiveMembershipRow, AppliedDiscount
@@ -85,7 +85,7 @@ def test_pct_0_id_would_have_been_rejected() -> None:
 
     tiny = PaymentsCouponValue(percentage_off=0.001)
     assert PaymentsStripeDiscountService.coupon_id_for_value(tiny) == "pct_0"
-    assert round(0.001, _PERCENT_OFF_DECIMALS) == 0.0
+    assert round(0.001, PERCENT_OFF_DECIMALS) == 0.0
 
 
 def test_percent_at_floor_is_still_emitted() -> None:
@@ -98,8 +98,8 @@ def test_percent_at_floor_is_still_emitted() -> None:
 
     assert len(values) == 1
     assert values[0].percentage_off is not None
-    assert round(values[0].percentage_off, _PERCENT_OFF_DECIMALS) >= (
-        _MIN_LINE_PERCENT_OFF
+    assert round(values[0].percentage_off, PERCENT_OFF_DECIMALS) >= (
+        MIN_LINE_PERCENT_OFF
     )
 
 

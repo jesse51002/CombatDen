@@ -438,6 +438,10 @@ class InvoicePaidHandler:
             if not data or not getattr(page, "has_more", False):
                 break
             starting_after = data[-1].get("id")
+            # Without a usable cursor the next page can't advance — stop rather
+            # than re-fetch the same page forever (Stripe lines always carry id).
+            if not starting_after:
+                break
         return lines
 
     async def _fetch_invoice_coupons(

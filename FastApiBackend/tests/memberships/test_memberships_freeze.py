@@ -77,7 +77,7 @@ async def test_freeze_account(
             connect_opts,
         )
 
-        await memberships_service.freeze(member.member_id, gym_id, 2, idempotency_key=uuid4())
+        await memberships_service.freeze(member.member_id, 2, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -154,7 +154,7 @@ async def test_freeze_updates_end_date(
         )
         assert profile.stripe_sub_id_month is not None
 
-        await memberships_service.freeze(member.member_id, gym_id, 1, idempotency_key=uuid4())
+        await memberships_service.freeze(member.member_id, 1, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -175,7 +175,7 @@ async def test_freeze_updates_end_date(
         )
 
         # Re-freeze with different duration
-        await memberships_service.freeze(member.member_id, gym_id, 3, idempotency_key=uuid4())
+        await memberships_service.freeze(member.member_id, 3, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -247,7 +247,7 @@ async def test_unfreeze_account(
         full_bill = await get_payer_monthly_bill(db_pool, member.member_id)
         assert full_bill > 0
 
-        await memberships_service.freeze(member.member_id, gym_id, 2, idempotency_key=uuid4())
+        await memberships_service.freeze(member.member_id, 2, idempotency_key=uuid4())
         # While frozen the BILL is $0 (the membership's own total_price stays real).
         assert (await get_payer_monthly_bill(db_pool, member.member_id)) == 0
 
@@ -259,7 +259,7 @@ async def test_unfreeze_account(
             connect_opts,
         )
 
-        await memberships_service.unfreeze(member.member_id, gym_id, idempotency_key=uuid4())
+        await memberships_service.unfreeze(member.member_id, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -336,7 +336,7 @@ async def test_freeze_zero_months_raises(
 
         with pytest.raises(ValueError):
             await memberships_service.freeze(
-                member.member_id, gym_id, 0, idempotency_key=uuid4()
+                member.member_id, 0, idempotency_key=uuid4()
             )
 
         await assert_no_unexpected_charges(
@@ -424,7 +424,7 @@ async def test_freeze_one_member_off_shared_line(
 
         # Freeze ONLY the child.
         await memberships_service.freeze(
-            child.member_id, gym_id, 2, idempotency_key=uuid4(),
+            child.member_id, 2, idempotency_key=uuid4(),
         )
 
         # Both per-membership total_prices stay the real standalone price; the
@@ -524,7 +524,7 @@ async def test_freeze_child_on_separate_line(
 
         # Freeze ONLY the child (the subject, not the payer).
         await memberships_service.freeze(
-            child.member_id, gym_id, 2, idempotency_key=uuid4(),
+            child.member_id, 2, idempotency_key=uuid4(),
         )
 
         # Per-membership total_prices stay the real standalone price; the BILL
