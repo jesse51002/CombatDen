@@ -227,9 +227,8 @@ async def freeze_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to freeze account: member_id=%s, gym_id=%s",
+            "Failed to freeze account: member_id=%s",
             request.member_id,
-            request.gym_id,
             exc_info=True,
         )
         raise HTTPException(
@@ -285,9 +284,8 @@ async def unfreeze_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to unfreeze account: member_id=%s, gym_id=%s",
+            "Failed to unfreeze account: member_id=%s",
             request.member_id,
-            request.gym_id,
             exc_info=True,
         )
         raise HTTPException(

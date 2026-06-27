@@ -187,13 +187,22 @@ class InvoicePaidHandler:
         paid_for: list[UUID],
     ) -> dict[str, Any]:
         upsert_sql = load_sql(SQL_DIR / "member_invoice_upsert.sql")
-        paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
+        paid_at_ts = (invoice.get("status_transitions") or {}).get(
+            "paid_at"
+        ) or invoice.get("created")
         params = {
             "gym_id": str(gym_id),
             "paid_by_member_id": str(paid_by_member_id),
             "paid_for": json.dumps([str(m) for m in paid_for]),
             "status": INVOICE_STATUS_PAID,
-            "total_amount": int(invoice.get("amount_paid") or invoice.get("total") or 0),
+            # Stripe's `total` is the post-discount billed amount: 0 for a fully
+            # discounted invoice, the real total for cash / credit-funded ones
+            # (where `amount_paid` can be 0). NOT amount_paid — that understates a
+            # credit/out-of-band-funded invoice the member still owes the total on.
+            # Clamp to >= 0: a net-credit proration invoice can carry a negative
+            # total, which member_invoices CHECK(total_amount >= 0) would reject
+            # (a 500 -> the webhook retries forever and the invoice never records).
+            "total_amount": max(0, int(invoice.get("total") or 0)),
             "currency": invoice.get("currency", "usd"),
             "stripe_invoice_id": invoice["id"],
             "stripe_payment_intent_id": invoice_payment_intent_id(invoice),
@@ -285,7 +294,9 @@ class InvoicePaidHandler:
         membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         update_sql = load_sql(SQL_DIR / "member_memberships_update_payment_dates.sql")
         gym_timezone = await get_gym_timezone(session, gym_id)
-        paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
+        paid_at_ts = (invoice.get("status_transitions") or {}).get(
+            "paid_at"
+        ) or invoice.get("created")
         last_paid_date = (
             stripe_ts_to_gym_date(paid_at_ts, gym_timezone)
             if paid_at_ts
@@ -317,7 +328,7 @@ class InvoicePaidHandler:
                 )
                 continue
 
-            period_end_ts = line.get("period", {}).get("end")
+            period_end_ts = (line.get("period") or {}).get("end")
             next_due_date = (
                 stripe_ts_to_gym_date(period_end_ts, gym_timezone)
                 if period_end_ts
