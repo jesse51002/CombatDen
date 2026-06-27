@@ -6,6 +6,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from schema.member_charge import ChargeKind, ChargeStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +25,6 @@ logger = logging.getLogger(__name__)
 ChargeDetails = tuple[str | None, str | None, str | None]
 
 EVENT_TYPE = "invoice_payment.paid"
-CHARGE_KIND_PAYMENT = "payment"
-CHARGE_STATUS_SUCCEEDED = "succeeded"
 PAYMENT_METHOD_TYPE_CASH = "cash"
 # InvoicePayment.payment.type discriminators we handle.
 PAYMENT_TYPE_PAYMENT_INTENT = "payment_intent"
@@ -215,8 +214,8 @@ class InvoicePaymentPaidHandler:
                 "invoice_id": str(invoice_id),
                 "gym_id": str(gym_id),
                 "paid_by_member_id": str(paid_by_member_id),
-                "kind": CHARGE_KIND_PAYMENT,
-                "status": CHARGE_STATUS_SUCCEEDED,
+                "kind": ChargeKind.payment.value,
+                "status": ChargeStatus.succeeded.value,
                 "amount": amount,
                 "currency": invoice_payment.get("currency", "usd"),
                 "payment_method_type": payment_method_type,

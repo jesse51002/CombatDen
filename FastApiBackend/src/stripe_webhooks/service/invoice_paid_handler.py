@@ -83,12 +83,18 @@ class InvoicePaidHandler:
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
 
+        # Paginate the lines ONCE; every consumer below works the full set, so a
+        # >10-line family / class-pack invoice is never silently truncated to
+        # Stripe's embedded first page (line records, payment dates, discounts).
+        lines = await self._all_lines(invoice, stripe_account_id)
+
         raw_metadata = invoice_metadata(invoice)
         is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
 
         paid_by_member_id, paid_for = await self._resolve_attribution(
             session,
             invoice,
+            lines,
             gym_id,
             raw_metadata=raw_metadata,
             is_one_time=is_one_time,
@@ -96,7 +102,7 @@ class InvoicePaidHandler:
         if paid_by_member_id is None:
             subscription_item_ids = [
                 item_id
-                for line in self._lines(invoice)
+                for line in lines
                 if (item_id := line_subscription_item(line))
             ]
             if subscription_item_ids:
@@ -116,14 +122,15 @@ class InvoicePaidHandler:
         )
         invoice_id: UUID = invoice_row["invoice_id"]
 
-        await self._insert_line_items(session, invoice, gym_id, invoice_id)
+        await self._insert_line_items(session, lines, gym_id, invoice_id)
 
         if not is_one_time:
-            await self._update_memberships(session, invoice, gym_id)
+            await self._update_memberships(session, invoice, lines, gym_id)
 
         await self._capture_discounts(
             session,
             invoice,
+            lines,
             gym_id,
             invoice_id,
             stripe_account_id=stripe_account_id,
@@ -135,6 +142,7 @@ class InvoicePaidHandler:
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
+        lines: list[dict[str, Any]],
         gym_id: UUID,
         *,
         raw_metadata: dict[str, str],
@@ -144,9 +152,7 @@ class InvoicePaidHandler:
         if is_one_time:
             return self._attribution_from_metadata(raw_metadata, invoice)
 
-        return await resolve_subscription_attribution(
-            session, self._lines(invoice), gym_id
-        )
+        return await resolve_subscription_attribution(session, lines, gym_id)
 
     @staticmethod
     def _attribution_from_metadata(
@@ -203,7 +209,7 @@ class InvoicePaidHandler:
     async def _insert_line_items(
         self,
         session: AsyncSession,
-        invoice: dict[str, Any],
+        lines: list[dict[str, Any]],
         gym_id: UUID,
         invoice_id: UUID,
     ) -> None:
@@ -211,7 +217,7 @@ class InvoicePaidHandler:
         membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         insert_sql = load_sql(SQL_DIR / "member_invoice_line_item_insert.sql")
 
-        for line in self._lines(invoice):
+        for line in lines:
             # Proration lines (incl. the zero-dollar edge) are not real charges.
             if self._is_proration(line):
                 continue
@@ -273,6 +279,7 @@ class InvoicePaidHandler:
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
+        lines: list[dict[str, Any]],
         gym_id: UUID,
     ) -> None:
         membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
@@ -285,7 +292,7 @@ class InvoicePaidHandler:
             else None
         )
 
-        for line in self._lines(invoice):
+        for line in lines:
             stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
@@ -332,13 +339,21 @@ class InvoicePaidHandler:
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
+        lines: list[dict[str, Any]],
         gym_id: UUID,
         invoice_id: UUID,
         *,
         stripe_account_id: str | None,
     ) -> None:
         """Write per-line discount audit rows. Best-effort: failures roll back only the audit."""
-        if not (invoice.get("total_discount_amounts") or []) or not stripe_account_id:
+        # Gate on per-line discount_amounts, never the invoice-level
+        # total_discount_amounts rollup: dahlia can omit the rollup while lines
+        # still carry discounts, and an empty rollup would silently skip the audit.
+        if not stripe_account_id or not any(
+            (line.get("discount_amounts") or [])
+            for line in lines
+            if not self._is_proration(line)
+        ):
             return
 
         try:
@@ -350,9 +365,8 @@ class InvoicePaidHandler:
             insert_sql = load_sql(
                 SQL_DIR / "member_invoice_applied_discount_insert.sql"
             )
-            all_lines = await self._all_lines(invoice, stripe_account_id)
             async with session.begin_nested():
-                for line in all_lines:
+                for line in lines:
                     if self._is_proration(line):
                         continue
                     line_item_id = line.get("id")
@@ -389,19 +403,20 @@ class InvoicePaidHandler:
     async def _all_lines(
         self,
         invoice: dict[str, Any],
-        stripe_account_id: str,
+        stripe_account_id: str | None,
     ) -> list[dict[str, Any]]:
         """Return EVERY invoice line as a plain dict.
 
         ``self._lines`` reads only Stripe's embedded first page (default 10), so
-        a >10-line family / class-pack invoice would under-capture the discount
-        audit. We keep the embedded page and follow ``has_more`` through the
-        line-items endpoint (StripeObjects round-tripped to the webhook's dict
-        shape). The common (<=10-line) case makes no extra request.
+        a >10-line family / class-pack invoice would silently truncate. We keep
+        the embedded page and follow ``has_more`` through the line-items endpoint
+        (StripeObjects round-tripped to the webhook's dict shape). The common
+        (<=10-line) case — and the case with no Stripe account to page against —
+        makes no extra request.
         """
         lines = self._lines(invoice)
         line_page = invoice.get("lines") or {}
-        if not line_page.get("has_more"):
+        if not line_page.get("has_more") or not stripe_account_id:
             return lines
 
         opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)

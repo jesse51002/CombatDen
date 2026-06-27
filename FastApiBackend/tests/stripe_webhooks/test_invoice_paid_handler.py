@@ -149,6 +149,7 @@ async def test_shared_coupon_records_one_row_per_family_line() -> None:
     await handler._capture_discounts(
         session,
         invoice,
+        invoice["lines"]["data"],
         gym_id=uuid4(),
         invoice_id=uuid4(),
         stripe_account_id="acct_1",
@@ -169,7 +170,8 @@ async def test_capture_noop_when_no_discounts_makes_no_stripe_call() -> None:
 
     await handler._capture_discounts(
         session,
-        {"id": "in_2", "total_discount_amounts": [], "lines": {"data": []}},
+        {"id": "in_2", "lines": {"data": []}},
+        [],
         gym_id=uuid4(),
         invoice_id=uuid4(),
         stripe_account_id="acct_1",

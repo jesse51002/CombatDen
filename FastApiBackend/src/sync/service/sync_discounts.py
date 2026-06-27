@@ -33,8 +33,8 @@ DISCOUNT_APPLICATION_ORDER: tuple[DiscountApplicationKind, ...] = (
 )
 
 # Stripe percent_off has 2-decimal precision; drop any value that rounds to 0.00%.
-_PERCENT_OFF_DECIMALS = 2
-_MIN_LINE_PERCENT_OFF = 0.01
+PERCENT_OFF_DECIMALS = 2
+MIN_LINE_PERCENT_OFF = 0.01
 
 
 class PaymentSyncDiscounts:
@@ -166,7 +166,7 @@ class PaymentSyncDiscounts:
 
         values: list[LineDiscountValue] = []
         line_percent = effective_fraction / divisor * 100
-        if round(line_percent, _PERCENT_OFF_DECIMALS) >= _MIN_LINE_PERCENT_OFF:
+        if round(line_percent, PERCENT_OFF_DECIMALS) >= MIN_LINE_PERCENT_OFF:
             values.append(
                 LineDiscountValue(
                     percentage_off=line_percent,

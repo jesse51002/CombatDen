@@ -49,6 +49,10 @@ ALTER TABLE member_invoice_applied_discounts
 -- 2a. Deduplicate any pre-existing succeeded-cash-payment rows per invoice,
 --     keeping the earliest by (charge_time, charge_id). This is a no-op on a
 --     reset DB but makes the CREATE UNIQUE INDEX safe on a populated one.
+--     A duplicate that is the target of a refund row (refunds_charge_id FK,
+--     NO ACTION) is NOT deleted: dropping it would abort the migration on a
+--     FK violation. Such a row is preserved over the earliest (a refunded
+--     duplicate is the meaningful one); on a reset DB none of this applies.
 DELETE FROM member_charges
 WHERE charge_id IN (
     SELECT charge_id
@@ -65,6 +69,11 @@ WHERE charge_id IN (
           AND payment_method_type = 'cash'
     ) ranked
     WHERE rn > 1
+)
+AND charge_id NOT IN (
+    SELECT refunds_charge_id
+    FROM member_charges
+    WHERE refunds_charge_id IS NOT NULL
 );
 
 -- 2b. Create the partial unique index (mirrors schemas/member_charges.sql exactly).

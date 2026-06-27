@@ -224,7 +224,7 @@ async def test_archiving_preset_leaves_holder_bill_unchanged(
         )
 
         # Archive the preset (soft-delete). Must not cascade.
-        await discounts_service.delete_discount(discount.discount_id)
+        await discounts_service.delete_discount(discount.discount_id, gym_id)
 
         # Holder keeps their applied-discount row + coupon; no charge at archive time.
         snaps = await get_applied_discounts(db_pool, item_id)
