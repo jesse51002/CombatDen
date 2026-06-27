@@ -283,7 +283,7 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
     )
     created.track_discount(created_resp.discount_id)
 
-    await discounts_service.delete_discount(created_resp.discount_id)
+    await discounts_service.delete_discount(created_resp.discount_id, gym_id)
 
     async with db_pool.session() as session:
         result = await session.execute(
@@ -325,7 +325,7 @@ async def test_archive_leaves_applied_discounts_untouched(
         )
         created.track_plan_db(plan_id)
 
-        await discounts_service.delete_discount(created_resp.discount_id)
+        await discounts_service.delete_discount(created_resp.discount_id, gym_id)
 
         async with db_pool.session() as session:
             result = await session.execute(

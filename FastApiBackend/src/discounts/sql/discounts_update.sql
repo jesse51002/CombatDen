@@ -6,5 +6,6 @@
 UPDATE gym_discounts_unfiltered
 SET {set_clause}
 WHERE discount_id = :discount_id
+  AND gym_id = :gym_id
   AND is_deleted = false
 RETURNING discount_id, gym_id, discount_name, discount_type, is_deleted, created_at

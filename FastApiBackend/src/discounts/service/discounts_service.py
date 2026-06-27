@@ -83,6 +83,7 @@ class DiscountsService:
     async def delete_discount(
         self,
         discount_id: UUID,
+        gym_id: UUID,
     ) -> None:
-        """Archive a preset (soft-delete)."""
-        await self._delete.delete_discount(discount_id)
+        """Archive a preset (soft-delete), scoped to the gym."""
+        await self._delete.delete_discount(discount_id, gym_id)

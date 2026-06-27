@@ -1,18 +1,4 @@
-"""Handler for Stripe ``invoice_payment.paid`` events.
-
-Stripe's 2026 "dahlia" generation decoupled an invoice from its payment:
-``invoice.charge`` / ``invoice.payment_intent`` are gone, and each successful
-payment against an invoice (partial **or** full) now arrives as its own
-``invoice_payment.paid`` event carrying an ``InvoicePayment`` object. This
-handler is the CRM's **charge recorder** — it appends one ``member_charges``
-``payment`` row per payment, so the full payment history is captured even once
-partial payments are supported. ``InvoicePaidHandler`` owns the bill (the
-``member_invoices`` row + line items + membership dates); this handler owns the
-money movement.
-
-A ``$0`` invoice fires no ``invoice_payment.paid`` event (no money moved), so
-no charge row is created for it — which is exactly right.
-"""
+"""Handler for Stripe ``invoice_payment.paid`` events (one per payment, partial or full)."""
 
 from __future__ import annotations
 
@@ -20,6 +6,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from schema.member_charge import ChargeKind, ChargeStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,9 +21,10 @@ from src.stripe_webhooks.stripe_webhooks_exceptions import (
 
 logger = logging.getLogger(__name__)
 
+# (charge_id, payment_method_type, card_last_four) resolved from Stripe.
+ChargeDetails = tuple[str | None, str | None, str | None]
+
 EVENT_TYPE = "invoice_payment.paid"
-CHARGE_KIND_PAYMENT = "payment"
-CHARGE_STATUS_SUCCEEDED = "succeeded"
 PAYMENT_METHOD_TYPE_CASH = "cash"
 # InvoicePayment.payment.type discriminators we handle.
 PAYMENT_TYPE_PAYMENT_INTENT = "payment_intent"
@@ -45,15 +33,7 @@ PAYMENT_STATUS_PAID = "paid"
 
 
 class InvoicePaymentPaidHandler:
-    """Apply an ``invoice_payment.paid`` event to the CRM database.
-
-    Inserts a ``member_charges`` ``payment`` row (``status='succeeded'``) for
-    the payment, attributed to the invoice's payer (``paid_by_member_id``). The
-    Stripe charge id is resolved from the payment's PaymentIntent
-    (``latest_charge``); an out-of-band payment is recorded as cash with no
-    charge id. The PaymentIntent retrieve is a read-only Stripe call on the
-    connected account (fast; runs inside the webhook transaction).
-    """
+    """Insert a ``member_charges`` payment row for each ``invoice_payment.paid`` event."""
 
     def __init__(self, stripe_client: PaymentsStripeClient) -> None:
         self._client = stripe_client
@@ -79,13 +59,9 @@ class InvoicePaymentPaidHandler:
         gym_id: UUID,
         *,
         stripe_account_id: str | None = None,
+        charge_details: ChargeDetails | None = None,
     ) -> None:
-        """Record a succeeded payment (InvoicePayment object) as a charge.
-
-        The seam shared by the webhook dispatcher (``handle`` unwraps the event)
-        and the reconciler invoice fetcher (passes the listed InvoicePayment
-        directly). Idempotent via ``member_charges.stripe_charge_id`` UNIQUE.
-        """
+        """Record a succeeded InvoicePayment as a charge row. Idempotent via stripe_charge_id."""
         if invoice_payment.get("status") != PAYMENT_STATUS_PAID:
             return
 
@@ -99,22 +75,21 @@ class InvoicePaymentPaidHandler:
             session, stripe_invoice_id, gym_id
         )
         if invoice_row is None:
-            # The invoice.paid event hasn't recorded the bill yet — retry
-            # until it has (member_charges FKs member_invoices).
+            # invoice.paid hasn't landed yet — retry (member_charges FKs member_invoices).
             raise InvoiceNotYetRecordedError(
                 stripe_invoice_id=stripe_invoice_id,
                 gym_id=str(gym_id),
             )
 
-        charge_id, payment_method_type, card_last_four = (
-            await self._resolve_charge(invoice_payment, stripe_account_id)
-        )
+        if charge_details is None:
+            charge_details = await self._resolve_charge(
+                invoice_payment, stripe_account_id
+            )
+        charge_id, payment_method_type, card_last_four = charge_details
 
         amount_paid = int(invoice_payment.get("amount_paid") or 0)
         if charge_id is None and payment_method_type != PAYMENT_METHOD_TYPE_CASH:
-            # Can't satisfy the payment_has_charge_id constraint and it's not
-            # cash — skip rather than crash (rare; e.g. an unhandled payment
-            # type). Logged so it's visible.
+            # Unhandled payment type with no charge id — skip.
             logger.warning(
                 "invoice_payment.paid: no charge id resolved "
                 "(stripe_invoice_id=%s gym_id=%s payment_type=%s) — skipping",
@@ -153,18 +128,20 @@ class InvoicePaymentPaidHandler:
         row = result.mappings().fetchone()
         return dict(row) if row is not None else None
 
+    async def resolve_charge(
+        self,
+        invoice_payment: dict[str, Any],
+        stripe_account_id: str | None,
+    ) -> ChargeDetails:
+        """Resolve charge details from Stripe with no DB I/O."""
+        return await self._resolve_charge(invoice_payment, stripe_account_id)
+
     async def _resolve_charge(
         self,
         invoice_payment: dict[str, Any],
         stripe_account_id: str | None,
-    ) -> tuple[str | None, str | None, str | None]:
-        """Return ``(charge_id, payment_method_type, card_last_four)``.
-
-        A card/bank payment carries a PaymentIntent — retrieve it with
-        ``latest_charge`` expanded so we read the real payment method type
-        (the webhook itself doesn't carry it) and, for a card, its last 4.
-        An out-of-band payment is cash (no charge id, no card).
-        """
+    ) -> ChargeDetails:
+        """Return (charge_id, payment_method_type, card_last_four) from the payment."""
         payment = invoice_payment.get("payment") or {}
         payment_type = payment.get("type")
 
@@ -200,10 +177,7 @@ class InvoicePaymentPaidHandler:
         self,
         charge: Any,
     ) -> tuple[str | None, str | None, str | None]:
-        """Pull ``(charge_id, payment_method_type, card_last_four)`` from an
-        (expanded) charge. Degrades gracefully: an unexpanded id string still
-        yields the charge id, just without the method/card detail.
-        """
+        """Extract (charge_id, payment_method_type, card_last_four) from an expanded charge."""
         if charge is None:
             return None, None, None
         if isinstance(charge, str):
@@ -240,8 +214,8 @@ class InvoicePaymentPaidHandler:
                 "invoice_id": str(invoice_id),
                 "gym_id": str(gym_id),
                 "paid_by_member_id": str(paid_by_member_id),
-                "kind": CHARGE_KIND_PAYMENT,
-                "status": CHARGE_STATUS_SUCCEEDED,
+                "kind": ChargeKind.payment.value,
+                "status": ChargeStatus.succeeded.value,
                 "amount": amount,
                 "currency": invoice_payment.get("currency", "usd"),
                 "payment_method_type": payment_method_type,

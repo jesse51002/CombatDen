@@ -5,15 +5,19 @@ from __future__ import annotations
 import logging
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from dateutil.relativedelta import relativedelta
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
+from src.memberships.memberships_exceptions import (
+    MembershipStartReplayError,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsStartRequest,
 )
@@ -321,11 +325,16 @@ class MemberMembershipsBase:
 
         Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
         price_id, start_date, end_date, last_paid_date, next_due_date,
-        stripe_item_id, total_price, quantity, and optionally sync_status
+        stripe_item_id, total_price, quantity, ``idempotency_key`` (C-086 —
+        the deterministic per-row dedup key on one-time/trial real-start rows,
+        ``None`` for recurring + preview rows), and optionally sync_status
         (default ``not_added`` — the real start's pending row; the start preview
         passes ``preview_add`` so the dry-run sees it but the real path never
         bills it). All rows appear atomically, or none. The DB generates each
-        row's ``item_id`` (PK default); we return them via ``RETURNING``.
+        row's ``item_id`` (PK default); we return them via ``RETURNING``. The
+        INSERT's ``ON CONFLICT (idempotency_key) DO NOTHING`` silently drops a
+        retried start's duplicate one-time rows; this method detects the
+        resulting RETURNING shortfall and rejects the replay (see below).
 
         Returns:
             The DB-generated item_ids in the SAME order as ``rows`` — matched
@@ -359,6 +368,13 @@ class MemberMembershipsBase:
                 r.get("sync_status", StripeSyncStatus.not_added).value
                 for r in rows
             ],
+            # C-086: per-row idempotency key (one-time/trial real-start rows
+            # only; NULL for recurring + preview rows). A retry reproduces these,
+            # and the INSERT's ON CONFLICT drops the colliding rows.
+            "idempotency_keys": [
+                str(key) if (key := r.get("idempotency_key")) else None
+                for r in rows
+            ],
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
@@ -370,12 +386,22 @@ class MemberMembershipsBase:
             }
             await session.commit()
         if len(by_key) != len(rows):
-            # Two rows shared (member_id, price_id) — the request dedup should
-            # make this impossible. Fail loud instead of silently collapsing
-            # two rows onto one id (the original stacked-pack bug).
-            raise RuntimeError(
-                f"member_memberships insert collapsed rows: {len(rows)} rows "
-                f"but {len(by_key)} distinct (member_id, price_id) keys",
+            # Fewer rows came back than we asked to insert. Two causes, both
+            # rejected loudly:
+            #  - C-086 idempotent REPLAY: the INSERT's
+            #    `ON CONFLICT (idempotency_key) DO NOTHING` dropped a retry's
+            #    one-time/trial rows because their deterministic keys already
+            #    exist from the original (completed) start. We must NOT continue:
+            #    re-running Phase B would re-apply discounts to the existing rows
+            #    and re-charge. Raise so the original rows + their discounts +
+            #    their charge stand untouched and nothing is duplicated.
+            #  - collapse: two rows shared (member_id, price_id) — the request
+            #    dedup should make this impossible.
+            # The partial unique index is the DB-level backstop for a race where
+            # two concurrent retries both reach this INSERT.
+            raise MembershipStartReplayError(
+                requested=len(rows),
+                returned=len(by_key),
             )
         return [by_key[(r["member_id"], r["price_id"])] for r in rows]
 
@@ -410,6 +436,29 @@ class MemberMembershipsBase:
                     plan_price["duration_amount"],
                     plan_price["duration_unit"],
                 )
+            # C-086: stamp a deterministic per-row idempotency key on the REAL
+            # start's ONE-TIME / TRIAL pending rows so a retried start request
+            # (same request.idempotency_key) reproduces the SAME key per row and
+            # its duplicate rows collide on the partial unique index (dropped via
+            # the INSERT's ON CONFLICT) instead of stacking into 2N rows for one
+            # payment. Gated tightly:
+            #   - sync_status == not_added -> ONLY the real start's pending rows;
+            #     a preview's preview_add rows stay NULL so a leaked preview row
+            #     can never collide with a real insert;
+            #   - non-recurring ONLY -> recurring rows stay NULL because a
+            #     duplicate recurring insert is already blocked by
+            #     trg_recurring_no_active_memberships.
+            # (member_id, price_id) is unique within a request (the request
+            # dedup) so it needs no row-index, and it is order-independent — a
+            # retry that reorders its items still reproduces each row's key. A
+            # genuinely distinct purchase carries a different request key, hence
+            # a different per-row key, hence still stacks.
+            idempotency_key: UUID | None = None
+            if sync_status == StripeSyncStatus.not_added and not is_recurring:
+                idempotency_key = uuid5(
+                    request.idempotency_key,
+                    f"{item.member_id}:{item.price_id}",
+                )
             rows.append({
                 "member_id": item.member_id,
                 "paid_by_member_id": request.payer_member_id,
@@ -426,20 +475,40 @@ class MemberMembershipsBase:
                 "total_price": plan_price["price"] * item.quantity,
                 "quantity": item.quantity,
                 "sync_status": sync_status,
+                "idempotency_key": idempotency_key,
             })
         return rows
 
     async def _delete_pending(self, item_ids: list[UUID]) -> None:
-        """Hard-delete pending membership rows (NULL stripe_item_id)."""
+        """Hard-delete pending membership rows (NULL stripe_item_id).
+
+        Opens its own session and commits. A caller that needs the delete
+        inside an existing transaction uses ``_delete_pending_in_session``.
+        """
+        if not item_ids:
+            return
+        async with self._db_pool.session() as session:
+            await self._delete_pending_in_session(session, item_ids)
+            await session.commit()
+
+    async def _delete_pending_in_session(
+        self,
+        session: AsyncSession,
+        item_ids: list[UUID],
+    ) -> None:
+        """Hard-delete pending membership rows on a passed-in session (no commit).
+
+        The caller owns the transaction (and the commit), so the transition
+        revert can run this single delete inside its one all-or-nothing revert
+        txn while ``_delete_pending`` keeps the standalone open-and-commit shape.
+        """
         if not item_ids:
             return
         sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
-        async with self._db_pool.session() as session:
-            await session.execute(
-                text(sql),
-                {"item_ids": [str(item_id) for item_id in item_ids]},
-            )
-            await session.commit()
+        await session.execute(
+            text(sql),
+            {"item_ids": [str(item_id) for item_id in item_ids]},
+        )
 
     async def _sweep_stale_preview_rows(
         self,

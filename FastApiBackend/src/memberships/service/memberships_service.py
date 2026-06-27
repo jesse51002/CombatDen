@@ -271,7 +271,6 @@ class MemberMembershipsService:
     async def freeze(
         self,
         member_id: UUID,
-        gym_id: UUID,
         freeze_months: int,
         idempotency_key: UUID,
     ) -> None:
@@ -281,32 +280,44 @@ class MemberMembershipsService:
         taken over the member AND every distinct payer of their memberships (the
         sub-service then re-converges each payer's subscription, dropping the
         member's lines or pausing a wholly-frozen payer).
+
+        C-070: the gym is derived server-side from the member's own row
+        (immutable ``members.gym_id``) — no caller-supplied gym_id — so the payer
+        discovery + profile write can never target another gym.
         """
+        resolved_gym_id = await self._freeze.lookup_member_gym_id(member_id)
         payer_ids = await self._get_recurring_payers_for_member(
-            member_id, gym_id,
+            member_id, resolved_gym_id,
         )
         async with self._paying_lock.lock([member_id, *payer_ids]):
             await self._freeze.freeze(
-                member_id, gym_id, freeze_months, idempotency_key, payer_ids,
+                member_id,
+                resolved_gym_id,
+                freeze_months,
+                idempotency_key,
+                payer_ids,
             )
 
     async def unfreeze(
         self,
         member_id: UUID,
-        gym_id: UUID,
         idempotency_key: UUID,
     ) -> None:
         """Unfreeze a member's billing (their OWN memberships, any payer).
 
         Locks the member AND every distinct payer of their memberships, then
         re-converges each payer (re-adding the lines / clearing the pause).
+
+        C-070: the gym is derived server-side from the member's own row
+        (see :meth:`freeze`) — no caller-supplied gym_id.
         """
+        resolved_gym_id = await self._freeze.lookup_member_gym_id(member_id)
         payer_ids = await self._get_recurring_payers_for_member(
-            member_id, gym_id,
+            member_id, resolved_gym_id,
         )
         async with self._paying_lock.lock([member_id, *payer_ids]):
             await self._freeze.unfreeze(
-                member_id, gym_id, idempotency_key, payer_ids,
+                member_id, resolved_gym_id, idempotency_key, payer_ids,
             )
 
     # ── Start ──────────────────────────────────────────────────

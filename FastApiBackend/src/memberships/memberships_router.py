@@ -9,7 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.memberships.memberships_exceptions import PartialCancelError
+from src.memberships.memberships_exceptions import (
+    MembershipStartReplayError,
+    PartialCancelError,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
@@ -68,21 +71,14 @@ member_memberships_router = APIRouter(
     response_model=MemberMembershipsCancelResponse,
     summary="Cancel one or more memberships",
     description=(
-        "Cancels one or more active memberships for a member (a single "
-        "cancel is a one-element ``item_ids`` list). Sets each cancel_date "
-        "to the membership's next_due_date, or today if missing or in the "
-        "past. Memberships funded by different payers are each converged "
-        "once. Returns a map of item_id → resolved cancel_date (the date "
-        "through which each membership remains active)."
+        "Cancels one or more active memberships. Returns item_id → cancel_date "
+        "map. Partial success returns 207 with succeeded/failed split."
     ),
     responses={
         200: {"description": "Membership(s) cancelled successfully"},
         207: {
             "description": (
-                "Partial cancel — some memberships cancelled, some failed. "
-                "Body carries succeeded_item_ids + failed_item_ids; the caller "
-                "re-issues the cancel for the failed items. A 2xx (not an "
-                "error) so a proxy never auto-retries a partial result."
+                "Partial cancel — body carries succeeded_item_ids + failed_item_ids."
             )
         },
         401: {"description": "Not authenticated"},
@@ -102,27 +98,9 @@ async def cancel_membership(
         Provide[DependencyInjector.tasks_service]
     ),
 ) -> MemberMembershipsCancelResponse:
-    """Cancel one or more memberships for a member.
-
-    Syncs each affected payer's cancellation to Stripe, then updates the
-    CRM database.
-
-    Args:
-        request: The item_ids to cancel, the member, and the idempotency key.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-        tasks_service: Injected tasks service (the in-task guard).
-
-    Raises:
-        HTTPException: 401 if not authenticated,
-            403 if not authorized,
-            409 if a membership is inside an unfinished task,
-            500 on a total Stripe failure or unexpected error
-            (a PARTIAL cancel is RETURNED as 207, not raised).
-    """
+    """Cancel one or more memberships; partial success returns 207."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task(
@@ -145,12 +123,7 @@ async def cancel_membership(
             detail=str(exc),
         ) from None
     except PartialCancelError as exc:
-        # A later payer's converge failed AFTER an earlier payer succeeded —
-        # the batch is partial. This is a real, parseable RESULT (not an error):
-        # RETURN it as 207 Multi-Status with the succeeded/failed split so the
-        # caller shows the accurate outcome and re-issues the cancel for the
-        # failed items. 207 is a 2xx, so a proxy never auto-retries a partial
-        # (which would needlessly re-cancel the already-succeeded payers).
+        # Partial result — earlier payer(s) succeeded, this one failed; return 207.
         succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
         failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
         logger.error(
@@ -182,9 +155,6 @@ async def cancel_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
-        # Total failure — nothing was cancelled (no payer succeeded). 500, not
-        # 502: a 502 is in the proxy auto-retry family and we don't want a
-        # partial-or-total cancel auto-retried at the gateway.
         logger.error(
             "Cancel failed (Stripe, nothing cancelled): item_ids=%s, "
             "member_id=%s",
@@ -213,12 +183,7 @@ async def cancel_membership(
     "/freeze",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Freeze a member's account",
-    description=(
-        "Freezes billing for a member's account (account-level). "
-        "Accepts any family member's member_id and resolves "
-        "to the paying parent. Idempotent — re-freezing updates "
-        "the freeze end date."
-    ),
+    description="Freezes billing for a member's account. Idempotent.",
     responses={
         204: {"description": "Account frozen successfully"},
         401: {"description": "Not authenticated"},
@@ -234,21 +199,13 @@ async def freeze_membership(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Freeze a member's account.
-
-    Args:
-        request: Freeze request with member_id, gym_id, freeze_months.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-    """
+    """Freeze a member's account."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.freeze(
             request.member_id,
-            request.gym_id,
             request.freeze_months,
             request.idempotency_key,
         )
@@ -285,10 +242,7 @@ async def freeze_membership(
     "/unfreeze",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Unfreeze a member's account",
-    description=(
-        "Resumes billing for a member's account (account-level). "
-        "If not frozen, performs a no-op sync for consistency."
-    ),
+    description="Resumes billing for a member's account. No-op if not frozen.",
     responses={
         204: {"description": "Account unfrozen successfully"},
         401: {"description": "Not authenticated"},
@@ -304,21 +258,13 @@ async def unfreeze_membership(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Unfreeze a member's account.
-
-    Args:
-        request: Unfreeze request with member_id, gym_id.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-    """
+    """Unfreeze a member's account."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.unfreeze(
             request.member_id,
-            request.gym_id,
             request.idempotency_key,
         )
     except ValueError as exc:
@@ -356,24 +302,17 @@ async def unfreeze_membership(
     response_model=MemberMembershipsStartResponse,
     summary="Start memberships for a payer's family",
     description=(
-        "Creates every membership in the request for the paying account's "
-        "family in one call (a single membership = a one-item list), with "
-        "per-membership discounts applied before the first charge. Bills at "
-        "most two charges: one consolidated one-time invoice plus one "
-        "recurring converge. Returns the per-membership breakdown — a "
-        "failed charge group surfaces there, not as an error status."
+        "Creates memberships for a payer's family. Bills at most two charges: "
+        "one consolidated one-time invoice + one recurring converge."
     ),
     responses={
         201: {"description": "All memberships created (full breakdown)"},
         207: {
-            "description": (
-                "Partial — some memberships created, some failed; the "
-                "results[] breakdown carries the per-item split. A 2xx, never "
-                "auto-retried."
-            )
+            "description": "Partial — results[] carries the per-item split."
         },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
+        409: {"description": "Retried start replayed — original stands"},
         500: {"description": "Total failure — nothing created (Stripe/sync)"},
     },
 )
@@ -387,22 +326,24 @@ async def start_membership(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MemberMembershipsStartResponse:
-    """Start the request's memberships for the payer's family.
-
-    Args:
-        request: Payer + the memberships to create (price + discounts each).
-        response: Injected so a mixed breakdown can be flagged 207 (below).
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-    """
+    """Start the request's memberships for the payer's family."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.payer_member_id, user_payload
+    )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_can_view_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
 
     try:
         result = await memberships_service.start(request)
+    except MembershipStartReplayError as exc:
+        # Retried start detected as an idempotent replay — the original rows,
+        # discounts, and charge stand. A conflict, not a server error: 409
+        # (never auto-retried), matching the other billing conflicts here.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -415,9 +356,6 @@ async def start_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
-        # Total failure before any membership was created. 500, not 502: a 502
-        # is in the proxy auto-retry family, and auto-retrying a create risks
-        # duplicate memberships/charges.
         logger.error(
             "Failed to start memberships (Stripe): payer_member_id=%s, "
             "gym_id=%s",
@@ -441,9 +379,7 @@ async def start_membership(
             detail="Failed to start memberships",
         ) from None
 
-    # A breakdown with any failed charge group is a partial -> 207 Multi-Status
-    # (the results[] carries the per-item split). 207 is a 2xx, so a proxy never
-    # auto-retries a partial create; an all-created breakdown stays 201.
+    # Any failed charge group → 207 partial; all-created stays 201.
     if any(
         item.status == MemberMembershipsStartStatus.failed
         for item in result.results
@@ -457,12 +393,8 @@ async def start_membership(
     response_model=MemberMembershipsUpdatePriceResponse,
     summary="Reprice ONE membership to the plan's current price",
     description=(
-        "Moves a membership onto its plan's currently active price — a "
-        "DIRECT, synchronous reprice (cancel-old-row + insert-successor + "
-        "Stripe converge), like cancel. Returns the successor membership id "
-        "(the same id when it was already on the price — a no-op). Tasks are "
-        "only for the per-plan BATCH endpoint. A membership inside an "
-        "unfinished batch task is rejected (409)."
+        "Reprices a membership to its plan's active price (direct/synchronous). "
+        "Returns the successor id (same id if already on the price — no-op)."
     ),
     responses={
         200: {"description": "Repriced; the successor membership id"},
@@ -485,18 +417,9 @@ async def update_membership_price(
         Provide[DependencyInjector.tasks_service]
     ),
 ) -> MemberMembershipsUpdatePriceResponse:
-    """Reprice one membership to its plan's active price (direct; 200 + id).
-
-    Args:
-        request: Update price request with proration_behavior.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-        tasks_service: Injected tasks service (the in-task guard — a
-            membership mid-batch-task is rejected 409).
-    """
+    """Reprice one membership to its plan's active price."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -545,15 +468,9 @@ async def update_membership_price(
     response_model=MemberMembershipsUpgradeResponse,
     summary="Upgrade ONE membership to a different plan (charge difference)",
     description=(
-        "Moves a membership to a DIFFERENT plan's currently active price (a "
-        "cross-plan upgrade) and charges the prorated DIFFERENCE now when "
-        "``proration_behavior`` is ``prorate_to_anchor`` and the new price is "
-        "higher; a downgrade/equal charges nothing. A DIRECT, synchronous op "
-        "(cancel-old-row + insert-successor-on-the-new-plan + Stripe converge), "
-        "like reprice. Returns the successor membership id. The target must be "
-        "a DIFFERENT recurring plan on the same billing interval (same-plan "
-        "moves use PUT /price). A membership inside an unfinished batch task is "
-        "rejected (409)."
+        "Upgrades a membership to a different plan (cross-plan, direct/synchronous). "
+        "Charges the prorated difference when the new price is higher. "
+        "Returns the successor id."
     ),
     responses={
         200: {"description": "Upgraded; the successor membership id"},
@@ -576,18 +493,9 @@ async def upgrade_membership(
         Provide[DependencyInjector.tasks_service]
     ),
 ) -> MemberMembershipsUpgradeResponse:
-    """Upgrade one membership to a different plan (direct; 200 + successor id).
-
-    Args:
-        request: Upgrade request (target_plan_id + proration_behavior).
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-        tasks_service: Injected tasks service (the in-task guard — a
-            membership mid-batch-task is rejected 409).
-    """
+    """Upgrade one membership to a different plan."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -637,12 +545,7 @@ async def upgrade_membership(
     "/upgrade/preview",
     response_model=DueNowVsRecurringPreview | None,
     summary="Preview upgrading a membership to a different plan",
-    description=(
-        "Dry-run of the upgrade endpoint: runs every validation and returns "
-        "the due-now prorated difference (``due_now``, null on a "
-        "downgrade/equal) plus the new steady-state monthly bill "
-        "(``recurring``). Writes and bills nothing."
-    ),
+    description="Dry-run of the upgrade endpoint. Returns due_now + recurring. Writes nothing.",
     responses={
         200: {"description": "Preview retrieved successfully"},
         400: {"description": "Invalid request (same plan / window / state)"},
@@ -661,7 +564,7 @@ async def preview_upgrade_membership(
 ) -> DueNowVsRecurringPreview | None:
     """Preview what upgrading a membership to a different plan would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await memberships_service.upgrade_preview(
@@ -704,11 +607,8 @@ async def preview_upgrade_membership(
     response_model=MemberMembershipsEndResponse,
     summary="End a one-time / trial membership early",
     description=(
-        "Ends a ONE-TIME / TRIAL membership now by setting its end_date to "
-        "today (→ status 'ended'). A one-time pack is a terminal invoice with "
-        "no subscription line, so this is a pure DB write — NO Stripe action "
-        "and no money movement (a refund is the separate POST /refund flow). "
-        "Recurring memberships are rejected (use DELETE / to cancel)."
+        "Ends a one-time/trial membership now (pure DB write, no Stripe action). "
+        "Recurring memberships are rejected — use DELETE / to cancel."
     ),
     responses={
         200: {"description": "Ended; the resolved end_date"},
@@ -727,16 +627,9 @@ async def end_membership(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MemberMembershipsEndResponse:
-    """End a one-time / trial membership early (200 + the resolved end_date).
-
-    Args:
-        request: The membership to end (item_id + member_id).
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-    """
+    """End a one-time/trial membership early."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         end_date = await memberships_service.end_one_time(
@@ -774,13 +667,8 @@ async def end_membership(
     response_model=MemberMembershipsBatchRepriceResponse,
     summary="Batch-upgrade a plan's members to its active price",
     description=(
-        "Upgrades EVERY member on the plan to the plan's currently active "
-        "price. The backend auto-discovers every live membership not already "
-        "on the active price (skipping any already mid-task), creates one "
-        "tracked task with an item per membership, runs it in the "
-        "background, and returns the task_id — poll GET /api/v1/tasks/"
-        "{task_id} for per-membership progress. Returns task_id=null when "
-        "nothing needs upgrading."
+        "Batch-reprices every live membership on the plan to its active price. "
+        "Returns task_id (null if nothing to upgrade); poll GET /api/v1/tasks/{task_id}."
     ),
     responses={
         202: {"description": "Batch accepted; poll the returned task"},
@@ -801,15 +689,7 @@ async def batch_reprice_plan(
         Provide[DependencyInjector.tasks_executor]
     ),
 ) -> MemberMembershipsBatchRepriceResponse:
-    """Batch-reprice a plan's members to its active price (202 + task_id).
-
-    Args:
-        request: Batch reprice request (plan_id, gym_id, proration_behavior).
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        reprice_task_handler: Injected membership_reprice task handler.
-        tasks_executor: Injected tasks executor (fires the run).
-    """
+    """Batch-reprice a plan's members to its active price."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
 
@@ -848,10 +728,8 @@ async def batch_reprice_plan(
     response_model=MemberMembershipsStartPreviewResponse,
     summary="Preview starting memberships",
     description=(
-        "Dry-run of the start endpoint: runs every validation, stages the "
-        "request (discounts included) as preview-only rows, and returns "
-        "the three-way invoice split (one_time / due_now / recurring) "
-        "without charging anything or leaving any rows behind."
+        "Dry-run of the start endpoint. Returns invoice split "
+        "(one_time/due_now/recurring). Writes nothing."
     ),
     responses={
         200: {"description": "Preview retrieved successfully"},
@@ -870,9 +748,11 @@ async def preview_start_membership(
 ) -> MemberMembershipsStartPreviewResponse:
     """Preview what starting the request's memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.payer_member_id, user_payload
+    )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_can_view_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
 
     try:
         return await memberships_service.preview_start(request)
@@ -908,13 +788,7 @@ async def preview_start_membership(
     "/cancel/preview",
     response_model=list[PayerInvoiceChange],
     summary="Preview cancelling one or more memberships",
-    description=(
-        "Dry-run of the cancel endpoint: a per-payer list of the post-cancel "
-        "subscription state (current → new). One entry per payer that funds "
-        "any of the item_ids — a single cancel is one payer (one entry); a "
-        "member's memberships split across payers yield several entries. A "
-        "payer with no billing change is reported with affected=false."
-    ),
+    description="Dry-run of cancel. Returns per-payer current→new subscription state.",
     responses={
         200: {"description": "Preview retrieved successfully"},
         401: {"description": "Not authenticated"},
@@ -932,7 +806,7 @@ async def preview_cancel_membership(
 ) -> list[PayerInvoiceChange]:
     """Preview what cancelling one or more memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await memberships_service.preview_cancel_many(
@@ -973,11 +847,8 @@ async def preview_cancel_membership(
     response_model=DueNowVsRecurringPreview | None,
     summary="Add applied-discount rows to a membership (or preview)",
     description=(
-        "Adds an applied-discount row per discount id, then re-syncs the Stripe "
-        "subscription — no mid-cycle invoice is cut. A preset already applied is "
-        "left frozen. With ``preview=true`` "
-        "nothing is committed: the adds are staged as preview rows, the "
-        "resulting invoice preview is returned, and the staged rows are removed."
+        "Adds applied-discount rows then re-syncs Stripe. With preview=true, "
+        "stages rows, returns invoice preview, then removes staged rows."
     ),
     responses={
         200: {"description": "Discounts added, or preview returned"},
@@ -999,7 +870,7 @@ async def add_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1049,10 +920,8 @@ async def add_membership_discounts(
     response_model=DueNowVsRecurringPreview | None,
     summary="Remove applied-discount rows from a membership (or preview)",
     description=(
-        "Removes the named applied-discount rows, then re-syncs the Stripe "
-        "subscription — no mid-cycle invoice is cut. With ``preview=true`` "
-        "nothing is committed: the rows are staged as preview-removed, the "
-        "resulting invoice preview is returned, and the rows are restored."
+        "Removes applied-discount rows then re-syncs Stripe. With preview=true, "
+        "stages removal, returns invoice preview, then restores rows."
     ),
     responses={
         200: {"description": "Discounts removed, or preview returned"},
@@ -1074,7 +943,7 @@ async def remove_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1124,11 +993,8 @@ async def remove_membership_discounts(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Mark a recurring membership's open invoice as paid via cash",
     description=(
-        "Finds the currently-open Stripe invoice for the "
-        "subscription this membership belongs to and marks it as "
-        "paid out of band. No card is charged. Only applies to "
-        "recurring memberships. The existing invoice.paid webhook "
-        "writes the CRM invoice and charge rows."
+        "Marks the membership's open Stripe invoice as paid out of band. "
+        "Recurring memberships only. No card charged."
     ),
     responses={
         204: {"description": "Invoice marked paid successfully"},
@@ -1152,7 +1018,7 @@ async def mark_membership_paid_cash(
 ) -> None:
     """Mark a recurring membership's open invoice as paid via cash."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1200,14 +1066,8 @@ async def mark_membership_paid_cash(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Charge a member's card for an ad-hoc amount",
     description=(
-        "Creates a one-off Stripe invoice for ``amount_cents`` "
-        "with ``reason`` as the description and line-item name, "
-        "then pays it. If ``paid_cash`` is true the invoice is "
-        "marked paid out of band instead of charging the card. "
-        "An optional ``payment_method_id`` bills a one-off card "
-        "(attached, billed once, detached) instead of the payer's "
-        "saved default. The existing ``invoice.paid`` webhook writes "
-        "the CRM invoice and charge rows."
+        "Creates and pays a one-off Stripe invoice for amount_cents. "
+        "paid_cash marks it out-of-band; payment_method_id bills a one-off card."
     ),
     responses={
         204: {"description": "Card charged successfully"},
@@ -1229,7 +1089,7 @@ async def charge_member_card(
 ) -> None:
     """Charge a member's card (or mark as cash) for an ad-hoc amount."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         await memberships_service.charge_card(request)
@@ -1268,16 +1128,14 @@ async def charge_member_card(
     response_model=MemberMembershipsRefundResponse,
     summary="Refund a prior charge (card via Stripe, or cash)",
     description=(
-        "Refunds a prior succeeded charge on a member's payment "
-        "history (full or partial). A card charge is reversed "
-        "through Stripe and recorded immediately; a cash charge is "
-        "recorded as a cash refund with no Stripe call."
+        "Refunds a prior charge (full or partial). "
+        "Card charges via Stripe; cash recorded locally."
     ),
     responses={
         200: {"description": "Refund processed"},
         400: {"description": "Charge is not refundable or amount invalid"},
         401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to view this member"},
+        403: {"description": "Not authorized to manage this member (staff only)"},
         404: {"description": "Member or charge not found"},
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
@@ -1293,7 +1151,7 @@ async def refund_charge(
 ) -> MemberMembershipsRefundResponse:
     """Refund a prior charge for a member (card via Stripe, or cash)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
         return await refund_service.refund_charge(request)

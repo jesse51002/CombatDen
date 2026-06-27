@@ -1,6 +1,4 @@
--- Fetch a non-deleted discount joined to its active value version. The identity
--- (name, type) lives on gym_discounts; the percent/dollar + lifetime live on the
--- active gym_discount_values row.
+-- Fetch a non-deleted discount joined to its active value version.
 SELECT
     d.discount_id,
     d.gym_id,
@@ -19,4 +17,5 @@ JOIN gym_discount_values v
     ON v.discount_id = d.discount_id
    AND v.is_active = true
 WHERE d.discount_id = :discount_id
+  AND d.gym_id = :gym_id
   AND d.is_deleted = false

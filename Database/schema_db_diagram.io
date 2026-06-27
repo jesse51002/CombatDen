@@ -472,11 +472,13 @@ Table member_memberships_unfiltered {
   total_price integer [not null, note: 'CHECK >= 0']
   quantity integer [not null, default: 1, note: 'CHECK > 0; how many units this row bills as. one_time/trial packs stack as ONE row with quantity = N (one Stripe line with that quantity, $-coupon applies once, class_count*quantity classes); recurring forced = 1 (trigger); set at INSERT, immutable after']
   stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']
+  idempotency_key uuid [note: 'nullable; set once at INSERT (service_role); partial unique WHERE NOT NULL; one-time/trial start dedup key (C-086) — retried start reproduces same key, collides, INSERT DO NOTHING drops duplicate rows; NULL for recurring + preview rows']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
     (item_id, member_id) [unique]
     (item_id, gym_id) [unique]
+    idempotency_key [note: 'partial unique WHERE idempotency_key IS NOT NULL']
   }
 }
 
@@ -546,12 +548,13 @@ Table member_invoice_applied_discounts {
   invoice_id uuid [not null]
   gym_id uuid [not null]
   discount_id uuid [note: 'nullable; not resolved to a CRM discount']
+  line_item_id varchar [not null, note: 'Stripe invoice line id (il_...); audit value, not FK-enforced; one row per coupon per line']
   amount_off integer [not null, note: 'snapshot at invoice time; CHECK >= 0']
   stripe_coupon_id varchar [not null, note: 'the identifier; captured at invoice time']
 
   indexes {
     invoice_id
-    (invoice_id, stripe_coupon_id) [unique]
+    (invoice_id, stripe_coupon_id, line_item_id) [unique, note: 'idempotent on webhook re-delivery; one row per coupon per invoice line']
   }
 }
 

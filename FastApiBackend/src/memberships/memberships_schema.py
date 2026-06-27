@@ -241,6 +241,7 @@ class MemberMembershipsStartItemState(BaseModel):
     """
 
     member_id: UUID
+    gym_id: UUID
     plan_id: UUID
     plan_type: PlanType
     item_id: UUID | None = None

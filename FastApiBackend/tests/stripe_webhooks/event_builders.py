@@ -92,6 +92,11 @@ def make_invoice_paid_event(
             }
         )
 
+    # Mirror the discount rollup onto the line (single-line only; a multi-line
+    # test must set per-line discount_amounts so per-line capture isn't masked).
+    if total_discount_amounts and len(lines) == 1:
+        lines[0]["discount_amounts"] = total_discount_amounts
+
     invoice = {
         "id": stripe_invoice_id,
         "object": "invoice",

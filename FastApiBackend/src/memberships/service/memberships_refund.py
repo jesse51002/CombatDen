@@ -1,19 +1,7 @@
-"""Refund a prior charge on a member's payment history.
+"""Refund a prior charge: Stripe call + immediate negative member_charges row.
 
-A refund hits Stripe (for a card charge) and is recorded **immediately** as a
-negative ``member_charges`` row — the endpoint writes the row itself rather than
-waiting for the ``refund.*`` webhook. The webhook then only matters for the
-cases the endpoint can't see synchronously: an async refund that comes back
-``pending`` and succeeds later, and a refund initiated from the Stripe Dashboard.
-Both write paths are idempotent on ``stripe_refund_id``.
-
-A cash charge has no Stripe charge to reverse, so it is refunded as a
-recordkeeping-only negative cash row with no Stripe call.
-
-Sibling of the charge-card op (``memberships_charge_card.py``): both are ad-hoc
-money-movement actions the CRM triggers from a member's billing history. It is a
-standalone service (not part of the ``MemberMembershipsService`` facade) because
-it touches no subscription state — no payment-sync, no paying-lock.
+Cash refunds skip the Stripe call; async/dashboard refunds are handled by the
+refund.* webhook. Both write paths are idempotent on stripe_refund_id.
 """
 
 from __future__ import annotations
@@ -23,6 +11,7 @@ from uuid import UUID
 
 from schema.member_charge import ChargeKind, ChargeStatus
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
@@ -119,36 +108,62 @@ class MemberMembershipsRefund:
     async def _refund_card(
         self, charge: dict, amount: int, idempotency_key: str
     ) -> MemberMembershipsRefundResponse:
-        """Refund a card charge via Stripe and record the succeeded row."""
+        """Refund a card charge: lock + recheck, THEN Stripe, THEN record — all
+        in ONE transaction.
+
+        The FOR-UPDATE lock + refundable recheck run BEFORE the Stripe call, so
+        two concurrent card refunds serialize: the second blocks on the row lock,
+        then its recheck sees ``refundable <= 0`` and raises ``ValueError``
+        BEFORE any second Stripe refund is issued — the member can never be
+        refunded twice. Holding the pooled connection across the Stripe call is
+        the accepted tradeoff for that guarantee (a rare staff op; mirrors how
+        plans ``set_price`` holds its lock across its Stripe call).
+        """
         account_id = await self._gym_stripe.get_stripe_account_id(
             charge["gym_id"]
         )
-        refund = await self._payments.refund_payment(
-            PaymentsRefundRequest(
-                stripe_charge_id=charge["stripe_charge_id"],
-                amount=amount,
-                idempotency_key=idempotency_key,
-            ),
-            account_id,
-        )
-        # A pending async refund is recorded later by the refund.* webhook when
-        # it succeeds; only a succeeded refund is written here.
-        refund_charge_id: UUID | None = None
-        if refund.status == ChargeStatus.succeeded:
-            refund_charge_id = await self._record_refund(
-                charge,
-                amount=refund.amount,
-                stripe_refund_id=refund.stripe_refund_id,
-                payment_method_type=charge["payment_method_type"],
-                card_last_four=charge["card_last_four"],
-                charge_time=stripe_ts_to_datetime(refund.created),
+        async with self._db_pool.session() as session:
+            await self._assert_refundable_under_lock(
+                session, charge_id=charge["charge_id"], amount=amount
             )
+            refund = await self._payments.refund_payment(
+                PaymentsRefundRequest(
+                    stripe_charge_id=charge["stripe_charge_id"],
+                    amount=amount,
+                    idempotency_key=idempotency_key,
+                ),
+                account_id,
+            )
+            # Pending (non-succeeded) refunds are recorded later by the refund.*
+            # webhook: no row inserted, the commit just releases the lock.
+            refund_charge_id: UUID | None = None
+            if refund.status == ChargeStatus.succeeded:
+                refund_charge_id = await self._insert_refund_row(
+                    session,
+                    self._build_refund_params(
+                        charge,
+                        amount=refund.amount,
+                        stripe_refund_id=refund.stripe_refund_id,
+                        payment_method_type=charge["payment_method_type"],
+                        card_last_four=charge["card_last_four"],
+                        charge_time=stripe_ts_to_datetime(refund.created),
+                    ),
+                )
+            await session.commit()
         return MemberMembershipsRefundResponse(
             refund_charge_id=refund_charge_id,
             refunded_amount=refund.amount,
             payment_method=PAYMENT_METHOD_CARD,
-            status=ChargeStatus(refund.status),
+            status=self._safe_charge_status(refund.status),
         )
+
+    @staticmethod
+    def _safe_charge_status(stripe_status: str) -> ChargeStatus:
+        """Map Stripe refund status; unrecognized values fall back to pending."""
+        try:
+            return ChargeStatus(stripe_status)
+        except ValueError:
+            return ChargeStatus.pending
 
     async def _refund_cash(
         self, charge: dict, amount: int
@@ -179,13 +194,46 @@ class MemberMembershipsRefund:
         card_last_four: str | None,
         charge_time: datetime | None,
     ) -> UUID | None:
-        """Insert the negative refund row; return its PK (None on conflict).
+        """Insert the negative refund row under the charge-row lock; return its
+        PK (None on conflict).
+
+        The CASH path: no Stripe call, so the lock fully serializes concurrent
+        cash refunds right here (``_assert_refundable_under_lock`` rechecks the
+        balance under FOR UPDATE before the insert). The card path instead locks
+        + rechecks BEFORE its Stripe call (see ``_refund_card``).
+        """
+        params = self._build_refund_params(
+            charge,
+            amount=amount,
+            stripe_refund_id=stripe_refund_id,
+            payment_method_type=payment_method_type,
+            card_last_four=card_last_four,
+            charge_time=charge_time,
+        )
+        async with self._db_pool.session() as session:
+            await self._assert_refundable_under_lock(
+                session, charge_id=charge["charge_id"], amount=amount
+            )
+            refund_charge_id = await self._insert_refund_row(session, params)
+            await session.commit()
+        return refund_charge_id
+
+    @staticmethod
+    def _build_refund_params(
+        charge: dict,
+        *,
+        amount: int,
+        stripe_refund_id: str | None,
+        payment_method_type: str | None,
+        card_last_four: str | None,
+        charge_time: datetime | None,
+    ) -> dict:
+        """Build the negative ``member_charges`` insert params for a refund row.
 
         ``paid_by_member_id`` carries the payer (the parent charge's payer who
         was charged), matching how the webhook records a refund.
         """
-        sql = load_sql(SQL_DIR / "member_refund_insert.sql")
-        params = {
+        return {
             "invoice_id": str(charge["invoice_id"]),
             "gym_id": str(charge["gym_id"]),
             "paid_by_member_id": str(charge["charge_paid_by_member_id"]),
@@ -199,8 +247,47 @@ class MemberMembershipsRefund:
             "refunds_charge_id": str(charge["charge_id"]),
             "charge_time": charge_time,
         }
-        async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            row = result.mappings().fetchone()
-            await session.commit()
+
+    @staticmethod
+    async def _insert_refund_row(
+        session: AsyncSession, params: dict
+    ) -> UUID | None:
+        """Execute the negative-refund INSERT in an ALREADY-OPEN session.
+
+        Does NOT commit — the CALLER owns the transaction (card: lock + Stripe +
+        this insert in one txn; cash: under ``_record_refund``'s lock). Returns
+        the new row's PK, or None on ``ON CONFLICT`` (idempotent re-record).
+        """
+        sql = load_sql(SQL_DIR / "member_refund_insert.sql")
+        result = await session.execute(text(sql), params)
+        row = result.mappings().fetchone()
         return row["charge_id"] if row else None
+
+    async def _assert_refundable_under_lock(
+        self,
+        session: AsyncSession,
+        *,
+        charge_id: UUID,
+        amount: int,
+    ) -> None:
+        """SELECT … FOR UPDATE the charge row, then re-check refundable balance.
+
+        Serializes concurrent cash refunds (no UNIQUE stripe_refund_id to guard them).
+        Raises ValueError if the charge is gone, fully refunded, or amount exceeds balance.
+        """
+        lock_sql = load_sql(SQL_DIR / "member_charge_lock.sql")
+        refunded_sql = load_sql(SQL_DIR / "member_charge_refunded_total.sql")
+        params = {"charge_id": str(charge_id)}
+        lock_result = await session.execute(text(lock_sql), params)
+        lock_row = lock_result.mappings().fetchone()
+        if lock_row is None:
+            raise ValueError("Charge not found")
+        refunded_result = await session.execute(text(refunded_sql), params)
+        refunded_row = refunded_result.mappings().fetchone()
+        refundable = lock_row["amount"] - refunded_row["already_refunded"]
+        if refundable <= 0:
+            raise ValueError("Charge has already been fully refunded")
+        if amount > refundable:
+            raise ValueError(
+                f"Refund amount exceeds the {refundable} refundable balance"
+            )

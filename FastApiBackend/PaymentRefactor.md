@@ -210,3 +210,61 @@ from that member's own memberships only.
 - Whether a **self-paying** linked member (own card) still earns the family tier.
 - Whether to constrain a linked discount to the **same plan** ("same membership
   type") to keep the tier math unambiguous.
+
+
+--------------------------
+
+
+# Reliability hardening
+
+> These two are **infrastructure**, not product features — deferred from the
+> billing-engine review because the proper fix is net-new infrastructure (the
+> outbox) or only bites at a scale the MVP isn't at (the Stripe-in-txn read).
+> They live here, not in a known-bugs doc, because each is a *build*, not a patch.
+
+## 7. Durable writeback outbox (not built)
+
+**The motivating bug (C-012).** Every DB writeback in the sync engine runs
+*after* its Stripe mutation, so it is inherently best-effort. Most steps have a
+caller verify-or-revert backstop; the payer `sub_id` write does **not**. If it is
+swallowed while the membership-row stamps land, the next `PaymentPushSweep` reads
+`sub_id = NULL` and **creates a second subscription**; the immutable
+`stripe_item_id` trigger then orphans the tracked sub, the orphan sweep reaps it,
+and a later sweep can cancel a paying member while the original sub keeps billing —
+a transient **double-bill + membership loss**. The trigger is narrow (a partial
+writeback failure) but the blast radius is real money.
+
+**What it takes.** A transactional **outbox**: any swallowed writeback step is
+recorded durably (a `writeback_outbox` table written in the same transaction as
+the row stamps), then drained by a reconciler that retries each pending step and
+survives crashes. This is the general fix for **all** best-effort writeback steps,
+not just `sub_id`. The existing `PaymentPushSweep` / `StaleTaskSweep` reconcilers
+are the natural home for the drain loop, and they need test coverage as part of
+this work (today they're the untested backstop the outbox would make reliable).
+
+**Open questions:** outbox granularity (per writeback step vs per operation); the
+retry/giveup policy and how a permanently-failing step is surfaced to staff;
+whether the drain runs in an existing sweep or its own worker.
+
+## 8. Move Stripe reads out of the webhook / reconciler DB transaction (future scaling)
+
+**Current state (C-053).** `InvoicePaymentPaidHandler.resolve_charge()` does a
+live `payment_intents.retrieve` *inside* the open DB transaction on both the
+webhook-dispatch path and the reconciler invoice-fetch path, so a pooled DB
+connection is held for the duration of that Stripe call.
+
+**Why it's deferred, not a current bug.** The call is a simple read, capped by the
+30 s httpx timeout, and it only causes harm when **many webhooks arrive
+concurrently** *and* **Stripe is slow at that same moment** — only then do enough
+connections get held at once to starve the pool. At MVP webhook volume that
+intersection doesn't occur (one slow webhook briefly holds one of N connections).
+The fix also doesn't make anything *faster* — it's the same Stripe call, just
+outside the txn boundary. So it's scale hardening, not a defect that bites today.
+
+**What it takes.** Pre-resolve via `resolve_charge()` **before** opening the
+transaction and pass the result as `charge_details=` to `record()`, in both
+`stripe_webhooks_service.py` and `memberships_invoice_fetch.py`. The pre-txn seam
+(`charge_details=` on `record()` + the public `resolve_charge`) already exists; the
+work is wiring the reconciler's generic per-record runner (shared across
+invoice/payment/refund records) and the webhook dispatcher to special-case
+pre-resolution without losing per-record error isolation.

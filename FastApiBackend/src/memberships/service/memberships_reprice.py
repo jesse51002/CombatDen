@@ -1,27 +1,10 @@
-"""The membership reprice operation (append-only, DB-first verify-or-revert).
+"""Membership reprice: cancel-old + insert-successor-at-new-price + verify-or-revert.
 
-A reprice never mutates the membership row — ``price_id`` and
-``stripe_item_id`` are trigger-enforced immutable. ``reprice`` cancels the old
-row effective today, inserts its successor at the target price **of the same
-plan**, copies the live applied discounts onto the successor (ONE transaction),
-then the EXISTING payment sync converges Stripe and the writeback stamps the
-successor ``applied`` and the old row ``deleted``.
-
-The cancel-old + insert-successor + copy-discounts + verify-or-revert machinery
-lives on ``MemberMembershipsTransitionBase`` (shared with the cross-plan
-``MemberMembershipsUpgrade`` op); this file holds only the reprice-specific
-resolution (target a price of the *same* plan), the no-op short-circuit, and the
-reprice validation.
-
-A standalone membership operation that knows NOTHING about how it is dispatched
-(the per-plan batch task today, a direct CRM call tomorrow): plain parameters
-in, the successor's item_id out, and it handles its own failure with the
-standard ``sync_or_revert`` contract — an unconfirmed converge REVERTS the DB
-phase and raises, leaving the membership exactly as it was. This module imports
-nothing from ``src.tasks``.
+Standalone op — no tasks import. Uses MemberMembershipsTransitionBase for the shared
+transition machinery; this file adds same-plan price resolution and reprice validation.
 """
 
-from uuid import UUID, uuid4
+from uuid import UUID, uuid5
 
 from schema.membership_plan import PlanType
 from schema.task import ProrationBehavior
@@ -32,6 +15,10 @@ from src.memberships.service.memberships_transition_base import (
 )
 from src.shared.db_first_helpers import sync_or_revert
 from src.shared.gym_timezone import gym_today
+
+# Namespace for uuid5(REPRICE_IDEMPOTENCY_NAMESPACE, successor_item_id) —
+# stable Stripe idempotency key per reprice (retries dedup correctly).
+REPRICE_IDEMPOTENCY_NAMESPACE = UUID("6b7c1f2a-0e4d-5a8b-9c3e-1d2f4a6b8c0d")
 
 
 class MemberMembershipsReprice(MemberMembershipsTransitionBase):
@@ -44,39 +31,11 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
         proration_behavior: ProrationBehavior,
         target_price_id: UUID | None = None,
     ) -> UUID:
-        """Run one reprice (DB-first); returns the successor row's item_id.
+        """Reprice one membership (DB-first); returns the successor item_id.
 
-        Takes the payer lock itself (the membership's ``paid_by_member_id``),
-        converges synchronously, returns when done — a standalone op like
-        ``cancel`` / ``start``. The single member-detail upgrade calls it
-        directly (no task); the per-plan batch runs it per task item.
-
-        ``target_price_id`` resolution:
-        - **None** (the single, member-detail upgrade) → resolve the plan's
-          current ``is_active`` price and reprice to it.
-        - **given** (the batch pins the active price at batch-discovery time)
-          → reprice to that exact price **as-is**, never re-checked against
-          the plan's *current* active price. A newer price created before the
-          item runs must NOT divert or fail the upgrade the user asked for (a
-          deactivated CRM price keeps a usable Stripe price — `plans_price.py`
-          never archives one).
-
-        A membership already on the target is a no-op (returns its own
-        item_id, no work, no bill).
-
-        Raises:
-            LockBusyError: The payer is busy.
-            ValueError: The membership does not validate (not found,
-                cancelled, ended), has no active price (None case), or the
-                given target is not a price of its plan.
-            SyncNotConfirmedError: The converge could not be confirmed on
-                Stripe — the DB phase has been reverted, the membership is
-                exactly as it was.
+        target_price_id=None resolves the plan's active price; given pins a specific price.
+        No-op if already on the target. DB phase is reverted on unconfirmed converge.
         """
-        # ``paid_by_member_id`` is immutable, so resolving the payer before
-        # locking is race-free — and the lock keys on the PAYER, not the
-        # member: a child's membership paid by a parent must lock the parent's
-        # subscription, the one this reprice converges.
         payer_id = await self._resolve_payer(old_item_id, member_id)
         async with self._paying_lock.lock([payer_id]):
             row = await self._get_membership(old_item_id, member_id)
@@ -96,13 +55,9 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
                 )
 
             if UUID(str(row["price_id"])) == target_price_id:
-                # Already on the target — a no-op (a duplicate request, or
-                # already repriced). Nothing to do and nothing to bill: the
-                # reconciler's sweep converges any DB↔Stripe drift, so there
-                # is no defensive re-sync here.
-                return old_item_id
+                return old_item_id  # Already on target — no-op.
 
-            # Prorating op: converge the payer to a clean baseline first.
+            # Converge to a clean baseline before inserting the successor.
             await self._pre_sync_payments(payer_id)
 
             new_item_id = await self._write_db_phase(
@@ -114,10 +69,16 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
                 target_price,
             )
 
+            # Stable key from immutable successor id — retries dedup at Stripe.
+            reprice_idempotency_key = uuid5(
+                REPRICE_IDEMPOTENCY_NAMESPACE,
+                str(new_item_id),
+            )
+
             await sync_or_revert(
                 sync_fn=lambda: self._payment_sync.update_payments_recurring(
                     payer_id,
-                    idempotency_key=uuid4(),
+                    idempotency_key=reprice_idempotency_key,
                     proration_behavior=proration_behavior,
                 ),
                 revert_fn=lambda: self._revert_db_phase(
@@ -141,23 +102,13 @@ class MemberMembershipsReprice(MemberMembershipsTransitionBase):
         old_item_id: UUID,
         member_id: UUID,
     ) -> None:
-        """Validate the membership can be repriced."""
-        # A reprice re-anchors RECURRING billing onto a new price version.
-        # one_time / trial memberships are a single terminal invoice with no
-        # recurring subscription to re-anchor, so repricing one is meaningless.
-        # The batch path already excludes them in SQL; reject here so the op is
-        # the single chokepoint for the direct single-member path (and any
-        # future caller) too.
+        """Validate the membership can be repriced (recurring, no pending cancel/end)."""
         if row["plan_type"] != PlanType.recurring:
             raise ValueError(
                 f"Can only reprice a recurring membership "
                 f"(plan_type={row['plan_type']}): "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
-        # A set cancel_date (already effective OR a future, still-active
-        # scheduled cancellation) blocks the reprice — the successor would have
-        # no cancel_date, silently dropping the pending cancellation. Staff
-        # clear the cancellation first.
         if row["cancel_date"] is not None:
             raise ValueError(
                 f"Cannot reprice a membership with a pending cancellation "

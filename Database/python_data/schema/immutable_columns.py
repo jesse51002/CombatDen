@@ -281,6 +281,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
         "price_id",  # immutable (trigger: trg_prevent_price_id_overwrite); reprice = new row
         "quantity",  # set at INSERT, immutable after; recurring forced = 1 (trigger: trg_recurring_quantity_must_be_one)
+        "idempotency_key",  # set once at INSERT (service_role), immutable after; backend-managed one-time start dedup key (C-086)
     }
 )
 
@@ -396,6 +397,7 @@ MEMBER_INVOICE_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
         "discount_id",  # identity FK
         # Stripe columns — always set by backend
         "stripe_coupon_id",
+        "line_item_id",  # set-once Stripe invoice-line id (audit identity)
     }
 )
 

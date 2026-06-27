@@ -160,14 +160,21 @@ class MemberMembershipsTransitionBase(MemberMembershipsBase):
             )
             return
 
+        # All three writes share ONE transaction so the revert is
+        # all-or-nothing (matching ``_write_db_phase``); a crash mid-revert
+        # must never leave a half-reverted membership (a stranded ``not_added``
+        # successor, or the old row still cancelled). The pending delete runs on
+        # this shared session via ``_delete_pending_in_session`` so it stays
+        # inside the revert transaction (the public ``_delete_pending`` would
+        # open and commit its own session).
         async with self._db_pool.session() as session:
             await self._delete_copied_discounts(session, new_item_id)
-            await session.commit()
-        await self._delete_pending([new_item_id])
-        async with self._db_pool.session() as session:
-            sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
+            await self._delete_pending_in_session(session, [new_item_id])
+            uncancel_sql = load_sql(
+                SQL_DIR / "member_memberships_uncancel.sql"
+            )
             await session.execute(
-                text(sql),
+                text(uncancel_sql),
                 {
                     "item_id": str(old_item_id),
                     "member_id": str(member_id),
@@ -247,6 +254,7 @@ class MemberMembershipsTransitionBase(MemberMembershipsBase):
                 # insert SQL since PR #32 added the quantity column.
                 "quantities": [row["quantity"]],
                 "sync_statuses": [sync_status.value],
+                "idempotency_keys": [None],  # successor is not a one-time start
             },
         )
         return UUID(str(result.mappings().one()["item_id"]))

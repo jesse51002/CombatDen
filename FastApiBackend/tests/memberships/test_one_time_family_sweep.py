@@ -102,6 +102,7 @@ async def _insert_pending_one_time(
         "total_prices": [total_price],
         "quantities": [1],
         "sync_statuses": [StripeSyncStatus.not_added.value],
+        "idempotency_keys": [None],
     }
     async with db_pool.session() as session:
         result = await session.execute(text(sql), params)
