@@ -17,7 +17,7 @@ CREATE TABLE members (
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
     current_rank_id UUID,
 
-    -- Contact / freeze / linkage / Stripe billing (service_role-written only;
+    -- Contact / freeze / Stripe billing (service_role-written only;
     -- NULL for engagement-only members).
     photo_url VARCHAR,
     phone VARCHAR,
@@ -27,7 +27,6 @@ CREATE TABLE members (
     emergency_contact_email VARCHAR,
     freeze_start_date DATE,
     freeze_end_date DATE,
-    account_linked_to_id UUID,
     stripe_customer_id VARCHAR,
     stripe_sub_id_month VARCHAR,
     stripe_payment_method_id VARCHAR,
@@ -48,24 +47,12 @@ CREATE TABLE members (
         CHECK (
             (freeze_start_date IS NULL AND freeze_end_date IS NULL)
             OR (freeze_start_date IS NOT NULL AND freeze_end_date IS NOT NULL)
-        ),
-    CONSTRAINT linked_account_no_stripe
-        CHECK (
-            account_linked_to_id IS NULL
-            OR (
-                stripe_sub_id_month IS NULL
-                AND freeze_start_date IS NULL
-                AND freeze_end_date IS NULL
-                AND payment_type IS NULL
-                AND card_brand IS NULL
-                AND card_last_four IS NULL
-                AND card_exp_month IS NULL
-                AND card_exp_year IS NULL
-            )
-        ),
-    CONSTRAINT fk_member_linked_account
-        FOREIGN KEY (account_linked_to_id, gym_id)
-        REFERENCES members (member_id, gym_id)
+        )
+    -- NOTE: a member MAY carry their own billing state. Billing is per PAYER
+    -- (member_memberships.paid_by_member_id): a member paid for by an authorized
+    -- payer still legitimately holds their own stripe_sub_id_month, payment
+    -- method/card columns, and freeze window. Authorization (who may pay for
+    -- whom) lives in member_authorized_payers, never a billing gate on this row.
 );
 
 -- Partial unique index: a user can only have one member record per gym
@@ -76,15 +63,6 @@ CREATE UNIQUE INDEX unique_member_user_gym
 -- Unique index: each Stripe customer maps to exactly one member
 CREATE UNIQUE INDEX idx_members_stripe_customer
     ON members (stripe_customer_id);
-
--- Index on the family-billing link. The payment sync resolves each family on
--- every billing op via `... OR account_linked_to_id = :parent`, and the
--- enforce_linked_account_hierarchy trigger checks `account_linked_to_id = NEW.member_id`
--- on every member insert/link — both seq-scan members without this. Partial
--- (the column is NULL for everyone except linked children) to stay lean.
-CREATE INDEX idx_members_account_linked_to
-    ON members (account_linked_to_id)
-    WHERE account_linked_to_id IS NOT NULL;
 
 -- Trigger: once user_id is set, it cannot be changed to a different value
 CREATE OR REPLACE FUNCTION prevent_user_id_overwrite()
@@ -116,43 +94,9 @@ CREATE TRIGGER trg_prevent_stripe_customer_id_overwrite
     BEFORE UPDATE OF stripe_customer_id ON members
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_customer_id_overwrite();
 
--- Trigger: an account cannot be both a parent and a child in linked accounts
-CREATE OR REPLACE FUNCTION enforce_linked_account_hierarchy()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.account_linked_to_id IS NOT NULL THEN
-        -- This member is becoming a child — ensure it is not already a parent
-        IF EXISTS (
-            SELECT 1 FROM members
-            WHERE account_linked_to_id = NEW.member_id
-        ) THEN
-            RAISE EXCEPTION 'Cannot link account % to a parent — it already has linked child accounts',
-                NEW.member_id;
-        END IF;
-
-        -- Ensure the target parent is not itself a child
-        IF EXISTS (
-            SELECT 1 FROM members
-            WHERE member_id = NEW.account_linked_to_id
-              AND account_linked_to_id IS NOT NULL
-        ) THEN
-            RAISE EXCEPTION 'Cannot link to account % — it is already linked to another account',
-                NEW.account_linked_to_id;
-        END IF;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_enforce_linked_account_hierarchy
-    BEFORE INSERT OR UPDATE OF account_linked_to_id ON members
-    FOR EACH ROW EXECUTE FUNCTION enforce_linked_account_hierarchy();
-
--- Linked (family) discounts dissolved: a family discount is now a snapshot row
--- on member_membership_applied_discounts (discount_type = 'linked'), not a
--- person-level pointer. members.linked_discount_id and its type-check trigger
--- are gone; account_linked_to_id (the family-billing link itself) is unchanged.
+-- The family link lives in the member_authorized_payers junction (the
+-- many-to-many authorization layer), so members carries no link column or
+-- hierarchy trigger.
 
 -- Filtered view: members with a completed Stripe customer sync. Billing flows
 -- read through this so half-synced rows are never surfaced. `members` is the

@@ -3,19 +3,17 @@
 Each step-service returns a ``SweepResult`` so the orchestrator can log a
 compact, machine-readable summary of one run. These are internal telemetry
 models, not an API response.
+
+``SweepResult`` itself lives in ``src/shared/sweep_result.py`` (re-exported here
+for the existing reconciler call sites) so the memberships invoice-fetch service
+can share it without importing from ``reconciler``.
 """
 
 from pydantic import BaseModel, Field
 
+from src.shared.sweep_result import SweepResult
 
-class SweepResult(BaseModel):
-    """The outcome of one step-service over a single reconciler run."""
-
-    name: str
-    processed: int = 0  # rows / members / objects examined
-    changed: int = 0  # acted on (deleted / cancelled / recorded)
-    skipped: int = 0  # intentionally left (e.g. family lock held)
-    errors: int = 0  # per-item failures that did not abort the sweep
+__all__ = ["ReconcilerRunResult", "SweepResult"]
 
 
 class ReconcilerRunResult(BaseModel):

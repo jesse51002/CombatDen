@@ -35,11 +35,24 @@ class EmailNotConfirmedException extends AuthException {
 class ServerException implements Exception {
   final String message;
   final int? statusCode;
+
+  /// The error body's `detail` when it is a plain string
+  /// (FastAPI's default `{"detail": "..."}` shape). Null when
+  /// `detail` is structured (a map/list) — read [data] then.
   final String? detail;
+
+  /// The raw decoded error response body (e.g.
+  /// `{"detail": {...}}`). Carries the structured `detail` a
+  /// FastAPI handler can return as an object — the caller reads
+  /// `data['detail']` directly. Null when the body is missing or
+  /// not a JSON map.
+  final Map<String, dynamic>? data;
+
   const ServerException(
     this.message, {
     this.statusCode,
     this.detail,
+    this.data,
   });
 
   @override
@@ -72,6 +85,17 @@ class NetworkException implements Exception {
 class DatabaseException implements Exception {
   final String message;
   const DatabaseException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// Thrown when a mutation is blocked because the target
+/// membership is part of an in-progress background task.
+/// Triggered by a 409 from the backend.
+class MembershipInTaskException implements Exception {
+  final String message;
+  const MembershipInTaskException(this.message);
 
   @override
   String toString() => message;

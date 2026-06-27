@@ -1,8 +1,8 @@
--- Append-only e-signature audit. Phase 1 = reads only (the front-desk clickwrap
--- capture is Phase 2, which adds the INSERT policy below). Members can see their
--- own signatures; gym staff see everything at their gym (mirrors
--- member_reward_redemptions). Rows are never updated or deleted — the legal
--- record is tamper-evident.
+-- Append-only e-signature audit + generic signature LOG (who signed which
+-- waiver version, when, with the audit fields). Gym staff record signatures at
+-- the front desk (clickwrap capture). Members can see their own signatures; gym
+-- staff see everything at their gym (mirrors member_reward_redemptions). Rows
+-- are never updated or deleted — the legal record is tamper-evident.
 
 -- Enable Row Level Security
 ALTER TABLE member_waiver_signatures ENABLE ROW LEVEL SECURITY;
@@ -20,11 +20,12 @@ CREATE POLICY "Members and gym staff can view waiver signatures"
         )
     );
 
--- Phase 2 (front-desk kiosk capture) will add the INSERT policy, e.g.:
---   CREATE POLICY "Gym staff can record waiver signatures"
---       ON member_waiver_signatures
---       FOR INSERT TO authenticated
---       WITH CHECK (is_gym_admin_or_owner(member_waiver_signatures.gym_id));
+-- Gym staff record signatures at the front desk (clickwrap capture).
+CREATE POLICY "Gym staff can record waiver signatures"
+    ON member_waiver_signatures
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (is_gym_admin_or_owner(member_waiver_signatures.gym_id));
 
 -- Append-only legal record: never updated or deleted.
 REVOKE UPDATE, DELETE ON TABLE member_waiver_signatures FROM authenticated;

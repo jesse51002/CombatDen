@@ -31,7 +31,7 @@ discounts_router = APIRouter(
     status_code=status.HTTP_200_OK,
     summary="List preset discounts for a gym",
     description=(
-        "Lists non-deleted preset discounts for the gym. Custom and linked discounts are excluded."
+        "Lists non-deleted preset discounts for the gym. Custom discounts are excluded."
     ),
     responses={
         200: {"description": "Discounts listed successfully"},
@@ -231,7 +231,7 @@ async def delete_discount(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await discounts_service.delete_discount(discount_id)
+        await discounts_service.delete_discount(discount_id, gym_id)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

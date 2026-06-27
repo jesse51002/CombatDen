@@ -2,7 +2,7 @@
 
 The batch syncs each member under its family lock; members that fail a pass (most
 often a transient ``LockBusyError``) are collected and retried in a loop, up to
-``BULK_SYNC_MAX_RETRIES`` passes, each after a ``BULK_SYNC_RETRY_DELAY_SECONDS``
+``settings.bulk_sync_max_retries`` passes, each after a ``settings.bulk_sync_retry_delay_seconds``
 wait. A member still failing once the retries are exhausted is logged, never
 raised. These tests mock the resolver / lock / per-member sync so no DB or Stripe
 is touched.
@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import src.shared.db_schema_path  # noqa: F401
+from src.core.config import settings
 from src.shared.paying_member_lock import LockBusyError
 from src.sync.service import (
     sync_service as mod,
@@ -36,8 +37,7 @@ def _build_service() -> PaymentSyncService:
     return PaymentSyncService(
         db_pool=MagicMock(),
         subscription_service=MagicMock(),
-        parent_resolver=MagicMock(),
-        once_discounts=MagicMock(),
+        payer_resolver=MagicMock(),
         builder=MagicMock(),
         paying_lock=paying_lock,
     )
@@ -79,7 +79,7 @@ async def test_failures_retried_after_delay(monkeypatch) -> None:
 
     # b failed once, was retried and succeeded; a and c synced once.
     assert attempts == {a: 1, b: 2, c: 1}
-    sleep.assert_awaited_once_with(mod.BULK_SYNC_RETRY_DELAY_SECONDS)
+    sleep.assert_awaited_once_with(settings.bulk_sync_retry_delay_seconds)
 
 
 async def test_persistent_failure_retries_max_then_logs(monkeypatch) -> None:
@@ -95,8 +95,8 @@ async def test_persistent_failure_retries_max_then_logs(monkeypatch) -> None:
 
     svc.update_payments_recurring = always_busy
 
-    # First pass + BULK_SYNC_MAX_RETRIES retry passes, all fail; never raises.
+    # First pass + bulk_sync_max_retries retry passes, all fail; never raises.
     await svc.bulk_payment_sync([bad])
 
-    assert attempts == [bad] * (mod.BULK_SYNC_MAX_RETRIES + 1)
-    assert sleep.await_count == mod.BULK_SYNC_MAX_RETRIES
+    assert attempts == [bad] * (settings.bulk_sync_max_retries + 1)
+    assert sleep.await_count == settings.bulk_sync_max_retries

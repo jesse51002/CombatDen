@@ -7,6 +7,8 @@ read-only — mutating helpers live in ``data_factory.py``.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -91,6 +93,45 @@ async def get_active_membership_item_id(
     return rows[0]["item_id"]
 
 
+async def get_membership_total_price(
+    db_pool: DirectDatabasePool,
+    member_id: UUID,
+    gym_id: UUID,
+) -> int:
+    """Return a member's active membership stamped ``total_price``.
+
+    The membership's own STANDALONE price (plan minus its own discounts).
+    Stays the real price even while frozen — freeze zeros the BILL, not the
+    membership's own price. Reads the filtered ``member_memberships`` view; a
+    frozen membership is still visible there because it keeps its
+    ``stripe_item_id`` (freeze is a discount, not a drop).
+    """
+    item_id = await get_active_membership_item_id(db_pool, member_id, gym_id)
+    sql = "SELECT total_price FROM member_memberships WHERE item_id = :id"
+    async with db_pool.session() as session:
+        result = await session.execute(text(sql), {"id": str(item_id)})
+        return result.scalar_one()
+
+
+async def get_payer_monthly_bill(
+    db_pool: DirectDatabasePool,
+    member_id: UUID,
+) -> int:
+    """Return a payer's actual monthly bill (``total_monthly_recurring_price``).
+
+    Written by the sync from Stripe's upcoming invoice, so it reflects a
+    freeze: a 100%-off line contributes $0, so a wholly-frozen payer bills 0
+    and a partially-frozen one bills only its active units.
+    """
+    sql = (
+        "SELECT total_monthly_recurring_price FROM members "
+        "WHERE member_id = :id"
+    )
+    async with db_pool.session() as session:
+        result = await session.execute(text(sql), {"id": str(member_id)})
+        return result.scalar_one()
+
+
 async def get_applied_discounts(
     db_pool: DirectDatabasePool,
     item_id: UUID,
@@ -104,7 +145,7 @@ async def get_applied_discounts(
     sql = (
         "SELECT ad.applied_discount_id, ad.item_id, ad.member_id, ad.gym_id, "
         "ad.value_id, d.discount_id, d.discount_name, d.discount_type, "
-        "v.percentage_off, v.dollar_off, v.discount_mode, "
+        "v.percentage_off, v.dollar_off, "
         "ad.end_date, ad.stripe_coupon_id "
         "FROM member_membership_applied_discounts_unfiltered ad "
         "JOIN gym_discount_values_unfiltered v ON ad.value_id = v.value_id "
@@ -141,3 +182,29 @@ async def get_membership_stripe_price_id(
     if row is None or row["stripe_price_id"] is None:
         raise AssertionError(f"No stripe_price_id for membership item_id={item_id}")
     return row["stripe_price_id"]
+
+
+async def await_task_terminal(
+    db_pool: DirectDatabasePool,
+    task_id: UUID,
+    timeout_seconds: float = 120.0,
+) -> str:
+    """Poll a background task (the CRM's contract) until completed/failed.
+
+    Returns the terminal status string. Raises if the task does not reach a
+    terminal state within ``timeout_seconds``.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text("SELECT status::text FROM tasks WHERE task_id = :t"),
+                {"t": str(task_id)},
+            )
+            status = result.scalar_one()
+        if status in ("completed", "failed"):
+            return status
+        await asyncio.sleep(1)
+    raise AssertionError(
+        f"Task {task_id} not terminal after {timeout_seconds}s"
+    )

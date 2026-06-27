@@ -18,7 +18,6 @@ from uuid import uuid4
 import pytest
 from schema.gym_discount import (
     DiscountDurationUnit,
-    DiscountMode,
     DiscountType,
 )
 from sqlalchemy import text
@@ -43,7 +42,11 @@ async def _create_custom(discounts_service, gym_id, created, pct=10.0):
     """
     [discount_id] = await discounts_service.mint_custom_discounts(
         gym_id,
-        [DiscountValue(percentage_off=pct, discount_mode=DiscountMode.once)],
+        [DiscountValue(
+            percentage_off=pct,
+            duration_amount=1,
+            duration_unit=DiscountDurationUnit.cycle,
+        )],
     )
     created.track_discount(discount_id)
     return discount_id
@@ -55,7 +58,7 @@ async def _row(db_pool, discount_id):
         result = await session.execute(
             text(
                 "SELECT d.discount_name, v.value_id, v.percentage_off, "
-                "v.dollar_off, v.discount_mode, v.duration_amount, "
+                "v.dollar_off, v.duration_amount, "
                 "v.duration_unit, v.end_date, d.is_deleted "
                 "FROM gym_discounts_unfiltered d "
                 "JOIN gym_discount_values_unfiltered v "
@@ -76,7 +79,6 @@ async def test_create_percentage_discount(discounts_service, db_pool, gym_id, cr
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=20.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -86,16 +88,14 @@ async def test_create_percentage_discount(discounts_service, db_pool, gym_id, cr
     assert resp.discount_name == "20% Off"
     assert resp.value.percentage_off == 20.0
     assert resp.value.dollar_off is None
-    assert resp.value.discount_mode == DiscountMode.ongoing
     assert resp.is_deleted is False
 
     row = await _row(db_pool, resp.discount_id)
     assert row["percentage_off"] == 20.0
-    assert row["discount_mode"] == "ongoing"
 
 
-async def test_create_dollar_once_discount(discounts_service, gym_id, created):
-    """A once dollar preset stores discount_mode=once and no end_date."""
+async def test_create_dollar_one_cycle_discount(discounts_service, gym_id, created):
+    """A 1-cycle dollar preset stores duration_amount=1, duration_unit=cycle and no end_date."""
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -103,7 +103,8 @@ async def test_create_dollar_once_discount(discounts_service, gym_id, created):
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 dollar_off=1000,
-                discount_mode=DiscountMode.once,
+                duration_amount=1,
+                duration_unit=DiscountDurationUnit.cycle,
             ),
         ),
     )
@@ -111,13 +112,13 @@ async def test_create_dollar_once_discount(discounts_service, gym_id, created):
 
     assert resp.value.dollar_off == 1000
     assert resp.value.percentage_off is None
-    assert resp.value.discount_mode == DiscountMode.once
+    assert resp.value.duration_amount == 1
+    assert resp.value.duration_unit == DiscountDurationUnit.cycle
     assert resp.value.end_date is None
-    assert resp.value.duration_amount is None
 
 
 async def test_create_ongoing_with_duration_span(discounts_service, gym_id, created):
-    """An ongoing preset with a duration span stores the span, no end_date."""
+    """A preset with a duration span stores the span, no end_date."""
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -125,7 +126,6 @@ async def test_create_ongoing_with_duration_span(discounts_service, gym_id, crea
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=15.0,
-                discount_mode=DiscountMode.ongoing,
                 duration_amount=3,
                 duration_unit=DiscountDurationUnit.month,
             ),
@@ -143,7 +143,6 @@ async def test_create_rejects_span_and_end_date_together(discounts_service, gym_
     with pytest.raises(ValueError, match="never both"):
         DiscountValue(
             percentage_off=10.0,
-            discount_mode=DiscountMode.ongoing,
             duration_amount=2,
             duration_unit=DiscountDurationUnit.month,
             end_date=date(2027, 1, 1),
@@ -165,7 +164,6 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=15.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -178,7 +176,6 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
             identity=DiscountUpdateIdentity(discount_name="New Name"),
             value=DiscountValue(
                 percentage_off=25.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -205,7 +202,6 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=12.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -239,7 +235,6 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=10.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -252,7 +247,6 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
             gym_id=gym_id,
             value=DiscountValue(
                 percentage_off=30.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -284,13 +278,12 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=5.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
     created.track_discount(created_resp.discount_id)
 
-    await discounts_service.delete_discount(created_resp.discount_id)
+    await discounts_service.delete_discount(created_resp.discount_id, gym_id)
 
     async with db_pool.session() as session:
         result = await session.execute(
@@ -318,7 +311,6 @@ async def test_archive_leaves_applied_discounts_untouched(
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=10.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -333,7 +325,7 @@ async def test_archive_leaves_applied_discounts_untouched(
         )
         created.track_plan_db(plan_id)
 
-        await discounts_service.delete_discount(created_resp.discount_id)
+        await discounts_service.delete_discount(created_resp.discount_id, gym_id)
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -403,9 +395,9 @@ async def _seed_membership_with_applied_discount(db_pool, gym_id, value_id):
         mem_row = await session.execute(
             text(
                 "INSERT INTO member_memberships_unfiltered "
-                "(member_id, gym_id, plan_id, price_id, start_date, "
-                " total_price, stripe_item_id) "
-                "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
+                "(member_id, paid_by_member_id, gym_id, plan_id, price_id, "
+                " start_date, total_price, stripe_item_id) "
+                "VALUES (:member_id, :member_id, :gym_id, :plan_id, :price_id, "
                 " CURRENT_DATE, 5000, :si) RETURNING item_id"
             ),
             {
@@ -472,7 +464,8 @@ async def test_create_rejects_custom_discount(discounts_service, gym_id):
                 discount_type=DiscountType.custom,
                 value=DiscountValue(
                     percentage_off=10.0,
-                    discount_mode=DiscountMode.once,
+                    duration_amount=1,
+                    duration_unit=DiscountDurationUnit.cycle,
                 ),
             ),
         )
@@ -494,7 +487,8 @@ async def test_update_rejects_custom_discount(discounts_service, gym_id, created
                 gym_id=gym_id,
                 value=DiscountValue(
                     percentage_off=20.0,
-                    discount_mode=DiscountMode.once,
+                    duration_amount=1,
+                    duration_unit=DiscountDurationUnit.cycle,
                 ),
             ),
         )
@@ -517,7 +511,6 @@ async def test_apply_rejects_custom_outside_membership_flow(
             discount_type=DiscountType.preset,
             value=DiscountValue(
                 percentage_off=5.0,
-                discount_mode=DiscountMode.ongoing,
             ),
         ),
     )
@@ -563,9 +556,8 @@ async def test_db_rejects_second_value_version_for_custom(
             await session.execute(
                 text(
                     "INSERT INTO gym_discount_values_unfiltered "
-                    "(discount_id, gym_id, percentage_off, discount_mode, "
-                    " is_active) "
-                    "VALUES (:d, :g, 20.0, 'once', false)"
+                    "(discount_id, gym_id, percentage_off, is_active) "
+                    "VALUES (:d, :g, 20.0, false)"
                 ),
                 {"d": str(custom_id), "g": str(gym_id)},
             )

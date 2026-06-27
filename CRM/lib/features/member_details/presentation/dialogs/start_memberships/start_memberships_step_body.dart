@@ -8,8 +8,10 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_discounts_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_members_step.dart';
@@ -53,9 +55,11 @@ class StartMembershipsStepBody extends StatelessWidget {
   final Future<List<DiscountResponse>> discountsFuture;
   final MemberMembershipsStartRequest? previewRequest;
   final MemberMembershipsStartPreview? preview;
-  final bool prorate;
+  final ProrationBehavior prorationBehavior;
   final bool paidWithCash;
   final bool hasRecurring;
+  final bool hasOneTime;
+  final CustomCardCapture? customCard;
   final CardOnFile? payerCardOnFile;
   final Map<String, String> memberNames;
   final Map<String, String> planNames;
@@ -75,9 +79,17 @@ class StartMembershipsStepBody extends StatelessWidget {
   ) onDraftChanged;
   final ValueChanged<MemberMembershipsStartPreview>
       onPreviewLoaded;
-  final ValueChanged<bool> onProrateChanged;
+  final ValueChanged<ProrationBehavior> onProrationChanged;
   final ValueChanged<bool> onPaidWithCashChanged;
   final VoidCallback onAddNewCard;
+  final VoidCallback onAddOrChangeCustomCard;
+  final VoidCallback onRemoveCustomCard;
+
+  /// Review-step actions: edit jumps the wizard back into
+  /// [memberId]'s plans/discounts; remove drops one draft.
+  final ValueChanged<String> onEditMember;
+  final void Function(String memberId, String planId)
+      onRemoveDraft;
   final VoidCallback onRetryFailed;
   final VoidCallback onBackToPayment;
   final ValueChanged<String> onViewMember;
@@ -100,9 +112,11 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.discountsFuture,
     required this.previewRequest,
     required this.preview,
-    required this.prorate,
+    required this.prorationBehavior,
     required this.paidWithCash,
     required this.hasRecurring,
+    required this.hasOneTime,
+    required this.customCard,
     required this.payerCardOnFile,
     required this.memberNames,
     required this.planNames,
@@ -112,9 +126,13 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.onPlanToggle,
     required this.onDraftChanged,
     required this.onPreviewLoaded,
-    required this.onProrateChanged,
+    required this.onProrationChanged,
     required this.onPaidWithCashChanged,
     required this.onAddNewCard,
+    required this.onAddOrChangeCustomCard,
+    required this.onRemoveCustomCard,
+    required this.onEditMember,
+    required this.onRemoveDraft,
     required this.onRetryFailed,
     required this.onBackToPayment,
     required this.onViewMember,
@@ -215,6 +233,8 @@ class StartMembershipsStepBody extends StatelessWidget {
           members: configMembers,
           draftsByMember: draftsByMember,
           discountsFuture: discountsFuture,
+          onEditMember: onEditMember,
+          onRemoveDraft: onRemoveDraft,
         );
       case StartMembershipsStep.preview:
         final req = previewRequest;
@@ -230,17 +250,31 @@ class StartMembershipsStepBody extends StatelessWidget {
         return StartPreviewStep(
           repository: repository,
           request: req,
+          // The payer's current monthly bill is the "before"
+          // baseline for the recurring card's before→after.
+          currentMonthly: payerDetail?.totalMonthlyRecurringPrice,
           onLoaded: onPreviewLoaded,
+          prorationBehavior: prorationBehavior,
+          onProrationChanged: onProrationChanged,
+          hasRecurring: hasRecurring,
+          anchorDate: preview?.recurring?.nextPaymentAt,
+          // Attribute the charge to the payer it bills.
+          payerName: payerDetail?.fullName,
+          payerPhotoUrl: payerDetail?.photoUrl,
         );
       case StartMembershipsStep.payment:
         return StartPaymentStep(
           cardOnFile: payerCardOnFile,
           paidWithCash: paidWithCash,
           onPaidWithCashChanged: onPaidWithCashChanged,
-          prorate: prorate,
-          onProrateChanged: onProrateChanged,
           hasRecurring: hasRecurring,
+          hasOneTime: hasOneTime,
+          customCard: customCard,
+          onAddOrChangeCustomCard:
+              onAddOrChangeCustomCard,
+          onRemoveCustomCard: onRemoveCustomCard,
           preview: preview,
+          prorationBehavior: prorationBehavior,
           onAddNewCard: onAddNewCard,
         );
       case StartMembershipsStep.results:

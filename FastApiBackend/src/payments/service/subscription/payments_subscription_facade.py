@@ -4,13 +4,10 @@ from src.payments.schema.payments_invoice_schema import (
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
     PaymentsSubscriptionCreateRequest,
-    PaymentsSubscriptionFreezeRequest,
-    PaymentsSubscriptionFreezeResponse,
     PaymentsSubscriptionItemResponse,
     PaymentsSubscriptionPriceMigrationRequest,
     PaymentsSubscriptionPriceMigrationResponse,
     PaymentsSubscriptionResponse,
-    PaymentsSubscriptionUnfreezeRequest,
     PaymentsSubscriptionUpdateRequest,
 )
 from src.payments.service.payments_stripe_client import (
@@ -30,9 +27,6 @@ from src.payments.service.subscription.payments_subscription_cancel import (
 )
 from src.payments.service.subscription.payments_subscription_create import (
     PaymentsSubscriptionCreate,
-)
-from src.payments.service.subscription.payments_subscription_freeze import (
-    PaymentsSubscriptionFreeze,
 )
 from src.payments.service.subscription.payments_subscription_item import (
     PaymentsSubscriptionItem,
@@ -76,7 +70,6 @@ class PaymentsStripeSubscriptionService:
         self._create = PaymentsSubscriptionCreate(*deps)
         self._update = PaymentsSubscriptionUpdate(*deps)
         self._cancel = PaymentsSubscriptionCancel(*deps)
-        self._freeze = PaymentsSubscriptionFreeze(*deps)
         self._migration = PaymentsSubscriptionMigration(*deps)
         self._item = PaymentsSubscriptionItem(*deps)
         self._upcoming = PaymentsSubscriptionUpcoming(*deps)
@@ -127,22 +120,6 @@ class PaymentsStripeSubscriptionService:
     ) -> PaymentsSubscriptionResponse:
         """Cancel a subscription immediately or at period end."""
         return await self._cancel.cancel_subscription(request, stripe_account_id)
-
-    async def freeze_subscription(
-        self,
-        request: PaymentsSubscriptionFreezeRequest,
-        stripe_account_id: str,
-    ) -> PaymentsSubscriptionFreezeResponse:
-        """Pause collection on a subscription (freeze)."""
-        return await self._freeze.freeze_subscription(request, stripe_account_id)
-
-    async def unfreeze_subscription(
-        self,
-        request: PaymentsSubscriptionUnfreezeRequest,
-        stripe_account_id: str,
-    ) -> PaymentsSubscriptionResponse:
-        """Resume collection on a paused subscription (unfreeze)."""
-        return await self._freeze.unfreeze_subscription(request, stripe_account_id)
 
     # ── Upcoming Invoice ──────────────────────────────────────────
 

@@ -100,7 +100,6 @@ Table members {
   emergency_contact_email varchar
   freeze_start_date date [note: 'nullable; must pair with freeze_end_date']
   freeze_end_date date [note: 'nullable']
-  account_linked_to_id uuid [note: 'nullable; self-FK (account_linked_to_id, gym_id) -> members(member_id, gym_id)']
   stripe_customer_id varchar [note: 'immutable once set (trigger); member_billing_profile view filters WHERE NOT NULL']
   stripe_sub_id_month varchar
   stripe_payment_method_id varchar
@@ -240,6 +239,7 @@ Table gym_waivers {
   name varchar [not null]
   current_version_id uuid
   is_deleted boolean [not null, default: false]
+  is_default boolean [not null, default: false, note: 'undeletable default authorized-payer waiver; <=1 per gym']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
@@ -278,6 +278,18 @@ Table member_waiver_signatures {
   content_hash varchar [not null]
 }
 
+Table member_authorized_payers {
+  member_id uuid [not null]
+  payer_member_id uuid [not null]
+  gym_id uuid [not null]
+  signature_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (member_id, payer_member_id) [pk]
+  }
+}
+
 Table member_activities {
   activity_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
@@ -307,7 +319,6 @@ Ref: gym_employees.gym_id > gyms.gym_id
 Ref: members.user_id > auth_users.id
 Ref: members.gym_id > gyms.gym_id
 Ref: members.current_rank_id > gym_ranks.rank_id
-Ref: members.account_linked_to_id > members.member_id
 
 Ref: gym_ranks.gym_id > gyms.gym_id
 
@@ -353,6 +364,11 @@ Ref: member_waiver_signatures.member_id > members.member_id
 Ref: member_waiver_signatures.waiver_id > gym_waivers.waiver_id
 Ref: member_waiver_signatures.waiver_version_id > gym_waiver_versions.version_id
 
+Ref: member_authorized_payers.member_id > members.member_id
+Ref: member_authorized_payers.payer_member_id > members.member_id
+Ref: member_authorized_payers.gym_id > gyms.gym_id
+Ref: member_authorized_payers.signature_id > member_waiver_signatures.signature_id
+
 Ref: member_activities.member_id > members.member_id
 Ref: member_activities.gym_id > gyms.gym_id
 
@@ -376,8 +392,6 @@ Table membership_plans_unfiltered {
   is_deleted boolean [not null, default: false]
   stripe_product_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
   waiver_ids jsonb [not null, default: `'[]'`, note: 'array of waiver_id strings (multi-select; no FK)']
-  linked_discount_enabled boolean [not null, default: false]
-  linked_discount_ids jsonb [not null, default: `'[]'`, note: 'discount ids per linked tier (2nd..5th+), in order']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -404,7 +418,7 @@ Table gym_discounts_unfiltered {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null, note: 'editable identity']
-  discount_type varchar [not null, note: 'CHECK: preset | custom | linked (linked = a family discount entry a plan references by id)']
+  discount_type discount_type [not null, note: 'enum: preset | custom']
   is_deleted boolean [not null, default: false]
   created_at timestamptz [not null, default: `now()`]
   // IDENTITY only. The percent/dollar + lifetime live on gym_discount_values (versioned).
@@ -425,13 +439,12 @@ Table gym_discount_values_unfiltered {
   gym_id uuid [not null]
   percentage_off float [note: 'nullable; exactly one of percentage_off/dollar_off set']
   dollar_off integer [note: 'nullable']
-  discount_mode discount_mode [not null, note: 'enum: once | ongoing']
   duration_amount integer [note: 'nullable; pairs with duration_unit']
-  duration_unit discount_duration_unit [note: 'nullable; enum: day | week | month']
+  duration_unit discount_duration_unit [note: 'nullable; enum: day | week | month | cycle (plan-relative)']
   end_date date [note: 'nullable; explicit absolute end; XOR with duration span']
   is_active boolean [not null, default: true, note: 'the one mutable column']
   created_at timestamptz [not null, default: `now()`]
-  // lifetime: discount_mode + (duration_amount+duration_unit) XOR end_date; neither = forever.
+  // lifetime: (duration_amount+duration_unit) XOR end_date; neither = forever. 1 cycle = the single-invoice discount (replaced once mode).
 
   indexes {
     (value_id, gym_id) [unique]
@@ -445,6 +458,7 @@ Table gym_discount_values_unfiltered {
 Table member_memberships_unfiltered {
   item_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'who PAYS this row: the resolved parent or a self-paying linked member; the sync groups by this (one subscription per payer); immutable (trigger) — payer change = cancel-old + insert-new; FK (paid_by_member_id, gym_id) -> members(member_id, gym_id)']
   gym_id uuid [not null]
   plan_id uuid [not null, note: 'immutable (trigger)']
   price_id uuid [not null]
@@ -455,14 +469,16 @@ Table member_memberships_unfiltered {
   next_due_date date [note: 'gym-local']
   stripe_item_id varchar [note: 'immutable once set EXCEPT while migrating (price migration moves the line); never nulled (historical line record)']
   stripe_one_time_invoice_id varchar [note: 'ONE-TIME only: the consolidated invoice (in_) this membership was billed on; stripe_item_id holds the per-membership LINE id, this holds the shared invoice id; NULL for recurring; immutable once set']
-  prorate boolean [not null, default: true]
   total_price integer [not null, note: 'CHECK >= 0']
+  quantity integer [not null, default: 1, note: 'CHECK > 0; how many units this row bills as. one_time/trial packs stack as ONE row with quantity = N (one Stripe line with that quantity, $-coupon applies once, class_count*quantity classes); recurring forced = 1 (trigger); set at INSERT, immutable after']
   stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']
+  idempotency_key uuid [note: 'nullable; set once at INSERT (service_role); partial unique WHERE NOT NULL; one-time/trial start dedup key (C-086) — retried start reproduces same key, collides, INSERT DO NOTHING drops duplicate rows; NULL for recurring + preview rows']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
     (item_id, member_id) [unique]
     (item_id, gym_id) [unique]
+    idempotency_key [note: 'partial unique WHERE idempotency_key IS NOT NULL']
   }
 }
 
@@ -471,7 +487,6 @@ Table member_memberships_unfiltered {
 // gym_discount_values version (value_id = the provenance / version tag). Apply =
 // INSERT, remove = DELETE, never an edit. end_date + stripe_coupon_id are sync
 // writebacks. The view exposes only rows with stripe_coupon_id written back.
-// Linked discounts are per-plan pricing, not applied here.
 Table member_membership_applied_discounts_unfiltered {
   applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
   item_id uuid [not null, note: 'FK (item_id, gym_id) -> member_memberships_unfiltered']
@@ -493,7 +508,8 @@ Table member_membership_applied_discounts_unfiltered {
 Table member_invoices {
   invoice_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
-  member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'the payer (billed customer)']
+  paid_for jsonb [not null, default: '[]', note: 'beneficiary member_id list']
   status varchar [not null, default: 'open', note: 'enum: open | paid']
   total_amount integer [not null, note: 'CHECK >= 0']
   currency char(3) [not null, default: 'usd']
@@ -504,8 +520,9 @@ Table member_invoices {
 
   indexes {
     (invoice_id, gym_id) [unique]
-    (member_id, gym_id, invoice_time)
+    (paid_by_member_id, gym_id, invoice_time)
     (gym_id, invoice_time)
+    paid_for [type: gin]
   }
 }
 
@@ -531,12 +548,13 @@ Table member_invoice_applied_discounts {
   invoice_id uuid [not null]
   gym_id uuid [not null]
   discount_id uuid [note: 'nullable; not resolved to a CRM discount']
+  line_item_id varchar [not null, note: 'Stripe invoice line id (il_...); audit value, not FK-enforced; one row per coupon per line']
   amount_off integer [not null, note: 'snapshot at invoice time; CHECK >= 0']
   stripe_coupon_id varchar [not null, note: 'the identifier; captured at invoice time']
 
   indexes {
     invoice_id
-    (invoice_id, stripe_coupon_id) [unique]
+    (invoice_id, stripe_coupon_id, line_item_id) [unique, note: 'idempotent on webhook re-delivery; one row per coupon per invoice line']
   }
 }
 
@@ -544,7 +562,7 @@ Table member_charges {
   charge_id uuid [primary key, default: `uuid_generate_v4()`]
   invoice_id uuid [not null]
   gym_id uuid [not null]
-  member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'the payer (billed customer)']
   kind varchar [not null, note: 'enum: payment | refund']
   status varchar [not null, note: 'enum: pending | succeeded | failed']
   amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
@@ -559,7 +577,7 @@ Table member_charges {
 
   indexes {
     invoice_id
-    (member_id, gym_id, charge_time)
+    (paid_by_member_id, gym_id, charge_time)
     (gym_id, charge_time)
   }
 }
@@ -584,6 +602,7 @@ Ref: gym_discounts_unfiltered.gym_id > gyms.gym_id
 // member_billing_profile_unfiltered FKs merged into `members` (see members refs above).
 
 Ref: member_memberships_unfiltered.member_id > members.member_id
+Ref: member_memberships_unfiltered.paid_by_member_id > members.member_id
 Ref: member_memberships_unfiltered.gym_id > gyms.gym_id
 Ref: member_memberships_unfiltered.plan_id > membership_plans_unfiltered.plan_id
 Ref: member_memberships_unfiltered.price_id > membership_plan_prices_unfiltered.price_id
@@ -595,7 +614,7 @@ Ref: member_membership_applied_discounts_unfiltered.value_id > gym_discount_valu
 Ref: gym_discount_values_unfiltered.discount_id > gym_discounts_unfiltered.discount_id
 Ref: gym_discount_values_unfiltered.gym_id > gyms.gym_id
 
-Ref: member_invoices.member_id > members.member_id
+Ref: member_invoices.paid_by_member_id > members.member_id
 Ref: member_invoices.gym_id > gyms.gym_id
 
 Ref: member_invoice_line_items.invoice_id > member_invoices.invoice_id
@@ -608,10 +627,57 @@ Ref: member_invoice_applied_discounts.discount_id > gym_discounts_unfiltered.dis
 
 Ref: member_charges.invoice_id > member_invoices.invoice_id
 Ref: member_charges.gym_id > gyms.gym_id
-Ref: member_charges.member_id > members.member_id
+Ref: member_charges.paid_by_member_id > members.member_id
 Ref: member_charges.refunds_charge_id > member_charges.charge_id
 
 Ref: stripe_webhook_events.gym_id > gyms.gym_id
+
+// Backend-executed tracked operations (background ops the CRM polls).
+Table tasks {
+  task_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  task_type task_type [not null, note: 'enum: membership_reprice']
+  status task_status [not null, default: 'pending', note: 'enum: pending | running | completed | failed']
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    (gym_id, status)
+    status [note: 'partial: pending/running (crash-recovery sweep)']
+  }
+}
+
+Table task_items {
+  task_item_id uuid [primary key, default: `uuid_generate_v4()`]
+  task_id uuid [not null]
+  gym_id uuid [not null]
+  member_id uuid [not null]
+  status task_status [not null, default: 'pending']
+  attempt_count integer [not null, default: 0]
+  error_message text
+  old_item_id uuid [note: 'membership row the op acts on']
+  new_item_id uuid [note: 'successor row; stamped in the op transaction = DB phase done']
+  target_price_id uuid [note: 'membership_reprice param']
+  proration_behavior proration_behavior [note: 'membership_reprice param']
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    task_id
+    old_item_id [note: 'partial: NOT NULL (in-task guard)']
+    new_item_id [note: 'partial: NOT NULL (in-task guard + orphan-sweep exclusion)']
+  }
+}
+
+Ref: tasks.gym_id > gyms.gym_id
+Ref: task_items.task_id > tasks.task_id
+Ref: task_items.gym_id > gyms.gym_id
+Ref: task_items.member_id > members.member_id
+Ref: task_items.old_item_id > member_memberships_unfiltered.item_id
+Ref: task_items.new_item_id > member_memberships_unfiltered.item_id
+Ref: task_items.target_price_id > membership_plan_prices_unfiltered.price_id
 
 // ============================================================
 // VideoService demo content (video_* tables). The gym here is a gym-TYPE

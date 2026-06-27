@@ -1,10 +1,14 @@
-"""Charge a member's card for an ad-hoc amount.
+"""Charge an ad-hoc amount for a member, billed to an explicit payer.
 
 Creates a one-off Stripe invoice (outside any subscription) for the
-supplied amount and reason. The existing ``invoice.paid`` webhook
+supplied amount and reason, on the request's ``paid_by_member_id``'s own
+Stripe customer — the member themselves or their linked parent (the
+self-or-parent authorization rule). The existing ``invoice.paid`` webhook
 persists the CRM invoice and charge rows once Stripe settles the
 payment. When ``paid_cash=True`` the invoice is marked paid out of
-band in Stripe instead of charging the card.
+band in Stripe instead of charging the card. When a one-off
+``payment_method_id`` is supplied, it is attached to the payer's
+customer, billed once, then detached (the saved default is untouched).
 """
 
 from __future__ import annotations
@@ -31,8 +35,8 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
@@ -41,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 class MemberMembershipsChargeCard(MemberMembershipsBase):
-    """Charge a member's card (or mark as cash) for an ad-hoc amount."""
+    """Charge an explicit payer's card (or mark as cash) for an ad-hoc amount."""
 
     def __init__(
         self,
@@ -49,7 +53,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
-        parent_resolver: BillingParentResolver,
+        payer_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -57,7 +61,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             gym_stripe_service,
         )
         self._payment_service = payment_service
-        self._parent_resolver = parent_resolver
+        self._payer_resolver = payer_resolver
 
     async def charge_card(
         self,
@@ -65,37 +69,51 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
     ) -> None:
         """Create and pay a one-off invoice for ``amount_cents``.
 
-        Resolves the paying parent to get the Stripe customer id,
-        validates the request's ``gym_id`` matches the parent's
-        gym, then delegates to the payment service to create +
-        finalize + pay the invoice. When ``paid_cash=True`` the
-        invoice is paid out of band (no card charge).
+        Validates the request's payer is authorized for the member (the
+        member themselves or the member's linked parent), resolves the
+        PAYER's own Stripe customer, validates the request's ``gym_id``
+        matches, then delegates to the payment service to create +
+        finalize + pay the invoice. When ``paid_cash=True`` the invoice
+        is paid out of band (no card charge). When
+        ``payment_method_id`` is set, that one-off card is attached to
+        the payer's customer, billed once, then detached (the saved
+        default is untouched); otherwise the payer's saved default is
+        billed.
 
         Args:
-            request: Charge-card request.
+            request: Charge-card request (beneficiary + explicit payer).
 
         Raises:
-            ValueError: If the member's parent profile is not in
-                the requested gym.
+            ValueError: If the payer is not the member or their linked
+                parent, or the payer's profile is not in the requested gym.
             PaymentsStripeError: If Stripe returns an error.
         """
-        parent = await self._parent_resolver.resolve_parent(request.member_id)
-        if parent.gym_id != request.gym_id:
+        await self._assert_payer_allowed(
+            request.member_id, request.paid_by_member_id,
+        )
+        payer = await self._payer_resolver.resolve_payer(
+            request.paid_by_member_id,
+        )
+        if payer.gym_id != request.gym_id:
             raise ValueError(
-                f"Member {request.member_id} is not in gym {request.gym_id}",
+                f"Payer {request.paid_by_member_id} is not in gym {request.gym_id}",
             )
 
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            parent.gym_id,
+            payer.gym_id,
         )
 
         metadata = StripeAdHocInvoiceMetadata(
-            member_id=request.member_id,
-            gym_id=parent.gym_id,
+            # The payer is billed; the charge is FOR the request's member
+            # (the beneficiary) — usually the same person, but a parent can
+            # pay for a child. Both surface on the right page via the webhook.
+            paid_by_member_id=request.paid_by_member_id,
+            paid_for=[request.member_id],
+            gym_id=payer.gym_id,
         )
 
         payment_request = PaymentsInvoicePaymentCreateRequest(
-            stripe_customer_id=parent.stripe_customer_id,
+            stripe_customer_id=payer.stripe_customer_id,
             items=[
                 PaymentsInvoiceItemSpec(
                     amount=request.amount_cents,
@@ -106,6 +124,10 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             # The reason lands on BOTH the invoice header and the line item.
             description=request.reason,
             paid_out_of_band=request.paid_cash,
+            # An optional one-off card: attached to the payer's customer,
+            # billed once, then detached (the saved default is untouched).
+            # None bills the payer's saved default.
+            payment_method_id=request.payment_method_id,
             idempotency_key=str(request.idempotency_key),
         )
 

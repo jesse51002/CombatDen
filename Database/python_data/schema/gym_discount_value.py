@@ -4,11 +4,10 @@ from uuid import UUID
 from pydantic import model_validator
 
 from . import SeedModel
-from .gym_discount import DiscountDurationUnit, DiscountMode
+from .gym_discount import DiscountDurationUnit
 
 __all__ = [
     "DiscountDurationUnit",
-    "DiscountMode",
     "GymDiscountValueCreate",
 ]
 
@@ -21,10 +20,11 @@ class GymDiscountValueCreate(SeedModel):
     deactivates the old one — a permanent paper trail. Applied-discount rows
     reference value_id, freezing a member's discount to the exact version.
 
-    Lifetime spec: discount_mode (once | ongoing) plus, for ongoing, an end set
-    by EITHER a duration span (duration_amount + duration_unit) OR an explicit
-    end_date — never both; neither = forever. Coupons are computed at sync (not
-    stored here), so there is no stripe_coupon_id.
+    Lifetime spec: an end set by EITHER a duration span (duration_amount +
+    duration_unit, where `cycle` is plan-relative) OR an explicit end_date —
+    never both; neither = forever. A 1-cycle span is the single-invoice discount
+    that replaced the old `once` mode. Coupons are computed at sync (not stored
+    here), so there is no stripe_coupon_id.
     """
 
     value_id: UUID
@@ -32,7 +32,6 @@ class GymDiscountValueCreate(SeedModel):
     gym_id: UUID
     percentage_off: float | None = None
     dollar_off: int | None = None
-    discount_mode: DiscountMode
     duration_amount: int | None = None
     duration_unit: DiscountDurationUnit | None = None
     end_date: date | None = None

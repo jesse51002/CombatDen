@@ -59,8 +59,8 @@ schema_paths = [
     "./schemas/gyms.sql",
     "./schemas/rank_presets.sql",
     "./schemas/gym_ranks.sql",
-    # Membership plans / prices / discounts load before members because the
-    # unified members table FKs gym_discounts (linked_discount_id).
+    # Membership plans / prices / discounts load before the member-scoped
+    # tables (member_memberships, applied discounts) that FK them.
     "./schemas/membership_plans.sql",
     "./schemas/membership_plan_prices.sql",
     "./schemas/gym_discounts.sql",
@@ -79,6 +79,9 @@ schema_paths = [
     "./schemas/gym_waivers.sql",
     "./schemas/gym_waiver_versions.sql",
     "./schemas/member_waiver_signatures.sql",
+    # Authorization layer (who may pay for whom). FKs members +
+    # member_waiver_signatures (the gating signature), so loads after both.
+    "./schemas/member_authorized_payers.sql",
     "./schemas/member_activities.sql",
     "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
@@ -105,6 +108,12 @@ schema_paths = [
     "./schemas/member_invoice_applied_discounts.sql",
     "./schemas/member_charges.sql",
     "./schemas/stripe_webhook_events.sql",
+    # Backend-executed tracked operations. task_items FKs tasks + members +
+    # member_memberships + membership_plan_prices, so both load after those —
+    # and tasks must precede task_items (the glob would order them
+    # alphabetically backwards).
+    "./schemas/tasks.sql",
+    "./schemas/task_items.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]

@@ -26,21 +26,24 @@ self-FK cleared — ``delete_member_data`` handles both per member).
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
-from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
+    get_active_membership_item_id,
     get_applied_discounts,
+    get_payer_monthly_bill,
     get_profile_stripe_ids,
 )
+from tests.helpers.db_writes import authorize_payer
 from tests.helpers.stripe_assertions import fetch_subscription
 
 # The single seeded gym is America/Chicago (tests/seed_constants.py).
@@ -48,18 +51,9 @@ _SEEDED_GYM_TZ = "America/Chicago"
 
 
 async def _link_child(db_pool, child_id, parent_id) -> None:
-    """Link a child to the payer via the production link SQL (NULLs the
-    child's own card/sub so it rides the payer's invoice)."""
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child_id),
-                "parent_member_id": str(parent_id),
-            },
-        )
-        await session.commit()
+    """Authorize ``parent_id`` to pay for ``child_id`` via the production
+    authorization service (sign-gated, inserts the junction row)."""
+    await authorize_payer(db_pool, child_id, parent_id)
 
 
 async def _read_membership_row(db_pool, item_id) -> dict:
@@ -105,19 +99,17 @@ async def test_recurring_family_one_converge_per_line_discounts(
     Two children share one price; the payer is on a different, cheaper price —
     proving the converge both consolidates the shared price (quantity 2) AND
     keeps a separate line for the payer's price, with each membership carrying
-    its discount. Ongoing discounts are used (not once) because a not-yet-synced
-    membership's once is excluded from the immediate per-line figure — ongoing
-    always counts, so each ``total_price`` writeback reflects its discount at
-    start.
+    its discount. Forever discounts are used so each ``total_price`` writeback
+    reflects the discount immediately without end-date resolution.
 
     Discount choice is deliberate: the payer gets a DISTINCT 10% on its own
-    (qty-1) line, so it keeps its exact ``pct_1000_ongoing`` coupon. The two
+    (qty-1) line, so it keeps its exact ``pct_1000`` coupon. The two
     children share a price AND the SAME 20% discount — a Stripe sub item with
     quantity 2 can carry only one coupon set, so per-member discounts on a
     shared price are blended into ONE line coupon
     (``line_percent = Σ effᵢ / qty``). Giving both children the same 20% keeps
     that blend equal to 20% (``(0.20 + 0.20) / 2 = 0.20``) so the shared line's
-    coupon is unambiguously ``pct_2000_ongoing`` and both per-member writebacks
+    coupon is unambiguously ``pct_2000`` and both per-member writebacks
     are 4000 — proving the consolidation cleanly rather than asserting a
     confusing averaged coupon.
     """
@@ -137,18 +129,15 @@ async def test_recurring_family_one_converge_per_line_discounts(
     )
 
     disc_payer = await created.discount(
-        gym_id, name="Fam payer 10% ongoing", percentage_off=10.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam payer 10%", percentage_off=10.0,
     )
     # Both children share the same 20% so the consolidated qty-2 line's blended
     # coupon is unambiguously 20% (not an averaged-across-distinct-discounts id).
     disc_kid_a = await created.discount(
-        gym_id, name="Fam kid A 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam kid A 20%", percentage_off=20.0,
     )
     disc_kid_b = await created.discount(
-        gym_id, name="Fam kid B 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam kid B 20%", percentage_off=20.0,
     )
 
     try:
@@ -160,7 +149,7 @@ async def test_recurring_family_one_converge_per_line_discounts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=payer.member_id,
@@ -209,7 +198,7 @@ async def test_recurring_family_one_converge_per_line_discounts(
             assert len(snaps) == 1
             assert snaps[0]["stripe_coupon_id"] is not None
 
-        # Coupons are the deterministic per-value ids (pct_<bps>_<mode>). The
+        # Coupons are the deterministic per-value ids (pct_<bps>). The
         # payer's distinct qty-1 line keeps its exact 10%; the two children's
         # consolidated qty-2 line carries the blended 20% (both contributed 20%
         # → (0.20 + 0.20) / 2 = 0.20), so both children's applied-discount rows
@@ -223,11 +212,11 @@ async def test_recurring_family_one_converge_per_line_discounts(
         b_snaps = await get_applied_discounts(
             db_pool, by_member[child_b.member_id].item_id
         )
-        assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000_ongoing"
-        assert a_snaps[0]["stripe_coupon_id"] == "pct_2000_ongoing"
-        assert b_snaps[0]["stripe_coupon_id"] == "pct_2000_ongoing"
-        created.track_coupon("pct_1000_ongoing")
-        created.track_coupon("pct_2000_ongoing")
+        assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000"
+        assert a_snaps[0]["stripe_coupon_id"] == "pct_2000"
+        assert b_snaps[0]["stripe_coupon_id"] == "pct_2000"
+        created.track_coupon("pct_1000")
+        created.track_coupon("pct_2000")
 
         # The payer's single family subscription carries the expected items:
         # one line on the payer's price (qty 1) + ONE consolidated line on the
@@ -281,12 +270,11 @@ async def test_mixed_one_time_and_recurring_two_charges(
         gym_id, plan_name="Monthly", price_cents=5000
     )
     ot_disc = await created.discount(
-        gym_id, name="Mixed 10% once", percentage_off=10.0,
-        discount_mode="once",
+        gym_id, name="Mixed 10% 1-cycle", percentage_off=10.0,
+        duration_amount=1, duration_unit="cycle",
     )
     rec_disc = await created.discount(
-        gym_id, name="Mixed 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Mixed 20% forever", percentage_off=20.0,
     )
 
     try:
@@ -295,7 +283,7 @@ async def test_mixed_one_time_and_recurring_two_charges(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -370,7 +358,7 @@ async def test_mixed_one_time_and_recurring_two_charges(
 # ── Test 3 — Phase-A validation gate (each rejects, nothing written) ──
 
 
-async def test_phase_a_payer_frozen_rejects(
+async def test_start_on_frozen_member_bills_zero(
     memberships_service,
     db_pool,
     gym_id,
@@ -378,11 +366,15 @@ async def test_phase_a_payer_frozen_rejects(
     connect_opts,
     created,
 ):
-    """3a: a frozen payer is rejected before anything is written.
+    """Starting a membership for an already-FROZEN member succeeds and bills $0.
 
-    The freeze window is written directly to ``members`` (the simplest way to
-    make ``ParentProfile.is_frozen`` true at validation time, with no live
-    subscription needed). ``_resolve_payer`` raises and no membership row lands.
+    Freeze is a synthetic 100%-off, not a backend block, so a (batch) start on a
+    frozen member is allowed: the new membership is created on a $0 subscription,
+    reaches ``applied`` with a real ``stripe_item_id``, and bills $0 until the
+    member unfreezes. The freeze window is written directly to ``members`` to
+    make the member frozen at start time with no prior subscription — exercising
+    the create-at-$0 path. (The CRM guards this in the UX; the backend stays open
+    so batch jobs never fail on a frozen member.)
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -401,27 +393,50 @@ async def test_phase_a_payer_frozen_rejects(
             )
             await session.commit()
 
-        with pytest.raises(ValueError, match="frozen"):
-            await memberships_service.start(
-                MemberMembershipsStartRequest(
-                    payer_member_id=member.member_id,
-                    gym_id=gym_id,
-                    idempotency_key=uuid4(),
-                    memberships=[
-                        MemberMembershipsStartItem(
-                            member_id=member.member_id,
-                            price_id=plan.price_id,
-                        ),
-                    ],
-                )
+        # No rejection — the start succeeds.
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
             )
+        )
 
-        assert await _count_membership_rows(db_pool, member.member_id) == 0
+        # The membership is live on Stripe at $0: applied, a real line id, $0.
+        item_id = await get_active_membership_item_id(
+            db_pool, member.member_id, gym_id,
+        )
+        row = await _read_membership_row(db_pool, item_id)
+        assert row["status"] == "applied"
+        assert row["stripe_item_id"] is not None
+        # total_price is the membership's real standalone price (freeze zeros the
+        # BILL, not the price); the actual bill is $0 (the 100%-off line).
+        assert row["total_price"] > 0
+
+        # A $0 subscription was created and is active (not paused/cancelled),
+        # and the payer's actual recurring bill is $0.
+        profile = await get_profile_stripe_ids(
+            db_pool, member.member_id, gym_id,
+        )
+        assert profile.stripe_sub_id_month is not None
+        sub = await fetch_subscription(
+            stripe_client, profile.stripe_sub_id_month, connect_opts,
+        )
+        assert sub.status == "active"
+        assert sub.pause_collection is None
+        bill = await get_payer_monthly_bill(db_pool, member.member_id)
+        assert bill == 0, "Frozen member's actual recurring bill must be $0"
     finally:
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_phase_a_payer_is_linked_child_rejects(
+async def test_phase_a_linked_child_self_pays_own_membership(
     memberships_service,
     db_pool,
     gym_id,
@@ -429,44 +444,56 @@ async def test_phase_a_payer_is_linked_child_rejects(
     connect_opts,
     created,
 ):
-    """3b: a payer that is itself a linked child is rejected.
+    """3b: a linked child CAN be the payer of their own membership.
 
-    ``resolve_parent`` resolves the linked child up to its paying parent, so
-    ``parent.member_id != payer_member_id`` → the "payer must be a top-level
-    paying account" guard fires. Nothing is written for either member.
+    Self-pay: the payer is the membership's own member, billed on their OWN
+    Stripe customer + subscription. The parent's billing is untouched — the
+    link is the authorization layer only, never the billing key.
     """
-    pm_id = await created.payment_method()
-    real_payer = await created.member(
-        gym_id, first_name="Top", last_name="Level", payment_method_id=pm_id
+    parent_pm = await created.payment_method()
+    parent = await created.member(
+        gym_id, first_name="Top", last_name="Level", payment_method_id=parent_pm
     )
+    child_pm = await created.payment_method()
     linked_child = await created.member(
-        gym_id, first_name="Linked", last_name="Child"
+        gym_id, first_name="Linked", last_name="Child", payment_method_id=child_pm
     )
     plan = await created.plan(gym_id)
 
     try:
-        await _link_child(db_pool, linked_child.member_id, real_payer.member_id)
+        await _link_child(db_pool, linked_child.member_id, parent.member_id)
 
-        with pytest.raises(ValueError, match="top-level"):
-            await memberships_service.start(
-                MemberMembershipsStartRequest(
-                    payer_member_id=linked_child.member_id,
-                    gym_id=gym_id,
-                    idempotency_key=uuid4(),
-                    memberships=[
-                        MemberMembershipsStartItem(
-                            member_id=linked_child.member_id,
-                            price_id=plan.price_id,
-                        ),
-                    ],
-                )
+        result = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=linked_child.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=linked_child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
             )
+        )
+        assert all(
+            r.status.value == "created" for r in result.results
+        ), result
 
-        assert await _count_membership_rows(db_pool, linked_child.member_id) == 0
-        assert await _count_membership_rows(db_pool, real_payer.member_id) == 0
+        # The CHILD's own subscription bills it; the parent has none.
+        child_profile = await get_profile_stripe_ids(
+            db_pool, linked_child.member_id, gym_id
+        )
+        parent_profile = await get_profile_stripe_ids(
+            db_pool, parent.member_id, gym_id
+        )
+        assert child_profile.stripe_sub_id_month is not None
+        assert parent_profile.stripe_sub_id_month is None
+        assert await _count_membership_rows(db_pool, linked_child.member_id) == 1
+        assert await _count_membership_rows(db_pool, parent.member_id) == 0
     finally:
         await delete_member_data(db_pool, linked_child.member_id)
-        await delete_member_data(db_pool, real_payer.member_id)
+        await delete_member_data(db_pool, parent.member_id)
 
 
 async def test_phase_a_member_unlinked_rejects(
@@ -490,7 +517,7 @@ async def test_phase_a_member_unlinked_rejects(
     plan = await created.plan(gym_id)
 
     try:
-        with pytest.raises(ValueError, match="link them first"):
+        with pytest.raises(ValueError, match="authorize them first"):
             await memberships_service.start(
                 MemberMembershipsStartRequest(
                     payer_member_id=payer.member_id,
@@ -540,7 +567,7 @@ async def test_phase_a_member_linked_to_other_payer_rejects(
     try:
         await _link_child(db_pool, child.member_id, other_payer.member_id)
 
-        with pytest.raises(ValueError, match="different paying"):
+        with pytest.raises(ValueError, match="authorize them first"):
             await memberships_service.start(
                 MemberMembershipsStartRequest(
                     payer_member_id=payer.member_id,
@@ -607,7 +634,9 @@ async def test_phase_a_custom_discount_by_id_rejects(
                         price_id=plan.price_id,
                         custom_discounts=[
                             DiscountValue(
-                                percentage_off=15.0, discount_mode="once"
+                                percentage_off=15.0,
+                                duration_amount=1,
+                                duration_unit="cycle",
                             ),
                         ],
                     ),
@@ -646,24 +675,27 @@ async def test_phase_a_custom_discount_by_id_rejects(
 
 
 def test_request_rejects_duplicate_member_price_pairs(gym_id):
-    """3f: duplicate (member_id, price_id) items fail at request construction.
+    """3f: duplicate (member_id, price_id) items are REJECTED at construction.
 
-    The pydantic ``_validate_memberships`` validator rejects the duplicate
-    pair before any service code runs — no DB / Stripe involvement at all.
+    Buying N of the same pack is ONE item with quantity = N, never N duplicate
+    items. (Two DIFFERENT prices of the same plan stay distinct items; the
+    recurring "one per plan in one request" guard lives in
+    MemberMembershipsStartValidation, where plan types are known — see
+    tests/memberships/test_start_request_schema.py.)
     """
     member_id = uuid4()
     price_id = uuid4()
-    with pytest.raises(ValueError, match="duplicate"):
+    with pytest.raises(ValidationError):
         MemberMembershipsStartRequest(
             payer_member_id=member_id,
             gym_id=gym_id,
             idempotency_key=uuid4(),
             memberships=[
                 MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
+                    member_id=member_id, price_id=price_id,
                 ),
                 MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
+                    member_id=member_id, price_id=price_id,
                 ),
             ],
         )
@@ -712,7 +744,7 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
     """A declining card FAILS the recurring group — never reports success.
 
     Setup: payer with a $0 one-time membership + a paid recurring membership in
-    ONE request (``prorate=True``, NOT cash). The payer's card-on-file is
+    ONE request (``proration_behavior=prorate_to_anchor``, NOT cash). The payer's card-on-file is
     ``tok_chargeCustomerFail`` (attaches cleanly, fails every charge).
 
     With ``payment_behavior='error_if_incomplete'`` on the card create path,
@@ -754,7 +786,7 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -838,7 +870,8 @@ async def test_single_recurring_start_declining_card_fails(
     """A lone recurring start on a declining card fails with no charge.
 
     The simplest decline case: ONE recurring membership, no one-time sibling,
-    declining card, ``prorate=True``, NOT cash. The create 402s, so the result
+    declining card, ``proration_behavior=prorate_to_anchor``, NOT cash. The create 402s,
+    so the result
     row is ``failed``, the pending membership row is cleaned (no rows remain),
     no subscription is left on the customer, and no charge succeeded.
     """
@@ -860,7 +893,7 @@ async def test_single_recurring_start_declining_card_fails(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -945,7 +978,7 @@ async def test_cash_recurring_start_with_declining_card_succeeds(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=True,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -1015,7 +1048,8 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
 
     Start a healthy recurring family (payer on a good card), then swap the
     payer's card to a declining one and add a SECOND recurring membership (a
-    linked child) with ``prorate=True``. The add generates a proration invoice;
+    linked child) with ``proration_behavior=prorate_to_anchor``. The add generates a
+    proration invoice;
     with ``error_if_incomplete`` on the update card path Stripe 402s and rolls
     the item change back. So:
       * the add result is ``failed`` with the decline error;
@@ -1051,7 +1085,7 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -1085,7 +1119,7 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(

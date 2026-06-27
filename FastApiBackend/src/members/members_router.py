@@ -5,7 +5,8 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -40,9 +41,15 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
+from src.memberships.memberships_exceptions import PartialCancelError
 from src.memberships.memberships_schema import (
+    MemberMembershipsCancelResponse,
+    MembersBillingLinkCheckRequest,
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
+    MembersBillingRemoveAuthorizationPreviewRequest,
+    MembersBillingRemoveAuthorizationRequest,
+    PayerInvoiceChange,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -53,6 +60,12 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import Auth, security
+from src.waivers.schema.waivers_schema import (
+    AuthorizedPayerWaiverResponse,
+)
+from src.waivers.service.waivers.waivers_service import (
+    WaiversService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,10 +182,12 @@ async def update_member(
     description=(
         "Returns a filtered, sorted, paginated list of gym members "
         "for the CRM members list screen. The view (all / trial / "
-        "frozen / overdue) plus filters and pagination are resolved "
-        "and the rows are pre-formatted per view. Membership status is "
-        "derived from member_memberships (member_memberships_status), "
-        "not from a member_status column."
+        "frozen / overdue) decides the row shape; the filters and "
+        "pagination are applied as given (the view and filters are "
+        "independent — no reconciliation), and the rows are "
+        "pre-formatted per view. Membership status is derived from "
+        "member_memberships (member_memberships_status), not from a "
+        "member_status column."
     ),
     responses={
         200: {"description": "Members list retrieved"},
@@ -199,7 +214,7 @@ async def list_members(
         logger.error(
             "Failed to list members: gym_id=%s, view=%s",
             request.gym_id,
-            request.requested_view,
+            request.view,
             exc_info=True,
         )
         raise HTTPException(
@@ -365,7 +380,7 @@ async def get_member_billing_detail(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -402,7 +417,7 @@ async def update_member_card(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -473,18 +488,18 @@ async def unlink_member_payment(
 
 @members_router.put(
     "/{member_id}/link",
-    summary="Link member to a parent account",
+    summary="Authorize a payer for a member",
     description=(
-        "Links an existing member to a paying parent account. The child must "
-        "have zero active recurring memberships. Clears any stripe subscription, "
-        "card, and freeze state on the child (required by the "
-        "linked_account_no_stripe DB constraint). This is a relationship change "
-        "only — the member carries no active recurring membership, so no "
-        "subscription is re-billed and no charges are issued."
+        "Authorizes a payer (payer_member_id) to pay for this member. The payer "
+        "signs the gym's default authorized-payer waiver (signer_name + "
+        "consent_acknowledged), and the signature + the authorization are "
+        "recorded atomically. A member may have many authorized payers. This is "
+        "the authorization layer (who may pay for whom; billing is per payer via "
+        "paid_by_member_id) — no subscription is re-billed and no charges issue."
     ),
     responses={
-        200: {"description": "Member linked successfully"},
-        400: {"description": "Child is already linked or has active recurring memberships"},
+        200: {"description": "Payer authorized successfully"},
+        400: {"description": "Payer invalid / different gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
@@ -494,20 +509,28 @@ async def unlink_member_payment(
 async def link_member_account(
     member_id: UUID,
     request: MembersBillingLinkRequest,
+    http_request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Link a member to a paying parent account."""
+    """Link a member to a paying parent account (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
+    # Capture the signer's IP + user-agent for the waiver signature audit.
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
     try:
         await memberships_service.link_account(
             member_id,
-            request.parent_member_id,
+            request.payer_member_id,
+            signer_name=request.signer_name,
+            consent_acknowledged=request.consent_acknowledged,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -532,61 +555,6 @@ async def link_member_account(
         ) from None
 
 
-@members_router.delete(
-    "/{member_id}/link",
-    summary="Unlink member from a parent account",
-    description=(
-        "Unlinks a member from their paying parent account by clearing "
-        "account_linked_to_id on the child. The child must have zero active "
-        "recurring memberships, so this is a relationship change only — no "
-        "subscription is re-billed and no charges are issued."
-    ),
-    responses={
-        200: {"description": "Member unlinked successfully"},
-        400: {"description": "Child is not linked or has active recurring memberships"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-    },
-)
-@inject
-async def unlink_member_account(
-    member_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
-    ),
-) -> None:
-    """Unlink a member from their paying parent account."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
-
-    try:
-        await memberships_service.unlink_account(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to unlink member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to unlink member",
-        ) from None
-
-
 @members_router.post(
     "/{member_id}/link/check",
     response_model=MembersBillingLinkCheckResponse,
@@ -605,21 +573,21 @@ async def unlink_member_account(
 @inject
 async def check_link_member_account(
     member_id: UUID,
-    request: MembersBillingLinkRequest,
+    request: MembersBillingLinkCheckRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MembersBillingLinkCheckResponse:
-    """Check whether a member can be linked to a parent account."""
+    """Check whether a payer can be authorized for a member (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
     try:
         return await memberships_service.check_link_account(
             member_id,
-            request.parent_member_id,
+            request.payer_member_id,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -641,6 +609,224 @@ async def check_link_member_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to check member link",
+        ) from None
+
+
+@members_router.post(
+    "/{member_id}/link/remove/preview",
+    response_model=list[PayerInvoiceChange],
+    summary="Preview removing a payer's authorization (pair-scoped cancel)",
+    description=(
+        "Read-only cost preview: the payer's recurring bill after cancelling "
+        "the path member's memberships that payer_member_id funds (current → "
+        "new), via the same per-payer cancel preview. Pair-scoped, so a single "
+        "entry — empty when there's no billing impact."
+    ),
+    responses={
+        200: {"description": "Preview computed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def preview_remove_authorization(
+    member_id: UUID,
+    request: MembersBillingRemoveAuthorizationPreviewRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> list[PayerInvoiceChange]:
+    """Preview the cascading cancel of removing a payer's authorization."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
+
+    try:
+        return await memberships_service.preview_remove_authorization(
+            member_id,
+            request.payer_member_id,
+        )
+    except Exception:
+        logger.error(
+            "Failed to preview remove authorization: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview removing the authorization",
+        ) from None
+
+
+@members_router.post(
+    "/{member_id}/link/remove",
+    response_model=MemberMembershipsCancelResponse,
+    summary="Remove a payer's authorization (pair-scoped cascading cancel)",
+    description=(
+        "Cancels the path member's live recurring memberships that "
+        "payer_member_id funds (the existing per-membership cancel converges "
+        "Stripe), then de-authorizes the pair. The signature audit row persists. "
+        "Memberships paid by other payers, and this payer's memberships for other "
+        "members, are untouched. Returns the cascading cancel's outcome — the "
+        "same item_id → cancel_date map a direct cancel returns (empty when the "
+        "relationship funded nothing) — so the caller can show what was "
+        "cancelled. Call .../remove/preview first to confirm impact."
+    ),
+    responses={
+        200: {"description": "Authorization removed and memberships cancelled"},
+        400: {"description": "That payer is not authorized for this member"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+        207: {
+            "description": (
+                "Partial cascade — some memberships cancelled, some failed "
+                "(body has succeeded_item_ids/failed_item_ids); the "
+                "authorization row is left intact. A 2xx, never auto-retried."
+            )
+        },
+        500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
+    },
+)
+@inject
+async def remove_authorization(
+    member_id: UUID,
+    request: MembersBillingRemoveAuthorizationRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> MemberMembershipsCancelResponse:
+    """Remove a payer's authorization, cancelling the pair's memberships."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
+
+    try:
+        cancel_dates = await memberships_service.remove_authorization(
+            member_id,
+            request.payer_member_id,
+            request.idempotency_key,
+        )
+        return MemberMembershipsCancelResponse(
+            cancel_dates={
+                str(item_id): cancel_date
+                for item_id, cancel_date in cancel_dates.items()
+            },
+        )
+    except PartialCancelError as exc:
+        # The cascading cancel partially applied (one payer converged, a later
+        # one failed). Mirror the cancel router: this is a real, parseable
+        # RESULT, so RETURN it as 207 Multi-Status with the succeeded/failed
+        # split (a 2xx — a proxy never auto-retries a partial). The
+        # authorization row is left intact (the de-authorize runs only after a
+        # full cancel).
+        succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
+        failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
+        logger.error(
+            "Remove-authorization cancel partially applied: member_id=%s "
+            "succeeded=%s failed_payer=%s failed_item_ids=%s",
+            member_id,
+            succeeded_item_ids,
+            exc.failed_payer_id,
+            failed_item_ids,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content={
+                "message": str(exc),
+                "succeeded_item_ids": succeeded_item_ids,
+                "failed_item_ids": failed_item_ids,
+            },
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        # Total failure — nothing cancelled, so nothing de-authorized. 500, not
+        # 502, so the gateway never auto-retries it.
+        logger.error(
+            "Remove-authorization failed (Stripe, nothing cancelled): "
+            "member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to remove authorization: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove the authorization",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/authorized-payer-waiver",
+    response_model=AuthorizedPayerWaiverResponse,
+    summary="Get the default authorized-payer waiver a payer must sign",
+    description=(
+        "Returns the member's gym default authorized-payer waiver — its id, "
+        "current version id, name, and body — for the front-desk sign dialog to "
+        "display before authorizing a payer. The link flow records the signature "
+        "against this same current version, so the caller only echoes back the "
+        "signer's name + consent."
+    ),
+    responses={
+        200: {"description": "Default waiver returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member or default waiver not found"},
+    },
+)
+@inject
+async def get_authorized_payer_waiver(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    waivers_service: WaiversService = Depends(
+        Provide[DependencyInjector.waivers_service]
+    ),
+) -> AuthorizedPayerWaiverResponse:
+    """Resolve the default authorized-payer waiver (with body) for a member."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await waivers_service.get_default_waiver_with_body_for_member(
+            member_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to get authorized-payer waiver: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get authorized-payer waiver",
         ) from None
 
 

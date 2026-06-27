@@ -1,23 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/unlink_parent_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/payment_authorizations_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
-/// Linked-accounts block for the profile header.
+/// Authorized-payer block for the profile header.
 ///
-/// Shows the family/group around this member: a chip per
-/// linked account (the paying parent flagged green), plus
-/// the link / unlink affordances. When the member has no
-/// link at all, only a "Link to Paying Account" button
-/// shows. Each chip can navigate to that member via
+/// At-a-glance, read-only: shows both directions of the member's payment
+/// authorizations — "Authorized Payers" (who may pay for them) and "Authorized
+/// to pay for" (who they may pay for). Editing (add / remove) happens in the
+/// "Modify Payment Authorizations" popup. Each chip navigates via
 /// [onLinkedAccountTap].
 class LinkedAccountsSection extends StatelessWidget {
   final MemberDetailResponse member;
@@ -29,87 +23,82 @@ class LinkedAccountsSection extends StatelessWidget {
     this.onLinkedAccountTap,
   });
 
-  bool get _hasParent => member.linkedToAccount != null;
-
   @override
   Widget build(BuildContext context) {
-    final accounts = member.linkedAccounts;
-    final hasAnyLink = _hasParent || accounts.isNotEmpty;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        if (accounts.isNotEmpty) ...[
-          Text(
-            'Linked accounts',
-            style: DesignConstants.h2,
+        if (member.authorizedPayers.isNotEmpty)
+          _Roster(
+            title: 'Authorized Payers',
+            accounts: member.authorizedPayers,
+            onTap: onLinkedAccountTap,
           ),
-          Wrap(
-            spacing: DesignConstants.spacingMedium,
-            runSpacing: DesignConstants.spacingMedium,
-            alignment: WrapAlignment.center,
-            children: accounts
-                .map(
-                  (a) => _LinkedAccountChip(
-                    account: a,
-                    isPayingAccount:
-                        a.memberId == member.linkedToAccount,
-                    onTap: onLinkedAccountTap != null
-                        ? () =>
-                            onLinkedAccountTap!(a.memberId)
-                        : null,
-                  ),
-                )
-                .toList(),
+        if (member.authorizedToPayFor.isNotEmpty)
+          _Roster(
+            title: 'Authorized to pay for',
+            accounts: member.authorizedToPayFor,
+            onTap: onLinkedAccountTap,
           ),
-        ],
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
-          child: _hasParent
-              ? AppOutlineButton(
-                  fullWidth: true,
-                  text: 'Unlink from paying account',
-                  borderColor: DesignConstants.badRed,
-                  textColor: DesignConstants.badRed,
-                  borderRadius: DesignConstants.radiusSmall,
-                  onPressed: () => UnlinkParentDialog.show(
-                    context: context,
-                    subjectName: member.fullName,
-                  ),
-                )
-              : AppOutlineButton(
-                  fullWidth: true,
-                  text: hasAnyLink
-                      ? 'Link to a paying account'
-                      : 'Link to paying account',
-                  borderRadius: DesignConstants.radiusSmall,
-                  onPressed: () => _openLink(context),
-                ),
+          child: AppOutlineButton(
+            fullWidth: true,
+            text: 'Modify Payment Authorizations',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => PaymentAuthorizationsDialog.show(context),
+          ),
         ),
       ],
     );
   }
+}
 
-  void _openLink(BuildContext context) {
-    final state = context.read<MemberDetailBloc>().state;
-    if (state is! MemberDetailLoaded) return;
-    LinkParentDialog.show(
-      context: context,
-      subjectMemberId: member.memberId,
-      candidates: state.allMembers,
+/// A titled, read-only roster of authorized-payer chips.
+class _Roster extends StatelessWidget {
+  final String title;
+  final List<LinkedAccount> accounts;
+  final ValueChanged<String>? onTap;
+
+  const _Roster({
+    required this.title,
+    required this.accounts,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Text(title, style: DesignConstants.h2),
+        Wrap(
+          spacing: DesignConstants.spacingMedium,
+          runSpacing: DesignConstants.spacingMedium,
+          alignment: WrapAlignment.center,
+          children: accounts
+              .map(
+                (a) => _LinkedAccountChip(
+                  account: a,
+                  onTap:
+                      onTap != null ? () => onTap!(a.memberId) : null,
+                ),
+              )
+              .toList(),
+        ),
+      ],
     );
   }
 }
 
 class _LinkedAccountChip extends StatelessWidget {
   final LinkedAccount account;
-  final bool isPayingAccount;
   final VoidCallback? onTap;
 
   const _LinkedAccountChip({
     required this.account,
-    required this.isPayingAccount,
     this.onTap,
   });
 
@@ -147,8 +136,7 @@ class _LinkedAccountChip extends StatelessWidget {
               child: account.photoUrl == null
                   ? Text(
                       account.firstName.isNotEmpty
-                          ? account.firstName[0]
-                              .toUpperCase()
+                          ? account.firstName[0].toUpperCase()
                           : '?',
                       style: DesignConstants.pSmall.copyWith(
                         color: DesignConstants.text,
@@ -166,18 +154,6 @@ class _LinkedAccountChip extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Subtle paying-account marker: a muted dollar
-            // glyph, no loud color treatment.
-            if (isPayingAccount)
-              Tooltip(
-                message: 'Paying account',
-                child: Icon(
-                  Symbols.attach_money_sharp,
-                  size: DesignConstants.iconSizeSmall,
-                  weight: DesignConstants.iconWeight,
-                  color: DesignConstants.text3rd,
-                ),
-              ),
           ],
         ),
       ),

@@ -1,14 +1,20 @@
 """Phase A of the start op: validate EVERYTHING up-front, write nothing.
 
-One request creates N memberships for a paying parent's family (a single
-membership = a one-item list). The real start and the start preview run this
-IDENTICAL validation first — it lives in its own class so that stays
+One request creates N memberships billed by ONE payer (a single membership =
+a one-item list). The payer may be the member themselves (self-pay, including
+a linked member paying their own way) or a member's linked parent —
+``_check_links`` is the authorization rule: every non-payer member in the
+request must be linked to the payer. The real start and the start preview run
+this IDENTICAL validation first — it lives in its own class so that stays
 structural, not copy-paste. Any failure rejects the whole request with
 nothing written and nothing billed.
 
-Order: payer → link/gym state → price/plan rows → per-member duplicate
-check → discounts. The request model already rejected an empty list and
-intra-request (member_id, price_id) duplicates.
+Order: payer → link/gym state → price/plan rows → intra-request recurring
+duplicate check → recurring-quantity check → per-member existing-recurring
+check → discounts. The request model rejects duplicate ``(member_id, price_id)``
+items (buying N of a pack is ONE item with ``quantity = N``, never N duplicate
+items); the recurring "two on the same plan, at different prices, in one
+request" rule is enforced here, where plan types are known.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from schema.gym_discount import DiscountType
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -33,8 +40,8 @@ from src.shared.gym_stripe_service import GymStripeService
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.shared.billing_parent import ParentProfile
-    from src.shared.billing_parent_resolver import BillingParentResolver
+    from src.shared.payer_profile import PayerProfile
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
@@ -50,19 +57,19 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         db_pool: DirectDatabasePool,
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: BillingParentResolver,
+        payer_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,
             payment_sync_service,
             gym_stripe_service,
         )
-        self._parent_resolver = parent_resolver
+        self._payer_resolver = payer_resolver
 
     async def validate(
         self,
         request: MemberMembershipsStartRequest,
-    ) -> tuple[ParentProfile, dict[UUID, dict]]:
+    ) -> tuple[PayerProfile, dict[UUID, dict]]:
         """Run every up-front check; return the payer + plan/price rows.
 
         Returns:
@@ -74,7 +81,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         Raises:
             ValueError: On the first failed check.
         """
-        parent = await self._resolve_payer(request)
+        payer = await self._resolve_payer(request)
         await self._check_links(request)
 
         price_ids = list({item.price_id for item in request.memberships})
@@ -84,6 +91,9 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                 raise ValueError(
                     f"Plan price {price_id} missing stripe_price_id",
                 )
+
+        self._check_no_recurring_duplicates(request, plan_prices)
+        self._check_recurring_quantity(request, plan_prices)
 
         plans_by_member: dict[UUID, list[UUID]] = {}
         for item in request.memberships:
@@ -96,56 +106,118 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
             )
 
         await self._check_discounts(request)
-        return parent, plan_prices
+        return payer, plan_prices
+
+    def _check_no_recurring_duplicates(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject two RECURRING items on the same plan in one request.
+
+        Exact duplicate items (same member + same price) are already blocked
+        structurally by MemberMembershipsStartItem's request validator. This
+        guard adds the case that one can't see: two recurring items on the same
+        PLAN at DIFFERENT prices (e.g. monthly + annual of plan A) — same
+        (member, plan), different price_id. A member can hold only one active
+        recurring membership per plan, and a BEFORE-INSERT row trigger can't be
+        relied on to catch two siblings inserted in the SAME multi-row INSERT,
+        so this surfaces it early, before any write. (one_time / trial stack via
+        quantity, not repeated items, so they have no equivalent restriction.)
+
+        Raises:
+            ValueError: On the first duplicate recurring (member, plan).
+        """
+        seen: set[tuple[UUID, UUID]] = set()
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if row["plan_type"] != PlanType.recurring:
+                continue
+            key = (item.member_id, row["plan_id"])
+            if key in seen:
+                raise ValueError(
+                    "Duplicate recurring membership in one request: "
+                    f"member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}"
+                )
+            seen.add(key)
+
+    def _check_recurring_quantity(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject quantity > 1 on a RECURRING item.
+
+        A recurring membership is one subscription item per plan, so it must be
+        quantity == 1; only one_time / trial packs may stack via quantity > 1.
+        The DB trigger trg_recurring_quantity_must_be_one enforces the same
+        invariant — this surfaces it early, before any write, with a clear
+        message.
+
+        Raises:
+            ValueError: On the first recurring item whose quantity != 1.
+        """
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if (
+                row["plan_type"] == PlanType.recurring
+                and item.quantity != 1
+            ):
+                raise ValueError(
+                    "Recurring membership must have quantity == 1 "
+                    f"(member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}, quantity={item.quantity})",
+                )
 
     async def _resolve_payer(
         self,
         request: MemberMembershipsStartRequest,
-    ) -> ParentProfile:
-        """Validate the payer is a top-level, in-gym, unfrozen paying account.
+    ) -> PayerProfile:
+        """Validate the payer is an in-gym billing profile.
 
-        ``resolve_parent`` already raises if the resolved account has no
-        Stripe customer; card presence is not pre-checked (a missing card
-        surfaces as the charge's own failure, and ``paid_with_cash`` needs
-        no card).
+        The payer's OWN profile is resolved directly — a linked member may be
+        the payer (self-pay); ``_check_links`` then enforces that every other
+        member in the request is linked to this payer (the authorization
+        rule). ``resolve_payer`` already raises if the account has no Stripe
+        customer; card presence is not pre-checked (a missing card surfaces as
+        the charge's own failure, and ``paid_with_cash`` needs no card).
+
+        **Freeze is NOT a start blocker.** Freeze is now per SUBJECT member, so a
+        frozen payer's status is irrelevant to billing a different member's
+        membership, and a frozen SUBJECT simply starts un-billed (its line is
+        frozen-excluded by the sync — paused/dropped). Backend start must stay
+        open on frozen members so batch jobs never fail on them; the CRM guards
+        the UX instead.
 
         Raises:
-            ValueError: If the payer is itself linked to another paying
-                account, is in a different gym, or is frozen.
+            ValueError: If the payer is in a different gym.
         """
-        parent = await self._parent_resolver.resolve_parent(
+        payer = await self._payer_resolver.resolve_payer(
             request.payer_member_id,
         )
-        if parent.member_id != request.payer_member_id:
-            raise ValueError(
-                f"Payer {request.payer_member_id} is linked to paying account "
-                f"{parent.member_id} — the payer must be a top-level "
-                f"paying account",
-            )
-        if parent.gym_id != request.gym_id:
+        if payer.gym_id != request.gym_id:
             raise ValueError(
                 f"Payer {request.payer_member_id} is not in gym {request.gym_id}",
             )
-        if parent.is_frozen:
-            raise ValueError(
-                "Cannot start memberships: payer account is frozen",
-            )
-        return parent
+        return payer
 
     async def _check_links(
         self,
         request: MemberMembershipsStartRequest,
     ) -> None:
-        """Every member exists, is in the gym, and is linked to THIS payer.
+        """Every non-payer member exists, is in the gym, and has THIS payer as
+        an authorized payer.
 
-        The start op never links — an unlinked or differently-linked member
-        is rejected with a "link them first" error. The payer itself (when
-        it appears in the items) was already validated as top-level by
-        ``_resolve_payer``.
+        This IS the payer-authorization rule: a payer may bill their own
+        memberships and those of members who have authorized them — nothing
+        else. The start op never authorizes — a member who has not authorized
+        the payer is rejected with an "authorize them first" error. The payer's
+        own items need no check (self-pay is always allowed).
 
         Raises:
-            ValueError: If a member is missing, in another gym, unlinked,
-                or linked to a different payer.
+            ValueError: If a member is missing, in another gym, or has not
+                authorized the payer.
         """
         member_ids = {
             item.member_id
@@ -155,11 +227,14 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         if not member_ids:
             return
 
-        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
+        sql = load_sql(SQL_DIR / "member_authorized_payers_check_batch.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(uid) for uid in member_ids]},
+                {
+                    "member_ids": [str(uid) for uid in member_ids],
+                    "payer_member_id": str(request.payer_member_id),
+                },
             )
             rows = {UUID(str(r["member_id"])): r for r in result.mappings()}
 
@@ -171,18 +246,11 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                 raise ValueError(
                     f"Member {member_id} is not in gym {request.gym_id}",
                 )
-            linked_to = row["account_linked_to_id"]
-            if linked_to is None:
+            if not row["authorized"]:
                 raise ValueError(
-                    f"Member {member_id} is not linked to payer "
-                    f"{request.payer_member_id} — link them first, then start "
-                    f"(the start op never links accounts)",
-                )
-            if UUID(str(linked_to)) != request.payer_member_id:
-                raise ValueError(
-                    f"Member {member_id} is linked to a different paying "
-                    f"account ({linked_to}) — unlink them first or use that "
-                    f"account as the payer",
+                    f"Member {member_id} has not authorized payer "
+                    f"{request.payer_member_id} — authorize them first, then "
+                    f"start (the start op never authorizes payers)",
                 )
 
     async def _check_discounts(

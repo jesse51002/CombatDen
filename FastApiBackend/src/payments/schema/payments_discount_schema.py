@@ -1,21 +1,20 @@
 from pydantic import BaseModel, model_validator
-from schema.gym_discount import DiscountMode
 
 import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
 class PaymentsCouponValue(BaseModel):
-    """The value a deterministic coupon encodes: a percent XOR dollar + mode.
+    """The value a deterministic coupon encodes: a percent XOR dollar.
 
     The shared input to the payments coupon find-or-create
     (``PaymentsStripeDiscountService.find_or_create_for_value``). Both the
     recurring sync (per consolidated line) and one-time membership discounting
     produce one of these per discount value; the deterministic coupon id is a
-    pure function of it (``pct_<bps>_<mode>`` / ``amt_<cents>_<mode>``).
+    pure function of it (``pct_<bps>`` / ``amt_<cents>``). Every coupon is a
+    ``forever`` coupon — lifetime is enforced by our resolved ``end_date``.
     """
 
-    discount_mode: DiscountMode
     percentage_off: float | None = None
     dollar_off: int | None = None
 

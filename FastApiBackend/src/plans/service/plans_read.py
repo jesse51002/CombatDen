@@ -83,9 +83,9 @@ class MembershipPlansRead(MembershipPlansBase):
 
         Returns the active price plus all older versions, each with the
         number of members still pinned to it (the same active-membership
-        set the migrate path moves). The CRM shows the active price plus
-        any older version with ``member_count > 0`` so members on a stale
-        price can be migrated forward.
+        set the per-plan reprice upgrades). The CRM shows the active price
+        plus any older version with ``member_count > 0`` so members on a
+        stale price can be upgraded forward.
 
         Args:
             plan_id: The plan whose prices to list.

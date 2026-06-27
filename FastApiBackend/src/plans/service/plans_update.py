@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # jsonb columns are bound as JSON text + cast to jsonb in the SET clause.
-_JSONB_COLUMNS = frozenset({"waiver_ids", "linked_discount_ids"})
+_JSONB_COLUMNS = frozenset({"waiver_ids"})
 
 
 class MembershipPlansUpdate(MembershipPlansBase):
@@ -51,33 +51,10 @@ class MembershipPlansUpdate(MembershipPlansBase):
         self,
         request: MembershipPlanUpdateRequest,
     ) -> MembershipPlanResponse:
-        """Update plan metadata in Stripe then CRM.
-
-        Only provided (non-None) fields are updated. The merged
-        state is validated against DB CHECK constraints before
-        persisting.
-
-        Args:
-            request: Plan update data (partial).
-
-        Returns:
-            The updated plan with its active price.
-
-        Raises:
-            ValueError: If plan not found, no fields provided,
-                or merged state violates constraints.
-        """
+        """Update plan metadata in Stripe then CRM (non-None fields only)."""
         existing = await self._get_plan(request.plan_id, request.gym_id)
 
         changes = self._collect_changes(request.data)
-        # The CRM edits linked discounts as per-tier $/% off values; mint real
-        # `linked` discount entries and store their ids (the actual column).
-        if "linked_discount_values" in changes:
-            values = changes.pop("linked_discount_values")
-            changes["linked_discount_ids"] = await self._mint_linked_discounts(
-                request.gym_id,
-                values,  # type: ignore[arg-type]
-            )
         if not changes:
             return self._build_plan_response(
                 existing,
@@ -95,19 +72,20 @@ class MembershipPlansUpdate(MembershipPlansBase):
 
         # ── Stripe first ──────────────────────────────────────
         stripe_product_id = existing["stripe_product_id"]
+        product_recreated = False
         if stripe_product_id:
-            stripe_product_id = await self._update_or_recreate_product(
+            new_stripe_product_id = await self._update_or_recreate_product(
                 stripe_product_id=stripe_product_id,
                 merged=merged,
                 stripe_account_id=stripe_account_id,
                 plan_id=request.plan_id,
                 gym_id=request.gym_id,
             )
+            product_recreated = new_stripe_product_id != stripe_product_id
+            stripe_product_id = new_stripe_product_id
 
         # ── CRM update ───────────────────────────────────────
-        # jsonb columns must use the functional cast CAST(:col AS JSONB); the
-        # shorthand colon-colon cast on a bind param breaks asyncpg binding
-        # (see CLAUDE.md → Database Patterns → SQL Files).
+        # jsonb uses CAST(:col AS JSONB); colon-colon cast breaks asyncpg.
         set_clause = ", ".join(
             f"{col} = CAST(:{col} AS JSONB)"
             if col in _JSONB_COLUMNS
@@ -131,6 +109,19 @@ class MembershipPlansUpdate(MembershipPlansBase):
             row = result.mappings().fetchone()
             if not row:
                 raise ValueError(f"Plan {request.plan_id} not found")
+            # Persist the new product id if the old one was gone and recreated.
+            if product_recreated:
+                set_product_id_sql = load_sql(
+                    SQL_DIR / "membership_plans_set_stripe_product_id.sql",
+                )
+                await session.execute(
+                    text(set_product_id_sql),
+                    {
+                        "plan_id": str(request.plan_id),
+                        "gym_id": str(request.gym_id),
+                        "stripe_product_id": stripe_product_id,
+                    },
+                )
             await session.commit()
 
         # Re-fetch to get the joined price columns
@@ -223,24 +214,14 @@ class MembershipPlansUpdate(MembershipPlansBase):
 
     @staticmethod
     def _bind_value(col: str, val: object) -> object:
-        """Map a change value to its SQL bind value.
-
-        jsonb columns are bound as JSON text (the SET clause casts them);
-        enums bind their `.value`; everything else binds as-is.
-        """
+        """Serialize a value for SQL binding (jsonb→JSON text, enum→value)."""
         if col == "waiver_ids":
             return json.dumps([str(u) for u in val])  # type: ignore[union-attr]
-        if col == "linked_discount_ids":
-            return json.dumps(list(val))  # type: ignore[arg-type]
         return val.value if hasattr(val, "value") else val
 
     @staticmethod
     def _validate_merged_state(merged: dict) -> None:
-        """Validate merged plan state against DB CHECK constraints.
-
-        Raises:
-            ValueError: If the merged state violates constraints.
-        """
+        """Validate merged plan state against DB CHECK constraints."""
         plan_type = PlanType(merged["plan_type"])
         duration_unit = (
             DurationUnit(merged["duration_unit"]) if merged.get("duration_unit") else None

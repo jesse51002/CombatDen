@@ -43,14 +43,12 @@ class OverduePaymentsBloc
       final rows = <OverdueViewRow>[];
       var startIndex = 0;
       while (true) {
-        // prevView=all, requestedView=overdue is a *view switch* — the
-        // backend reconciler injects the overdue status filter for that.
-        // Sending overdue→overdue with empty filters would resolve back
-        // to the All view (see CrmMembersListService._reconcile_*).
+        // The overdue view is self-sufficient (its SQL hardcodes the
+        // overdue condition), so view=overdue with empty filters
+        // returns exactly the overdue members.
         final request = CrmMembersListRequest(
           gymId: event.gymId,
-          prevView: MembersListView.all,
-          requestedView: MembersListView.overdue,
+          view: MembersListView.overdue,
           startIndex: startIndex,
           count: AppConstants.defaultPageSize,
         );

@@ -1,22 +1,21 @@
-"""Link / unlink a member to a paying parent account.
+"""Authorize / de-authorize a payer for a member (the authorization layer).
 
-Linking sets ``members.account_linked_to_id`` (and NULLs the child's
-stripe/card/freeze fields, required by the ``linked_account_no_stripe`` DB
-check); unlinking clears it. Both REQUIRE the target member to have zero active
-recurring memberships (``_assert_no_active_recurring``).
+Adding an authorized payer is **gated by a signed waiver**: the payer signs the
+gym's default authorized-payer waiver, and that signature + the
+``member_authorized_payers`` row are written in ONE transaction (no orphan
+signatures). A member may have MANY authorized payers, and a member may be an
+authorized payer for others — the relationship is many-to-many. This is the
+AUTHORIZATION layer only (who is *allowed* to pay for whom); billing is per
+payer via ``member_memberships.paid_by_member_id``.
 
-These are **pure DB changes — no Stripe sync.** Because a member with no active
-recurring memberships contributes no membership line and no applied-discount rows
-to the family, and the engine never recomputes discounts family-wide (each
-membership's bill is derived from that member's own memberships only — see the
-``discounts-guide``), changing the link never changes anyone's bill. The
-no-active-recurring guard is exactly what keeps that true: the only case where a
-relationship change *would* move billing is a member who still carries a
-membership, which is forbidden here.
+These are **pure DB changes — no Stripe sync** and **no billing-state guard**:
+the authorization row never contributes a membership line or discount, and the
+engine derives each membership's bill from that membership's own payer only, so
+adding/removing an authorization never changes anyone's bill (no
+no-active-recurring precondition).
 
-The two-family ``PayingMemberLock`` is still held across each op so the
-check-then-write (no-active-recurring / already-linked) cannot race a concurrent
-membership start on the same family.
+The two-family ``PayingMemberLock`` is held across each op so the
+check-then-write cannot race a concurrent membership start on either account.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
@@ -36,266 +36,195 @@ from src.shared.sql_loader import load_sql
 if TYPE_CHECKING:
     from src.shared.database import DirectDatabasePool
     from src.shared.paying_member_lock import PayingMemberLock
+    from src.waivers.service.waivers.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 
 
 class MemberMembershipsLinked:
-    """Link / unlink a member to a paying parent account.
+    """Authorize / de-authorize a payer for a member (many-to-many).
 
-    Self-contained (does not share ``MemberMembershipsBase``): link / unlink is
-    member-keyed and writes the ``members`` table, so the base's item-keyed
-    membership-row helpers do not apply.
+    Self-contained (does not share ``MemberMembershipsBase``): authorization is
+    member-keyed and writes ``member_authorized_payers`` (+ a signature), so the
+    base's item-keyed membership-row helpers do not apply.
 
-    Owns its OWN concurrency locking: link / unlink lock TWO families (the
-    member's own and the paying parent's), so — unlike the single-family lifecycle
-    ops — the facade must NOT wrap these in ``lock([member_id])``.
+    Owns its OWN concurrency locking: each op locks TWO accounts (the member and
+    the payer), so — unlike the single-family lifecycle ops — the facade must NOT
+    wrap these in ``lock([member_id])``.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         paying_lock: PayingMemberLock,
+        waivers_service: WaiversService,
     ) -> None:
         self._db_pool = db_pool
         self._paying_lock = paying_lock
+        self._waivers = waivers_service
 
-    # ── Link ───────────────────────────────────────────────────
+    # ── Authorize (link) ───────────────────────────────────────
 
     async def link_account(
         self,
         member_id: UUID,
-        parent_member_id: UUID,
+        payer_member_id: UUID,
+        *,
+        signer_name: str,
+        consent_acknowledged: bool,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> None:
-        """Link a member to a paying parent account.
+        """Authorize ``payer_member_id`` to pay for ``member_id``.
 
-        Validates the child is not already linked and has no active recurring
-        memberships, then sets ``account_linked_to_id`` and NULLs all
-        stripe/card/freeze fields (required by the ``linked_account_no_stripe``
-        DB check).
-
-        Pure DB change — no Stripe sync: the child has no active recurring
-        memberships, so the family's consolidated subscription is unaffected (see
-        the module docstring).
+        The payer signs the gym's default authorized-payer waiver; the signature
+        and the ``member_authorized_payers`` row are written in one transaction.
 
         Args:
-            member_id: The child profile to link.
-            parent_member_id: The paying parent profile.
+            member_id: The member being paid for.
+            payer_member_id: The payer to authorize (the signer).
+            signer_name: The payer's typed legal name at signing.
+            consent_acknowledged: Must be True (a valid e-signature).
+            ip_address / user_agent: Optional signing-context audit fields.
 
         Raises:
-            ValueError: If the child is not found, is already linked,
-                is the same as the parent, or has any active recurring
-                memberships.
+            ValueError: If the member is not found, the gym has no default
+                waiver, the payer is missing / in a different gym, the payer is
+                the member, the pair is already authorized, or consent is False.
         """
-        if member_id == parent_member_id:
-            raise ValueError("A member cannot be linked to themselves")
+        if member_id == payer_member_id:
+            raise ValueError(
+                "A member cannot be an authorized payer for themselves",
+            )
+        if not consent_acknowledged:
+            raise ValueError("consent_acknowledged must be true to sign")
 
-        # Lock BOTH families — the child's own and the new paying parent's — so
-        # the check-then-write can't race a concurrent op on either.
-        async with self._paying_lock.lock([member_id, parent_member_id]):
-            existing_parent = await self._get_account_link(member_id)
-            if existing_parent is not None:
+        # Lock BOTH accounts — the member's and the payer's — so the
+        # check-then-write can't race a concurrent op on either.
+        async with self._paying_lock.lock([member_id, payer_member_id]):
+            row = await self._run_link_check(member_id, payer_member_id)
+            blocked = self._link_block_reason(row)
+            if blocked is not None:
+                raise ValueError(blocked)
+
+            # TEMPORARY (TOCTOU): the waiver version is resolved here and signed
+            # below; if the gym published a new version in between, the signature
+            # records the server-resolved version, not necessarily the one the
+            # CRM showed the signer. Acceptable for now — this in-line sign is
+            # slated to move to a dedicated signing endpoint where the client
+            # echoes the version_id it displayed and the backend version-locks on
+            # it before signing, closing the window.
+            default = await self._waivers.get_default_waiver_for_member(member_id)
+
+            insert_sql = load_sql(
+                SQL_DIR / "member_authorized_payers_insert.sql",
+            )
+            try:
+                async with self._db_pool.session() as session:
+                    signature_id = await self._waivers.record_signature(
+                        session,
+                        gym_id=default.gym_id,
+                        signer_member_id=payer_member_id,
+                        waiver_id=default.waiver_id,
+                        waiver_version_id=default.version_id,
+                        signer_name=signer_name,
+                        consent_acknowledged=consent_acknowledged,
+                        content_hash=default.content_hash,
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    )
+                    await session.execute(
+                        text(insert_sql),
+                        {
+                            "member_id": str(member_id),
+                            "payer_member_id": str(payer_member_id),
+                            "gym_id": str(default.gym_id),
+                            "signature_id": str(signature_id),
+                        },
+                    )
+                    await session.commit()
+            except IntegrityError as exc:
+                # Backstop: the pair lock serializes same-pair link calls, so the
+                # _link_block_reason check above normally catches a duplicate. If
+                # two ever race past it, the second INSERT trips the
+                # member_authorized_payers PK — translate that to the same
+                # user-facing "already authorized" error (a 400) instead of an
+                # unhandled 500. The signature INSERT in the same txn rolls back
+                # with it, so no orphan signature is left.
                 raise ValueError(
-                    f"Member {member_id} is already linked to {existing_parent}"
-                )
-
-            await self._assert_no_active_recurring(member_id)
-            await self._write_link(member_id, parent_member_id)
-
-    # ── Unlink ─────────────────────────────────────────────────
-
-    async def unlink_account(
-        self,
-        member_id: UUID,
-    ) -> None:
-        """Unlink a member from their paying parent account.
-
-        Clears ``account_linked_to_id`` on the child.
-
-        Pure DB change — no Stripe sync: the child has no active recurring
-        memberships, so the old parent's consolidated subscription is unaffected
-        (see the module docstring).
-
-        Args:
-            member_id: The child profile to unlink.
-
-        Raises:
-            ValueError: If the child is not found, is not currently linked,
-                or has any active recurring memberships.
-        """
-        old_parent_id = await self._get_account_link(member_id)
-        if old_parent_id is None:
-            raise ValueError(f"Member {member_id} is not linked to a parent account")
-
-        # Lock the child + its old paying parent so the check-then-write can't
-        # race a concurrent op on that family.
-        async with self._paying_lock.lock([member_id, old_parent_id]):
-            await self._assert_no_active_recurring(member_id)
-            await self._write_unlink(member_id)
+                    f"Payer {payer_member_id} is already an authorized payer "
+                    f"for member {member_id}",
+                ) from exc
 
     # ── Check ──────────────────────────────────────────────────
 
     async def check_link_account(
         self,
         member_id: UUID,
-        parent_member_id: UUID,
+        payer_member_id: UUID,
     ) -> MembersBillingLinkCheckResponse:
-        """Check whether a member can be linked to a parent account.
+        """Check whether ``payer_member_id`` can be authorized for ``member_id``.
 
-        Read-only. Returns a structured result with a user-facing
-        ``error`` string when linking is blocked.
+        Read-only. Returns a structured result with a user-facing ``error``
+        string when the authorization is blocked.
 
         Raises:
-            ValueError: If the candidate member does not exist (→ 404).
+            ValueError: If the member does not exist (→ 404).
         """
-        if member_id == parent_member_id:
+        if member_id == payer_member_id:
             return MembersBillingLinkCheckResponse(
                 can_link=False,
-                error="You can't link an account to itself. Pick a different payer.",
+                error=(
+                    "You can't authorize an account to pay for itself. "
+                    "Pick a different payer."
+                ),
             )
 
-        check_sql = load_sql(SQL_DIR / "member_memberships_link_check.sql")
+        row = await self._run_link_check(member_id, payer_member_id)
+        blocked = self._link_block_reason(row)
+        if blocked is not None:
+            return MembersBillingLinkCheckResponse(
+                can_link=False,
+                error=blocked,
+            )
+        return MembersBillingLinkCheckResponse(can_link=True, error=None)
+
+    # ── Private ────────────────────────────────────────────────
+
+    async def _run_link_check(
+        self,
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> dict:
+        """Run the link-check read; raise if the member does not exist."""
+        sql = load_sql(SQL_DIR / "member_authorized_payers_link_check.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
-                text(check_sql),
+                text(sql),
                 {
                     "member_id": str(member_id),
-                    "parent_member_id": str(parent_member_id),
+                    "payer_member_id": str(payer_member_id),
                 },
             )
             row = result.mappings().fetchone()
 
         if not row:
             raise ValueError(f"Member {member_id} not found")
+        return dict(row)
 
-        if row["candidate_linked_to"] is not None:
-            return MembersBillingLinkCheckResponse(
-                can_link=False,
-                error=(
-                    "This member is already linked to another "
-                    "paying account. Unlink them first, then try again."
-                ),
+    @staticmethod
+    def _link_block_reason(row: dict) -> str | None:
+        """Return a user-facing reason the authorization is blocked, or None."""
+        if row["payer_member_id"] is None:
+            return (
+                "The selected payer account could not be found. "
+                "Pick a different payer."
             )
-
-        if row["candidate_is_parent"]:
-            return MembersBillingLinkCheckResponse(
-                can_link=False,
-                error=(
-                    "This account already has other members linked to it as the "
-                    "payer. Unlink those members first before linking this account "
-                    "to a new payer."
-                ),
+        if row["candidate_gym_id"] != row["payer_gym_id"]:
+            return (
+                "The selected payer is in a different gym. "
+                "Pick a payer from the same gym."
             )
-
-        if row["parent_member_id"] is None:
-            return MembersBillingLinkCheckResponse(
-                can_link=False,
-                error="The selected payer account could not be found. Pick a different payer.",
-            )
-
-        if row["parent_linked_to"] is not None:
-            return MembersBillingLinkCheckResponse(
-                can_link=False,
-                error=(
-                    "The selected payer is already linked to another account as a "
-                    "child. Pick a top-level paying account instead."
-                ),
-            )
-
-        try:
-            await self._assert_no_active_recurring(member_id)
-        except ValueError:
-            return MembersBillingLinkCheckResponse(
-                can_link=False,
-                error=(
-                    "This member has an active recurring membership. Cancel all "
-                    "recurring memberships before linking them to a payer."
-                ),
-            )
-
-        return MembersBillingLinkCheckResponse(can_link=True, error=None)
-
-    # ── Private ────────────────────────────────────────────────
-
-    async def _get_account_link(
-        self,
-        member_id: UUID,
-    ) -> UUID | None:
-        """Return the member's ``account_linked_to_id`` (None if unlinked).
-
-        Reads the unfiltered ``members`` row. Raises if the member does not
-        exist (preserves the not-found → 404 contract for link / unlink).
-        """
-        sql = load_sql(SQL_DIR / "member_memberships_get_account_link.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"member_id": str(member_id)},
-            )
-            row = result.mappings().fetchone()
-
-        if row is None:
-            raise ValueError(f"Member {member_id} not found")
-        linked_to = row["account_linked_to_id"]
-        return UUID(str(linked_to)) if linked_to is not None else None
-
-    async def _write_link(
-        self,
-        member_id: UUID,
-        parent_member_id: UUID,
-    ) -> None:
-        """Set ``account_linked_to_id`` on the child (also NULLs its stripe/card
-        fields, per the ``linked_account_no_stripe`` DB check)."""
-        sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {
-                    "member_id": str(member_id),
-                    "parent_member_id": str(parent_member_id),
-                },
-            )
-            row = result.mappings().fetchone()
-            if not row:
-                raise ValueError(f"Member {member_id} not found")
-            await session.commit()
-
-    async def _write_unlink(
-        self,
-        member_id: UUID,
-    ) -> None:
-        """Clear ``account_linked_to_id`` on the child.
-
-        NOTE: a child carries no card by design (a link NULLed its stripe/card
-        fields), so unlinking only restores the relationship — the member simply
-        re-adds a card if needed.
-        """
-        sql = load_sql(SQL_DIR / "member_memberships_unlink.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"member_id": str(member_id)},
-            )
-            row = result.mappings().fetchone()
-            if not row:
-                raise ValueError(f"Member {member_id} not found")
-            await session.commit()
-
-    async def _assert_no_active_recurring(
-        self,
-        member_id: UUID,
-    ) -> None:
-        """Raise ValueError if the member has active recurring memberships."""
-        sql = load_sql(SQL_DIR / "member_memberships_active_recurring.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"member_id": str(member_id)},
-            )
-            rows = result.mappings().all()
-
-        if rows:
-            raise ValueError(
-                f"Member {member_id} has {len(rows)} active recurring membership(s) "
-                f"— cancel them before changing the linked-account relationship"
-            )
+        if row["already_authorized"]:
+            return "That payer is already authorized to pay for this member."
+        return None

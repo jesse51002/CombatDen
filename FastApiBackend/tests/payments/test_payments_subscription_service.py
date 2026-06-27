@@ -2,8 +2,8 @@
 
 from uuid import uuid4
 
-from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
+from schema.task import ProrationBehavior
 
 from src.payments.schema.metadata.stripe_customer_metadata import (
     StripeCustomerMetadata,
@@ -22,8 +22,6 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionDesiredItem,
-    PaymentsSubscriptionFreezeRequest,
-    PaymentsSubscriptionUnfreezeRequest,
     PaymentsSubscriptionUpdateRequest,
     SubscriptionItemDiscount,
 )
@@ -154,9 +152,7 @@ async def test_create_subscription_with_discount(
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
     coupon_id = await discount_service.find_or_create_for_value(
-        PaymentsCouponValue(
-            discount_mode=DiscountMode.ongoing, percentage_off=20.0
-        ),
+        PaymentsCouponValue(percentage_off=20.0),
         stripe_account_id,
     )
     created.track_coupon(coupon_id)
@@ -185,9 +181,8 @@ async def test_create_subscription_with_discount(
 
     # The coupon is attached at the ITEM level (sub-level discounts were removed
     # — discounts ride the membership/item now). The contract that matters is
-    # that the read primitive ``get_subscription`` surfaces it: that is the path
-    # the sync's once-consumption settle reads to tell a pending coupon from a
-    # consumed one. (Stripe exposes the coupon at ``discount.source.coupon``.)
+    # that the read primitive ``get_subscription`` surfaces it.
+    # (Stripe exposes the coupon at ``discount.source.coupon``.)
     refetched = await subscription_service.get_subscription(
         resp.stripe_subscription_id,
         stripe_account_id,
@@ -236,7 +231,7 @@ async def test_update_subscription_add_item(
                 ),
                 PaymentsSubscriptionDesiredItem(stripe_price_id=price2),
             ],
-            proration_behavior="none",
+            proration_behavior=ProrationBehavior.no_charge,
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
             gym_timezone="America/Chicago",
@@ -298,7 +293,7 @@ async def test_update_subscription_remove_item(
                     stripe_item_id=keep_item.stripe_subscription_item_id,
                 ),
             ],
-            proration_behavior="none",
+            proration_behavior=ProrationBehavior.no_charge,
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
             gym_timezone="America/Chicago",
@@ -413,107 +408,6 @@ async def test_cancel_at_period_end(
     assert sub.cancel_at_period_end is True
 
 
-async def test_freeze_subscription(
-    subscription_service,
-    members_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    customer_id = await _setup_customer(
-        members_service,
-        stripe_client,
-        stripe_account_id,
-        connect_opts,
-        created,
-    )
-    price_id = await _setup_price(membership_service, stripe_account_id, created)
-
-    created_resp = await subscription_service.create_subscription(
-        PaymentsSubscriptionCreateRequest(
-            stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
-            idempotency_key=str(uuid4()),
-            metadata=_subscription_metadata(),
-            gym_timezone="America/Chicago",
-        ),
-        stripe_account_id,
-    )
-
-    resp = await subscription_service.freeze_subscription(
-        PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    assert resp.stripe_subscription_id == created_resp.stripe_subscription_id
-    assert resp.pause_collection_behavior is not None
-
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created_resp.stripe_subscription_id,
-        options=connect_opts,
-    )
-    assert sub.pause_collection is not None
-
-
-async def test_unfreeze_subscription(
-    subscription_service,
-    members_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    customer_id = await _setup_customer(
-        members_service,
-        stripe_client,
-        stripe_account_id,
-        connect_opts,
-        created,
-    )
-    price_id = await _setup_price(membership_service, stripe_account_id, created)
-
-    created_resp = await subscription_service.create_subscription(
-        PaymentsSubscriptionCreateRequest(
-            stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
-            idempotency_key=str(uuid4()),
-            metadata=_subscription_metadata(),
-            gym_timezone="America/Chicago",
-        ),
-        stripe_account_id,
-    )
-    await subscription_service.freeze_subscription(
-        PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    resp = await subscription_service.unfreeze_subscription(
-        PaymentsSubscriptionUnfreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-
-    assert resp.status == "active"
-
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created_resp.stripe_subscription_id,
-        options=connect_opts,
-    )
-    assert sub.status == "active"
-    assert sub.pause_collection is None
-
-
 async def test_preview_create_subscription(
     subscription_service,
     members_service,
@@ -532,9 +426,9 @@ async def test_preview_create_subscription(
     )
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    # prorate=False so the preview reflects a plain full-cycle
+    # proration_behavior=no_charge so the preview reflects a plain full-cycle
     # invoice at the anchor date (no partial-period proration).
-    # Default prorate=True would trigger ``always_invoice`` and
+    # Default proration_behavior=prorate_to_anchor would trigger ``always_invoice`` and
     # return the prorated partial-period amount instead, which
     # depends on wall-clock time and is not deterministic here.
     resp = await subscription_service.preview_create_subscription(
@@ -543,7 +437,7 @@ async def test_preview_create_subscription(
             items=[
                 PaymentsSubscriptionDesiredItem(
                     stripe_price_id=price_id,
-                    prorate=False,
+                    proration_behavior=ProrationBehavior.no_charge,
                 ),
             ],
             idempotency_key=str(uuid4()),

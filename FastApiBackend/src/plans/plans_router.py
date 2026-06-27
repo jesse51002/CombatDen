@@ -12,8 +12,6 @@ from src.core.dependencies import DependencyInjector
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.plans.plans_schema import (
     MembershipPlanCreateRequest,
-    MembershipPlanMigrateAllRequest,
-    MembershipPlanMigrateRequest,
     MembershipPlanPriceRequest,
     MembershipPlanPriceResponse,
     MembershipPlanPriceWithCount,
@@ -47,7 +45,7 @@ membership_plans_router = APIRouter(
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -68,7 +66,7 @@ async def create_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/502/500 on respective errors.
+        HTTPException: 400/401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -82,7 +80,7 @@ async def create_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -112,7 +110,7 @@ async def create_plan(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -133,7 +131,7 @@ async def update_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -153,7 +151,7 @@ async def update_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -182,7 +180,7 @@ async def update_plan(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -205,7 +203,7 @@ async def delete_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
@@ -225,7 +223,7 @@ async def delete_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -434,7 +432,7 @@ async def list_plan_prices(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -455,7 +453,7 @@ async def set_price(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -475,7 +473,7 @@ async def set_price(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -488,69 +486,3 @@ async def set_price(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to set price",
         ) from None
-
-
-# ── Migrate (specific members) ─────────────────────────────────
-
-
-@membership_plans_router.post(
-    "/migrate",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    summary="Migrate specific members (not implemented)",
-    description="Member migration is not implemented yet.",
-    responses={
-        501: {"description": "Member migration is not implemented yet"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized for this gym"},
-    },
-)
-@inject
-async def migrate_members(
-    request: MembershipPlanMigrateRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-) -> None:
-    """Not implemented yet — member migration is pending backend work.
-
-    Raises:
-        HTTPException: 401/403 on auth, otherwise 501 Not Implemented.
-    """
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Member migration is not implemented yet.",
-    )
-
-
-# ── Migrate All ────────────────────────────────────────────────
-
-
-@membership_plans_router.post(
-    "/migrate-all",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    summary="Migrate all members on a plan (not implemented)",
-    description="Member migration is not implemented yet.",
-    responses={
-        501: {"description": "Member migration is not implemented yet"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized for this gym"},
-    },
-)
-@inject
-async def migrate_all_members(
-    request: MembershipPlanMigrateAllRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-) -> None:
-    """Not implemented yet — member migration is pending backend work.
-
-    Raises:
-        HTTPException: 401/403 on auth, otherwise 501 Not Implemented.
-    """
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Member migration is not implemented yet.",
-    )

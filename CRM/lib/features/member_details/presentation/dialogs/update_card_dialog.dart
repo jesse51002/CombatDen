@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
+import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
@@ -28,10 +30,25 @@ class UpdateCardDialog extends StatefulWidget {
   final String memberName;
   final CardOnFile? card;
 
+  /// The member whose saved card this edits. Null targets
+  /// the currently viewed member; the start-memberships
+  /// wizard sets it to the payer so the card is editable
+  /// from any launching page.
+  final String? targetMemberId;
+
+  /// Whether to offer the destructive "Remove card" action.
+  /// True on the member profile (the management surface);
+  /// false in checkout flows (start / charge), where removing
+  /// a card mid-purchase makes no sense — removal lives on the
+  /// profile, behind its own confirmation.
+  final bool allowRemove;
+
   const UpdateCardDialog({
     super.key,
     required this.memberName,
     this.card,
+    this.targetMemberId,
+    this.allowRemove = true,
   });
 
   /// Resolves `true` only when the user taps "Remove card";
@@ -40,6 +57,8 @@ class UpdateCardDialog extends StatefulWidget {
     required BuildContext context,
     required String memberName,
     CardOnFile? card,
+    String? targetMemberId,
+    bool allowRemove = true,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -49,6 +68,8 @@ class UpdateCardDialog extends StatefulWidget {
         child: UpdateCardDialog(
           memberName: memberName,
           card: card,
+          targetMemberId: targetMemberId,
+          allowRemove: allowRemove,
         ),
       ),
     );
@@ -80,7 +101,10 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
       );
       if (!mounted) return;
       context.read<MemberDetailBloc>().add(
-            UpdateCardRequested(paymentMethod.id),
+            UpdateCardRequested(
+              paymentMethod.id,
+              targetMemberId: widget.targetMemberId,
+            ),
           );
       Navigator.of(context).pop();
     } catch (e) {
@@ -118,35 +142,16 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
               color: DesignConstants.text,
             ),
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: DesignConstants.card,
-              borderRadius: BorderRadius.circular(
-                DesignConstants.radiusBig,
-              ),
-              border: Border.all(
-                color: DesignConstants.text,
-                width: 2,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: DesignConstants.spacingMedium,
-              ),
-              child: CardField(
-                enablePostalCode: true,
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text,
-                ),
-                onCardChanged: (details) {
-                  final isComplete =
-                      details?.complete ?? false;
-                  if (isComplete != _complete) {
-                    setState(() => _complete = isComplete);
-                  }
-                },
-              ),
-            ),
+          _RecurringImpactWarning(
+            memberName: widget.memberName,
+            replacing: card != null,
+          ),
+          CardFieldBox(
+            onComplete: (isComplete) {
+              if (isComplete != _complete) {
+                setState(() => _complete = isComplete);
+              }
+            },
           ),
           if (_error != null)
             Text(
@@ -166,10 +171,13 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
         secondaryOnPressed: _submitting
             ? null
             : () => Navigator.of(context).pop(),
-        destructiveLabel: card == null ? null : 'Remove card',
-        destructiveOnPressed: _submitting
+        destructiveLabel: (card == null || !widget.allowRemove)
             ? null
-            : () => Navigator.of(context).pop(true),
+            : 'Remove card',
+        destructiveOnPressed:
+            (_submitting || !widget.allowRemove)
+                ? null
+                : () => Navigator.of(context).pop(true),
       ),
     );
   }
@@ -198,6 +206,63 @@ class _CurrentCardLine extends StatelessWidget {
                 'Expires ${card.expMonth}/${card.expYear}',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Spells out the global side effect of saving a card: it becomes the
+/// member's DEFAULT, so every recurring membership they have bills to it —
+/// not a one-off for a single purchase.
+class _RecurringImpactWarning extends StatelessWidget {
+  final String memberName;
+  final bool replacing;
+
+  const _RecurringImpactWarning({
+    required this.memberName,
+    required this.replacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(
+        DesignConstants.paddingSmall,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        border: Border.all(color: DesignConstants.okYellow),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          Icon(
+            Symbols.warning_sharp,
+            size: DesignConstants.iconSizeSmall,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.okYellow,
+          ),
+          Expanded(
+            child: Text(
+              replacing
+                  ? 'This is $memberName’s saved DEFAULT card. '
+                      'Saving a new one re-bills EVERY recurring '
+                      'membership they have to it going forward '
+                      '— it’s not a one-off for a single charge.'
+                  : 'This becomes $memberName’s saved DEFAULT '
+                      'card — every recurring membership they '
+                      'have bills to it going forward, not just '
+                      'one charge.',
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text,
+              ),
             ),
           ),
         ],

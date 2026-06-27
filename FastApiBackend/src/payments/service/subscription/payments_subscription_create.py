@@ -15,7 +15,7 @@ from stripe.params._subscription_create_params import (
 )
 
 import src.shared.db_schema_path  # noqa: F401
-from src.core.config import MONTHLY_BILLING_ANCHOR_DAY
+from src.core.config import settings
 from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
@@ -28,6 +28,7 @@ from src.payments.schema.payments_members_schema import (
 )
 from src.payments.service.payments_stripe_mappers import (
     map_preview_invoice,
+    proration_behavior_to_stripe,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -86,7 +87,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         items = self._build_create_items(consolidated)
 
         proration_behavior: Literal["none", "always_invoice"] = (
-            request.proration_behavior
+            proration_behavior_to_stripe(request.proration_behavior)
         )
 
         create_params = SubscriptionCreateParams(
@@ -125,9 +126,9 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         customer: stripe.Customer,
         opts: stripe.RequestOptions,
     ) -> int:
-        """Next MONTHLY_BILLING_ANCHOR_DAY as a unix timestamp.
+        """Next monthly billing anchor day as a unix timestamp.
 
-        Pins the next anchor to midnight of MONTHLY_BILLING_ANCHOR_DAY in
+        Pins the next anchor to midnight of settings.monthly_billing_anchor_day in
         the gym's configured timezone. We pass this explicit timestamp on
         both the real subscription create AND the invoice preview so the
         two paths share identical proration inputs. Stripe's
@@ -143,7 +144,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         """
         now = await self._customer_now(customer, gym_timezone, opts)
         candidate = now.replace(
-            day=MONTHLY_BILLING_ANCHOR_DAY,
+            day=settings.monthly_billing_anchor_day,
             hour=0,
             minute=0,
             second=0,

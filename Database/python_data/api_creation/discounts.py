@@ -3,11 +3,11 @@
 The seed creates coupon-free discount presets: `POST /api/v1/discounts/` writes
 the identity row plus its active value version (coupons are computed at sync and
 written onto the applied-discount row, never on the preset). Each carries a lifetime
-spec — discount_mode (once | ongoing) plus, for ongoing, an end set by EITHER a
-duration span (duration_amount + duration_unit ∈ day/week/month) OR an explicit
-end_date — never both; neither = forever. The payload built here matches
-DiscountCreateRequest in FastApiBackend (a nested ``value`` DiscountValue object;
-verify against Database/openapi.json).
+spec — an end set by EITHER a duration span (duration_amount + duration_unit ∈
+day/week/month/cycle) OR an explicit end_date, never both; neither = forever. A
+1-cycle span is the single-invoice discount that replaced the old `once` mode. The
+payload built here matches DiscountCreateRequest in FastApiBackend (a nested
+``value`` DiscountValue object; verify against Database/openapi.json).
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ class DiscountRecord:
     discount_type: str
     percentage_off: float | None
     dollar_off: int | None
-    discount_mode: str
     duration_amount: int | None
     duration_unit: str | None
     end_date: str | None
@@ -60,7 +59,6 @@ def _parse_record(resp: dict) -> DiscountRecord:
         discount_type=resp["discount_type"],
         percentage_off=value.get("percentage_off"),
         dollar_off=value.get("dollar_off"),
-        discount_mode=value["discount_mode"],
         duration_amount=value.get("duration_amount"),
         duration_unit=value.get("duration_unit"),
         end_date=value.get("end_date"),
@@ -87,13 +85,18 @@ def create_regular(
         # Catalog discounts are preset-only: `custom` is one-shot/single-owner,
         # minted ONLY inline at membership start (the create API rejects it).
         discount_type = "preset"
-        discount_mode = random.choice(["once", "ongoing"])
         pct_off = round(random.uniform(5, 25), 1)
         dollar_off = random.randint(500, 5000)
-        # For ongoing discounts, ~half get a duration span, the rest run forever.
-        duration_amount = random.randint(1, 12) if discount_mode == "ongoing" else None
-        duration_unit = random.choice(["day", "week", "month"]) if discount_mode == "ongoing" else None
-        if discount_mode == "ongoing" and random.random() < 0.5:
+        # Lifetime: a few billing cycles (the single-invoice / short-run case that
+        # replaced `once`), a day/week/month span, or forever (no duration).
+        lifetime = random.choice(["cycle", "span", "forever"])
+        if lifetime == "cycle":
+            duration_amount = random.randint(1, 3)
+            duration_unit = "cycle"
+        elif lifetime == "span":
+            duration_amount = random.randint(1, 12)
+            duration_unit = random.choice(["day", "week", "month"])
+        else:
             duration_amount = None
             duration_unit = None
 
@@ -102,7 +105,7 @@ def create_regular(
             records.append(existing)
             continue
 
-        value: dict = {"discount_mode": discount_mode}
+        value: dict = {}
         if use_pct:
             value["percentage_off"] = pct_off
         else:

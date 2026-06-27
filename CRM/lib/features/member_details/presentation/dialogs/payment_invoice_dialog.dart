@@ -5,27 +5,32 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
+import 'package:crm/features/member_details/data/models/line_item_record.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// Shows a historical [PaymentRecord] as a full invoice via
-/// the shared [InvoiceBreakdown]. A refund affordance is
-/// rendered only for a succeeded, non-refund charge; it
-/// routes through a [BillingConfirmationDialog] and then
-/// dispatches [RefundChargeRequested].
+/// the shared [InvoiceBreakdown] — line items, discounts, the
+/// refunded amount, and the per-attempt history. A refund
+/// affordance is rendered only for a succeeded, non-refund
+/// charge with a balance left; it routes through the shared
+/// [RefundChargeDialog] and then dispatches
+/// [RefundChargeRequested]. A failure surfaces through the
+/// bloc's `actionError` path.
 ///
-/// NOTE: the merged contract has no refund endpoint — the
-/// repository's refund call targets an assumed path that
-/// will 404 until the backend ships it. The frozen
-/// [RefundChargeRequested] event exists, so the seam is
-/// wired; a real failure surfaces through the bloc's
-/// `actionError` path.
+/// [show] resolves to `true` once a refund is submitted (the refund
+/// form opens ON TOP of this invoice and both close on submit), so a
+/// caller can follow up — the one-time refund flow uses this to offer
+/// to end the membership after a refund. It resolves to `null` when the
+/// invoice is simply dismissed.
 class PaymentInvoiceDialog extends StatelessWidget {
   final PaymentRecord payment;
 
@@ -34,11 +39,11 @@ class PaymentInvoiceDialog extends StatelessWidget {
     required this.payment,
   });
 
-  static Future<void> show({
+  static Future<bool?> show({
     required BuildContext context,
     required PaymentRecord payment,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
@@ -48,6 +53,14 @@ class PaymentInvoiceDialog extends StatelessWidget {
   }
 
   bool get _isRefund => payment.kind == ChargeKind.refund;
+
+  /// "For {beneficiaries}" — who the bill was for, when that differs from the
+  /// payer (the payer is shown as the avatar attribution header). Null when
+  /// the bill was only for the payer.
+  String? get _forLabel {
+    final others = _beneficiaryNames;
+    return others.isEmpty ? null : 'For ${others.join(', ')}';
+  }
 
   /// Refundable only when this is a succeeded payment (not
   /// already a refund, not pending/failed) with an
@@ -66,9 +79,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
         ? payment.lineItems
             .map(
               (l) => InvoiceLineItem(
-                description: l.quantity > 1
-                    ? '${l.name} ×${l.quantity}'
-                    : l.name,
+                description: _lineDescription(l),
                 amount: l.amount,
               ),
             )
@@ -107,6 +118,26 @@ class PaymentInvoiceDialog extends StatelessWidget {
     );
   }
 
+  /// "{Plan} ×{qty}" with who the line was FOR appended ("· {names}").
+  /// A membership line carries all its co-owners (`ownerLabel`, already
+  /// comma-joined); a custom/ad-hoc line has none, so it falls back to the
+  /// invoice's beneficiaries (`paid_for`, excluding the payer) — either way
+  /// this can be **multiple** people on one line.
+  String _lineDescription(LineItemRecord l) {
+    final base = l.quantity > 1 ? '${l.name} ×${l.quantity}' : l.name;
+    final owner = l.ownerLabel ?? '';
+    final forWhom = owner.isNotEmpty ? owner : _beneficiaryNames.join(', ');
+    return forWhom.isNotEmpty ? '$base · $forWhom' : base;
+  }
+
+  /// The invoice's beneficiaries (`paid_for`) other than the payer — the
+  /// people a non-membership line was for. May be several.
+  List<String> get _beneficiaryNames => payment.paidFor
+      .where((m) => m.memberId != payment.paidByMemberId)
+      .map((m) => m.name)
+      .where((n) => n.isNotEmpty)
+      .toList();
+
   /// "•••• 4242" for a card, "Cash" for cash, else the method
   /// type (or "—" when we never captured one — e.g. a failed
   /// attempt, whose card isn't on the webhook payload).
@@ -139,31 +170,56 @@ class PaymentInvoiceDialog extends StatelessWidget {
     };
   }
 
-  /// Closes the invoice, then routes the refund through the
-  /// shared [RefundChargeDialog] (confirmation +
-  /// [RefundChargeRequested]) so the refund flow lives in
-  /// one place.
-  void _onRefund(BuildContext context) {
-    Navigator.of(context).pop();
-    RefundChargeDialog.show(
-      context: context,
-      charge: payment,
-    );
+  /// Routes the refund through the shared [RefundChargeDialog]
+  /// (confirmation + [RefundChargeRequested]) so the refund flow lives
+  /// in one place. The refund form opens ON TOP of this invoice; once a
+  /// refund is submitted both close and [show] resolves to `true`.
+  /// Cancelling the refund leaves the invoice open.
+  Future<void> _onRefund(BuildContext context) async {
+    final submitted =
+        await RefundChargeDialog.show(context: context, charge: payment) ??
+            false;
+    if (submitted && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final forLabel = _forLabel;
     return AppDialog(
       title: _isRefund ? 'Refund' : 'Invoice',
-      body: InvoiceBreakdown(
-        data: _data,
-        headerCaption: _isRefund ? 'Refund' : 'Payment',
-        headerMeta: formatDay(payment.chargeTime),
-        strongHeaderCaption: true,
-        statusLabel: payment.status.displayLabel,
-        statusTone: _statusTone,
-        onRefundPressed:
-            _canRefund ? () => _onRefund(context) : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          InvoiceBreakdown(
+            data: _data,
+            // Whose invoice — the payer (their card billed it).
+            attribution: payment.paidByName.isEmpty
+                ? null
+                : InvoiceAttribution(
+                    name: payment.paidByName,
+                    photoUrl: payment.paidByPhotoUrl,
+                    caption: 'Paid by',
+                  ),
+            headerCaption: _isRefund ? 'Refund' : 'Payment',
+            headerMeta: formatDay(payment.chargeTime),
+            strongHeaderCaption: true,
+            statusLabel: payment.status.displayLabel,
+            statusTone: _statusTone,
+            onRefundPressed:
+                _canRefund ? () => _onRefund(context) : null,
+          ),
+          if (forLabel != null)
+            Text(
+              forLabel,
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+        ],
       ),
     );
   }

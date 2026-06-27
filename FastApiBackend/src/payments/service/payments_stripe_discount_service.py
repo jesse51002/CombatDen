@@ -1,7 +1,6 @@
 import logging
 
 import stripe
-from schema.gym_discount import DiscountMode
 from stripe.params._coupon_create_params import CouponCreateParams
 
 import src.shared.db_schema_path  # noqa: F401
@@ -23,10 +22,11 @@ logger = logging.getLogger(__name__)
 # fractions (per-unit percents summed then divided by quantity).
 _PERCENT_DECIMALS = 2
 
-_MODE_TO_STRIPE_DURATION: dict[DiscountMode, StripeCouponDuration] = {
-    DiscountMode.once: StripeCouponDuration.once,
-    DiscountMode.ongoing: StripeCouponDuration.forever,
-}
+# Every discount coupon is a Stripe `forever` coupon. A discount's lifetime is
+# enforced by OUR resolved `end_date` cutoff (the sync read drops anything past
+# it), never by Stripe coupon duration — so a `forever` coupon is never consumed
+# by appearing on an invoice and a mid-cycle proration can't burn it.
+_COUPON_DURATION = StripeCouponDuration.forever
 
 
 class PaymentsStripeDiscountService:
@@ -123,15 +123,15 @@ class PaymentsStripeDiscountService:
         The only coupon-create path (the deterministic find-or-create owns it).
         Idempotent on the id: a create race (the id was taken by a concurrent
         create of the same value) is caught and the existing coupon's id is
-        returned. ``once`` → Stripe ``once`` duration, ``ongoing`` → ``forever``
-        (our ``end_date`` cutoff is enforced in the read). The id is mirrored into
-        the coupon name so the dashboard shows the value signature.
+        returned. The coupon is always Stripe ``forever`` — a discount's lifetime
+        is enforced by our resolved ``end_date`` cutoff in the read, not by Stripe
+        duration. The id is mirrored into the coupon name so the dashboard shows
+        the value signature.
         """
-        duration = _MODE_TO_STRIPE_DURATION[value.discount_mode]
         params = CouponCreateParams(
             id=coupon_id,
             name=coupon_id,
-            duration=duration.value,
+            duration=_COUPON_DURATION.value,
         )
         if value.percentage_off is not None:
             params["percent_off"] = round(value.percentage_off, _PERCENT_DECIMALS)
@@ -184,15 +184,15 @@ class PaymentsStripeDiscountService:
     def coupon_id_for_value(value: PaymentsCouponValue) -> str:
         """Deterministic coupon id for a discount value.
 
-        ``pct_<bps>_<mode>`` (basis points, integer) for a percent or
-        ``amt_<cents>_<mode>`` for a fixed dollar amount, so one coupon per
-        distinct value+mode is reused on the Connect account.
+        ``pct_<bps>`` (basis points, integer) for a percent or ``amt_<cents>``
+        for a fixed dollar amount, so one ``forever`` coupon per distinct value
+        is reused on the Connect account.
         """
         if value.percentage_off is not None:
             bps = round(value.percentage_off * 100)
-            return f"pct_{bps}_{value.discount_mode.value}"
+            return f"pct_{bps}"
         cents = int(value.dollar_off or 0)
-        return f"amt_{cents}_{value.discount_mode.value}"
+        return f"amt_{cents}"
 
     async def find_or_create_for_value(
         self,
@@ -248,9 +248,10 @@ class PaymentsStripeDiscountService:
 
         Guards against reusing a stale/corrupted coupon: the deterministic id
         encodes the intended value, but the coupon object could have drifted.
-        Compares exactly the fields ``_build_create_request_for_value`` sets.
+        Every coupon is ``forever`` (lifetime is our end_date cutoff, not Stripe
+        duration); a drifted duration is treated as a mismatch and replaced.
         """
-        if coupon.duration != _MODE_TO_STRIPE_DURATION[value.discount_mode]:
+        if coupon.duration != _COUPON_DURATION:
             return False
         if value.percentage_off is not None:
             expected_percent = round(value.percentage_off, _PERCENT_DECIMALS)

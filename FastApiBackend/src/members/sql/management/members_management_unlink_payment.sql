@@ -14,7 +14,6 @@ RETURNING
     emergency_contact_name,
     emergency_contact_phone,
     emergency_contact_email,
-    account_linked_to_id,
     stripe_customer_id,
     stripe_payment_method_id,
     card_brand,

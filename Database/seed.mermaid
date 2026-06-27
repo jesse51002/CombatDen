@@ -23,7 +23,7 @@ flowchart TB
   %% dimension's values reconverge into the next. family + non-family converge
   %% into the shared membership lifecycle.
   Members["👤 Members ×100"]
-  Members -->|"~50%"| m_fam["family<br/>paying root + 1–5 cardless kids"]
+  Members -->|"~50%"| m_fam["family<br/>paying root + 1–5 linked kids<br/>~50% of kids self-pay (own card), rest parent-paid"]
   Members -->|"~50%"| m_non["non-family"]
   m_fam --> m_life
   m_non --> m_life
@@ -33,13 +33,15 @@ flowchart TB
   m_life -->|"10%"| m_former["former (history only)"]
   m_life -->|"25%"| m_trial["trial-only"]
   m_life -->|"20%"| m_t2p["trial→paid"]
-  m_life -->|"22%"| m_active["active (~10% cancel at start)"]
-  m_life -->|"15%"| m_resign["re-signup"]
+  m_life -->|"17%"| m_active["active (~10% cancel at start)"]
+  m_life -->|"10%"| m_packs["active class pack<br/>1 one-time row · qty 1–3"]
+  m_life -->|"10%"| m_resign["re-signup"]
   m_never --> m_frz
   m_former --> m_frz
   m_trial --> m_frz
   m_t2p --> m_frz
   m_active --> m_frz
+  m_packs --> m_frz
   m_resign --> m_frz
 
   m_frz["freeze status (co-occurs)"]
@@ -53,6 +55,8 @@ flowchart TB
   m_acc -->|"95%"| m_staff["staff-managed ×95"]
 
   Members -.->|"+2 extra"| m_overdue["overdue ×2<br/>past_due, via Stripe test-clock"]
+  m_fam -.->|"1 row / linked child<br/>(PUT /members/{id}/link)"| m_auth["member_authorized_payers<br/>payer authorized to bill for child"]
+  m_fam -.->|"1 signature / linked child<br/>(same link transaction)"| m_waiver["member_waiver_signatures<br/>parent signs default authorized-payer waiver"]
 
   %% ── Ranks · presets ×35 (this gym = BJJ — simple split) ──
   Ranks["🥋 Ranks · presets ×35"]
@@ -78,23 +82,26 @@ flowchart TB
   d_pct --> d_dur
   d_dollar --> d_dur
 
-  d_dur["duration (co-occurs)"]
-  d_dur -->|"50%"| d_once["once"]
-  d_dur -->|"50%"| d_ongoing["ongoing<br/>½ time-bounded · ½ forever"]
+  d_dur["lifetime (co-occurs)"]
+  d_dur -->|"⅓"| d_cycle["N cycles 1–3<br/>single-invoice / short-run"]
+  d_dur -->|"⅓"| d_span["day/week/month span 1–12"]
+  d_dur -->|"⅓"| d_forever["forever (no end)"]
 
   Discounts -.->|"0–3 preset ids / live membership"| d_applied["applied snapshots<br/>preset discount_ids per item"]
   Discounts -.->|"~15% of live memberships"| d_custom["custom_discounts one-shot<br/>inline at start · backend-minted"]
 
   %% ── Memberships · grouped live vs closed (one status each) ──
-  %% Live memberships are started via one batch POST per paying-parent family:
-  %% link each child first, then POST /member_memberships/ with all family
-  %% members' items (each carrying discount_ids + optional custom_discounts);
-  %% a failed result in the breakdown hard-fails the seed.
+  %% Live memberships are started via batch POSTs grouped by PAYER: link each
+  %% child first, then POST /member_memberships/ for the parent-paid group (root
+  %% + parent-paid kids, billed to the root) and one more POST per self-paying
+  %% child (billed to that child). Each item carries discount_ids + optional
+  %% custom_discounts; a failed result in the breakdown hard-fails the seed.
   Memberships["📄 Memberships · live ≈50 + closed ≈50–70"]
   Memberships --> ms_live["live ≈50"]
   Memberships --> ms_closed["closed ≈50–70"]
   ms_live --> ms_active["active (recurring)"]
   ms_live --> ms_trial["active trial"]
+  ms_live --> ms_packs["active class pack (one-time · qty 1–3)"]
   ms_live --> ms_cancel["cancelled at start ~10%"]
   ms_closed --> ms_ended["ended (trial / drop-in)"]
   ms_closed --> ms_former["former / re-signup history"]
@@ -160,10 +167,14 @@ flowchart TB
   History["📈 gym_history ×30"]
   History -->|"daily"| h_day["active vs inactive rollup · 30 days"]
 
+  %% ── Waivers ×1 — the undeletable default authorized-payer waiver per gym ──
+  Waivers["📜 Waivers ×1"]
+  Waivers -->|"v1"| w_default["default authorized-payer (is_default)<br/>1 catalog + 1 version · seed-copied from platform default · editable · undeletable"]
+
   %% ── styling: hub = entity · dim = co-occurring dimension · leaf = a type ──
   classDef hub  fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
-  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
+  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History,Waivers hub;
   class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day,w_default leaf;

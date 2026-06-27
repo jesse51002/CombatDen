@@ -1,8 +1,7 @@
-from datetime import date
-from typing import Literal
-
 from pydantic import BaseModel, field_validator
+from schema.task import ProrationBehavior
 
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.metadata.stripe_customer_metadata import (
     StripeCustomerMetadata,
 )
@@ -81,7 +80,7 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
     items: list[PaymentsSubscriptionDesiredItem]
     metadata: StripeSubscriptionMetadata
     pay_first_invoice_out_of_band: bool = False
-    proration_behavior: Literal["none", "always_invoice"] = "none"
+    proration_behavior: ProrationBehavior = ProrationBehavior.no_charge
     idempotency_key: str
     gym_timezone: str
 
@@ -99,7 +98,7 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
 
 class PaymentsSubscriptionUpdateRequest(PaymentsSubscriptionCreateRequest):
     stripe_subscription_id: str
-    proration_behavior: Literal["none", "always_invoice"]
+    proration_behavior: ProrationBehavior
 
 
 class PaymentsSubscriptionItemResponse(BaseModel):
@@ -114,21 +113,6 @@ class PaymentsSubscriptionItemResponse(BaseModel):
 
 
 # ── Subscription-Level Operations ───────────────────────────────
-
-
-class PaymentsSubscriptionFreezeRequest(BaseModel):
-    """Freeze (pause collection on) a subscription."""
-
-    stripe_subscription_id: str
-    freeze_end_date: date | None = None
-    idempotency_key: str
-
-
-class PaymentsSubscriptionUnfreezeRequest(BaseModel):
-    """Resume (unfreeze) a paused subscription."""
-
-    stripe_subscription_id: str
-    idempotency_key: str
 
 
 class PaymentsSubscriptionCancelRequest(BaseModel):
@@ -151,14 +135,6 @@ class PaymentsSubscriptionResponse(BaseModel):
     metadata: dict[str, str] = {}
 
 
-class PaymentsSubscriptionFreezeResponse(BaseModel):
-    """Response after freezing/pausing a subscription."""
-
-    stripe_subscription_id: str
-    pause_collection_behavior: str
-    resumes_at: int | None = None
-
-
 # ── Batch Migration ─────────────────────────────────────────────
 
 
@@ -168,7 +144,7 @@ class PaymentsSubscriptionPriceMigrationRequest(BaseModel):
     subscription_ids: list[str]
     old_stripe_price_id: str
     new_stripe_price_id: str
-    proration_behavior: Literal["none", "always_invoice"] = "none"
+    proration_behavior: ProrationBehavior = ProrationBehavior.no_charge
 
 
 class PaymentsResourceNotFoundDetail(BaseModel):

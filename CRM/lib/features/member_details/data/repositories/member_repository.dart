@@ -1,4 +1,7 @@
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
+import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
@@ -10,6 +13,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_request.dart';
@@ -17,6 +21,7 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/members_management_update_card_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/payer_invoice_change.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
@@ -71,8 +76,7 @@ class MemberRepository {
         '/api/v1/members/list',
         data: CrmMembersListRequest(
           gymId: gymId,
-          prevView: MembersListView.all,
-          requestedView: MembersListView.all,
+          view: MembersListView.all,
           count: pageSize,
           startIndex: startIndex,
         ).toJson(),
@@ -152,49 +156,127 @@ class MemberRepository {
     );
   }
 
-  /// `PUT /api/v1/members/{member_id}/link` — link the
-  /// member to a paying parent account. A pure DB change
-  /// (the member has no active recurring memberships, so
-  /// nothing is re-billed); the endpoint returns no body,
+  /// `GET /api/v1/members/{member_id}/authorized-payer-waiver` — the gym's
+  /// default authorized-payer waiver (id + version + body) the payer must sign
+  /// to be authorized for this member. The sign dialog renders [body] before
+  /// linking.
+  Future<AuthorizedPayerWaiver> getAuthorizedPayerWaiver(
+    String memberId,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/members/$memberId/authorized-payer-waiver',
+    );
+    return AuthorizedPayerWaiver.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `PUT /api/v1/members/{member_id}/link` — authorize [payerMemberId] to pay
+  /// for the member. The payer signs the gym's default authorized-payer waiver
+  /// in the same call ([signerName] + [consentAcknowledged]); the signature and
+  /// the authorization are recorded atomically. A pure DB change (the
+  /// authorization layer — nothing is re-billed); the endpoint returns no body,
   /// so callers refetch member detail afterward.
   Future<void> linkMemberAccount(
-    String memberId,
-    String parentMemberId,
-  ) async {
+    String memberId, {
+    required String payerMemberId,
+    required String signerName,
+    required bool consentAcknowledged,
+  }) async {
     await _apiClient.put(
       '/api/v1/members/$memberId/link',
       data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
+        payerMemberId: payerMemberId,
+        signerName: signerName,
+        consentAcknowledged: consentAcknowledged,
       ).toJson(),
     );
   }
 
-  /// `POST /api/v1/members/{member_id}/link/check`.
+  /// `POST /api/v1/members/{member_id}/link/check` — read-only eligibility for
+  /// authorizing [payerMemberId] (no signature). Returns can_link + an error
+  /// string when blocked.
   Future<MembersManagementLinkCheckResponse>
       checkLinkMemberAccount(
     String memberId,
-    String parentMemberId,
+    String payerMemberId,
   ) async {
     final response = await _apiClient.post(
       '/api/v1/members/$memberId/link/check',
-      data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
-      ).toJson(),
+      data: {'payer_member_id': payerMemberId},
     );
     return MembersManagementLinkCheckResponse.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
 
-  /// `DELETE /api/v1/members/{member_id}/link` — unlink the
-  /// member from their paying parent account. A pure DB
-  /// change; the endpoint returns no body, so callers
-  /// refetch member detail afterward.
-  Future<void> unlinkMemberAccount(
+  /// `POST /api/v1/members/{member_id}/link/remove/preview` — cost preview of
+  /// removing [payerMemberId] as a payer for [memberId]: the payer's recurring
+  /// bill after cancelling the memberships they fund (current → new),
+  /// pair-scoped so a one-entry list (empty = no billing change). Read-only;
+  /// shown before confirming.
+  Future<List<PayerInvoiceChange>> previewRemoveAuthorization(
     String memberId,
+    String payerMemberId,
   ) async {
-    await _apiClient.delete(
-      '/api/v1/members/$memberId/link',
+    final response = await _apiClient.post(
+      '/api/v1/members/$memberId/link/remove/preview',
+      data: {'payer_member_id': payerMemberId},
+    );
+    return (response.data as List<dynamic>)
+        .map(
+          (e) =>
+              PayerInvoiceChange.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  /// `POST /api/v1/members/{member_id}/link/remove` — cancels [memberId]'s live
+  /// recurring memberships that [payerMemberId] funds, then de-authorizes the
+  /// pair (the signature audit row is kept). [idempotencyKey] is generated once
+  /// per user action and reused on retry, so the cascading cancel dedups at
+  /// Stripe (the backend derives the payer's sub-key from it).
+  ///
+  /// Returns a [CancelOutcome] describing which funded memberships were
+  /// cancelled (mirrors [cancelMemberships], so the unlink flow can show the
+  /// same completion screen):
+  /// - HTTP 200: the cancelled item_ids come from the `cancel_dates` keys (the
+  ///   map is empty when the relationship funded nothing — a clean de-authorize).
+  /// - HTTP 207 partial: the body's `{succeeded_item_ids, failed_item_ids}`
+  ///   carries the real split (a 2xx, so it arrives on the success path).
+  /// Any other error (total failure 500, transport failure) rethrows — the
+  /// caller surfaces it rather than showing an empty completion screen.
+  Future<CancelOutcome> removeAuthorization(
+    String memberId,
+    String payerMemberId,
+    String idempotencyKey,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/members/$memberId/link/remove',
+      data: {
+        'payer_member_id': payerMemberId,
+        'idempotency_key': idempotencyKey,
+      },
+    );
+    // HTTP 207 partial: the body carries the succeeded/failed split (a 2xx, so
+    // it arrives here on the success path, not as an exception).
+    if (response.statusCode == 207) {
+      final partial = _parsePartialCancel(
+        response.data is Map
+            ? (response.data as Map).cast<String, dynamic>()
+            : null,
+      );
+      if (partial != null) return partial;
+    }
+    // HTTP 200: cancelled item_ids = cancel_dates keys (empty = nothing
+    // funded, just a de-authorize).
+    final data = response.data;
+    final cancelDates = data is Map
+        ? data['cancel_dates'] as Map<String, dynamic>?
+        : null;
+    return CancelOutcome(
+      succeededItemIds: cancelDates?.keys.toList() ?? const [],
+      failedItemIds: const [],
     );
   }
 
@@ -261,8 +343,9 @@ class MemberRepository {
 
   /// `POST /api/v1/member_memberships/` — start a payer's
   /// family memberships in one request. Returns the
-  /// per-membership created/failed breakdown (a 201 is NOT
-  /// success/fail — inspect each result).
+  /// per-membership created/failed breakdown (status is 201 when all
+  /// created, 207 when some failed — both 2xx; inspect each result
+  /// either way). A total failure (nothing created) throws.
   Future<MemberMembershipsStartResponse> startMemberships(
     MemberMembershipsStartRequest req,
   ) async {
@@ -292,47 +375,140 @@ class MemberRepository {
     );
   }
 
-  /// `DELETE /api/v1/member_memberships/` — cancel a
-  /// membership item. The merged contract takes
-  /// `item_id`, `member_id`, and `idempotency_key` as
-  /// query params.
-  Future<void> cancelMembership({
-    required String itemId,
+  /// `DELETE /api/v1/member_memberships/` — cancel ONE OR MORE
+  /// membership items in one call (a single cancel is a one-element
+  /// list). The merged contract takes `item_ids`, `member_id`, and
+  /// `idempotency_key` in the request body; the backend groups the
+  /// items by payer and converges each payer's subscription once.
+  ///
+  /// Returns a [CancelOutcome] describing which item_ids succeeded
+  /// and which failed:
+  /// - HTTP 200: all [itemIds] succeeded (from `cancel_dates` keys).
+  /// - HTTP 207 partial: the body's `{succeeded_item_ids, failed_item_ids}`
+  ///   carries the real split — a 207 is a 2xx, so it arrives on the
+  ///   SUCCESS path (no exception); parse it so the completion screen shows
+  ///   which items actually cancelled. If the structured shape is missing,
+  ///   fall back to all-failed.
+  /// - HTTP 409: throws [MembershipInTaskException] (not a cancel
+  ///   outcome — the request was blocked entirely).
+  /// - Total failure (HTTP 500) / other error: all [itemIds] reported as failed.
+  Future<CancelOutcome> cancelMemberships({
+    required List<String> itemIds,
     required String memberId,
     required String idempotencyKey,
   }) async {
-    await _apiClient.delete(
-      '/api/v1/member_memberships/'
-      '?item_id=$itemId'
-      '&member_id=$memberId'
-      '&idempotency_key=$idempotencyKey',
+    try {
+      final response = await _apiClient.delete(
+        '/api/v1/member_memberships/',
+        data: {
+          'item_ids': itemIds,
+          'member_id': memberId,
+          'idempotency_key': idempotencyKey,
+        },
+      );
+      // HTTP 207: partial — the body carries the real succeeded/failed split.
+      if (response.statusCode == 207) {
+        final partial = _parsePartialCancel(
+          response.data is Map
+              ? (response.data as Map).cast<String, dynamic>()
+              : null,
+        );
+        if (partial != null) return partial;
+      }
+      // HTTP 200: parse succeeded item_ids from cancel_dates keys.
+      final data = response.data;
+      if (data is Map) {
+        final cancelDates =
+            data['cancel_dates'] as Map<String, dynamic>?;
+        final succeeded = cancelDates?.keys.toList() ?? itemIds;
+        return CancelOutcome(
+          succeededItemIds: succeeded,
+          failedItemIds: const [],
+        );
+      }
+      // Unexpected shape — treat all as succeeded (a 2xx was returned).
+      return CancelOutcome(
+        succeededItemIds: itemIds,
+        failedItemIds: const [],
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      // Total failure (500) / unstructured server error: all items failed.
+      return CancelOutcome(
+        succeededItemIds: const [],
+        failedItemIds: itemIds,
+      );
+    } catch (_) {
+      return CancelOutcome(
+        succeededItemIds: const [],
+        failedItemIds: itemIds,
+      );
+    }
+  }
+
+  /// Reads the structured partial-cancel split from a 207 Multi-Status body
+  /// (`{"message": ..., "succeeded_item_ids": [...], "failed_item_ids":
+  /// [...]}`). The fields are top-level (a 207 is a returned RESULT, not an
+  /// HTTPException, so there is no `detail` wrapper). Returns null when the
+  /// body has no structured split, so the caller falls back appropriately.
+  CancelOutcome? _parsePartialCancel(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final succeeded = data['succeeded_item_ids'];
+    final failed = data['failed_item_ids'];
+    if (succeeded is! List || failed is! List) return null;
+    return CancelOutcome(
+      succeededItemIds: succeeded.map((e) => e.toString()).toList(),
+      failedItemIds: failed.map((e) => e.toString()).toList(),
     );
   }
 
-  /// `POST /api/v1/member_memberships/cancel/preview`.
-  Future<DueNowVsRecurringPreview?>
-      previewCancelMembership(
-    String itemId,
+  /// `POST /api/v1/member_memberships/cancel/preview` — per-payer cost preview
+  /// of cancelling [itemIds] (a single cancel is one payer → a one-entry list;
+  /// a member's memberships split across payers yield several entries). Sends
+  /// `item_ids` + `member_id` in the request body.
+  Future<List<PayerInvoiceChange>> previewCancelMemberships(
+    List<String> itemIds,
     String memberId,
   ) async {
     final response = await _apiClient.post(
-      '/api/v1/member_memberships/cancel/preview'
-      '?item_id=$itemId&member_id=$memberId',
+      '/api/v1/member_memberships/cancel/preview',
+      data: {
+        'item_ids': itemIds,
+        'member_id': memberId,
+      },
     );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    if (response.data == null) return [];
+    return (response.data as List<dynamic>)
+        .map(
+          (e) =>
+              PayerInvoiceChange.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
   }
 
   /// `PUT /api/v1/member_memberships/price`.
   Future<void> updateMembershipPrice(
     MemberMembershipsUpdatePriceRequest req,
   ) async {
-    await _apiClient.put(
-      '/api/v1/member_memberships/price',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.put(
+        '/api/v1/member_memberships/price',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/price/preview`.
@@ -350,24 +526,98 @@ class MemberRepository {
     );
   }
 
+  /// `POST /api/v1/member_memberships/upgrade` — cross-plan upgrade.
+  ///
+  /// Moves the membership to the target plan's active price and charges
+  /// the prorated difference now. A membership in an in-progress task is
+  /// rejected (409 → [MembershipInTaskException], like reprice).
+  Future<void> upgradeMembership(
+    MemberMembershipsUpgradeRequest req,
+  ) async {
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/upgrade',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// `POST /api/v1/member_memberships/upgrade/preview`.
+  Future<DueNowVsRecurringPreview?> upgradePreview(
+    MemberMembershipsUpgradeRequest req,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/upgrade/preview',
+      data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/member_memberships/end` — end a ONE-TIME / TRIAL
+  /// membership early (sets its end date to today → status 'ended').
+  /// No Stripe action, no money movement (refund is the separate flow).
+  Future<void> endMembership({
+    required String itemId,
+    required String memberId,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/member_memberships/end',
+      data: {
+        'item_id': itemId,
+        'member_id': memberId,
+      },
+    );
+  }
+
   /// `POST /api/v1/member_memberships/freeze`.
   Future<void> freezeAccount(
     MemberMembershipsFreezeRequest req,
   ) async {
-    await _apiClient.post(
-      '/api/v1/member_memberships/freeze',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/freeze',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/unfreeze`.
   Future<void> unfreezeAccount(
     MemberMembershipsUnfreezeRequest req,
   ) async {
-    await _apiClient.post(
-      '/api/v1/member_memberships/unfreeze',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/unfreeze',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/mark-paid-cash`.
@@ -424,14 +674,24 @@ class MemberRepository {
   Future<DueNowVsRecurringPreview?> addMembershipDiscounts(
     MemberMembershipsAddDiscountsRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/discounts/add',
-      data: req.toJson(),
-    );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/discounts/add',
+        data: req.toJson(),
+      );
+      if (response.data == null) return null;
+      return DueNowVsRecurringPreview.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/discounts/remove` — removes the
@@ -441,14 +701,24 @@ class MemberRepository {
   Future<DueNowVsRecurringPreview?> removeMembershipDiscounts(
     MemberMembershipsRemoveDiscountsRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/discounts/remove',
-      data: req.toJson(),
-    );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/discounts/remove',
+        data: req.toJson(),
+      );
+      if (response.data == null) return null;
+      return DueNowVsRecurringPreview.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/discounts/preview` —
@@ -479,47 +749,57 @@ class MemberRepository {
   /// units with [reason] as the invoice description /
   /// line-item name. When [paidCash] is true the invoice
   /// is marked paid out of band instead of charging the
-  /// saved card. [idempotencyKey] dedupes retries.
+  /// saved card. When [paymentMethodId] is set, that one-off
+  /// card is billed (attached, charged once, detached)
+  /// instead of the payer's saved default. [idempotencyKey]
+  /// dedupes retries.
   Future<void> chargeCard({
     required String memberId,
+    required String paidByMemberId,
     required String gymId,
     required int amount,
     required String reason,
     required String idempotencyKey,
     bool paidCash = false,
+    String? paymentMethodId,
   }) async {
     await _apiClient.post(
       '/api/v1/member_memberships/charge-card',
       data: {
         'member_id': memberId,
+        'paid_by_member_id': paidByMemberId,
         'gym_id': gymId,
         'amount_cents': amount,
         'reason': reason,
         'paid_cash': paidCash,
+        'payment_method_id': ?paymentMethodId,
         'idempotency_key': idempotencyKey,
       },
     );
   }
 
-  /// Issues a refund for a prior charge.
+  /// Issues a refund for a prior charge — full or partial.
   ///
-  /// NOTE: there is NO refund endpoint in the merged
-  /// `Database/openapi.json` contract. This call targets
-  /// an assumed `POST /api/v1/members/{member_id}/refund`
-  /// that the backend does not yet expose — it will 404
-  /// until the endpoint exists. Kept so the bloc's refund
-  /// flow has a repository seam, but DO NOT treat the
-  /// path as contract-backed.
+  /// `POST /api/v1/member_memberships/refund` — refunds the
+  /// [chargeId] charge for [amount] minor units (full remaining
+  /// balance when [amount] is null). A card charge is reversed
+  /// through Stripe; a cash charge is recorded as a cash refund.
+  /// [memberId] is the beneficiary whose history the refund was
+  /// launched from (auth + gym scope); [idempotencyKey] dedupes a
+  /// retried submission's Stripe refund. Mirrors `chargeCard`.
   Future<void> refundCharge({
     required String memberId,
     required String chargeId,
+    required String idempotencyKey,
     int? amount,
   }) async {
     await _apiClient.post(
-      '/api/v1/members/$memberId/refund',
+      '/api/v1/member_memberships/refund',
       data: {
+        'member_id': memberId,
         'charge_id': chargeId,
         'amount': ?amount,
+        'idempotency_key': idempotencyKey,
       },
     );
   }

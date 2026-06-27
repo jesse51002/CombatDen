@@ -13,200 +13,8 @@
 > lists only remaining work — when something ships it is **removed**, never
 > annotated "done".
 
-## 7. Per-membership `paid_by_member_id` — who actually pays each membership (not built)
-
-> Linked (family) members currently have **no independent billing identity** — everything
-> resolves to the paying parent. But a linked member will sometimes need to pay for their
-> **own** things on their **own** payment method: a store purchase, a drop-in / daily class,
-> or even carrying their own membership line — without routing it through the parent.
-
-### Current state — everything resolves to the paying parent
-`BillingParentResolver.resolve_parent` follows `members.account_linked_to_id` **once** to the
-paying parent, who owns the `stripe_customer_id` and the subscription(s). The sync consolidates
-the whole family's recurring memberships onto the parent's subscription, and every ad-hoc charge
-(`charge_card`, one-time invoices) targets the **resolved parent's** customer. A linked child has
-**no way to be billed on their own card** today — the resolver always redirects to the parent.
-
-### What's needed — a per-membership `paid_by_member_id` (a payer reference, not a boolean)
-Add a **`paid_by_member_id`** column on each `member_memberships` row — the member who actually
-pays for that membership. **Always populated** (see Approach): for a normal family membership it
-is the resolved paying parent; for a self-payer it is that member, whose own Stripe customer +
-payment method is billed. This lets a family member buy from the store, pay a drop-in class, or
-carry their own membership on their own card while still belonging to the family.
-
-**Why a member-id reference, not a `paid_by_linked_account` boolean.** A boolean only encodes
-"self vs parent," and the **linked relationship can change** — a child can be unlinked, re-linked
-to a different parent, or the payer can shift — at which point a boolean is ambiguous about *who*
-pays. Storing the concrete `member_id` of the payer pins it exactly, **survives re-linking**, and
-lets *any* member (not just "the one linked account") be the payer.
-
-### Immutable — changing the payer is a NEW row, never an in-place edit
-`paid_by_member_id` must be an **immutable column** (added to the `MEMBER_MEMBERSHIPS` immutable set
-+ a guard trigger, alongside the already-immutable `item_id`, `stripe_item_id`, `plan_id`,
-`price_id`). Changing who pays is **a whole new `member_memberships` row** — cancel the old one,
-insert a new one with the new `paid_by_member_id` — exactly the append-only model memberships
-already follow (re-enrolling is always a new row, never a flip-back-to-active). This is required,
-not stylistic: changing the payer moves the line from one Stripe customer's subscription to a
-**different** customer's subscription, so it is a cancel-on-the-old-sub + create-on-the-new-sub
-(a brand-new `stripe_item_id`) — **never an in-place reassignment of the existing line**, and **not**
-a `migrating` price-migration (that moves a line *within* one subscription). The existing `item_id`
-(the membership PK / Stripe-item identity) and `stripe_item_id` are already immutable (the latter
-only mutable during a price `migrating` migration), so this slots straight into that model.
-
-### Approach — group by `paid_by_member_id` (it's not a big change)
-This is **not** a structural fight with the consolidate-to-parent model — it's a change of
-grouping key. Today `PaymentSyncBuilder` resolves the family to **one** paying parent and
-consolidates every membership onto that parent's subscription. With `paid_by_member_id` the builder
-**groups by payer** instead: each distinct `paid_by_member_id` in the family is its own
-consolidation → its own subscription → its own sync call. A family with one self-paying member is
-simply **two sync calls** — the parent's payer-group and the self-payer's — each converging its own
-subscription. The per-line discount math, writeback, and once-settle are unchanged *within* each
-payer group.
-
-**Simplest version — always populate the column.** Default every membership's `paid_by_member_id`
-to the resolved paying parent's `member_id` so it is **never NULL**, then make **every** engine
-read / filter / grouping key on `paid_by_member_id` from now on. The parent-paid case is just
-`paid_by_member_id = parent` and the self-paid case is `paid_by_member_id = self` — **no special
-branch anywhere**, one uniform "who pays this line" column. `BillingParentResolver`'s parent-follow
-becomes the rule that *sets* `paid_by_member_id` (default = parent) rather than a redirect every
-read repeats.
-
-### Still real work (not hard, just real)
-- **The payer needs their own Stripe customer.** A self-paying linked member is billed on their
-  **own** `stripe_customer_id` + payment method, which a linked child doesn't have today — so the
-  link / payment flow has to create one for a member who is going to self-pay (membership or ad-hoc).
-- **Ad-hoc charges follow the same key.** `charge_card` / store / drop-in target the paying
-  member's customer — the store / drop-in cases are *charges*, not memberships, so they read the
-  payer the same way (see open questions).
-
-### Open questions
-- Does a membership paid by a non-parent member still **consolidate for family discounts**, or is it
-  priced on its own line? Grouping by payer naturally splits it off — confirm that's the intended
-  discount behavior, or whether family-tier counting should still include it.
-- **Ad-hoc charges:** the store / drop-in target is a *charge*, not a membership. Does the charge
-  path read a per-membership `paid_by_member_id`, or does the paying member need a payer reference
-  of its own?
-- **Where the payer's Stripe customer lives and when it's created** — at link time, or lazily on the
-  first self-paid action?
-- **Freeze is account-level (on the parent)** — when a membership is paid by a non-parent member,
-  does the parent's freeze still cascade to it, or does that payer group freeze independently? Plus
-  the interaction with the consolidated subscription per interval (§2).
-
-## 8. Full membership-row immutability — reprice & payer change become new rows (drop `migrating`)
-
-> **Decision (recorded — build it with the reprice/payer rework, not now).** State it as
-> **immutable once set**: `price_id`, `stripe_item_id` (and `paid_by_member_id`, §7) can never
-> change once they hold a value — on top of the always-immutable PK/FK identity (`item_id` /
-> `member_id` / `gym_id` / `plan_id` / `created_at`). So a **price or payer change is a new row**
-> (cancel old + insert new), and `stripe_item_id` drops its `migrating` exception. **`cancel_date`
-> keeps its current rule** (locked once `stripe_sync_status = 'deleted'`, clearable before — the
-> failed-cancel revert stays). The remaining lifecycle/outcome columns stay writable (`cancel_date`,
-> `end_date`, the §5 actual-price writeback, and the Stripe-mirror `next_due_date` /
-> `last_paid_date` / `stripe_sync_status`).
-
-### Why — the consolidated line forces it anyway
-N family members on one price share **one** Stripe sub-item (`si_X`, quantity N); every one of those
-`member_memberships` rows carries the **same** `stripe_item_id` (verified in the writeback —
-"a consolidated line maps to every family membership on that price; they all get the same line id").
-So:
-- **Reprice one of them** can't repoint `si_X` — that would move all N. The repriced member must be
-  **split onto a new sub-item** (`si_Y`, a new `stripe_item_id`). Today that's an in-place
-  `stripe_item_id` overwrite — the *only* reason the `migrating` carve-out exists.
-- **Change one member's payer** (§7) likewise moves their line to a different customer's
-  subscription → a new sub-item.
-
-Both already require a new Stripe line, so model them the same on our side: **a new row**. Then
-`price_id` / `paid_by_member_id` / `stripe_item_id` are genuinely immutable and `migrating` goes away.
-
-### The rule — immutable once set
-- **Immutable once set (trigger-enforced even at service-role):** `price_id`, `stripe_item_id`
-  (no more `migrating` exception), and `paid_by_member_id` (§7). Plus the always-immutable PK/FK
-  identity: `item_id`, `member_id`, `gym_id`, `plan_id`, `created_at`. *"Once set" matters* because
-  `stripe_item_id` is NULL on a pending row until the first sync stamps it — once it holds a value it
-  is frozen. (`price_id` is already in the *user*-immutable set but the reprice service mutates it at
-  service-role today — this adds the trigger so even the service can't.)
-- **`cancel_date` keeps its current rule (unchanged):** locked once `stripe_sync_status = 'deleted'`,
-  **clearable before** — that clear-path *is* the failed-cancel revert and it stays. So `cancel_date`
-  is immutable-once-`deleted`, **not** immutable-once-set.
-- **Writable:** `cancel_date` (per its rule above), `end_date`, the §5 **actual post-discount price**
-  writeback, and the existing Stripe-mirror bookkeeping `next_due_date` / `last_paid_date` /
-  `stripe_sync_status` (they update every cycle — outcomes, not identity).
-
-### What it touches
-- `MEMBER_MEMBERSHIPS` immutable set + the triggers: drop the `migrating` exception on
-  `trg_prevent_stripe_item_id_overwrite`; add `price_id` / `paid_by_member_id` guards; retire the
-  `migrating` enum value once nothing stages it. (`trg_prevent_cancel_date_overwrite` is **unchanged**
-  — `cancel_date` stays locked-on-`'deleted'`, clearable before, so the failed-cancel revert keeps
-  working.)
-- `update_price` (`member_memberships_update_price.py`): re-shaped from the in-place `price_id` +
-  `migrating` write into a **cancel-old-row + insert-new-row** flow.
-- The sync builder/writeback: split the repriced / payer-changed member off the consolidated line
-  (quantity N → N-1 on the old line; a new single line for the new row).
-- **Applied discounts pin to `item_id`** → re-pin onto the **new row's** `item_id` whenever a reprice
-  / payer change mints a new row (today they ride along for free on the same `item_id`).
-
-### The writeback auto-creates the new row (upsert by line)
-For the new-row model to happen **inside the sync** instead of needing the caller to pre-insert,
-`PaymentSyncWriteback` becomes an **upsert by Stripe line**: as it maps live Stripe items back to
-membership rows, a live line whose `stripe_item_id` has **no matching row** is **inserted as a new
-immutable row** — not just skipped or force-updated onto an existing one (today it only ever
-*updates* the rows it finds). So a reprice / payer change simply changes the desired state → the
-sync creates the new sub-item → the writeback **materializes the new row automatically**; the old
-row is left intact (its line continues at quantity N-1, or `_mark_removed_deleted` stamps it
-`deleted` if its line is gone).
-
-For the writeback to populate the new row's immutable columns (`member_id`, `plan_id`, `price_id`,
-`paid_by_member_id`), the desired `SyncParams` must carry **which member / plan / price / payer each
-desired line belongs to** — today it maps live items back only to *existing* rows, so that per-line
-provenance has to be threaded through the build. (This is the same create-if-missing reconciliation
-the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
-
-### Test to add (missing today)
-- **Reprice one member off a shared consolidated line** (N>1 on one price, quantity-N `si_X`): assert
-  the remaining N-1 stay on `si_X` at quantity N-1, the repriced member lands on a **new** sub-item at
-  the new price, the **old row is cancelled and a new immutable row** carries the new line, and the
-  applied discounts followed to the new row. **No such test exists today — and the current in-place
-  path may not split the line correctly** (the repriced row still carries the old shared `si_X` when
-  the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
-  verifying now too.
-
-## 11. Per-membership PAYMENT TYPE — cash vs card per item, not per request (not built)
-
-> One person frequently covers part of a cart for someone else: the payer's card
-> auto-charges their own memberships while one membership in the same request is
-> settled with cash someone handed over (or vice versa). Today that's impossible —
-> payment type is one flag for the whole request. Decided as definitely-needed
-> (2026-06-11) but deferred.
-
-### Current state — payment type is request-level
-`paid_with_cash` lives on `MemberMembershipsStartRequest` (locked when the op was
-designed: "payment method is request-level — the consolidated one-time invoice is
-ONE charge"). It flips the WHOLE one-time invoice to `paid_out_of_band` and the
-WHOLE recurring converge's first invoice to out-of-band. Mixed settlement within
-one request cannot be expressed.
-
-### What's needed — payment type on the ITEM
-A per-item payment-type field (`paid_with_cash` on `MemberMembershipsStartItem`,
-or a small enum if more types ever arrive), with the engine splitting by it:
-
-- **One-time/trial:** group the pending rows by payment type → **one consolidated
-  invoice PER type** (the card group charges normally; the cash group is
-  `paid_out_of_band`). The family-sweep read gains the payment-type dimension
-  (today `charge_one_time` sweeps ALL pending rows onto one invoice — it must not
-  mix types). `charge_count` / `multiple_charges` count the extra invoice.
-- **Recurring:** harder — the family's recurring memberships consolidate onto ONE
-  subscription with ONE first invoice, so cash-vs-card granularity inside a single
-  converge doesn't exist on Stripe. Likely resolution: the first-invoice
-  out-of-band flag stays converge-level, and mixed-settlement recurring waits for
-  (or composes with) §7's payer groups — a different payer group is a different
-  subscription, which is also naturally a different settlement.
-- **Composes with §7 (`paid_by_member_id`):** §7 answers WHOSE customer is billed;
-  this answers HOW that charge settles. "Someone covering the cost for someone"
-  often needs both — grandma pays cash for her grandkid's membership = the payer
-  group is grandma's (§7) and its settlement is cash (§11).
 
 --------------------------
-
 
 
 # Later
@@ -240,12 +48,14 @@ anticipate this extension.
 
 ## 3. Paid-time-preserving freeze (not built)
 
-**Why the current freeze is insufficient.** Today freeze = Stripe
-`pause_collection` + a resume date. Pausing collection does **not** give the member
-back the time they were frozen — the billing clock keeps ticking through the pause,
-so they don't resume with exactly the remaining interval they had paid for. For
-monthly that was "close enough" to ship; for **weekly** (day/week precision) and
-**yearly** (a few frozen months is real money against a year) it is not.
+**Why the current freeze is insufficient.** Today freeze = a synthetic 100%-off
+on the frozen member's line (per-subject-member; the membership stays on the sub
+billing $0). It zeroes the bill while frozen but does **not** give the member back
+the time they were frozen — the billing clock keeps ticking, an absolute discount
+`end_date` keeps elapsing, and they don't resume with exactly the remaining
+interval they had paid for. For monthly that is "close enough"; for **weekly**
+(day/week precision) and **yearly** (a few frozen months is real money against a
+year) it is not.
 
 **What a correct freeze does:**
 1. **On freeze**, capture the **remaining time** until `next_due_date` — the credit
@@ -295,3 +105,166 @@ cancel + recreate, never an in-place re-anchor.
 **Open questions:** where the chosen anchor lives (per member? per membership? gym
 default + override?); how it interacts with first-invoice proration; and the
 per-interval anchor shape (day-of-month vs day-of-week vs date) under §2.
+
+## 5. Prepay — mark a FUTURE invoice paid early in cash (tabled)
+
+> A member pays cash now for their NEXT (not-yet-open) invoice; their card must
+> not charge for it, while mid-cycle changes (adding a membership) must still
+> bill normally. Tabled 2026-06-17: it cannot be made predictable without
+> re-architecting the sync engine, and isn't worth that now. Today's stopgap —
+> cash settles only an OPEN/overdue invoice (the existing `mark_paid_cash`
+> out-of-band path, now wired into the CRM Invoices card); upcoming invoices
+> show when they open. So "prepay" today = wait until the invoice opens, then
+> mark it cash.
+
+### Why it's hard
+Future subscription invoices don't exist in Stripe yet, and a payer is billed as
+ONE consolidated subscription. So "this one future slice is prepaid but
+everything else bills normally" has no clean expression. Mechanisms explored,
+each rejected:
+
+1. **`once` dollar-off coupon** (apply an `amount_off` `once` coupon sized to the
+   cash). A pending coupon lands on whatever invoice Stripe cuts next, not the
+   renewal you meant. Coupons here are **item-scoped** (`sync_builder.py` attaches
+   them per consolidated price line), so a *different-plan* add is safe — but a
+   *same-plan* family add consolidates onto the **shared quantity line** and, with
+   `prorate`, its immediate proration invoice consumes the coupon. An `amount_off`
+   `once` coupon **forfeits the excess**, and `PaymentSyncOnceDiscounts`
+   permanently stamps it consumed → cash taken AND the real renewal charges the
+   card. Fails for exactly the family "whole bill" scope.
+2. **`pause_collection` + mark the renewal paid when it opens.** `pause_collection`
+   is **subscription-wide**, so it blocks charging for any membership added during
+   the prepaid window. Breaks mid-cycle adds.
+3. **Prebilling (`billing_schedules`).** Stripe's native "bill in advance," but
+   (a) it **errors on `amount_off` coupons** ("amount_off coupons … return an
+   error when used with a subscription that has billing_schedules configured") —
+   the discount engine mints an `amount_off` coupon for **every** dollar discount,
+   so any member with a dollar discount can't be prebilled; and (b) it stores
+   `billing_schedules` as **subscription state the sync engine doesn't model** —
+   the sync's per-mutation `Subscription.modify` (Stripe's pass-what-you-want-to-
+   keep semantics) would likely wipe it, and a prebilled/skipped period would
+   confuse `next_due_date`, the once-settle, and the reconciler. (Flexible billing
+   mode itself is available and is NOT the blocker — the sync collision is.)
+4. **Stripe customer credit balance — the recommended path when revisited.** A
+   per-customer credit auto-applies to upcoming invoices, **charges the card for
+   the remainder**, and **carries leftovers forward (no forfeiture)** — so it
+   survives mid-cycle adds with no pause, and is **orthogonal to the sync engine**
+   (it lives on the customer, not the subscription, so the sync never touches or
+   wipes it). Caveat: it's **customer-wide** — applies to the next finalized
+   invoice, can't be pinned to a specific one — which is benign because remainders
+   carry, and matches the per-payer "whole bill" scope. (Billing Credits / credit
+   grants were also checked and ruled out: metered/usage prices only.)
+
+### What it takes (when revisited, via customer balance)
+- A payments primitive to add a credit
+  (`POST /v1/customers/{id}/balance_transactions`, negative `amount` → a
+  `CustomerBalanceTransaction`).
+- A CRM record of the cash receipt at prepay time (the credit itself is not a
+  Stripe charge, so it won't arrive via the `invoice_payment.paid` webhook).
+- Webhook handling so a balance-covered future invoice records cleanly
+  (`starting_balance`/`ending_balance`, reduced/zero card charge) instead of
+  looking like an underpayment.
+
+## 6. Linked (family) discounts — per-plan family tiers (not built)
+
+> Pulled from the active codebase as unused MVP scope. This captures the
+> intended design so it can be rebuilt; nothing of it remains in code or schema.
+
+### Current state — no family discount
+The discount model is **preset + custom only**. A family pays together via the
+payer model (`member_authorized_payers` + `member_memberships.paid_by_member_id`),
+but every family member's membership bills at the full plan price — there is no
+automatic "2nd member 20% off, 3rd member 30% off" tier on a plan.
+
+### What it takes
+- **Plan-level family tiers.** A membership plan carries a per-tier discount
+  **value** for the 2nd / 3rd / 4th / 5th linked member (capped at 5 members),
+  each a `$ off` **or** `% off` (exactly one) — not a flat "member price".
+- **Real `linked` discount entries.** Each tier is a real discount: a
+  `gym_discounts` identity tagged `discount_type = 'linked'` with a versioned
+  value on `gym_discount_values`, so it gets versioning + a stable id like any
+  discount. The plan references them by id
+  (`membership_plans.linked_discount_ids`, one per tier, in order); plan reads
+  resolve the ids back to `{percentage_off, dollar_off}` for the CRM. The
+  `linked` tag keeps them out of the regular per-membership preset picker.
+- **Backend mint on plan write.** The CRM plan create/edit screen sends the
+  per-tier `linked_discount_values`; the backend mints one `linked` discount
+  entry per value (reusing `DiscountsService`) and stores their ids. Editing a
+  value mints a new active version on the same discount, so the stored id stays
+  stable.
+- **Apply like any discount.** The family/membership flow passes the linked
+  discount's id in `discount_ids`, pinning an applied-discount row to its active
+  value version — the same path as a preset. No special sync/coupon logic.
+- **Schema to restore.** The `'linked'` value back on the
+  `gym_discounts.discount_type` CHECK, and `linked_discount_enabled` +
+  `linked_discount_ids` columns back on `membership_plans`.
+
+**The thing we never want here:** a cross-member recalculation of the family-wide
+discount on every membership change — that produced "random-seeming" cross-member
+price moves and broke predictability. Each membership's billing is determined
+from that member's own memberships only.
+
+### Open questions
+- How the tiers map to *which* family member gets *which* tier (2nd vs 3rd) —
+  assignment ordering as members are added/removed.
+- Whether a **self-paying** linked member (own card) still earns the family tier.
+- Whether to constrain a linked discount to the **same plan** ("same membership
+  type") to keep the tier math unambiguous.
+
+
+--------------------------
+
+
+# Reliability hardening
+
+> These two are **infrastructure**, not product features — deferred from the
+> billing-engine review because the proper fix is net-new infrastructure (the
+> outbox) or only bites at a scale the MVP isn't at (the Stripe-in-txn read).
+> They live here, not in a known-bugs doc, because each is a *build*, not a patch.
+
+## 7. Durable writeback outbox (not built)
+
+**The motivating bug (C-012).** Every DB writeback in the sync engine runs
+*after* its Stripe mutation, so it is inherently best-effort. Most steps have a
+caller verify-or-revert backstop; the payer `sub_id` write does **not**. If it is
+swallowed while the membership-row stamps land, the next `PaymentPushSweep` reads
+`sub_id = NULL` and **creates a second subscription**; the immutable
+`stripe_item_id` trigger then orphans the tracked sub, the orphan sweep reaps it,
+and a later sweep can cancel a paying member while the original sub keeps billing —
+a transient **double-bill + membership loss**. The trigger is narrow (a partial
+writeback failure) but the blast radius is real money.
+
+**What it takes.** A transactional **outbox**: any swallowed writeback step is
+recorded durably (a `writeback_outbox` table written in the same transaction as
+the row stamps), then drained by a reconciler that retries each pending step and
+survives crashes. This is the general fix for **all** best-effort writeback steps,
+not just `sub_id`. The existing `PaymentPushSweep` / `StaleTaskSweep` reconcilers
+are the natural home for the drain loop, and they need test coverage as part of
+this work (today they're the untested backstop the outbox would make reliable).
+
+**Open questions:** outbox granularity (per writeback step vs per operation); the
+retry/giveup policy and how a permanently-failing step is surfaced to staff;
+whether the drain runs in an existing sweep or its own worker.
+
+## 8. Move Stripe reads out of the webhook / reconciler DB transaction (future scaling)
+
+**Current state (C-053).** `InvoicePaymentPaidHandler.resolve_charge()` does a
+live `payment_intents.retrieve` *inside* the open DB transaction on both the
+webhook-dispatch path and the reconciler invoice-fetch path, so a pooled DB
+connection is held for the duration of that Stripe call.
+
+**Why it's deferred, not a current bug.** The call is a simple read, capped by the
+30 s httpx timeout, and it only causes harm when **many webhooks arrive
+concurrently** *and* **Stripe is slow at that same moment** — only then do enough
+connections get held at once to starve the pool. At MVP webhook volume that
+intersection doesn't occur (one slow webhook briefly holds one of N connections).
+The fix also doesn't make anything *faster* — it's the same Stripe call, just
+outside the txn boundary. So it's scale hardening, not a defect that bites today.
+
+**What it takes.** Pre-resolve via `resolve_charge()` **before** opening the
+transaction and pass the result as `charge_details=` to `record()`, in both
+`stripe_webhooks_service.py` and `memberships_invoice_fetch.py`. The pre-txn seam
+(`charge_details=` on `record()` + the public `resolve_charge`) already exists; the
+work is wiring the reconciler's generic per-record runner (shared across
+invoice/payment/refund records) and the webhook dispatcher to special-case
+pre-resolution without losing per-record error isolation.

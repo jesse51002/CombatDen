@@ -16,16 +16,25 @@ MemberDetailResponse _$MemberDetailResponseFromJson(
   photoUrl: json['photo_url'] as String?,
   accountStatus: json['account_status'] as String?,
   membershipOverview: json['membership_overview'] as String,
-  linkedToAccount: json['linked_to_account'] as String?,
   totalMonthlyRecurringPrice: (json['total_monthly_recurring_price'] as num)
       .toInt(),
   totalMembershipCount: (json['total_membership_count'] as num).toInt(),
   personalInfo: PersonalInfo.fromJson(
     json['personal_info'] as Map<String, dynamic>,
   ),
-  linkedAccounts:
-      (json['linked_accounts'] as List<dynamic>?)
+  authorizedPayers:
+      (json['authorized_payers'] as List<dynamic>?)
           ?.map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+  authorizedToPayFor:
+      (json['authorized_to_pay_for'] as List<dynamic>?)
+          ?.map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+  paysFor:
+      (json['pays_for'] as List<dynamic>?)
+          ?.map((e) => PaysForMember.fromJson(e as Map<String, dynamic>))
           .toList() ??
       [],
   memberships:

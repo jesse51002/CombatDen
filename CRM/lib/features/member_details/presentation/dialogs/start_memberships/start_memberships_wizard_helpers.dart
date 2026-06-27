@@ -1,10 +1,12 @@
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart'
@@ -24,7 +26,7 @@ List<StartMembershipParticipant> configMembersFor({
   final all = <StartMembershipParticipant>[
     payer,
     if (payerDetail != null)
-      ...payerDetail.linkedAccounts.map(
+      ...payerDetail.authorizedToPayFor.map(
         (a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,
@@ -96,6 +98,18 @@ bool hasRecurringDrafts(
       ),
     );
 
+/// Whether any configured draft is a one-time / trial plan
+/// (non-recurring) — gates the one-off-card option.
+bool hasOneTimeDrafts(
+  List<StartMembershipParticipant> members,
+  Map<String, List<MembershipDraft>> drafts,
+) =>
+    members.any(
+      (m) => (drafts[m.memberId] ?? const []).any(
+        (d) => d.plan.planType != PlanType.recurring,
+      ),
+    );
+
 Map<String, String> memberNamesOf(
   List<StartMembershipParticipant> members,
 ) =>
@@ -116,17 +130,21 @@ MemberMembershipsStartRequest? buildStartRequest({
   required String idempotencyKey,
   required String payerMemberId,
   required String gymId,
-  required bool prorate,
+  required ProrationBehavior prorationBehavior,
   required bool paidWithCash,
   required List<StartMembershipParticipant> configMembers,
   required Map<String, List<MembershipDraft>> drafts,
+  MemberMembershipsStartPayment? payment,
 }) {
   final items = <MemberMembershipsStartItem>[];
   for (final m in configMembers) {
     for (final d
         in drafts[m.memberId] ?? const <MembershipDraft>[]) {
       final item = d.toItem(m.memberId);
-      if (item != null) items.add(item);
+      if (item == null) continue;
+      // ONE item carrying the count as quantity (the pack
+      // stacks via quantity, not repeated items).
+      items.add(item);
     }
   }
   if (items.isEmpty) return null;
@@ -134,8 +152,9 @@ MemberMembershipsStartRequest? buildStartRequest({
     payerMemberId: payerMemberId,
     gymId: gymId,
     idempotencyKey: idempotencyKey,
-    prorate: prorate,
+    prorationBehavior: prorationBehavior,
     paidWithCash: paidWithCash,
+    payment: payment,
     memberships: items,
   );
 }

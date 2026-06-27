@@ -51,7 +51,6 @@ MEMBERS: frozenset[str] = frozenset(
         "card_exp_year",
         "freeze_start_date",  # managed by backend freeze/unfreeze logic
         "freeze_end_date",  # managed by backend freeze/unfreeze logic
-        "account_linked_to_id",  # set by backend linking logic, not client
     }
 )
 
@@ -142,6 +141,7 @@ GYM_WAIVERS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
         "current_version_id",  # set by the publish-version flow, not a raw edit
+        "is_default",  # the undeletable default; set once at seed/create
         # name + is_deleted + updated_at are the writable update surface.
     }
 )
@@ -176,6 +176,17 @@ MEMBER_WAIVER_SIGNATURES: frozenset[str] = frozenset(
         "ip_address",  # audit trail, captured at sign time
         "user_agent",  # audit trail, captured at sign time
         "content_hash",  # frozen copy of the signed version's hash
+    }
+)
+
+MEMBER_AUTHORIZED_PAYERS: frozenset[str] = frozenset(
+    {
+        # Backend-managed authorization rows — clients never write any column.
+        "member_id",  # identity (the member being paid for)
+        "payer_member_id",  # identity (the authorized payer / signer)
+        "gym_id",  # identity FK, per-gym resource
+        "signature_id",  # the gating waiver signature
+        "created_at",  # auto-generated timestamp
     }
 )
 
@@ -233,9 +244,8 @@ GYM_DISCOUNTS: frozenset[str] = frozenset(
         "is_deleted",  # managed by the archive (delete) endpoint only
         "created_at",  # auto-generated timestamp
         # gym_discounts is identity-only: name (editable) + type
-        # (preset | custom | linked). The percent/dollar + lifetime live on the
-        # versioned gym_discount_values rows. A `linked` discount is a real entry
-        # a membership plan's family tiers reference by id.
+        # (preset | custom). The percent/dollar + lifetime live on the
+        # versioned gym_discount_values rows.
     }
 )
 
@@ -249,7 +259,6 @@ GYM_DISCOUNT_VALUES: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "percentage_off",  # immutable value
         "dollar_off",  # immutable value
-        "discount_mode",  # immutable lifetime mode
         "duration_amount",  # immutable lifetime spec
         "duration_unit",  # immutable lifetime spec
         "end_date",  # immutable lifetime spec
@@ -264,12 +273,51 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "plan_id",  # immutable (trigger: trg_prevent_plan_id_overwrite)
+        "paid_by_member_id",  # immutable payer (trigger: trg_prevent_paid_by_member_id_overwrite)
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
-        "stripe_item_id",
+        "stripe_item_id",  # immutable once set (trigger, no exceptions)
         "stripe_one_time_invoice_id",  # one-time consolidated invoice id (writeback)
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
-        "price_id",
+        "price_id",  # immutable (trigger: trg_prevent_price_id_overwrite); reprice = new row
+        "quantity",  # set at INSERT, immutable after; recurring forced = 1 (trigger: trg_recurring_quantity_must_be_one)
+        "idempotency_key",  # set once at INSERT (service_role), immutable after; backend-managed one-time start dedup key (C-086)
+    }
+)
+
+TASKS: frozenset[str] = frozenset(
+    {
+        # Backend-executed tracked operations: written by the backend at
+        # service_role only, read-only for clients. Every column is
+        # user-immutable.
+        "task_id",
+        "gym_id",
+        "task_type",
+        "status",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+)
+
+TASK_ITEMS: frozenset[str] = frozenset(
+    {
+        # Per-membership work units of a task: backend-written records, every
+        # column user-immutable.
+        "task_item_id",
+        "task_id",
+        "gym_id",
+        "member_id",
+        "status",
+        "attempt_count",
+        "error_message",
+        "old_item_id",
+        "new_item_id",
+        "target_price_id",
+        "proration_behavior",
+        "created_at",
+        "started_at",
+        "finished_at",
     }
 )
 
@@ -294,7 +342,8 @@ MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
 MEMBER_INVOICES: frozenset[str] = frozenset(
     {
         "invoice_id",  # PK, auto-generated UUID
-        "member_id",  # identity FK
+        "paid_by_member_id",  # identity FK — the payer
+        "paid_for",  # beneficiary member_id list, set by backend at record time
         "gym_id",  # identity FK, per-gym resource
         "invoice_time",  # auto-generated timestamp
         # Stripe columns — always set by backend
@@ -320,7 +369,7 @@ MEMBER_CHARGES: frozenset[str] = frozenset(
     {
         "charge_id",  # PK, auto-generated UUID
         "invoice_id",  # identity FK
-        "member_id",  # identity FK
+        "paid_by_member_id",  # identity FK — the payer
         "gym_id",  # identity FK, per-gym resource
         "kind",  # set at creation
         "charge_time",  # auto-generated timestamp
@@ -348,6 +397,7 @@ MEMBER_INVOICE_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
         "discount_id",  # identity FK
         # Stripe columns — always set by backend
         "stripe_coupon_id",
+        "line_item_id",  # set-once Stripe invoice-line id (audit identity)
     }
 )
 

@@ -15,6 +15,7 @@ halves are flat ``PreviewInvoice`` objects.
 from uuid import UUID, uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 from src.memberships.memberships_schema import (
@@ -26,7 +27,6 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
     PreviewInvoice,
 )
-from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
@@ -254,7 +254,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
     connect_opts,
     created,
 ):
-    """prorate=False start preview: due_now is None, recurring present.
+    """proration_behavior=no_charge start preview: due_now is None, recurring present.
 
     When not prorating, nothing extra is charged now. The engine's split
     reuses the steady-state recurring figure as ``due_now`` ("same thing
@@ -279,7 +279,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -291,7 +291,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
 
         _assert_valid_split(preview)
         assert preview.due_now is None, (
-            "prorate=False start preview must report due_now=None"
+            "proration_behavior=no_charge start preview must report due_now=None"
         )
         assert preview.recurring is not None
         assert preview.recurring.amount_due == plan.price_cents, (
@@ -450,14 +450,21 @@ async def test_preview_cancel_active(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
 
-        # Cancelling the only item on the subscription drops the bucket
-        # to zero — preview returns None for pure cancellations.
-        assert preview is None
+        # The per-payer cost preview is a list: this member funds the one
+        # cancelled item, so exactly one entry for them, affected=True.
+        assert len(changes) == 1
+        change = changes[0]
+        assert str(change.payer_member_id) == str(member.member_id)
+        assert change.affected is True
+        # Cancelling the only item on the subscription drops the bucket to
+        # zero — a cancelled sub has no remaining recurring invoice, so the
+        # affected entry's preview half is None (not a $0 invoice).
+        assert change.preview is None
 
         # CRM row still active: cancel_date must be NULL.
         async with db_pool.session() as session:
@@ -525,11 +532,13 @@ async def test_preview_cancel_already_cancelled_returns_none(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
-        assert preview is None
+        # The item is already cancelled, so preview_cancel skips it — no
+        # payer funds anything still-cancellable, so the list is empty.
+        assert changes == []
 
         await assert_no_unexpected_charges(
             stripe_client,
@@ -540,93 +549,73 @@ async def test_preview_cancel_already_cancelled_returns_none(
         await delete_member_data(db_pool, member.member_id)
 
 
-# ── Update price preview ────────────────────────────────────────────
-
-
-async def test_preview_update_price(
+async def test_staged_cancel_preview_restores_not_added_status(
     memberships_service,
-    plans_service,
     db_pool,
     gym_id,
-    stripe_client,
-    connect_opts,
     created,
 ):
-    pm_id = await created.payment_method()
-    member = await created.member(gym_id, payment_method_id=pm_id)
+    """Regression (finding #1): the staged-cancel preview must restore each
+    staged item to its OWN pre-stage status, never blindly ``applied``.
+
+    The two live callers (``preview_cancel`` via the filtered-view read, and
+    ``preview_remove_authorization`` which filters ``applied``) only ever hand
+    ``applied`` rows to ``_staged_cancel_preview`` today, so this exercises the
+    fixed method directly with a pending (``not_added``) row — inserted but not
+    yet synced (``stripe_item_id IS NULL``). The bug: ``_cleanup`` restored
+    every staged row to ``applied`` blindly, which would corrupt a never-synced
+    row into a fake-synced state. The fix captures and restores each row's own
+    pre-stage status, so a ``not_added`` row comes back ``not_added``.
+    """
+    member = await created.member(gym_id)
     plan = await created.plan(gym_id)
 
     try:
-        item_id = await _start_and_get_item_id(
-            memberships_service,
-            db_pool,
-            member,
-            gym_id,
-            plan,
-        )
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
-        assert profile.stripe_sub_id_month is not None
-
-        new_price = await plans_service.set_price(
-            MembershipPlanPriceRequest(
-                plan_id=plan.plan_id,
-                gym_id=gym_id,
-                price=8000,
-            ),
-        )
-
-        before = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
-        )
-
-        preview = await memberships_service.preview_update_price(
-            item_id=item_id,
-            member_id=member.member_id,
-            prorate=False,
-        )
-
-        _assert_valid_due_now_split(preview)
-
-        # CRM price_id must still be the ORIGINAL — preview does no writes.
         async with db_pool.session() as session:
             result = await session.execute(
                 text(
-                    "SELECT price_id, total_price "
-                    "FROM member_memberships_unfiltered "
-                    "WHERE item_id = :item_id"
+                    "INSERT INTO member_memberships_unfiltered ("
+                    "  member_id, paid_by_member_id, gym_id, plan_id, "
+                    "  price_id, start_date, stripe_item_id, total_price, "
+                    "  stripe_sync_status"
+                    ") VALUES ("
+                    "  :member_id, :member_id, :gym_id, :plan_id, "
+                    "  :price_id, CURRENT_DATE - 7, NULL, :total_price, "
+                    "  CAST(:status AS stripe_sync_status)"
+                    ") RETURNING item_id"
                 ),
-                {"item_id": str(item_id)},
+                {
+                    "member_id": str(member.member_id),
+                    "gym_id": str(gym_id),
+                    "plan_id": str(plan.plan_id),
+                    "price_id": str(plan.price_id),
+                    "total_price": 5000,
+                    "status": "not_added",
+                },
             )
-            row = result.mappings().fetchone()
+            item_id = UUID(str(result.mappings().one()["item_id"]))
+            await session.commit()
 
-        assert UUID(str(row["price_id"])) == plan.price_id, (
-            "preview_update_price must not change the CRM price_id"
-        )
+        # Call the fixed method directly under the family lock the facade holds.
+        async with memberships_service._paying_lock.lock([member.member_id]):
+            await memberships_service._cancel._staged_cancel_preview(
+                [(item_id, member.member_id)],
+                member.member_id,
+            )
 
-        # Stripe subscription item must still be on the original price.
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        remaining_prices = {item.price.id for item in sub.items.data}
-        assert plan.stripe_price_id in remaining_prices, (
-            "preview_update_price must not swap the Stripe price"
-        )
-        assert new_price.stripe_price_id not in remaining_prices, (
-            "preview_update_price must not attach the new Stripe price"
-        )
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT stripe_sync_status::text AS status, cancel_date "
+                    "FROM member_memberships_unfiltered WHERE item_id = :i"
+                ),
+                {"i": str(item_id)},
+            )
+            row = result.mappings().one()
 
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before,
-            connect_opts,
-        )
+        # Restored to its OWN original status, not blindly 'applied'.
+        assert row["status"] == "not_added"
+        # Read-only preview never sets cancel_date.
+        assert row["cancel_date"] is None
     finally:
         await delete_member_data(db_pool, member.member_id)

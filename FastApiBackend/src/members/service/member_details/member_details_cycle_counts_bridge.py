@@ -12,7 +12,7 @@ from src.classes.service.classes_cycle_counts_service import (
 
 
 class MemberDetailsCycleCountsBridge:
-    """Fetches cycle-based class usage and provides plan-level lookups.
+    """Fetches cycle-based class usage and provides per-membership lookups.
 
     Args:
         cycle_counts_service: Injected cycle counts service.
@@ -29,17 +29,19 @@ class MemberDetailsCycleCountsBridge:
         gym_id: UUID,
         member_ids: list[UUID],
     ) -> dict[tuple[UUID, UUID], MembershipUsage]:
-        """Fetch cycle counts and return a (member_id, plan_id) lookup.
+        """Fetch cycle counts and return a (member_id, item_id) lookup.
 
-        Frozen / ended memberships are included — the breakdown is
-        informational and should still show their usage.
+        Keyed per membership (item_id), not per plan, so a member holding two
+        packs on the same plan keeps a distinct usage bucket per pack. Frozen
+        / ended memberships are included — the breakdown is informational and
+        should still show their usage.
 
         Args:
             gym_id: The gym to query.
             member_ids: Members to include.
 
         Returns:
-            Dict keyed by (member_id, plan_id) to MembershipUsage.
+            Dict keyed by (member_id, item_id) to MembershipUsage.
         """
         request = ClassesCycleCountsRequest(
             gym_id=gym_id,
@@ -50,6 +52,6 @@ class MemberDetailsCycleCountsBridge:
         lookup: dict[tuple[UUID, UUID], MembershipUsage] = {}
         for user in response.users:
             for membership in user.memberships:
-                lookup[(user.member_id, membership.plan_id)] = membership
+                lookup[(user.member_id, membership.item_id)] = membership
 
         return lookup

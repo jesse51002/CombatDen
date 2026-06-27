@@ -28,16 +28,6 @@ CREATE TABLE membership_plans_unfiltered (
     waiver_ids JSONB NOT NULL DEFAULT '[]'
         CONSTRAINT chk_plan_waiver_ids_array
         CHECK (jsonb_typeof(waiver_ids) = 'array'),
-    -- Per-plan linked (family-member) discount: a flag plus the discount ids
-    -- for the 2nd, 3rd, 4th, 5th linked member, in order (jsonb uuid array of
-    -- real `linked` discount entries in gym_discounts; capped at 5 members).
-    -- The backend mints a linked discount entry per entered tier value
-    -- ($ off / % off) and stores its id here; reads resolve the ids back to
-    -- those values. Empty when disabled.
-    linked_discount_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    linked_discount_ids JSONB NOT NULL DEFAULT '[]'
-        CONSTRAINT chk_plan_linked_ids_array
-        CHECK (jsonb_typeof(linked_discount_ids) = 'array'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (plan_id),
     UNIQUE (plan_id, gym_id)

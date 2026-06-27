@@ -4,8 +4,7 @@ Creating a discount is two inserts in one transaction: the IDENTITY row
 (gym_discounts: name + type) and its first ACTIVE value version
 (gym_discount_values: percent/dollar + lifetime). No coupon is pre-baked — the
 sync computes each consolidated line's effective coupon at sync-time and writes
-the resolved stripe_coupon_id back onto the applied-discount row. There is no
-linked branch (linked/family discounts are per-plan pricing, not a discount).
+the resolved stripe_coupon_id back onto the applied-discount row.
 
 DiscountsService never touches applied-discount rows — it owns only
 ``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns
@@ -132,7 +131,6 @@ class DiscountsCreate(DiscountsBase):
             "gym_id": str(identity["gym_id"]),
             "percentage_off": value.percentage_off,
             "dollar_off": value.dollar_off,
-            "discount_mode": value.discount_mode.value,
             "duration_amount": value.duration_amount,
             "duration_unit": (
                 value.duration_unit.value if value.duration_unit is not None else None

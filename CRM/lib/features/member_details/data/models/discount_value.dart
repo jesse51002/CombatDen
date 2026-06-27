@@ -2,19 +2,19 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 
 part 'discount_value.g.dart';
 
 /// One discount value version — everything that determines the
-/// discount (how much, mode, how long).
+/// discount (how much, how long).
 ///
 /// Mirrors `DiscountValue` from the backend:
 /// - Exactly one of [percentageOff] / [dollarOff] is set.
-/// - [discountMode] is `once` or `ongoing`.
 /// - Lifetime is a duration span ([durationAmount] +
 ///   [durationUnit]) XOR an explicit [endDate] — never both;
-///   neither means forever.
+///   neither means forever. A 1-`cycle` span is the
+///   single-invoice discount that replaced the old `once`
+///   mode.
 /// - [dollarOff] is in minor units (cents).
 @JsonSerializable(
   fieldRename: FieldRename.snake,
@@ -23,8 +23,6 @@ part 'discount_value.g.dart';
 class DiscountValue extends Equatable {
   final double? percentageOff;
   final int? dollarOff;
-  @JsonKey(fromJson: DiscountMode.fromJson)
-  final DiscountMode discountMode;
   final int? durationAmount;
   @JsonKey(fromJson: _durationUnitOrNull)
   final DiscountDurationUnit? durationUnit;
@@ -34,7 +32,6 @@ class DiscountValue extends Equatable {
   const DiscountValue({
     this.percentageOff,
     this.dollarOff,
-    required this.discountMode,
     this.durationAmount,
     this.durationUnit,
     this.endDate,
@@ -58,7 +55,6 @@ class DiscountValue extends Equatable {
   List<Object?> get props => [
         percentageOff,
         dollarOff,
-        discountMode,
         durationAmount,
         durationUnit,
         endDate,

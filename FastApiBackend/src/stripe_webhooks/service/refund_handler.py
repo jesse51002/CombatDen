@@ -95,7 +95,7 @@ class RefundHandler:
             {
                 "invoice_id": str(parent["invoice_id"]),
                 "gym_id": str(gym_id),
-                "member_id": str(parent["member_id"]),
+                "paid_by_member_id": str(parent["paid_by_member_id"]),
                 "kind": CHARGE_KIND_REFUND,
                 "status": CHARGE_STATUS_SUCCEEDED,
                 "amount": -int(refund.get("amount") or 0),

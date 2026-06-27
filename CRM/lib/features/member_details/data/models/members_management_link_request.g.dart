@@ -9,8 +9,7 @@ part of 'members_management_link_request.dart';
 Map<String, dynamic> _$MembersManagementLinkRequestToJson(
   MembersManagementLinkRequest instance,
 ) => <String, dynamic>{
-  'stringify': instance.stringify,
-  'hash_code': instance.hashCode,
-  'parent_member_id': instance.parentMemberId,
-  'props': instance.props,
+  'payer_member_id': instance.payerMemberId,
+  'signer_name': instance.signerName,
+  'consent_acknowledged': instance.consentAcknowledged,
 };

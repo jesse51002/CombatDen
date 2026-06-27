@@ -50,6 +50,8 @@ InvoiceBreakdownData comparisonBreakdownFromPair({
   required PreviewInvoice? current,
   required PreviewInvoice next,
   int? fallbackCurrentMonthly,
+  String totalLabel = 'Monthly',
+  String amountSuffix = '/mo',
 }) {
   // Current post-discount line nets, keyed by sub-item.
   final currentBySi = <String, int>{
@@ -85,7 +87,28 @@ InvoiceBreakdownData comparisonBreakdownFromPair({
     total: next.total,
     currency: next.currency,
     previousTotal: current?.total ?? fallbackCurrentMonthly,
-    totalLabel: 'Monthly',
-    amountSuffix: '/mo',
+    totalLabel: totalLabel,
+    amountSuffix: amountSuffix,
+  );
+}
+
+/// The recurring breakdown when a change removes the LAST membership on
+/// the subscription: there is no "next" invoice because the subscription
+/// ends, so the new monthly is **$0** shown against the current
+/// ([current] / [fallbackCurrentMonthly]) — old → $0 with a Difference
+/// row, rather than an empty "nothing to show" state.
+InvoiceBreakdownData endingBreakdown({
+  required PreviewInvoice? current,
+  int? fallbackCurrentMonthly,
+  String totalLabel = 'Monthly',
+  String amountSuffix = '/mo',
+}) {
+  return InvoiceBreakdownData(
+    lines: const [],
+    total: 0,
+    currency: current?.currency ?? 'usd',
+    previousTotal: current?.total ?? fallbackCurrentMonthly,
+    totalLabel: totalLabel,
+    amountSuffix: amountSuffix,
   );
 }

@@ -24,8 +24,7 @@ class StripeSyncStatus(StrEnum):
     lifecycle MembershipDbStatus: `not_added` = pending (the row is asking the
     sync to add it); the sync (writeback) stamps `applied` once Stripe confirms
     and `deleted` on removal; `preview_add`/`preview_remove` are reserved for
-    preview-staging; `migrating` (memberships only) marks a migration requested
-    but not yet completed. Shared by member_memberships and
+    preview-staging. Shared by member_memberships and
     member_membership_applied_discounts.
     """
 
@@ -34,12 +33,15 @@ class StripeSyncStatus(StrEnum):
     deleted = "deleted"
     preview_add = "preview_add"
     preview_remove = "preview_remove"
-    migrating = "migrating"
 
 
 class MemberMembershipCreate(SeedModel):
     item_id: UUID
     member_id: UUID
+    # Who pays this membership (NOT NULL in the DB): the linked parent for a
+    # family child, else the member themselves. The payment sync groups
+    # memberships by this column — one subscription per payer.
+    paid_by_member_id: UUID
     gym_id: UUID
     plan_id: UUID
     price_id: UUID
@@ -48,8 +50,11 @@ class MemberMembershipCreate(SeedModel):
     cancel_date: date | None = None
     last_paid_date: date | None = None
     next_due_date: date | None = None
-    prorate: bool = True
     total_price: int
+    # How many identical units this membership bills as (one_time / trial packs
+    # stack as one row with quantity = N). Recurring is always 1 (DB trigger
+    # trg_recurring_quantity_must_be_one enforces it).
+    quantity: int = 1
 
     stripe_item_id: str | None = None
     stripe_sync_status: StripeSyncStatus = StripeSyncStatus.not_added
@@ -64,9 +69,10 @@ class MemberMembershipCreate(SeedModel):
     def status(self) -> MembershipDbStatus:
         """Approximate status for data generation.
 
-        Freeze is account-level (member_billing_profile), not membership-level,
-        so this computed field cannot derive frozen status. The DB view
-        member_memberships_status is the authoritative source.
+        Freeze is payer-level (the paid_by_member_id's freeze window on
+        members), not membership-level, so this computed field cannot derive
+        frozen status. The DB view member_memberships_status is the
+        authoritative source.
         """
         today = date.today()
         if self.cancel_date is not None and self.cancel_date <= today:

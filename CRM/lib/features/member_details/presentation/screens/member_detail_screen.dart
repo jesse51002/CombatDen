@@ -10,6 +10,9 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/bloc/tasks_event.dart';
+import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/member_details/presentation/sections/member_detail_grid.dart';
 import 'package:crm/features/member_details/presentation/sections/member_search_sidebar.dart';
 import 'package:crm/features/member_details/presentation/sections/profile_header_section.dart';
@@ -44,15 +47,30 @@ class MemberDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<MemberRepository>(
-      create: (_) =>
-          MemberRepository(apiClient: ApiClient()),
-      child: BlocProvider<MemberDetailBloc>(
-        create: (ctx) => MemberDetailBloc(
-          repository: ctx.read<MemberRepository>(),
-        )..add(
-            MemberDetailRequested(memberId, gymId: _gymId),
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MemberRepository>(
+          create: (_) => MemberRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<TasksRepository>(
+          create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+      ],
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<MemberDetailBloc>(
+            create: (ctx) => MemberDetailBloc(
+              repository: ctx.read<MemberRepository>(),
+            )..add(
+                MemberDetailRequested(memberId, gymId: _gymId),
+              ),
           ),
+          BlocProvider<TasksBloc>(
+            create: (ctx) => TasksBloc(
+              repository: ctx.read<TasksRepository>(),
+            )..add(TasksOngoingRequested(_gymId)),
+          ),
+        ],
         child: _MemberDetailView(gymId: _gymId),
       ),
     );
@@ -70,8 +88,10 @@ class _MemberDetailView extends StatelessWidget {
   ) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(
-          name: AppRoutes.memberDetail,
+        // Name the route with the member id so jumping between members
+        // (the roster sidebar) updates the URL to `/members/detail/<id>`.
+        settings: RouteSettings(
+          name: AppRoutes.memberDetailPath(memberId),
         ),
         builder: (_) => MemberDetailScreen(
           memberId: memberId,
@@ -84,46 +104,63 @@ class _MemberDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocListener<MemberDetailBloc, MemberDetailState>(
+      // A member id that doesn't resolve to a viewable member (a 4xx from
+      // the billing endpoint — unknown / malformed id, or a gym the caller
+      // can't see) bounces to the members list: the deep-link fallback for
+      // "an id that doesn't line up". A transient 5xx / network error keeps
+      // the retryable error view below.
       listenWhen: (prev, curr) =>
-          curr is MemberDetailLoaded &&
-          curr.actionError != null &&
-          (prev is! MemberDetailLoaded ||
-              prev.actionError != curr.actionError),
-      listener: (context, state) {
-        if (state is! MemberDetailLoaded) return;
-        final error = state.actionError;
-        if (error == null) return;
-        final bloc = context.read<MemberDetailBloc>();
-        BillingErrorDialog.show(
-          context: context,
-          message: error,
-        );
-        bloc.add(const MemberActionErrorCleared());
-      },
-      child: AppShell(
-        activeRoute: AppRoutes.members,
-        child: BlocBuilder<MemberDetailBloc,
-            MemberDetailState>(
-          builder: (context, state) {
-            return switch (state) {
-              MemberDetailLoaded() => _Loaded(
-                  onMemberTap: (id) =>
-                      _navigateToMember(context, id),
-                ),
-              MemberDetailError() => _ErrorView(
-                  message: state.message,
-                  onRetry: () => context
-                      .read<MemberDetailBloc>()
-                      .add(
-                        MemberDetailRequested(
-                          state.memberId,
-                          gymId: gymId,
+          curr is MemberDetailError && curr.isNotFound,
+      listener: (context, _) => Navigator.of(context)
+          .pushReplacementNamed(AppRoutes.members),
+      child: BlocListener<MemberDetailBloc, MemberDetailState>(
+        listenWhen: (prev, curr) =>
+            curr is MemberDetailLoaded &&
+            curr.actionError != null &&
+            (prev is! MemberDetailLoaded ||
+                prev.actionError != curr.actionError),
+        listener: (context, state) {
+          if (state is! MemberDetailLoaded) return;
+          final error = state.actionError;
+          if (error == null) return;
+          final bloc = context.read<MemberDetailBloc>();
+          BillingErrorDialog.show(
+            context: context,
+            message: error,
+          );
+          bloc.add(const MemberActionErrorCleared());
+        },
+        child: AppShell(
+          activeRoute: AppRoutes.members,
+          child: BlocBuilder<MemberDetailBloc,
+              MemberDetailState>(
+            builder: (context, state) {
+              return switch (state) {
+                MemberDetailLoaded() => _Loaded(
+                    onMemberTap: (id) =>
+                        _navigateToMember(context, id),
+                  ),
+                // A not-found error is mid-redirect to the members list
+                // (see the listener above) — show a spinner, not the
+                // error view, so there's no flash of "Failed to load".
+                MemberDetailError() =>
+                  state.isNotFound
+                      ? const Center(child: AppSpinner())
+                      : _ErrorView(
+                          message: state.message,
+                          onRetry: () => context
+                              .read<MemberDetailBloc>()
+                              .add(
+                                MemberDetailRequested(
+                                  state.memberId,
+                                  gymId: gymId,
+                                ),
+                              ),
                         ),
-                      ),
-                ),
-              _ => const Center(child: AppSpinner()),
-            };
-          },
+                _ => const Center(child: AppSpinner()),
+              };
+            },
+          ),
         ),
       ),
     );

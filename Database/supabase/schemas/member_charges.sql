@@ -1,9 +1,4 @@
--- Money movement. Payments and refunds both live here.
---   kind='payment':  amount >= 0, stripe_charge_id set (or cash), no parent
---   kind='refund':   amount <= 0, stripe_refund_id set, refunds_charge_id set
--- Retry attempts become multiple rows sharing one invoice_id: each failed
--- attempt is its own row with status='failed'; the successful attempt (if any)
--- is another row with status='succeeded'.
+-- Money movement. Payments and refunds both live here; retried attempts are separate rows.
 CREATE TYPE charge_kind AS ENUM ('payment', 'refund');
 CREATE TYPE charge_status AS ENUM ('pending', 'succeeded', 'failed');
 
@@ -13,21 +8,22 @@ CREATE TABLE member_charges (
         CONSTRAINT fk_charge_invoice
         REFERENCES member_invoices(invoice_id) ON DELETE CASCADE,
     gym_id UUID NOT NULL CONSTRAINT fk_charge_gym REFERENCES gyms(gym_id),
-    member_id UUID NOT NULL,
+
+    -- Payer: mirrors invoice.paid_by_member_id. Beneficiary set lives on the invoice.
+    paid_by_member_id UUID NOT NULL,
 
     kind charge_kind NOT NULL,
     status charge_status NOT NULL,
 
-    amount INTEGER NOT NULL,  -- signed: payment >= 0, refund <= 0
+    amount INTEGER NOT NULL,  -- payment >= 0, refund <= 0
     currency CHAR(3) NOT NULL DEFAULT 'usd',
     payment_method_type VARCHAR,  -- 'card' | 'us_bank_account' | 'cash' | ...
     card_last_four VARCHAR,  -- last 4 of the card, when the charge was on a card
 
-    -- Exactly one of these is populated per row (enforced by kind-based checks).
+    -- Exactly one populated per row (enforced by kind-based checks).
     stripe_charge_id VARCHAR UNIQUE,
     stripe_refund_id VARCHAR UNIQUE,
 
-    -- Refund linkage: which charge row this refund refunds.
     refunds_charge_id UUID
         CONSTRAINT fk_refund_parent
         REFERENCES member_charges(charge_id),
@@ -41,11 +37,10 @@ CREATE TABLE member_charges (
         FOREIGN KEY (invoice_id, gym_id)
         REFERENCES member_invoices (invoice_id, gym_id),
 
-    CONSTRAINT fk_charge_member_gym
-        FOREIGN KEY (member_id, gym_id)
+    CONSTRAINT fk_charge_payer_gym
+        FOREIGN KEY (paid_by_member_id, gym_id)
         REFERENCES members (member_id, gym_id),
 
-    -- Payment rules
     CONSTRAINT payment_amount_nonneg
         CHECK (kind <> 'payment' OR amount >= 0),
     CONSTRAINT payment_has_charge_id
@@ -55,11 +50,10 @@ CREATE TABLE member_charges (
     CONSTRAINT payment_has_no_parent
         CHECK (kind <> 'payment' OR refunds_charge_id IS NULL),
 
-    -- Refund rules
     CONSTRAINT refund_amount_nonpos
         CHECK (kind <> 'refund' OR amount <= 0),
     CONSTRAINT refund_has_refund_id
-        CHECK (kind <> 'refund' OR stripe_refund_id IS NOT NULL),
+        CHECK (kind <> 'refund' OR stripe_refund_id IS NOT NULL OR payment_method_type = 'cash'),
     CONSTRAINT refund_has_parent
         CHECK (kind <> 'refund' OR refunds_charge_id IS NOT NULL),
     CONSTRAINT refund_has_no_charge_id
@@ -69,8 +63,18 @@ CREATE TABLE member_charges (
 CREATE INDEX idx_charges_invoice
     ON member_charges (invoice_id);
 
-CREATE INDEX idx_charges_member_gym_time
-    ON member_charges (member_id, gym_id, charge_time DESC);
+CREATE INDEX idx_charges_payer_gym_time
+    ON member_charges (paid_by_member_id, gym_id, charge_time DESC);
 
 CREATE INDEX idx_charges_gym_time
     ON member_charges (gym_id, charge_time DESC);
+
+-- Cash payments have no stripe_charge_id, so this partial unique index deduplicates
+-- them per invoice (reconciler re-runs would otherwise double-count). Scoped to
+-- succeeded payments only so cash refunds and failed card attempts don't collide.
+CREATE UNIQUE INDEX idx_charges_cash_payment_dedup
+    ON member_charges (invoice_id)
+    WHERE stripe_charge_id IS NULL
+      AND kind = 'payment'
+      AND status = 'succeeded'
+      AND payment_method_type = 'cash';

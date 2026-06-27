@@ -52,8 +52,13 @@ class GymApiClient:
     def post(self, path: str, json: dict | None = None) -> dict | None:
         return self._send("POST", path, json=json)
 
-    def delete(self, path: str, params: dict | None = None) -> dict | None:
-        return self._send("DELETE", path, params=params)
+    def delete(
+        self,
+        path: str,
+        params: dict | None = None,
+        json: dict | None = None,
+    ) -> dict | None:
+        return self._send("DELETE", path, json=json, params=params)
 
     def put(self, path: str, json: dict | None = None) -> dict | None:
         return self._send("PUT", path, json=json)

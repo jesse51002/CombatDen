@@ -1,25 +1,39 @@
 WITH target_profile AS (
-    SELECT mbp.member_id, mbp.gym_id, mbp.account_linked_to_id
+    SELECT mbp.member_id, mbp.gym_id
     FROM member_billing_profile mbp
     WHERE mbp.member_id = :member_id
 ),
-primary_id AS (
-    SELECT COALESCE(t.account_linked_to_id, t.member_id) AS id
-    FROM target_profile t
-),
 family_group AS (
-    SELECT mbp.member_id
-    FROM member_billing_profile mbp
-    JOIN target_profile t ON mbp.gym_id = t.gym_id
-    CROSS JOIN primary_id pi
-    WHERE mbp.member_id = pi.id
-       OR mbp.account_linked_to_id = pi.id
+    -- The viewed member, plus every member they PAY FOR
+    -- (member_memberships.paid_by_member_id), so the payer math behind the
+    -- overview line + the "pays for" list can see those funded memberships.
+    -- Authorization rosters (who may pay for whom) are separate junction reads.
+    SELECT t.member_id
+    FROM target_profile t
+    UNION
+    SELECT DISTINCT mm.member_id
+    FROM member_memberships_status mm
+    JOIN target_profile t ON t.gym_id = mm.gym_id
+    WHERE mm.paid_by_member_id = :member_id
 ),
+-- Collapse RECURRING reprice history to the current row (one card per plan),
+-- but keep EACH one_time / trial pack DISTINCT by item_id — stacked or
+-- separately-bought packs on the same plan are different memberships and must
+-- each surface, not collapse to the most recent. So the DISTINCT-ON key is the
+-- plan for recurring, the item for one_time / trial (CASE: NULL vs item_id).
 latest_memberships AS (
-    SELECT DISTINCT ON (member_id, gym_id, plan_id) *
-    FROM member_memberships_status
-    ORDER BY member_id, gym_id, plan_id,
-             start_date DESC, created_at DESC
+    SELECT DISTINCT ON (
+        mms.member_id, mms.gym_id, mms.plan_id,
+        CASE WHEN mp.plan_type = 'recurring'
+             THEN NULL::uuid ELSE mms.item_id END
+    ) mms.*
+    FROM member_memberships_status mms
+    JOIN membership_plans mp
+        ON mp.plan_id = mms.plan_id AND mp.gym_id = mms.gym_id
+    ORDER BY mms.member_id, mms.gym_id, mms.plan_id,
+             CASE WHEN mp.plan_type = 'recurring'
+                  THEN NULL::uuid ELSE mms.item_id END,
+             mms.start_date DESC, mms.created_at DESC
 )
 SELECT
     m.member_id,
@@ -35,7 +49,6 @@ SELECT
     mbp.emergency_contact_email,
     m.last_class,
     m.points_balance,
-    mbp.account_linked_to_id,
     mbp.total_monthly_recurring_price,
     mbp.card_brand,
     mbp.card_last_four,
@@ -54,7 +67,6 @@ SELECT
             'discount_type', d.discount_type,
             'percentage_off', v.percentage_off,
             'dollar_off', v.dollar_off,
-            'discount_mode', v.discount_mode,
             'end_date', ad.end_date
          ) ORDER BY ad.created_at)
          FROM member_membership_applied_discounts ad
@@ -65,6 +77,7 @@ SELECT
         '[]'::jsonb
     ) AS applied_discounts,
     ms.item_id,
+    ms.paid_by_member_id,
     ms.status       AS membership_status,
     ms.start_date   AS membership_start_date,
     ms.end_date     AS membership_end_date,
@@ -121,4 +134,8 @@ ORDER BY
         WHEN 'recurring' THEN 1
         WHEN 'one_time' THEN 2
         WHEN 'trial' THEN 3
-    END ASC
+    END ASC,
+    -- Tiebreaker within a plan-type group (the one-time / trial packs):
+    -- newest start first, so stacked class packs are date-ordered, not
+    -- left to heap order.
+    ms.start_date DESC

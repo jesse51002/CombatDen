@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
@@ -43,7 +44,6 @@ Widget statusValue(MembershipStatus status) {
       status.displayLabel,
       style: DesignConstants.h2.copyWith(
         color: statusColor(status),
-        fontWeight: FontWeight.w600,
       ),
     ),
   );
@@ -55,13 +55,42 @@ bool isTerminalStatus(MembershipStatus status) =>
     status == MembershipStatus.cancelled ||
     status == MembershipStatus.ended;
 
+/// The live recurring memberships in [memberships] funded by [payerId] —
+/// the exact set a remove-authorization unlink would cancel. Shared by the
+/// payment-authorizations and remove-authorization dialogs so "what counts
+/// as a funded membership" is defined in one place.
+List<MembershipInfo> fundedRecurringMemberships(
+  List<MembershipInfo> memberships,
+  String payerId,
+) {
+  return memberships
+      .where(
+        (m) =>
+            m.paidByMemberId == payerId &&
+            m.planType?.toLowerCase() == 'recurring' &&
+            !isTerminalStatus(m.status),
+      )
+      .toList();
+}
+
 /// Cost display for an explicit amount (minor currency
 /// units) — the selected member's own after-discount total.
 Widget costValue(int amount) {
   return Text(
     formatMinorUnits(amount),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
+    style: DesignConstants.h2Bold,
+  );
+}
+
+/// Refunded-amount display for a one-time / trial membership — shown
+/// under Cost only when some of its charge has been refunded (minor
+/// units, > 0). Rendered in the money-out colour to read as a credit
+/// back to the member.
+Widget refundedValue(int amount) {
+  return Text(
+    formatMinorUnits(amount),
+    style: DesignConstants.h2Bold.copyWith(
+      color: DesignConstants.badRed,
     ),
   );
 }
@@ -143,8 +172,6 @@ Widget dateValue(DateTime? date) {
   }
   return Text(
     formatDay(date),
-    style: DesignConstants.h2.copyWith(
-      fontWeight: FontWeight.w700,
-    ),
+    style: DesignConstants.h2Bold,
   );
 }

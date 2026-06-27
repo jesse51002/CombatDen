@@ -18,8 +18,4 @@ Map<String, dynamic> _$MembershipPlanCreateRequestToJson(
   'is_public': instance.isPublic,
   'price': instance.price,
   'waiver_ids': instance.waiverIds,
-  'linked_discount_enabled': instance.linkedDiscountEnabled,
-  'linked_discount_values': instance.linkedDiscountValues
-      .map((e) => e.toJson())
-      .toList(),
 };

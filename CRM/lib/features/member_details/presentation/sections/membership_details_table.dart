@@ -2,43 +2,49 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/data/models/membership_member_info.dart';
-import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/info_table.dart';
 
-/// Status / type / billing cycle / cost / usage / dates for
-/// the **selected covered member** ([coveredMemberId]) on the
-/// current membership. Everything reads atomically for that one
-/// member: their status, their cost, their class usage. The
-/// outdated-price prompt lives in its own card outside this
-/// table; cash payment lives in the Invoices card.
+/// Status / type / billing cycle / cost / usage / dates for the
+/// viewed member's current membership. Everything reads flat off
+/// the one membership row: its status, its cost, its class usage.
+/// When the member is in an authorization relationship, [payerName]
+/// is set and a "Paid by" row (a small avatar + the payer's name)
+/// leads the table so it stands out; the outdated-price prompt
+/// lives in its own card.
 class MembershipDetailsTable extends StatelessWidget {
   final MembershipInfo membership;
-  final String coveredMemberId;
+
+  /// The payer's display name + photo, for the leading "Paid by"
+  /// row. Null for a member with no authorization relationship
+  /// (the row is omitted — they always pay their own way).
+  final String? payerName;
+  final String? payerPhotoUrl;
+
+  /// How much of this membership's charge has been refunded (minor
+  /// units). When > 0 a "Refunded" row shows right under Cost; null /
+  /// 0 omits it. Resolved by [MembershipDetailsLoader] for one-time /
+  /// trial memberships only (a recurring membership's refunds live in
+  /// Payment History, so it is left null).
+  final int? refundedAmount;
 
   const MembershipDetailsTable({
     super.key,
     required this.membership,
-    required this.coveredMemberId,
+    this.payerName,
+    this.payerPhotoUrl,
+    this.refundedAmount,
   });
-
-  MembershipStatus get _status =>
-      membership.payingForMemberFor(coveredMemberId)?.status ??
-      membership.status;
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
-    final exit = membership.exitDateFor(coveredMemberId);
+    final status = membership.status;
+    final exit = membership.exitDate;
     final cancelling = exit != null &&
         exit.kind == MembershipExitKind.cancelling &&
         !isTerminalStatus(status);
-
-    final usage =
-        membership.payingForMemberFor(coveredMemberId);
 
     final planTypeLabel = membership.planType == null
         ? '—'
@@ -46,6 +52,14 @@ class MembershipDetailsTable extends StatelessWidget {
 
     return InfoTable(
       rows: [
+        if (payerName != null)
+          (
+            membershipLabel('Paid by:'),
+            _PaidByValue(
+              name: payerName!,
+              photoUrl: payerPhotoUrl,
+            ),
+          ),
         (
           membershipLabel('Status:'),
           _StatusCell(
@@ -57,9 +71,7 @@ class MembershipDetailsTable extends StatelessWidget {
           membershipLabel('Type:'),
           Text(
             planTypeLabel,
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
           ),
         ),
         (
@@ -72,28 +84,28 @@ class MembershipDetailsTable extends StatelessWidget {
               membership.durationUnit,
               membership.planType,
             ),
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: DesignConstants.h2Bold,
           ),
         ),
         (
           membershipLabel('Cost:'),
           costBreakdownValue(
-            membership.baseCostFor(coveredMemberId),
-            membership.totalPriceFor(coveredMemberId),
+            membership.baseCost,
+            membership.totalPrice,
           ),
         ),
-        if (usage != null)
+        if (refundedAmount != null && refundedAmount! > 0)
           (
-            membershipLabel('Usage:'),
-            Text(
-              _usageText(usage),
-              style: DesignConstants.h2.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            membershipLabel('Refunded:'),
+            refundedValue(refundedAmount!),
           ),
+        (
+          membershipLabel('Usage:'),
+          Text(
+            _usageText(),
+            style: DesignConstants.h2Bold,
+          ),
+        ),
         (
           membershipLabel('Last paid:'),
           dateValue(membership.lastPaidDate),
@@ -121,13 +133,56 @@ class MembershipDetailsTable extends StatelessWidget {
     );
   }
 
-  String _usageText(PayingForMember usage) {
-    if (usage.classCount == null) {
+  String _usageText() {
+    if (membership.classCount == null) {
       final cycle = membership.durationUnit.toLowerCase();
-      return '${usage.classesUsed} classes this $cycle';
+      return '${membership.classesUsed} classes this $cycle';
     }
-    return '${usage.classesUsed}/'
-        '${usage.classCount} classes';
+    return '${membership.classesUsed}/'
+        '${membership.classCount} classes';
+  }
+}
+
+/// The "Paid by" value cell — a small payer avatar followed by
+/// their name, matching the table's value text style.
+class _PaidByValue extends StatelessWidget {
+  final String name;
+  final String? photoUrl;
+
+  const _PaidByValue({required this.name, this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        name.isNotEmpty ? name[0].toUpperCase() : '?';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        CircleAvatar(
+          radius: DesignConstants.iconSizeLarge / 2,
+          backgroundColor: DesignConstants.backgroundColor,
+          backgroundImage:
+              photoUrl != null ? NetworkImage(photoUrl!) : null,
+          child: photoUrl == null
+              ? Text(
+                  initial,
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                )
+              : null,
+        ),
+        Flexible(
+          child: Text(
+            name,
+            style: DesignConstants.h2Bold,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -163,7 +218,6 @@ class _ExitStatus extends StatelessWidget {
         text,
         style: DesignConstants.h2.copyWith(
           color: DesignConstants.okYellow,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

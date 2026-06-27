@@ -74,7 +74,11 @@ def generate(
                 MemberInvoiceCreate(
                     invoice_id=invoice_id,
                     gym_id=gym_id,
-                    member_id=m.member_id,
+                    # Billed to the membership's payer, FOR its owner (the
+                    # membership beneficiary) — a parent paying for a child
+                    # seeds as paid_by=parent, paid_for=[child].
+                    paid_by_member_id=m.paid_by_member_id,
+                    paid_for=[m.member_id],
                     status=InvoiceStatus.paid,
                     total_amount=m.total_price,
                     currency="usd",
@@ -102,7 +106,7 @@ def generate(
                         charge_id=uuid.uuid4(),
                         invoice_id=invoice_id,
                         gym_id=gym_id,
-                        member_id=m.member_id,
+                        paid_by_member_id=m.paid_by_member_id,
                         kind=ChargeKind.payment,
                         status=ChargeStatus.failed,
                         amount=m.total_price,
@@ -118,7 +122,7 @@ def generate(
                     charge_id=success_charge_id,
                     invoice_id=invoice_id,
                     gym_id=gym_id,
-                    member_id=m.member_id,
+                    paid_by_member_id=m.paid_by_member_id,
                     kind=ChargeKind.payment,
                     status=ChargeStatus.succeeded,
                     amount=m.total_price,
@@ -136,7 +140,7 @@ def generate(
                         charge_id=uuid.uuid4(),
                         invoice_id=invoice_id,
                         gym_id=gym_id,
-                        member_id=m.member_id,
+                        paid_by_member_id=m.paid_by_member_id,
                         kind=ChargeKind.refund,
                         status=ChargeStatus.succeeded,
                         amount=-m.total_price,

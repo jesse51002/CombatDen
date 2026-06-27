@@ -5,7 +5,6 @@ from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
-from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
@@ -13,7 +12,7 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
 )
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 
 
 class AppliedDiscount(BaseModel):
@@ -24,9 +23,11 @@ class AppliedDiscount(BaseModel):
     memberships into consolidated lines by ``price_id``, computes each line's
     effective coupon from the line's memberships' discounts, and writes the
     resolved ``stripe_coupon_id`` back. ``end_date`` and ``stripe_coupon_id`` are
-    sync writebacks and may be null until resolved: a ``once`` row's ``end_date``
-    is null until the sync stamps it on consumption; an ongoing row's
-    ``end_date`` is resolved at apply-time (or null = forever).
+    sync writebacks and may be null until resolved: ``end_date`` is the absolute
+    lifetime end resolved at apply-time from the value's duration span (``cycle``
+    spans use the membership's plan billing period) or explicit end_date — null =
+    forever. Stripe coupons are always ``forever``; this ``end_date`` cutoff (the
+    SQL read drops anything past it) is what bounds a discount's lifetime.
     """
 
     applied_discount_id: UUID
@@ -34,7 +35,6 @@ class AppliedDiscount(BaseModel):
     member_id: UUID
     plan_id: UUID
     stripe_item_id: str | None = None
-    discount_mode: DiscountMode
     percentage_off: float | None = None
     dollar_off: int | None = None
     end_date: date | None = None
@@ -60,28 +60,32 @@ class ActiveMembershipRow(BaseModel):
     stripe_price_id: str
     price: int
     stripe_item_id: str | None = None
+    # How many units this single row bills as. One-time / trial packs stack as
+    # quantity > 1 (one row -> one invoice line carrying that quantity). Recurring
+    # is always 1 (DB-enforced) and the recurring build ignores it — the recurring
+    # line quantity is the number of memberships on the price group, not this.
+    quantity: int = 1
     # Recurring rows always carry the plan's interval; a one-time row may leave it
     # None (a one-time plan can have no duration). Carried as metadata only — the
     # bucket interval is fixed monthly, so nothing in the build reads it.
     duration_unit: DurationUnit | None = None
+    # Whether this membership's SUBJECT member (member_id, not the payer) is
+    # frozen right now. A frozen membership stays in the bucket but bills $0 via
+    # a synthetic 100%-off on its line (PaymentSyncDiscounts), so it keeps its
+    # Stripe line id and stays `applied` — freeze is a discount, not a drop.
+    is_frozen: bool = False
     discounts: list[AppliedDiscount] = []
 
 
-class OnceDiscount(BaseModel):
-    """An attached-but-unconsumed ``once`` discount, for the consumption check.
-
-    The minimal projection the once-discount sync needs: the row to stamp and
-    the coupon to look for on the live subscription. The DB query already
-    guarantees ``once`` + no end_date + a non-null coupon, so the only thing
-    left is whether the coupon is still present (pending) or gone (consumed).
-    """
-
-    applied_discount_id: UUID
-    stripe_coupon_id: str
-
-
 class IntervalBucket(BaseModel):
-    """All items for one billing interval (discounts ride the items)."""
+    """All items for one billing interval (discounts ride the items).
+
+    Frozen memberships are NOT special-cased here — they stay in the bucket like
+    any membership and bill $0 via a synthetic 100%-off on their line (see
+    ``PaymentSyncDiscounts``), so a frozen row keeps its line id and stays
+    `applied`. The bucket is empty only when the payer has no active recurring
+    memberships at all — a genuine cancellation.
+    """
 
     interval: DurationUnit
     items: list[PaymentsSubscriptionDesiredItem]
@@ -89,23 +93,19 @@ class IntervalBucket(BaseModel):
 
 
 class LineDiscountValue(BaseModel):
-    """One consolidated line's effective discount value for a single mode.
+    """One consolidated line's effective discount value (percent XOR dollar).
 
     Computed per-line at sync from the line's memberships' discounts: percents
     compound **sequentially within a membership** then the per-membership
     effective fractions are averaged across the line (÷ quantity); fixed dollars
-    are summed. Exactly one of ``percentage_off`` / ``dollar_off`` is set.
-    ``once`` and ``ongoing`` never mix into the same value.
+    are summed. Exactly one of ``percentage_off`` / ``dollar_off`` is set — a
+    line yields at most one percent value and one dollar value.
 
-    ``contributing_ids`` are the applied-discount rows of this exact mode **and
-    kind** (percent vs dollar) that fed the value — disjoint, so the sync writes
-    the value's resolved coupon back onto only its own contributors. A line
-    mixing a percent and a dollar ``once`` records each coupon on its own rows,
-    so a dollar-``once``'s presence handle is its own dollar coupon, not the
-    percent coupon (keeps the ``once`` consumption check exact).
+    ``contributing_ids`` are the applied-discount rows of this exact **kind**
+    (percent vs dollar) that fed the value — disjoint, so the sync writes the
+    value's resolved coupon back onto only its own contributors.
     """
 
-    discount_mode: DiscountMode
     percentage_off: float | None = Field(default=None, gt=0, le=100)
     dollar_off: int | None = Field(default=None, gt=0)
     contributing_ids: list[UUID] = []
@@ -133,16 +133,13 @@ class ResolvedDiscounts(BaseModel):
     coupons to attach to its bucket item (percent coupon first, then dollar, so
     Stripe sequences percent→dollar). ``links`` maps each contributing
     ``applied_discount_id`` to the coupon it resolved to — the **real** path
-    writes these back (a ``once`` value records its coupon, the consumption
-    handle, on its rows; an ``ongoing`` value on its rows).
+    writes these back onto its rows.
 
     ``membership_amounts`` maps each active membership's ``item_id`` to its own
-    post-discount price (minor units) — its plan price with its **ongoing**
-    discounts always applied and its **once** discounts applied only once the
-    membership is on Stripe (its ``stripe_item_id`` is set, so the once applies
-    to a future invoice); a not-yet-synced membership excludes its once. It
-    covers **every** membership in the sync; the **real** path writes each onto
-    its membership row.
+    post-discount price (minor units) — its plan price with all its currently
+    active discounts applied (the read already drops any past its ``end_date``).
+    It covers **every** membership in the sync; the **real** path writes each
+    onto its membership row.
     """
 
     coupons_by_price: dict[UUID, list[SubscriptionItemDiscount]] = {}
@@ -163,7 +160,7 @@ class SyncParams(BaseModel):
     """
 
     bucket: IntervalBucket
-    parent: ParentProfile
+    payer: PayerProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
     membership_post_discount_amounts: dict[UUID, int] = {}
@@ -178,12 +175,15 @@ class OneTimeInvoiceItem(BaseModel):
     writeback maps each returned line id + amount back to this ``item_id``.
     ``coupon_ids`` are the membership's item-level coupons, already ordered
     percent→dollar by the resolver (``DISCOUNT_APPLICATION_ORDER``).
+    ``quantity`` is how many units this line bills (a one_time / trial pack
+    bought N at once is ONE line carrying quantity = N).
     """
 
     item_id: UUID
     member_id: UUID
     plan_id: UUID
     stripe_price_id: str
+    quantity: int = 1
     coupon_ids: list[str] = []
 
 
@@ -192,12 +192,12 @@ class OneTimeInvoicePlan(BaseModel):
 
     The one-time counterpart of ``SyncParams``: an **ordered** list of invoice
     lines (one per pending one-time membership), plus the ``applied_discount_id →
-    coupon_id`` links the writeback stamps, and the ``once``-mode applied-discount
-    ids to mark consumed (``end_date = today``). Built with **no DB writes**.
+    coupon_id`` links the writeback stamps. A one-time membership is terminal
+    (one invoice), so its discounts simply apply to that invoice — there is no
+    consumption lifecycle to settle. Built with **no DB writes**.
     """
 
     items: list[OneTimeInvoiceItem] = []
-    parent: ParentProfile
+    payer: PayerProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
-    once_consumed_ids: list[UUID] = []

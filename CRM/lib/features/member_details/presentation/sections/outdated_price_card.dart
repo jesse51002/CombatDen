@@ -13,19 +13,19 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 /// price upgrade for this one membership.
 class OutdatedPriceCard extends StatelessWidget {
   final MembershipInfo membership;
-  final String coveredMemberId;
+  final String memberId;
   final String coveredMemberName;
 
   const OutdatedPriceCard({
     super.key,
     required this.membership,
-    required this.coveredMemberId,
+    required this.memberId,
     required this.coveredMemberName,
   });
 
   @override
   Widget build(BuildContext context) {
-    final oldPrice = membership.baseCostFor(coveredMemberId);
+    final oldPrice = membership.baseCost;
     final newPrice = membership.currentActivePrice;
     return Container(
       width: double.infinity,
@@ -92,7 +92,7 @@ class OutdatedPriceCard extends StatelessWidget {
             onPressed: () => UpdatePriceDialog.show(
               context: context,
               membership: membership,
-              coveredMemberId: coveredMemberId,
+              memberId: memberId,
               coveredMemberName: coveredMemberName,
             ),
           ),

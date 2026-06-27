@@ -4,6 +4,16 @@
 
 When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
 
+## Don't silently inherit existing problems
+
+When you find a bug, anti-pattern, wrong behavior, or stale rule that **already exists** in the codebase — a pre-existing gap, a flawed pattern other code follows, a confusing UX, a data inconsistency — **do not quietly follow, mirror, or accept it.** Surface it and propose a fix, even when it's strictly "out of scope" for the task at hand.
+
+- **Flag it plainly** the moment you notice it: what's wrong, where, and why it matters.
+- **Propose a concrete fix** and let the user decide (per *No assumptions*: present, then wait). Don't unilaterally expand scope — but don't bury the issue either.
+- **Default to fixing the root cause, not inheriting it.** If new code would have to reproduce an existing bug to stay "consistent" with the old code, that is the signal to fix the root cause — not to copy the bug forward.
+
+"It's pre-existing," "the other code does it too," or "it already worked this way" is **never** a reason to ship the same problem again or to gloss over it. Naming the problem and offering the fix is the default; silently accepting it is the failure mode this rule exists to prevent.
+
 ## Skills
 
 All skills live in one place: `.claude/skills/` at the codebase root. This is the single, centralized place to look — skills for every subsystem (FastApi backend, CRM, services, data models) live here together, not scattered in per-system `.claude/` folders. Before starting any task, check this directory for a relevant skill and use it.
@@ -40,10 +50,22 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - `claude-code-review.yml` (auto PR review) and `claude.yml` (the `@claude` assistant) run `claude-code-action`, whose GitHub App token exchange requires the workflow file on a PR branch to be **byte-identical to the version on `main`**. If a feature branch edits one of them, every review run on that branch dies at startup with `App token exchange failed: 401 Unauthorized — Workflow validation failed`.
 - So any change to these files must land on `main` FIRST, via a small dedicated PR, then be synced onto the feature branch — **never edit them on a feature branch alone.** This bites often; treat it as a hard rule. (Even the dedicated PR's own review run will 401, because that PR is the one changing the file — that's expected, ignore it; the merge still works.)
 
+## After pushing to a PR — poll the Claude review automatically
+- Every push to a PR branch triggers the `claude-code-review.yml` workflow, which posts an automated review (~5–9 min). **Pushing is not "done" — always poll for that review and address it, without being asked.**
+- **Do the polling in the BACKGROUND so the main session isn't blocked for those minutes.** Whichever is easiest:
+  - a **background `haiku` sub-agent** — cheap; have it watch the run, fetch the new `claude[bot]` review once it posts, and return just the findings; or
+  - a **background shell command** (`run_in_background: true`) — e.g. `gh pr checks <pr> --watch` then print the latest `claude[bot]` comment; the harness re-invokes the main agent when it exits.
+  - Either way the main agent keeps working / hands back, and picks the review up when the poller reports.
+- Where to read the review: it posts as an **issue comment** from `claude[bot]` — `gh api repos/<owner>/<repo>/issues/<pr>/comments`. Also check `.../pulls/<pr>/reviews` and `.../pulls/<pr>/comments` for any inline findings.
+- Triage **every** finding: fix the legitimate ones; for a finding that conflicts with a decision already made, is a false positive, or follows an established codebase convention, **reply with the rationale instead of silently applying it** (per *No assumptions* + challenging weak findings). Surface anything that needs a human decision.
+- A clean run is not enough — the workflow passing only means the review *ran*, not that its findings are resolved. Loop until the review is addressed (push fix → re-poll the new review).
+- **Correctness over quickness in the review cycle.** When addressing findings, optimize for the fully-correct fix, never the fastest patch that just silences the comment — fix the root cause (including any pre-existing issue the review surfaces, per *Don't silently inherit existing problems*), re-run the full verification (lint + tests + analyze + the live tests the change touches), and update the docs/skills the change affects. A slower, complete fix beats a fast, partial one; never trade correctness for review-loop turnaround.
+
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
 - Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.
 - This holds repo-wide and for every system, including ones not using prompts or SQL yet.
+- **Exception — short integration-test queries.** Tests are not production code: a short read/assert/setup query may be inlined as a `text("SELECT …")`/`text("UPDATE …")` literal directly in the test or a `tests/helpers/db_reads.py` / `db_writes.py` helper. This is the established, deliberate test convention (those helpers themselves inline; `tests/helpers/sql/` holds only the cleanup `DELETE`s). It applies to **test code only** — every query in application/service code still lives in its own `.sql` file with no exceptions.
 
 ## Organization
 - Each system (backend, frontend, database, etc.) lives in its own top-level directory.
@@ -64,8 +86,11 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 ## Worktrees
 - When creating a git worktree, branch off the **local** branch (e.g. local `main`), NOT the remote (`origin/main`). The remote often lags behind local, so a worktree branched from it silently misses recent work.
 - If a worktree was created from the remote, run `git reset --hard main` in it before starting (safe while its branch has no commits), and verify expected recent files exist before building.
+- **A fresh worktree has NO env files — copy them in before running or testing anything.** Per-system secret env files are gitignored, so a clean worktree checkout won't contain them; every system (and its tests/seed) will fail or warn until they're present. Copy each from the **root codebase checkout** into the worktree at the **same relative path**. The set to copy: `FastApiBackend/.env`, `CRM/.env.dev`, `CRM/.env.prod`, `Database/python_data/.env`, `VideoService/.env`, `VideoService/.env.prod`, `ThemeService/.env`. They stay gitignored, so the copies are never committed (verify with `git check-ignore`). Re-copy if the root's secrets are later regenerated. (`FastApiBackend/.venv` is symlinked separately by the FastApiBackend worktree setup — see the `fastapi-worktree-setup` note.)
 
 ## Meld diff review (root Makefile)
+**Always run meld at a review gate.** Whenever you present completed work — or a piece of a multi-step change — for my review, proactively launch `make meld` so I can see the diff visually; don't wait to be asked. This is the default for every "here's what I did, please review" hand-off, not only when I explicitly say "open a diff".
+
 When asked to spin up a diff / open a review of the current checkout (e.g. a worktree under `.claude/worktrees/`), use the root Makefile targets:
 - `make meld` — meld directory diff of the current working tree against the **root codebase checkout's** HEAD. Works from inside any worktree (resolves the root via `git rev-parse --git-common-dir`).
 - `make meld-origin` — same, but fetches and diffs against `origin/main`.
@@ -77,7 +102,9 @@ When asked to spin up a diff / open a review of the current checkout (e.g. a wor
   - **Edits to files already in the diff flow through live.** The right pane is symlinks to the real working-tree files, so further edits to those files show on refresh (Ctrl+R in meld) — no restart.
   - **Files created/deleted/clean-at-launch do NOT appear** (and a file created AFTER launch isn't intent-added yet). git stages only the files that differed at launch; refreshing can't surface anything else. Close meld and rerun the target.
   - Practical rhythm while an agent works in a worktree: refresh while it iterates on the same files; close-and-rerun once it has touched new ones.
-- **ALWAYS kill any previous meld before launching a new one** — a second launch hands off to the open window and exits, git deletes the staging dirs, and the new diff shows empty. Before every `make meld` / `make meld-origin`, run the kill first (`flatpak kill org.gnome.meld 2>/dev/null; pkill -f meld 2>/dev/null; true`), then launch in the background. This is a hard rule, not a recovery step.
+- **The meld targets restart on their own — just run `make meld` (in the background); no separate kill step.** Every meld target depends on a `kill-meld` prerequisite that runs `flatpak kill org.gnome.meld` first, so a window left open from a prior run is always closed before the new diff opens. (Why it matters: a second launch into an already-open window hands off to it and exits, git then deletes the difftool staging dirs, and the new window shows empty — so restarting is mandatory, and now automatic.)
+- **Do NOT add your own `pkill -f meld` kill before/around `make meld`.** It matches the *full command line*, so it also matches the very bash invocation containing `make meld` and kills the launcher mid-run (the old failure mode: exit 144, no window). The Makefile deliberately uses `flatpak kill org.gnome.meld` (the app id), which can never match the launcher. If meld ever isn't the Flatpak build, fix the `kill-meld` target — don't reintroduce a `pkill -f` at the call site.
+- **A `make meld` run dying is EXPECTED, not a problem with your diff — don't chase it.** If a meld run exits non-zero (commonly `warning: failed: 137` / `Error 137`, a SIGKILL), or the window vanishes / reopens empty, it's almost always one of two benign causes: **(a) I closed the meld window/tab**, or **(b) another parallel agent or background job ran `make meld`** — meld is a single shared Flatpak app, and every meld target's `kill-meld` prerequisite runs `flatpak kill org.gnome.meld`, which closes ALL open meld windows (including yours) before opening its own. So a peer launching meld kills your window mid-review. **Do not treat this as a failed diff, do not retry in a loop, and do not conclude your changes are broken** — the diff was correct; the window just got pre-empted. Note it and move on; I'll relaunch `make meld` myself when no other agent is contending.
 - **Default workflow/sub-agents to Sonnet with 1M context** (`model: 'sonnet[1m]'` on `agent()` calls / subagent launches, or the phase/run model override; plain `'sonnet'` only where the harness rejects the `[1m]` variant) unless a task genuinely needs Opus-level reasoning. Workflows fan out many agents at once; running them on Opus is far more expensive and **hits rate limits** fast (a 75-agent Opus fan-out got rate-limited mid-run). Sonnet has higher throughput and lower cost, and the 1M-context variant keeps large rename/review/data passes from compacting mid-task — the right default for fan-out work like data passes, conversions, broad reviews, and per-file edits. Reserve Opus for the few agents that actually need deep reasoning.
 - Keep concurrent fan-out reasonable; prefer Sonnet + batching over a huge Opus burst.
 

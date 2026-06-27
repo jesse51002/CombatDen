@@ -5,8 +5,8 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/filter_bar.dart';
 
-/// Search box + Add Employee button + Add Filter row. Mirrors
-/// `MembersControls`; actions are debug no-ops in the prototype.
+/// Search box + Add Employee button + Add Filter row for the
+/// employees screen; actions are debug no-ops in the prototype.
 class EmployeesControls extends StatelessWidget {
   const EmployeesControls({super.key});
 

@@ -12,7 +12,6 @@ from uuid import uuid4
 from schema.membership_plan import DurationUnit, PlanType
 
 from src.plans.plans_schema import (
-    LinkedDiscountValue,
     MembershipPlanCreateRequest,
     MembershipPlanPriceRequest,
     MembershipPlanUpdateData,
@@ -123,48 +122,6 @@ async def test_create_one_time_plan(
     assert price.recurring is None, (
         f"One-time Stripe price {price.id} unexpectedly has a recurring block"
     )
-
-
-async def test_create_plan_with_linked_discount_values(
-    plans_service,
-    gym_id,
-    created,
-):
-    """Linked (family) tiers are real $ off / % off discount values that
-    round-trip through create and read (not the old dollar 'member price')."""
-    resp = await plans_service.create_plan(
-        MembershipPlanCreateRequest(
-            gym_id=gym_id,
-            plan_name="Family Unlimited",
-            plan_type=PlanType.recurring,
-            duration_amount=1,
-            duration_unit=DurationUnit.month,
-            price=10000,
-            linked_discount_enabled=True,
-            linked_discount_values=[
-                LinkedDiscountValue(percentage_off=20),
-                LinkedDiscountValue(dollar_off=1500),
-            ],
-        ),
-    )
-    _track_plan(created, resp)
-    for did in resp.linked_discount_ids:
-        created.track_discount(did)
-
-    # Create response echoes the entered values (percent vs dollar preserved).
-    assert resp.linked_discount_enabled is True
-    assert len(resp.linked_discount_values) == 2
-    assert resp.linked_discount_values[0].percentage_off == 20
-    assert resp.linked_discount_values[0].dollar_off is None
-    assert resp.linked_discount_values[1].dollar_off == 1500
-    assert resp.linked_discount_values[1].percentage_off is None
-
-    # The read path resolves the minted linked discounts back to the same
-    # per-tier values, in tier order.
-    fetched = await plans_service.get_plan(resp.plan_id, gym_id)
-    assert len(fetched.linked_discount_values) == 2
-    assert fetched.linked_discount_values[0].percentage_off == 20
-    assert fetched.linked_discount_values[1].dollar_off == 1500
 
 
 async def test_update_plan_name(

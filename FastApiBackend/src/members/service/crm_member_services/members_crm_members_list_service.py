@@ -7,12 +7,13 @@ the final response.
 from src.members.schema.members_crm_members_list_schema import (
     CrmMembersListRequest,
     CrmMembersListResponse,
-    CrmMemberStatus,
-    MembersListFilters,
     MembersListView,
 )
 from src.members.service.crm_member_services.members_crm_all_service import (
     CrmAllViewService,
+)
+from src.members.service.crm_member_services.members_crm_base_service import (
+    CrmBaseViewService,
 )
 from src.members.service.crm_member_services.members_crm_frozen_service import (
     CrmFrozenViewService,
@@ -29,8 +30,12 @@ from src.shared.database import DirectDatabasePool
 class CrmMembersListService:
     """Orchestrator for the CRM members list screen.
 
-    Routes requests to the appropriate view service and
-    assembles the response with total counts.
+    Routes each request to the view service named by
+    ``request.view`` and applies ``request.filters`` as-is.
+    The view (which decides the row shape) and the filters
+    are independent: the service does no view/filter
+    reconciliation, so a filter the user set stays put when
+    the view tab changes and never moves the view.
 
     Args:
         db_pool: Injected database connection pool.
@@ -56,120 +61,41 @@ class CrmMembersListService:
         Returns:
             CrmMembersListResponse with pre-formatted rows.
         """
-        resolved_view, cleaned_filters = self._reconcile_view_and_filters(
-            request.prev_view,
-            request.requested_view,
-            request.filters,
-        )
-
-        match resolved_view:
-            case MembersListView.all:
-                service = self._all
-            case MembersListView.trial:
-                service = self._trial
-            case MembersListView.frozen:
-                service = self._frozen
-            case MembersListView.overdue:
-                service = self._overdue
+        service = self._service_for(request.view)
 
         async with self._db_pool.session() as session:
             data = await service.fetch(
                 session,
                 request.gym_id,
-                cleaned_filters,
+                request.filters,
                 request.start_index,
                 request.count,
             )
 
         return CrmMembersListResponse(
-            view=resolved_view,
-            filters=cleaned_filters,
+            view=request.view,
+            filters=request.filters,
             data=data,
         )
 
-    def _reconcile_view_and_filters(
+    def _service_for(
         self,
-        prev_view: MembersListView,
-        requested_view: MembersListView,
-        filters: MembersListFilters,
-    ) -> tuple[MembersListView, MembersListFilters]:
-        """Reconcile the requested view with the active filters.
-
-        When the user switches views, auto-inject or strip
-        status filters. When the user changes filters on the
-        same view, resolve the view from the status filters.
+        view: MembersListView,
+    ) -> CrmBaseViewService:
+        """Pick the view service for the requested view.
 
         Args:
-            prev_view: The view the user was on before.
-            requested_view: The view the user is requesting.
-            filters: Active filters from the frontend.
+            view: The view the user is requesting.
 
         Returns:
-            Tuple of (resolved_view, cleaned_filters).
+            The matching view-specific service.
         """
-        if prev_view != requested_view:
-            return self._reconcile_view_switch(requested_view, filters)
-        return self._reconcile_filter_change(requested_view, filters)
-
-    def _reconcile_view_switch(
-        self,
-        requested_view: MembersListView,
-        filters: MembersListFilters,
-    ) -> tuple[MembersListView, MembersListFilters]:
-        """Handle reconciliation when the user switches views.
-
-        Replaces membership_status with the view's required
-        status, keeps date_range.
-
-        Args:
-            requested_view: The view the user is switching to.
-            filters: Current filters from the frontend.
-
-        Returns:
-            Tuple of (resolved_view, cleaned_filters).
-        """
-        match requested_view:
+        match view:
+            case MembersListView.all:
+                return self._all
             case MembersListView.trial:
-                status = [CrmMemberStatus.trial]
+                return self._trial
             case MembersListView.frozen:
-                status = [CrmMemberStatus.frozen]
+                return self._frozen
             case MembersListView.overdue:
-                status = [CrmMemberStatus.overdue]
-            case _:
-                status = []
-
-        filters.membership_status = status
-        return requested_view, filters
-
-    def _reconcile_filter_change(
-        self,
-        current_view: MembersListView,
-        filters: MembersListFilters,
-    ) -> tuple[MembersListView, MembersListFilters]:
-        """Handle reconciliation when filters change on the
-        same view.
-
-        If exactly one membership status is selected, switch
-        to the matching view. Otherwise resolve to All.
-
-        Args:
-            current_view: The view the user is currently on.
-            filters: Updated filters from the frontend.
-
-        Returns:
-            Tuple of (resolved_view, cleaned_filters).
-        """
-        statuses = filters.membership_status
-
-        if len(statuses) != 1:
-            return MembersListView.all, filters
-
-        match statuses[0]:
-            case CrmMemberStatus.trial:
-                return MembersListView.trial, filters
-            case CrmMemberStatus.frozen:
-                return MembersListView.frozen, filters
-            case CrmMemberStatus.overdue:
-                return MembersListView.overdue, filters
-            case _:
-                return MembersListView.all, filters
+                return self._overdue

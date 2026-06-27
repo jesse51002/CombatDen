@@ -41,8 +41,8 @@ class AddRewardCard extends StatelessWidget {
               ),
               ClipOval(
                 child: SizedBox(
-                  height: 72,
-                  width: 72,
+                  height: DesignConstants.rewardAvatarSize,
+                  width: DesignConstants.rewardAvatarSize,
                   child: Image.asset(template.imageAsset, fit: BoxFit.cover),
                 ),
               ),

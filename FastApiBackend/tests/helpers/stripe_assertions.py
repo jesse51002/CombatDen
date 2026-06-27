@@ -146,7 +146,8 @@ async def assert_immediate_prorated_invoice(
 
     Complement of :func:`assert_no_unexpected_charges` for operations
     that are expected to bill immediately (e.g. membership start with
-    ``prorate=True`` or a mid-cycle upgrade with ``prorate=True``).
+    ``proration_behavior=prorate_to_anchor`` or a mid-cycle upgrade with
+    ``proration_behavior=prorate_to_anchor``).
 
     Checks:
         * Exactly one new invoice id appeared for the customer.

@@ -44,7 +44,6 @@ class MembersBillingProfileResponse(BaseModel):
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
-    account_linked_to_id: UUID | None = None
     stripe_customer_id: str | None = None
     stripe_payment_method_id: str | None = None
     card_brand: str | None = None
@@ -76,13 +75,30 @@ class BillingLinkedAccount(BaseModel):
     photo_url: str | None = None
 
 
-class BillingPayingForMember(BillingLinkedAccount):
-    """A member on a plan with their class usage for the current cycle."""
+class BillingPaidForMember(BillingLinkedAccount):
+    """A beneficiary an invoice was paid FOR (the invoice's paid_for).
 
-    status: CrmMemberStatus
-    class_count: int | None = None
-    classes_used: int = 0
-    classes_remaining: int | None = None
+    Usually just the payer themselves; a parent paying for a child (or a
+    consolidated family invoice) lists each beneficiary, so a payment shows
+    on — and is refundable from — each of their pages.
+    """
+
+
+class BillingPaysForMembership(BaseModel):
+    """One active recurring membership the viewed member funds."""
+
+    item_id: UUID
+    plan_name: str
+
+
+class BillingPaysForMember(BillingLinkedAccount):
+    """A member whose recurring memberships the viewed member pays for,
+    with the funded membership(s). Drives the freeze-impact display:
+    freezing the viewed member pauses every membership listed across
+    ``pays_for`` (their whole subscription), the viewed member included.
+    """
+
+    memberships: list[BillingPaysForMembership] = []
 
 
 class BillingDiscountInfo(BaseModel):
@@ -100,50 +116,46 @@ class BillingDiscountInfo(BaseModel):
     amount_off: int
 
 
-class BillingMembershipMemberInfo(BaseModel):
-    """Per-member membership details within a grouped plan.
-
-    ``base_cost`` and ``total_price`` are this membership's own
-    ``member_memberships`` numbers (its pinned price and its **own**
-    post-discount share — the plan price minus this member's own
-    discounts), so the CRM renders the membership card atomically for one
-    covered member at a time rather than as a family-wide aggregate.
-    """
-
-    item_id: UUID
-    end_date: date | None = None
-    cancel_date: date | None = None
-    on_outdated_price: bool = False
-    base_cost: int
-    total_price: int
-
-
 class BillingMembershipInfo(BaseModel):
-    """A grouped plan in the membership carousel.
+    """One membership in the CRM member-detail carousel.
 
-    ``total_price`` here is the plan-level total — the **sum** of the active
-    memberships' own post-discount shares (each ``members[...].total_price``).
-    Per-member shares live in ``members``; use those for an individual covered
-    member, this for the whole plan.
+    The carousel is scoped to the viewed member, and ``member_details.sql``
+    returns one row per (member, plan), so each card is exactly one of the
+    viewed member's own memberships — there is no cross-member grouping.
+
+    ``base_cost`` / ``total_price`` are this membership's own
+    ``member_memberships`` numbers (its pinned price and its **own**
+    post-discount share). They are kept regardless of status — the
+    ``status`` badge conveys frozen / cancelled — so a paused card still
+    shows what it bills. ``paid_by_member_id`` is the membership's PAYER
+    (the member themselves or an authorized payer), driving the "Paid by"
+    display. ``class_count`` / ``classes_used`` / ``classes_remaining`` are
+    the member's class usage for the current cycle (None / 0 when absent).
     """
 
     plan_id: UUID
     plan_name: str
     plan_type: PlanType | None = None
     status: CrmMemberStatus
+    item_id: UUID
+    paid_by_member_id: UUID
     base_cost: int
     current_active_price: int | None = None
+    on_outdated_price: bool = False
     duration_amount: int
     duration_unit: str
     total_price: int
     last_paid_date: date | None = None
     next_due_date: date | None = None
     start_date: date
+    end_date: date | None = None
+    cancel_date: date | None = None
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
-    paying_for: list[BillingPayingForMember] = []
+    class_count: int | None = None
+    classes_used: int = 0
+    classes_remaining: int | None = None
     discounts: list[MemberMembershipsAppliedDiscount] = []
-    members: dict[UUID, BillingMembershipMemberInfo] = {}
 
 
 class BillingRetention(BaseModel):
@@ -182,7 +194,13 @@ class BillingRewardCard(BaseModel):
 
 
 class BillingLineItemRecord(BaseModel):
-    """A single line item on an invoice."""
+    """A single line item on an invoice.
+
+    ``owner_label`` names the member(s) this line was FOR, comma-joined — a
+    membership line resolves all co-owners on its (possibly consolidated)
+    Stripe item; a custom/ad-hoc line has none. Lets the UI label each line
+    "Plan · Owner A, Owner B" on a consolidated family invoice.
+    """
 
     line_item_id: str
     item_type: LineItemType
@@ -191,6 +209,7 @@ class BillingLineItemRecord(BaseModel):
     quantity: int = 1
     stripe_product_id: str | None = None
     item_id: UUID | None = None
+    owner_label: str | None = None
 
 
 class BillingInvoiceAttempt(BaseModel):
@@ -213,9 +232,9 @@ class BillingInvoiceAttempt(BaseModel):
 class BillingPaymentRecord(BaseModel):
     """A single charge (payment or refund) against an invoice.
 
-    ``paid_by_*`` identify the account that was charged (the payer) so the
-    member-detail history can label each row — the charges are attributed to
-    the member by membership, so the payer may be a paying parent.
+    ``paid_by_*`` identify the account that was charged (the payer); ``paid_for``
+    lists who the bill was FOR (the beneficiaries — usually just the payer). A
+    parent paying for a child shows on both pages, each correctly labelled.
     """
 
     charge_id: UUID
@@ -232,13 +251,19 @@ class BillingPaymentRecord(BaseModel):
     paid_by_first_name: str
     paid_by_last_name: str
     paid_by_photo_url: str | None = None
+    paid_for: list[BillingPaidForMember] = []
     line_items: list[BillingLineItemRecord] = []
     applied_discounts: list[BillingDiscountInfo] = []
     attempts: list[BillingInvoiceAttempt] = []
 
 
 class BillingCardOnFile(BaseModel):
-    """Saved card details for the paying account."""
+    """The member's OWN saved card (their Stripe customer's default).
+
+    Per-payer billing: this is the queried member's own card, never a
+    linked parent's — a payer-scoped read shows the card that will be
+    charged. None when the member has no saved card of their own.
+    """
 
     brand: str
     last_four: str
@@ -250,7 +275,7 @@ class MemberBillingDetailResponse(BaseModel):
     """Full member detail response for the CRM Specific Member screen.
 
     Extends the standard MemberDetailResponse with billing data:
-    memberships, payment history, linked accounts, and card on file.
+    memberships, payment history, authorization rosters, and card on file.
     """
 
     member_id: UUID
@@ -260,11 +285,17 @@ class MemberBillingDetailResponse(BaseModel):
     photo_url: str | None = None
     account_status: str | None = None
     membership_overview: str
-    linked_to_account: UUID | None = None
     total_monthly_recurring_price: int
     total_membership_count: int
     personal_info: BillingPersonalInfo
-    linked_accounts: list[BillingLinkedAccount] = []
+    # Authorization rosters (who MAY pay for whom — many-to-many), distinct from
+    # `pays_for` (the actual billing relationship via paid_by_member_id).
+    authorized_payers: list[BillingLinkedAccount] = []
+    authorized_to_pay_for: list[BillingLinkedAccount] = []
+    # Every member (the viewed member included) whose recurring
+    # memberships the viewed member funds — what a freeze on this member
+    # would pause. Empty when they pay for nobody / nothing recurring.
+    pays_for: list[BillingPaysForMember] = []
     memberships: list[BillingMembershipInfo]
     retention: BillingRetention
     rank: BillingRank | None = None

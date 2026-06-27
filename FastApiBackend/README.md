@@ -15,7 +15,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>11 domains · 73 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks · tasks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -37,13 +37,13 @@ talks to **Stripe** for payments, Connect onboarding, and inbound webhooks. Dash
 
 **For the full internal graph** — every route, the service classes, the grouped **Payments** Stripe
 core, the cross-cutting **`PaymentSyncService`** (the declarative reconciler called by three domains —
-it re-derives each family's desired Stripe state from the DB and converges Stripe onto it), and the
-shared **`BillingParentResolver`** — see
+it re-derives each payer's desired Stripe state from the DB and converges Stripe onto it), and the
+shared **`PayerResolver`** — see
 **[`architecture.mermaid`](architecture.mermaid)** (generated from the DI wiring; render it with the
 `mermaid-creation` skill).
 
 **For the payment-sync engine in depth** — the step-by-step orchestration flow of
-`update_payments_recurring` (resolve → freeze re-apply → settle once → build + resolve coupons →
+`update_payments_recurring` (resolve → build + resolve coupons (freeze = a 100%-off line) →
 execute → write back, returning `None`), plus the `preview` / `bulk` / deferred-reconciler branches —
 see
 **[`payment_sync.mermaid`](payment_sync.mermaid)**. The sync steps are grouped in one box with
@@ -52,7 +52,9 @@ see
 solid = a live runtime call, dashed = future / shared-code. Deep engine knowledge lives in the
 `sync-guide` skill.
 
-**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → invoice-fetch → orphan-clean → push, whose sync self-heals a gone subscription), and the webhook `record` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
+**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → invoice-fetch → orphan-clean → push, whose sync self-heals a gone subscription, → subscription-orphans, which cancels live Stripe subs with no live DB link), and the webhook `record` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
+
+**Invoice absorption fast path:** right after any invoice-creating membership op (`charge_card`, `start`, `upgrade`, prorating reprice, `mark-paid-cash`), a **deterministic post-op invoice fetch** fires fire-and-forget — it pulls that payer's new invoices from Stripe immediately and applies them via the same idempotent webhook `record()` seams, without waiting for the `invoice.paid` / `invoice_payment.paid` webhooks. Webhooks + the twice-daily reconciler sweep remain backstops. See `memberships-guide`.
 
 ---
 
@@ -70,19 +72,20 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 
 | Domain | What it does |
 |---|---|
-| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices) |
+| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices); **payer authorization**: `PUT /{member_id}/link` authorizes a payer (signs the gym's default authorized-payer waiver atomically; many-to-many `member_authorized_payers`), `POST /link/remove` cascades-cancel then de-authorizes (the only unlink path — de-authorizing without cancelling would orphan billing), `GET /{member_id}/authorized-payer-waiver` fetches the waiver to display before signing |
 | `classes` | Gated class check-in (plan eligibility + capacity + auto-end) + attendance streaks + per-cycle class usage (feeds member billing detail) |
 | `gyms` | Gym records + Stripe **Connect** Express onboarding |
 | `ranks` | Rank tiers / point thresholds + presets |
 | `rewards` | Reward catalog + redemptions |
-| `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
+| `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status); `WaiversService` is also injected into `MemberMembershipsLinked` to record the payer's signature when authorizing a payer |
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
-| `memberships` | Member ↔ plan subscriptions: one list-based **start** (a payer's family in one call, discounts applied at creation, ≤2 charges — one consolidated one-time invoice + one recurring converge — per-membership breakdown out), freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync; one-time/trial = creation-only), previews (start = 3-way `one_time / due_now / recurring`), cash/card charge, link/unlink family accounts (pure DB change) |
-| `plans` | Plan + price templates (Stripe products / prices) + migration |
+| `memberships` | Member ↔ plan subscriptions: one list-based **start** (a payer's family in one call, discounts applied at creation, an optional `payment` card entered at checkout — a one-off for the one-time invoice, or saved as the default FIRST via members-management so recurring bills it; the default-save aborts the whole start if it fails — ≤2 charges — one consolidated one-time invoice + one recurring converge — per-membership breakdown out), freeze/unfreeze, **reprice** (membership rows are append-only — `price_id`/`stripe_item_id` immutable, so a reprice cancels the old row + inserts a successor: `PUT /price` upgrades ONE member directly/synchronously, `POST /reprice-plan` batch-upgrades every member on a plan to its active price as a tracked task the CRM polls via `/tasks`), apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync; one-time/trial = creation-only), previews (start = 3-way `one_time / due_now / recurring`), cash/card charge, **refund** a prior charge (card → Stripe refund + record; cash → record only — standalone, mirrors charge-card); payer authorization via `MemberMembershipsLinked` — `member_authorized_payers` many-to-many, **waiver-gated** (signing the gym's default authorized-payer waiver is required and written atomically with the authorization row) |
+| `plans` | Plan + price templates (Stripe products / prices); moving members to a new price is the per-plan reprice (in `memberships`, `POST /reprice-plan`) |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
+| `tasks` | Tracked background operations (`tasks` + `task_items` tables): an op endpoint creates a task and returns its id immediately; the executor claims items atomically, dispatches to the task_type's registered handler (e.g. `membership_reprice`), and retries ×3. Crash recovery lives in the **reconciler** — its twice-daily sweep re-runs unfinished tasks (the tasks domain has no scheduler of its own). Read-only polling routes (`GET /tasks/ongoing`, `GET /tasks/{id}`); item-targeted membership ops reject mid-task rows (409) |
 | `sync` *(no router)* | Payment-sync engine: re-derives the family's desired Stripe subscription state from the DB on every membership mutation and converges Stripe onto it. Also owns the one-time invoice charge path. |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |
-| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill, `not_added` orphan cleanup, and the CRM→Stripe push (`bulk_payment_sync`, whose sync self-heals a gone subscription). See the `reconciler-guide` skill |
+| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill (delegates per gym to `MemberMembershipsInvoiceFetch.sweep_account` in `memberships` — the reconciler calls in, never the reverse), stale-task recovery (re-runs unfinished `tasks` whose in-process run died), `not_added` orphan cleanup, the CRM→Stripe push (`bulk_payment_sync`, whose sync self-heals a gone subscription), and the subscription-orphan sweep (cancel live Stripe subs with no live DB link). See the `reconciler-guide` skill |
 
 ## Conventions (the load-bearing rules)
 

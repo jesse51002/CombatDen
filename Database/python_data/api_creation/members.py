@@ -14,9 +14,10 @@ member we:
      rewards-managed and immutable to the API, so the create endpoint won't
      accept it.
 
-Linked children POST with no card (they can hold none per the
-`linked_account_no_stripe` constraint); they still get a cardless Stripe
-customer, and the parent pays.
+Linked children POST with a card only when they SELF-PAY (own subscription);
+a parent-paid child POSTs cardless (they still get a Stripe customer, but the
+parent's card pays). Either way the child is linked under the parent in the
+family pipeline.
 
 Member creation has no per-family billing lock, so it runs concurrently across
 members (each member is independent). Linking children to parents and account
@@ -127,10 +128,11 @@ def _create_one(
         payload["current_rank_id"] = str(member.current_rank_id)
     if member.auth_user_id is not None:
         payload["user_id"] = str(member.auth_user_id)
-    # Every member is provisioned a Stripe customer at creation. Non-children
-    # also get a default card in the same call; linked children hold no card
-    # (the parent pays) and are linked under the parent in the family pipeline.
-    if not member.is_linked_child:
+    # Every member is provisioned a Stripe customer at creation. A member also
+    # gets a default card when they will be billed directly: a root/solo (not a
+    # linked child) OR a SELF-PAYING linked child (own card, own subscription).
+    # A parent-paid linked child holds no card — the parent pays.
+    if not member.is_linked_child or member.self_pays:
         payload["payment_method_id"] = "pm_card_visa"
 
     resp = api.post("/api/v1/members/", json=payload)

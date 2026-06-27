@@ -82,7 +82,6 @@ async def test_billing_detail_surfaces_active_applied_discount(
             gym_id,
             name="Billing-detail 10% Off",
             percentage_off=10.0,
-            discount_mode="ongoing",
         )
 
         await _start_membership(memberships_service, member, gym_id, plan)
@@ -126,14 +125,13 @@ async def test_billing_detail_surfaces_active_applied_discount(
         info = applied[0]
         assert info.percentage_off == 10.0
         assert info.dollar_off is None
-        assert info.discount_mode == "ongoing"
         # The rich applied-discount fields the CRM needs to group + remove the
         # discount must be populated (item-scoped, removable by id).
         assert info.item_id == item_id
         assert info.member_id == member.member_id
         assert info.applied_discount_id is not None
         assert info.value_id is not None
-        # Ongoing forever (no duration / explicit end_date) -> applied-discount
+        # Forever (no duration / explicit end_date) -> applied-discount
         # row's end_date is NULL and the currently-active filter keeps it.
         assert info.end_date is None
     finally:

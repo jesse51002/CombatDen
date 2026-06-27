@@ -3,10 +3,11 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'linked_account.g.dart';
 
-/// A linked family/group member account.
+/// A member in an authorization relationship — an element of
+/// `authorizedPayers` (who may pay for the viewed member) or
+/// `authorizedToPayFor` (who the viewed member may pay for).
 ///
-/// Mirrors the merged `BillingLinkedAccount` schema
-/// (member-id keyed).
+/// Mirrors the backend `BillingLinkedAccount` schema (member-id keyed).
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,

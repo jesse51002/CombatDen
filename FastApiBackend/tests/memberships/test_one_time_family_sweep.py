@@ -35,13 +35,14 @@ from src.payments.service.payments_stripe_members_service import (
 from src.payments.service.payments_stripe_payment_service import (
     PaymentsStripePaymentService,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_resolver import PayerResolver
 from src.shared.sql_loader import load_sql
 from src.sync.service.sync_discounts import PaymentSyncDiscounts
 from src.sync.service.sync_one_time import PaymentSyncOneTime
 from tests.helpers.db_reads import get_applied_discounts
+from tests.helpers.db_writes import authorize_payer
 
 _SEEDED_GYM_TZ = "America/Chicago"
 
@@ -51,12 +52,12 @@ def _build_one_time_engine(db_pool, stripe_client) -> PaymentSyncOneTime:
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     payment_svc = PaymentsStripePaymentService(stripe_client, members_svc)
-    parent_resolver = BillingParentResolver(db_pool, GymStripeService(db_pool))
+    payer_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
     return PaymentSyncOneTime(
         db_pool,
         discounts=PaymentSyncDiscounts(discount_svc),
         payment_service=payment_svc,
-        parent_resolver=parent_resolver,
+        payer_resolver=payer_resolver,
     )
 
 
@@ -73,6 +74,7 @@ async def _insert_pending_one_time(
     db_pool,
     *,
     member_id: UUID,
+    paid_by_member_id: UUID,
     gym_id: UUID,
     plan_id: UUID,
     price_id: UUID,
@@ -82,11 +84,13 @@ async def _insert_pending_one_time(
     """Insert a pending (``not_added``) one-time membership row like ``start``.
 
     The insert SQL is the multi-row (array-bound) form; this helper passes
-    one-element arrays.
+    one-element arrays. ``paid_by_member_id`` is the payer the one-time sweep
+    groups on — the family-sweep scenario bills both rows to the parent.
     """
     sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
     params = {
         "member_ids": [str(member_id)],
+        "paid_by_member_ids": [str(paid_by_member_id)],
         "gym_ids": [str(gym_id)],
         "plan_ids": [str(plan_id)],
         "price_ids": [str(price_id)],
@@ -95,9 +99,10 @@ async def _insert_pending_one_time(
         "last_paid_dates": [start_date],
         "next_due_dates": [None],
         "stripe_item_ids": [None],
-        "prorates": [True],
         "total_prices": [total_price],
+        "quantities": [1],
         "sync_statuses": [StripeSyncStatus.not_added.value],
+        "idempotency_keys": [None],
     }
     async with db_pool.session() as session:
         result = await session.execute(text(sql), params)
@@ -137,19 +142,8 @@ async def test_family_sweep_one_invoice_two_lines(
     payer = await created.member(gym_id, payment_method_id=pm_id)
     child = await created.member(gym_id, first_name="Child", last_name="Sweep")
 
-    # Link the child to the payer (NULLs the child's card; child rides the
-    # payer's invoice). Allowed: the child has no active recurring memberships
-    # (a pending one-time row is not recurring).
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child.member_id),
-                "parent_member_id": str(payer.member_id),
-            },
-        )
-        await session.commit()
+    # Authorize the payer to pay for the child (sign-gated junction row).
+    await authorize_payer(db_pool, child.member_id, payer.member_id)
 
     plan = await created.plan(
         gym_id,
@@ -160,31 +154,37 @@ async def test_family_sweep_one_invoice_two_lines(
     )
     pct_preset = await created.discount(
         gym_id,
-        name="10% once sweep",
+        name="10% 1-cycle sweep",
         percentage_off=10.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
     amt_preset = await created.discount(
         gym_id,
-        name="$5 off once sweep",
+        name="$5 off 1-cycle sweep",
         percentage_off=None,
         dollar_off=500,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     start_date = gym_today(_SEEDED_GYM_TZ)
     payer_item = await _insert_pending_one_time(
         db_pool,
         member_id=payer.member_id,
+        paid_by_member_id=payer.member_id,
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
         start_date=start_date,
         total_price=5000,
     )
+    # The parent pays for the child's one-time purchase too (paid_by = payer),
+    # so both land on the payer's single consolidated invoice.
     child_item = await _insert_pending_one_time(
         db_pool,
         member_id=child.member_id,
+        paid_by_member_id=payer.member_id,
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
@@ -236,10 +236,10 @@ async def test_family_sweep_one_invoice_two_lines(
     # different coupons (percent vs dollar), not an averaged single discount.
     payer_snaps = await get_applied_discounts(db_pool, payer_item)
     child_snaps = await get_applied_discounts(db_pool, child_item)
-    assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000_once"
-    assert child_snaps[0]["stripe_coupon_id"] == "amt_500_once"
-    created.track_coupon("pct_1000_once")
-    created.track_coupon("amt_500_once")
+    assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000"
+    assert child_snaps[0]["stripe_coupon_id"] == "amt_500"
+    created.track_coupon("pct_1000")
+    created.track_coupon("amt_500")
 
     # The Stripe invoice itself carries exactly 2 lines.
     invoice = await stripe_client.client.v1.invoices.retrieve_async(

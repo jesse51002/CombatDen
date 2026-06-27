@@ -1,8 +1,10 @@
 """Stripe create/update/cancel operations for the payment sync flow."""
 
-from typing import Literal
 from uuid import UUID, uuid4
 
+from schema.task import ProrationBehavior
+
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
@@ -19,7 +21,7 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 from src.sync.sync_schema import (
     IntervalBucket,
 )
@@ -39,17 +41,17 @@ class PaymentSyncStripe:
     async def execute_sync(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> PaymentsSubscriptionResponse | None:
         """Create, update, or cancel the monthly subscription.
 
         Args:
             bucket: Desired subscription state.
-            parent: Paying parent profile (customer + metadata source).
+            payer: The payer profile (customer + metadata source).
             stripe_account_id: The gym's Stripe Connect account ID.
             idempotency_key: Base key for Stripe. Sub-operation keys
                 are derived from it (``:sub_create``, ``:sub_update``,
@@ -69,7 +71,7 @@ class PaymentSyncStripe:
         if bucket.items:
             return await self._sync_bucket(
                 bucket,
-                parent,
+                payer,
                 stripe_account_id,
                 idempotency_key=idempotency_key,
                 pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
@@ -90,9 +92,9 @@ class PaymentSyncStripe:
     async def preview_execute_sync(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> DueNowVsRecurringPreview | None:
         """Preview the sync as a due-now / recurring split.
 
@@ -105,10 +107,10 @@ class PaymentSyncStripe:
 
         Args:
             bucket: Desired subscription state.
-            parent: Paying parent profile (customer + metadata source).
+            payer: The payer profile (customer + metadata source).
             stripe_account_id: The gym's Stripe Connect account ID.
-            proration_behavior: ``always_invoice`` to also fetch the
-                immediate (prorated) ``due_now`` invoice; ``none`` to
+            proration_behavior: ``prorate_to_anchor`` to also fetch the
+                immediate (prorated) ``due_now`` invoice; ``no_charge`` to
                 reuse the recurring preview as ``due_now``.
 
         Returns:
@@ -119,11 +121,14 @@ class PaymentSyncStripe:
             return None
 
         recurring = await self._run_preview(
-            bucket, parent, stripe_account_id, "none"
+            bucket, payer, stripe_account_id, ProrationBehavior.no_charge
         )
-        if proration_behavior == "always_invoice":
+        if proration_behavior == ProrationBehavior.prorate_to_anchor:
             due_now = await self._run_preview(
-                bucket, parent, stripe_account_id, "always_invoice"
+                bucket,
+                payer,
+                stripe_account_id,
+                ProrationBehavior.prorate_to_anchor,
             )
         else:
             due_now = recurring
@@ -135,9 +140,9 @@ class PaymentSyncStripe:
     async def _run_preview(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
-        proration_behavior: Literal["none", "always_invoice"],
+        proration_behavior: ProrationBehavior,
     ) -> PreviewInvoice:
         """One Stripe invoice preview at a given proration behavior.
 
@@ -148,31 +153,31 @@ class PaymentSyncStripe:
         """
         placeholder_key = str(uuid4())
         metadata = StripeSubscriptionMetadata(
-            member_id=parent.member_id,
-            gym_id=parent.gym_id,
+            member_id=payer.member_id,
+            gym_id=payer.gym_id,
         )
         if bucket.existing_sub_id:
             return await self._subscriptions.preview_update_subscription(
                 PaymentsSubscriptionUpdateRequest(
                     stripe_subscription_id=bucket.existing_sub_id,
-                    stripe_customer_id=parent.stripe_customer_id,
+                    stripe_customer_id=payer.stripe_customer_id,
                     items=bucket.items,
                     proration_behavior=proration_behavior,
                     metadata=metadata,
                     idempotency_key=placeholder_key,
-                    gym_timezone=parent.timezone,
+                    gym_timezone=payer.timezone,
                 ),
                 stripe_account_id,
             )
 
         return await self._subscriptions.preview_create_subscription(
             PaymentsSubscriptionCreateRequest(
-                stripe_customer_id=parent.stripe_customer_id,
+                stripe_customer_id=payer.stripe_customer_id,
                 items=bucket.items,
                 proration_behavior=proration_behavior,
                 metadata=metadata,
                 idempotency_key=placeholder_key,
-                gym_timezone=parent.timezone,
+                gym_timezone=payer.timezone,
             ),
             stripe_account_id,
         )
@@ -182,12 +187,12 @@ class PaymentSyncStripe:
     async def _sync_bucket(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
         *,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> PaymentsSubscriptionResponse:
         """Create or update the subscription for this bucket.
 
@@ -201,33 +206,33 @@ class PaymentSyncStripe:
         out of band here — only the create's first invoice does.
         """
         metadata = StripeSubscriptionMetadata(
-            member_id=parent.member_id,
-            gym_id=parent.gym_id,
+            member_id=payer.member_id,
+            gym_id=payer.gym_id,
         )
         if bucket.existing_sub_id:
             return await self._subscriptions.update_subscription(
                 PaymentsSubscriptionUpdateRequest(
                     stripe_subscription_id=bucket.existing_sub_id,
-                    stripe_customer_id=parent.stripe_customer_id,
+                    stripe_customer_id=payer.stripe_customer_id,
                     items=bucket.items,
                     pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
                     proration_behavior=proration_behavior,
                     metadata=metadata,
                     idempotency_key=f"{idempotency_key}:sub_update",
-                    gym_timezone=parent.timezone,
+                    gym_timezone=payer.timezone,
                 ),
                 stripe_account_id,
             )
 
         return await self._subscriptions.create_subscription(
             PaymentsSubscriptionCreateRequest(
-                stripe_customer_id=parent.stripe_customer_id,
+                stripe_customer_id=payer.stripe_customer_id,
                 items=bucket.items,
                 pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
                 proration_behavior=proration_behavior,
                 metadata=metadata,
                 idempotency_key=f"{idempotency_key}:sub_create",
-                gym_timezone=parent.timezone,
+                gym_timezone=payer.timezone,
             ),
             stripe_account_id,
         )

@@ -1,4 +1,8 @@
+import json
 import logging
+from collections.abc import Awaitable, Callable
+from functools import partial
+from typing import Any
 
 import stripe
 from stripe.params._invoice_create_params import InvoiceCreateParams
@@ -16,6 +20,7 @@ from stripe.params._invoice_pay_params import InvoicePayParams
 from stripe.params._invoice_update_params import InvoiceUpdateParams
 from stripe.params._refund_create_params import RefundCreateParams
 
+from src.core.config import settings
 from src.payments.payments_exceptions import (
     PaymentsResourceNotFoundError,
     PaymentsStripeError,
@@ -42,7 +47,6 @@ from src.payments.service.payments_stripe_members_service import (
 )
 
 INVOICE_STATUS_OPEN = "open"
-SUBSCRIPTION_OPEN_INVOICE_LIMIT = 1
 
 logger = logging.getLogger(__name__)
 
@@ -125,19 +129,14 @@ class PaymentsStripePaymentService:
         # Zero-amount invoices are auto-marked paid at finalization, so paying
         # again raises "Invoice is already paid".
         if invoice.status != "paid":
-            pay_params = InvoicePayParams()
-            if request.paid_out_of_band:
-                pay_params["paid_out_of_band"] = True
-            invoice = await self._stripe.v1.invoices.pay_async(
+            invoice = await self._pay_invoice(
                 invoice.id,
-                params=pay_params,
-                options=self._client.connect_opts(
-                    stripe_account_id,
-                    idempotency_key=f"{base_key}:pay",
-                ),
+                request,
+                stripe_account_id,
             )
 
-        ordered_lines = self._order_lines(invoice, invoice_item_ids)
+        all_lines = await self._all_invoice_lines(invoice, stripe_account_id)
+        ordered_lines = self._order_lines(all_lines, invoice_item_ids)
         return PaymentsInvoicePaymentResponse(
             stripe_invoice_id=invoice.id,
             stripe_customer_id=invoice.customer,
@@ -148,6 +147,85 @@ class PaymentsStripePaymentService:
             line_amounts=[amount for _, amount in ordered_lines],
             metadata=invoice.metadata.to_dict() if invoice.metadata else {},
         )
+
+    async def _pay_invoice(
+        self,
+        invoice_id: str,
+        request: PaymentsInvoicePaymentCreateRequest,
+        stripe_account_id: str,
+    ) -> stripe.Invoice:
+        """Pay a finalized invoice — cash, a one-off card, or the default.
+
+        A one-off card (``request.payment_method_id``) must belong to the
+        customer before Stripe will charge it, so we attach → pay → (on
+        success) detach. The detach runs ONLY after a successful pay — a
+        declined pay leaves the card attached but non-default so a retry can
+        reuse it (a detached method can never be re-attached) — and is
+        best-effort: the invoice is already paid, so a detach failure must not
+        surface as a charge failure.
+        """
+        base_key = request.idempotency_key
+        pay_params = InvoicePayParams()
+        if request.paid_out_of_band:
+            pay_params["paid_out_of_band"] = True
+
+        if request.payment_method_id is not None:
+            await self._members.attach_payment_method(
+                request.payment_method_id,
+                request.stripe_customer_id,
+                stripe_account_id,
+                idempotency_key=f"{base_key}:attach",
+            )
+            pay_params["payment_method"] = request.payment_method_id
+
+        invoice = await self._stripe.v1.invoices.pay_async(
+            invoice_id,
+            params=pay_params,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:pay",
+            ),
+        )
+
+        if request.payment_method_id is not None:
+            await self._detach_after_pay(
+                request.payment_method_id,
+                stripe_account_id,
+                idempotency_key=f"{base_key}:detach",
+            )
+
+        return invoice
+
+    async def _detach_after_pay(
+        self,
+        payment_method_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> None:
+        """Best-effort detach of a one-off card after a successful pay.
+
+        The invoice is already paid, so a detach failure is logged and
+        swallowed — raising would wrongly signal a charge failure and a caller
+        could un-bill a billed invoice.
+        """
+        try:
+            await self._members.detach_payment_method(
+                payment_method_id,
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+            )
+        except Exception:
+            # ANY failure here (Stripe error, network timeout, unexpected
+            # None) must stay swallowed — the invoice is already paid, so
+            # raising would wrongly read as a charge failure and a caller
+            # could un-bill a billed invoice.
+            logger.warning(
+                "Failed to detach one-off payment method %s after a "
+                "successful charge; it remains attached (non-default).",
+                payment_method_id,
+                exc_info=True,
+            )
 
     async def _create_items(
         self,
@@ -166,6 +244,7 @@ class PaymentsStripePaymentService:
             )
             if item.stripe_price_id is not None:
                 params["pricing"] = {"price": item.stripe_price_id}
+                params["quantity"] = item.quantity
             else:
                 params["amount"] = item.amount
                 params["currency"] = request.currency
@@ -186,9 +265,48 @@ class PaymentsStripePaymentService:
             invoice_item_ids.append(created.id)
         return invoice_item_ids
 
+    async def _all_invoice_lines(
+        self,
+        invoice: stripe.Invoice,
+        stripe_account_id: str,
+    ) -> list[stripe.InvoiceLineItem]:
+        """Return EVERY line on a finalized invoice as Stripe objects.
+
+        The embedded ``invoice.lines.data`` is only Stripe's first page
+        (default 10), so a >10-item itemized invoice (large family /
+        class-pack) would silently truncate and ``_order_lines`` would then
+        raise for the dropped items **after** the invoice was already charged.
+        We keep the embedded first page and follow ``has_more`` through the
+        dedicated line-items endpoint so the item->line map is complete. The
+        common (<=10-item) case needs no extra request.
+        """
+        lines: list[stripe.InvoiceLineItem] = list(invoice.lines.data)
+        if not getattr(invoice.lines, "has_more", False):
+            return lines
+
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        starting_after: str | None = lines[-1].id if lines else None
+        while True:
+            params: dict[str, Any] = {
+                "limit": settings.invoice_line_items_page_limit
+            }
+            if starting_after:
+                params["starting_after"] = starting_after
+            page = await self._stripe.v1.invoices.line_items.list_async(
+                invoice.id,
+                params=params,
+                options=read_opts,
+            )
+            data = list(page.data)
+            lines.extend(data)
+            if not data or not getattr(page, "has_more", False):
+                break
+            starting_after = data[-1].id
+        return lines
+
     @staticmethod
     def _order_lines(
-        invoice: stripe.Invoice,
+        lines: list[stripe.InvoiceLineItem],
         invoice_item_ids: list[str],
     ) -> list[tuple[str, int]]:
         """Map finalized invoice lines back to the InvoiceItems that created
@@ -197,12 +315,13 @@ class PaymentsStripePaymentService:
 
         Each line references its source InvoiceItem at
         ``line.parent.invoice_item_details.invoice_item`` (dahlia); the amount is
-        the line's net (post item-level discount) charge in cents. Raises if an
-        item has no matching line (e.g. the default 10-line page truncated — an
-        itemized invoice we build is far smaller).
+        the line's net (post item-level discount) charge in cents. ``lines`` must
+        be the FULL set of invoice lines (see ``_all_invoice_lines``), not just
+        Stripe's embedded first page — a missing line still raises, but only for
+        a genuinely absent item, never a paged-out one.
         """
         line_by_item: dict[str, stripe.InvoiceLineItem] = {}
-        for line in invoice.lines.data:
+        for line in lines:
             parent = getattr(line, "parent", None)
             details = getattr(parent, "invoice_item_details", None)
             invoice_item = getattr(details, "invoice_item", None)
@@ -248,7 +367,9 @@ class PaymentsStripePaymentService:
     ) -> InvoiceCreatePreviewParamsInvoiceItem:
         """Build one preview invoice-item (price or amount) with item-level
         discounts."""
-        preview_item = InvoiceCreatePreviewParamsInvoiceItem(quantity=1)
+        preview_item = InvoiceCreatePreviewParamsInvoiceItem(
+            quantity=item.quantity,
+        )
         if item.stripe_price_id is not None:
             preview_item["price"] = item.stripe_price_id
         else:
@@ -267,13 +388,19 @@ class PaymentsStripePaymentService:
         request: PaymentsRefundRequest,
         stripe_account_id: str,
     ) -> PaymentsRefundResponse:
-        """Refund a PaymentIntent (full or partial)."""
+        """Refund a charge (full or partial).
+
+        Refunds by the original charge id (``ch_…``) — what the CRM stores and
+        what the ``refund.*`` webhook keys on — so no PaymentIntent lookup is
+        needed. The response carries the refund's ``status`` / ``currency`` /
+        ``created`` so the caller can record it without a second Stripe read.
+        """
         opts = self._client.connect_opts(
             stripe_account_id, idempotency_key=request.idempotency_key
         )
 
         params = RefundCreateParams(
-            payment_intent=request.stripe_payment_intent_id,
+            charge=request.stripe_charge_id,
         )
         if request.amount is not None:
             params["amount"] = request.amount
@@ -285,9 +412,11 @@ class PaymentsStripePaymentService:
 
         return PaymentsRefundResponse(
             stripe_refund_id=refund.id,
-            stripe_payment_intent_id=request.stripe_payment_intent_id,
+            stripe_charge_id=request.stripe_charge_id,
             amount=refund.amount,
             status=refund.status,
+            currency=refund.currency,
+            created=refund.created,
         )
 
     # ── Pay Out of Band ──────────────────────────────────────────
@@ -311,7 +440,7 @@ class PaymentsStripePaymentService:
         list_params = InvoiceListParams(
             subscription=stripe_subscription_id,
             status=INVOICE_STATUS_OPEN,
-            limit=SUBSCRIPTION_OPEN_INVOICE_LIMIT,
+            limit=settings.subscription_open_invoice_limit,
         )
         try:
             invoice_list = await self._stripe.v1.invoices.list_async(
@@ -369,3 +498,101 @@ class PaymentsStripePaymentService:
             ) from exc
 
         return invoice.id
+
+    # ── Paginated read primitives (lists → plain nested dicts) ───
+    #
+    # A Stripe ``list`` yields StripeObjects; the callers (the on-demand /
+    # reconciler invoice fetch + the webhook record() seams) want the plain
+    # nested dict shape the webhook path gets from event JSON — StripeObject
+    # has no dict ``.get`` in this lib version. The object's ``str`` IS its
+    # canonical JSON, so this round-trips to exactly that shape.
+
+    async def _paginate(
+        self,
+        list_fn: Callable[..., Awaitable[Any]],
+        base_params: dict[str, Any],
+        stripe_account_id: str,
+    ) -> list[dict]:
+        """Collect every object across a paginated Stripe list, as plain dicts."""
+        opts = self._client.connect_opts_readonly(stripe_account_id)
+        out: list[dict] = []
+        starting_after: str | None = None
+        while True:
+            params = dict(base_params)
+            if starting_after:
+                params["starting_after"] = starting_after
+            page = await list_fn(params=params, options=opts)
+            data = list(page.data)
+            for obj in data:
+                out.append(json.loads(str(obj)))
+            if not data or not getattr(page, "has_more", False):
+                break
+            starting_after = data[-1].id
+        return out
+
+    async def list_invoices(
+        self,
+        stripe_account_id: str,
+        *,
+        created_gte: int,
+        limit: int,
+        customer: str | None = None,
+    ) -> list[dict]:
+        """List a Connect account's invoices created at/after ``created_gte``
+        (optionally scoped to one ``customer``), as plain dicts."""
+        params: dict[str, Any] = {
+            "created": {"gte": created_gte},
+            "limit": limit,
+        }
+        if customer is not None:
+            params["customer"] = customer
+        return await self._paginate(
+            self._stripe.v1.invoices.list_async, params, stripe_account_id
+        )
+
+    async def list_refunds(
+        self,
+        stripe_account_id: str,
+        *,
+        created_gte: int,
+        limit: int,
+    ) -> list[dict]:
+        """List a Connect account's refunds created at/after ``created_gte``,
+        as plain dicts. (refunds.list has no customer filter.)"""
+        params: dict[str, Any] = {
+            "created": {"gte": created_gte},
+            "limit": limit,
+        }
+        return await self._paginate(
+            self._stripe.v1.refunds.list_async, params, stripe_account_id
+        )
+
+    async def list_invoice_payments(
+        self,
+        stripe_account_id: str,
+        invoice_id: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """List one invoice's payments (InvoicePayment objects), as plain dicts."""
+        params: dict[str, Any] = {"invoice": invoice_id, "limit": limit}
+        return await self._paginate(
+            self._stripe.v1.invoice_payments.list_async,
+            params,
+            stripe_account_id,
+        )
+
+    async def list_invoice_line_items(
+        self,
+        stripe_account_id: str,
+        invoice_id: str,
+        *,
+        limit: int,
+    ) -> list[dict]:
+        """List ALL of one invoice's line items, as plain dicts. The endpoint
+        takes the invoice id positionally, so bind it for the paginator."""
+        return await self._paginate(
+            partial(self._stripe.v1.invoices.line_items.list_async, invoice_id),
+            {"limit": limit},
+            stripe_account_id,
+        )

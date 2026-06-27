@@ -10,6 +10,9 @@ part 'member_memberships_start_item.g.dart';
 /// Mirrors the backend `MemberMembershipsStartItem`:
 /// [priceId] alone identifies what is bought (a price
 /// belongs to exactly one plan, derived server-side).
+/// [quantity] is how many units this one item buys — a
+/// one_time / trial pack bought N at once is ONE item with
+/// `quantity = N` (not N items); recurring stays 1.
 /// [discountIds] reference existing preset / linked
 /// discounts; [customDiscounts] are inline values minted
 /// server-side as one-shot `custom` discounts. Both land
@@ -22,12 +25,14 @@ part 'member_memberships_start_item.g.dart';
 class MemberMembershipsStartItem extends Equatable {
   final String memberId;
   final String priceId;
+  final int quantity;
   final List<String> discountIds;
   final List<DiscountValue> customDiscounts;
 
   const MemberMembershipsStartItem({
     required this.memberId,
     required this.priceId,
+    this.quantity = 1,
     this.discountIds = const [],
     this.customDiscounts = const [],
   });
@@ -35,11 +40,25 @@ class MemberMembershipsStartItem extends Equatable {
   Map<String, dynamic> toJson() =>
       _$MemberMembershipsStartItemToJson(this);
 
+  // Keep Equatable's inherited getters out of the request JSON —
+  // json_serializable would otherwise serialize props / stringify /
+  // hashCode into the wire body. Equality + toString are unchanged
+  // (the overrides delegate to Equatable).
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [
         memberId,
         priceId,
+        quantity,
         discountIds,
         customDiscounts,
       ];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }

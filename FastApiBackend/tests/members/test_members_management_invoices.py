@@ -1,8 +1,15 @@
 """Integration tests for member invoice listing."""
 
+from uuid import uuid4
+
 import pytest
+from sqlalchemy import text
 
 from src.members.schema.members_schema import MemberCreateRequest
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 
 
@@ -104,3 +111,114 @@ async def test_list_invoices_no_stripe_customer_raises(
             await management_service.list_invoices(member_id)
     finally:
         await delete_member_data(db_pool, member_id)
+
+
+async def test_list_invoices_drops_canceled_sub_open_invoice(
+    management_service,
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """An OPEN invoice on a dead (canceled) subscription must not surface.
+
+    Canceling a recurring membership nulls the payer's
+    ``stripe_sub_id_month`` (cancel-sync). The dead sub's lingering open
+    invoice is uncollectible and must never appear as overdue — only the
+    live sub's invoices (or standalone one-off invoices) surface.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="recurring",
+        plan_name="Canceled Sub Invoice Test",
+        price_cents=5000,
+    )
+
+    try:
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        async with db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(
+                            "SELECT stripe_sub_id_month FROM "
+                            "member_billing_profile "
+                            "WHERE member_id = :id AND gym_id = :gym_id"
+                        ),
+                        {"id": str(member.member_id), "gym_id": str(gym_id)},
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+        stripe_sub_id = row["stripe_sub_id_month"]
+        assert stripe_sub_id is not None
+
+        # An OPEN invoice scoped to that subscription (a failed renewal).
+        await stripe_client.client.v1.invoice_items.create_async(
+            params={
+                "customer": member.stripe_customer_id,
+                "subscription": stripe_sub_id,
+                "amount": 5000,
+                "currency": "usd",
+                "description": "stale renewal on dead sub",
+            },
+            options=connect_opts,
+        )
+        pending = await stripe_client.client.v1.invoices.create_async(
+            params={
+                "customer": member.stripe_customer_id,
+                "subscription": stripe_sub_id,
+                "auto_advance": False,
+            },
+            options=connect_opts,
+        )
+        open_invoice = (
+            await stripe_client.client.v1.invoices.finalize_invoice_async(
+                pending.id,
+                options=connect_opts,
+            )
+        )
+        assert open_invoice.status == "open"
+
+        # While the sub is live, the open invoice surfaces.
+        before = await management_service.list_invoices(member.member_id)
+        assert any(i.stripe_invoice_id == open_invoice.id for i in before), (
+            "an open invoice on the live sub should surface"
+        )
+
+        # Simulate the cancel-sync clearing the dead sub's id.
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE members SET stripe_sub_id_month = NULL "
+                    "WHERE member_id = :id"
+                ),
+                {"id": str(member.member_id)},
+            )
+            await session.commit()
+
+        # Now the dead sub's open invoice must NOT surface.
+        after = await management_service.list_invoices(member.member_id)
+        assert not any(
+            i.stripe_invoice_id == open_invoice.id for i in after
+        ), "an open invoice on a canceled sub must not surface as overdue"
+    finally:
+        await delete_member_data(db_pool, member.member_id)

@@ -12,8 +12,8 @@ part 'member_memberships_start_preview.g.dart';
 /// [oneTime] — the consolidated one-time invoice (all
 /// one-time / trial memberships, one charge; trials appear
 /// as $0 lines). [dueNow] — the recurring proration invoice
-/// charged immediately (`prorate=true`). [recurring] — the
-/// steady-state recurring invoice each cycle going forward.
+/// charged immediately (`proration_behavior=prorate_to_anchor`).
+/// [recurring] — the steady-state invoice each cycle going forward.
 /// Each is null when the request has no memberships in that
 /// group.
 @JsonSerializable(

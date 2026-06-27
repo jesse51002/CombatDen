@@ -6,7 +6,6 @@ SELECT
     d.discount_id,
     d.discount_type,
     v.value_id,
-    v.discount_mode,
     v.duration_amount,
     v.duration_unit,
     v.end_date

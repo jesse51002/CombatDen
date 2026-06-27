@@ -41,6 +41,18 @@ from tests.seed_constants import SEEDED_GYM_ID
 settings.reconciler_enabled = False
 
 
+@pytest.fixture(autouse=True)
+def _disable_on_demand_invoice_fetch() -> Generator[None]:
+    """Ops do NOT fire real background Stripe invoice fetches in tests by
+    default (the post-op on-demand fast-path). The dedicated invoice-fetch
+    tests drive ``fetch_for_payer`` / the runner directly; everything else stays
+    deterministic and makes no extra Stripe calls on that path."""
+    prev = settings.invoice_fetch_on_demand_enabled
+    settings.invoice_fetch_on_demand_enabled = False
+    yield
+    settings.invoice_fetch_on_demand_enabled = prev
+
+
 @pytest.fixture
 def fake_user_id() -> str:
     """A stable auth user id for the request-scoped fake user."""
@@ -82,6 +94,7 @@ def auth_mock(fake_user_id: str) -> AsyncMock:
     auth.verify_gym_employee = AsyncMock(return_value=None)
     auth.verify_gym_owner = AsyncMock(return_value=None)
     auth.verify_can_view_member = AsyncMock(return_value=None)
+    auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
     return auth
 
 

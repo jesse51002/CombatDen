@@ -39,7 +39,6 @@ from tests.conftest import STRIPE_TEST_ACCOUNT_ID
 from tests.helpers.cleanup import delete_all_gym_data
 from tests.helpers.data_factory import create_member, create_plan
 from tests.helpers.service_factory import (
-    build_paying_member_lock,
     build_payment_sync_service,
 )
 
@@ -230,14 +229,11 @@ def event_log() -> StripeWebhookEventLog:
 
 
 @pytest.fixture(scope="module")
-def invoice_paid_handler(db_pool, stripe_client) -> InvoicePaidHandler:
-    # payment_sync uses the real test-account client; the discount-audit
-    # retrieve is faked (the webhook test gym's account isn't real).
-    return InvoicePaidHandler(
-        payment_sync_service=build_payment_sync_service(db_pool, stripe_client),
-        paying_lock=build_paying_member_lock(db_pool),
-        stripe_client=FakePaymentsStripeClient(),
-    )
+def invoice_paid_handler() -> InvoicePaidHandler:
+    # The discount-audit retrieve is faked (the webhook test gym's account
+    # isn't real). The handler no longer runs the once-settle, so it takes
+    # only stripe_client.
+    return InvoicePaidHandler(stripe_client=FakePaymentsStripeClient())
 
 
 @pytest.fixture(scope="module")
@@ -346,10 +342,10 @@ async def webhook_fixture(
     # (the view hides 'not_added', which is the column default).
     insert_sql = """
         INSERT INTO member_memberships_unfiltered (
-            member_id, gym_id, plan_id, price_id,
+            member_id, paid_by_member_id, gym_id, plan_id, price_id,
             start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
-            :member_id, :gym_id, :plan_id, :price_id,
+            :member_id, :member_id, :gym_id, :plan_id, :price_id,
             CURRENT_DATE, :stripe_item_id, :total_price, 'applied'
         )
         RETURNING item_id

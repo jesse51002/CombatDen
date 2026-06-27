@@ -1,7 +1,7 @@
 INSERT INTO member_charges (
     invoice_id,
     gym_id,
-    member_id,
+    paid_by_member_id,
     kind,
     status,
     amount,
@@ -17,7 +17,7 @@ INSERT INTO member_charges (
 VALUES (
     :invoice_id,
     :gym_id,
-    :member_id,
+    :paid_by_member_id,
     CAST(:kind AS charge_kind),
     CAST(:status AS charge_status),
     :amount,

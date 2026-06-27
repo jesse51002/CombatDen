@@ -8,8 +8,8 @@ is the **prompt path**: it runs a payment sync for the member's family right awa
 and the sync, finding the subscription gone, records the cancellation in the CRM
 (cancels the family's live recurring memberships + nulls the parent's sub id).
 
-The member is read from the subscription's metadata (our sync stamps
-``member_id`` = the paying parent). ``bulk_payment_sync`` locks the family, runs
+The payer is read from the subscription's metadata (our sync stamps
+``member_id`` = the PAYER). ``bulk_payment_sync`` locks the payer, runs
 the sync, and swallows its own per-member failures, so a transient error never
 fails the webhook. Idempotent: re-running the sync on an already-cancelled family
 syncs to nothing, and the dispatcher's event-log dedup guards re-delivery. The

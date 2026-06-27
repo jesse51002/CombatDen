@@ -115,7 +115,7 @@ class _Bar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 4,
+      height: DesignConstants.progressBarThickness,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(2),

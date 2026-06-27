@@ -21,6 +21,11 @@ class LineItemRecord extends Equatable {
   final String? stripeProductId;
   final String? itemId;
 
+  /// The member(s) this line was FOR, comma-joined — a membership line
+  /// resolves ALL co-owners on its (possibly consolidated) Stripe item; a
+  /// custom/ad-hoc line has none. Lets the UI label "Plan · Owner A, Owner B".
+  final String? ownerLabel;
+
   const LineItemRecord({
     required this.lineItemId,
     required this.itemType,
@@ -29,6 +34,7 @@ class LineItemRecord extends Equatable {
     this.quantity = 1,
     this.stripeProductId,
     this.itemId,
+    this.ownerLabel,
   });
 
   factory LineItemRecord.fromJson(
@@ -45,5 +51,6 @@ class LineItemRecord extends Equatable {
         quantity,
         stripeProductId,
         itemId,
+        ownerLabel,
       ];
 }

@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 _MANAGEMENT_SQL = SQL_DIR / "management"
 
+# Stripe invoice status for an outstanding (finalized, unpaid) invoice.
+_OPEN_INVOICE_STATUS = "open"
+
 
 class MembersManagementInvoices(MembersManagementBase):
     """List Stripe invoices and fetch the upcoming invoice for a member."""
@@ -61,7 +64,12 @@ class MembersManagementInvoices(MembersManagementBase):
             starting_after: Cursor for pagination (invoice ID).
 
         Returns:
-            List of invoice details from Stripe.
+            Invoice details from Stripe. An OPEN invoice belonging to a
+            subscription other than the payer's current monthly sub is
+            omitted: a canceled recurring membership leaves a stale,
+            uncollectible invoice on the dead sub (the cancel-sync nulls
+            ``stripe_sub_id_month``), and it must never surface as
+            overdue. One-off invoices and the live sub's invoices stay.
 
         Raises:
             ValueError: If the member has no Stripe customer
@@ -75,27 +83,48 @@ class MembersManagementInvoices(MembersManagementBase):
         if not info["stripe_account_id"]:
             raise ValueError(f"Gym {info['gym_id']} has no Stripe account configured")
 
-        return await self._payments.list_invoices(
+        invoices = await self._payments.list_invoices(
             stripe_customer_id=info["stripe_customer_id"],
             stripe_account_id=info["stripe_account_id"],
             limit=limit,
             starting_after=starting_after,
         )
 
+        # Drop an OPEN invoice that belongs to a DEAD subscription — one
+        # whose id is not the payer's current monthly sub. Canceling a
+        # recurring membership nulls stripe_sub_id_month (cancel-sync), so
+        # the canceled sub's lingering, uncollectible invoice no longer
+        # matches and never surfaces as overdue (the member re-enrolls
+        # instead). One-off invoices (no subscription) and the live sub's
+        # own invoices are kept.
+        current_sub = info["stripe_sub_id_month"]
+        return [
+            inv
+            for inv in invoices
+            if not (
+                inv.status == _OPEN_INVOICE_STATUS
+                and inv.stripe_subscription_id is not None
+                and inv.stripe_subscription_id != current_sub
+            )
+        ]
+
     async def get_upcoming_invoice(
         self,
         member_id: UUID,
     ) -> PreviewInvoice | None:
-        """Fetch the upcoming (next) invoice for a member's account.
+        """Fetch the upcoming (next) invoice for a member's OWN subscription.
 
-        Resolves the paying account (a linked child resolves to its
-        parent), reads its monthly Stripe subscription id, and previews
-        the next invoice. Returns ``None`` when the account has no
-        recurring subscription or Stripe has no upcoming invoice for it —
-        an empty state, not an error.
+        Under per-payer billing each payer funds their own subscription,
+        so ``member_id`` is the PAYER whose invoice is wanted: this reads
+        that member's OWN monthly Stripe subscription id (no parent
+        resolution) and previews its next invoice. Returns ``None`` when
+        the member has no recurring subscription of their own (e.g. their
+        memberships are paid by someone else) or Stripe has no upcoming
+        invoice for it — an empty state, not an error. To see the invoice
+        for a membership a parent pays, pass the parent's id.
 
         Args:
-            member_id: The member whose next invoice to preview.
+            member_id: The payer whose next invoice to preview.
 
         Returns:
             The upcoming invoice preview, or ``None`` when there is none.

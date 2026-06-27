@@ -1,7 +1,6 @@
 import enum
 import logging
 import sys
-from typing import Final
 
 from pydantic_settings import BaseSettings
 
@@ -60,34 +59,70 @@ class Settings(BaseSettings):
     # Logging Configuration
     log_level: str = "DEBUG"
 
-    # Scheduled reconciler (twice-daily billing safety-net sweep)
+    # Scheduled reconciler (twice-daily billing safety-net sweep). Its run now
+    # also recovers stale tasks (re-runs unfinished tasks whose in-process
+    # execution died) — see src/reconciler/.
     reconciler_enabled: bool = True
     reconciler_cron_hours: list[int] = [2, 14]  # UTC hours, twice daily
+    # Scheduled reconciler sweep tuning — see src/reconciler/. No
+    # reconciler-wide lock: safety is the per-payer PayingMemberLock every
+    # payment op already holds, so concurrent sweeps are safe (they only
+    # repeat idempotent work).
+    reconciler_invoice_lookback_days: int = 1
+    reconciler_stripe_page_size: int = 100
+    # Subscription-orphan sweep: only cancel a Stripe sub with no live DB link
+    # once it is older than this. Without metadata we can't lock an unlinked sub
+    # to its family, so a sub a live op just created (writeback not yet stamped)
+    # must age past any in-flight op before it can be judged an orphan.
+    reconciler_orphan_min_age_seconds: int = 3600
 
+    # On-demand post-op invoice fetch: right after an invoice-creating
+    # membership op, pull that payer's new invoices straight from Stripe and
+    # apply them (deterministic) instead of waiting on the invoice.paid /
+    # invoice_payment.paid webhooks. Webhooks + the twice-daily reconciler sweep
+    # remain the backstops; this is an additive fast-path that reuses the same
+    # idempotent record() seams.
+    invoice_fetch_on_demand_enabled: bool = True
+    # Widen the created>= cutoff below the op's start time to absorb clock skew
+    # between our server clock and Stripe's invoice `created` timestamp.
+    invoice_fetch_buffer_seconds: int = 120
+    # Bounded retry: a just-created invoice may not be paid/listable the instant
+    # the op returns. Delays BETWEEN attempts (first attempt is immediate); the
+    # loop stops early once the bill this op cut is applied. ~51s total.
+    invoice_fetch_retry_delays_seconds: list[int] = [0, 3, 8, 15, 25]
 
-# Billing cycle anchor constants
-MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
-WEEKLY_BILLING_ANCHOR_WEEKDAY: Final[int] = 6  # Sunday (Python weekday: Mon=0, Sun=6)
+    # Stripe invoice line-items pagination + open-invoice lookups. The embedded
+    # invoice.lines page holds only Stripe's default 10, so a >10-line invoice
+    # (large family / class-pack) is paged in full at this limit.
+    invoice_line_items_page_limit: int = 100
+    subscription_open_invoice_limit: int = 1
 
-# Concurrency-lease timings — see src/shared/paying_member_lock.py
-LOCK_TTL_SECONDS: Final[int] = 60  # hard cap; a crashed/stuck holder self-heals
-LOCK_MAX_HOLD_SECONDS: Final[float] = 55.0  # abort the op before its lease expires (< TTL)
-LOCK_ACQUIRE_TIMEOUT_SECONDS: Final[float] = 5.0  # block this long, then LockBusyError -> 409
-LOCK_POLL_INTERVAL_SECONDS: Final[float] = 0.25  # retry cadence while waiting
-# The lock-key namespace for a paying-parent family lease.
-PAYING_MEMBER_LOCK_PREFIX: Final[str] = "paying_member_lock"
+    # Billing cycle anchors
+    monthly_billing_anchor_day: int = 1  # 1st of month
+    weekly_billing_anchor_weekday: int = 6  # Sunday (Python weekday: Mon=0, Sun=6)
 
-# Bulk payment-sync retry — re-attempt members that failed a pass (most often a
-# transient busy family): up to BULK_SYNC_MAX_RETRIES retry passes, each after a
-# BULK_SYNC_RETRY_DELAY_SECONDS wait.
-BULK_SYNC_RETRY_DELAY_SECONDS: Final[int] = 10
-BULK_SYNC_MAX_RETRIES: Final[int] = 3
+    # Concurrency-lease timings — see src/shared/paying_member_lock.py
+    lock_ttl_seconds: int = 60  # hard cap; a crashed/stuck holder self-heals
+    lock_max_hold_seconds: float = 55.0  # abort the op before its lease expires (< TTL)
+    lock_acquire_timeout_seconds: float = 5.0  # block this long, then LockBusyError -> 409
+    lock_poll_interval_seconds: float = 0.25  # retry cadence while waiting
+    # The lock-key namespace for a payer lease.
+    paying_member_lock_prefix: str = "paying_member_lock"
 
-# Scheduled reconciler — see src/reconciler/. No reconciler-wide lock: safety is
-# the per-paying-family PayingMemberLock every payment op already holds, so
-# concurrent sweeps are safe (they only repeat idempotent work).
-RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 1
-RECONCILER_STRIPE_PAGE_SIZE: Final[int] = 100
+    # Bulk payment-sync retry — re-attempt payers that failed a pass (most
+    # often a transient busy payer): up to bulk_sync_max_retries retry passes,
+    # each after a bulk_sync_retry_delay_seconds wait.
+    bulk_sync_retry_delay_seconds: int = 10
+    bulk_sync_max_retries: int = 3
+
+    # Tracked background tasks (src/tasks/) — per-item retry mirrors the
+    # bulk-sync retry: up to task_item_max_attempts attempts,
+    # task_item_retry_delay_seconds between them. A 'running' claim older than
+    # task_stale_running_seconds belongs to a dead process and may be reclaimed
+    # when the reconciler's stale-task recovery re-runs it (see src/reconciler/).
+    task_item_max_attempts: int = 3
+    task_item_retry_delay_seconds: int = 10
+    task_stale_running_seconds: int = 120
 
 
 settings = Settings()

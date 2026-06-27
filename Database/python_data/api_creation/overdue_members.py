@@ -135,6 +135,8 @@ def create_overdue(
         client.table("member_memberships_unfiltered").insert(
             {
                 "member_id": str(member_id),
+                # A standalone overdue member pays for their own membership.
+                "paid_by_member_id": str(member_id),
                 "gym_id": str(gym_id),
                 "plan_id": str(plan.plan_id),
                 "price_id": str(plan.price_id),
@@ -144,7 +146,6 @@ def create_overdue(
                 .date()
                 .isoformat(),
                 "stripe_item_id": sub_item_id,
-                "prorate": True,
                 "total_price": plan.base_cost,
                 # Direct insert (not via the API) of a live membership — stamp
                 # 'applied' so it's visible through the client-facing

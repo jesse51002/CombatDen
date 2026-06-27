@@ -93,9 +93,10 @@ real customers, so it is edited under a stricter rule than the rest of the repo:
 - This ensures clarity and prevents import errors when modules are moved
 
 **Constants**
-- **NEVER use magic numbers or hardcoded values** — all constants must live in `src/core/config.py` (as `Settings` fields) or as `UPPER_CASE` final variables at the top of the file
-- Good: `settings.db_pool_size` or `MAX_RETRIES = 3` at the top of the file
-- Bad: `pool_size=10` buried inside a function or constructor
+- **NEVER use magic numbers or hardcoded values** — all constants must live in `src/core/config.py` (as `Settings` fields) or as `UPPER_CASE` final variables at the top of the consuming file
+- **Inside `src/core/config.py` itself, EVERY constant is a `Settings` field — never a module-level `Final` variable.** The class is the whole point: fields are env-overridable, typed, and monkeypatchable in tests via `settings`. A module-level constant next to the class is the anti-pattern this rule exists to prevent (it crept in once and spread).
+- Good: `settings.db_pool_size`, `settings.lock_ttl_seconds`, or `MAX_RETRIES = 3` at the top of the file that uses it
+- Bad: `pool_size=10` buried inside a function or constructor; `LOCK_TTL_SECONDS: Final[int] = 60` at module level in `config.py`
 
 **Enums**
 - **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
@@ -285,6 +286,9 @@ src/
   - Focus on clear, descriptive exception messages that help debugging
 - **Layer Separation**: API logs + handles, Services raise + describe
 
+**Billing / Stripe error status codes — never 502/503/504**
+- Stripe-or-upstream failures in billing endpoints always return **500 Internal Server Error**, never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. A partial batch result (some items succeeded, some failed) returns **207 Multi-Status** (a 2xx, also never auto-retried) with the per-item succeeded/failed split in the body; a total failure is 500.
+
 **Middleware**
 - CORS must be first in middleware stack
 - One purpose per middleware
@@ -299,6 +303,7 @@ src/
 - Use `{variable_name}` for structural parts (e.g., WHERE clauses) and `:param_name` for bind parameters
 - Good: `load_sql(SQL_DIR / "all_view.sql", {"where_clause": where})` then pass params to SQLAlchemy
 - Bad: Inline SQL strings in service files
+- **Tests are exempt** (per the root `CLAUDE.md`): a short read/assert/setup query in an integration test may be inlined as a `text("SELECT …")`/`text("UPDATE …")` literal — directly in the test or in a `tests/helpers/db_reads.py` / `db_writes.py` helper (those helpers inline by design; `tests/helpers/sql/` holds only the cleanup `DELETE`s). This is the established test convention; application/service code never inlines SQL.
 - **NEVER cast a bind parameter with `:param::type`** (e.g. `:waiver_ids::jsonb`, `:id::uuid`). SQLAlchemy `text()` over asyncpg cannot bind a parameter that is immediately followed by `::`, so Postgres raises `syntax error at or near ":"` and the query 500s. **Always use the functional cast `CAST(:param AS TYPE)`** instead.
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
@@ -333,7 +338,10 @@ that derivation through a Postgres view rather than repeating the
 (in `Database/supabase/schemas/member_memberships.sql`) wraps
 `member_memberships` and derives `status`
 (`active` / `cancelled` / `ended` / `frozen`) from `cancel_date`,
-`end_date`, and the account's freeze window on `members`. The member
+`end_date`, and the **subject member's** freeze window on `members` (the
+view joins `members` on the membership's own `member_id`, NOT its
+`paid_by_member_id` — freezing a member pauses only that member's own
+memberships, regardless of who pays). The member
 read-paths (`src/members/sql/crm_views/*.sql`, `member_details/*.sql`)
 SELECT from this view; writes go directly to the underlying table.
 

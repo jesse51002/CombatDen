@@ -18,19 +18,29 @@ const int _kPageSize = 20;
 /// Account-level payment history in its own full-width card.
 /// Fetched on demand and paginated (a separate request from the
 /// member detail) — read-only side read with its own state, like
-/// the Waivers / Invoices sections. Attributed by membership: the
-/// charges that paid for any membership this member has held, plus
-/// their own direct charges, each row labelled with who was charged.
+/// the Waivers / Invoices sections. Returns the invoices this member
+/// PAID, the invoices a membership they have ever held was on, and
+/// the invoices that were FOR them (the payer's `paid_for`) — so a
+/// charge a parent made for this member shows here. The "Paid by"
+/// column names the payer; the invoice popup adds who it was "For".
 /// Each row opens the full invoice (via [PaymentInvoiceDialog]);
-/// "Show more" loads the next page.
+/// "Show more" loads the next page. Reloads from page 1 whenever
+/// [refreshKey] changes — bumped on every billing change (and on each
+/// tick of the post-charge invoice poll) so a webhook-delivered
+/// invoice surfaces here without a manual reload.
 class PaymentHistorySection extends StatefulWidget {
   final String memberId;
   final String gymId;
+
+  /// Bumped by the bloc on every billing change (the member-detail
+  /// `refreshToken`). A change reloads the table from page 1.
+  final int refreshKey;
 
   const PaymentHistorySection({
     super.key,
     required this.memberId,
     required this.gymId,
+    required this.refreshKey,
   });
 
   @override
@@ -47,6 +57,11 @@ class _PaymentHistorySectionState
   String? _error;
   int _offset = 0;
 
+  /// Bumped on every [_reload] so an in-flight page fetch from a
+  /// superseded load discards its result instead of appending stale
+  /// rows onto the freshly-reset list.
+  int _loadGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -54,8 +69,17 @@ class _PaymentHistorySectionState
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant PaymentHistorySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      _reload();
+    }
+  }
+
   Future<void> _load() async {
     if (_loading || !_hasMore) return;
+    final gen = _loadGen;
     setState(() {
       _loading = true;
       _error = null;
@@ -66,7 +90,7 @@ class _PaymentHistorySectionState
         limit: _kPageSize,
         offset: _offset,
       );
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _payments.addAll(page);
         _offset += page.length;
@@ -74,7 +98,41 @@ class _PaymentHistorySectionState
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  /// Re-fetches page 1 in the BACKGROUND and swaps it in, WITHOUT
+  /// clearing the visible list first — so a poll tick doesn't flash the
+  /// card to a spinner/empty state on every refresh (the poll runs ~3
+  /// min, so a clear-then-fetch would flicker repeatedly). Bumping
+  /// [_loadGen] orphans any in-flight [_load] (e.g. a "Show more") so it
+  /// can't append onto the swapped page.
+  Future<void> _reload() async {
+    final gen = ++_loadGen;
+    if (_error != null) setState(() => _error = null);
+    try {
+      final page = await _repo.getPayments(
+        widget.memberId,
+        limit: _kPageSize,
+        offset: 0,
+      );
+      if (!mounted || gen != _loadGen) return;
+      setState(() {
+        _payments
+          ..clear()
+          ..addAll(page);
+        _offset = page.length;
+        _hasMore = page.length == _kPageSize;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _error = e.toString();
         _loading = false;

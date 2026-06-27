@@ -52,6 +52,22 @@ def invoice_subscription_id(invoice: dict[str, Any]) -> str | None:
     return invoice.get("subscription")
 
 
+def invoice_payment_intent_id(invoice: dict[str, Any]) -> str | None:
+    """Return an invoice's Stripe PaymentIntent id, or ``None``.
+
+    New nested location (``parent.payment_intent_details``) first, old flat
+    field as fallback.
+    """
+    parent = invoice.get("parent")
+    if isinstance(parent, dict):
+        details = parent.get("payment_intent_details")
+        if isinstance(details, dict):
+            payment_intent = details.get("payment_intent")
+            if payment_intent:
+                return payment_intent
+    return invoice.get("payment_intent")
+
+
 def invoice_metadata(invoice: dict[str, Any]) -> dict[str, Any]:
     """Return the invoice's effective metadata for flow-control reads.
 

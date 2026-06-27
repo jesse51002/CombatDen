@@ -4,6 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 
@@ -24,6 +25,13 @@ part 'invoice_breakdown_rows.dart';
 /// The private row widgets live in `invoice_breakdown_rows.dart`.
 class InvoiceBreakdown extends StatelessWidget {
   final InvoiceBreakdownData data;
+
+  /// Optional attribution header (avatar + name) shown ABOVE everything
+  /// else — whose invoice this is. Every billing surface passes one so an
+  /// invoice display always says who it belongs to (the payer whose card /
+  /// subscription it bills). Omit only where the parent already shows the
+  /// person.
+  final InvoiceAttribution? attribution;
 
   /// Optional header row shown above the line items — a
   /// caption (e.g. "Payment" / "Refund") on the left and
@@ -48,6 +56,7 @@ class InvoiceBreakdown extends StatelessWidget {
   const InvoiceBreakdown({
     super.key,
     required this.data,
+    this.attribution,
     this.headerCaption,
     this.headerMeta,
     this.statusLabel,
@@ -108,6 +117,7 @@ class InvoiceBreakdown extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
+        ?attribution,
         if (headerCaption != null)
           _Header(
             caption: headerCaption!,
@@ -135,7 +145,8 @@ class InvoiceBreakdown extends StatelessWidget {
           ),
         Divider(
           color: DesignConstants.divider,
-          height: 1,
+          height: DesignConstants.dividerThickness,
+          thickness: DesignConstants.dividerThickness,
         ),
         _LineRow(
           label: data.isRefund ? 'Refunded' : data.totalLabel,
@@ -167,7 +178,8 @@ class InvoiceBreakdown extends StatelessWidget {
         if (data.attempts.isNotEmpty) ...[
           Divider(
             color: DesignConstants.divider,
-            height: 1,
+            height: DesignConstants.dividerThickness,
+            thickness: DesignConstants.dividerThickness,
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -7,14 +7,17 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_member_check_tile.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Step 2 — who's getting memberships. Multi-select over
-/// the payer + members already linked to the payer (the
-/// backend hard-rejects unlinked members: the start op
-/// never links). The "link a member first" affordance jumps
-/// to the existing link flow and returns here.
+/// Step 2 — who's getting memberships. Multi-select over the payer plus
+/// EVERYONE the payer is authorized to pay for (the backend hard-rejects
+/// members the payer isn't authorized for: the start op never authorizes).
+///
+/// Authorization is many-to-many: a payer may themselves have authorized
+/// payers AND still be authorized to pay for others, so this never collapses to
+/// "just the payer". The "authorize someone first" affordance jumps to the link
+/// flow and returns here.
 class StartMembersStep extends StatelessWidget {
-  /// The PAYER's member detail (its `linkedAccounts` are
-  /// the linkable family). Null while it is still loading.
+  /// The PAYER's member detail — its `authorizedToPayFor` are the members the
+  /// payer may enroll. Null while it is still loading.
   final MemberDetailResponse? payerDetail;
   final StartMembershipParticipant payer;
   final Set<String> selectedMemberIds;
@@ -35,13 +38,15 @@ class StartMembersStep extends StatelessWidget {
     final detail = payerDetail;
     if (detail == null) {
       return const SizedBox(
-        height: 160,
+        height: DesignConstants.dialogProcessingHeight,
         child: Center(child: AppSpinner()),
       );
     }
+    // The payer plus everyone they're authorized to pay for — regardless of
+    // whether the payer also has authorized payers of their own.
     final candidates = <StartMembershipParticipant>[
       payer,
-      ...detail.linkedAccounts.map(
+      ...detail.authorizedToPayFor.map(
         (a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,
@@ -63,9 +68,9 @@ class StartMembersStep extends StatelessWidget {
               style: DesignConstants.h2,
             ),
             Text(
-              'Pick everyone to enroll in this run — '
-              'the payer themselves and members already '
-              'linked to them.',
+              'Pick everyone to enroll in this run — the payer '
+              'themselves and the members they’re authorized to pay '
+              'for.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -79,8 +84,7 @@ class StartMembersStep extends StatelessWidget {
             ...candidates.map(
               (c) => StartMemberCheckTile(
                 participant: c,
-                selected: selectedMemberIds
-                    .contains(c.memberId),
+                selected: selectedMemberIds.contains(c.memberId),
                 onTap: () => onToggle(c.memberId),
               ),
             ),

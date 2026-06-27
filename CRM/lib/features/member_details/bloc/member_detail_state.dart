@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -52,6 +53,75 @@ class MemberDetailLoaded extends MemberDetailState {
   /// the wizard is open.
   final String? startError;
 
+  /// True while the cancel-memberships DELETE is in flight.
+  /// Separate from [isMutating] so the cancel dialog owns its
+  /// own loading + completion treatment (mirrors
+  /// [isStartingMemberships] / [isChargingCard]).
+  final bool isCancellingMemberships;
+
+  /// The outcome of the last cancel-memberships request.
+  /// Rendered by the cancel dialog's completion step;
+  /// cleared via [CancelMembershipOutcomeCleared].
+  final CancelOutcome? cancelOutcome;
+
+  /// True while the remove-authorization POST is in flight.
+  /// Separate from [isMutating] so the remove-authorization
+  /// dialog owns its own loading + completion treatment
+  /// (mirrors [isCancellingMemberships]).
+  final bool isRemovingAuthorization;
+
+  /// The outcome of the last remove-authorization request —
+  /// which funded memberships the cascading cancel cancelled.
+  /// Rendered by the remove-authorization dialog's completion
+  /// step; cleared via [RemoveAuthorizationOutcomeCleared].
+  final CancelOutcome? removeAuthorizationOutcome;
+
+  /// True while the charge-card POST is in flight. Separate
+  /// from [isMutating] so the charge dialog owns its own
+  /// loading + success treatment (mirrors
+  /// [isStartingMemberships]).
+  final bool isChargingCard;
+
+  /// Monotonic token bumped once a charge succeeds. The charge
+  /// dialog watches it to flip to its success step; the
+  /// confirmation is rendered from the dialog's own retained
+  /// amount / card / reason, so no result payload is needed.
+  final int chargeCardSuccess;
+
+  /// The last charge-card failure. Kept off [actionError] so
+  /// the screen-level error dialog doesn't swallow it while
+  /// the charge dialog is open (mirrors [startError]).
+  final String? chargeCardError;
+
+  /// True while the upgrade POST is in flight. Separate from
+  /// [isMutating] so the upgrade dialog owns its own loading +
+  /// success treatment (mirrors [isChargingCard]).
+  final bool isUpgrading;
+
+  /// Monotonic token bumped once an upgrade succeeds. The upgrade
+  /// dialog watches it to flip to its success step; the
+  /// confirmation is rendered from the picked plan name.
+  final int upgradeSuccess;
+
+  /// The last upgrade failure. Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while the
+  /// upgrade dialog is open (mirrors [chargeCardError]).
+  final String? upgradeError;
+
+  /// True while the end-membership POST is in flight. Separate from
+  /// [isMutating] so the end dialog owns its own loading + success
+  /// treatment (mirrors [isUpgrading]).
+  final bool isEnding;
+
+  /// Monotonic token bumped once an end succeeds. The end dialog
+  /// watches it to flip to its success step.
+  final int endSuccess;
+
+  /// The last end-membership failure. Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while the end dialog
+  /// is open (mirrors [upgradeError]).
+  final String? endError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -70,6 +140,19 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isStartingMemberships = false,
     this.startResult,
     this.startError,
+    this.isCancellingMemberships = false,
+    this.cancelOutcome,
+    this.isRemovingAuthorization = false,
+    this.removeAuthorizationOutcome,
+    this.isChargingCard = false,
+    this.chargeCardSuccess = 0,
+    this.chargeCardError,
+    this.isUpgrading = false,
+    this.upgradeSuccess = 0,
+    this.upgradeError,
+    this.isEnding = false,
+    this.endSuccess = 0,
+    this.endError,
     this.refreshToken = 0,
   });
 
@@ -95,6 +178,24 @@ class MemberDetailLoaded extends MemberDetailState {
     MemberMembershipsStartResponse? startResult,
     String? startError,
     bool clearStartOutcome = false,
+    bool? isCancellingMemberships,
+    CancelOutcome? cancelOutcome,
+    bool clearCancelOutcome = false,
+    bool? isRemovingAuthorization,
+    CancelOutcome? removeAuthorizationOutcome,
+    bool clearRemoveAuthorizationOutcome = false,
+    bool? isChargingCard,
+    int? chargeCardSuccess,
+    String? chargeCardError,
+    bool clearChargeOutcome = false,
+    bool? isUpgrading,
+    int? upgradeSuccess,
+    String? upgradeError,
+    bool clearUpgradeOutcome = false,
+    bool? isEnding,
+    int? endSuccess,
+    String? endError,
+    bool clearEndOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -117,6 +218,33 @@ class MemberDetailLoaded extends MemberDetailState {
       startError: clearStartOutcome
           ? null
           : (startError ?? this.startError),
+      isCancellingMemberships: isCancellingMemberships ??
+          this.isCancellingMemberships,
+      cancelOutcome: clearCancelOutcome
+          ? null
+          : (cancelOutcome ?? this.cancelOutcome),
+      isRemovingAuthorization: isRemovingAuthorization ??
+          this.isRemovingAuthorization,
+      removeAuthorizationOutcome: clearRemoveAuthorizationOutcome
+          ? null
+          : (removeAuthorizationOutcome ??
+              this.removeAuthorizationOutcome),
+      isChargingCard: isChargingCard ?? this.isChargingCard,
+      chargeCardSuccess:
+          chargeCardSuccess ?? this.chargeCardSuccess,
+      chargeCardError: clearChargeOutcome
+          ? null
+          : (chargeCardError ?? this.chargeCardError),
+      isUpgrading: isUpgrading ?? this.isUpgrading,
+      upgradeSuccess: upgradeSuccess ?? this.upgradeSuccess,
+      upgradeError: clearUpgradeOutcome
+          ? null
+          : (upgradeError ?? this.upgradeError),
+      isEnding: isEnding ?? this.isEnding,
+      endSuccess: endSuccess ?? this.endSuccess,
+      endError: clearEndOutcome
+          ? null
+          : (endError ?? this.endError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -133,6 +261,19 @@ class MemberDetailLoaded extends MemberDetailState {
         isStartingMemberships,
         startResult,
         startError,
+        isCancellingMemberships,
+        cancelOutcome,
+        isRemovingAuthorization,
+        removeAuthorizationOutcome,
+        isChargingCard,
+        chargeCardSuccess,
+        chargeCardError,
+        isUpgrading,
+        upgradeSuccess,
+        upgradeError,
+        isEnding,
+        endSuccess,
+        endError,
         refreshToken,
       ];
 }
@@ -141,11 +282,24 @@ class MemberDetailError extends MemberDetailState {
   final String message;
   final String memberId;
 
+  /// The HTTP status when the failure was a server error (null for a
+  /// transport / parse error). Lets the screen tell a "this id doesn't
+  /// line up" 4xx (bounce a deep link to the members list) apart from a
+  /// transient 5xx / network error (keep the retryable error view).
+  final int? statusCode;
+
   const MemberDetailError(
     this.message, {
     required this.memberId,
+    this.statusCode,
   });
 
+  /// A 4xx — the member id doesn't resolve to a viewable member (unknown
+  /// / malformed id, or a gym the caller can't see), as opposed to a
+  /// transient 5xx / network failure.
+  bool get isNotFound =>
+      statusCode != null && statusCode! >= 400 && statusCode! < 500;
+
   @override
-  List<Object?> get props => [message, memberId];
+  List<Object?> get props => [message, memberId, statusCode];
 }

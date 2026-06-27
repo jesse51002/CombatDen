@@ -33,12 +33,30 @@ def _interval_days(duration_amount: int | None, duration_unit: str | None) -> in
     return 30
 
 
+def _payer_id(
+    member: MemberPlan, handle_to_id: dict[str, uuid.UUID]
+) -> uuid.UUID:
+    """The member's payer: a self-paying child (or any non-linked member) pays
+    themselves; a parent-paid linked child is paid by their linked parent."""
+    if not member.self_pays and member.linked_primary_handle is not None:
+        return handle_to_id[member.linked_primary_handle]
+    assert member.member_id is not None
+    return member.member_id
+
+
+def _handle_to_id(members: list[MemberPlan]) -> dict[str, uuid.UUID]:
+    return {
+        m.local_handle: m.member_id for m in members if m.member_id is not None
+    }
+
+
 def create_history(
     client: Client,
     gym_id: uuid.UUID,
     members: list[MemberPlan],
 ) -> list[MemberMembershipCreate]:
     """Insert every member's closed history rows; return them for invoicing."""
+    handle_to_id = _handle_to_id(members)
     rows: list[MemberMembershipCreate] = []
     for member in members:
         assert member.member_id is not None
@@ -47,6 +65,7 @@ def create_history(
                 MemberMembershipCreate(
                     item_id=uuid.uuid4(),
                     member_id=member.member_id,
+                    paid_by_member_id=_payer_id(member, handle_to_id),
                     gym_id=gym_id,
                     plan_id=h.plan.plan_id,
                     price_id=h.plan.price_id,
@@ -55,7 +74,6 @@ def create_history(
                     cancel_date=h.cancel_date,
                     last_paid_date=h.last_paid_date,
                     next_due_date=None,
-                    prorate=True,
                     total_price=h.total_price,
                     stripe_item_id=f"si_{uuid.uuid4().hex[:24]}",
                     # Direct-inserted (not via the API), so stamp the Stripe-sync
@@ -86,8 +104,10 @@ def create_history(
 def pseudo_rows_for_current(
     gym_id: uuid.UUID,
     current_records: list[CurrentMembershipRecord],
+    members: list[MemberPlan],
 ) -> list[MemberMembershipCreate]:
     """Synthetic (non-inserted) rows for live memberships, for invoicing."""
+    handle_to_id = _handle_to_id(members)
     today = date.today()
     rows: list[MemberMembershipCreate] = []
     for rec in current_records:
@@ -109,6 +129,7 @@ def pseudo_rows_for_current(
             MemberMembershipCreate(
                 item_id=rec.item_id,
                 member_id=rec.member.member_id,
+                paid_by_member_id=_payer_id(rec.member, handle_to_id),
                 gym_id=gym_id,
                 plan_id=rec.plan_id,
                 price_id=rec.price_id,
@@ -117,7 +138,6 @@ def pseudo_rows_for_current(
                 cancel_date=None,
                 last_paid_date=last_paid,
                 next_due_date=next_due,
-                prorate=True,
                 total_price=rec.total_price,
                 stripe_item_id=rec.stripe_item_id,
             )

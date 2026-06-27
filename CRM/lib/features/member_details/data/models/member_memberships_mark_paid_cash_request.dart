@@ -26,9 +26,18 @@ class MemberMembershipsMarkPaidCashRequest extends Equatable {
       _$MemberMembershipsMarkPaidCashRequestToJson(this);
 
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [
         itemId,
         memberId,
         idempotencyKey,
       ];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }

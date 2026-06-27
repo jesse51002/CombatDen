@@ -8,11 +8,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import BackgroundTasks
-
-from src.discounts.service.discounts_service import (
-    DiscountsService,
-)
 from src.payments.service.payments_stripe_membership_service import (
     PaymentsStripeMembershipService,
 )
@@ -44,9 +39,6 @@ from src.plans.service.plans_update import (
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
-from src.sync.service.sync_service import (
-    PaymentSyncService,
-)
 
 
 class MembershipPlansService:
@@ -62,24 +54,18 @@ class MembershipPlansService:
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
-        payment_sync_service: PaymentSyncService,
-        discounts_service: DiscountsService,
     ) -> None:
         deps = (
             db_pool,
             gym_stripe_service,
             stripe_membership_service,
             stripe_price_service,
-            discounts_service,
         )
         self._create = MembershipPlansCreate(*deps)
         self._update = MembershipPlansUpdate(*deps)
         self._delete = MembershipPlansDelete(*deps)
         self._read = MembershipPlansRead(*deps)
-        self._price = MembershipPlansPrice(
-            *deps,
-            payment_sync_service=payment_sync_service,
-        )
+        self._price = MembershipPlansPrice(*deps)
 
     # ── Create ─────────────────────────────────────────────────
 
@@ -142,33 +128,3 @@ class MembershipPlansService:
     ) -> MembershipPlanPriceResponse:
         """Set / update the active price on a plan."""
         return await self._price.set_price(request)
-
-    # ── Migrate ────────────────────────────────────────────────
-
-    async def migrate_all_members(
-        self,
-        plan_id: UUID,
-        gym_id: UUID,
-        background_tasks: BackgroundTasks,
-    ) -> None:
-        """Migrate all active members on a plan to the current price."""
-        await self._price.migrate_all_members(
-            plan_id,
-            gym_id,
-            background_tasks,
-        )
-
-    async def migrate_members(
-        self,
-        plan_id: UUID,
-        gym_id: UUID,
-        member_ids: list[UUID],
-        background_tasks: BackgroundTasks,
-    ) -> None:
-        """Migrate specific members to the current active price."""
-        await self._price.migrate_members(
-            plan_id,
-            gym_id,
-            member_ids,
-            background_tasks,
-        )

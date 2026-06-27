@@ -6,6 +6,7 @@ import 'package:crm/features/members_list/bloc/members_list_bloc.dart';
 import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/features/members_list/bloc/members_list_state.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_controls.dart';
+import 'package:crm/features/members/presentation/widgets/members_list_filter_bar.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_header.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_table.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_view_switcher.dart';
@@ -53,12 +54,22 @@ class MembersListBody extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
             horizontal: DesignConstants.paddingBig,
           ),
-          child: MembersListControls(
-            searchQuery: state.searchQuery,
-            onSearchChanged: (q) =>
-                context.read<MembersListBloc>().add(
-                      MembersListSearchChanged(q),
-                    ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingMedium,
+            children: [
+              MembersListControls(
+                searchQuery: state.searchQuery,
+                onSearchChanged: (q) =>
+                    context.read<MembersListBloc>().add(
+                          MembersListSearchChanged(q),
+                        ),
+              ),
+              MembersListFilterBar(
+                filters: state.filters,
+                plans: state.plans,
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -68,6 +79,8 @@ class MembersListBody extends StatelessWidget {
             gymId: state.gymId,
             isLoadingMore: state.isLoadingMore,
             hasReachedEnd: state.hasReachedEnd,
+            hasActiveFilters:
+                state.filters.hasActiveFilters,
             onLoadMore: () =>
                 context.read<MembersListBloc>().add(
                       const MembersListNextPageRequested(),

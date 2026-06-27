@@ -12,7 +12,6 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionDesiredItem,
-    PaymentsSubscriptionFreezeRequest,
 )
 from tests.helpers.data_factory import create_payment_method
 from tests.helpers.stripe_assertions import (
@@ -187,94 +186,3 @@ async def test_cancel_at_period_end_completes(
         before,
         connect_opts,
     )
-
-
-@pytest.mark.timeout(90)
-async def test_freeze_resumes_at_date(
-    subscription_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    test_clock,
-    clock_customer,
-    clock_price,
-    created,
-):
-    """Freeze with a resumes_at date, advance past it, verify collection resumes."""
-    from datetime import date
-
-    created_resp = await subscription_service.create_subscription(
-        PaymentsSubscriptionCreateRequest(
-            stripe_customer_id=clock_customer,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
-            idempotency_key=str(uuid4()),
-            metadata=_subscription_metadata(),
-            gym_timezone="America/Chicago",
-        ),
-        stripe_account_id,
-    )
-
-    freeze_end = date(2026, 2, 15)
-    resp = await subscription_service.freeze_subscription(
-        PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created_resp.stripe_subscription_id,
-            freeze_end_date=freeze_end,
-            idempotency_key=str(uuid4()),
-        ),
-        stripe_account_id,
-    )
-    assert resp.resumes_at is not None
-
-    # Advance to a point still inside the freeze window. Stripe's
-    # pause_collection.behavior="void" still *creates* renewal
-    # invoices on schedule but voids them immediately, so we cannot
-    # use ``assert_no_unexpected_charges`` here. Instead we assert
-    # that no invoice during the pause was actually paid and that
-    # the customer's balance did not move.
-    before_balance = (
-        await stripe_client.client.v1.customers.retrieve_async(
-            clock_customer,
-            options=connect_opts,
-        )
-    ).balance
-    await advance_clock(
-        stripe_client,
-        test_clock,
-        datetime(2026, 2, 10, 0, 0, 0),
-        connect_opts,
-    )
-    mid_pause_invoices = await stripe_client.client.v1.invoices.list_async(
-        params={"customer": clock_customer, "limit": 100},
-        options=connect_opts,
-    )
-    paid_during_pause = [inv for inv in mid_pause_invoices.data if inv.status == "paid"]
-    # The initial create may have produced a paid invoice — freeze
-    # started after that, so any *new* paid invoices would mean
-    # voiding didn't work.
-    assert len(paid_during_pause) <= 1, (
-        f"Unexpected paid invoices during freeze window: {[i.id for i in paid_during_pause]}"
-    )
-    mid_customer = await stripe_client.client.v1.customers.retrieve_async(
-        clock_customer,
-        options=connect_opts,
-    )
-    assert mid_customer.balance == before_balance, (
-        f"Customer balance shifted during freeze: {before_balance} -> {mid_customer.balance}"
-    )
-
-    # Advance past the freeze end date
-    await advance_clock(
-        stripe_client,
-        test_clock,
-        datetime(2026, 2, 16, 0, 0, 0),
-        connect_opts,
-    )
-
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created_resp.stripe_subscription_id,
-        options=connect_opts,
-    )
-
-    # After resumes_at, pause_collection should be cleared
-    assert sub.pause_collection is None
-    assert sub.status == "active"

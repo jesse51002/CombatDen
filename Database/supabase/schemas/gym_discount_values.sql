@@ -13,15 +13,17 @@
 -- applied snapshot), so there is no Stripe gate. See
 -- access_rules/gym_discount_values.sql.
 --
--- The discount_mode / discount_duration_unit enums are declared here (the
--- earliest-loaded consumer): gym_discounts is now identity-only and the applied
--- snapshots reach mode via value_id -> gym_discount_values.
-CREATE TYPE discount_mode AS ENUM ('once', 'ongoing');
-
--- Duration span unit for an ongoing discount's lifetime. Dedicated to discounts
--- (day/week/month) — distinct from membership_plans' duration_unit
--- (week/month/year), which is a different domain.
-CREATE TYPE discount_duration_unit AS ENUM ('day', 'week', 'month');
+-- The discount_duration_unit enum is declared here (the earliest-loaded
+-- consumer): gym_discounts is identity-only and the applied snapshots reach a
+-- discount's value (percent/dollar + lifetime) via value_id -> gym_discount_values.
+--
+-- Duration span unit for a discount's lifetime. Dedicated to discounts —
+-- distinct from membership_plans' duration_unit (week/month/year), a different
+-- domain. `cycle` is plan-relative: one cycle = the membership's plan billing
+-- period, resolved to an absolute end_date at apply-time (1 cycle on a monthly
+-- plan -> +1 month). It is how a single-invoice ("just the next cycle")
+-- discount is expressed now that there is no separate once mode.
+CREATE TYPE discount_duration_unit AS ENUM ('day', 'week', 'month', 'cycle');
 
 CREATE TABLE gym_discount_values_unfiltered (
     value_id UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -31,11 +33,12 @@ CREATE TABLE gym_discount_values_unfiltered (
     percentage_off FLOAT CHECK (percentage_off > 0 AND percentage_off <= 100),
     dollar_off INTEGER CHECK (dollar_off > 0),
 
-    -- Lifetime spec: discount_mode (once | ongoing) PLUS, for ongoing, an end
-    -- set by EITHER a duration span (duration_amount + duration_unit) OR an
-    -- explicit end_date — exactly one, never both; neither = forever. At
-    -- apply-time the applied snapshot's absolute end_date is resolved from this.
-    discount_mode discount_mode NOT NULL,
+    -- Lifetime spec: an end set by EITHER a duration span (duration_amount +
+    -- duration_unit, where `cycle` is plan-relative) OR an explicit end_date —
+    -- at most one, never both; neither = forever. At apply-time the applied
+    -- snapshot's absolute end_date is resolved from this (a `cycle` span uses
+    -- the membership's plan billing period). A 1-cycle span is the single-
+    -- invoice discount that replaced the old `once` mode.
     duration_amount INTEGER CHECK (duration_amount > 0),
     duration_unit discount_duration_unit,
     end_date DATE,
@@ -81,7 +84,7 @@ CREATE INDEX idx_gym_discount_values_discount
 -- single-application trigger on member_membership_applied_discounts this makes
 -- the custom lifecycle explicit (mint -> apply once -> archive), so cleaning up
 -- a failed membership's minted customs can never touch another holder. Presets
--- and linked discounts version freely.
+-- version freely.
 CREATE FUNCTION prevent_custom_discount_second_value()
 RETURNS TRIGGER AS $$
 BEGIN

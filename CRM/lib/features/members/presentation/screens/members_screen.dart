@@ -8,6 +8,7 @@ import 'package:crm/features/members_list/bloc/members_list_bloc.dart';
 import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/features/members_list/bloc/members_list_state.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_body.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -26,13 +27,26 @@ class MembersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<MembersListRepository>(
-      create: (_) => MembersListRepository(
-        apiClient: ApiClient(),
-      ),
+    // ApiClient is built inside each lazy `create:` (not in build())
+    // so it isn't re-allocated on every parent rebuild.
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MembersListRepository>(
+          create: (_) => MembersListRepository(
+            apiClient: ApiClient(),
+          ),
+        ),
+        RepositoryProvider<MembershipsRepository>(
+          create: (_) => MembershipsRepository(
+            apiClient: ApiClient(),
+          ),
+        ),
+      ],
       child: BlocProvider<MembersListBloc>(
         create: (ctx) => MembersListBloc(
           repository: ctx.read<MembersListRepository>(),
+          membershipsRepository:
+              ctx.read<MembershipsRepository>(),
         )..add(
             MembersListInitRequested(
               selectedGym.gymId ?? '',

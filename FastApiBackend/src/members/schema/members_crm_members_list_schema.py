@@ -48,13 +48,21 @@ class DateRangeFilter(BaseModel):
 class MembersListFilters(BaseModel):
     """All filters for the members list.
 
+    Each dimension narrows the result independently (they are
+    AND-combined); multiple values within a dimension widen it
+    (membership_status and plan_ids are OR-combined internally).
+
     Attributes:
         membership_status: Statuses to include.
+        plan_ids: Membership plans to include — members with a
+            LIVE (active or frozen) membership on any of these
+            plans; cancelled/ended memberships do not match.
         date_range: Optional date range filter.
         name: Optional name search string.
     """
 
     membership_status: list[CrmMemberStatus] = []
+    plan_ids: list[UUID] = []
     date_range: DateRangeFilter | None = None
     name: str | None = None
 
@@ -64,16 +72,17 @@ class CrmMembersListRequest(BaseModel):
 
     Attributes:
         gym_id: The gym to list members for.
-        prev_view: The view the user was on before this request.
-        requested_view: The view the user is requesting.
+        view: The view to show (decides the row shape). The
+            view and the filters are independent — the server
+            applies both as given and does not reconcile one
+            against the other.
         filters: Active filters from the frontend.
         start_index: Pagination offset.
         count: Number of rows to fetch per page.
     """
 
     gym_id: UUID
-    prev_view: MembersListView
-    requested_view: MembersListView
+    view: MembersListView
     filters: MembersListFilters = MembersListFilters()
     start_index: int = 0
     count: int = 25

@@ -28,6 +28,7 @@ def make_invoice_paid_event(
     event_id: str | None = None,
     metadata: dict[str, str] | None = None,
     total_discount_amounts: list[dict[str, Any]] | None = None,
+    one_time_line_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build an ``invoice.paid`` event payload in the Stripe "dahlia" shape.
 
@@ -40,6 +41,13 @@ def make_invoice_paid_event(
     A subscription invoice (non-empty ``stripe_item_ids``) carries its
     metadata under ``parent.subscription_details.metadata``; a one-time
     invoice (empty) carries it on the invoice root.
+
+    ``one_time_line_ids`` adds one-time / trial membership lines — each has an
+    ``id`` but NO ``subscription_item`` (its dahlia parent is an invoice-item
+    discriminator). A one-time membership's ``stripe_item_id`` IS this line id,
+    so the line→membership resolver falls back to the line id. Pair it with an
+    empty ``stripe_item_ids`` + ``crm_one_time_payment`` root metadata to model
+    a real one-time membership invoice.
     """
     now = int(time.time())
     paid_at = paid_at or now
@@ -66,6 +74,28 @@ def make_invoice_paid_event(
         }
         for i, si in enumerate(stripe_item_ids)
     ]
+    # A one-time / trial line has NO subscription_item — its dahlia parent is an
+    # invoice-item discriminator, so ``line_subscription_item`` returns None and
+    # the resolver falls back to the line id (== the membership's stripe_item_id).
+    for line_id in one_time_line_ids or []:
+        lines.append(
+            {
+                "id": line_id,
+                "amount": amount_paid,
+                "currency": currency,
+                "period": {"start": now, "end": period_end},
+                "pricing": {"unit_amount_decimal": Decimal(str(amount_paid))},
+                "parent": {
+                    "type": "invoice_item_details",
+                    "invoice_item_details": {},
+                },
+            }
+        )
+
+    # Mirror the discount rollup onto the line (single-line only; a multi-line
+    # test must set per-line discount_amounts so per-line capture isn't masked).
+    if total_discount_amounts and len(lines) == 1:
+        lines[0]["discount_amounts"] = total_discount_amounts
 
     invoice = {
         "id": stripe_invoice_id,
