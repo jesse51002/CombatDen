@@ -384,25 +384,27 @@ class MemberMembershipsBase:
                 )
                 for r in result.mappings()
             }
+            if len(by_key) != len(rows):
+                # Fewer rows came back than we asked to insert. Two causes, both
+                # rejected loudly — and the check runs BEFORE commit so the raise
+                # ROLLS BACK any rows that did insert, rather than committing a
+                # ghost `not_added` row that is never charged or cleaned up:
+                #  - C-086 idempotent REPLAY: the INSERT's
+                #    `ON CONFLICT (idempotency_key) DO NOTHING` dropped a retry's
+                #    one-time/trial rows because their deterministic keys already
+                #    exist from the original (completed) start. We must NOT
+                #    continue: re-running Phase B would re-apply discounts to the
+                #    existing rows and re-charge. Raise so the original rows +
+                #    their discounts + their charge stand untouched.
+                #  - collapse: two rows shared (member_id, price_id) — the
+                #    request dedup should make this impossible.
+                # The partial unique index is the DB-level backstop for a race
+                # where two concurrent retries both reach this INSERT.
+                raise MembershipStartReplayError(
+                    requested=len(rows),
+                    returned=len(by_key),
+                )
             await session.commit()
-        if len(by_key) != len(rows):
-            # Fewer rows came back than we asked to insert. Two causes, both
-            # rejected loudly:
-            #  - C-086 idempotent REPLAY: the INSERT's
-            #    `ON CONFLICT (idempotency_key) DO NOTHING` dropped a retry's
-            #    one-time/trial rows because their deterministic keys already
-            #    exist from the original (completed) start. We must NOT continue:
-            #    re-running Phase B would re-apply discounts to the existing rows
-            #    and re-charge. Raise so the original rows + their discounts +
-            #    their charge stand untouched and nothing is duplicated.
-            #  - collapse: two rows shared (member_id, price_id) — the request
-            #    dedup should make this impossible.
-            # The partial unique index is the DB-level backstop for a race where
-            # two concurrent retries both reach this INSERT.
-            raise MembershipStartReplayError(
-                requested=len(rows),
-                returned=len(by_key),
-            )
         return [by_key[(r["member_id"], r["price_id"])] for r in rows]
 
     def _build_pending_rows(
