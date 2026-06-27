@@ -16,6 +16,7 @@ state is ever committed.
 from __future__ import annotations
 
 import json
+from datetime import time
 from uuid import UUID
 
 from sqlalchemy import text
@@ -29,7 +30,9 @@ from src.shared.sql_loader import load_sql
 # ── Synthesised schedule defaults ────────────────────────────────────────────
 # These values are applied to every imported class because the template does
 # not carry a time-of-day or duration — the owner edits them after import.
-_DEFAULT_CLASS_TIME = "09:00"
+# class_time MUST be a datetime.time (not a "HH:MM" string): the SQL binds it to
+# a Postgres TIME parameter, and asyncpg's TIME codec requires a time object.
+_DEFAULT_CLASS_TIME = time(9, 0)
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
 

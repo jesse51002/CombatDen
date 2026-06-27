@@ -5,7 +5,19 @@ the import must always produce a non-empty first AND last name so the
 ``gym_employees`` NOT NULL / non-empty CHECK constraints are satisfied.
 """
 
-from src.presets.service.presets_service import PresetsService
+from datetime import time
+
+from src.presets.service.presets_service import (
+    _DEFAULT_CLASS_TIME,
+    PresetsService,
+)
+
+
+def test_default_class_time_is_a_time_not_a_string():
+    # Regression: the synthesized class_time is bound to a Postgres TIME param,
+    # and asyncpg's TIME codec requires a datetime.time — a "HH:MM" string fails
+    # with "'str' object has no attribute 'hour'" and rolls back the import.
+    assert isinstance(_DEFAULT_CLASS_TIME, time)
 
 
 def test_split_name_two_parts():
