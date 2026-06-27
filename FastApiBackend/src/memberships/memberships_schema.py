@@ -63,19 +63,25 @@ class MemberMembershipsCancelResponse(BaseModel):
 
 
 class MemberMembershipsFreezeRequest(BaseModel):
-    """Freeze a member's account (account-level)."""
+    """Freeze a member's account (account-level).
+
+    No ``gym_id``: the gym is derived server-side from the member's own row
+    (C-070), so a client value would be dead weight and a misleading contract.
+    """
 
     member_id: UUID
-    gym_id: UUID
     freeze_months: int = Field(..., gt=0)
     idempotency_key: UUID
 
 
 class MemberMembershipsUnfreezeRequest(BaseModel):
-    """Unfreeze a member's account (account-level)."""
+    """Unfreeze a member's account (account-level).
+
+    No ``gym_id`` — derived server-side from the member's row (see
+    :class:`MemberMembershipsFreezeRequest`).
+    """
 
     member_id: UUID
-    gym_id: UUID
     idempotency_key: UUID
 
 

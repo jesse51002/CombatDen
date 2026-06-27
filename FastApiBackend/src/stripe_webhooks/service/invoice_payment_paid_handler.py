@@ -205,7 +205,7 @@ class InvoicePaymentPaidHandler:
     ) -> None:
         insert_sql = load_sql(SQL_DIR / "member_charge_insert.sql")
         paid_at_ts = (
-            invoice_payment.get("status_transitions", {}).get("paid_at")
+            (invoice_payment.get("status_transitions") or {}).get("paid_at")
             or invoice_payment.get("created")
         )
         await session.execute(

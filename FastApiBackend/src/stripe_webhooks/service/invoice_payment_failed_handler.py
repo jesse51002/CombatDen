@@ -141,6 +141,10 @@ class InvoicePaymentFailedHandler:
             "paid_by_member_id": str(paid_by_member_id),
             "paid_for": json.dumps([str(m) for m in paid_for]),
             "status": INVOICE_STATUS_OPEN,
+            # An OPEN/failed invoice records what is still owed (amount_due), not
+            # the gross billed total — once paid, the invoice.paid handler upserts
+            # the post-discount `total`. amount_due is set at finalization and is
+            # never 0 for a failed payment, so the `or total` is just a guard.
             "total_amount": int(invoice.get("amount_due") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),
             "stripe_invoice_id": invoice["id"],

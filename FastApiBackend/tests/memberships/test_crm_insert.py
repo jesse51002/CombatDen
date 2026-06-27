@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 
 import src.shared.db_schema_path  # noqa: F401
+from src.memberships.memberships_exceptions import MembershipStartReplayError
 from src.memberships.service.memberships_base import MemberMembershipsBase
 
 
@@ -34,11 +35,16 @@ class _FakeSession:
     def __init__(self, mappings: list[dict]) -> None:
         self._mappings = mappings
         self.params: dict | None = None
+        self.committed = False
+        self.exited_with_exc = False
 
     async def __aenter__(self) -> _FakeSession:
         return self
 
-    async def __aexit__(self, *exc: object) -> bool:
+    async def __aexit__(self, exc_type: object, *_: object) -> bool:
+        # A real db_pool session rolls back here when the block raises; record
+        # that the raise propagated through the context manager (not suppressed).
+        self.exited_with_exc = exc_type is not None
         return False
 
     async def execute(self, _sql: object, params: dict) -> _FakeResult:
@@ -46,7 +52,7 @@ class _FakeSession:
         return _FakeResult(self._mappings)
 
     async def commit(self) -> None:
-        return None
+        self.committed = True
 
 
 class _FakePool:
@@ -101,23 +107,28 @@ async def test_crm_insert_maps_ids_by_member_price_in_row_order():
     assert result == ids  # ROWS order, despite the shuffled RETURNING
     assert len(set(result)) == 3  # NOT collapsed to one
     assert pool.session_obj.params["quantities"] == [1, 2, 3]
+    assert pool.session_obj.committed  # the happy path commits
 
 
-async def test_crm_insert_raises_when_key_collapses():
-    """Two rows sharing (member, price) (the dedup should prevent it) fail loud
-    instead of silently collapsing onto one id."""
+async def test_crm_insert_raises_and_rolls_back_on_shortfall():
+    """A RETURNING shortfall (replay drop, or two rows collapsing onto one key)
+    raises MembershipStartReplayError — and the check runs BEFORE commit, so the
+    insert ROLLS BACK rather than committing a ghost row (review round-9 #2)."""
     member, plan, price = uuid4(), uuid4(), uuid4()
     rows = [_row(member, plan, price, 1), _row(member, plan, price, 1)]
-    # The DB inserted 2 rows; both come back with the SAME (member, price).
+    # The DB returns ONE row for the two requested (here a same-key collapse;
+    # the same shortfall arises from a C-086 idempotent replay drop).
     pool = _FakePool([
         {
             "item_id": str(uuid4()),
             "member_id": str(member),
             "price_id": str(price),
         }
-        for _ in range(2)
     ])
 
     base = MemberMembershipsBase(pool, None, None)
-    with pytest.raises(RuntimeError, match="collapsed"):
+    with pytest.raises(MembershipStartReplayError):
         await base._crm_insert(rows)
+    assert not pool.session_obj.committed  # never committed
+    # the raise went through the context-manager exit -> real session rolls back
+    assert pool.session_obj.exited_with_exc
