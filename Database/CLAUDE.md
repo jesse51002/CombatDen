@@ -57,6 +57,46 @@ This file is a living document — exactly like a skill, it must track reality. 
 - The FastAPI backend imports these via `from schema.immutable_columns import <TABLE_NAME>` (available through `db_schema_path.py`).
 - Used with `validate_mutable_columns()` in `src/shared/column_guard.py` to reject update requests that try to write immutable columns.
 
+## Real-gym video content schema (`gym_video_*`)
+
+The `gym_video_*` tables hold real customer gym video content (UUID-keyed by `gyms.gym_id`), separate
+from the `video_gym*` template tables (text-keyed demo content).
+
+**`gym_video_spec` is append-only and versioned.** Every change appends a new row; existing rows are
+never UPDATE'd. The `spec_id uuid` is the PK; `gym_id` is NOT unique. Columns:
+
+| Column | Type | Notes |
+|---|---|---|
+| `spec_id` | `uuid` PK | Immutable row identity |
+| `gym_id` | `uuid` | FK to `gyms`; multiple rows per gym (one per version) |
+| `videos_desc` | `text` | Full keep-spec (markdown) |
+| `avoid_desc` | `text` | Full avoid-spec (markdown) |
+| `short_videos_desc` | `text` | Optional short summary |
+| `short_avoid_desc` | `text` | Optional short summary |
+| `queries` | `jsonb` | Array of search query strings (was a separate table — see below) |
+| `source` | `gym_video_spec_source` | Enum: `admin_update` \| `system_update` \| `feed_update` |
+| `created_at` | `timestamptz` | Version timestamp |
+
+Three writers, each stamping a distinct `source`:
+- `FastApiBackend/src/video_config/` agent / owner save → `admin_update`
+- `FastApiBackend/src/presets/` template import → `system_update`
+- `FastApiBackend/src/video_config/` feed refiner → `feed_update`
+
+**Read paths use the `gym_video_spec_latest` view**, which surfaces the single most-recent version row
+per gym. Never query the underlying `gym_video_spec` table directly in a read path.
+
+**`gym_video_query` was dropped.** Search queries were previously a separate `gym_video_query` table
+(one row per query per gym). They are now stored in `gym_video_spec.queries JSONB` as part of the
+versioned spec. Do not reference or recreate `gym_video_query`.
+
+**`gym_video_feed.curated_at`** — a nullable `timestamptz` column added to `gym_video_feed`, recording
+when the owner last manually accepted or rejected that feed row.
+
+**`gym_video_spec_source` enum** — a new Postgres enum (`CREATE TYPE gym_video_spec_source AS ENUM
+('admin_update', 'system_update', 'feed_update')`), mirrored in
+`python_data/schema/` as a Python `StrEnum`. Update `immutable_columns.py` if `spec_id` or `source`
+are columns that must be guarded (they are immutable once written).
+
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, constraints, indexes, triggers)
 - `access_rules/` — RLS policies, REVOKE/GRANT statements for each table (loaded after all schemas to avoid circular dependencies)

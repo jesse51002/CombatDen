@@ -87,11 +87,10 @@ class PresetsBloc extends Bloc<PresetsEvent, PresetsState> {
         gymId: gymId,
         videoGymId: videoGymId,
       );
-      // Update the preview surfaces so they immediately reflect the imported gym.
-      selectedGym.setVideoGymId(
-        videoGymId: videoGymId,
-        designId: result.themeDesignId,
-      );
+      // Refresh the preview surfaces (classes / rewards / videos) to reflect the
+      // imported content. Theme is intentionally NOT applied here — that's the
+      // Theme tab's job; the imported design is persisted server-side.
+      selectedGym.setVideoGymId(videoGymId: videoGymId);
       emit(
         state.copyWith(
           importStatus: PresetsImportStatus.success,

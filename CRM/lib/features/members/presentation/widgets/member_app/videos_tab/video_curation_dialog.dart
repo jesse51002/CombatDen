@@ -14,6 +14,10 @@ enum VideoCurationMode { remove, keep }
 /// For agent-curated videos it asks an optional "why" so the agent learns to
 /// surface / suppress videos like it automatically next time, instead of
 /// resurfacing the same mistake.
+///
+/// [show] resolves to the entered reason on confirm (the empty string when none
+/// was typed) and to `null` on cancel — so the caller can both tell confirm from
+/// cancel and log the reason (the "Your videos" remove persists it).
 class VideoCurationDialog extends StatefulWidget {
   final String videoTitle;
   final bool teachAgent;
@@ -26,13 +30,13 @@ class VideoCurationDialog extends StatefulWidget {
     required this.mode,
   });
 
-  static Future<void> show(
+  static Future<String?> show(
     BuildContext context, {
     required String videoTitle,
     required bool teachAgent,
     VideoCurationMode mode = VideoCurationMode.remove,
   }) {
-    return showDialog<void>(
+    return showDialog<String>(
       context: context,
       builder: (_) => VideoCurationDialog(
         videoTitle: videoTitle,
@@ -56,7 +60,7 @@ class _VideoCurationDialogState extends State<VideoCurationDialog> {
   String get _confirmLabel => _isKeep ? 'Keep' : 'Remove';
 
   Color get _confirmColor =>
-      _isKeep ? DesignConstants.goodGreen : DesignConstants.redDark;
+      _isKeep ? DesignConstants.goodGreen : DesignConstants.badRed;
 
   String get _teachText => _isKeep
       ? "Tell the agent why you want it back. It'll learn to surface "
@@ -125,7 +129,10 @@ class _VideoCurationDialogState extends State<VideoCurationDialog> {
               text: _confirmLabel,
               fullWidth: true,
               backgroundColor: _confirmColor,
-              onPressed: () => Navigator.of(context).pop(),
+              // Resolve to the reason (empty string when none) so the caller can
+              // distinguish confirm from cancel and log it.
+              onPressed: () =>
+                  Navigator.of(context).pop(_reasonController.text.trim()),
             ),
           ),
         ],

@@ -95,8 +95,8 @@ schema_paths = [
     # Per-gym live video content (UUID-keyed; the prod counterpart of the
     # video_gym* template catalog). Loads after gyms + video (FK targets).
     "./schemas/gym_video_spec.sql",
+    "./schemas/video_run.sql",
     "./schemas/gym_video_feed.sql",
-    "./schemas/gym_video_query.sql",
     # CRM billing subsystem (restored) — ordered by FK dependency so each
     # table's references already exist when it loads. membership_plans /
     # membership_plan_prices / gym_discounts moved above members; billing

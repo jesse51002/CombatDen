@@ -28,6 +28,7 @@ from src.rewards.rewards_router import rewards_router
 from src.shared.paying_member_lock import LockBusyError
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
 from src.tasks.tasks_router import tasks_router
+from src.video_config.video_config_router import video_config_router
 from src.videos.videos_router import videos_router
 from src.waivers.waivers_router import waivers_router
 
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
 
     # Videos: read-only template catalog + a real gym's live feed/showcase.
     application.include_router(videos_router)
+    application.include_router(video_config_router)
 
     # Presets: transactional template import into a real gym's production tables.
     application.include_router(presets_router)

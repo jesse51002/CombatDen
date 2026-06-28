@@ -55,11 +55,12 @@ class GymContentRepository {
   Future<List<FeedSection>> fetchVideoPreview(
     String gymId, {
     int perTag = 10,
+    bool rejected = false,
   }) async {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/api/v1/gyms/$gymId/videos/preview',
-        queryParameters: {'per_tag': perTag},
+        queryParameters: {'per_tag': perTag, if (rejected) 'rejected': true},
       );
       final data = response.data;
       if (data == null) {
@@ -93,6 +94,8 @@ class GymContentRepository {
   Future<VideoPage> fetchVideos(
     String gymId, {
     String? videoType,
+    bool owner = false,
+    bool rejected = false,
     int limit = 20,
     int offset = 0,
   }) async {
@@ -104,6 +107,8 @@ class GymContentRepository {
           'offset': offset,
           if (videoType != null && videoType.isNotEmpty)
             'video_type': videoType,
+          if (owner) 'owner': true,
+          if (rejected) 'rejected': true,
         },
       );
       final data = response.data;
@@ -127,6 +132,108 @@ class GymContentRepository {
     } catch (e, st) {
       log('fetchVideos failed', error: e, stackTrace: st);
       throw ServerException('Failed to load gym videos: $e');
+    }
+  }
+
+  /// `POST /api/v1/gyms/{gymId}/videos/lookup` — fetch a YouTube link's real
+  /// metadata (title / channel / thumbnail / views / duration) WITHOUT adding
+  /// it. Powers the "confirm these details before adding" preview. Returns the
+  /// looked-up [Video].
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure (e.g. a 400 when
+  /// the URL isn't a YouTube link or the video doesn't exist).
+  Future<Video> lookupVideo(String gymId, String url) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos/lookup',
+        data: {'url': url},
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const ServerException('Empty lookup response');
+      }
+      return Video.fromJson(data);
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('lookupVideo failed', error: e, stackTrace: st);
+      throw ServerException('Failed to look up video: $e');
+    }
+  }
+
+  /// `POST /api/v1/gyms/{gymId}/videos` — add one owner-provided YouTube link
+  /// to the gym's served feed. The backend extracts the id and fetches the
+  /// video's real metadata from the YouTube Data API. Returns the resulting
+  /// [Video].
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure (e.g. a 400 when
+  /// the URL isn't a recognisable YouTube link).
+  Future<Video> addVideo(String gymId, String url) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos',
+        data: {'url': url},
+      );
+      final data = response.data;
+      if (data == null) {
+        throw const ServerException('Empty add-video response');
+      }
+      return Video.fromJson(data);
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('addVideo failed', error: e, stackTrace: st);
+      throw ServerException('Failed to add video: $e');
+    }
+  }
+
+  /// `DELETE /api/v1/gyms/{gymId}/videos/{videoId}` — remove one video from the
+  /// gym's served feed and log the removal (with the optional [reason]) to
+  /// `gym_video_feed_removal`. The shared pool row is left untouched.
+  /// Idempotent.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<void> removeVideo(
+    String gymId,
+    String videoId, {
+    bool owner = false,
+    String? reason,
+  }) async {
+    try {
+      await _apiClient.delete<void>(
+        '/api/v1/gyms/$gymId/videos/$videoId${owner ? '?owner=true' : ''}',
+        data: (reason != null && reason.isNotEmpty) ? {'reason': reason} : null,
+      );
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('removeVideo failed', error: e, stackTrace: st);
+      throw ServerException('Failed to remove video: $e');
+    }
+  }
+
+  /// `POST /api/v1/gyms/{gymId}/videos/{videoId}/keep` — un-reject a video
+  /// (flip it back to the served feed; the reject audit is kept). Idempotent.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<void> keepVideo(String gymId, String videoId) async {
+    try {
+      await _apiClient.post<void>(
+        '/api/v1/gyms/$gymId/videos/$videoId/keep',
+      );
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('keepVideo failed', error: e, stackTrace: st);
+      throw ServerException('Failed to keep video: $e');
     }
   }
 }

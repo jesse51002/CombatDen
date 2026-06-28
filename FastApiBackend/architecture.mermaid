@@ -13,8 +13,9 @@ flowchart TB
     r_plan["<b>plans</b> · /api/v1/membership_plans · 7 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>GET /{plan_id}/prices<br/>POST /price"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
-    r_vid["<b>videos</b> · /api/v1/videos + /api/v1/gyms/{id}/videos · 8 routes<br/>GET /videos/templates<br/>GET /videos/templates/{id}<br/>GET /videos/templates/{id}/videos<br/>GET /videos/templates/{id}/videos/preview<br/>GET /gyms/{id}/videos<br/>GET /gyms/{id}/videos/preview<br/>GET /gyms/{id}/videos/spec<br/>GET /gyms/{id}/showcase"]
+    r_vid["<b>videos</b> · /api/v1/videos + /api/v1/gyms/{id}/videos · 12 routes<br/>GET /videos/templates<br/>GET /videos/templates/{id}<br/>GET /videos/templates/{id}/videos<br/>GET /videos/templates/{id}/videos/preview<br/>GET /gyms/{id}/videos<br/>POST /gyms/{id}/videos/lookup<br/>POST /gyms/{id}/videos<br/>DELETE /gyms/{id}/videos/{video_id}<br/>POST /gyms/{id}/videos/{video_id}/keep<br/>GET /gyms/{id}/videos/preview<br/>GET /gyms/{id}/videos/spec<br/>GET /gyms/{id}/showcase"]
     r_pres["<b>presets</b> · /api/v1/gyms/{id}/presets · 1 route<br/>POST /gyms/{id}/presets/import (owner + email-allowlist gated)"]
+    r_vcfg["<b>video_config</b> · /api/v1/gyms/{id}/video-config · 5 routes<br/>GET / (latest spec via gym_video_spec_latest view)<br/>PUT / (save confirmed draft → admin_update version)<br/>POST /agent (one conversational turn · Pydantic AI)<br/>POST /generate-queries (single structured LLM call)<br/>POST /refine-from-feed (curation signals → feed_update version)<br/>· gym-employee gated"]
     checkin_service["ClassesCheckinService"]
     cycle_counts_service["ClassesCycleCountsService"]
     crm_members_list_service["CrmMembersListService"]
@@ -39,8 +40,9 @@ flowchart TB
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
     memberships_linked["MemberMembershipsLinked<br/>src/memberships/ · authorize payer + check eligibility (many-to-many)<br/>writes member_authorized_payers + signs authorized-payer waiver<br/>in one txn (no orphan signatures); owns two-family lock"]
-    videos_service["VideosService<br/>src/videos/ · public template catalog + authed gym content<br/>reads video_* + video_gym_* + gym_video_*"]
-    presets_service["PresetsService<br/>src/presets/ · owner-gated template-→-gym import<br/>writes gym_video_spec/feed/query · gym_classes · gym_employees · gym_rewards · gyms.theme_design_id"]
+    videos_service["VideosService<br/>src/videos/ · public template catalog + authed gym content<br/>reads video_* + video_gym_* + gym_video_* (scan_status/run-versioned)<br/>+ owner feed add (YouTube Data API metadata; pool row owned via video.gym_id + added_via=manual)<br/>/ remove: owner=True → delete owner-section row (+ pool if manual); owner=False → reject latest-run row (scan_status=rejected)<br/>/ keep: un-reject (scan_status=accepted; reject audit retained)"]
+    presets_service["PresetsService<br/>src/presets/ · owner-gated template-→-gym import<br/>writes gym_video_spec (system_update version) + gym_video_feed · gym_classes · gym_employees · gym_rewards · gyms.theme_design_id"]
+    video_config_service["VideoConfigService — src/video_config/<br/>agent turns (agent_turn · Pydantic AI · default anthropic:claude-sonnet-4-6)<br/>structured query generation (VideoConfigQueryGenerator)<br/>feed refiner → feed_update spec version (VideoConfigFeedRefiner)<br/>spec reads: gym_video_spec_latest view · writes: append-only INSERT<br/>prompts: src/video_config/prompts/*.md · model: settings.video_agent_model"]
     reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push → sub-orphans (cancel unlinked subs)<br/>per-family lock guards mutations; no sweep-wide lock"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
@@ -93,6 +95,7 @@ flowchart TB
     r_task --> tasks_service
     r_vid --> videos_service
     r_pres --> presets_service
+    r_vcfg --> video_config_service
     r_mm -->|"batch reprice: discover + create"| membership_reprice_task_handler
     r_mm -->|"in-task guard (item ops)"| tasks_service
     r_mm -->|"fire batch run"| tasks_executor
@@ -146,19 +149,23 @@ flowchart TB
   end
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(applied-discount rows · sync writes back stripe_coupon_id + status)"]
   Stripe["Stripe — payments · Connect · webhooks"]
+  YouTube["📺 YouTube Data API v3<br/>video metadata for owner-added videos"]
+  LLMProvider["🤖 LLM Provider (Anthropic default · Pydantic AI)<br/>model: settings.video_agent_model (claude-sonnet-4-6)<br/>keys: anthropic_api_key / openai_api_key / gemini_api_key"]
   CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
   FastApiBackend -->|"read/write · JWT auth · read+write applied-discount rows"| Supabase
   FastApiBackend -->|"via Payments core · compute coupons at sync, write back stripe_coupon_id"| Stripe
   Stripe -.->|"webhooks → /api/v1/stripe/webhooks"| FastApiBackend
+  FastApiBackend -->|"videos: owner-add fetches video title/channel/thumbnail/views"| YouTube
+  FastApiBackend -->|"video_config: conversational agent + structured query generation (Pydantic AI)"| LLMProvider
   classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef route fill:#eef2ff,stroke:#5b6bb0,color:#222;
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
   class CRM client;
-  class Supabase,Stripe ext;
-  class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service svc;
+  class Supabase,Stripe,YouTube,LLMProvider ext;
+  class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_vcfg route;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,video_config_service svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

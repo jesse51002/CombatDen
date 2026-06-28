@@ -2,10 +2,11 @@
 
 Covers the read-path transforms that don't need the database: the genre→group
 and discipline→parent maps (asserted TOTAL so a new enum value can't silently go
-unmapped), the serve-time channel-avatar backfill, and the small null-safe
-helpers on ``VideosService``.
+unmapped), the serve-time channel-avatar backfill, the small null-safe helpers on
+``VideosService``, and the owner-add YouTube-id extractor.
 """
 
+import pytest
 from schema.video import VideoGenre
 
 from src.videos.schema.videos_big_group import BigGroup, big_group_for
@@ -85,3 +86,45 @@ def test_as_list_tolerates_json_string_and_none():
     assert VideosService._as_list(None) == []
     assert VideosService._as_list('["a", "b"]') == ["a", "b"]
     assert VideosService._as_list(["a"]) == ["a"]
+
+
+# ── owner-add: YouTube id extraction ─────────────────────────────────
+
+_VALID_ID = "dQw4w9WgXcQ"  # 11 chars, the standard YouTube id shape
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://www.youtube.com/watch?v={_VALID_ID}",
+        f"https://www.youtube.com/watch?v={_VALID_ID}&t=42s",
+        f"https://m.youtube.com/watch?v={_VALID_ID}",
+        f"https://youtu.be/{_VALID_ID}",
+        f"https://youtu.be/{_VALID_ID}?si=abcd",
+        f"https://www.youtube.com/embed/{_VALID_ID}",
+        f"https://www.youtube.com/shorts/{_VALID_ID}",
+        f"https://www.youtube.com/live/{_VALID_ID}",
+        f"youtube.com/watch?v={_VALID_ID}",  # scheme-less
+        _VALID_ID,  # a bare id
+    ],
+)
+def test_extract_youtube_id_accepts_known_forms(url: str):
+    assert VideosService._extract_youtube_id(url) == _VALID_ID
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "   ",
+        "https://vimeo.com/123456",
+        "https://example.com/watch?v=" + _VALID_ID,  # right path, wrong host
+        "https://www.youtube.com/watch?v=",  # no id
+        "https://www.youtube.com/feed/subscriptions",  # no id segment
+        "not a url at all",
+        "https://youtu.be/short",  # too short to be an id
+    ],
+)
+def test_extract_youtube_id_rejects_garbage(url: str):
+    with pytest.raises(ValueError):
+        VideosService._extract_youtube_id(url)

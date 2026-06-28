@@ -418,6 +418,40 @@ derivation across SQL files.
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
 
+## `video_config` domain — LLM-backed gym video config
+
+`src/video_config/` holds five gym-employee-gated routes under
+`/api/v1/gyms/{gym_id}/video-config`:
+
+| Route | What it does |
+|---|---|
+| `GET /` | Return the gym's latest config (reads `gym_video_spec_latest` view) |
+| `PUT /` | Save a confirmed draft as an `admin_update` version (append-only INSERT) |
+| `POST /agent` | One conversational turn — `VideoConfigService.agent_turn` runs the Pydantic AI agent built by `build_video_config_agent` |
+| `POST /generate-queries` | Single structured LLM call that drafts search queries |
+| `POST /refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
+
+**External dependency — LLM provider (Pydantic AI).**
+Uses `pydantic-ai-slim[anthropic]` — a provider-swappable agent framework. Default model is
+`anthropic:claude-sonnet-4-6`, overrideable via `settings.video_agent_model`. Related settings:
+`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_model`, `video_agent_retries`.
+
+**Prompts live in `src/video_config/prompts/*.md`** (per the monorepo no-inline-prompt rule). Code holds
+the file path, never the prompt text.
+
+**Versioned spec — readers always use the view, not the table.**
+`gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
+Three writers append new version rows, each stamped with a `gym_video_spec_source` enum value:
+
+- Agent / manual owner save → `admin_update` (via `PUT /`)
+- Preset import (`PresetsService`) → `system_update`
+- Feed refiner → `feed_update` (via `POST /refine-from-feed`)
+
+Read paths (including the `GET /` endpoint) **always** query the `gym_video_spec_latest` view, which
+surfaces the single most-recent version per gym. Do not `SELECT` directly from the raw
+`gym_video_spec` table in a read path. Queries are stored in the spec's `queries JSONB` column (the
+separate `gym_video_query` table was dropped when versioned spec shipped).
+
 ## Database
 
 **Schema Location:** `../Database/supabase/schemas/` contains all Supabase table definitions with RLS policies.

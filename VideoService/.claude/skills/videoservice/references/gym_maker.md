@@ -124,6 +124,16 @@ rewards: null                         # optional points-store reward cards (belo
   (educational/how-to). An all-educational query set is wrong (principle 6). The
   scraper reads them. Empty list is allowed (a gym that rides on others'
   queries), but then nothing new is fetched for it.
+
+  > **Note — this guide covers template YAML gyms only.** The `queries` field
+  > above applies to the hand-authored `VideoService/gyms/<gym_id>.yaml` template
+  > files (the 76 demo gym archetypes). For **real customer gyms** (UUID-keyed,
+  > stored in `gym_video_spec` in Postgres), query generation is handled by the
+  > FastApiBackend `video_config` domain: `POST
+  > /api/v1/gyms/{gym_id}/video-config/generate-queries` (single structured LLM
+  > call) and `POST /api/v1/gyms/{gym_id}/video-config/agent` (conversational
+  > agent). The genre-spread methodology from this skill (principle 6) was ported
+  > into those backend prompts.
 - **`classes` / `rewards`** — `null` until authored. Shapes below.
 
 ### `classes` — branded class cards (`ClassImage`)
@@ -179,7 +189,9 @@ A workable order (adapt, don't recite):
 3. **What should its feed contain vs. exclude?** — turn this into
    `specification.videos_desc` / `avoid_desc`. Push for specifics.
 4. **What searches feed it?** — draft `queries` from the discipline + spec; show
-   them and let the user cut/add. (Don't invent filler queries.)
+   them and let the user cut/add. (Don't invent filler queries.) This step
+   applies to template YAML gyms. For real customer gyms, queries are generated
+   via `POST /api/v1/gyms/{gym_id}/video-config/generate-queries` on the backend.
 5. **Classes / rewards?** — only if the user wants them now; otherwise leave
    `null`. Get real titles/images/points from the user — don't fabricate.
 

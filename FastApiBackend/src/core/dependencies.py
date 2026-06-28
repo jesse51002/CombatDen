@@ -139,7 +139,14 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.video_config.service.video_config_llm import (
+    build_config_agent,
+    build_feed_refiner,
+    build_query_generator,
+)
+from src.video_config.service.video_config_service import VideoConfigService
 from src.videos.service.videos_service import VideosService
+from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -168,6 +175,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.tasks.tasks_router",
             "src.videos.videos_router",
             "src.presets.presets_router",
+            "src.video_config.video_config_router",
         ],
     )
 
@@ -195,9 +203,56 @@ class DependencyInjector(containers.DeclarativeContainer):
     # tracking), no Stripe.
     waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
 
-    # Videos: read-only — the slug-keyed video template catalog + a real gym's
-    # live feed/spec/showcase from the gym_video_* tables. No Stripe, no writes.
-    videos_service = providers.Factory(VideosService, db_pool=db_pool)
+    # Videos: the slug-keyed template catalog + a real gym's live
+    # feed/spec/showcase from the gym_video_* tables, plus the owner's feed
+    # add/remove. The add fetches real metadata from the YouTube Data API. No
+    # Stripe.
+    youtube_metadata_client = providers.Singleton(
+        YouTubeMetadataClient,
+        api_key=settings.youtube_api_key,
+        base_url=settings.youtube_data_api_base_url,
+    )
+    videos_service = providers.Factory(
+        VideosService,
+        db_pool=db_pool,
+        youtube_client=youtube_metadata_client,
+    )
+
+    # Video-config domain: the Pydantic AI conversational agent + single-call query
+    # generator that author a gym's append-only spec. Provider-swappable via the
+    # model string; keys are published to the env by the builders. No Stripe.
+    video_config_query_generator = providers.Singleton(
+        build_query_generator,
+        model=settings.video_agent_model,
+        retries=settings.video_agent_retries,
+        anthropic_api_key=settings.anthropic_api_key,
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key,
+    )
+    video_config_agent = providers.Singleton(
+        build_config_agent,
+        model=settings.video_agent_model,
+        retries=settings.video_agent_retries,
+        anthropic_api_key=settings.anthropic_api_key,
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key,
+    )
+    video_config_feed_refiner = providers.Singleton(
+        build_feed_refiner,
+        model=settings.video_agent_model,
+        retries=settings.video_agent_retries,
+        db_pool=db_pool,
+        anthropic_api_key=settings.anthropic_api_key,
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key,
+    )
+    video_config_service = providers.Factory(
+        VideoConfigService,
+        db_pool=db_pool,
+        agent=video_config_agent,
+        query_generator=video_config_query_generator,
+        feed_refiner=video_config_feed_refiner,
+    )
 
     # Presets: transactional import of a video_gym template into a real gym's
     # production tables. Owner-gated + email allowlist. No Stripe.

@@ -31,6 +31,7 @@ import 'package:crm/features/schedule/data/mock_schedule.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
 import 'package:crm/features/schedule/presentation/screens/schedule_screen.dart';
 import 'package:crm/features/settings/presentation/screens/settings_screen.dart';
+import 'package:crm/features/video_config/presentation/screens/video_config_screen.dart';
 import 'package:crm/shared/themes/app_theme.dart';
 
 Future<void> main() async {
@@ -170,6 +171,7 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   // can read the tapped class off `settings.arguments` (a
   // `WidgetBuilder` can't see them).
   AppRoutes.settings: (_) => const SettingsScreen(),
+  AppRoutes.videoConfig: (_) => const VideoConfigScreen(),
   AppRoutes.growth: (_) => const GrowthScreen(),
   AppRoutes.employees: (_) => const EmployeesScreen(),
   AppRoutes.employeeDetail: (_) => const EmployeeDetailScreen(),

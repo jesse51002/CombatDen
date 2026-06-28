@@ -21,6 +21,7 @@ dependencies = [
     "email-validator (>=2.3.0,<3.0.0)",
     "stripe (>=15.2.0,<16.0.0)",
     "apscheduler (>=3.11.2,<4.0.0)",
+    "pydantic-ai-slim[anthropic] (>=2.0.0,<3.0.0)",
 ]
 
 [build-system]

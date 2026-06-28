@@ -1,5 +1,6 @@
--- A real gym's live video spec — one row per gym. Returns no rows when the gym
--- has no spec authored yet.
+-- A real gym's live video spec — the LATEST version (the spec is append-only
+-- versioned; read through the gym_video_spec_latest view). Returns no rows when
+-- the gym has no spec authored yet.
 SELECT
     gym_id,
     gym_type,
@@ -7,7 +8,6 @@ SELECT
     short_avoid_desc,
     videos_desc,
     avoid_desc,
-    imported_from,
-    imported_at
-FROM gym_video_spec
+    imported_from
+FROM gym_video_spec_latest
 WHERE gym_id = CAST(:gym_id AS UUID)

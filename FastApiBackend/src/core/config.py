@@ -65,6 +65,25 @@ class Settings(BaseSettings):
     video_app_id: str = "combatden"
     video_assets_cdn_base_url: str = "https://cdn.combatden.net"
 
+    # YouTube Data API v3 — used when an owner adds a single video to a gym's
+    # feed: the backend fetches the real title / channel / thumbnail / views /
+    # duration / channel avatar for that id. Same key family the VideoService
+    # scraper uses (a Google API key, ``AIza…``); set ``YOUTUBE_API_KEY`` in .env.
+    youtube_api_key: str
+    youtube_data_api_base_url: str = "https://www.googleapis.com/youtube/v3"
+
+    # Video-config agent (Pydantic AI) — the conversational config-authoring agent
+    # + the single-call query generator. PROVIDER-SWAPPABLE via the model string:
+    # set ``video_agent_model`` to any provider Pydantic AI supports (e.g.
+    # ``openai:gpt-...`` / ``google-gla:gemini-...``) whose key is set below. Keys
+    # default to empty so the backend boots without them (the agents resolve the
+    # model lazily); set ``ANTHROPIC_API_KEY`` in .env to use the default model.
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    video_agent_model: str = "anthropic:claude-sonnet-4-6"
+    video_agent_retries: int = 3
+
     # Logging Configuration
     log_level: str = "DEBUG"
 

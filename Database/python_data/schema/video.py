@@ -35,6 +35,40 @@ class VideoGymFeedStatus(StrEnum):
     rejected = "rejected"
 
 
+class VideoSource(StrEnum):
+    """Mirrors the Postgres `video_source` enum in schemas/video.sql — how a video
+    entered the system and whether it can be DELETED: web_query (shared, scraped;
+    removal = reject only) vs manual (owner-added, gym-owned; removal = delete)."""
+
+    web_query = "web_query"  # found via the scrape's search queries (bulk path)
+    manual = "manual"  # an owner manually pasted a YouTube link
+
+
+class GymVideoScanStatus(StrEnum):
+    """Mirrors the Postgres `gym_video_scan_status` enum in
+    schemas/gym_video_feed.sql — a feed row's keep/drop decision."""
+
+    accepted = "accepted"  # served
+    rejected = "rejected"  # the rejected list (web_query removals land here)
+
+
+class GymVideoRejectionType(StrEnum):
+    """Mirrors the Postgres `gym_video_rejection_type` enum in
+    schemas/gym_video_feed.sql — whether a rejection was automatic or manual."""
+
+    automatic = "automatic"  # the batch scan's keep/drop pass dropped it
+    manual = "manual"  # an owner/admin rejected it in the UI
+
+
+class GymVideoSpecSource(StrEnum):
+    """Mirrors the Postgres `gym_video_spec_source` enum in
+    schemas/gym_video_spec.sql — what produced an (append-only) spec version."""
+
+    feed_update = "feed_update"  # the feed-learning refiner folded in curation
+    admin_update = "admin_update"  # the conversational config agent / CRM edit
+    system_update = "system_update"  # preset import / automation
+
+
 class VideoExecutionType(StrEnum):
     """Mirrors the Postgres `video_execution_type` enum in schemas/video_cost_log.sql."""
 

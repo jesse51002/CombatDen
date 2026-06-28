@@ -31,6 +31,7 @@ flowchart TB
   GoogleFonts["Google Fonts"]
   Recraft["Recraft"]
   CDN["S3 + CloudFront CDN"]
+  LLMProvider["🤖 Anthropic / LLM (Pydantic AI)<br/>video_config agent + query generation"]
 
   MobileApp -->|"branding"| ThemeService
   MobileApp -->|"feed / gym"| VideoService
@@ -44,6 +45,7 @@ flowchart TB
   FastApiBackend -->|"read/write · auth"| Database
   VideoService -->|"writes video_* tables"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
+  FastApiBackend -->|"video-config agent + query gen"| LLMProvider
   VideoService --> Apify
   VideoService --> LiteLLM
   VideoService --> Gemini
@@ -59,7 +61,7 @@ flowchart TB
   class MobileApp,CRM,LandingPage client;
   class ThemeService,VideoService,FastApiBackend service;
   class Database data;
-  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN ext;
+  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN,LLMProvider ext;
   style FastApiBackend stroke-dasharray:4 3;
 ```
 
@@ -82,7 +84,7 @@ flowchart TB
 
 **🌐 LandingPage** — Marketing site (React via CDN + Babel, no bundler) at `www.combatden.net`. Hero phone carousel, feed demo, loyalty loop, pricing. It makes no live API calls — its screenshots are captured from MobileApp and its feed thumbnails are pulled from VideoService **at build time**, then baked into the deploy. It links out to the theme browser. *Talks to:* CRM (link), MobileApp + VideoService (build-time assets only).
 
-**⚙️ FastApiBackend** — Python/FastAPI membership + billing + video content backend (the CRM's API). Routers for members, gyms, classes, ranks, rewards, plus the billing subsystem — membership plans, discounts, member memberships, payments, and Stripe webhooks — and two merged video domains: **`videos`** (public slug-keyed template catalog + authed real-gym content: feed, spec, showcase) and **`presets`** (owner-gated import of a video template into a gym's live tables). A service/SQL layer; Supabase-JWT auth. The request/response contract lives in the backend's Pydantic schemas (`src/<domain>/<domain>_schema.py`). *Talks to:* Database (read/write + Supabase Auth), Stripe (payments + webhooks). **Built and wired to the CRM, not yet deployed** (prod target `api.combatden.net`); billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred).
+**⚙️ FastApiBackend** — Python/FastAPI membership + billing + video content backend (the CRM's API). Routers for members, gyms, classes, ranks, rewards, plus the billing subsystem — membership plans, discounts, member memberships, payments, and Stripe webhooks — and three video domains: **`videos`** (public slug-keyed template catalog + authed real-gym content: feed, spec, showcase), **`presets`** (owner-gated import of a video template into a gym's live tables), and **`video_config`** (LLM-powered conversational agent for authoring a gym's versioned video spec, generating search queries, and refining the spec from owner curation signals — via Pydantic AI, Anthropic by default). A service/SQL layer; Supabase-JWT auth. The request/response contract lives in the backend's Pydantic schemas (`src/<domain>/<domain>_schema.py`). *Talks to:* Database (read/write + Supabase Auth), Stripe (payments + webhooks), Anthropic/LLM provider (video-config agent + query generation via Pydantic AI). **Built and wired to the CRM, not yet deployed** (prod target `api.combatden.net`); billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred).
 
 **🎬 VideoService** — owns the gym-video **batch pipeline**, and is now **two distinct parts**. The **CREATION pipeline** (driven by the `videoservice` skill — make-gym / scrape / scan — plus the `gym_maker`, `scraper`, `scan`, `sync_gyms`, `import_yaml`, `sql` scripts and the `VideoDbWriter`) scrapes YouTube via Apify, classifies with Gemini/LiteLLM, and **writes** the shared Postgres `video_*` tables. The **READ API** at `video.combatden.net` is a transitional source for the **MobileApp** only — the CRM reads video content via FastApiBackend's merged `videos` domain. The two halves never call each other — the database is the handoff.
 

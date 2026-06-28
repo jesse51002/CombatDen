@@ -8,7 +8,8 @@ Two surfaces, both read-only:
 * **A real gym's live content** (``GymVideo*`` / ``GymShowcase`` / ``GymFeed*``) —
   keyed by ``gyms.gym_id`` (UUID), read from the ``gym_video_*`` tables and the
   shared ``video`` pool. ``gym_video_feed`` is lean (no status column): every row
-  is a served video, so there is no rejected-feed surface here.
+  is a served video, so there is no rejected-feed surface here. The owner edits
+  this feed by hand via ``VideoAddRequest`` (add one YouTube link) + a delete.
 
 The genre tag reuses ``VideoGenre`` from the Database package (the Postgres
 ``video_genre`` enum); ``GymType`` / ``ParentGymType`` / ``BigGroup`` are the
@@ -17,7 +18,6 @@ videos domain's own mapping enums.
 
 from __future__ import annotations
 
-from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -163,6 +163,31 @@ class GymVideoCard(BaseModel):
         return big_group_for(self.tag) if self.tag is not None else None
 
 
+class VideoAddRequest(BaseModel):
+    """The owner-add payload: a single YouTube link (or a bare 11-char id).
+
+    The backend extracts the YouTube video id, fetches the video's real metadata
+    from the YouTube Data API (title / channel / thumbnail / views / duration /
+    channel avatar), stores it on the shared-pool row, and adds it to the gym's
+    served feed.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    url: str = Field(min_length=1)
+
+
+class VideoRemoveRequest(BaseModel):
+    """The owner-remove payload: an optional reason. The remove deletes the
+    feed row (so the video stops showing) and logs the removal + this reason to
+    ``gym_video_feed_removal``. The body is optional — a remove with no reason
+    is allowed (the reason is simply NULL in the log)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str | None = None
+
+
 class GymVideosFeed(BaseModel):
     """A gym's served video feed: one page of the slim, public projection.
 
@@ -204,10 +229,11 @@ class GymFeedPreview(BaseModel):
 
 
 class GymVideoSpecView(BaseModel):
-    """A real gym's live video spec — the projection of its ``gym_video_spec``
-    row. The short pair is display-only; the long pair is the scan criteria. The
-    ``imported_*`` provenance records the template a preset import seeded this
-    from (NULL once hand-edited)."""
+    """A real gym's live video spec — the projection of its LATEST
+    ``gym_video_spec`` version (read via the ``gym_video_spec_latest`` view; the
+    spec is append-only versioned). The short pair is display-only; the long pair
+    is the scan criteria. ``imported_from`` records the template a preset import
+    seeded this from (NULL once agent/hand-authored)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -218,7 +244,6 @@ class GymVideoSpecView(BaseModel):
     videos_desc: str
     avoid_desc: str
     imported_from: str | None = None
-    imported_at: datetime | None = None
 
 
 class ShowcaseClassCard(BaseModel):
