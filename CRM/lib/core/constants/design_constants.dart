@@ -77,7 +77,25 @@ class DesignConstants {
   // The label color that sits on a sapphire / gradient fill — near-white in
   // both themes (white on light, the near-white ink on dark), so a filled
   // accent (primary button, selected pill) always carries a legible label.
+  // Safe only on a fill that is dark in BOTH themes (the gradient, the
+  // saturated reds/greens). For a fill whose luminance flips between themes,
+  // use [onFill] instead.
   static Color get onAccent => _dark ? _dText : _lSurface;
+
+  // The legible label/icon color for an arbitrary SOLID colored fill, chosen
+  // by the fill's luminance: near-white [onAccent] on a dark fill, near-black
+  // ink on a light one. Needed because some fills flip brightness between
+  // themes — e.g. `okYellow` is a dark amber in light mode (wants a light
+  // label) but a bright gold in dark mode (wants a dark label) — so a single
+  // fixed token can't stay legible on both.
+  static Color onFill(Color fill) =>
+      ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+          // Near-white, same as an accent label on a dark fill.
+          ? onAccent
+          // Always the dark ink: a light fill needs dark text in EITHER theme,
+          // so this is intentionally the fixed light-theme ink (`_lText`), not
+          // `_dText` or a theme-aware token — don't "fix" it to one.
+          : _lText;
 
   static Color get darkPrimary => _dark ? _dDarkPrimary : _lDarkPrimary;
 
