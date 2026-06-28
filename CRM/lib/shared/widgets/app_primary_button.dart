@@ -38,7 +38,7 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = textColor ?? DesignConstants.surface;
+    final fg = textColor ?? DesignConstants.onAccent;
     final style = (textStyle ?? DesignConstants.h3).copyWith(color: fg);
     final radius = borderRadius ?? DesignConstants.radiusBig;
     final pad = padding ??
