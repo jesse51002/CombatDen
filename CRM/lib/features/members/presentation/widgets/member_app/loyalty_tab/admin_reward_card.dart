@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/members/data/gym_detail.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/loyalty_tab/reward_image_hero.dart';
+import 'package:crm/features/rewards/data/models/reward_response.dart';
+import 'package:crm/features/rewards/presentation/dialogs/reward_delete_dialog.dart';
+import 'package:crm/features/rewards/presentation/dialogs/reward_form_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// One reward in the admin's points store: the member-facing card art,
-/// title, and points cost, with Edit / Remove actions for the admin. Driven
-/// live by the selected gym's [Reward] (a network image url).
+/// title, and points cost, with Edit / Remove actions for the admin.
+/// Backed by the real [RewardResponse] from the FastApiBackend.
 class AdminRewardCard extends StatelessWidget {
-  final Reward reward;
+  final RewardResponse reward;
 
   const AdminRewardCard({super.key, required this.reward});
 
@@ -51,7 +53,7 @@ class AdminRewardCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${formatRewardPoints(reward.pointsCost)} pts',
+                  '${formatRewardPoints(reward.pointCost)} pts',
                   style: DesignConstants.h2.copyWith(
                     color: DesignConstants.primaryColor,
                   ),
@@ -64,7 +66,10 @@ class AdminRewardCard extends StatelessWidget {
                       child: AppOutlineButton(
                         text: 'Edit',
                         fullWidth: true,
-                        onPressed: () => debugPrint('TODO: edit reward'),
+                        onPressed: () => RewardFormDialog.show(
+                          context,
+                          existing: reward,
+                        ),
                       ),
                     ),
                     Expanded(
@@ -72,7 +77,11 @@ class AdminRewardCard extends StatelessWidget {
                         text: 'Remove',
                         fullWidth: true,
                         backgroundColor: DesignConstants.redDark,
-                        onPressed: () => debugPrint('TODO: remove reward'),
+                        onPressed: () => RewardDeleteDialog.show(
+                          context,
+                          rewardId: reward.rewardId,
+                          rewardTitle: reward.title,
+                        ),
                       ),
                     ),
                   ],

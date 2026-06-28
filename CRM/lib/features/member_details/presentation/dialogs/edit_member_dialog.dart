@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/data/models/members_management_updat
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
+import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 
 /// Edits a member's identity + contact details — name,
 /// email, phone, address, emergency contact, and photo —
@@ -55,7 +56,8 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
   late final TextEditingController _ecName;
   late final TextEditingController _ecPhone;
   late final TextEditingController _ecEmail;
-  late final TextEditingController _photoUrl;
+  /// CDN URL after a successful photo upload. Null = unchanged.
+  String? _uploadedPhotoUrl;
 
   @override
   void initState() {
@@ -77,8 +79,6 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
     _ecEmail = TextEditingController(
       text: pi.emergencyContactEmail ?? '',
     );
-    _photoUrl =
-        TextEditingController(text: m.photoUrl ?? '');
   }
 
   @override
@@ -91,7 +91,6 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
     _ecName.dispose();
     _ecPhone.dispose();
     _ecEmail.dispose();
-    _photoUrl.dispose();
     super.dispose();
   }
 
@@ -150,7 +149,11 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
                 _ecEmail.text,
                 pi.emergencyContactEmail,
               ),
-              photoUrl: _diff(_photoUrl.text, m.photoUrl),
+              // Only send photo_url when a new upload
+              // completed in this session.
+              photoUrl: _uploadedPhotoUrl != null
+                  ? _diff(_uploadedPhotoUrl!, m.photoUrl)
+                  : null,
             ),
           ),
         );
@@ -207,11 +210,12 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
               keyboardType: TextInputType.emailAddress,
               validator: _optionalEmail,
             ),
-            CustomTextField(
-              controller: _photoUrl,
-              label: 'Photo URL',
-              hintText: 'https://…',
-              keyboardType: TextInputType.url,
+            ImageUploadPickerField(
+              label: 'Member photo',
+              category: 'member',
+              imageUrl: widget.member.photoUrl,
+              onUploaded: (url) =>
+                  setState(() => _uploadedPhotoUrl = url),
             ),
           ],
         ),

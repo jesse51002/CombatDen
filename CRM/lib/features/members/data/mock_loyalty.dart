@@ -8,16 +8,26 @@
 library;
 
 /// A starter the admin can add to their store from the "Add your own"
-/// grid. The subtitle hints at what the admin will configure.
+/// grid. Clicking one opens the reward create form pre-filled with
+/// [title], [suggestedPointCost], and [suggestedPriceLabel].
+/// The image is never pre-filled — the admin must upload one.
 class RewardTemplate {
   final String title;
   final String? subtitle;
   final String imageAsset;
 
+  /// Suggested starting value for the point-cost field.
+  final int? suggestedPointCost;
+
+  /// Suggested badge label (e.g. 'Free', '30% off').
+  final String? suggestedPriceLabel;
+
   const RewardTemplate({
     required this.title,
     this.subtitle,
     required this.imageAsset,
+    this.suggestedPointCost,
+    this.suggestedPriceLabel,
   });
 }
 
@@ -63,16 +73,22 @@ const List<RewardTemplate> kMockRewardTemplates = [
     title: 'Membership discount',
     subtitle: '% off or \$ discount',
     imageAsset: 'assets/images/reward_membership_discount.png',
+    suggestedPointCost: 2500,
+    suggestedPriceLabel: '30% off',
   ),
   RewardTemplate(
     title: 'Gym branded gear',
     subtitle: 'Apparel or equipment',
     imageAsset: 'assets/images/reward_gym_tshirt.png',
+    suggestedPointCost: 1500,
+    suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
     title: 'Film and review session',
     subtitle: 'Recorded rounds + coach notes',
     imageAsset: 'assets/images/reward_film_review.png',
+    suggestedPointCost: 2000,
+    suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
     title: 'Custom',

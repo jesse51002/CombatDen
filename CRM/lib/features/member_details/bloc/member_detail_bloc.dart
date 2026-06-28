@@ -98,6 +98,13 @@ class MemberDetailBloc
     on<MemberReserveRequested>(_onReserve);
     on<MemberReserveCleared>(_onReserveCleared);
 
+    on<ApproveRedemptionRequested>(_onApproveRedemption);
+    on<RejectRedemptionRequested>(_onRejectRedemption);
+    on<RedeemRewardForMemberRequested>(
+      _onRedeemRewardForMember,
+    );
+    on<AdjustPointsRequested>(_onAdjustPoints);
+
     on<InvoicePollRequested>(_onInvoicePoll);
   }
 
@@ -1064,6 +1071,63 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     emit(s.copyWith(clearReserveOutcome: true));
+  }
+
+  // ----- Rewards / redemptions -----
+
+  Future<void> _onApproveRedemption(
+    ApproveRedemptionRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    await _runMutation(
+      actionLabel: 'Approve redemption',
+      emit: emit,
+      action: () => _repository.approveRedemption(
+        event.redemptionId,
+      ),
+    );
+  }
+
+  Future<void> _onRejectRedemption(
+    RejectRedemptionRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    await _runMutation(
+      actionLabel: 'Reject redemption',
+      emit: emit,
+      action: () => _repository.rejectRedemption(
+        event.redemptionId,
+      ),
+    );
+  }
+
+  Future<void> _onRedeemRewardForMember(
+    RedeemRewardForMemberRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    await _runMutation(
+      actionLabel: 'Redeem reward for member',
+      emit: emit,
+      action: () => _repository.redeemRewardForMember(
+        rewardId: event.rewardId,
+        memberId: event.memberId,
+        allowOverride: event.allowOverride,
+      ),
+    );
+  }
+
+  Future<void> _onAdjustPoints(
+    AdjustPointsRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    await _runMutation(
+      actionLabel: 'Adjust points',
+      emit: emit,
+      action: () => _repository.adjustPoints(
+        memberId: event.memberId,
+        amount: event.amount,
+      ),
+    );
   }
 
   // ----- Invoice polling -----

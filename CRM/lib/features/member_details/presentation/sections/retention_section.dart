@@ -5,6 +5,9 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/retention_thresholds.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/models/reward_card_model.dart';
+import 'package:crm/features/member_details/presentation/dialogs/adjust_points_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/redeem_reward_dialog.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
@@ -16,14 +19,24 @@ const double _kRewardStripHeight = 140;
 /// Retention stats (last class, class streak, points,
 /// videos watched) with threshold-driven coloring, plus a
 /// horizontal strip of recently redeemed rewards.
+///
+/// Also provides "Redeem reward" and "Award / adjust points"
+/// action buttons that open their respective dialogs and
+/// dispatch bloc events on confirm.
 class RetentionSection extends StatelessWidget {
   final Retention retention;
   final List<RewardCardModel> rewards;
+  final String memberId;
+  final String memberName;
+  final String gymId;
 
   const RetentionSection({
     super.key,
     required this.retention,
     required this.rewards,
+    required this.memberId,
+    required this.memberName,
+    required this.gymId,
   });
 
   @override
@@ -35,6 +48,12 @@ class RetentionSection extends StatelessWidget {
         children: [
           Text('Retention', style: DesignConstants.h2),
           _RetentionGrid(retention: retention),
+          _RewardsActions(
+            memberId: memberId,
+            memberName: memberName,
+            gymId: gymId,
+            pointsBalance: retention.pointsBalance,
+          ),
           SubtitleSection(
             title: 'Recently redeemed rewards',
             child: rewards.isEmpty
@@ -56,6 +75,59 @@ class RetentionSection extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Inline action bar for rewards staff actions.
+class _RewardsActions extends StatelessWidget {
+  final String memberId;
+  final String memberName;
+  final String gymId;
+  final int pointsBalance;
+
+  const _RewardsActions({
+    required this.memberId,
+    required this.memberName,
+    required this.gymId,
+    required this.pointsBalance,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        AppOutlineButton(
+          text: 'Redeem reward',
+          icon: Icon(
+            Symbols.redeem_sharp,
+            size: DesignConstants.iconSizeMedium,
+            weight: DesignConstants.iconWeight,
+          ),
+          onPressed: () => RedeemRewardDialog.show(
+            context: context,
+            gymId: gymId,
+            memberId: memberId,
+            memberName: memberName,
+            pointsBalance: pointsBalance,
+          ),
+        ),
+        AppOutlineButton(
+          text: 'Award / adjust pts',
+          icon: Icon(
+            Symbols.star_sharp,
+            size: DesignConstants.iconSizeMedium,
+            weight: DesignConstants.iconWeight,
+          ),
+          onPressed: () => AdjustPointsDialog.show(
+            context: context,
+            memberId: memberId,
+            memberName: memberName,
+            currentBalance: pointsBalance,
+          ),
+        ),
+      ],
     );
   }
 }

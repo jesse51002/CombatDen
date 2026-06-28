@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/mock_loyalty.dart';
+import 'package:crm/features/rewards/presentation/dialogs/reward_form_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
-/// One starter in the "Add your own" grid: a reward template the admin
-/// can drop into the store and then configure.
+/// One starter in the "Add your own" grid.
+///
+/// In the admin context (`gymId != null`) the Add button opens the reward
+/// create form pre-filled with the template's suggested values. In the
+/// template preview (`gymId == null`) the button is a no-op (no gym to
+/// write to).
 class AddRewardCard extends StatelessWidget {
   final RewardTemplate template;
 
@@ -51,7 +57,14 @@ class AddRewardCard extends StatelessWidget {
           AppOutlineButton(
             text: 'Add',
             fullWidth: true,
-            onPressed: () => debugPrint('TODO: add reward template'),
+            onPressed: selectedGym.gymId != null
+                ? () => RewardFormDialog.show(
+                    context,
+                    prefillTitle: template.title,
+                    prefillPointCost: template.suggestedPointCost,
+                    prefillPriceLabel: template.suggestedPriceLabel,
+                  )
+                : null,
           ),
         ],
       ),
