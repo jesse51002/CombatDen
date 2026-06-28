@@ -38,6 +38,7 @@ class RewardsService:
             "point_cost": request.point_cost,
             "amount_off": request.amount_off,
             "image_url": request.image_url,
+            "price_label": request.price_label,
         }
         row = await self._db_pool.execute_with_retry(sql, params)
         if not row:

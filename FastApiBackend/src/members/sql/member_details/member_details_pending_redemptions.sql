@@ -10,5 +10,5 @@ FROM member_reward_redemptions rr
 JOIN gym_rewards r ON r.reward_id = rr.reward_id
 WHERE rr.gym_id = :gym_id
     AND rr.member_id = :member_id
-    AND rr.status = 'approved'
+    AND rr.status = 'pending'
 ORDER BY rr.redeemed_at DESC

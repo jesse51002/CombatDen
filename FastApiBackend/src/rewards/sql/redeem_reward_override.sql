@@ -1,8 +1,7 @@
--- Single statement that atomically:
---   1) decrements points_balance (guarded: only if balance >= point_cost)
---   2) inserts a row in member_reward_redemptions with the given status
--- Uses a CTE so both writes share one transactional unit.
--- Bind params: :member_id, :reward_id, :status ('pending' or 'approved')
+-- Staff override redemption: no points guard, drains balance to zero.
+-- Debits LEAST(points_balance, point_cost) so balance never goes negative.
+-- Always inserts status='approved', decided_at=now().
+-- Bind params: :member_id, :reward_id
 WITH locked_member AS (
     SELECT member_id, points_balance, gym_id
     FROM members
@@ -17,11 +16,11 @@ locked_reward AS (
 ),
 debited AS (
     UPDATE members
-    SET points_balance = points_balance - (
-        SELECT point_cost FROM locked_reward
+    SET points_balance = points_balance - LEAST(
+        points_balance,
+        (SELECT point_cost FROM locked_reward)
     )
     WHERE member_id = :member_id
-      AND points_balance >= (SELECT point_cost FROM locked_reward)
     RETURNING points_balance
 ),
 inserted AS (
@@ -38,8 +37,8 @@ inserted AS (
         lm.gym_id,
         lr.reward_id,
         lr.point_cost,
-        CAST(:status AS reward_redemption_status),
-        CASE WHEN :status = 'approved' THEN now() ELSE NULL END
+        CAST('approved' AS reward_redemption_status),
+        now()
     FROM locked_member lm
     JOIN locked_reward lr ON lr.gym_id = lm.gym_id
     WHERE lr.is_active = TRUE

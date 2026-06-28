@@ -5,6 +5,7 @@ SELECT
     point_cost,
     amount_off,
     image_url,
+    price_label,
     is_active,
     created_at
 FROM gym_rewards

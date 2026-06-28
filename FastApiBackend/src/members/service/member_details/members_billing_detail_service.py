@@ -20,6 +20,7 @@ from src.members.schema.members_billing_schema import (
     BillingRank,
     BillingRetention,
     MemberBillingDetailResponse,
+    PendingRedemptionCard,
 )
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
@@ -140,6 +141,7 @@ class MembersBillingDetailService:
             authorized_to_pay_for=supplementary.authorized_to_pay_for,
             pays_for=pays_for,
             redeemed_rewards=supplementary.redeemed_rewards,
+            pending_redemptions=supplementary.pending_redemptions,
             streak_weeks=streak_weeks,
             # Per-payer semantics: the QUERIED member's own row carries what
             # THEY pay monthly (the sync writes each payer's own total; a
@@ -181,6 +183,7 @@ class MembersBillingDetailService:
         authorized_to_pay_for: list,
         pays_for: list,
         redeemed_rewards: list,
+        pending_redemptions: list[PendingRedemptionCard],
         streak_weeks: int,
         total_monthly_recurring_price: int,
         today: date,
@@ -220,6 +223,7 @@ class MembersBillingDetailService:
             ),
             rank=self._build_rank(target_row),
             recently_redeemed_rewards=redeemed_rewards,
+            pending_redemptions=pending_redemptions,
             card_on_file=self._build_card_on_file(target_row),
         )
 

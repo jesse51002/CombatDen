@@ -170,6 +170,7 @@ flowchart TB
   Rewards -->|"~20%"| rw_inactive["inactive"]
   Rewards -->|"60%"| rd_none["members redeeming none"]
   Rewards -->|"40%"| rd_some["members redeeming 1–2"]
+  rd_some -->|"default: 100%"| rd_approved["status=approved (pending_ratio=0.0 default)"]
 
   %% ── Activities ×500 · 5/member, by type (one type each — simple split) ──
   Activities["📝 Activities ×500 · 5/member"]

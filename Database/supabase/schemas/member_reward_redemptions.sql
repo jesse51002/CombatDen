@@ -1,5 +1,15 @@
+-- Approval lifecycle for a redemption request. 'pending' = awaiting admin
+-- decision; 'approved' = admin granted the reward; 'rejected' = admin denied.
+CREATE TYPE reward_redemption_status AS ENUM (
+    'pending',
+    'approved',
+    'rejected'
+);
+
 -- Log of point-based reward redemptions. point_cost is a snapshot at
 -- redemption time (the reward's current point_cost may change later).
+-- status and decided_at are backend-written (the backend connects as the
+-- postgres role and bypasses the authenticated REVOKE UPDATE).
 CREATE TABLE member_reward_redemptions (
     redemption_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_redemption_gym REFERENCES gyms(gym_id),
@@ -7,6 +17,8 @@ CREATE TABLE member_reward_redemptions (
     reward_id UUID NOT NULL CONSTRAINT fk_redemption_reward REFERENCES gym_rewards(reward_id),
     point_cost INTEGER NOT NULL CHECK (point_cost >= 0),
     redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status reward_redemption_status NOT NULL DEFAULT 'pending',
+    decided_at TIMESTAMPTZ,
 
     PRIMARY KEY (redemption_id),
 

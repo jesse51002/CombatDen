@@ -169,6 +169,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
 )
 from src.tasks.service.tasks_service import TasksService
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
@@ -207,6 +208,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.videos.videos_router",
             "src.presets.presets_router",
             "src.theme.theme_router",
+            "src.uploads.uploads_router",
         ],
     )
 
@@ -225,6 +227,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     classes_version_expander = providers.Singleton(
         ClassesVersionExpander,
         expander=classes_expander,
+    )
+
+    # ── Uploads (image proxy → S3 + CloudFront CDN) ──────────────
+    uploads_s3_service = providers.Factory(
+        UploadsS3Service,
+        assets_bucket=settings.assets_bucket,
+        aws_region=settings.aws_region,
+        assets_cdn_base_url=settings.assets_cdn_base_url,
     )
 
     # ── Checkin domain (the class consumer side) ─────────────────

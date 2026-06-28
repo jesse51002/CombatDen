@@ -7,6 +7,48 @@ from uuid import uuid4
 from tests.conftest import make_reward_row
 
 
+# ─── helpers ────────────────────────────────────────────────────────────────
+
+def make_redemption_row(
+    *,
+    redemption_id: str,
+    member_id: str,
+    reward_id: str,
+    gym_id: str,
+    point_cost: int = 50,
+    status: str = "pending",
+    decided_at=None,
+    points_balance_after: int = 50,
+) -> dict:
+    return {
+        "redemption_id": redemption_id,
+        "member_id": member_id,
+        "reward_id": reward_id,
+        "gym_id": gym_id,
+        "point_cost": point_cost,
+        "redeemed_at": datetime.now(UTC),
+        "status": status,
+        "decided_at": decided_at,
+        "points_balance_after": points_balance_after,
+    }
+
+
+def make_transition_row(
+    *,
+    redemption_id: str,
+    status: str,
+    points_balance_after: int | None = None,
+) -> dict:
+    return {
+        "redemption_id": redemption_id,
+        "status": status,
+        "decided_at": datetime.now(UTC),
+        "points_balance_after": points_balance_after,
+    }
+
+
+# ─── reward CRUD ─────────────────────────────────────────────────────────────
+
 def test_list_rewards_returns_active_only_by_default(
     client, db_pool_mock, auth_headers, fake_gym_id
 ):
@@ -55,23 +97,73 @@ def test_create_reward_returns_201(client, db_pool_mock, auth_headers, fake_gym_
     assert response.json()["title"] == "Free smoothie"
 
 
-def test_redeem_reward_returns_redemption(
+def test_create_reward_with_price_label(client, db_pool_mock, auth_headers, fake_gym_id):
+    """POST /api/v1/rewards/ accepts and returns price_label."""
+    reward_id = str(uuid4())
+    row = make_reward_row(reward_id=reward_id, gym_id=fake_gym_id)
+    row["price_label"] = "$5 off"
+    db_pool_mock.execute_with_retry = AsyncMock(return_value=row)
+
+    response = client.post(
+        "/api/v1/rewards/",
+        json={
+            "gym_id": fake_gym_id,
+            "title": "Discount",
+            "point_cost": 100,
+            "price_label": "$5 off",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["price_label"] == "$5 off"
+
+
+def test_immutable_columns_guard_blocks_reward_id_update(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_reward_id
+):
+    """The column guard rejects attempts to update reward_id via the data field."""
+    db_pool_mock.execute_with_retry = AsyncMock(
+        side_effect=Exception("should not be reached"),
+    )
+
+    get_row = make_reward_row(reward_id=fake_reward_id, gym_id=fake_gym_id)
+    get_result = MagicMock()
+    get_result.mappings.return_value.fetchone.return_value = get_row
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=get_result)
+
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value=make_reward_row(
+            reward_id=fake_reward_id, gym_id=fake_gym_id, title="Updated title"
+        ),
+    )
+
+    response = client.put(
+        f"/api/v1/rewards/{fake_reward_id}",
+        json={"data": {"title": "Updated title"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Updated title"
+
+
+# ─── member-initiated redeem ─────────────────────────────────────────────────
+
+def test_redeem_reward_returns_pending_redemption(
     client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
 ):
-    """POST /api/v1/rewards/{reward_id}/redeem returns redemption + new balance."""
+    """POST /{reward_id}/redeem returns a pending redemption with new balance."""
     redemption_id = str(uuid4())
-    redemption_row = {
-        "redemption_id": redemption_id,
-        "member_id": fake_member_id,
-        "reward_id": fake_reward_id,
-        "gym_id": fake_gym_id,
-        "point_cost": 50,
-        "redeemed_at": datetime.now(UTC),
-        "points_balance_after": 50,
-    }
+    row = make_redemption_row(
+        redemption_id=redemption_id,
+        member_id=fake_member_id,
+        reward_id=fake_reward_id,
+        gym_id=fake_gym_id,
+        status="pending",
+    )
 
     result = MagicMock()
-    result.mappings.return_value.fetchone.return_value = redemption_row
+    result.mappings.return_value.fetchone.return_value = row
 
     session = db_pool_mock.session.return_value
     session.execute = AsyncMock(return_value=result)
@@ -85,6 +177,7 @@ def test_redeem_reward_returns_redemption(
     assert response.status_code == 201
     body = response.json()
     assert body["redemption_id"] == redemption_id
+    assert body["status"] == "pending"
     assert body["points_balance_after"] == 50
 
 
@@ -107,6 +200,250 @@ def test_redeem_reward_400_when_insufficient_points(
     assert "insufficient" in response.json()["detail"].lower()
 
 
+# ─── staff redeem-for-member ─────────────────────────────────────────────────
+
+def test_redeem_for_member_auto_approve(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
+):
+    """POST /{reward_id}/redeem-for-member (override=false) returns approved."""
+    redemption_id = str(uuid4())
+    row = make_redemption_row(
+        redemption_id=redemption_id,
+        member_id=fake_member_id,
+        reward_id=fake_reward_id,
+        gym_id=fake_gym_id,
+        status="approved",
+        decided_at=datetime.now(UTC),
+    )
+
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = row
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.post(
+        f"/api/v1/rewards/{fake_reward_id}/redeem-for-member",
+        json={"member_id": fake_member_id, "override": False},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "approved"
+
+
+def test_redeem_for_member_override(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
+):
+    """POST /{reward_id}/redeem-for-member override=true uses the override SQL path."""
+    redemption_id = str(uuid4())
+    row = make_redemption_row(
+        redemption_id=redemption_id,
+        member_id=fake_member_id,
+        reward_id=fake_reward_id,
+        gym_id=fake_gym_id,
+        status="approved",
+        decided_at=datetime.now(UTC),
+        points_balance_after=0,
+    )
+
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = row
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.post(
+        f"/api/v1/rewards/{fake_reward_id}/redeem-for-member",
+        json={"member_id": fake_member_id, "override": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "approved"
+    assert body["points_balance_after"] == 0
+
+
+def test_redeem_for_member_400_when_inactive(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_reward_id
+):
+    """Staff redeem returns 400 when reward is inactive (no row returned)."""
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = None
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.post(
+        f"/api/v1/rewards/{fake_reward_id}/redeem-for-member",
+        json={"member_id": fake_member_id, "override": False},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+
+
+# ─── approve / reject ────────────────────────────────────────────────────────
+
+def _setup_two_executes(db_pool_mock, first_row, second_row):
+    """Wire db_pool_mock to return two different rows on consecutive executes."""
+    results = [MagicMock(), MagicMock()]
+    results[0].mappings.return_value.fetchone.return_value = first_row
+    results[1].mappings.return_value.fetchone.return_value = second_row
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=results)
+
+
+def test_approve_redemption_returns_200(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_reward_id, fake_gym_id
+):
+    """POST /redemptions/{id}/approve returns 200 with approved status."""
+    redemption_id = str(uuid4())
+    auth_info = {
+        "redemption_id": redemption_id,
+        "gym_id": fake_gym_id,
+        "member_id": fake_member_id,
+        "status": "pending",
+    }
+    transition_row = make_transition_row(
+        redemption_id=redemption_id, status="approved"
+    )
+    _setup_two_executes(db_pool_mock, auth_info, transition_row)
+
+    response = client.post(
+        f"/api/v1/rewards/redemptions/{redemption_id}/approve",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+
+
+def test_approve_redemption_409_when_already_decided(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id
+):
+    """Approving a non-pending redemption returns 409."""
+    redemption_id = str(uuid4())
+    auth_info = {
+        "redemption_id": redemption_id,
+        "gym_id": fake_gym_id,
+        "member_id": fake_member_id,
+        "status": "approved",  # already decided
+    }
+    # Second execute (approve SQL) returns no row → AlreadyDecidedError → 409
+    _setup_two_executes(db_pool_mock, auth_info, None)
+
+    response = client.post(
+        f"/api/v1/rewards/redemptions/{redemption_id}/approve",
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+def test_reject_redemption_returns_200_with_balance(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_reward_id, fake_gym_id
+):
+    """POST /redemptions/{id}/reject refunds points and returns updated balance."""
+    redemption_id = str(uuid4())
+    auth_info = {
+        "redemption_id": redemption_id,
+        "gym_id": fake_gym_id,
+        "member_id": fake_member_id,
+        "status": "pending",
+    }
+    transition_row = make_transition_row(
+        redemption_id=redemption_id,
+        status="rejected",
+        points_balance_after=150,
+    )
+    _setup_two_executes(db_pool_mock, auth_info, transition_row)
+
+    response = client.post(
+        f"/api/v1/rewards/redemptions/{redemption_id}/reject",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "rejected"
+    assert body["points_balance_after"] == 150
+
+
+def test_reject_redemption_409_when_already_decided(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id
+):
+    """Rejecting a non-pending redemption returns 409."""
+    redemption_id = str(uuid4())
+    auth_info = {
+        "redemption_id": redemption_id,
+        "gym_id": fake_gym_id,
+        "member_id": fake_member_id,
+        "status": "rejected",
+    }
+    _setup_two_executes(db_pool_mock, auth_info, None)
+
+    response = client.post(
+        f"/api/v1/rewards/redemptions/{redemption_id}/reject",
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+def test_approve_redemption_404_when_not_found(
+    client, db_pool_mock, auth_headers
+):
+    """Approving a non-existent redemption returns 404."""
+    redemption_id = str(uuid4())
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = None
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.post(
+        f"/api/v1/rewards/redemptions/{redemption_id}/approve",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+# ─── pending queue ───────────────────────────────────────────────────────────
+
+def test_list_pending_redemptions(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
+):
+    """GET /redemptions/pending returns the queue for the gym."""
+    redemption_id = str(uuid4())
+    pending_row = {
+        "redemption_id": redemption_id,
+        "member_id": fake_member_id,
+        "member_name": "Ada Lovelace",
+        "reward_title": "Free smoothie",
+        "reward_image_url": None,
+        "point_cost": 50,
+        "redeemed_at": datetime.now(UTC),
+    }
+
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = [pending_row]
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.get(
+        f"/api/v1/rewards/redemptions/pending?gym_id={fake_gym_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["member_name"] == "Ada Lovelace"
+    assert item["reward_title"] == "Free smoothie"
+
+
+# ─── redemption history ───────────────────────────────────────────────────────
+
 def test_redemption_history_returns_items(client, db_pool_mock, auth_headers, fake_member_id):
     """GET /api/v1/rewards/redemptions returns last redemptions for a member."""
     history_row = {
@@ -117,6 +454,7 @@ def test_redemption_history_returns_items(client, db_pool_mock, auth_headers, fa
         "amount_off": None,
         "point_cost": 50,
         "redeemed_at": datetime.now(UTC),
+        "status": "pending",
     }
 
     result = MagicMock()
@@ -131,34 +469,3 @@ def test_redemption_history_returns_items(client, db_pool_mock, auth_headers, fa
     )
     assert response.status_code == 200
     assert len(response.json()["items"]) == 1
-
-
-def test_immutable_columns_guard_blocks_reward_id_update(
-    client, db_pool_mock, auth_headers, fake_gym_id, fake_reward_id
-):
-    """The column guard rejects attempts to update reward_id via the data field."""
-    db_pool_mock.execute_with_retry = AsyncMock(
-        side_effect=Exception("should not be reached"),
-    )
-
-    get_row = make_reward_row(reward_id=fake_reward_id, gym_id=fake_gym_id)
-    get_result = MagicMock()
-    get_result.mappings.return_value.fetchone.return_value = get_row
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(return_value=get_result)
-
-    # The schema rejects unknown fields by default but allows extras —
-    # send a valid update and confirm the response contains the row.
-    db_pool_mock.execute_with_retry = AsyncMock(
-        return_value=make_reward_row(
-            reward_id=fake_reward_id, gym_id=fake_gym_id, title="Updated title"
-        ),
-    )
-
-    response = client.put(
-        f"/api/v1/rewards/{fake_reward_id}",
-        json={"data": {"title": "Updated title"}},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["title"] == "Updated title"

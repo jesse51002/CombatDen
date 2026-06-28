@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
 
+    # Asset storage (S3 + CloudFront CDN) — shared bucket used by ThemeService.
+    # AWS credentials are read from the standard boto3 credential chain
+    # (env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, ~/.aws/credentials,
+    # or an EC2/App Runner instance role). For local upload testing, add
+    # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to FastApiBackend/.env.
+    assets_bucket: str = "combatden-assets"
+    aws_region: str = "us-east-1"
+    assets_cdn_base_url: str = "https://cdn.combatden.net"
+
     # Logging Configuration
     log_level: str = "DEBUG"
 

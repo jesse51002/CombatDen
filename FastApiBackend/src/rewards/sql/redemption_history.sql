@@ -3,6 +3,7 @@ SELECT
     r.reward_id,
     r.point_cost,
     r.redeemed_at,
+    r.status,
     gr.title,
     gr.image_url,
     gr.amount_off

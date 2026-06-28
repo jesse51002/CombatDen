@@ -4,6 +4,9 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from schema.member_reward_redemption import RewardRedemptionStatus
+
+import src.shared.db_schema_path  # noqa: F401  — ensures ``from schema.*`` path is set up
 
 
 class RewardCreateRequest(BaseModel):
@@ -14,6 +17,7 @@ class RewardCreateRequest(BaseModel):
     point_cost: int = Field(gt=0)
     amount_off: str | None = None
     image_url: str | None = None
+    price_label: str | None = None
 
 
 class RewardUpdateData(BaseModel):
@@ -23,6 +27,7 @@ class RewardUpdateData(BaseModel):
     point_cost: int | None = Field(default=None, gt=0)
     amount_off: str | None = None
     image_url: str | None = None
+    price_label: str | None = None
     is_active: bool | None = None
 
 
@@ -41,6 +46,7 @@ class RewardResponse(BaseModel):
     point_cost: int
     amount_off: str | None
     image_url: str | None
+    price_label: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -57,8 +63,15 @@ class RedemptionRequest(BaseModel):
     member_id: UUID
 
 
+class RedeemForMemberRequest(BaseModel):
+    """Body for POST /api/v1/rewards/{reward_id}/redeem-for-member."""
+
+    member_id: UUID
+    override: bool = False
+
+
 class RedemptionResponse(BaseModel):
-    """A single member_reward_redemptions row."""
+    """A single member_reward_redemptions row (full redemption result)."""
 
     redemption_id: UUID
     member_id: UUID
@@ -66,7 +79,18 @@ class RedemptionResponse(BaseModel):
     gym_id: UUID
     point_cost: int
     redeemed_at: datetime
+    status: RewardRedemptionStatus
+    decided_at: datetime | None
     points_balance_after: int
+
+
+class RedemptionTransitionResponse(BaseModel):
+    """Response for approve / reject admin transitions."""
+
+    redemption_id: UUID
+    status: RewardRedemptionStatus
+    decided_at: datetime
+    points_balance_after: int | None = None
 
 
 class RedemptionHistoryItem(BaseModel):
@@ -79,9 +103,28 @@ class RedemptionHistoryItem(BaseModel):
     amount_off: str | None
     point_cost: int
     redeemed_at: datetime
+    status: RewardRedemptionStatus
 
 
 class RedemptionHistoryResponse(BaseModel):
     """A member's reward redemption history."""
 
     items: list[RedemptionHistoryItem]
+
+
+class PendingRedemptionItem(BaseModel):
+    """One row from the gym-wide pending redemption queue."""
+
+    redemption_id: UUID
+    member_id: UUID
+    member_name: str
+    reward_title: str
+    reward_image_url: str | None
+    point_cost: int
+    redeemed_at: datetime
+
+
+class PendingRedemptionListResponse(BaseModel):
+    """Gym-wide pending redemption queue."""
+
+    items: list[PendingRedemptionItem]

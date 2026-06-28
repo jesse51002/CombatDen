@@ -193,6 +193,44 @@ class BillingRewardCard(BaseModel):
     point_cost: int
 
 
+class PendingRedemptionCard(BaseModel):
+    """A reward redemption awaiting staff approval.
+
+    Sourced from ``member_reward_redemptions`` with ``status = 'pending'``.
+    Distinct from BillingRewardCard: carries the redemption's own
+    ``redemption_id`` and ``redeemed_at`` timestamp so staff can identify
+    and act on specific pending requests.
+    """
+
+    redemption_id: UUID
+    reward_id: UUID
+    title: str
+    amount_off: str | None = None
+    image_url: str | None = None
+    point_cost: int
+    redeemed_at: datetime
+
+
+# ── Points adjustment request / response ─────────────────────────
+
+
+class PointsAdjustRequest(BaseModel):
+    """Signed points adjustment for POST /{member_id}/points.
+
+    Positive ``amount`` awards points; negative ``amount`` corrects
+    (deducts) points. The service rejects an adjustment that would
+    take the balance below zero.
+    """
+
+    amount: int
+
+
+class PointsAdjustResponse(BaseModel):
+    """Points balance after a manual adjustment."""
+
+    points_balance: int
+
+
 class BillingLineItemRecord(BaseModel):
     """A single line item on an invoice.
 
@@ -300,4 +338,7 @@ class MemberBillingDetailResponse(BaseModel):
     retention: BillingRetention
     rank: BillingRank | None = None
     recently_redeemed_rewards: list[BillingRewardCard] = []
+    # Redemptions the member has submitted but staff have not yet
+    # approved or rejected — shown prominently so staff act on them.
+    pending_redemptions: list[PendingRedemptionCard] = []
     card_on_file: BillingCardOnFile | None = None

@@ -239,8 +239,10 @@ Table member_reward_redemptions {
   gym_id uuid [not null]
   member_id uuid [not null]
   reward_id uuid [not null]
-  point_cost integer [not null]
+  point_cost integer [not null, note: 'snapshot at redemption time']
   redeemed_at timestamptz [not null, default: `now()`]
+  status reward_redemption_status [not null, default: 'pending', note: 'backend-written']
+  decided_at timestamptz [note: 'backend-written; set when admin approves/rejects']
 }
 
 Table gym_waivers {

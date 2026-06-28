@@ -23,8 +23,15 @@ def create_redemptions(
     gym_id: uuid.UUID,
     members: list[MemberCreate],
     rewards: list[GymRewardCreate],
+    pending_ratio: float = 0.0,
 ) -> None:
-    rows = redemptions_generator.generate(gym_id, members, rewards)
+    """Seed reward redemptions for a gym.
+
+    pending_ratio: fraction of rows to mint as 'pending' (for CRM approval
+    queue testing). Default 0.0 keeps all rows 'approved' — identical to
+    prior behavior when the parameter is omitted.
+    """
+    rows = redemptions_generator.generate(gym_id, members, rewards, pending_ratio=pending_ratio)
     if rows:
         client.table("member_reward_redemptions").insert(
             [r.to_insert_dict() for r in rows]

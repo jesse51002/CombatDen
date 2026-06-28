@@ -3,14 +3,16 @@ INSERT INTO gym_rewards (
     title,
     point_cost,
     amount_off,
-    image_url
+    image_url,
+    price_label
 )
 VALUES (
     :gym_id,
     :title,
     :point_cost,
     :amount_off,
-    :image_url
+    :image_url,
+    :price_label
 )
 RETURNING
     reward_id,
@@ -19,5 +21,6 @@ RETURNING
     point_cost,
     amount_off,
     image_url,
+    price_label,
     is_active,
     created_at
