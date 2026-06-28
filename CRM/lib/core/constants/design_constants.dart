@@ -90,7 +90,11 @@ class DesignConstants {
   // fixed token can't stay legible on both.
   static Color onFill(Color fill) =>
       ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+          // Near-white, same as an accent label on a dark fill.
           ? onAccent
+          // Always the dark ink: a light fill needs dark text in EITHER theme,
+          // so this is intentionally the fixed light-theme ink (`_lText`), not
+          // `_dText` or a theme-aware token — don't "fix" it to one.
           : _lText;
 
   static Color get darkPrimary => _dark ? _dDarkPrimary : _lDarkPrimary;

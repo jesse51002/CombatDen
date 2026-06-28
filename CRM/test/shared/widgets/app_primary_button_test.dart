@@ -36,4 +36,23 @@ void main() {
     final label = tester.widget<Text>(find.text('Go'));
     expect(label.style?.color?.computeLuminance(), greaterThan(0.5));
   });
+
+  // The other direction: a dark solid fill (e.g. okYellow's dark-amber
+  // light-mode value) must keep the near-white label.
+  testWidgets('dark backgroundColor gets a near-white label', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AppPrimaryButton(
+            text: 'Freeze',
+            backgroundColor: const Color(0xFF915C08), // dark amber
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+
+    final label = tester.widget<Text>(find.text('Freeze'));
+    expect(label.style?.color?.computeLuminance(), greaterThan(0.5));
+  });
 }
