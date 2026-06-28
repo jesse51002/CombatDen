@@ -537,6 +537,14 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 
 There is NO separate `video_config` router or module.
 
+## Image upload domain (`src/uploads/`)
+
+`POST /api/v1/uploads/image` accepts a multipart image plus a `category` **form field** (`reward` or `member` — not a query parameter), stores it in the `combatden-assets` S3 bucket (under a `reward/` or `member/` key prefix matching the `category` value), and returns a CDN URL (`cdn.combatden.net/...?v=<content-hash>`). The bucket and CDN are the same infrastructure ThemeService uses for theme asset uploads; the uploads domain is the backend's own proxy into that same bucket. Used by the CRM's `ImageUploadPickerField` (reward catalog images, member photos) via `ImageUploadRepository.uploadImage`.
+
+**Dependencies:** `boto3` (PyPI — S3 client) and `python-multipart` (FastAPI multipart form parser).
+
+**Required `Settings` fields** (`src/core/config.py`): `assets_bucket`, `aws_region`, `assets_cdn_base_url`. AWS credentials (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) must be present in the runtime environment — they are read by the standard boto3 credential chain, not via `Settings` fields.
+
 ## Database
 
 **Schema Location:** `../Database/supabase/schemas/` contains all Supabase table definitions with RLS policies.
