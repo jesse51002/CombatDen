@@ -260,7 +260,7 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
       SnackBar(
         content: Text(
           _isEdit ? 'Discount saved.' : 'Discount created.',
-          style: DesignConstants.p.copyWith(color: DesignConstants.surface),
+          style: DesignConstants.p.copyWith(color: DesignConstants.onAccent),
         ),
         backgroundColor: DesignConstants.goodGreen,
       ),
