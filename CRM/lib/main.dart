@@ -11,7 +11,6 @@ import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/employees/presentation/screens/employee_detail_screen.dart';
-import 'package:crm/features/employees/presentation/screens/employees_screen.dart';
 import 'package:crm/features/growth/presentation/screens/growth_screen.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
@@ -19,13 +18,13 @@ import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/login/data/repositories/auth_repository.dart';
 import 'package:crm/features/login/presentation/screens/auth_gate.dart';
 import 'package:crm/features/members/presentation/screens/member_app_screen.dart';
-import 'package:crm/features/members/presentation/screens/members_screen.dart';
 import 'package:crm/features/members/presentation/screens/specific_member_screen.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/presentation/screens/membership_details_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/memberships_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/waiver_editor_screen.dart';
+import 'package:crm/features/people/presentation/screens/people_screen.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:crm/features/schedule/data/mock_schedule.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
@@ -158,7 +157,7 @@ class _AuthGateHost extends StatelessWidget {
 /// [_onGenerateRoute]).
 final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.home: (_) => const HomeScreen(),
-  AppRoutes.members: (_) => const MembersScreen(),
+  AppRoutes.members: (_) => const PeopleScreen(),
   AppRoutes.memberDetail: (_) => const SpecificMemberScreen(),
   AppRoutes.memberAppPreview: (_) => const MemberAppScreen(),
   AppRoutes.memberAppPreviewVideos: (_) =>
@@ -173,7 +172,8 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.settings: (_) => const SettingsScreen(),
   AppRoutes.videoConfig: (_) => const VideoConfigScreen(),
   AppRoutes.growth: (_) => const GrowthScreen(),
-  AppRoutes.employees: (_) => const EmployeesScreen(),
+  AppRoutes.employees: (_) =>
+      const PeopleScreen(initialTab: PeopleTab.employees),
   AppRoutes.employeeDetail: (_) => const EmployeeDetailScreen(),
 };
 
