@@ -413,11 +413,16 @@ class _TagPager extends StatefulWidget {
 class _TagPagerState extends State<_TagPager> {
   final List<Video> _videos = [];
   int _total = 0;
+  // DB-row cursor: tracks how many rows the backend has consumed, NOT how many
+  // videos were rendered. The backend may skip rows that fail validation, so
+  // _videos.length can be less than the DB rows consumed — using _videos.length
+  // as the next offset would re-fetch already-seen rows and produce duplicates.
+  int _dbOffset = 0;
   bool _loading = false;
   bool _errored = false;
   bool _loadedFirst = false;
 
-  bool get _hasMore => _videos.length < _total;
+  bool get _hasMore => _dbOffset < _total;
 
   @override
   void initState() {
@@ -456,7 +461,7 @@ class _TagPagerState extends State<_TagPager> {
           videoType: widget.tag,
           rejected: widget.rejected,
           limit: _kPageSize,
-          offset: _videos.length,
+          offset: _dbOffset,
         );
       } else {
         // Public browser: unauthenticated template endpoint.
@@ -464,13 +469,18 @@ class _TagPagerState extends State<_TagPager> {
           videoType: widget.tag,
           rejected: widget.rejected,
           limit: _kPageSize,
-          offset: _videos.length,
+          offset: _dbOffset,
         );
       }
       if (!mounted) return;
       setState(() {
         _videos.addAll(page.videos);
         _total = page.total;
+        // Advance the DB cursor by the page size requested, not by the number
+        // of videos returned — the backend may skip rows that fail validation,
+        // and using the rendered count as the next offset would re-fetch those
+        // rows and produce duplicate tiles.
+        _dbOffset += _kPageSize;
         _loadedFirst = true;
         _loading = false;
       });
@@ -560,13 +570,26 @@ Future<bool> confirmAndRemoveGenreVideo(
   }
 }
 
-/// "Keep" a rejected video (un-reject → back to the served feed). No dialog.
-/// Returns true on success so the caller can drop it from the rejected list.
+/// Confirm-with-"why" then "Keep" a rejected video (un-reject → back to the
+/// served feed). The optional reason is stored as `accept_reason` and teaches
+/// the feed-learning refiner to surface videos like it. Returns true on success
+/// so the caller can drop it from the rejected list.
 Future<bool> keepGenreVideo(BuildContext context, Video video) async {
   final adminGymId = selectedGym.gymId;
   if (adminGymId == null) return false;
+  final reason = await VideoCurationDialog.show(
+    context,
+    videoTitle: video.title.isNotEmpty ? video.title : 'this video',
+    teachAgent: true,
+    mode: VideoCurationMode.keep,
+  );
+  if (reason == null) return false;
   try {
-    await GymContentRepository(ApiClient()).keepVideo(adminGymId, video.videoId);
+    await GymContentRepository(ApiClient()).keepVideo(
+      adminGymId,
+      video.videoId,
+      reason: reason.isEmpty ? null : reason,
+    );
     return true;
   } catch (_) {
     if (context.mounted) {

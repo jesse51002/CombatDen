@@ -34,8 +34,8 @@ class AppRoutes {
   // sign-up / check-in QR codes.
   static const String settings = '/settings';
 
-  // Video-config agent screen: reachable from the Settings page.
-  static const String videoConfig = '/settings/video-config';
+  // Video-agent screen: reachable from the Settings page.
+  static const String videoAgent = '/settings/video-agent';
 
   /// Deep-link path for a specific member's detail page —
   /// `/members/detail/<memberId>`. Opening a member writes this to the

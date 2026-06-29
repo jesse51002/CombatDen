@@ -12,18 +12,13 @@ const String _kVideoBaseUrl = String.fromEnvironment(
   'BACKEND_BASE_URL',
   defaultValue: 'http://localhost:8000',
 );
-/// ThemeService base, used ONLY to absolutise a gym card's celebration image
-/// (a ThemeService-relative path). Mirrors the engine default.
-const String _kThemeServiceBaseUrl = String.fromEnvironment(
-  'CUST_BASE_URL',
-  defaultValue: 'http://localhost:8001',
-);
 
-/// Accumulates a paged + searchable view of the VideoService **gym browser**
-/// (`GET /gyms`), mapping each gym to a [ThemeStyle] the existing
-/// theme picker renders — `id` is the gym's **theme** (so tapping it loads that
-/// theme via `ThemeRuntime.selectDesign`), the card art is the gym's celebration
-/// image. Gyms are the entry point; the theme lives on the gym.
+/// Accumulates a paged + searchable view of the template catalog
+/// (`GET /api/v1/presets/templates`), mapping each template to a [ThemeStyle]
+/// the existing theme picker renders — `id` is the template's **theme** (so
+/// tapping it loads that theme via `ThemeRuntime.selectDesign`), the card art is
+/// the theme's celebration image from the ThemeService styles catalog.
+/// Templates are the entry point; the theme lives on the template.
 ///
 /// Same public surface as the engine's `StylesPager`, so it is a drop-in for the
 /// picker. Kept app-side on purpose: the engine must never know the VideoService.
@@ -71,9 +66,8 @@ class GymsPager extends ChangeNotifier {
   // Design id -> the theme's celebration-image URL carrying its content-hash
   // `?v=` token (from the ThemeService styles catalog), so a card's art
   // refreshes when the image is regenerated instead of sitting on the browser's
-  // day-long cache. Fetched once; the VideoService-derived bare URL is the
-  // fallback when the styles catalog is unreachable. ThemeService is reached
-  // through the engine (dio), never `http` (VideoService-only).
+  // day-long cache. Fetched once. ThemeService is reached through the engine
+  // (dio), never `http` (template-catalog-only).
   Map<String, String>? _celebrationByDesign;
   Future<void>? _celebrationFetch;
 
@@ -99,7 +93,11 @@ class GymsPager extends ChangeNotifier {
         if (page.items.isEmpty || offset >= page.total) break;
       }
     } catch (_) {
-      // Degrade quietly: fall back to the bare VideoService-derived URLs.
+      // Degrade quietly: cards show placeholder art when ThemeService is down.
+      // Clear the memo so the next page/search re-attempts rather than pinning
+      // placeholder art for the entire session.
+      _celebrationFetch = null;
+      return;
     }
     _celebrationByDesign = map;
   }
@@ -127,7 +125,7 @@ class GymsPager extends ChangeNotifier {
     _safeNotify();
     try {
       final uri = Uri.parse(
-        '$_kVideoBaseUrl/api/v1/videos/templates',
+        '$_kVideoBaseUrl/api/v1/presets/templates',
       ).replace(
         queryParameters: {
           'offset': '${_items.length}',
@@ -144,7 +142,7 @@ class GymsPager extends ChangeNotifier {
       }
       // Load the tokened celebration URLs (once) so each card's art carries its
       // content-hash `?v=` and refreshes when the theme is regenerated.
-      // Best-effort: on failure the bare VideoService URL is used.
+      // Best-effort: on failure cards show placeholder art.
       await _ensureCelebrationUrls();
       if (generation != _queryGeneration) return;
       final data = jsonDecode(response.body);
@@ -175,19 +173,17 @@ class GymsPager extends ChangeNotifier {
 
   ThemeStyle _toStyle(Map<String, dynamic> gym) {
     final theme = (gym['theme'] as String?) ?? '';
-    final raw = (gym['celebration_image_url'] as String?) ?? '';
     // The backend catalog uses `video_gym_id`; fall back to `gym_id` for any
-    // legacy VideoService response during the transition period.
+    // legacy response during the transition period.
     final videoGymId =
         (gym['video_gym_id'] as String?) ?? (gym['gym_id'] as String?) ?? '';
     return ThemeStyle(
       id: theme,
       displayName: _titleize(videoGymId),
-      // Prefer the ThemeService styles catalog's celebration URL — it carries
-      // the content-hash `?v=` token so the card refreshes when the image is
-      // regenerated; fall back to the bare backend-derived URL.
-      celebrationImageUrl:
-          _celebrationByDesign?[theme] ?? (raw.isEmpty ? '' : _resolve(raw)),
+      // Celebration art comes exclusively from the ThemeService styles catalog
+      // (`_celebrationByDesign`). Falls back to '' (shows placeholder) when the
+      // catalog hasn't loaded yet or the design has no image.
+      celebrationImageUrl: _celebrationByDesign?[theme] ?? '',
       // The coarse parent bucket (Fighting/Yoga/…) is what the picker filters by.
       gymType: gym['parent_gym_type'] as String?,
       // The content key: stored on selection so the loyalty/videos/preview
@@ -195,11 +191,6 @@ class GymsPager extends ChangeNotifier {
       gymId: videoGymId.isEmpty ? null : videoGymId,
     );
   }
-
-  String _resolve(String raw) =>
-      (raw.startsWith('http://') || raw.startsWith('https://'))
-      ? raw
-      : '$_kThemeServiceBaseUrl${raw.startsWith('/') ? '' : '/'}$raw';
 
   static String _titleize(String gymId) => gymId
       .split('_')

@@ -786,8 +786,8 @@ Ref: video_cost_log.gym_id > video_gym.gym_id
 // gym_video_spec is APPEND-ONLY VERSIONED. Rows are never UPDATE'd.
 // The gym_video_spec_latest VIEW surfaces the most-recent version per gym;
 // all read paths use that view, not the table directly.
-// Three writers stamp distinct source values: admin_update (video_config agent/save),
-// system_update (presets import), feed_update (feed refiner).
+// Three writers stamp distinct source values: admin_update (videos agent/save — src/videos/service/video_agent/),
+// system_update (presets import — src/presets/), feed_update (VideoFeedRefiner — src/videos/service/).
 Table gym_video_spec {
   spec_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null, note: 'FK to gyms.gym_id (real customer gym); NOT unique — multiple version rows per gym']
@@ -816,10 +816,10 @@ Table gym_video_feed {
   video_id text [not null, note: 'FK to video.video_id']
   video_run_id uuid [note: 'NULL = owner "Your videos" section (always served); set = a scan run (served only while latest)']
   scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected']
-  rejection_type gym_video_rejection_type [note: 'enum: automatic | manual; required when scan_status = rejected']
-  reject_reason text [note: 'optional why; may be blank for manual rejections']
+  curation_type gym_video_curation_type [not null, default: 'automatic', note: 'enum: automatic | manual; how the current scan_status was set']
+  curation_reason text [note: 'nullable; owner free-text reason for the latest manual curation; NULL for automatic rows']
   rejected_at timestamptz [note: 'last rejection time; retained across re-acceptance (history)']
-  curated_at timestamptz [note: 'nullable; when the owner last manually accepted or rejected this row (set by feed curation ops)']
+  curated_at timestamptz [note: 'nullable; when the owner last manually curated this row (reject/keep/re-add)']
 }
 
 // gym_video_query was DROPPED — queries now live in gym_video_spec.queries JSONB.

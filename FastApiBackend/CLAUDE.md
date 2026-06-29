@@ -418,39 +418,106 @@ derivation across SQL files.
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
 
-## `video_config` domain — LLM-backed gym video config
+## `videos` domain — LLM spec and agent surface
 
-`src/video_config/` holds five gym-employee-gated routes under
-`/api/v1/gyms/{gym_id}/video-config`:
+The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
+agent. Three gym-employee-gated routes cover the spec/agent surface:
 
 | Route | What it does |
 |---|---|
-| `GET /` | Return the gym's latest config (reads `gym_video_spec_latest` view) |
-| `PUT /` | Save a confirmed draft as an `admin_update` version (append-only INSERT) |
-| `POST /agent` | One conversational turn — `VideoConfigService.agent_turn` runs the Pydantic AI agent built by `build_video_config_agent` |
-| `POST /generate-queries` | Single structured LLM call that drafts search queries |
-| `POST /refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
+| `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
+| `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
+| `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
 
-**External dependency — LLM provider (Pydantic AI).**
-Uses `pydantic-ai-slim[anthropic]` — a provider-swappable agent framework. Default model is
-`anthropic:claude-sonnet-4-6`, overrideable via `settings.video_agent_model`. Related settings:
-`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_model`, `video_agent_retries`.
+**Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
 
-**Prompts live in `src/video_config/prompts/*.md`** (per the monorepo no-inline-prompt rule). Code holds
+The agent has **zero tools**. It converses to propose a spec; its proposal output
+(`SpecProposal`) **always** pairs a short chat `message` with the criteria `draft` (criteria
+only: disciplines + keep/avoid descriptions), so a proposal is never silent — the message is
+appended to the chat while the criteria show in the highlighted panel. When the owner presses Accept, the frontend sends
+`accepted_spec` in the next `AgentTurnRequest` and the backend commits it deterministically:
+diff guard → query generation → save. The agent is then run on a short outcome note so it can
+acknowledge and invite further changes (the conversation stays open, `saved=True`).
+
+**Services (flat in `service/`):**
+
+- **`VideoSpecService`** (`video_spec_service.py`) — spec DB read/write: `load_latest`,
+  `save_version(gym_id, draft, queries, *, source)`. `queries` is a separate arg — never in the draft.
+- **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`.
+- **`VideoSpecAuthoring`** (`video_spec_authoring.py`) — shared deterministic commit: diff guard → query gen → save.
+  `commit(gym_id, criteria, *, source) -> VideoSpecView | None`. Returns `None` when criteria are unchanged.
+- **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
+
+**`VideosService` (`videos_service.py`) is the domain FACADE** — composes `VideoFeedService`,
+`VideoSpecService`, `VideoSpecAuthoring`, and `VideoFeedRefiner`. Exposes: `load_latest_spec`,
+`save_accepted_spec` (→ authoring.commit), `refine_from_feed`, plus all feed operations
+(`load_feed_ids`, `load_pool_videos`, owner add/remove/keep). The conversational agent uses it for
+the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
+in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
+
+The agent wrapper lives in `service/video_agent/`:
+
+- **`VideoAgentService`** (`video_agent_service.py`) — `agent_turn` only. No tools registered.
+  Accept-path calls `videos_service.save_accepted_spec`; normal first turn seeds current-spec
+  context by prepending it to the user message.
+
+**Schemas:**
+- `schema/video_spec_schema.py`: `VideoSpecDraft` (criteria only — no `queries` field),
+  `VideoSpecView` (read, includes queries/source/created_at), `QueriesResult`.
+- `schema/video_agent_schema.py`: `AgentTurnRequest` (`message`, `history`, `accepted_spec`),
+  `AgentTurnResponse` (`reply`, `draft`, `question`, `history`, `saved`, `usage`).
+  `AgentQuestion` (`question`, `options` 2–6, `multi_select`) — the agent can ask a
+  multiple-choice question rendered as selectable chips in the CRM. `SpecProposal`
+  (`message` + criteria `draft`) — the agent's finished-proposal output; a proposed draft
+  **always** carries a `message` (mapped to `AgentTurnResponse.reply`, appended to the chat).
+
+**SQL:** `sql/video_spec_load_latest.sql`, `video_spec_insert_version.sql`, `video_feed_signals.sql`.
+
+**Prompts live in `src/videos/prompts/*.md`** (per the monorepo no-inline-prompt rule). Code holds
 the file path, never the prompt text.
+
+**LLM stack — litellm for regular calls; Pydantic AI for the conversational agent.**
+
+The backend runs **Python 3.13** (`requires-python = ">=3.13,<3.14"`). litellm can't install on
+3.14, so the backend moved to 3.13 to get both LLM frameworks.
+
+- **Regular single-shot structured calls** (`VideoQueryGenerator`, `VideoFeedRefiner`) go through
+  **litellm** via `src/shared/litellm_client.py` (`LiteLLMClient.complete_structured(prompt, schema,
+  model)`). Model string is `settings.video_llm_model` in litellm's `provider/name` format (e.g.
+  `anthropic/claude-sonnet-4-6`); the `provider/` prefix selects which API key to use.
+- **The conversational agent** (`VideoAgentService`) uses **Pydantic AI** (`pydantic-ai-slim[anthropic]`)
+  with an explicit `AnthropicModel` constructed from `settings.video_agent_model` (bare model name,
+  e.g. `claude-sonnet-4-6`) and `settings.anthropic_api_key`. No env-variable writing,
+  no `video_agent_llm.py` (that file was removed — all provider wiring is in `video_agent_service.py`).
+
+**One-way layering rule:** `VideoAgentService` → `VideosService` (facade) → the regular services
+(`VideoSpecService`, `VideoQueryGenerator`, `VideoFeedRefiner`, `VideoSpecAuthoring`). The regular
+services **never** call `VideoAgentService`.
+
+Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare model name),
+`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`.
 
 **Versioned spec — readers always use the view, not the table.**
 `gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
 Three writers append new version rows, each stamped with a `gym_video_spec_source` enum value:
 
-- Agent / manual owner save → `admin_update` (via `PUT /`)
+- Agent accept / admin save → `admin_update` (via `POST /api/v1/gyms/{id}/video-agent` with `accepted_spec`)
 - Preset import (`PresetsService`) → `system_update`
-- Feed refiner → `feed_update` (via `POST /refine-from-feed`)
+- Feed refiner → `feed_update` (via `POST /api/v1/gyms/{id}/video-agent/refine-from-feed`)
 
-Read paths (including the `GET /` endpoint) **always** query the `gym_video_spec_latest` view, which
+Read paths (including the `GET` endpoint) **always** query the `gym_video_spec_latest` view, which
 surfaces the single most-recent version per gym. Do not `SELECT` directly from the raw
 `gym_video_spec` table in a read path. Queries are stored in the spec's `queries JSONB` column (the
 separate `gym_video_query` table was dropped when versioned spec shipped).
+
+**DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
+`video_spec_authoring`, `video_feed_refiner`, `video_agent_service`, `videos_service`.
+
+**DI providers (presets domain):** `presets_service`, `presets_template_service`.
+
+**DI providers (theme domain):** `theme_showcase_service`.
+
+There is NO separate `video_config` router or module.
 
 ## Database
 

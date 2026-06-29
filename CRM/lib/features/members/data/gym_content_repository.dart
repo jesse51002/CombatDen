@@ -8,8 +8,9 @@ import 'package:crm/features/members/data/video_feed.dart';
 /// Repository for reading real-gym content via the authed FastApiBackend.
 ///
 /// Used in the admin preview path (when [selectedGym.gymId] is non-null) to
-/// fetch the gym's showcase data (classes, rewards, spec) and video feed from
-/// UUID-keyed endpoints that require a valid Supabase session.
+/// fetch the gym's showcase data (classes + rewards; the video spec is
+/// cross-fetched from the videos domain) and video feed from UUID-keyed
+/// endpoints that require a valid Supabase session.
 ///
 /// Contrast with [VideoApiClient] / [GymApiClient] (public, package:http),
 /// which serve the slug-keyed template catalog used by the public theme browser.
@@ -22,9 +23,13 @@ class GymContentRepository {
   GymContentRepository(ApiClient apiClient) : _apiClient = apiClient;
 
   /// `GET /api/v1/gyms/{gymId}/showcase` — the real gym's showcase content
-  /// (spec, classes, rewards). Returns a [GymDetail] whose [GymDetail.gymId]
-  /// is the real UUID. The response uses key `spec` (not `specification`);
-  /// [GymDetail.fromJson] handles both via `specification ?? spec`.
+  /// (classes + rewards). Returns a [GymDetail] whose [GymDetail.gymId] is the
+  /// real UUID.
+  ///
+  /// The showcase lives in the theme domain and no longer carries the video
+  /// spec, so the spec is cross-fetched from the videos domain
+  /// (`GET .../videos/spec`) and merged under the `spec` key — keeping the
+  /// Content focus cards populated. A missing spec (404) just leaves it empty.
   ///
   /// Throws [ServerException] / [NetworkException] on failure.
   Future<GymDetail> fetchShowcase(String gymId) async {
@@ -36,7 +41,12 @@ class GymContentRepository {
       if (data == null) {
         throw const ServerException('Empty showcase response');
       }
-      return GymDetail.fromJson(data);
+      final spec = await _fetchSpecOrNull(gymId);
+      final merged = Map<String, dynamic>.from(data);
+      if (spec != null) {
+        merged['spec'] = spec;
+      }
+      return GymDetail.fromJson(merged);
     } on ServerException {
       rethrow;
     } on NetworkException {
@@ -44,6 +54,22 @@ class GymContentRepository {
     } catch (e, st) {
       log('fetchShowcase failed', error: e, stackTrace: st);
       throw ServerException('Failed to load gym showcase: $e');
+    }
+  }
+
+  /// The gym's live video spec (`GET .../videos/spec`), or null when there is
+  /// none (404) or the read fails — best-effort context for the showcase.
+  Future<Map<String, dynamic>?> _fetchSpecOrNull(String gymId) async {
+    try {
+      final resp = await _apiClient.get<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos/spec',
+      );
+      return resp.data;
+    } catch (e, st) {
+      // Log so transient 5xx/network failures aren't completely invisible;
+      // return null so the showcase still renders without a spec.
+      log('_fetchSpecOrNull failed', error: e, stackTrace: st);
+      return null;
     }
   }
 
@@ -219,13 +245,22 @@ class GymContentRepository {
   }
 
   /// `POST /api/v1/gyms/{gymId}/videos/{videoId}/keep` — un-reject a video
-  /// (flip it back to the served feed; the reject audit is kept). Idempotent.
+  /// (flip it back to the served feed; the reject audit is kept). The optional
+  /// [reason] is stored as `accept_reason` and fed to the feed-learning refiner.
+  /// Idempotent.
   ///
   /// Throws [ServerException] / [NetworkException] on failure.
-  Future<void> keepVideo(String gymId, String videoId) async {
+  Future<void> keepVideo(
+    String gymId,
+    String videoId, {
+    String? reason,
+  }) async {
     try {
       await _apiClient.post<void>(
         '/api/v1/gyms/$gymId/videos/$videoId/keep',
+        data: (reason != null && reason.isNotEmpty)
+            ? {'accept_reason': reason}
+            : null,
       );
     } on ServerException {
       rethrow;

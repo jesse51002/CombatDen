@@ -10,8 +10,8 @@ Failure is surfaced, never swallowed: a missing video (private / deleted /
 invalid id) raises :class:`YouTubeVideoNotFoundError`, and any transport / HTTP
 error raises :class:`YouTubeApiError` — the add endpoint maps both to a clear
 client error rather than storing a metadata-less row. The channel-avatar fetch
-is the one best-effort piece: if it fails the video is still added (the empty
-avatar is backfilled from the gym's instructor headshots at serve time).
+is the one best-effort piece: if it fails the video is still added with an
+empty ``channel_avatar_url`` (stored as-is; there is no serve-time backfill).
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ from __future__ import annotations
 import re
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+
+from src.videos.schema.videos_schema import YouTubeVideoMetadata
 
 # YouTube ids are 11 chars; a video has exactly one channel. One request each.
 _VIDEOS_PARTS = "snippet,statistics,contentDetails"
@@ -56,20 +57,15 @@ class YouTubeApiError(YouTubeMetadataError):
     """The YouTube Data API call failed (transport / HTTP / quota)."""
 
 
-class YouTubeVideoMetadata(BaseModel):
-    """The real metadata fetched for one owner-added video — exactly the fields
-    the ``video`` pool row stores. ``channel_avatar_url`` is best-effort (empty
-    when the channel fetch failed; serve-time backfill fills it)."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    title: str
-    channel_name: str
-    channel_url: str
-    thumbnail_url: str
-    channel_avatar_url: str = ""
-    view_count: int | None = None
-    duration_seconds: int | None = None
+# YouTubeVideoMetadata is defined in src.videos.schema.videos_schema and
+# re-exported here for backwards-compatible imports.
+__all__ = [
+    "YouTubeVideoMetadata",
+    "YouTubeMetadataError",
+    "YouTubeVideoNotFoundError",
+    "YouTubeApiError",
+    "YouTubeMetadataClient",
+]
 
 
 class YouTubeMetadataClient:
@@ -132,7 +128,8 @@ class YouTubeMetadataClient:
         self, client: httpx.AsyncClient, channel_id: str
     ) -> str:
         """The channel's avatar url — best-effort: any failure yields '' so the
-        video still adds (serve-time backfill fills the empty avatar)."""
+        video still adds (the empty avatar is stored as-is; no serve-time
+        backfill)."""
         if not channel_id:
             return ""
         try:

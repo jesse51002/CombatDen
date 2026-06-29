@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/members/presentation/screens/video_agent_edit_screen.dart';
+import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/content_focus_cards.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
@@ -74,10 +74,8 @@ class _EditPanel extends StatelessWidget {
         AppPrimaryButton(
           text: 'Start editing',
           fullWidth: true,
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const VideoAgentEditScreen(),
-            ),
+          onPressed: () => Navigator.of(context).pushNamed(
+            AppRoutes.videoAgent,
           ),
         ),
       ],

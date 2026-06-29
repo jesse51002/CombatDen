@@ -56,15 +56,6 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
-    # Videos domain (read-only template catalog + a gym's live feed/showcase).
-    # The ThemeService app id whose celebration images brand template cards, and
-    # the CDN base those images resolve from. The CDN base defaults to the prod
-    # CDN so the derived template celebration_image_url ALWAYS points at the CDN
-    # (matching ThemeService, whose images are de-baked); set it empty to emit
-    # the ThemeService-relative path the client absolutises (local dev).
-    video_app_id: str = "combatden"
-    video_assets_cdn_base_url: str = "https://cdn.combatden.net"
-
     # YouTube Data API v3 — used when an owner adds a single video to a gym's
     # feed: the backend fetches the real title / channel / thumbnail / views /
     # duration / channel avatar for that id. Same key family the VideoService
@@ -72,16 +63,18 @@ class Settings(BaseSettings):
     youtube_api_key: str
     youtube_data_api_base_url: str = "https://www.googleapis.com/youtube/v3"
 
-    # Video-config agent (Pydantic AI) — the conversational config-authoring agent
-    # + the single-call query generator. PROVIDER-SWAPPABLE via the model string:
-    # set ``video_agent_model`` to any provider Pydantic AI supports (e.g.
-    # ``openai:gpt-...`` / ``google-gla:gemini-...``) whose key is set below. Keys
-    # default to empty so the backend boots without them (the agents resolve the
-    # model lazily); set ``ANTHROPIC_API_KEY`` in .env to use the default model.
+    # LLM layer for the videos domain. Two separate model settings because the
+    # single-shot structured calls (query gen, feed refiner) use litellm (with its
+    # ``provider/name`` format), while the conversational agent uses Pydantic AI's
+    # explicit ``AnthropicModel`` (bare model name only). Keys default to empty so
+    # the backend boots without them; set the relevant key in .env to enable calls.
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
-    video_agent_model: str = "anthropic:claude-sonnet-4-6"
+    # litellm model string for VideoQueryGenerator + VideoFeedRefiner.
+    video_llm_model: str = "anthropic/claude-sonnet-4-6"
+    # Bare Anthropic model name for the Pydantic AI VideoAgentService.
+    video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
 
     # Logging Configuration

@@ -1,1 +1,0 @@
-"""Video-config domain schemas."""

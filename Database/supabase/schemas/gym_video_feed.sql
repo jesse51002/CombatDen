@@ -11,9 +11,10 @@
 -- The scan keep/drop decision for one feed row.
 CREATE TYPE gym_video_scan_status AS ENUM ('accepted', 'rejected');
 
--- Whether a rejection came from the automatic scan (the batch job's keep/drop
--- pass) or a manual owner/admin action in the UI.
-CREATE TYPE gym_video_rejection_type AS ENUM ('automatic', 'manual');
+-- How the row's current scan_status was set: automatic scan/import vs. manual
+-- owner/admin action in the UI. A single column covers all curation paths;
+-- scan_status already distinguishes keep vs reject.
+CREATE TYPE gym_video_curation_type AS ENUM ('automatic', 'manual');
 
 CREATE TABLE gym_video_feed (
     feed_id UUID NOT NULL DEFAULT gen_random_uuid()
@@ -28,29 +29,29 @@ CREATE TABLE gym_video_feed (
     video_run_id UUID
         CONSTRAINT fk_gym_video_feed_run REFERENCES video_run(run_id) ON DELETE CASCADE,
     -- Keep/drop: 'accepted' serves, 'rejected' is the rejected list. A web_query
-    -- removal flips this to 'rejected' (and fills the reject_* audit below);
-    -- "Keep" flips it back. Manual videos are hard-deleted, never rejected.
+    -- removal flips this to 'rejected'; "Keep" flips it back. Manual videos are
+    -- hard-deleted, never rejected.
     scan_status gym_video_scan_status NOT NULL DEFAULT 'accepted',
-    -- Reject audit = the row's LAST rejection, RETAINED across re-acceptance: a
-    -- row can be 'accepted' yet still carry rejection_type / reject_reason /
-    -- rejected_at, so we know it was rejected (auto or manual, why, when) and then
-    -- switched back. The row toggles accepted <-> rejected freely; this audit just
-    -- records the most recent rejection (a manual reject's reason may be blank).
-    -- Replaces the old separate removal-log table.
-    rejection_type gym_video_rejection_type,
-    reject_reason TEXT,
-    rejected_at TIMESTAMPTZ,
-    -- When this row was last MANUALLY curated (owner reject / keep / readd),
+    -- How the row's CURRENT scan_status was set: 'automatic' = the scan/import
+    -- batch placed or accepted/rejected it; 'manual' = the owner explicitly acted
+    -- via the UI (keep, reject, or re-add). NOT NULL, default 'automatic'.
+    curation_type gym_video_curation_type NOT NULL DEFAULT 'automatic',
+    -- The owner's free-text reason for the latest manual curation. scan_status
+    -- already tells keep vs reject, so one field covers both. NULL for automatic
+    -- rows and manual actions where no reason was supplied.
+    curation_reason TEXT,
+    -- When this row was last MANUALLY curated (owner reject / keep / re-add),
     -- bumped to now() by every manual feed write. NULL = never manually touched
     -- (e.g. an automatic-scan row). The feed-learning refiner reads rows whose
     -- curated_at is newer than the gym's latest feed_update spec version to find
     -- "curation since the last refine" — the unconsumed signal it folds into an
     -- improved spec. Automatic scan rows leave this NULL.
     curated_at TIMESTAMPTZ,
-    -- Only rule: a CURRENTLY-rejected row must say how it was rejected. An
-    -- accepted row may still carry the prior rejection's audit (history).
-    CONSTRAINT rejection_type_when_rejected
-        CHECK (scan_status = 'accepted' OR rejection_type IS NOT NULL)
+    -- When this row was last REJECTED (manual or automatic). Retained across a
+    -- subsequent re-acceptance so the rejection timestamp is kept as history.
+    -- Possible later cleanup: superseded by curation_type + curated_at for the
+    -- manual case; kept here for now as an out-of-scope change.
+    rejected_at TIMESTAMPTZ
 );
 
 -- A video appears at most once per scan run, and at most once in the owner

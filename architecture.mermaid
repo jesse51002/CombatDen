@@ -48,8 +48,8 @@ flowchart TB
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (merged read API) · presets (template import)<br/>video_config (LLM agent + query gen · Pydantic AI)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>VideosService · PresetsService · VideoConfigService (Pydantic AI)"]
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + LLM spec/agent authoring · Pydantic AI)<br/>presets (template catalog + import) · theme (gym showcase)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator · VideoSpecAuthoring · VideoFeedRefiner<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
@@ -64,7 +64,7 @@ flowchart TB
   GoogleFonts["Google Fonts"]
   Recraft["Recraft"]
   CDN["S3 + CloudFront CDN<br/>cdn.combatden.net"]
-  LLMProvider["🤖 Anthropic / LLM (Pydantic AI)<br/>video_config agent + query gen<br/>default claude-sonnet-4-6"]
+  LLMProvider["🤖 Anthropic / LLM<br/>agent: Pydantic AI (AnthropicModel)<br/>regular calls: litellm (LiteLLMClient)<br/>default claude-sonnet-4-6"]
 
   %% ---------- CROSS-SYSTEM (root siblings only) ----------
   MobileApp -->|"GET /apps/{id}/styles"| TS_api
@@ -88,7 +88,7 @@ flowchart TB
   VS_api -->|"read video_* tables"| Database
   FastApiBackend -->|"read/write · Supabase Auth"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
-  FastApiBackend -->|"video_config agent + query gen"| LLMProvider
+  FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;

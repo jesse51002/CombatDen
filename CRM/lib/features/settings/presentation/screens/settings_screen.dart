@@ -11,7 +11,7 @@ import 'package:crm/features/settings/data/repositories/settings_repository.dart
 import 'package:crm/features/settings/presentation/sections/appearance_section.dart';
 import 'package:crm/features/settings/presentation/sections/gym_presets_section.dart';
 import 'package:crm/features/settings/presentation/sections/qr_codes_section.dart';
-import 'package:crm/features/settings/presentation/sections/video_config_settings_section.dart';
+import 'package:crm/features/settings/presentation/sections/video_agent_settings_section.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
@@ -57,7 +57,7 @@ class SettingsScreen extends StatelessWidget {
                   Hairline(),
                   QrCodesSection(),
                   Hairline(),
-                  VideoConfigSettingsSection(),
+                  VideoAgentSettingsSection(),
                   Hairline(),
                   GymPresetsSection(),
                 ],

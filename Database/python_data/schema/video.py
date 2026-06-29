@@ -52,12 +52,13 @@ class GymVideoScanStatus(StrEnum):
     rejected = "rejected"  # the rejected list (web_query removals land here)
 
 
-class GymVideoRejectionType(StrEnum):
-    """Mirrors the Postgres `gym_video_rejection_type` enum in
-    schemas/gym_video_feed.sql — whether a rejection was automatic or manual."""
+class GymVideoCurationType(StrEnum):
+    """Mirrors the Postgres `gym_video_curation_type` enum in
+    schemas/gym_video_feed.sql — how a curation action (accept or reject)
+    happened: automatic scan vs. manual owner/admin action."""
 
-    automatic = "automatic"  # the batch scan's keep/drop pass dropped it
-    manual = "manual"  # an owner/admin rejected it in the UI
+    automatic = "automatic"  # the batch scan's keep/drop pass decided this
+    manual = "manual"  # an owner/admin acted on it in the UI
 
 
 class GymVideoSpecSource(StrEnum):

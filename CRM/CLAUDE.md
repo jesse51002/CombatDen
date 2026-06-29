@@ -90,33 +90,51 @@ The discriminator **`selectedGym.gymId != null`** drives this branch in `selecte
 - **Failure behavior:** the gyms list / gym-detail calls time out after **15s**, the feed after **30s**; all degrade quietly (empty feed / error state) so the rest of the app stays up if the service is down.
 - **`package:http` is whitelisted for the public/template integration only.** Do not reuse `VideoApiClient` or `package:http` to wire other screens to a backend — CRM data goes through `ApiClient`. The admin video/showcase reads use `GymContentRepository` (ApiClient-backed). (The ThemeService integration below does not use `http`; it rides `theme_flutter`'s own `dio` client.)
 
-## Video-config agent Settings section
+## Video-agent Settings section
 
 The **Settings screen** includes a **Video feed config** section that opens a conversational
 screen where the gym owner chats with an LLM agent to author the gym's video-feed
-configuration (keep/avoid criteria + YouTube search queries).
+spec (keep/avoid criteria).
 
-- **Entry:** `features/settings/presentation/sections/video_config_settings_section.dart`
-  — a button that pushes `AppRoutes.videoConfig` (`/settings/video-config`).
-- **Architecture:** full Bloc feature (`features/video_config/`) — `VideoConfigBloc`,
-  `VideoConfigRepository` (placed at `features/members/data/video_config_repository.dart`
-  next to `GymContentRepository`). Models at `features/video_config/data/models/`.
-- **Screen:** `features/video_config/presentation/screens/video_config_screen.dart`.
+- **Entry:** `features/settings/presentation/sections/video_agent_settings_section.dart`
+  — a button that pushes `AppRoutes.videoAgent` (`/settings/video-agent`).
+- **Architecture:** full Bloc feature (`features/video_agent/`) — `VideoAgentBloc`,
+  `VideoAgentRepository` (placed at `features/members/data/video_agent_repository.dart`
+  next to `GymContentRepository`). Models at `features/video_agent/data/models/`.
+- **Screen:** `features/video_agent/presentation/screens/video_agent_screen.dart`.
   Uses `AppShell(activeRoute: AppRoutes.settings)`. On open: calls `refineFromFeed`
   (404 = no-op) then `getConfig` (404 = empty state). The bloc carries the agent history
-  across turns (stateless backend) and exposes the draft in `pendingDraft` when the
-  agent proposes a config.
-- **Backend contract:** base path `GET|PUT /api/v1/gyms/{gymId}/video-config`;
-  `POST /agent` (stateless, history round-tripped by the client);
-  `POST /generate-queries`; `POST /refine-from-feed`.
-- **Draft flow:** agent turn → `pendingDraft != null` → `VideoConfigDraftPanel` surfaces
-  Confirm & Save / Keep chatting. Confirm dispatches `VideoConfigDraftConfirmed` →
-  `saveStatus = saved` → SnackBar + `savedConfig` updated. Error shown inline in the
-  draft panel with a retry (the draft stays visible). Never a silent dismiss.
-- **Widgets:** `VideoConfigCurrentPanel` (saved config, markdown via
-  `flutter_markdown_plus`), `VideoConfigChatList` (reuses `AgentMessageBubble` /
-  `UserMessageBubble` from `video_agent/`), `VideoConfigDraftPanel`, `VideoConfigInputBar`
-  (stateful, Shift+Enter = newline, Enter = send).
+  across turns (stateless backend).
+- **Backend contract (final):**
+  - `GET  /api/v1/gyms/{gymId}/video-spec` → `VideoSpecView` or 404.
+  - `POST /api/v1/gyms/{gymId}/video-agent` body `{ message, history, accepted_spec? }`
+    → `{ reply?, draft?, question?, history, saved, usage? }`. Exactly one of
+    reply/draft/question is set per turn. `accepted_spec` is the criteria-only map
+    (`VideoSpecDraft.toJson()`); when present the backend saves and returns `saved: true`.
+  - `POST /api/v1/gyms/{gymId}/video-agent/refine-from-feed` → `VideoSpecView` or 404.
+  - **`PUT /video-spec` and `POST /generate-queries` do not exist and must never be called.**
+- **Draft flow:** agent turn → `pendingDraft != null` → `VideoAgentDraftPanel` surfaces
+  Confirm & Save / Keep chatting. **Confirm dispatches `VideoAgentDraftConfirmed` → the
+  bloc sends a new agent turn with `accepted_spec = draft.toJson()`.** On `saved == true`
+  in the response: the agent's reply is appended to chat, the draft is cleared, a
+  SnackBar confirms, and `savedConfig` updates — **the chat stays open** (no terminal
+  state; owner may continue chatting). Error is shown inline in the draft panel with a
+  retry; the draft stays visible. Never a silent dismiss.
+- **Queries are never shown to the gym owner.** `VideoSpecView` carries `queries` in its
+  model (the backend includes them) but neither `VideoAgentCurrentPanel` nor
+  `VideoAgentDraftPanel` renders them. Queries are a server-side search concern only.
+- **Multi-choice question chips:** when an agent turn returns a non-null `AgentQuestion`,
+  `VideoAgentQuestionChips` renders the options above the input bar.
+  - `multiSelect == false` (single-select): tapping a chip immediately sends that option
+    as the next turn's message and clears the question.
+  - `multiSelect == true`: chips are toggleable; a "Send" button sends the comma-joined
+    selection once at least one chip is chosen.
+  - The text input bar stays available so the owner may type a custom reply instead.
+  - Sending any message (typed or chip) clears the pending question.
+- **Widgets:** `VideoAgentCurrentPanel` (saved spec, markdown via `flutter_markdown_plus`;
+  no queries), `VideoAgentChatList` (reuses `AgentMessageBubble` / `UserMessageBubble`),
+  `VideoAgentDraftPanel` (no queries), `VideoAgentQuestionChips` (multi-choice answer
+  surface), `VideoAgentInputBar` (stateful, Shift+Enter = newline, Enter = send).
 
 ## Gym presets Settings section (owner1-only preset import)
 

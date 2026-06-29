@@ -71,6 +71,7 @@ from src.plans.service.plans_service import (
     MembershipPlansService,
 )
 from src.presets.service.presets_service import PresetsService
+from src.presets.service.presets_template_service import PresetsTemplateService
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -97,6 +98,7 @@ from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.litellm_client import LiteLLMClient
 from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
 from src.shared.resource_lock import ResourceLock
@@ -139,12 +141,13 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
-from src.video_config.service.video_config_llm import (
-    build_config_agent,
-    build_feed_refiner,
-    build_query_generator,
-)
-from src.video_config.service.video_config_service import VideoConfigService
+from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refiner import VideoFeedRefiner
+from src.videos.service.video_feed_service import VideoFeedService
+from src.videos.service.video_query_generator import VideoQueryGenerator
+from src.videos.service.video_spec_authoring import VideoSpecAuthoring
+from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers.waivers_service import WaiversService
@@ -175,7 +178,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.tasks.tasks_router",
             "src.videos.videos_router",
             "src.presets.presets_router",
-            "src.video_config.video_config_router",
+            "src.theme.theme_router",
         ],
     )
 
@@ -212,46 +215,77 @@ class DependencyInjector(containers.DeclarativeContainer):
         api_key=settings.youtube_api_key,
         base_url=settings.youtube_data_api_base_url,
     )
-    videos_service = providers.Factory(
-        VideosService,
+
+    # Video spec domain: the LLM authoring surface for a gym's append-only spec
+    # (keep/avoid criteria + search queries). litellm drives the single-shot
+    # structured calls; Pydantic AI drives the conversational agent. Keys default
+    # to empty so the backend boots without them. No Stripe.
+    # Sub-services are defined BEFORE videos_service (the facade that composes them).
+    litellm_client = providers.Singleton(
+        LiteLLMClient,
+        anthropic_api_key=settings.anthropic_api_key,
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key,
+    )
+    video_spec_service = providers.Singleton(
+        VideoSpecService,
+        db_pool=db_pool,
+    )
+    video_query_generator = providers.Singleton(
+        VideoQueryGenerator,
+        litellm_client=litellm_client,
+        model=settings.video_llm_model,
+    )
+    video_spec_authoring = providers.Singleton(
+        VideoSpecAuthoring,
+        spec_service=video_spec_service,
+        query_generator=video_query_generator,
+    )
+    video_feed_refiner = providers.Singleton(
+        VideoFeedRefiner,
+        db_pool=db_pool,
+        spec_service=video_spec_service,
+        litellm_client=litellm_client,
+        model=settings.video_llm_model,
+        authoring=video_spec_authoring,
+    )
+    # Concern services — stateless, composed by the facade.
+    video_feed_service = providers.Factory(
+        VideoFeedService,
         db_pool=db_pool,
         youtube_client=youtube_metadata_client,
     )
-
-    # Video-config domain: the Pydantic AI conversational agent + single-call query
-    # generator that author a gym's append-only spec. Provider-swappable via the
-    # model string; keys are published to the env by the builders. No Stripe.
-    video_config_query_generator = providers.Singleton(
-        build_query_generator,
-        model=settings.video_agent_model,
-        retries=settings.video_agent_retries,
-        anthropic_api_key=settings.anthropic_api_key,
-        openai_api_key=settings.openai_api_key,
-        gemini_api_key=settings.gemini_api_key,
+    # Facade: composes feed + spec sub-services. Template catalog reads are in
+    # PresetsTemplateService; showcase reads are in ThemeShowcaseService.
+    videos_service = providers.Factory(
+        VideosService,
+        feed_service=video_feed_service,
+        spec_service=video_spec_service,
+        authoring=video_spec_authoring,
+        feed_refiner=video_feed_refiner,
     )
-    video_config_agent = providers.Singleton(
-        build_config_agent,
-        model=settings.video_agent_model,
-        retries=settings.video_agent_retries,
-        anthropic_api_key=settings.anthropic_api_key,
-        openai_api_key=settings.openai_api_key,
-        gemini_api_key=settings.gemini_api_key,
-    )
-    video_config_feed_refiner = providers.Singleton(
-        build_feed_refiner,
-        model=settings.video_agent_model,
-        retries=settings.video_agent_retries,
+    # Theme: branded class/reward cards for the showcase surface.
+    theme_showcase_service = providers.Factory(
+        ThemeShowcaseService,
         db_pool=db_pool,
-        anthropic_api_key=settings.anthropic_api_key,
-        openai_api_key=settings.openai_api_key,
-        gemini_api_key=settings.gemini_api_key,
     )
-    video_config_service = providers.Factory(
-        VideoConfigService,
+    # Presets: template catalog reads (list, detail, feed ids).
+    presets_template_service = providers.Factory(
+        PresetsTemplateService,
         db_pool=db_pool,
-        agent=video_config_agent,
-        query_generator=video_config_query_generator,
-        feed_refiner=video_config_feed_refiner,
+    )
+    # The conversational agent builds its Pydantic AI Agent internally with an
+    # explicit AnthropicModel — no env writes. Singleton: VideoAgentService has
+    # no per-request mutable state (message history + gym_id are call arguments,
+    # not instance state). The injected videos_service (and its deps) are also
+    # stateless per-request — DB calls go through async context managers on the
+    # shared pool, so pinning one instance is safe.
+    video_agent_service = providers.Singleton(
+        VideoAgentService,
+        videos_service=videos_service,
+        model_name=settings.video_agent_model,
+        retries=settings.video_agent_retries,
+        anthropic_api_key=settings.anthropic_api_key,
     )
 
     # Presets: transactional import of a video_gym template into a real gym's

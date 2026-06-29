@@ -29,7 +29,7 @@ class VideoApiClient {
   // has room to finish instead of failing a row.
   static const Duration _kTimeout = Duration(seconds: 30);
 
-  /// `GET /api/v1/videos/templates/{gymId}/videos` — one page of the
+  /// `GET /api/v1/presets/templates/{gymId}/videos` — one page of the
   /// template's feed.
   ///
   /// Each genre section fetches its own slice: pass [videoType] to filter to a
@@ -46,7 +46,7 @@ class VideoApiClient {
     int offset = 0,
   }) async {
     final uri = Uri.parse(
-      '$baseUrl/api/v1/videos/templates/$gymId/videos',
+      '$baseUrl/api/v1/presets/templates/$gymId/videos',
     ).replace(
       queryParameters: {
         'limit': '$limit',
@@ -73,7 +73,7 @@ class VideoApiClient {
     throw Exception('Video feed response missing a videos array');
   }
 
-  /// `GET /api/v1/videos/templates/{gymId}/videos/preview` — the whole "All"
+  /// `GET /api/v1/presets/templates/{gymId}/videos/preview` — the whole "All"
   /// view in ONE request: one [FeedSection] per genre, each capped to [perTag]
   /// videos, sampled server-side so no genre is starved. Replaces firing a
   /// request per genre row. [rejected] previews the scan's rejected list.
@@ -83,7 +83,7 @@ class VideoApiClient {
     int perTag = 10,
   }) async {
     final uri = Uri.parse(
-      '$baseUrl/api/v1/videos/templates/$gymId/videos/preview',
+      '$baseUrl/api/v1/presets/templates/$gymId/videos/preview',
     ).replace(
       queryParameters: {
         'per_tag': '$perTag',

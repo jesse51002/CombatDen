@@ -1,0 +1,64 @@
+"""API routes for the theme domain.
+
+    * ``GET /api/v1/gyms/{gym_id}/showcase`` — a gym's branded class/reward
+      cards (gym-employee gated).
+"""
+
+import logging
+from typing import Annotated
+from uuid import UUID
+
+from dependency_injector.wiring import Provide, inject
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials
+
+from src.core.dependencies import DependencyInjector
+from src.shared.auth import Auth, security
+from src.theme.schema.theme_schema import GymShowcase
+from src.theme.service.theme_showcase_service import ThemeShowcaseService
+
+logger = logging.getLogger(__name__)
+
+theme_router = APIRouter(tags=["theme"])
+
+
+@theme_router.get(
+    "/api/v1/gyms/{gym_id}/showcase",
+    response_model=GymShowcase,
+    summary="Get a gym's showcase (branded class/reward cards)",
+    description=(
+        "The gym's branded class cards and points-store reward cards. "
+        "``classes`` / ``rewards`` are possibly-empty lists. "
+        "Gym-employee gated."
+    ),
+    responses={
+        200: {"description": "The gym's showcase"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+    },
+)
+@inject
+async def get_gym_showcase(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    theme_showcase_service: ThemeShowcaseService = Depends(
+        Provide[DependencyInjector.theme_showcase_service]
+    ),
+) -> GymShowcase:
+    """Return the gym's showcase: its class cards and reward cards."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        classes = await theme_showcase_service.load_showcase_classes(gym_id)
+        rewards = await theme_showcase_service.load_showcase_rewards(gym_id)
+    except Exception:
+        logger.error(
+            "Failed to load gym showcase for %s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load gym showcase",
+        ) from None
+    return GymShowcase(gym_id=gym_id, classes=classes, rewards=rewards)

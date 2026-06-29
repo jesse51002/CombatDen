@@ -56,13 +56,18 @@ class _YourVideosFeedState extends State<YourVideosFeed> {
 
   final List<Video> _videos = [];
   int _total = 0;
+  // DB-row cursor: tracks how many rows the backend has consumed, NOT how many
+  // videos were rendered. The backend may skip rows that fail validation, so
+  // _videos.length can be less than the DB rows consumed — using _videos.length
+  // as the next offset would re-fetch already-seen rows and produce duplicates.
+  int _dbOffset = 0;
   bool _loading = false;
   bool _errored = false;
   bool _loadedFirst = false;
 
   GymContentRepository get _repo => GymContentRepository(ApiClient());
   int get _limit => widget.preview ? _previewCap : _pageSize;
-  bool get _hasMore => !widget.preview && _videos.length < _total;
+  bool get _hasMore => !widget.preview && _dbOffset < _total;
 
   @override
   void initState() {
@@ -81,6 +86,7 @@ class _YourVideosFeedState extends State<YourVideosFeed> {
     setState(() {
       _videos.clear();
       _total = 0;
+      _dbOffset = 0;
       _loadedFirst = false;
       _errored = false;
     });
@@ -100,12 +106,17 @@ class _YourVideosFeedState extends State<YourVideosFeed> {
         // (latest-run) videos live in the genre rows.
         owner: true,
         limit: _limit,
-        offset: _videos.length,
+        offset: _dbOffset,
       );
       if (!mounted) return;
       setState(() {
         _videos.addAll(page.videos);
         _total = page.total;
+        // Advance the DB cursor by the page size requested, not by the number
+        // of videos returned — the backend may skip rows that fail validation,
+        // and using the rendered count as the next offset would re-fetch those
+        // rows and produce duplicate tiles.
+        _dbOffset += _limit;
         _loadedFirst = true;
         _loading = false;
       });

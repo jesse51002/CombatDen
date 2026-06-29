@@ -3,7 +3,7 @@
 -- The whole template rejection list is seeded so the gym's rejected view mirrors
 -- the scan's full keep/drop verdict.
 INSERT INTO gym_video_feed (
-    gym_id, video_id, video_run_id, scan_status, rejection_type, rejected_at
+    gym_id, video_id, video_run_id, scan_status, curation_type, rejected_at
 )
 SELECT
     CAST(:gym_id AS UUID),

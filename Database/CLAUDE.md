@@ -78,9 +78,9 @@ never UPDATE'd. The `spec_id uuid` is the PK; `gym_id` is NOT unique. Columns:
 | `created_at` | `timestamptz` | Version timestamp |
 
 Three writers, each stamping a distinct `source`:
-- `FastApiBackend/src/video_config/` agent / owner save → `admin_update`
+- `FastApiBackend/src/videos/service/video_agent/` agent / owner save → `admin_update`
 - `FastApiBackend/src/presets/` template import → `system_update`
-- `FastApiBackend/src/video_config/` feed refiner → `feed_update`
+- `FastApiBackend/src/videos/service/` feed refiner (`VideoFeedRefiner`) → `feed_update`
 
 **Read paths use the `gym_video_spec_latest` view**, which surfaces the single most-recent version row
 per gym. Never query the underlying `gym_video_spec` table directly in a read path.
@@ -89,8 +89,18 @@ per gym. Never query the underlying `gym_video_spec` table directly in a read pa
 (one row per query per gym). They are now stored in `gym_video_spec.queries JSONB` as part of the
 versioned spec. Do not reference or recreate `gym_video_query`.
 
-**`gym_video_feed.curated_at`** — a nullable `timestamptz` column added to `gym_video_feed`, recording
-when the owner last manually accepted or rejected that feed row.
+**`gym_video_feed` curation audit** — `gym_video_feed` carries a unified curation pair:
+- `curation_type gym_video_curation_type NOT NULL DEFAULT 'automatic'` — how the row's CURRENT
+  `scan_status` was set: `'manual'` = owner rejected / kept / re-added via the UI;
+  `'automatic'` = the scan/import batch placed it. Written by every feed-write path
+  (`videos_keep_feed_video.sql`, `videos_reject_feed_video.sql`, `videos_insert_feed_video.sql`,
+  `presets_insert_feed.sql`, `presets_insert_rejected_feed.sql`).
+- `curation_reason TEXT` — the owner's latest free-text reason for a manual curation. `scan_status`
+  already tells keep vs reject, so one field covers both directions. NULL for automatic rows and
+  manual actions with no stated reason.
+- `curated_at` — when the owner last manually touched the row (reject/keep/re-add); NULL for
+  automatic-only rows. The feed-learning refiner filters on `curation_type = 'manual'` AND
+  `curated_at >` the gym's last `feed_update` version to find unconsumed signals.
 
 **`gym_video_spec_source` enum** — a new Postgres enum (`CREATE TYPE gym_video_spec_source AS ENUM
 ('admin_update', 'system_update', 'feed_update')`), mirrored in
