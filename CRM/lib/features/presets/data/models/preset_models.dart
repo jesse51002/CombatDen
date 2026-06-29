@@ -1,7 +1,7 @@
 /// Models for the presets domain.
 ///
 /// [TemplateCard] mirrors `VideoTemplateCard` from the backend:
-/// the slim picker card served by GET /api/v1/videos/templates.
+/// the slim picker card served by GET /api/v1/presets/templates.
 ///
 /// [PresetImportResult] mirrors `PresetImportResponse`:
 /// the result of POST /api/v1/gyms/{gym_id}/presets/import.
@@ -14,7 +14,6 @@ class TemplateCard {
   final List<String> gymType;
   final String parentGymType;
   final String theme;
-  final String celebrationImageUrl;
   final int videoCount;
   final bool hasClasses;
   final bool hasRewards;
@@ -24,7 +23,6 @@ class TemplateCard {
     required this.gymType,
     required this.parentGymType,
     required this.theme,
-    required this.celebrationImageUrl,
     required this.videoCount,
     required this.hasClasses,
     required this.hasRewards,
@@ -39,7 +37,6 @@ class TemplateCard {
         const [],
     parentGymType: (json['parent_gym_type'] as String?) ?? '',
     theme: (json['theme'] as String?) ?? '',
-    celebrationImageUrl: (json['celebration_image_url'] as String?) ?? '',
     videoCount: (json['video_count'] as int?) ?? 0,
     hasClasses: (json['has_classes'] as bool?) ?? false,
     hasRewards: (json['has_rewards'] as bool?) ?? false,

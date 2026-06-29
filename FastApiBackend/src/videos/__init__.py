@@ -7,3 +7,4 @@ from pathlib import Path
 import src.shared.db_schema_path  # noqa: F401, E402
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
+PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"

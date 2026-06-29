@@ -19,23 +19,27 @@ class ShowcaseTopbar extends StatelessWidget {
     super.key,
     required this.mode,
     required this.gymName,
-    required this.logoAsset,
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
     this.logoImage,
+    this.themeTabPreview = false,
   });
 
   final ShowcaseTopbarMode mode;
   final String gymName;
-  final String logoAsset;
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
 
-  /// Host-supplied gym logo (AppManagement's gym identity). When null the
-  /// bundled [logoAsset] is used. The gym logo is NOT a customization slot.
+  /// Host-supplied gym logo (the real gym's identity). When set it wins over
+  /// any theme or fallback logo. The gym logo is NOT a customization slot.
   final ImageProvider? logoImage;
+
+  /// When true the active theme logo is used as the logo fallback (so theme
+  /// switching changes the nav logo in the preview). When false the CombatDen
+  /// logo is the fallback — used for the v2 landing page and standalone embeds.
+  final bool themeTabPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -63,8 +67,8 @@ class ShowcaseTopbar extends StatelessWidget {
           mode == ShowcaseTopbarMode.bigLogo
               ? _GymHeader(
                   gymName: gymName,
-                  logoAsset: logoAsset,
                   logoImage: logoImage,
+                  themeTabPreview: themeTabPreview,
                 )
               : _GymNameLabel(gymName: gymName),
           _InfoBar(
@@ -81,25 +85,44 @@ class ShowcaseTopbar extends StatelessWidget {
 class _GymHeader extends StatelessWidget {
   const _GymHeader({
     required this.gymName,
-    required this.logoAsset,
     this.logoImage,
+    this.themeTabPreview = false,
   });
 
   final String gymName;
-  final String logoAsset;
   final ImageProvider? logoImage;
+  final bool themeTabPreview;
+
+  // Shown when no gym logo is provided and we are NOT in the theme-tab
+  // preview context (v2 landing page, standalone embeds, etc.).
+  static const ImageProvider _combatDenLogo =
+      AssetImage('assets/images/combatden_logo.png');
 
   @override
   Widget build(BuildContext context) {
+    // Logo resolution order:
+    //   1. Gym's real logo [logoImage] — always wins when present.
+    //   2. Active theme logo — only in the theme-tab preview, so theme
+    //      switching also changes the mockup logo (falls back to CombatDen
+    //      if the theme carries no logo slot).
+    //   3. CombatDen logo — general fallback (landing page, etc.).
+    final ImageProvider resolvedLogo;
+    if (logoImage != null) {
+      resolvedLogo = logoImage!;
+    } else if (themeTabPreview) {
+      resolvedLogo = ThemeImage.image(
+        ShowcaseSlots.logoPrimary,
+        fallback: _combatDenLogo,
+      );
+    } else {
+      resolvedLogo = _combatDenLogo;
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       spacing: ShowcaseTokens.spacingBig,
       children: [
         Image(
-          image: ThemeImage.image(
-            ShowcaseSlots.logoPrimary,
-            fallback: logoImage ?? ShowcaseAsset.image(logoAsset),
-          ),
+          image: resolvedLogo,
           width: 100,
           height: 100,
           fit: BoxFit.contain,

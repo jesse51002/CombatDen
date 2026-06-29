@@ -1,3 +1,4 @@
+import 'package:crm/features/members/data/youtube_url.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 
 /// One video as served by the VideoService
@@ -47,6 +48,11 @@ class Video {
     final views = formatViewCount(viewCount);
     return views.isEmpty ? channelName : '$channelName ‧ $views views';
   }
+
+  /// The YouTube video id, recovered from [url] (the feed serves the canonical
+  /// `watch?v=<id>` form). Empty when [url] isn't a recognisable YouTube link.
+  /// Used as the path id for the remove call.
+  String get videoId => extractYoutubeId(url) ?? '';
 
   factory Video.fromJson(Map<String, dynamic> json) {
     return Video(

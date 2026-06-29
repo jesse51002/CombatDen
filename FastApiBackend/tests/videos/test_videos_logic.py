@@ -2,33 +2,29 @@
 
 Covers the read-path transforms that don't need the database: the genre→group
 and discipline→parent maps (asserted TOTAL so a new enum value can't silently go
-unmapped), the serve-time channel-avatar backfill, and the small null-safe
-helpers on ``VideosService``.
+unmapped), the small null-safe helpers on ``ThemeShowcaseService``, and the
+owner-add YouTube-id extractor.
+
+Also covers the paginated feed service method (``load_feed_page``) with a
+mocked DB session to assert that limit/offset/filter params are forwarded to SQL
+and that total is extracted from the ``COUNT(*) OVER()`` column.
 """
 
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
+
+import pytest
 from schema.video import VideoGenre
 
-from src.videos.schema.videos_big_group import BigGroup, big_group_for
+from src.presets.service.presets_template_service import PresetsTemplateService
+from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup, big_group_for
 from src.videos.schema.videos_gym_type import GymType
 from src.videos.schema.videos_parent_gym_type import ParentGymType, parent_of
-from src.videos.schema.videos_schema import GymVideoCard, ShowcaseClassCard
-from src.videos.service.videos_avatar_fallback import (
-    card_with_avatar,
-    instructor_avatars,
-)
-from src.videos.service.videos_service import VideosService
-
-
-def _card(avatar: str = "") -> GymVideoCard:
-    return GymVideoCard(
-        url="https://www.youtube.com/watch?v=abc123",
-        title="t",
-        thumbnail_url="thumb",
-        channel_name="c",
-        channel_url="cu",
-        channel_avatar_url=avatar,
-        relevance_index=0,
-    )
+from src.videos.service.video_feed_service import VideoFeedService
 
 
 def test_big_group_for_is_total_over_genres():
@@ -50,38 +46,228 @@ def test_parent_of_is_total_over_disciplines():
         assert isinstance(parent_of(discipline), ParentGymType)
 
 
-def test_instructor_avatars_dedupes_and_skips_missing():
-    classes = [
-        ShowcaseClassCard(name="A", instructor_image_url="x"),
-        ShowcaseClassCard(name="B", instructor_image_url=None),
-        ShowcaseClassCard(name="C", instructor_image_url="x"),
-        ShowcaseClassCard(name="D", instructor_image_url="y"),
-    ]
-    # First-seen order, deduped, None skipped.
-    assert instructor_avatars(classes) == ["x", "y"]
-
-
-def test_card_with_avatar_backfills_empty_only_and_is_deterministic():
-    avatars = ["a", "b", "c"]
-    filled = card_with_avatar(_card(""), avatars)
-    assert filled.channel_avatar_url in avatars
-    # Deterministic: the same video url always picks the same headshot.
-    again = card_with_avatar(_card(""), avatars)
-    assert again.channel_avatar_url == filled.channel_avatar_url
-    # A populated avatar is left untouched.
-    assert card_with_avatar(_card("real"), avatars).channel_avatar_url == "real"
-    # An empty avatar pool is a no-op.
-    assert card_with_avatar(_card(""), []).channel_avatar_url == ""
-
-
 def test_instructor_name_null_safe():
-    assert VideosService._instructor_name("Mary", "Jo") == "Mary Jo"
-    assert VideosService._instructor_name("Mary", None) == "Mary"
-    assert VideosService._instructor_name(None, "Jo") == "Jo"
-    assert VideosService._instructor_name(None, None) is None
+    assert ThemeShowcaseService._instructor_name("Mary", "Jo") == "Mary Jo"
+    assert ThemeShowcaseService._instructor_name("Mary", None) == "Mary"
+    assert ThemeShowcaseService._instructor_name(None, "Jo") == "Jo"
+    assert ThemeShowcaseService._instructor_name(None, None) is None
 
 
 def test_as_list_tolerates_json_string_and_none():
-    assert VideosService._as_list(None) == []
-    assert VideosService._as_list('["a", "b"]') == ["a", "b"]
-    assert VideosService._as_list(["a"]) == ["a"]
+    assert PresetsTemplateService._as_list(None) == []
+    assert PresetsTemplateService._as_list('["a", "b"]') == ["a", "b"]
+    assert PresetsTemplateService._as_list(["a"]) == ["a"]
+
+
+# ── owner-add: YouTube id extraction ─────────────────────────────────
+
+_VALID_ID = "dQw4w9WgXcQ"  # 11 chars, the standard YouTube id shape
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://www.youtube.com/watch?v={_VALID_ID}",
+        f"https://www.youtube.com/watch?v={_VALID_ID}&t=42s",
+        f"https://m.youtube.com/watch?v={_VALID_ID}",
+        f"https://youtu.be/{_VALID_ID}",
+        f"https://youtu.be/{_VALID_ID}?si=abcd",
+        f"https://www.youtube.com/embed/{_VALID_ID}",
+        f"https://www.youtube.com/shorts/{_VALID_ID}",
+        f"https://www.youtube.com/live/{_VALID_ID}",
+        f"youtube.com/watch?v={_VALID_ID}",  # scheme-less
+        _VALID_ID,  # a bare id
+    ],
+)
+def test_extract_youtube_id_accepts_known_forms(url: str):
+    assert VideoFeedService._extract_youtube_id(url) == _VALID_ID
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "   ",
+        "https://vimeo.com/123456",
+        "https://example.com/watch?v=" + _VALID_ID,  # right path, wrong host
+        "https://www.youtube.com/watch?v=",  # no id
+        "https://www.youtube.com/feed/subscriptions",  # no id segment
+        "not a url at all",
+        "https://youtu.be/short",  # too short to be an id
+    ],
+)
+def test_extract_youtube_id_rejects_garbage(url: str):
+    with pytest.raises(ValueError):
+        VideoFeedService._extract_youtube_id(url)
+
+
+# ── load_feed_page: paginated DB feed (mocked session) ───────────────
+
+_GYM_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+_EDUCATIONAL_GENRE_VALUES = [g.value for g in EDUCATIONAL_GENRES]
+
+
+def _make_feed_service(mock_rows: list[dict]) -> tuple[VideoFeedService, MagicMock]:
+    """Build a VideoFeedService whose DB session returns the given rows."""
+    mock_result = MagicMock()
+    mock_result.mappings.return_value.all.return_value = mock_rows
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def _session_ctx():
+        yield mock_session
+
+    mock_db = MagicMock()
+    mock_db.session = _session_ctx
+
+    svc = VideoFeedService(db_pool=mock_db, youtube_client=MagicMock())
+    return svc, mock_session
+
+
+def _video_row(**overrides: object) -> dict:
+    """A minimal valid pool-video row with a ``total`` column."""
+    base = {
+        "video_id": "vid1",
+        "url": "https://www.youtube.com/watch?v=vid1",
+        "title": "Test Video",
+        "description": None,
+        "thumbnail_url": "https://img.youtube.com/vi/vid1/hqdefault.jpg",
+        "channel_name": "Test Channel",
+        "channel_url": "https://www.youtube.com/channel/test",
+        "channel_avatar_url": "",
+        "view_count": 1000,
+        "like_count": None,
+        "duration_seconds": 120,
+        "tag": None,
+        "gym_type": None,
+        "source_queries": None,
+        "relevance_index": 0,
+        "transcript_error": None,
+        "transcript": None,
+        "total": 1,
+    }
+    return {**base, **overrides}
+
+
+async def test_load_feed_page_no_filter_returns_page_and_total() -> None:
+    """No tag filter: video_type and filter_big_group are both None in params."""
+    svc, mock_session = _make_feed_service([_video_row(total=5)])
+
+    cards, total = await svc.load_feed_page(
+        _GYM_ID,
+        owner=False,
+        rejected=False,
+        video_type=None,
+        big_group=None,
+        limit=10,
+        offset=0,
+    )
+
+    assert total == 5
+    assert len(cards) == 1
+
+    params = mock_session.execute.call_args[0][1]
+    assert params["video_type"] is None
+    assert params["filter_big_group"] is None
+    assert params["limit"] == 10
+    assert params["offset"] == 0
+    assert params["gym_id"] == str(_GYM_ID)
+    assert params["educational_genres"] == _EDUCATIONAL_GENRE_VALUES
+
+
+async def test_load_feed_page_video_type_filter() -> None:
+    """video_type passes its string value as :video_type param."""
+    svc, mock_session = _make_feed_service([_video_row(tag="educational", total=3)])
+
+    cards, total = await svc.load_feed_page(
+        _GYM_ID,
+        video_type=VideoGenre.educational,
+        limit=20,
+        offset=0,
+    )
+
+    assert total == 3
+    params = mock_session.execute.call_args[0][1]
+    assert params["video_type"] == VideoGenre.educational.value
+    assert params["filter_big_group"] is None
+
+
+async def test_load_feed_page_big_group_educational() -> None:
+    """big_group=EDUCATIONAL passes filter_big_group='educational' to SQL."""
+    svc, mock_session = _make_feed_service([_video_row(tag="educational", total=2)])
+
+    cards, total = await svc.load_feed_page(
+        _GYM_ID,
+        big_group=BigGroup.EDUCATIONAL,
+        limit=20,
+        offset=0,
+    )
+
+    assert total == 2
+    params = mock_session.execute.call_args[0][1]
+    assert params["video_type"] is None
+    assert params["filter_big_group"] == BigGroup.EDUCATIONAL.value
+
+
+async def test_load_feed_page_big_group_entertainment() -> None:
+    """big_group=ENTERTAINMENT passes filter_big_group='entertainment' to SQL."""
+    svc, mock_session = _make_feed_service([_video_row(tag="entertainment", total=7)])
+
+    cards, total = await svc.load_feed_page(
+        _GYM_ID,
+        big_group=BigGroup.ENTERTAINMENT,
+        limit=5,
+        offset=10,
+    )
+
+    assert total == 7
+    params = mock_session.execute.call_args[0][1]
+    assert params["filter_big_group"] == BigGroup.ENTERTAINMENT.value
+    assert params["limit"] == 5
+    assert params["offset"] == 10
+
+
+async def test_load_feed_page_empty_result_returns_zero_total() -> None:
+    """When DB returns no rows (no matches), return ([], 0)."""
+    svc, _ = _make_feed_service([])
+
+    cards, total = await svc.load_feed_page(
+        _GYM_ID,
+        limit=10,
+        offset=0,
+    )
+
+    assert cards == []
+    assert total == 0
+
+
+async def test_load_feed_page_owner_and_rejected_flags() -> None:
+    """owner=True and rejected=True are forwarded to the SQL params."""
+    svc, mock_session = _make_feed_service([_video_row(total=1)])
+
+    await svc.load_feed_page(
+        _GYM_ID,
+        owner=True,
+        rejected=True,
+        limit=10,
+        offset=0,
+    )
+
+    params = mock_session.execute.call_args[0][1]
+    assert params["owner"] is True
+    assert params["scan_status"] == "rejected"
+
+
+async def test_load_feed_page_invalid_row_skipped() -> None:
+    """A row that fails GymVideoCard validation is silently skipped."""
+    bad_row = _video_row(relevance_index=-1, total=2)  # ge=0 constraint fails
+    good_row = _video_row(video_id="vid2", total=2)
+    svc, _ = _make_feed_service([bad_row, good_row])
+
+    cards, total = await svc.load_feed_page(_GYM_ID, limit=10, offset=0)
+
+    assert total == 2
+    assert len(cards) == 1

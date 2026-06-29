@@ -444,6 +444,16 @@ VIDEO_GYM_REWARD: frozenset[str] = frozenset(
 VIDEO: frozenset[str] = frozenset(
     {
         "video_id",  # PK (YouTube id)
+        "gym_id",  # custom-video ownership; backend-set on add, never client-edited
+        "added_via",  # web_query vs manual; backend-set, marks deletability
+    }
+)
+
+VIDEO_RUN: frozenset[str] = frozenset(
+    {
+        "run_id",  # PK
+        "gym_id",  # identity FK
+        "created_at",  # auto-generated
     }
 )
 
@@ -468,25 +478,31 @@ VIDEO_COST_LOG: frozenset[str] = frozenset(
 # are listed for convention/parity.
 # ============================================================
 
+# Append-only versioned spec: every confirmed change is a NEW row (INSERT), never
+# an UPDATE, and only the backend (service_role) writes. Clients read the latest
+# via the gym_video_spec_latest view. Every column is therefore user-immutable;
+# `queries` (the JSONB search list) collapses the old gym_video_query table.
 GYM_VIDEO_SPEC: frozenset[str] = frozenset(
     {
-        "gym_id",  # PK / identity FK, per-gym resource
+        "spec_id",  # PK, auto-generated UUID (one per version)
+        "gym_id",  # identity FK, per-gym resource
+        "gym_type",  # disciplines snapshot for the version
+        "short_videos_desc",
+        "short_avoid_desc",
+        "videos_desc",
+        "avoid_desc",
+        "queries",  # JSONB search list (collapses gym_video_query)
+        "source",  # feed_update | admin_update | system_update
         "imported_from",  # provenance, set by the preset import
-        "imported_at",  # provenance, set by the preset import
-        "updated_at",  # auto-managed timestamp
+        "created_at",  # auto-generated version timestamp
     }
 )
 
 GYM_VIDEO_FEED: frozenset[str] = frozenset(
     {
-        "gym_id",  # composite PK / identity FK
-        "video_id",  # composite PK / identity FK
-    }
-)
-
-GYM_VIDEO_QUERY: frozenset[str] = frozenset(
-    {
-        "query_id",  # PK, identity
-        "gym_id",  # identity FK, per-gym resource
+        "feed_id",  # surrogate PK
+        "gym_id",  # identity FK
+        "video_id",  # identity FK
+        "video_run_id",  # the run this row belongs to (NULL = owner section)
     }
 )

@@ -18,5 +18,9 @@ CREATE POLICY "Members can view video spec"
         )
     );
 
--- Written by the backend (service_role) via the preset import; clients never write.
+-- Append-only, written only by the backend (service_role): the preset import
+-- (system_update), the conversational config agent (admin_update), and the
+-- feed-learning refiner (feed_update). Clients never write — they read the
+-- latest version through the security_invoker `gym_video_spec_latest` view.
 REVOKE INSERT, UPDATE, DELETE ON TABLE gym_video_spec FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE ON gym_video_spec_latest FROM authenticated;

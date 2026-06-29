@@ -8,11 +8,21 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_content.dart';
+import 'package:crm/showcase/showcase_group_defaults.dart';
 import 'package:crm/showcase/showcase_screen.dart';
 
 // Phone-like page push between showcase screens. Same spirit (and curve) as
 // theme_grid.dart's scroll animation — a local const, not a design token.
 const Duration _kSlideDuration = Duration(milliseconds: 300);
+
+/// Returns [defaults] when [real] is null or empty; when [real] has exactly
+/// one item, repeats it across all [defaults.length] slots so the single
+/// item fills every schedule/store card instead of appearing only once.
+List<T> _fillSlots<T>(List<T>? real, List<T> defaults) {
+  if (real == null || real.isEmpty) return defaults;
+  if (real.length == 1) return List.filled(defaults.length, real[0]);
+  return real;
+}
 
 /// The left pane: a large phone mockup that fills the available space,
 /// showing the active showcase screen (re-themed live, animation looping),
@@ -110,7 +120,7 @@ class _PreviewContent extends StatelessWidget {
           listenable: Listenable.merge([ThemeRuntime.changes, selectedGym]),
           builder: (context, _) {
             final detail = selectedGym.detail;
-            final rewards = detail?.rewards
+            final rawRewards = detail?.rewards
                 .map(
                   (r) => ShowcaseReward(
                     title: r.title,
@@ -120,7 +130,7 @@ class _PreviewContent extends StatelessWidget {
                   ),
                 )
                 .toList();
-            final classes = detail?.classes
+            final rawClasses = detail?.classes
                 .map(
                   (c) => ShowcaseClassInfo(
                     name: c.name,
@@ -129,6 +139,23 @@ class _PreviewContent extends StatelessWidget {
                   ),
                 )
                 .toList();
+
+            // Group-aware defaults: resolve the selected gym's parent group,
+            // apply its default set when real data is absent, and repeat a
+            // single real item across all 4 slots so it is shown in every
+            // schedule/store slot instead of appearing only once.
+            final group = showcaseGroupFor(selectedGym.videoGymId);
+            final classes = _fillSlots(
+              rawClasses,
+              kShowcaseClassesByGroup[group] ??
+                  kShowcaseClassesByGroup[kDefaultShowcaseGroup]!,
+            );
+            final rewards = _fillSlots(
+              rawRewards,
+              kShowcaseRewardsByGroup[group] ??
+                  kShowcaseRewardsByGroup[kDefaultShowcaseGroup]!,
+            );
+
             return AnimatedSwitcher(
               duration: reduceMotion ? Duration.zero : _kSlideDuration,
               switchInCurve: Curves.easeOutCubic,
@@ -165,6 +192,7 @@ class _PreviewContent extends StatelessWidget {
                     gymLogo: gymLogo,
                     rewards: rewards,
                     classes: classes,
+                    themeTabPreview: true,
                   ),
                 ),
               ),

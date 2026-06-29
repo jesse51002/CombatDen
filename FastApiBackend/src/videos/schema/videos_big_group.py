@@ -19,14 +19,16 @@ class BigGroup(enum.StrEnum):
     ENTERTAINMENT = "entertainment"
 
 
-# Only these map to EDUCATIONAL; every other VideoGenre is ENTERTAINMENT.
-_EDUCATIONAL_GENRES: frozenset[VideoGenre] = frozenset(
+# The VideoGenre values that map to BigGroup.EDUCATIONAL.
+# Every other genre is ENTERTAINMENT.
+# Public so services can pass these as SQL parameters for the big-group filter.
+EDUCATIONAL_GENRES: frozenset[VideoGenre] = frozenset(
     {VideoGenre.educational, VideoGenre.analysis}
 )
 
 
 def big_group_for(genre: VideoGenre) -> BigGroup:
     """The big group a single genre maps to."""
-    if genre in _EDUCATIONAL_GENRES:
+    if genre in EDUCATIONAL_GENRES:
         return BigGroup.EDUCATIONAL
     return BigGroup.ENTERTAINMENT

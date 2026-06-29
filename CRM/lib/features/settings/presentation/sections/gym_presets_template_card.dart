@@ -5,9 +5,9 @@ import 'package:crm/features/presets/data/models/preset_models.dart';
 
 /// One selectable template card in the gym-presets picker.
 ///
-/// Shows the celebration image (or a placeholder), the template name, its
-/// disciplines, and a compact "N videos · classes · rewards" hint. A selected
-/// card gets a sapphire border + accent background overlay.
+/// Text-only: the template name, its disciplines, and a compact
+/// "N videos · classes · rewards" hint. A selected card gets a sapphire border +
+/// accent background overlay.
 class GymPresetsTemplateCard extends StatelessWidget {
   final TemplateCard template;
   final bool isSelected;
@@ -21,7 +21,6 @@ class GymPresetsTemplateCard extends StatelessWidget {
   });
 
   static const double _cardWidth = 180.0;
-  static const double _imageHeight = 100.0;
 
   @override
   Widget build(BuildContext context) {
@@ -39,36 +38,30 @@ class GymPresetsTemplateCard extends StatelessWidget {
           ),
           boxShadow: isSelected ? DesignConstants.buttonShadow : null,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _CelebrationImage(url: template.celebrationImageUrl),
-            Padding(
-              padding: const EdgeInsets.all(DesignConstants.spacingMedium),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: DesignConstants.spacingSmall,
-                children: [
-                  Text(
-                    template.displayName,
-                    style: DesignConstants.h3,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (template.gymType.isNotEmpty)
-                    Text(
-                      _disciplines(template.gymType),
-                      style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text2nd,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  _HintRow(template: template),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.all(DesignConstants.spacingMedium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(
+                template.displayName,
+                style: DesignConstants.h3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+              if (template.gymType.isNotEmpty)
+                Text(
+                  _disciplines(template.gymType),
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              _HintRow(template: template),
+            ],
+          ),
         ),
       ),
     );
@@ -81,34 +74,6 @@ class GymPresetsTemplateCard extends StatelessWidget {
 
   static String _cap(String w) =>
       w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}';
-}
-
-class _CelebrationImage extends StatelessWidget {
-  final String url;
-
-  const _CelebrationImage({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(DesignConstants.radiusBig),
-        topRight: Radius.circular(DesignConstants.radiusBig),
-      ),
-      child: SizedBox(
-        height: GymPresetsTemplateCard._imageHeight,
-        width: double.infinity,
-        child: url.isEmpty
-            ? ColoredBox(color: DesignConstants.line)
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    ColoredBox(color: DesignConstants.line),
-              ),
-      ),
-    );
-  }
 }
 
 class _HintRow extends StatelessWidget {

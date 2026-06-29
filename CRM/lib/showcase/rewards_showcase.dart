@@ -66,7 +66,6 @@ class RewardsShowcase extends StatelessWidget {
               ShowcaseTopbar(
                 mode: ShowcaseTopbarMode.nameOnly,
                 gymName: gymName,
-                logoAsset: data.gymLogoAsset,
                 logoImage: gymLogo,
                 streakDays: data.streakDays,
                 pointsLabel: data.pointsLabel,

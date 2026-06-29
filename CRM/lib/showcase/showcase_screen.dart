@@ -41,6 +41,8 @@ enum ShowcaseScreen {
   /// real content: [rewards] feed the Store grid and the "Rewards You Can Get"
   /// carousel, [classes] feed the Home schedule; null falls back to bundled
   /// samples. The remaining surfaces stay on bundled samples regardless.
+  /// [themeTabPreview] signals that this showcase is embedded in the live
+  /// theme-tab preview, which affects the logo fallback (see [ShowcaseTopbar]).
   Widget build({
     bool loop = true,
     VoidCallback? onCycleComplete,
@@ -48,6 +50,7 @@ enum ShowcaseScreen {
     ImageProvider? gymLogo,
     List<ShowcaseReward>? rewards,
     List<ShowcaseClassInfo>? classes,
+    bool themeTabPreview = false,
   }) {
     switch (this) {
       case ShowcaseScreen.home:
@@ -57,6 +60,7 @@ enum ShowcaseScreen {
           gymName: gymName,
           gymLogo: gymLogo,
           classes: classes,
+          themeTabPreview: themeTabPreview,
         );
       case ShowcaseScreen.booking:
         return BookingShowcase(loop: loop, onCycleComplete: onCycleComplete);

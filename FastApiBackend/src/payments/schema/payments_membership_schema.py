@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, model_validator
 from schema.membership_plan import DurationUnit, PlanType
 

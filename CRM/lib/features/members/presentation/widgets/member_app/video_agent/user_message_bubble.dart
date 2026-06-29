@@ -20,7 +20,7 @@ class UserMessageBubble extends StatelessWidget {
             color: DesignConstants.primaryColor25,
             borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
           ),
-          child: Text(text, style: DesignConstants.p),
+          child: Text(text, style: DesignConstants.h3Regular),
         ),
       ),
     );

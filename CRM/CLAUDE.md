@@ -8,7 +8,7 @@ This is the CombatDen **gym admin web app** (CRM) — staff and owners managing 
 
 - **Web-only Flutter app** (no Android, no iOS target).
 - **Architecture is feature-first** (see *Project Structure*): each feature owns its `bloc/`, `data/` (models + repositories), and `presentation/` (screens + widgets + dialogs + sections).
-- **Two deliberate read-only edge integrations** — the VideoService feed/gym-detail and the ThemeService theme preview — are documented below. They are specific, scoped integrations, **not** the only backend access: the CRM feature stack (members, member detail, gym setup, billing) goes through the FastApiBackend via the authenticated `ApiClient`.
+- **Two deliberate edge integrations** — the video feed/gym-detail (read, plus the owner's "Your videos" add/remove) and the read-only ThemeService theme preview — are documented below. They are specific, scoped integrations, **not** the only backend access: the CRM feature stack (members, member detail, gym setup, billing) goes through the FastApiBackend via the authenticated `ApiClient`.
 
 **Theme/design rules are not relaxed for any reason.** See *Theming System*.
 
@@ -61,26 +61,80 @@ When you add a feature that talks to the FastApiBackend, it gets a bloc. When yo
 - **Use `bloc_test` + `mocktail`.** Blocs hold the business logic, so they get the coverage: build the bloc with a mocked repository, `act` an event, assert the emitted state sequence (loading → loaded/error). Mock repositories and `ApiClient`; never hit a live backend in a test.
 - Tests mirror the `lib/` tree under `test/`. Cover error and edge conditions, not just the happy path. `flutter test` (`make test`) before committing.
 
-## Video template integration (read-only edge feed + gym detail)
+## Video template integration (live edge feed + gym detail)
 
 The member-app **videos tab** pulls its feed live so the admin previews real thumbnails and titles instead of placeholder art; a second read fetches the selected gym's **detail** (classes / rewards / spec) once into memory.
 
+**"Your videos" is the owner section** (admin context only) — `gym_video_feed` rows with `video_run_id` NULL (run-independent). Fetched with `GymContentRepository.fetchVideos(gymId, owner: true)`; the genre rows are the gym's latest scan run. The owner edits "Your videos" inline:
+- **Add** a YouTube link — a **two-step confirm**: `AddVideoDialog` looks the link up (`lookupVideo` → `POST …/videos/lookup`, no write) and shows the fetched title/channel/thumbnail/views for confirmation, then `addVideo` → `POST …/gyms/{id}/videos` commits it. **The backend fetches real metadata from the YouTube Data API** (no URL-only storage). The new `video` pool row is **owned by this gym** (`video.gym_id` set, `added_via='manual'` — a private custom video) and the feed row is inserted into the owner section.
+- **Remove from "Your videos"** — a plain confirmation (`ConfirmationModal`, **no "why"**) → `removeVideo(gymId, id, owner: true)`. The backend deletes the owner-section feed row; if the video is `added_via='manual'` (gym-owned custom), it also hard-deletes the pool row.
+
+**Genre-row (latest-run) removes are different** — they keep the **"why"**: `member_feed_section.dart` wires a real `onRemove` (admin only) → `VideoCurationDialog` (the teach-the-agent reason) → `removeVideo(gymId, id, reason)` → the backend **rejects** the latest-run row (`scan_status='rejected'`, `rejection_type='manual'`, optional reason; the pool row is never deleted). Held sections update synchronously from the cached state (no refetch). So: owner-section = confirm + delete-pool-if-manual; genre = why + reject-latest-run-row + keep-pool.
+
+Every video tile (Your videos **and** the genre rows) is clickable — its thumbnail opens the YouTube watch page in a **new browser tab** (`openVideoInNewTab` → `url_launcher` with `webOnlyWindowName: '_blank'`). A preset import seeds a few videos into the owner section on first import (only when the owner section is still empty, so re-imports don't pile up), so "Your videos" isn't blank in the demo (they also appear in the genre rows from the same scan run — harmless). In the **public** theme browser (no real gym) "Your videos" drops out — there's no owner feed to edit. **Destructive buttons use `DesignConstants.badRed`, not `redDark`** (a 25%-alpha wash that renders as a grayed/disabled look).
+
 **Admin preview vs. public browser** — branched on **`selectedGym.gymId != null`**:
 
-- **Admin (real gym, `gymId` set):** detail and video feed read from **UUID-keyed, authed** endpoints via `ApiClient`. The rejected toggle is hidden (real-gym endpoints have no `rejected` param).
-  - Gym detail: `GET /api/v1/gyms/{gymId}/showcase` → `GymDetail` (key `spec`, not `specification`; `GymDetail.fromJson` handles both via `?? json['spec']`). Backed by `lib/features/members/data/gym_content_repository.dart` (`GymContentRepository`). Fetched by `SelectedGym._fetchDetail` and re-fetched by `setVideoGymId` on preset import so Loyalty/classes/schedule refresh immediately.
-  - Video feed: `GET /api/v1/gyms/{gymId}/videos` and `/preview` via `GymContentRepository`, no `rejected` param.
+- **Admin (real gym, `gymId` set):** detail and video feed read from **UUID-keyed, authed** endpoints via `ApiClient`. The **rejected view is restored**: the "Show rejected" toggle flips the feed between accepted videos and the scan's rejected list; in rejected mode, genre tiles show a **Keep** action (un-reject back to the served feed) instead of remove.
+  - Gym detail: `GET /api/v1/gyms/{gymId}/showcase` → `GymDetail` (key `spec`, not `specification`; `GymDetail.fromJson` handles both via `?? json['spec']`). Backed by `lib/features/members/data/gym_content_repository.dart` (`GymContentRepository`). Fetched by `SelectedGym._fetchDetail` and re-fetched by `setVideoGymId` on preset import so Loyalty/classes/schedule refresh immediately. **`setVideoGymId` does NOT touch the theme** — a Settings preset import only changes content; theme selection/application is the Theme tab's job (the imported design id is persisted server-side). Touching the theme here threw when the theme engine wasn't yet initialized and wrongly reported the import as failed.
+  - Video feed: `GET /api/v1/gyms/{gymId}/videos` (paginated, `?owner=true` for the owner section, `?rejected=true` for the rejected list) and `/preview?rejected=true` via `GymContentRepository`. The owner-edit endpoints: `POST /api/v1/gyms/{gymId}/videos/lookup` (`lookupVideo` — fetch details for the add confirmation, no write), `POST /api/v1/gyms/{gymId}/videos` (`addVideo`), `DELETE /api/v1/gyms/{gymId}/videos/{video_id}` (`removeVideo` — `?owner=true` deletes from the owner section; else rejects the latest-run row), and `POST /api/v1/gyms/{gymId}/videos/{video_id}/keep` (`keepVideo`), all on `GymContentRepository`.
 - **Public browser (`gymId` null):** unauthenticated, slug-keyed template path via `package:http` (`VideoApiClient` / `GymApiClient`). Supabase is not initialized in this target — never call `ApiClient` on this branch.
 
-The discriminator **`selectedGym.gymId != null`** is the ONLY place this branch lives (`selected_gym.dart::_fetchDetail`, `member_feed_section.dart::_previewFor` + `_TagPagerState._loadMore`). Do not add it elsewhere.
+The discriminator **`selectedGym.gymId != null`** drives this branch in `selected_gym.dart::_fetchDetail`, `member_feed_section.dart::_previewFor` + `_TagPagerState._loadMore`, and gates the admin-only editable "Your videos" section there (`_Feed`/`_AllSections` `showYourVideos`). Keep these consistent; don't scatter the check into unrelated widgets.
 
-- **Feed (template/public path):** `GET /api/v1/videos/templates/{videoGymId}/videos` (video-gym-id-keyed, paginated). The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list (backing the videos tab's rejected-videos section). Admin path suppresses this toggle entirely.
+- **Feed (template/public path):** `GET /api/v1/videos/templates/{videoGymId}/videos` (video-gym-id-keyed, paginated). The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list (backing the videos tab's rejected-videos section). The "Show rejected" toggle is visible in both admin and public contexts.
 - **Gym detail (template/public path):** `GET /api/v1/videos/templates/{videoGymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, `package:http`) fetches the template's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. The backend response uses `video_gym_id`; `GymDetail.fromJson` falls back to `gym_id` for transition tolerance; and falls back from `specification` key to `spec` key for the showcase response.
 - **`video_gym` id ≠ regular gym id — and there is no mapping. `selectedGym` carries BOTH, named separately.** The template catalog keys on a string `video_gym` id (`boxing`, `acro_yoga`, …); the FastApiBackend gym (`GET /api/v1/gyms/`, `GymWithRole`) keys on a **UUID**. They are **separate id spaces**, so `selectedGym` exposes two getters: **`selectedGym.gymId`** = the real gym UUID (set by `setActiveGym` at login/pick; scopes every CRM member query — members list, member-detail roster, plans, discounts) and **`selectedGym.videoGymId`** = the template content key (drives the read-only preview surfaces: feed, loyalty store, content focus, phone preview, Schedule screen, dashboard Upcoming Classes). Never pass the real `gymId` to a video template endpoint — it 404s; never scope a member query by `videoGymId`. After login the auth gate calls `setActiveGym` (real gym) **and** seeds `videoGymId` with a **default** `video_gym` (`AppConstants.defaultVideoGymId`, `--dart-define=DEFAULT_VIDEO_GYM`, default `boxing`) for content; the **Theme-tab gym picker** overrides `videoGymId` only; the **Gym presets** Settings section also updates `videoGymId` after a successful import via `selectedGym.setVideoGymId(...)`. If a real gym→video_gym link is ever needed, it's a new schema field + endpoint + setup UI, not a reuse of the UUID.
-- **Where it lives:** `lib/features/members/data/` — `video_api_client.dart` (template feed + preview), `gym_api_client.dart`, `gym_content_repository.dart` (authed real-gym showcase + videos), `gyms_pager.dart` (pages the template catalog for the theme/gym picker); models in `video_feed.dart` / `gym_detail.dart`. The `StatefulWidget` + `FutureBuilder` pattern is the right shape for the widgets that consume these reads (`member_feed_section.dart`, `library_view.dart`).
+- **Where it lives:** `lib/features/members/data/` — `video_api_client.dart` (template feed + preview), `gym_api_client.dart`, `gym_content_repository.dart` (authed real-gym showcase + videos; methods: `fetchVideos(owner, rejected)`, `fetchVideoPreview(rejected)`, `addVideo`, `lookupVideo`, `removeVideo(owner, reason)`, `keepVideo`), `gyms_pager.dart` (pages the template catalog for the theme/gym picker), `youtube_url.dart` (`extractYoutubeId`, mirrors the backend extractor, used to validate the add input + derive `Video.videoId`); models in `video_feed.dart` / `gym_detail.dart`. The editable "Your videos" UI is `videos_tab/your_videos_feed.dart` (the stateful preview/full feed with add/remove), `your_video_tile.dart` (`feedVideoTile` + `openVideoInNewTab`), and `add_video_dialog.dart` (paste-a-link). The `StatefulWidget` + `FutureBuilder`/`setState` pattern is the right shape for the widgets that consume these reads/edits (`member_feed_section.dart`, `your_videos_feed.dart`, `library_view.dart`).
 - **Dependency:** the FastApiBackend must be running. Base URL defaults to `http://localhost:8000`; override with `--dart-define=BACKEND_BASE_URL=http://<host>:<port>`. (Replaces the old `VIDEO_BASE_URL` / VideoService `:8002` dart-define.)
 - **Failure behavior:** the gyms list / gym-detail calls time out after **15s**, the feed after **30s**; all degrade quietly (empty feed / error state) so the rest of the app stays up if the service is down.
 - **`package:http` is whitelisted for the public/template integration only.** Do not reuse `VideoApiClient` or `package:http` to wire other screens to a backend — CRM data goes through `ApiClient`. The admin video/showcase reads use `GymContentRepository` (ApiClient-backed). (The ThemeService integration below does not use `http`; it rides `theme_flutter`'s own `dio` client.)
+
+## Video-agent Settings section
+
+The **Settings screen** includes a **Video feed config** section that opens a conversational
+screen where the gym owner chats with an LLM agent to author the gym's video-feed
+spec (keep/avoid criteria).
+
+- **Entry:** `features/settings/presentation/sections/video_agent_settings_section.dart`
+  — a button that pushes `AppRoutes.videoAgent` (`/settings/video-agent`).
+- **Architecture:** full Bloc feature (`features/video_agent/`) — `VideoAgentBloc`,
+  `VideoAgentRepository` (placed at `features/members/data/video_agent_repository.dart`
+  next to `GymContentRepository`). Models at `features/video_agent/data/models/`.
+- **Screen:** `features/video_agent/presentation/screens/video_agent_screen.dart`.
+  Uses `AppShell(activeRoute: AppRoutes.settings)`. On open: calls `refineFromFeed`
+  (404 = no-op) then `getConfig` (404 = empty state). The bloc carries the agent history
+  across turns (stateless backend).
+- **Backend contract (final):**
+  - `GET  /api/v1/gyms/{gymId}/video-spec` → `VideoSpecView` or 404.
+  - `POST /api/v1/gyms/{gymId}/video-agent` body `{ message, history, accepted_spec? }`
+    → `{ reply?, draft?, question?, history, saved, usage? }`. Exactly one of
+    reply/draft/question is set per turn. `accepted_spec` is the criteria-only map
+    (`VideoSpecDraft.toJson()`); when present the backend saves and returns `saved: true`.
+  - `POST /api/v1/gyms/{gymId}/video-agent/refine-from-feed` → `VideoSpecView` or 404.
+  - **`PUT /video-spec` and `POST /generate-queries` do not exist and must never be called.**
+- **Draft flow:** agent turn → `pendingDraft != null` → `VideoAgentDraftPanel` surfaces
+  Confirm & Save / Keep chatting. **Confirm dispatches `VideoAgentDraftConfirmed` → the
+  bloc sends a new agent turn with `accepted_spec = draft.toJson()`.** On `saved == true`
+  in the response: the agent's reply is appended to chat, the draft is cleared, a
+  SnackBar confirms, and `savedConfig` updates — **the chat stays open** (no terminal
+  state; owner may continue chatting). Error is shown inline in the draft panel with a
+  retry; the draft stays visible. Never a silent dismiss.
+- **Queries are never shown to the gym owner.** `VideoSpecView` carries `queries` in its
+  model (the backend includes them) but neither `VideoAgentCurrentPanel` nor
+  `VideoAgentDraftPanel` renders them. Queries are a server-side search concern only.
+- **Multi-choice question chips:** when an agent turn returns a non-null `AgentQuestion`,
+  `VideoAgentQuestionChips` renders the options above the input bar.
+  - `multiSelect == false` (single-select): tapping a chip immediately sends that option
+    as the next turn's message and clears the question.
+  - `multiSelect == true`: chips are toggleable; a "Send" button sends the comma-joined
+    selection once at least one chip is chosen.
+  - The text input bar stays available so the owner may type a custom reply instead.
+  - Sending any message (typed or chip) clears the pending question.
+- **Widgets:** `VideoAgentCurrentPanel` (saved spec, markdown via `flutter_markdown_plus`;
+  no queries), `VideoAgentChatList` (reuses `AgentMessageBubble` / `UserMessageBubble`),
+  `VideoAgentDraftPanel` (no queries), `VideoAgentQuestionChips` (multi-choice answer
+  surface), `VideoAgentInputBar` (stateful, Shift+Enter = newline, Enter = send).
 
 ## Gym presets Settings section (owner1-only preset import)
 

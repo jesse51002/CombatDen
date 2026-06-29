@@ -18,7 +18,7 @@ class PresetsRepository {
   PresetsRepository({required ApiClient apiClient})
       : _apiClient = apiClient;
 
-  /// `GET /api/v1/videos/templates` — the first page of the template catalog.
+  /// `GET /api/v1/presets/templates` — the first page of the template catalog.
   ///
   /// Loads up to [limit] templates (default 100 — the full catalog fits in one
   /// page today; pagination can be wired later). Returns slim [TemplateCard]s
@@ -30,7 +30,7 @@ class PresetsRepository {
   }) async {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
-        '/api/v1/videos/templates',
+        '/api/v1/presets/templates',
         queryParameters: {
           'limit': limit,
           'offset': offset,

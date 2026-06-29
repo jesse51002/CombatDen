@@ -165,7 +165,7 @@ Then:
 - `ASSETS_CDN_BASE_URL` is **no longer required as an env var** — both services
   default it to `https://cdn.combatden.net` in code (ThemeService
   `src/api/config.py`, VideoService `src/api/config.py`), so they always emit
-  absolute CDN URLs (theme: image/icon URLs; video: the gym celebration URL)
+  absolute CDN URLs (theme: image/icon URLs)
   even when the App Runner var is unset. Only set it to point at a *different*
   CDN; set it empty for local serving. (This replaced the earlier "must be set
   in prod or paths 404" requirement — the de-baked container can't serve the
