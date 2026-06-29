@@ -1,9 +1,12 @@
 import 'dart:developer';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/check_in/data/models/check_in_request.dart';
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -80,8 +83,14 @@ class MemberDetailBloc
     on<ChargeCardOutcomeCleared>(_onChargeCardOutcomeCleared);
     on<RefundChargeRequested>(_onRefundCharge);
 
+    on<MemberCheckInRequested>(_onCheckIn);
+    on<MemberCheckInCleared>(_onCheckInCleared);
+
     on<InvoicePollRequested>(_onInvoicePoll);
   }
+
+  /// Backend `date` body fields are bare `YYYY-MM-DD` (gym-local, no tz).
+  static final DateFormat _occurrenceDate = DateFormat('yyyy-MM-dd');
 
   // ----- Load + UI handlers -----
 
@@ -888,6 +897,89 @@ class MemberDetailBloc
         idempotencyKey: const Uuid().v4(),
       ),
     );
+  }
+
+  // ----- Class check-in -----
+
+  /// The check-in dialog's mutation. Like [_onChargeCard] it rides a DEDICATED
+  /// channel ([isCheckingIn] / [checkInResult] / [checkInError]) so the
+  /// screen-level overlay + error dialog never fire while the dialog is open;
+  /// the dialog flips to its own terminal step off the result. A skip is NOT an
+  /// error — it arrives as a [CheckInResponse] with a `skip_reason` so the
+  /// dialog can offer "check in anyway". Only a real recorded attendance bumps
+  /// `refreshToken` (so last-class / attendance / rewards refresh) — a skip or
+  /// idempotent repeat changes nothing.
+  Future<void> _onCheckIn(
+    MemberCheckInRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isCheckingIn: true,
+      clearCheckInOutcome: true,
+    ));
+
+    final CheckInResponse result;
+    try {
+      result = await _repository.checkInMember(
+        CheckInRequest(
+          memberId: s.member.memberId,
+          gymId: s.member.gymId,
+          classId: event.classId,
+          occurrenceDate: _occurrenceDate.format(event.occurrenceDate),
+          allowOverride: event.allowOverride,
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Check in failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isCheckingIn: false,
+        checkInError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    // A skip / idempotent repeat wrote nothing — surface the result without a
+    // refresh. A fresh attendance bumps `refreshToken` so the detail surfaces
+    // (last class, attendance, rewards) re-read behind the still-open dialog.
+    emit(committed.copyWith(
+      isCheckingIn: false,
+      checkInResult: result,
+      refreshToken:
+          result.isRecorded ? committed.refreshToken + 1 : null,
+    ));
+    if (!result.isRecorded) return;
+
+    try {
+      final refreshed =
+          await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Check in recorded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onCheckInCleared(
+    MemberCheckInCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearCheckInOutcome: true));
   }
 
   // ----- Invoice polling -----

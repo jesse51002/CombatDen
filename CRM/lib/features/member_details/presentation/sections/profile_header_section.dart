@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/check_in/member_class_check_in_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/edit_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_wizard.dart';
 import 'package:crm/features/member_details/presentation/dialogs/unlink_payment_dialog.dart';
@@ -184,12 +184,9 @@ class _ActionButtonsRow extends StatelessWidget {
       children: [
         _ActionButton(
           label: 'Check In',
-          onPressed: () => ComingSoonDialog.show(
+          onPressed: () => MemberClassCheckInDialog.show(
             context: context,
-            title: 'Check In',
-            message:
-                'Class check-in is pending the classes '
-                'feature on the backend.',
+            gymId: member.gymId,
           ),
         ),
         _ActionButton(

@@ -5,10 +5,23 @@ import src.shared.db_schema_path  # noqa: F401
 from src.classes.service.checkin.classes_checkin_service import (
     ClassesCheckinService,
 )
+from src.classes.service.classes_batch_checkin_service import (
+    ClassesBatchCheckinService,
+)
+from src.classes.service.classes_crud_service import ClassesCrudService
 from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )
+from src.classes.service.classes_exceptions_service import (
+    ClassesExceptionsService,
+)
+from src.classes.service.classes_expander import ClassesExpander
+from src.classes.service.classes_materializer import ClassesMaterializer
+from src.classes.service.classes_schedule_reader_service import (
+    ClassesScheduleReaderService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
+from src.classes.service.classes_undo_service import ClassesUndoService
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
 from src.gyms.service.gyms_service import GymsService
@@ -72,6 +85,9 @@ from src.plans.service.plans_service import (
 )
 from src.presets.service.presets_service import PresetsService
 from src.ranks.service.ranks_service import RanksService
+from src.reconciler.service.reconciler.reconciler_class_history_sweep import (
+    ClassHistorySweep,
+)
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
 )
@@ -180,10 +196,55 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesCycleCountsService,
         db_pool=db_pool,
     )
+
+    # The canonical recurrence + exception expander is pure (no I/O), so a
+    # single shared instance is reused by the check-in resolve seam, the
+    # exception reschedule-conflict check, and the schedule reader.
+    classes_expander = providers.Singleton(ClassesExpander)
+    # Lazy find-or-create of the class_history occurrence (idempotent +
+    # race-safe via uq_class_history_occurrence).
+    classes_materializer = providers.Factory(
+        ClassesMaterializer,
+        db_pool=db_pool,
+    )
     checkin_service = providers.Factory(
         ClassesCheckinService,
         db_pool=db_pool,
         cycle_counts_service=cycle_counts_service,
+        expander=classes_expander,
+        materializer=classes_materializer,
+    )
+    # Phase 4b: batch staff check-in. Resolves the occurrence ONCE via the
+    # single-member check-in service's seams, then loops checkin_member over a
+    # de-duped member list. Reuses checkin_service — does not re-wire the gate.
+    classes_batch_checkin_service = providers.Factory(
+        ClassesBatchCheckinService,
+        checkin_service=checkin_service,
+    )
+
+    # Class CRUD + exceptions + the schedule board.
+    classes_crud_service = providers.Factory(
+        ClassesCrudService,
+        db_pool=db_pool,
+    )
+    classes_exceptions_service = providers.Factory(
+        ClassesExceptionsService,
+        db_pool=db_pool,
+        expander=classes_expander,
+    )
+    classes_schedule_reader_service = providers.Factory(
+        ClassesScheduleReaderService,
+        db_pool=db_pool,
+        expander=classes_expander,
+    )
+    # Phase 6: un-occur (cancel) + reschedule a single occurrence. Billing-
+    # adjacent (deletes member_attendance, may clear an auto-end end_date), so
+    # the cancel runs in one transaction. Reuses the pure expander to validate
+    # the source occurrence and the reschedule target.
+    classes_undo_service = providers.Factory(
+        ClassesUndoService,
+        db_pool=db_pool,
+        expander=classes_expander,
     )
 
     rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
@@ -529,6 +590,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
+    # NON-billing class-history materialize sweep: backfills class_history rows
+    # for past, non-cancelled class occurrences via the existing idempotent
+    # expander + materializer. Independent of every billing step.
+    reconciler_class_history_sweep = providers.Factory(
+        ClassHistorySweep,
+        db_pool=db_pool,
+        expander=classes_expander,
+        materializer=classes_materializer,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
@@ -536,4 +606,5 @@ class DependencyInjector(containers.DeclarativeContainer):
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
         stale_task_sweep=reconciler_stale_task_sweep,
         subscription_orphan_sweep=reconciler_subscription_orphan_sweep,
+        class_history_sweep=reconciler_class_history_sweep,
     )

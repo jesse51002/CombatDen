@@ -11,6 +11,11 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from src.classes.schema.classes_batch_checkin_schema import (
+    BatchCheckinItemResult,
+    BatchCheckinItemStatus,
+    BatchCheckinResponse,
+)
 from src.classes.schema.classes_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
@@ -32,19 +37,23 @@ def _override_checkin(response: CheckinResponse):
 def test_checkin_records_when_a_plan_covers_the_class(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A covered check-in returns the log_id, chosen plan/item, and breakdown."""
+    """A covered check-in returns the log_id, chosen plan/item, points, and
+    breakdown."""
     log_id = str(uuid4())
     plan_id = uuid4()
     item_id = uuid4()
+    class_id = str(uuid4())
     class_history_id = str(uuid4())
 
     response = CheckinResponse(
         log_id=log_id,
         member_id=fake_member_id,
         class_history_id=class_history_id,
+        class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=plan_id,
         chosen_item_id=item_id,
+        points_awarded=50,
         memberships=[
             CheckinMembershipBreakdown(
                 item_id=item_id,
@@ -66,7 +75,8 @@ def test_checkin_records_when_a_plan_covers_the_class(
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
-                "class_history_id": class_history_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
             },
             headers=auth_headers,
         )
@@ -79,21 +89,27 @@ def test_checkin_records_when_a_plan_covers_the_class(
     assert body["already_checked_in"] is False
     assert body["chosen_plan_id"] == str(plan_id)
     assert body["chosen_item_id"] == str(item_id)
+    assert body["points_awarded"] == 50
     assert body["memberships"][0]["is_eligible"] is True
 
 
 def test_checkin_rejected_when_no_plan_covers(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A hard-gate rejection returns 200 with null log_id and no chosen plan."""
+    """A hard-gate skip returns 200 with null log_id, no chosen plan, a
+    skip_reason, and 0 points."""
+    class_id = str(uuid4())
     class_history_id = str(uuid4())
     response = CheckinResponse(
         log_id=None,
         member_id=fake_member_id,
         class_history_id=class_history_id,
+        class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=None,
         chosen_item_id=None,
+        points_awarded=0,
+        skip_reason="no_eligible_plan",
         memberships=[],
     )
     _override_checkin(response)
@@ -103,7 +119,8 @@ def test_checkin_rejected_when_no_plan_covers(
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
-                "class_history_id": class_history_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
             },
             headers=auth_headers,
         )
@@ -116,6 +133,8 @@ def test_checkin_rejected_when_no_plan_covers(
     assert body["chosen_plan_id"] is None
     assert body["chosen_item_id"] is None
     assert body["already_checked_in"] is False
+    assert body["points_awarded"] == 0
+    assert body["skip_reason"] == "no_eligible_plan"
 
 
 def test_checkin_idempotent_returns_already_checked_in(
@@ -125,15 +144,18 @@ def test_checkin_idempotent_returns_already_checked_in(
     log_id = str(uuid4())
     plan_id = uuid4()
     item_id = uuid4()
+    class_id = str(uuid4())
     class_history_id = str(uuid4())
 
     response = CheckinResponse(
         log_id=log_id,
         member_id=fake_member_id,
         class_history_id=class_history_id,
+        class_id=class_id,
         already_checked_in=True,
         chosen_plan_id=plan_id,
         chosen_item_id=item_id,
+        points_awarded=0,
         memberships=[],
     )
     _override_checkin(response)
@@ -143,7 +165,8 @@ def test_checkin_idempotent_returns_already_checked_in(
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
-                "class_history_id": class_history_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
             },
             headers=auth_headers,
         )
@@ -154,6 +177,177 @@ def test_checkin_idempotent_returns_already_checked_in(
     body = resp.json()
     assert body["log_id"] == log_id
     assert body["already_checked_in"] is True
+    assert body["points_awarded"] == 0
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/classes/{class_id}/occurrences/{occurrence_date}/checkin-batch
+#
+# The batch service is overridden with a double; these assert the router's
+# status-code mapping (207 on any processed mix, 500 on total failure, 404/400
+# on an unresolved occurrence, 422 on an empty member list) + serialization.
+# The batch FLOW is unit-tested in
+# classes/service/test_classes_batch_checkin_service.py.
+# ---------------------------------------------------------------------------
+
+_BATCH_CLASS_ID = uuid4()
+_BATCH_OCCURRENCE_DATE = "2026-06-01"
+
+
+def _batch_url() -> str:
+    return (
+        f"/api/v1/classes/{_BATCH_CLASS_ID}"
+        f"/occurrences/{_BATCH_OCCURRENCE_DATE}/checkin-batch"
+    )
+
+
+def _override_batch(*, return_value=None, side_effect=None):
+    """Override the batch service double; caller resets the override."""
+    service = MagicMock()
+    service.batch_checkin = AsyncMock(
+        return_value=return_value, side_effect=side_effect
+    )
+    app.container.classes_batch_checkin_service.override(service)
+    return service
+
+
+def test_batch_checkin_returns_207_with_per_member_results(
+    client, auth_headers, fake_gym_id
+):
+    """A mix of checked_in / already_checked_in / skipped returns 207 with the
+    per-member split and the single class_history_id."""
+    class_history_id = uuid4()
+    m1, m2, m3 = uuid4(), uuid4(), uuid4()
+    response = BatchCheckinResponse(
+        class_id=_BATCH_CLASS_ID,
+        occurrence_date=date(2026, 6, 1),
+        class_history_id=class_history_id,
+        results=[
+            BatchCheckinItemResult(
+                member_id=m1,
+                status=BatchCheckinItemStatus.checked_in,
+                points_awarded=50,
+                chosen_plan_id=uuid4(),
+                chosen_item_id=uuid4(),
+                log_id=uuid4(),
+            ),
+            BatchCheckinItemResult(
+                member_id=m2,
+                status=BatchCheckinItemStatus.already_checked_in,
+                chosen_plan_id=uuid4(),
+                chosen_item_id=uuid4(),
+                log_id=uuid4(),
+            ),
+            BatchCheckinItemResult(
+                member_id=m3,
+                status=BatchCheckinItemStatus.skipped,
+                reason="no_membership",
+            ),
+        ],
+    )
+    _override_batch(return_value=(response, False))
+    try:
+        resp = client.post(
+            _batch_url(),
+            json={
+                "gym_id": fake_gym_id,
+                "member_ids": [str(m1), str(m2), str(m3)],
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.classes_batch_checkin_service.reset_override()
+
+    assert resp.status_code == 207
+    body = resp.json()
+    assert body["class_history_id"] == str(class_history_id)
+    assert [r["status"] for r in body["results"]] == [
+        "checked_in",
+        "already_checked_in",
+        "skipped",
+    ]
+    assert body["results"][2]["reason"] == "no_membership"
+
+
+def test_batch_checkin_total_failure_returns_500(
+    client, auth_headers, fake_gym_id
+):
+    """When every member failed (all_failed True) the router returns 500, not
+    207 — a total failure must not look like a partial success."""
+    m1 = uuid4()
+    response = BatchCheckinResponse(
+        class_id=_BATCH_CLASS_ID,
+        occurrence_date=date(2026, 6, 1),
+        class_history_id=uuid4(),
+        results=[
+            BatchCheckinItemResult(
+                member_id=m1,
+                status=BatchCheckinItemStatus.failed,
+                reason="db down",
+            ),
+        ],
+    )
+    _override_batch(return_value=(response, True))
+    try:
+        resp = client.post(
+            _batch_url(),
+            json={"gym_id": fake_gym_id, "member_ids": [str(m1)]},
+            headers=auth_headers,
+        )
+    finally:
+        app.container.classes_batch_checkin_service.reset_override()
+
+    assert resp.status_code == 500
+
+
+def test_batch_checkin_class_not_found_returns_404(
+    client, auth_headers, fake_gym_id
+):
+    """A ValueError mentioning 'not found' maps to 404 before any member work."""
+    _override_batch(side_effect=ValueError("Class not found"))
+    try:
+        resp = client.post(
+            _batch_url(),
+            json={"gym_id": fake_gym_id, "member_ids": [str(uuid4())]},
+            headers=auth_headers,
+        )
+    finally:
+        app.container.classes_batch_checkin_service.reset_override()
+
+    assert resp.status_code == 404
+
+
+def test_batch_checkin_invalid_occurrence_returns_400(
+    client, auth_headers, fake_gym_id
+):
+    """A non-'not found' ValueError (not a real occurrence) maps to 400."""
+    _override_batch(
+        side_effect=ValueError(
+            "No class occurrence on 2026-06-01 for this class"
+        )
+    )
+    try:
+        resp = client.post(
+            _batch_url(),
+            json={"gym_id": fake_gym_id, "member_ids": [str(uuid4())]},
+            headers=auth_headers,
+        )
+    finally:
+        app.container.classes_batch_checkin_service.reset_override()
+
+    assert resp.status_code == 400
+
+
+def test_batch_checkin_empty_member_ids_returns_422(
+    client, auth_headers, fake_gym_id
+):
+    """An empty member list violates min_length=1 -> 422 (no service call)."""
+    resp = client.post(
+        _batch_url(),
+        json={"gym_id": fake_gym_id, "member_ids": []},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
 
 
 def test_streak_returns_zero_when_no_attendance(

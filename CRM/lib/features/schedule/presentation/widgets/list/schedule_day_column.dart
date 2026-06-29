@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/navigation/app_routes.dart';
-import 'package:crm/features/schedule/data/mock_schedule.dart';
+import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/shared/widgets/class_row/class_card.dart';
 
 /// One day of the schedule, rendered as a column: a day-label header above
 /// a vertical stack of [ClassCard]s for that day.
+///
+/// [onClassTap] is called with a card's [ScheduleClassEntry] when tapped; the
+/// board opens the manage dialog (edit the class, or cancel just that day),
+/// sharing the board's bloc.
 class ScheduleDayColumn extends StatelessWidget {
   final ScheduleDayGroup group;
+  final void Function(ScheduleClassEntry entry) onClassTap;
 
-  const ScheduleDayColumn({super.key, required this.group});
+  const ScheduleDayColumn({
+    super.key,
+    required this.group,
+    required this.onClassTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +34,7 @@ class ScheduleDayColumn extends StatelessWidget {
                 : DesignConstants.text,
           ),
         ),
-        _DayCards(group: group),
+        _DayCards(group: group, onClassTap: onClassTap),
       ],
     );
   }
@@ -34,7 +42,9 @@ class ScheduleDayColumn extends StatelessWidget {
 
 class _DayCards extends StatelessWidget {
   final ScheduleDayGroup group;
-  const _DayCards({required this.group});
+  final void Function(ScheduleClassEntry entry) onClassTap;
+
+  const _DayCards({required this.group, required this.onClassTap});
 
   @override
   Widget build(BuildContext context) {
@@ -47,15 +57,11 @@ class _DayCards extends StatelessWidget {
             name: e.name,
             timeLabel: e.timeLabel,
             instructorName: e.instructorName,
-            instructorPhotoUrl: e.instructorPhotoUrl,
             imageUrl: e.imageUrl,
             pointsWorth: e.pointsWorth,
             attendingCount: e.attendingCount,
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.scheduleEditClass,
-              arguments: classFromEntry(e),
-            ),
+            isCancelled: e.isCancelled,
+            onTap: () => onClassTap(e),
           ),
       ],
     );

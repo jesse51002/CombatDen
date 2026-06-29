@@ -8,7 +8,8 @@ import 'package:crm/features/members/data/gym_detail.dart';
 /// time [_slots] under a per-day rotation, so a class sits at a different time
 /// each day and no two days look the same. The first class of the first day is
 /// flagged in-session (a live, checked-in count); the rest carry a seeded
-/// attending count. Mirrors the Schedule screen's `schedule_generator.dart`.
+/// attending count. This dashboard teaser is still mock; the Schedule screen
+/// itself now reads the real backend (`GET /api/v1/classes/instances`).
 
 class _Slot {
   final String start;
@@ -36,7 +37,7 @@ int _seeded(int dayIndex, int slot, int base, int span) {
 }
 
 /// The class index placed at each slot on [dayIndex] — a rotation, reversed on
-/// alternating cycles so the days stay distinct (see `schedule_generator.dart`).
+/// alternating cycles so the days stay distinct.
 List<int> _dayOrder(int dayIndex, int count) {
   final rotated = [for (var i = 0; i < count; i++) (i + dayIndex) % count];
   final flip = (dayIndex ~/ count).isOdd;

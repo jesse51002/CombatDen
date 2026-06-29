@@ -12,6 +12,8 @@ from generators import classes as classes_generator
 from schema.gym_class import (
     MemberAttendanceCreate,
     ClassHistoryCreate,
+    ClassInstanceExceptionCreate,
+    ClassRangeExceptionCreate,
     GymClassCreate,
 )
 from schema.gym_employee import GymEmployeeCreate
@@ -25,7 +27,11 @@ def create(
     gym_id: uuid.UUID,
     gym_name: str,
     employees: list[GymEmployeeCreate],
-) -> list[GymClassCreate]:
+) -> tuple[
+    list[GymClassCreate],
+    list[ClassInstanceExceptionCreate],
+    list[ClassRangeExceptionCreate],
+]:
     classes, instance_exc, range_exc = classes_generator.generate_classes(
         gym_id, CLASSES_PER_GYM, employees
     )
@@ -42,19 +48,28 @@ def create(
         f"  {gym_name}: {len(classes)} classes, "
         f"{len(instance_exc)} instance exceptions, {len(range_exc)} range exceptions"
     )
-    return classes
+    return classes, instance_exc, range_exc
 
 
 def create_history_and_attendance(
     client: Client,
     gym_id: uuid.UUID,
+    gym_timezone: str,
     gym_name: str,
     classes: list[GymClassCreate],
     members: list[MemberCreate],
     membership_rows: list[MemberMembershipCreate],
+    instance_exceptions: list[ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
 ) -> tuple[list[ClassHistoryCreate], list[MemberAttendanceCreate]]:
     history, attendance = classes_generator.generate_class_history_and_attendance(
-        gym_id, classes, members, membership_rows
+        gym_id,
+        gym_timezone,
+        classes,
+        members,
+        membership_rows,
+        instance_exceptions,
+        range_exceptions,
     )
     if history:
         _bulk_insert(client, "class_history", history)

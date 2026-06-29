@@ -4,18 +4,17 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// Card-styled rounded pill that shows the visible week range
-/// (e.g. "Feb 1st, 2026 - Feb 7th, 2026") and a chevron-down hint that
-/// it can be opened to pick a different range.
-///
-/// Demo-only — tapping it logs a TODO via `debugPrint`.
+/// (e.g. "Feb 1, 2026 - Feb 7, 2026"). Display-only by default; pass an
+/// [onTap] to make it tappable (with a chevron-down affordance) when a
+/// range-picker is wired up.
 class DateRangePill extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const DateRangePill({
     super.key,
     required this.label,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
@@ -37,12 +36,13 @@ class DateRangePill extends StatelessWidget {
           spacing: DesignConstants.spacingSmall,
           children: [
             Text(label, style: DesignConstants.h2),
-            Icon(
-              Symbols.expand_more_sharp,
-              weight: DesignConstants.iconWeight,
-              size: DesignConstants.iconSizeTiny,
-              color: DesignConstants.text,
-            ),
+            if (onTap != null)
+              Icon(
+                Symbols.expand_more_sharp,
+                weight: DesignConstants.iconWeight,
+                size: DesignConstants.iconSizeTiny,
+                color: DesignConstants.text,
+              ),
           ],
         ),
       ),

@@ -162,6 +162,7 @@ Table class_instance_exceptions {
   new_duration_minutes integer
   new_max_capacity integer
   new_instructor_id uuid
+  new_date date
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -191,7 +192,7 @@ Table class_history {
 
   indexes {
     (class_history_id, gym_id) [unique]
-    (class_id, occurred_at)
+    (class_id, occurred_at) [unique]
   }
 }
 

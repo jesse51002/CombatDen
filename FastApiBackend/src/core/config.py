@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # to its family, so a sub a live op just created (writeback not yet stamped)
     # must age past any in-flight op before it can be judged an orphan.
     reconciler_orphan_min_age_seconds: int = 3600
+    # Class-history materialize sweep (NON-billing): how many days back the sweep
+    # expands recurring classes to backfill class_history rows for PAST,
+    # non-cancelled occurrences (even zero-attendee ones). The window is
+    # [today - this, today] (UTC dates). A value <= 0 makes the sweep a no-op
+    # (logged warning) — it never expands or writes.
+    class_history_lookback_days: int = 14
 
     # On-demand post-op invoice fetch: right after an invoice-creating
     # membership op, pull that payer's new invoices straight from Stripe and

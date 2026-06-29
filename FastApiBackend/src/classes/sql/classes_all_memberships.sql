@@ -19,7 +19,18 @@ SELECT
     ms.status,
     mp.plan_type,
     mp.class_count * ms.quantity AS class_count,
-    COALESCE(counts.classes_used, 0) AS classes_used
+    COALESCE(counts.classes_used, 0) AS classes_used,
+    -- Remaining capacity, clamped at 0 so an over-drawn pack (e.g. forced via an
+    -- override check-in) never reports negative. NULL class_count (unlimited)
+    -- stays NULL -- a bare GREATEST(NULL - used, 0) would wrongly report 0, so
+    -- the NULL case is guarded explicitly.
+    CASE
+        WHEN mp.class_count IS NULL THEN NULL
+        ELSE GREATEST(
+            mp.class_count * ms.quantity - COALESCE(counts.classes_used, 0),
+            0
+        )
+    END AS classes_remaining
 FROM member_memberships_status ms
 JOIN membership_plans mp
     ON  mp.plan_id = ms.plan_id

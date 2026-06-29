@@ -131,6 +131,49 @@ class Auth:
                 detail="Not authorized: gym owner only",
             ) from None
 
+    async def verify_gym_admin_or_owner(
+        self,
+        gym_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is an ADMIN or OWNER of the gym.
+
+        Gates gym-config writes (classes / rewards / discounts / plans
+        create / update / delete). Trainers are rejected: they may read
+        gym config as employees but may not mutate it. Mirrors the DB's
+        ``is_gym_admin_or_owner`` RLS function at the API layer.
+
+        Raises:
+            HTTPException: 403 if the user is neither an admin nor an
+                owner of the gym.
+        """
+        auth_user_id = user_payload["sub"]
+
+        manager = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .eq("gym_id", str(gym_id))
+            .in_(
+                "employee_type",
+                [EmployeeType.owner.value, EmployeeType.admin.value],
+            )
+            .maybe_single()
+            .execute()
+        )
+
+        if not manager or not manager.data:
+            logger.warning(
+                "Unauthorized gym-admin/owner action attempt: "
+                "user=%s, gym_id=%s",
+                auth_user_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized: gym admin or owner only",
+            ) from None
+
     async def verify_can_view_member(
         self,
         member_id: UUID,

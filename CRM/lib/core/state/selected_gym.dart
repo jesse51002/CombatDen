@@ -17,8 +17,9 @@ import 'package:crm/features/members/data/gym_detail.dart';
 ///   [setActiveGym]. [role] is the caller's role at that gym.
 /// - [videoGymId] — the **VideoService content key** (a string like `boxing`).
 ///   It drives the read-only member-app surfaces: the loyalty store, the videos
-///   feed/content focus, the phone preview, the Schedule screen, and the
-///   dashboard's Upcoming Classes card. Picking a gym in the theme picker
+///   feed/content focus, the phone preview, and the dashboard's Upcoming
+///   Classes card. (The Schedule screen now reads the real `classes` domain
+///   scoped by [gymId], not this content key.) Picking a gym in the theme picker
 ///   records it here, applies its theme via [ThemeRuntime.selectDesign], and
 ///   fetches the whole [GymDetail] **once**.
 ///

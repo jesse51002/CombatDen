@@ -61,6 +61,8 @@ class ClassInstanceExceptionCreate(SeedModel):
     new_duration_minutes: int | None = None
     new_max_capacity: int | None = None
     new_instructor_id: UUID | None = None
+    # Reschedule target (strictly after original_date); None = not rescheduled.
+    new_date: date | None = None
 
 
 class ClassRangeExceptionCreate(SeedModel):

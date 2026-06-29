@@ -177,14 +177,24 @@ def seed() -> None:
         membership_rows = history_rows + pseudo_current
 
         progress.log("Creating classes...")
-        classes = bs_classes.create(client, gym_id, bundle.gym_name, bundle.all_employees)
+        classes, instance_exc, range_exc = bs_classes.create(
+            client, gym_id, bundle.gym_name, bundle.all_employees
+        )
 
         progress.log("Creating rewards...")
         gym_rewards = bs_rewards.create(client, gym_id)
 
         progress.log("Creating class history + attendance...")
         bs_classes.create_history_and_attendance(
-            client, gym_id, bundle.gym_name, classes, members, membership_rows
+            client,
+            gym_id,
+            bundle.gym.timezone,
+            bundle.gym_name,
+            classes,
+            members,
+            membership_rows,
+            instance_exc,
+            range_exc,
         )
 
         progress.log("Creating reward redemptions...")

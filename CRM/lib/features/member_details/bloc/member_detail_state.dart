@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
@@ -122,6 +123,23 @@ class MemberDetailLoaded extends MemberDetailState {
   /// is open (mirrors [upgradeError]).
   final String? endError;
 
+  /// True while the class check-in POST is in flight. Separate
+  /// from [isMutating] so the check-in dialog owns its own
+  /// loading + terminal treatment (mirrors [isChargingCard]).
+  final bool isCheckingIn;
+
+  /// The last check-in's result — a recorded attendance, an
+  /// idempotent repeat, or a skip carrying a reason. Rendered by
+  /// the check-in dialog's terminal step (a skip offers "check in
+  /// anyway"); cleared via [MemberCheckInCleared].
+  final CheckInResponse? checkInResult;
+
+  /// The last check-in failure (an unexpected error — a skip is NOT
+  /// an error, it arrives as [checkInResult]). Kept off [actionError]
+  /// so the screen-level error dialog doesn't swallow it while the
+  /// check-in dialog is open (mirrors [chargeCardError]).
+  final String? checkInError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -153,6 +171,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isEnding = false,
     this.endSuccess = 0,
     this.endError,
+    this.isCheckingIn = false,
+    this.checkInResult,
+    this.checkInError,
     this.refreshToken = 0,
   });
 
@@ -196,6 +217,10 @@ class MemberDetailLoaded extends MemberDetailState {
     int? endSuccess,
     String? endError,
     bool clearEndOutcome = false,
+    bool? isCheckingIn,
+    CheckInResponse? checkInResult,
+    String? checkInError,
+    bool clearCheckInOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -245,6 +270,13 @@ class MemberDetailLoaded extends MemberDetailState {
       endError: clearEndOutcome
           ? null
           : (endError ?? this.endError),
+      isCheckingIn: isCheckingIn ?? this.isCheckingIn,
+      checkInResult: clearCheckInOutcome
+          ? null
+          : (checkInResult ?? this.checkInResult),
+      checkInError: clearCheckInOutcome
+          ? null
+          : (checkInError ?? this.checkInError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -274,6 +306,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isEnding,
         endSuccess,
         endError,
+        isCheckingIn,
+        checkInResult,
+        checkInError,
         refreshToken,
       ];
 }

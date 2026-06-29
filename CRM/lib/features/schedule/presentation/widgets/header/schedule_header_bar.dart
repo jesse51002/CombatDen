@@ -1,23 +1,31 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/schedule/presentation/widgets/header/date_range_pill.dart';
 import 'package:crm/features/schedule/presentation/widgets/header/month_navigator.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Top action row of the Schedule screen.
 ///
-/// Layout (left to right): month label + prev/next chevrons,
-/// flexible spacer, date-range pill, "Add New Class" primary button.
+/// Layout (left to right): month label + prev/next chevrons (which move the
+/// board a week at a time), flexible spacer, the visible-week range pill, and
+/// the "Add New Class" button.
 class ScheduleHeaderBar extends StatelessWidget {
   final String monthLabel;
   final String rangeLabel;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  /// Opens the create-class form (provided with the board's [ScheduleBloc]).
+  final VoidCallback onAddClass;
 
   const ScheduleHeaderBar({
     super.key,
     required this.monthLabel,
     required this.rangeLabel,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onAddClass,
   });
 
   @override
@@ -28,19 +36,14 @@ class ScheduleHeaderBar extends StatelessWidget {
       children: [
         MonthNavigator(
           monthLabel: monthLabel,
-          onPrevious: () =>
-              debugPrint('TODO: change date range (previous)'),
-          onNext: () => debugPrint('TODO: change date range (next)'),
+          onPrevious: onPrevious,
+          onNext: onNext,
         ),
         const Spacer(),
-        DateRangePill(
-          label: rangeLabel,
-          onTap: () => debugPrint('TODO: change date range'),
-        ),
+        DateRangePill(label: rangeLabel),
         AppPrimaryButton(
           text: 'Add New Class',
-          onPressed: () =>
-              Navigator.pushNamed(context, AppRoutes.scheduleAddClass),
+          onPressed: onAddClass,
           textStyle: DesignConstants.h2,
           padding: const EdgeInsets.symmetric(
             horizontal: DesignConstants.paddingBig,

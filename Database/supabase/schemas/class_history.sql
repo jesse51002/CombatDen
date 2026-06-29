@@ -12,6 +12,10 @@ CREATE TABLE class_history (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (class_history_id),
     UNIQUE (class_history_id, gym_id),
+    -- Idempotency anchor: one history row per (class, occurrence instant). Lets the
+    -- lazy-at-check-in and reconciler materialize paths find-or-create the same row
+    -- without a race (INSERT ... ON CONFLICT ON CONSTRAINT uq_class_history_occurrence).
+    CONSTRAINT uq_class_history_occurrence UNIQUE (class_id, occurred_at),
     CONSTRAINT fk_class_history_class
         FOREIGN KEY (class_id, gym_id)
         REFERENCES gym_classes (class_id, gym_id),

@@ -76,6 +76,23 @@ def select_best_membership(
     return _sort_memberships_by_priority(candidates)[0]
 
 
+def select_best_membership_forced(
+    memberships: list[MembershipUsage],
+) -> MembershipUsage | None:
+    """Override selection: ignore eligibility AND remaining capacity.
+
+    Used by the coverage / front-desk override path. Picks the highest-priority
+    active membership (trial -> one_time -> recurring, then lowest class_count,
+    then oldest pack) even when it is ineligible for the class or already
+    depleted — over-draw is allowed. Returns None only when the member has no
+    active membership to attribute to (a forced check-in still needs a
+    non-null plan_id / item_id).
+    """
+    if not memberships:
+        return None
+    return _sort_memberships_by_priority(memberships)[0]
+
+
 def should_end_membership(membership: MembershipUsage) -> bool:
     """Trial and one_time plans end when their last class is used.
 

@@ -370,6 +370,35 @@ class RefundChargeRequested extends MemberDetailEvent {
   List<Object?> get props => [chargeId, amount];
 }
 
+// ----- Class check-in -----
+
+/// Check the viewed member into the occurrence of [classId] on
+/// [occurrenceDate] (a local calendar day). The outcome lands on the loaded
+/// state as `checkInResult` (recorded / already-checked-in / skipped-with-a-
+/// reason) or `checkInError`. [allowOverride] forces past the eligibility /
+/// capacity gates — the dialog re-dispatches with it true on a skip's "check
+/// in anyway".
+class MemberCheckInRequested extends MemberDetailEvent {
+  final String classId;
+  final DateTime occurrenceDate;
+  final bool allowOverride;
+
+  const MemberCheckInRequested({
+    required this.classId,
+    required this.occurrenceDate,
+    this.allowOverride = false,
+  });
+
+  @override
+  List<Object?> get props => [classId, occurrenceDate, allowOverride];
+}
+
+/// Clears the check-in outcome (result + error) when the check-in dialog opens
+/// or closes, so a later run opens clean.
+class MemberCheckInCleared extends MemberDetailEvent {
+  const MemberCheckInCleared();
+}
+
 // ----- Invoice polling -----
 
 /// One tick of the post-charge invoice poll. Dispatched by the

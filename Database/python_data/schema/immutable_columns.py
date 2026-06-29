@@ -86,6 +86,7 @@ CLASS_HISTORY: frozenset[str] = frozenset(
         "class_history_id",  # PK, auto-generated UUID
         "class_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
+        "occurred_at",  # identity (part of uq_class_history_occurrence); set once
         "created_at",  # auto-generated timestamp
     }
 )

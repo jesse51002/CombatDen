@@ -27,8 +27,6 @@ import 'package:crm/features/memberships/presentation/screens/membership_details
 import 'package:crm/features/memberships/presentation/screens/memberships_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/waiver_editor_screen.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:crm/features/schedule/data/mock_schedule.dart';
-import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
 import 'package:crm/features/schedule/presentation/screens/schedule_screen.dart';
 import 'package:crm/features/settings/presentation/screens/settings_screen.dart';
 import 'package:crm/shared/themes/app_theme.dart';
@@ -165,10 +163,10 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.memberAppPreviewLoyalty: (_) =>
       const MemberAppScreen(initialTab: MemberAppTab.loyalty),
   AppRoutes.schedule: (_) => const ScheduleScreen(),
-  AppRoutes.scheduleAddClass: (_) => const ClassFormScreen(),
-  // scheduleEditClass is handled in `_onGenerateRoute` so it
-  // can read the tapped class off `settings.arguments` (a
-  // `WidgetBuilder` can't see them).
+  // The Add / Edit Class form is pushed directly from the board
+  // (`schedule_screen.dart`) with `BlocProvider.value`, so it shares the
+  // board's `ScheduleBloc` and reloads it on save. It has no bloc-less
+  // named-route builder here (one would crash with no ancestor bloc).
   AppRoutes.settings: (_) => const SettingsScreen(),
   AppRoutes.growth: (_) => const GrowthScreen(),
   AppRoutes.employees: (_) => const EmployeesScreen(),
@@ -177,17 +175,6 @@ final Map<String, WidgetBuilder> _routeBuilders = {
 
 Route<dynamic> _onGenerateRoute(RouteSettings settings) {
   final path = Uri.parse(settings.name ?? AppRoutes.home).path;
-  // Edit Class carries the tapped class as a route argument;
-  // fall back to the sample for a direct nav (e.g. deep link)
-  // with no argument.
-  if (path == AppRoutes.scheduleEditClass) {
-    final existing =
-        settings.arguments as ScheduleClass? ?? kSampleClass;
-    return MaterialPageRoute<dynamic>(
-      builder: (_) => ClassFormScreen(existing: existing),
-      settings: settings,
-    );
-  }
   // A specific member's detail page is deep-linkable by id:
   // `/members/detail/<memberId>`. Parse the id off the path and hand it
   // to SpecificMemberScreen as the route argument (its existing id

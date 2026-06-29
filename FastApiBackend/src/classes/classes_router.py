@@ -1,22 +1,59 @@
 """API routes for the classes domain."""
 
 import logging
-from typing import Annotated
+from datetime import date
+from typing import Annotated, NoReturn
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
+from src.classes.schema.classes_batch_checkin_schema import (
+    BatchCheckinRequest,
+    BatchCheckinResponse,
+)
+from src.classes.schema.classes_crud_schema import (
+    ClassInstanceExceptionListResponse,
+    ClassInstanceExceptionResponse,
+    ClassInstanceExceptionUpsertRequest,
+    ClassRangeExceptionCreateRequest,
+    ClassRangeExceptionListResponse,
+    ClassRangeExceptionResponse,
+    EffectiveClassInstanceListResponse,
+    GymClassCreateRequest,
+    GymClassListResponse,
+    GymClassResponse,
+    GymClassUpdateRequest,
+)
 from src.classes.schema.classes_schema import (
     CheckinRequest,
     CheckinResponse,
     StreakResponse,
 )
+from src.classes.schema.classes_undo_schema import (
+    OccurrenceCancelResponse,
+    OccurrenceRescheduleRequest,
+    OccurrenceRescheduleResponse,
+)
 from src.classes.service.checkin.classes_checkin_service import (
     ClassesCheckinService,
 )
+from src.classes.service.classes_batch_checkin_service import (
+    ClassesBatchCheckinService,
+)
+from src.classes.service.classes_crud_service import ClassesCrudService
+from src.classes.service.classes_exceptions_service import (
+    ClassesExceptionsService,
+    RescheduleConflictError,
+)
+from src.classes.service.classes_schedule_reader_service import (
+    ClassesScheduleReaderService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
+from src.classes.service.classes_undo_service import ClassesUndoService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
 
@@ -33,20 +70,26 @@ classes_router = APIRouter(
     response_model=CheckinResponse,
     summary="Check a member into a class instance",
     description=(
-        "Selects the best eligible membership plan with remaining "
-        "capacity (trial -> one_time -> recurring), logs the "
-        "attendance against it, bumps ``last_class``, and auto-ends "
-        "trial / punch-card memberships once depleted. Returns the "
-        "membership breakdown. If no plan covers the class with "
-        "capacity, the check-in is rejected: ``log_id`` is null and "
-        "no attendance is written. Idempotent — a repeat for the same "
-        "(member_id, class_history_id) returns the existing log_id "
-        "with ``already_checked_in = True`` and consumes no capacity."
+        "Addresses the occurrence by ``class_id`` + ``occurrence_date`` and "
+        "lazily materializes the ``class_history`` row. Selects the best "
+        "eligible membership plan with remaining capacity (trial -> one_time "
+        "-> recurring), logs the attendance against it, bumps ``last_class``, "
+        "awards the class's points, and auto-ends trial / punch-card "
+        "memberships once depleted. Gated by plan eligibility, punch-card "
+        "capacity, and the room's ``max_capacity``; a skipped check-in returns "
+        "``log_id = null`` with a ``skip_reason`` and writes nothing. "
+        "``allow_override = true`` forces past those gates (front-desk "
+        "coverage), attributing to the member's best active membership even if "
+        "depleted. Idempotent — a repeat for the same (member, occurrence) "
+        "returns the existing log_id with ``already_checked_in = True``, "
+        "consumes no capacity, and awards no points."
     ),
     responses={
-        200: {"description": "Check-in result returned (recorded or rejected)"},
+        200: {"description": "Check-in result returned (recorded or skipped)"},
+        400: {"description": "Not a valid occurrence on that date"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this member"},
+        404: {"description": "Class not found"},
     },
 )
 @inject
@@ -62,17 +105,127 @@ async def checkin(
 
     try:
         return await checkin_service.checkin(request)
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from None
     except Exception:
         logger.error(
-            "Check-in failed: member_id=%s, class_history_id=%s",
+            "Check-in failed: member_id=%s, class_id=%s, occurrence_date=%s",
             request.member_id,
-            request.class_history_id,
+            request.class_id,
+            request.occurrence_date,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to record check-in",
         ) from None
+
+
+@classes_router.post(
+    "/{class_id}/occurrences/{occurrence_date}/checkin-batch",
+    summary="Check many members into one class occurrence (staff batch)",
+    description=(
+        "Resolves + materializes the occurrence's single ``class_history`` row "
+        "ONCE (by ``class_id`` + ``occurrence_date`` PATH params), then runs "
+        "the per-member check-in gate over each (de-duped) member. One bad "
+        "member never sinks the batch — its result is a ``failed`` item. "
+        "Returns **207 Multi-Status** with a per-member split (``checked_in`` / "
+        "``already_checked_in`` / ``skipped`` / ``failed``). A total failure "
+        "(every member failed) is **500**; an invalid occurrence is **400 / "
+        "404** before any member is processed. ``allow_override = true`` forces "
+        "every member past the eligibility, punch-card, and room-capacity gates "
+        "(front-desk coverage). Admin/owner only."
+    ),
+    responses={
+        207: {
+            "model": BatchCheckinResponse,
+            "description": (
+                "Per-member results returned (any mix of checked_in / "
+                "already_checked_in / skipped / failed)"
+            ),
+        },
+        400: {"description": "Not a valid occurrence on that date"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+        500: {"description": "Batch check-in failed for every member"},
+    },
+)
+@inject
+async def checkin_batch(
+    class_id: UUID,
+    occurrence_date: date,
+    request: BatchCheckinRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    batch_service: ClassesBatchCheckinService = Depends(
+        Provide[DependencyInjector.classes_batch_checkin_service]
+    ),
+) -> JSONResponse:
+    """Batch staff check-in — 207 on any processed mix, 500 on total failure."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+
+    try:
+        response, all_failed = await batch_service.batch_checkin(
+            class_id,
+            request.gym_id,
+            occurrence_date,
+            request.member_ids,
+            request.allow_override,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Batch check-in failed: gym_id=%s, class_id=%s, occurrence_date=%s",
+            request.gym_id,
+            class_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record batch check-in",
+        ) from None
+
+    if all_failed:
+        # Total failure — 500 (never 207); the per-item reasons are logged but a
+        # whole-batch failure must not look like a success to the caller.
+        logger.error(
+            "Batch check-in failed for every member: gym_id=%s, class_id=%s, "
+            "occurrence_date=%s",
+            request.gym_id,
+            class_id,
+            occurrence_date,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Batch check-in failed for every member",
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_207_MULTI_STATUS,
+        content=jsonable_encoder(response),
+    )
 
 
 @classes_router.get(
@@ -111,3 +264,630 @@ async def get_streak(
         ) from None
 
     return StreakResponse(member_id=member_id, class_streak_weeks=weeks)
+
+
+# ---------------------------------------------------------------------------
+# Occurrence un-occur (cancel) + reschedule — Phase 6. Admin/owner gated on the
+# caller-supplied gym_id (the same direct ``verify_gym_admin_or_owner`` wiring
+# the batch check-in uses); the service validates the class belongs to that gym
+# (404 otherwise). Billing-adjacent: cancel deletes attendance + may clear an
+# auto-end end_date, never claws back points.
+# ---------------------------------------------------------------------------
+
+
+def _raise_for_undo_value_error(msg: str) -> NoReturn:
+    """Map a service ValueError message to its HTTP status (never 5xx-retryable).
+
+    ``not found`` -> 404; ``already materialized`` / ``conflict`` -> 409; every
+    other validation message -> 400.
+    """
+    lowered = msg.lower()
+    if "not found" in lowered:
+        code = status.HTTP_404_NOT_FOUND
+    elif "already materialized" in lowered or "conflict" in lowered:
+        code = status.HTTP_409_CONFLICT
+    else:
+        code = status.HTTP_400_BAD_REQUEST
+    raise HTTPException(status_code=code, detail=msg) from None
+
+
+@classes_router.delete(
+    "/{class_id}/occurrences/{occurrence_date}",
+    response_model=OccurrenceCancelResponse,
+    summary="Cancel (un-occur) a single class occurrence",
+    description=(
+        "Un-occurs the occurrence on ``occurrence_date``: deletes its "
+        "materialized ``class_history`` row and ``member_attendance`` (if any), "
+        "reverses the auto-end on trial / one_time packs that drop back below "
+        "capacity, and writes the cancelled instance exception so the day never "
+        "re-materializes. Points are NEVER clawed back. When nothing was "
+        "materialized yet, only the cancelled exception is written "
+        "(``class_history_id = null``). Admin/owner only."
+    ),
+    responses={
+        200: {"description": "Occurrence cancelled"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found for this gym"},
+    },
+)
+@inject
+async def cancel_occurrence(
+    class_id: UUID,
+    occurrence_date: date,
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    undo_service: ClassesUndoService = Depends(
+        Provide[DependencyInjector.classes_undo_service]
+    ),
+) -> OccurrenceCancelResponse:
+    """Un-occur a single class occurrence (admin/owner)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+
+    try:
+        return await undo_service.cancel_occurrence(
+            class_id, gym_id, occurrence_date
+        )
+    except ValueError as exc:
+        _raise_for_undo_value_error(str(exc))
+    except Exception:
+        logger.error(
+            "Failed to cancel occurrence: class_id=%s, gym_id=%s, date=%s",
+            class_id,
+            gym_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel occurrence",
+        ) from None
+
+
+@classes_router.post(
+    "/{class_id}/occurrences/{occurrence_date}/reschedule",
+    response_model=OccurrenceRescheduleResponse,
+    summary="Reschedule a single class occurrence to a later date",
+    description=(
+        "Moves the occurrence on ``occurrence_date`` to ``new_date`` (must be "
+        "strictly later) by upserting the instance exception's ``new_date`` — "
+        "no history / attendance is touched. Rejected with 409 if the source "
+        "occurrence has already been materialized (cancel it first) or a "
+        "non-cancelled occurrence already lands on ``new_date``. Admin/owner "
+        "only."
+    ),
+    responses={
+        200: {"description": "Occurrence rescheduled"},
+        400: {"description": "Invalid request (bad dates / not an occurrence)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found for this gym"},
+        409: {"description": "Already materialized or target date occupied"},
+    },
+)
+@inject
+async def reschedule_occurrence(
+    class_id: UUID,
+    occurrence_date: date,
+    request: OccurrenceRescheduleRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    undo_service: ClassesUndoService = Depends(
+        Provide[DependencyInjector.classes_undo_service]
+    ),
+) -> OccurrenceRescheduleResponse:
+    """Reschedule a single occurrence to a later date (admin/owner)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+
+    try:
+        return await undo_service.reschedule_occurrence(
+            class_id, request.gym_id, occurrence_date, request.new_date
+        )
+    except ValueError as exc:
+        _raise_for_undo_value_error(str(exc))
+    except Exception:
+        logger.error(
+            "Failed to reschedule occurrence: class_id=%s, gym_id=%s, date=%s",
+            class_id,
+            request.gym_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reschedule occurrence",
+        ) from None
+
+
+# ---------------------------------------------------------------------------
+# Class CRUD + exceptions + the schedule board.
+#
+# Auth: reads are gym-employee gated via ``verify_gym_employee``; writes
+# (create / update / soft-delete / exception upsert + range) are gated to
+# admin-or-owner via ``verify_gym_admin_or_owner`` — the same read/write split
+# the sibling gym-config CRUD domains (rewards / discounts / plans) use, and
+# the API-layer mirror of the DB's ``is_gym_admin_or_owner`` RLS function.
+# Trainers may read gym config but may not mutate it.
+#
+# Static sub-paths (``/instances``) are declared BEFORE ``/{class_id}`` so they
+# are never captured by the UUID path param.
+# ---------------------------------------------------------------------------
+
+
+@classes_router.get(
+    "",
+    response_model=GymClassListResponse,
+    summary="List a gym's classes",
+    responses={
+        200: {"description": "Classes listed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def list_classes(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    include_inactive: bool = False,
+) -> GymClassListResponse:
+    """List non-deleted classes for a gym."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await crud_service.list_classes(
+            gym_id, include_inactive=include_inactive
+        )
+    except Exception:
+        logger.error("Failed to list classes: gym_id=%s", gym_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list classes",
+        ) from None
+
+
+@classes_router.post(
+    "",
+    response_model=GymClassResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a class",
+    responses={
+        201: {"description": "Class created"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def create_class(
+    request: GymClassCreateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+) -> GymClassResponse:
+    """Create a gym class."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+
+    try:
+        return await crud_service.create_class(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to create class: gym_id=%s", request.gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create class",
+        ) from None
+
+
+@classes_router.get(
+    "/instances",
+    response_model=EffectiveClassInstanceListResponse,
+    summary="The schedule board: effective dated occurrences in a window",
+    description=(
+        "Expands every non-deleted class + its exceptions over "
+        "``[start_date, end_date]`` (cancelled days included, flagged) and "
+        "enriches each occurrence with the resolved instructor name, the "
+        "instance/range-exception flags, and the recorded attendance count."
+    ),
+    responses={
+        200: {"description": "Schedule board returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def list_effective_instances(
+    gym_id: UUID,
+    start_date: date,
+    end_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    reader_service: ClassesScheduleReaderService = Depends(
+        Provide[DependencyInjector.classes_schedule_reader_service]
+    ),
+) -> EffectiveClassInstanceListResponse:
+    """The schedule board for a gym across a date window."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await reader_service.list_effective_instances(
+            gym_id, start_date, end_date
+        )
+    except Exception:
+        logger.error(
+            "Failed to build schedule board: gym_id=%s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to build schedule board",
+        ) from None
+
+
+@classes_router.post(
+    "/{class_id}/exceptions/instance",
+    response_model=ClassInstanceExceptionResponse,
+    summary="Upsert a single-date class exception",
+    description=(
+        "Inserts or replaces the override for one occurrence (unique per "
+        "class + original_date). A reschedule (``new_date``) is rejected with "
+        "409 if a non-cancelled occurrence already lands on the target date."
+    ),
+    responses={
+        200: {"description": "Exception upserted"},
+        400: {"description": "Invalid exception"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+        409: {"description": "Reschedule target already occupied"},
+    },
+)
+@inject
+async def upsert_instance_exception(
+    class_id: UUID,
+    request: ClassInstanceExceptionUpsertRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassInstanceExceptionResponse:
+    """Upsert a single-date instance exception."""
+    user_payload = auth.get_current_user(credentials)
+    existing = await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await exceptions_service.upsert_instance_exception(
+            class_id, existing.gym_id, request
+        )
+    except RescheduleConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to upsert instance exception: class_id=%s",
+            class_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upsert instance exception",
+        ) from None
+
+
+@classes_router.get(
+    "/{class_id}/exceptions/instance",
+    response_model=ClassInstanceExceptionListResponse,
+    summary="List a class's single-date exceptions in a window",
+    responses={
+        200: {"description": "Instance exceptions listed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def list_instance_exceptions(
+    class_id: UUID,
+    start_date: date,
+    end_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassInstanceExceptionListResponse:
+    """List instance exceptions for a class within a window."""
+    user_payload = auth.get_current_user(credentials)
+    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+
+    try:
+        return await exceptions_service.list_instance_exceptions(
+            class_id, start_date, end_date
+        )
+    except Exception:
+        logger.error(
+            "Failed to list instance exceptions: class_id=%s",
+            class_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list instance exceptions",
+        ) from None
+
+
+@classes_router.post(
+    "/{class_id}/exceptions/range",
+    response_model=ClassRangeExceptionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a continuous-range class exception",
+    description=(
+        "Cancels the class across a date range and/or substitutes the "
+        "instructor (one of the two is required)."
+    ),
+    responses={
+        201: {"description": "Range exception created"},
+        400: {"description": "Invalid exception"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def create_range_exception(
+    class_id: UUID,
+    request: ClassRangeExceptionCreateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassRangeExceptionResponse:
+    """Create a range exception."""
+    user_payload = auth.get_current_user(credentials)
+    existing = await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await exceptions_service.create_range_exception(
+            class_id, existing.gym_id, request
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to create range exception: class_id=%s",
+            class_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create range exception",
+        ) from None
+
+
+@classes_router.get(
+    "/{class_id}/exceptions/range",
+    response_model=ClassRangeExceptionListResponse,
+    summary="List a class's range exceptions in a window",
+    responses={
+        200: {"description": "Range exceptions listed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def list_range_exceptions(
+    class_id: UUID,
+    start_date: date,
+    end_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassRangeExceptionListResponse:
+    """List range exceptions for a class within a window."""
+    user_payload = auth.get_current_user(credentials)
+    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+
+    try:
+        return await exceptions_service.list_range_exceptions(
+            class_id, start_date, end_date
+        )
+    except Exception:
+        logger.error(
+            "Failed to list range exceptions: class_id=%s",
+            class_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list range exceptions",
+        ) from None
+
+
+@classes_router.get(
+    "/{class_id}",
+    response_model=GymClassResponse,
+    summary="Get a single class by id",
+    responses={
+        200: {"description": "Class returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def get_class(
+    class_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+) -> GymClassResponse:
+    """Get a single class (gym-employee scoped)."""
+    user_payload = auth.get_current_user(credentials)
+    return await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+
+
+@classes_router.put(
+    "/{class_id}",
+    response_model=GymClassResponse,
+    summary="Update a class",
+    responses={
+        200: {"description": "Class updated"},
+        400: {"description": "Invalid update"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def update_class(
+    class_id: UUID,
+    request: GymClassUpdateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+) -> GymClassResponse:
+    """Update a class."""
+    user_payload = auth.get_current_user(credentials)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await crud_service.update_class(class_id, request.data)
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to update class: class_id=%s", class_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update class",
+        ) from None
+
+
+@classes_router.delete(
+    "/{class_id}",
+    response_model=GymClassResponse,
+    summary="Soft-delete a class",
+    description="Sets ``is_deleted = TRUE`` and ``is_active = FALSE``.",
+    responses={
+        200: {"description": "Class soft-deleted"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def soft_delete_class(
+    class_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+) -> GymClassResponse:
+    """Soft-delete a class."""
+    user_payload = auth.get_current_user(credentials)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await crud_service.soft_delete_class(class_id)
+    except Exception:
+        logger.error(
+            "Failed to soft-delete class: class_id=%s", class_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to soft-delete class",
+        ) from None
+
+
+async def _resolve_class_for_auth(
+    crud_service: ClassesCrudService,
+    auth: Auth,
+    class_id: UUID,
+    user_payload: dict,
+    *,
+    require_admin_or_owner: bool = False,
+) -> GymClassResponse:
+    """Load a class (404 if absent) and gate the caller on its gym.
+
+    Reads gate at gym-employee level; writes pass
+    ``require_admin_or_owner=True`` to gate at admin-or-owner instead.
+    """
+    try:
+        existing = await crud_service.get_class(class_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Class not found",
+        ) from None
+    if require_admin_or_owner:
+        await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
+    else:
+        await auth.verify_gym_employee(existing.gym_id, user_payload)
+    return existing

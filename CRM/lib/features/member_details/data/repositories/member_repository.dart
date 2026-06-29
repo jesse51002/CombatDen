@@ -1,5 +1,7 @@
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/check_in/data/models/check_in_request.dart';
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
@@ -627,6 +629,24 @@ class MemberRepository {
     await _apiClient.post(
       '/api/v1/member_memberships/mark-paid-cash',
       data: req.toJson(),
+    );
+  }
+
+  // ----- Class check-in -----
+
+  /// `POST /api/v1/classes/checkin` — staff single check-in for [req]'s member
+  /// into the occurrence addressed by `class_id` + `occurrence_date`. Returns
+  /// the [CheckInResponse]: a recorded attendance (points awarded), an
+  /// idempotent repeat (`already_checked_in`), or a skip carrying a
+  /// `skip_reason` (nothing written) that the caller can retry with
+  /// `allow_override`.
+  Future<CheckInResponse> checkInMember(CheckInRequest req) async {
+    final response = await _apiClient.post(
+      '/api/v1/classes/checkin',
+      data: req.toJson(),
+    );
+    return CheckInResponse.fromJson(
+      response.data as Map<String, dynamic>,
     );
   }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/schedule/data/mock_schedule.dart';
+import 'package:crm/features/schedule/data/models/recurring_unit.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/app_date_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';

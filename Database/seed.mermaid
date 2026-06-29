@@ -135,7 +135,7 @@ flowchart TB
 
   %% ── Class history + attendance (simple split) ──
   Attendance["✅ Class history + attendance"]
-  Attendance -->|"per class"| a_hist["class_history<br/>≤30 occurrences (½ of inactive skipped)"]
+  Attendance -->|"per class"| a_hist["class_history<br/>≤30 occurrences (½ inactive skipped · exceptions applied)"]
   Attendance -->|"95%"| a_yes["attended · covered members attend a 1–15 subset"]
   Attendance -->|"5%"| a_no["never attended"]
 

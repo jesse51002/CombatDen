@@ -3,12 +3,16 @@ class_history (past class instances), and member_attendance."""
 
 from __future__ import annotations
 
+import calendar
 import random
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import NamedTuple
 from uuid import UUID
+from zoneinfo import ZoneInfo
+
+from dateutil.relativedelta import relativedelta
 
 from schema.gym_class import (
     MemberAttendanceCreate,
@@ -157,27 +161,157 @@ def _instructor_for_day(cls: GymClassCreate, day_short: str) -> uuid.UUID | None
     return getattr(cls, f"{day_short}_instructor_id", None)
 
 
+def _weekday_short(d: date) -> str:
+    """Map a date to its DAYS short name (Mon=0..Sun=6 -> "mon".."sun")."""
+    return DAYS[(d.weekday() + 1) % 7]
+
+
 def _enumerate_occurrences(
     cls: GymClassCreate, until: date, max_count: int
-) -> list[datetime]:
-    """Walk the class's recurrence rule from start_date forward, returning
-    up to `max_count` past occurrence datetimes (capped at `until`).
+) -> list[date]:
+    """Enumerate the class's recurrence rule from start_date forward, honoring
+    recurring_interval, returning up to `max_count` occurrence DATES no later
+    than `until` (or the class's end_date). Time-of-day and any exception
+    overrides are applied later, when each occurrence is materialized.
     """
-    out: list[datetime] = []
+    interval = cls.recurring_interval
+    end = min(cls.end_date or until, until)
+    out: list[date] = []
+
+    if cls.recurring_unit == RecurringUnit.monthly:
+        # Anchor each month off start_date (never chained), clamping the day to
+        # the month's length so Jan 31 -> Feb 28/29 -> Mar 31 stays correct.
+        n = 0
+        while len(out) < max_count:
+            anchor = cls.start_date + relativedelta(months=n * interval)
+            last_day = calendar.monthrange(anchor.year, anchor.month)[1]
+            occ = anchor.replace(day=min(cls.start_date.day, last_day))
+            if occ > end:
+                break
+            out.append(occ)
+            n += 1
+        return out
+
     cursor = cls.start_date
-    end = cls.end_date or until
-    while cursor <= end and cursor <= until and len(out) < max_count:
+    while cursor <= end and len(out) < max_count:
+        days_from_start = (cursor - cls.start_date).days
         if cls.recurring_unit == RecurringUnit.daily:
-            should_emit = True
-        elif cls.recurring_unit == RecurringUnit.weekly:
-            day_short = DAYS[(cursor.weekday() + 1) % 7]  # Mon=0 -> "mon", Sun=6 -> "sun"
-            should_emit = getattr(cls, day_short)
-        else:  # monthly
-            should_emit = cursor.day == cls.start_date.day
+            should_emit = days_from_start % interval == 0
+        else:  # weekly
+            week_index = days_from_start // 7
+            should_emit = bool(
+                week_index % interval == 0 and getattr(cls, _weekday_short(cursor))
+            )
         if should_emit:
-            out.append(datetime.combine(cursor, cls.class_time))
+            out.append(cursor)
         cursor += timedelta(days=1)
     return out
+
+
+class _OccurrenceSnapshot(NamedTuple):
+    """The materialized class_history fields for one resolved occurrence."""
+
+    emit_date: date
+    class_time: time
+    duration_minutes: int
+    instructor_id: UUID | None
+
+
+def _instance_exceptions_by_class(
+    exceptions: list[ClassInstanceExceptionCreate],
+) -> dict[UUID, dict[date, ClassInstanceExceptionCreate]]:
+    """Index instance exceptions by class_id, then by original_date (unique)."""
+    by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]] = defaultdict(dict)
+    for exc in exceptions:
+        by_class[exc.class_id][exc.original_date] = exc
+    return by_class
+
+
+def _range_exceptions_by_class(
+    exceptions: list[ClassRangeExceptionCreate],
+) -> dict[UUID, list[ClassRangeExceptionCreate]]:
+    """Index range exceptions by class_id, preserving creation order so the
+    earliest-created covering range wins when ranges overlap.
+    """
+    by_class: dict[UUID, list[ClassRangeExceptionCreate]] = defaultdict(list)
+    for exc in exceptions:
+        by_class[exc.class_id].append(exc)
+    return by_class
+
+
+def _covering_range(
+    ranges: list[ClassRangeExceptionCreate], when: date
+) -> ClassRangeExceptionCreate | None:
+    """The earliest-created range exception covering `when` (inclusive)."""
+    for exc in ranges:
+        if exc.start_date <= when <= exc.end_date:
+            return exc
+    return None
+
+
+def _resolve_occurrence(
+    cls: GymClassCreate,
+    original_date: date,
+    today: date,
+    instance_exceptions: dict[date, ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> _OccurrenceSnapshot | None:
+    """Reconcile one scheduled occurrence against its seeded exceptions.
+
+    Returns the materialized class_history snapshot, or None when the
+    occurrence is cancelled or moved out of the past (history is past-only).
+    An instance exception on the exact date is authoritative and suppresses
+    any range exception for that date.
+    """
+    default_instructor = _instructor_for_day(cls, _weekday_short(original_date))
+
+    instance = instance_exceptions.get(original_date)
+    if instance is not None:
+        if instance.is_cancelled:
+            return None
+        emit_date = instance.new_date if instance.new_date is not None else original_date
+        if emit_date > today:
+            return None  # moved into the future: it hasn't occurred yet
+        return _OccurrenceSnapshot(
+            emit_date=emit_date,
+            class_time=(
+                instance.new_class_time
+                if instance.new_class_time is not None
+                else cls.class_time
+            ),
+            duration_minutes=(
+                instance.new_duration_minutes
+                if instance.new_duration_minutes is not None
+                else cls.duration_minutes
+            ),
+            instructor_id=(
+                instance.new_instructor_id
+                if instance.new_instructor_id is not None
+                else default_instructor
+            ),
+        )
+
+    covering = _covering_range(range_exceptions, original_date)
+    if covering is not None:
+        if covering.is_cancelled:
+            return None
+        return _OccurrenceSnapshot(
+            emit_date=original_date,
+            class_time=cls.class_time,
+            duration_minutes=cls.duration_minutes,
+            instructor_id=(
+                covering.new_instructor_id
+                if covering.new_instructor_id is not None
+                else default_instructor
+            ),
+        )
+
+    return _OccurrenceSnapshot(
+        emit_date=original_date,
+        class_time=cls.class_time,
+        duration_minutes=cls.duration_minutes,
+        instructor_id=default_instructor,
+    )
 
 
 class _Coverage(NamedTuple):
@@ -221,14 +355,19 @@ def _find_cover(covers: list[_Coverage], when: date) -> _Coverage | None:
 
 def generate_class_history_and_attendance(
     gym_id: uuid.UUID,
+    gym_timezone: str,
     classes: list[GymClassCreate],
     members: list[MemberCreate],
     membership_rows: list[MemberMembershipCreate],
+    instance_exceptions: list[ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
     instances_per_class: int = 30,
 ) -> tuple[list[ClassHistoryCreate], list[MemberAttendanceCreate]]:
     """Walk each class's schedule to produce class_history rows for past
-    occurrences, then assign each member a random subset of the occurrences
-    that fall within one of their membership windows as member_attendance.
+    occurrences — reconciled against the seeded instance/range exceptions so
+    the history matches the real schedule — then assign each member a random
+    subset of the occurrences that fall within one of their membership windows
+    as member_attendance.
 
     Attendance is hard-gated like the live check-in: a member with no
     membership covering an occurrence gets no attendance row, and every row
@@ -238,23 +377,38 @@ def generate_class_history_and_attendance(
     history: list[ClassHistoryCreate] = []
     attendance: list[MemberAttendanceCreate] = []
 
+    instances_by_class = _instance_exceptions_by_class(instance_exceptions)
+    ranges_by_class = _range_exceptions_by_class(range_exceptions)
+
     for cls in classes:
         if not cls.is_active and random.random() < 0.5:
             # Skip half of inactive classes — they shouldn't all have heavy history
             continue
 
-        occurrences = _enumerate_occurrences(cls, today, instances_per_class)
-        for occ in occurrences:
-            day_short = DAYS[(occ.date().weekday() + 1) % 7]
-            instructor_id = _instructor_for_day(cls, day_short)
+        cls_instances = instances_by_class.get(cls.class_id, {})
+        cls_ranges = ranges_by_class.get(cls.class_id, [])
+        for occ_date in _enumerate_occurrences(cls, today, instances_per_class):
+            snapshot = _resolve_occurrence(
+                cls, occ_date, today, cls_instances, cls_ranges
+            )
+            if snapshot is None:
+                continue  # cancelled, or moved out of the past window
             history.append(
                 ClassHistoryCreate(
                     class_history_id=uuid.uuid4(),
                     class_id=cls.class_id,
                     gym_id=gym_id,
-                    instructor_id=instructor_id,
-                    occurred_at=occ,
-                    duration_minutes=cls.duration_minutes,
+                    instructor_id=snapshot.instructor_id,
+                    # Interpret the class wall-clock time in the gym's timezone,
+                    # then convert to UTC — identical to ClassesExpander, so the
+                    # runtime materializer's occurred_at matches the seeded row
+                    # (uq_class_history_occurrence) instead of duplicating it.
+                    occurred_at=datetime.combine(
+                        snapshot.emit_date,
+                        snapshot.class_time,
+                        tzinfo=ZoneInfo(gym_timezone),
+                    ).astimezone(timezone.utc),
+                    duration_minutes=snapshot.duration_minutes,
                 )
             )
 

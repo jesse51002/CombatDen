@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
@@ -54,6 +55,12 @@ class MemberDetailScreen extends StatelessWidget {
         ),
         RepositoryProvider<TasksRepository>(
           create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+        // The class check-in dialog reads today's / recent occurrences for the
+        // member-page "Check In" surface — cross-feature reuse of the schedule
+        // repo (no schedule bloc; a read-only side fetch).
+        RepositoryProvider<ScheduleRepository>(
+          create: (_) => ScheduleRepository(apiClient: ApiClient()),
         ),
       ],
       child: MultiBlocProvider(

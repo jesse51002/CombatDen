@@ -66,13 +66,9 @@ class ClassesCycleCountsService:
 
         for row in rows:
             uid = row["member_id"]
-            class_count = row["class_count"]
-            classes_used = row["classes_used"]
 
-            remaining = None
-            if class_count is not None:
-                remaining = max(0, class_count - classes_used)
-
+            # classes_remaining is clamped at 0 (NULL stays NULL for unlimited)
+            # by the SQL CASE/GREATEST, so an over-drawn pack never goes negative.
             user_memberships[uid].append(
                 MembershipUsage(
                     item_id=row["item_id"],
@@ -80,9 +76,9 @@ class ClassesCycleCountsService:
                     start_date=row["start_date"],
                     plan_type=PlanType(row["plan_type"]),
                     status=row["status"],
-                    class_count=class_count,
-                    classes_used=classes_used,
-                    classes_remaining=remaining,
+                    class_count=row["class_count"],
+                    classes_used=row["classes_used"],
+                    classes_remaining=row["classes_remaining"],
                     renew_date=row["next_due_date"],
                     end_date=row["end_date"],
                 )

@@ -89,7 +89,7 @@ async def create_reward(
 ) -> RewardResponse:
     """Create a reward."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await rewards_service.create_reward(request)
@@ -141,7 +141,7 @@ async def update_reward(
             detail="Reward not found",
         ) from None
 
-    await auth.verify_gym_employee(existing.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
 
     try:
         return await rewards_service.update_reward(reward_id, request.data)
@@ -198,7 +198,7 @@ async def deactivate_reward(
             detail="Reward not found",
         ) from None
 
-    await auth.verify_gym_employee(existing.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
 
     try:
         return await rewards_service.deactivate_reward(reward_id)

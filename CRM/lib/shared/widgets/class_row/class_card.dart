@@ -28,6 +28,9 @@ class ClassCard extends StatelessWidget {
   final String? imageAsset;
   final int? pointsWorth;
   final int? attendingCount;
+
+  /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
+  final bool isCancelled;
   final VoidCallback? onTap;
 
   const ClassCard({
@@ -41,6 +44,7 @@ class ClassCard extends StatelessWidget {
     this.imageAsset,
     this.pointsWorth,
     this.attendingCount,
+    this.isCancelled = false,
     this.onTap,
   });
 
@@ -137,6 +141,12 @@ class _CardDetails extends StatelessWidget {
           card.timeLabel,
           style: DesignConstants.p.copyWith(color: DesignConstants.text),
         ),
+        if (card.isCancelled)
+          ClassMetaChip(
+            icon: Symbols.cancel_sharp,
+            text: 'Cancelled',
+            color: DesignConstants.badRed,
+          ),
         if (card.instructorName != null) _InstructorLine(card: card),
         if (card.pointsWorth != null || card.attendingCount != null)
           _MetaRow(card: card),
