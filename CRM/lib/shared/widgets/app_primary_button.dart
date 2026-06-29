@@ -8,8 +8,11 @@ import 'package:crm/core/constants/design_constants.dart';
 /// `LandingPage/hifi/chrome.jsx`.
 ///
 /// Pass [backgroundColor] to override the gradient with a solid fill (e.g. a
-/// destructive red) — that also drops the blue CTA shadow. All visuals come
-/// from [DesignConstants].
+/// destructive red) — that also drops the blue CTA shadow. When [textColor] is
+/// omitted the label/spinner colour auto-contrasts against the fill: near-white
+/// on the gradient or a dark fill, near-black on a light fill (e.g. `okYellow`
+/// gold in dark mode), via [DesignConstants.onFill]. All visuals come from
+/// [DesignConstants].
 class AppPrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
@@ -38,7 +41,14 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = textColor ?? DesignConstants.surface;
+    // No solid fill → the default gradient CTA (dark in both themes) → the
+    // near-white accent label. A solid [backgroundColor] may be light in one
+    // theme (e.g. okYellow gold in dark mode), so pick the contrasting ink by
+    // its luminance instead of assuming near-white.
+    final fg = textColor ??
+        (backgroundColor == null
+            ? DesignConstants.onAccent
+            : DesignConstants.onFill(backgroundColor!));
     final style = (textStyle ?? DesignConstants.h3).copyWith(color: fg);
     final radius = borderRadius ?? DesignConstants.radiusBig;
     final pad = padding ??

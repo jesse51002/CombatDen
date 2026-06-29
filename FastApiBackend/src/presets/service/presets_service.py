@@ -16,9 +16,11 @@ state is ever committed.
 from __future__ import annotations
 
 import json
+import random
 from datetime import time
 from uuid import UUID
 
+from schema.video import GymVideoSpecSource
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +37,10 @@ from src.shared.sql_loader import load_sql
 _DEFAULT_CLASS_TIME = time(9, 0)
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
+
+# Demo: how many of the imported videos to re-mark as 'manual' so the gym's
+# "Your videos" section isn't empty right after an import.
+_MANUAL_SEED_COUNT = 3
 
 # Fallback last-name when an instructor is listed under a single word only.
 _FALLBACK_LAST_NAME = "Coach"
@@ -69,12 +75,17 @@ class PresetsService:
             Exception: Any DB error propagates; the caller maps it to HTTP.
         """
         load_template_sql = load_sql(SQL_DIR / "presets_load_template.sql")
-        upsert_spec_sql = load_sql(SQL_DIR / "presets_upsert_spec.sql")
+        insert_spec_version_sql = load_sql(
+            SQL_DIR / "presets_insert_spec_version.sql"
+        )
         set_theme_sql = load_sql(SQL_DIR / "presets_set_theme.sql")
-        delete_queries_sql = load_sql(SQL_DIR / "presets_delete_queries.sql")
-        insert_query_sql = load_sql(SQL_DIR / "presets_insert_query.sql")
-        delete_feed_sql = load_sql(SQL_DIR / "presets_delete_feed.sql")
+        insert_run_sql = load_sql(SQL_DIR / "presets_insert_run.sql")
         insert_feed_sql = load_sql(SQL_DIR / "presets_insert_feed.sql")
+        insert_rejected_feed_sql = load_sql(
+            SQL_DIR / "presets_insert_rejected_feed.sql"
+        )
+        seed_manual_sql = load_sql(SQL_DIR / "presets_seed_manual_videos.sql")
+        count_owner_sql = load_sql(SQL_DIR / "presets_count_owner_feed.sql")
         soft_delete_classes_sql = load_sql(
             SQL_DIR / "presets_soft_delete_classes.sql"
         )
@@ -96,9 +107,9 @@ class PresetsService:
             if row is None:
                 raise ValueError(f"no template {video_gym_id!r}")
 
-            # ── Spec (upsert) ─────────────────────────────────────────────
+            # ── Spec (append a new versioned row) ────────────────────────
             await session.execute(
-                text(upsert_spec_sql),
+                text(insert_spec_version_sql),
                 {
                     "gym_id": gym_id_str,
                     "gym_type": json.dumps(self._as_list(row["gym_type"])),
@@ -106,6 +117,8 @@ class PresetsService:
                     "short_avoid_desc": row["short_avoid_desc"],
                     "videos_desc": row["videos_desc"],
                     "avoid_desc": row["avoid_desc"],
+                    "queries": json.dumps(self._as_list(row["queries"])),
+                    "source": GymVideoSpecSource.system_update.value,
                     "imported_from": video_gym_id,
                 },
             )
@@ -116,27 +129,54 @@ class PresetsService:
                 {"gym_id": gym_id_str, "theme_design_id": row["theme"]},
             )
 
-            # ── Queries (replace) ─────────────────────────────────────────
-            await session.execute(
-                text(delete_queries_sql), {"gym_id": gym_id_str}
-            )
-            for q in self._as_list(row["queries"]):
-                await session.execute(
-                    text(insert_query_sql),
-                    {"gym_id": gym_id_str, "query": q},
-                )
-
-            # ── Feed (replace; only ids present in the shared pool) ───────
-            await session.execute(
-                text(delete_feed_sql), {"gym_id": gym_id_str}
-            )
+            # ── Feed (open a new run; only ids present in the shared pool) ─
+            # A new run becomes the gym's latest (served) feed; old runs are
+            # retained as history. The owner "Your videos" section is NOT
+            # touched (run-independent, persists across re-imports).
             good_ids = self._as_list(row["good_video_ids"])
             if good_ids:
+                run_id = (
+                    await session.execute(
+                        text(insert_run_sql), {"gym_id": gym_id_str}
+                    )
+                ).scalar_one()
                 feed_result = await session.execute(
                     text(insert_feed_sql),
-                    {"gym_id": gym_id_str, "ids": good_ids},
+                    {
+                        "gym_id": gym_id_str,
+                        "run_id": str(run_id),
+                        "ids": good_ids,
+                    },
                 )
                 videos_imported = feed_result.rowcount
+                # Demo: seed the owner section with a few videos so "Your
+                # videos" isn't empty — only on the first import (when it's
+                # still empty), so re-imports don't pile up.
+                owner_count = (
+                    await session.execute(
+                        text(count_owner_sql), {"gym_id": gym_id_str}
+                    )
+                ).scalar_one()
+                if owner_count == 0:
+                    seed_ids = random.sample(
+                        good_ids, min(_MANUAL_SEED_COUNT, len(good_ids))
+                    )
+                    await session.execute(
+                        text(seed_manual_sql),
+                        {"gym_id": gym_id_str, "ids": seed_ids},
+                    )
+                # Seed the template's full automatic-reject list so the gym's
+                # rejected view mirrors the scan's complete keep/drop verdict.
+                rejected_ids = self._as_list(row["rejected_video_ids"])
+                if rejected_ids:
+                    await session.execute(
+                        text(insert_rejected_feed_sql),
+                        {
+                            "gym_id": gym_id_str,
+                            "run_id": str(run_id),
+                            "ids": rejected_ids,
+                        },
+                    )
             else:
                 videos_imported = 0
 

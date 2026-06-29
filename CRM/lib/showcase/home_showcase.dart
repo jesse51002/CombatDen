@@ -8,7 +8,6 @@ import 'package:crm/showcase/support/showcase_topbar.dart';
 
 // Dummy non-identity data. Gym name + logo come from the host (arguments);
 // these stand in for the streak/points/rank chips in the info bar.
-const String _kLogoAsset = 'gym_logo_global_mma.png';
 const String _kRankBadgeAsset = 'icon_rank_belt.png';
 const int _kStreakDays = 3;
 const String _kPointsLabel = '3.4k';
@@ -18,7 +17,8 @@ const String _kPointsLabel = '3.4k';
 /// strip, and the day-by-day class schedule, under the themed bottom nav.
 /// Static surface; [loop] / [onCycleComplete] are accepted for the uniform
 /// showcase API but unused. [gymName] / [gymLogo] are the host app's gym
-/// identity (NOT a customization slot).
+/// identity (NOT a customization slot). [themeTabPreview] signals that this
+/// showcase is embedded in the live theme-tab — affects the logo fallback.
 class HomeShowcase extends StatelessWidget {
   const HomeShowcase({
     super.key,
@@ -27,6 +27,7 @@ class HomeShowcase extends StatelessWidget {
     this.gymName = 'Your Gym',
     this.gymLogo,
     this.classes,
+    this.themeTabPreview = false,
   });
 
   final bool loop;
@@ -34,6 +35,11 @@ class HomeShowcase extends StatelessWidget {
   final String gymName;
   final ImageProvider? gymLogo;
   final List<ShowcaseClassInfo>? classes;
+
+  /// When true the topbar will use the active theme logo as the logo fallback
+  /// (so theme switching changes the logo in the preview). When false the
+  /// CombatDen logo is the fallback (the v2 landing page / standalone embed).
+  final bool themeTabPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -45,11 +51,11 @@ class HomeShowcase extends StatelessWidget {
         topbar: ShowcaseTopbar(
           mode: ShowcaseTopbarMode.bigLogo,
           gymName: gymName,
-          logoAsset: _kLogoAsset,
           logoImage: gymLogo,
           streakDays: _kStreakDays,
           pointsLabel: _kPointsLabel,
           rankBadgeAsset: _kRankBadgeAsset,
+          themeTabPreview: themeTabPreview,
         ),
       ),
     );

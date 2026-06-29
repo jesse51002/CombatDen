@@ -92,7 +92,7 @@ void showTabActionError(BuildContext context, String message) {
     SnackBar(
       content: Text(
         message,
-        style: DesignConstants.p.copyWith(color: DesignConstants.surface),
+        style: DesignConstants.p.copyWith(color: DesignConstants.onAccent),
       ),
       backgroundColor: DesignConstants.badRed,
     ),

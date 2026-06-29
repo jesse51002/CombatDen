@@ -119,14 +119,14 @@ class _ActivePill extends StatelessWidget {
         children: [
           Icon(
             Symbols.check_sharp,
-            color: DesignConstants.surface,
+            color: DesignConstants.onAccent,
             weight: DesignConstants.iconWeight,
             size: DesignConstants.iconSizeSmall,
           ),
           Text(
             'Active',
             style: DesignConstants.pSmallBold.copyWith(
-              color: DesignConstants.surface,
+              color: DesignConstants.onAccent,
             ),
           ),
         ],

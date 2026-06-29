@@ -300,7 +300,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       SnackBar(
         content: Text(
           message,
-          style: DesignConstants.p.copyWith(color: DesignConstants.surface),
+          style: DesignConstants.p.copyWith(color: DesignConstants.onAccent),
         ),
         backgroundColor:
             isError ? DesignConstants.badRed : DesignConstants.goodGreen,

@@ -80,27 +80,21 @@ class SelectedGym extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Update the VideoService content gym id after a preset import. Optionally
-  /// also applies a new [designId] theme when the import returns one.
+  /// Update the VideoService content gym id after a preset import, and (in the
+  /// admin context) re-fetch the real gym's showcase so the preview surfaces
+  /// immediately reflect the imported content.
   ///
-  /// In the admin context ([gymId] is set), also re-fetches the real gym's
-  /// showcase so the preview surfaces immediately reflect the imported content.
-  /// In the public browser ([gymId] is null), the template catalog is already
-  /// up-to-date — no re-fetch needed.
+  /// **Does NOT touch the theme.** Theme selection/application is the Theme
+  /// tab's job — a preset import from Settings only changes content, never the
+  /// live design. (The imported theme id is persisted server-side on the gym;
+  /// the Theme tab reads/applies it.) This avoids the engine-not-ready throw
+  /// that would otherwise surface when importing before the Theme tab has booted
+  /// the theme runtime.
   ///
-  /// This keeps the two id spaces ([gymId] / [videoGymId]) intact — only the
-  /// video content key changes here; the real gym UUID is untouched.
-  void setVideoGymId({
-    required String videoGymId,
-    String? designId,
-  }) {
+  /// Keeps the two id spaces ([gymId] / [videoGymId]) intact — only the video
+  /// content key changes here; the real gym UUID is untouched.
+  void setVideoGymId({required String videoGymId}) {
     _videoGymId = videoGymId;
-    if (designId != null && designId.isNotEmpty) {
-      _designId = designId;
-      if (ThemeRuntime.activeDesignId != designId) {
-        ThemeRuntime.selectDesign(designId);
-      }
-    }
     // Admin: re-fetch showcase so Loyalty/classes/schedule reflect the import.
     if (_gymId != null) {
       _fetchDetail(videoGymId);

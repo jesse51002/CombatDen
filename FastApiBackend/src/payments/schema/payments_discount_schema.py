@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, model_validator
 
 import src.shared.db_schema_path  # noqa: F401

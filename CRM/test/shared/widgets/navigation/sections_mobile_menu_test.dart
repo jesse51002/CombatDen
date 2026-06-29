@@ -38,7 +38,8 @@ void main() {
 
       // Built without throwing, and the rows + Logout are present.
       expect(tester.takeException(), isNull);
-      expect(find.text('Members'), findsOneWidget);
+      // The Members + Employees sections are now one combined "People" entry.
+      expect(find.text('People'), findsOneWidget);
       expect(find.text('Memberships'), findsOneWidget);
       expect(find.text('Logout'), findsOneWidget);
 

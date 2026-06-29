@@ -7,12 +7,13 @@ import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/video_api_client.dart';
 import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_curation_dialog.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_tile.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_wrap_grid.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/view_all_button.dart';
-import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/your_videos_grid.dart';
-import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/your_videos_row.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/your_video_tile.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/your_videos_feed.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/horizontal_scroller.dart';
 import 'package:crm/shared/widgets/section_card.dart';
@@ -25,9 +26,9 @@ const int _kPageSize = 24;
 /// The member feed for the selected gym. Pills switch sections: "All" shows a
 /// scrollable preview row per section ("Your videos" first, then each live
 /// genre), and selecting a section opens its full View all grid. "Your videos"
-/// is the gym's own uploads (mock); the genres pull live from the VideoService
-/// — the one screen that hits a real backend, so the admin previews real
-/// thumbnails.
+/// is the gym's own real, editable feed (add a YouTube link / remove); the
+/// genres are that same feed grouped by genre. Both pull live from the backend,
+/// and every tile opens its watch page in a new tab.
 class MemberFeedSection extends StatefulWidget {
   const MemberFeedSection({super.key});
 
@@ -36,29 +37,82 @@ class MemberFeedSection extends StatefulWidget {
 }
 
 class _MemberFeedSectionState extends State<MemberFeedSection> {
-  // Genres discovered once per (gym, feed) and cached, so switching gyms or
-  // toggling rejected swaps the sections and revisiting is instant. The
+  // The "All" preview sections held as RESOLVED state (not a Future), per
+  // (gym, feed) key — so a removal mutates the list synchronously and the row
+  // updates in place, with no FutureBuilder re-entering its loading state. The
   // rejected feed has its own genres, hence the feed flag in the key.
-  final Map<String, Future<List<FeedSection>>> _previewByKey = {};
+  final Map<String, List<FeedSection>> _sectionsByKey = {};
+  final Set<String> _loadingKeys = {};
+  final Set<String> _erroredKeys = {};
   int _selectedIndex = 0;
   bool _showRejected = false;
 
-  // One request powers the whole "All" view — each genre sampled server-side,
-  // so there's no per-genre request storm. Cached per (gym, feed) so switching
-  // gyms or toggling rejected swaps the sections and revisiting is instant.
-  //
-  // In the admin context (real gymId set), fetches from the authed real-gym
-  // endpoint via ApiClient; in the public browser, uses the unauthenticated
-  // template path via VideoApiClient.
-  Future<List<FeedSection>> _previewFor(String gymId, bool rejected) {
+  // The cache key for the current (gym, feed): one shared key in admin (the
+  // authed real-gym preview), per-(slug, rejected) in the public browser.
+  String _keyFor(String gymId, bool rejected) {
     final adminGymId = selectedGym.gymId;
-    if (adminGymId != null) {
-      return _previewByKey['$adminGymId-admin'] ??=
-          GymContentRepository(ApiClient()).fetchVideoPreview(adminGymId);
+    return adminGymId != null
+        ? '$adminGymId-admin-$rejected'
+        : '$gymId-$rejected';
+  }
+
+  // Load the preview once per key (each genre sampled server-side, so one
+  // request powers the whole "All" view). Admin → authed real-gym endpoint;
+  // public browser → the unauthenticated template path. Safe to call in build:
+  // it no-ops once loaded/loading and only setStates from the async callback.
+  void _ensureLoaded(String gymId, bool rejected) {
+    final key = _keyFor(gymId, rejected);
+    if (_sectionsByKey.containsKey(key) ||
+        _loadingKeys.contains(key) ||
+        _erroredKeys.contains(key)) {
+      return;
     }
-    return _previewByKey['$gymId-$rejected'] ??= VideoApiClient(
-      gymId: gymId,
-    ).fetchPreview(rejected: rejected);
+    _loadingKeys.add(key);
+    _erroredKeys.remove(key);
+    final adminGymId = selectedGym.gymId;
+    final future = adminGymId != null
+        ? GymContentRepository(
+            ApiClient(),
+          ).fetchVideoPreview(adminGymId, rejected: rejected)
+        : VideoApiClient(gymId: gymId).fetchPreview(rejected: rejected);
+    future
+        .then((sections) {
+          if (!mounted) return;
+          setState(() {
+            _sectionsByKey[key] = sections;
+            _loadingKeys.remove(key);
+          });
+        })
+        .catchError((_) {
+          if (!mounted) return;
+          setState(() {
+            _loadingKeys.remove(key);
+            _erroredKeys.add(key);
+          });
+        });
+  }
+
+  /// Remove a queried video from the "All" preview, then drop it from the held
+  /// sections synchronously — the row updates in place, no refetch/flicker.
+  Future<void> _removePreviewVideo(Video video) async {
+    final key = _keyFor(selectedGym.videoGymId ?? '', _showRejected);
+    // Rejected view → "Keep" (un-reject); else reject (with why).
+    final ok = _showRejected
+        ? await keepGenreVideo(context, video)
+        : await confirmAndRemoveGenreVideo(context, video);
+    if (ok && mounted) {
+      final sections = _sectionsByKey[key];
+      if (sections == null) return;
+      setState(() {
+        _sectionsByKey[key] = [
+          for (final s in sections)
+            FeedSection(
+              tag: s.tag,
+              videos: s.videos.where((x) => x.videoId != video.videoId).toList(),
+            ),
+        ];
+      });
+    }
   }
 
   @override
@@ -75,10 +129,11 @@ class _MemberFeedSectionState extends State<MemberFeedSection> {
             ),
           );
         }
-        // The rejected toggle is only meaningful on the public/template path —
-        // the real-gym feed endpoint has no `rejected` param.
+        // The rejected toggle is meaningful in both contexts now: the real-gym
+        // feed has a scan_status rejected list (admin can Keep videos back), and
+        // the template path has the scan's rejected list.
         final isAdmin = selectedGym.gymId != null;
-        final showRejected = isAdmin ? false : _showRejected;
+        final showRejected = _showRejected;
         return SubtitleSection(
           title: 'Member feed',
           child: Column(
@@ -86,31 +141,32 @@ class _MemberFeedSectionState extends State<MemberFeedSection> {
             // Tuck the toggle right above the pills so it's easy to find.
             spacing: DesignConstants.spacingMedium,
             children: [
-              if (!isAdmin)
-                _RejectedToggle(
-                  value: _showRejected,
-                  // Switching feeds resets to "All": the approved and rejected
-                  // feeds have different pills.
-                  onChanged: (v) => setState(() {
-                    _showRejected = v;
-                    _selectedIndex = 0;
-                  }),
-                ),
-              // Your videos (mock) shows only in the approved feed; the genres
-              // degrade to a loading/error/empty message without hiding the
-              // rest of the feed.
-              FutureBuilder<List<FeedSection>>(
-                future: _previewFor(gymId, showRejected),
-                builder: (context, snapshot) {
+              _RejectedToggle(
+                value: _showRejected,
+                // Switching feeds resets to "All": the approved and rejected
+                // feeds have different pills.
+                onChanged: (v) => setState(() {
+                  _showRejected = v;
+                  _selectedIndex = 0;
+                }),
+              ),
+              // Load the preview into held state (no-op once cached); the genres
+              // degrade to a loading/error/empty message without hiding the rest
+              // of the feed. A removal mutates the held sections in place.
+              Builder(
+                builder: (context) {
+                  _ensureLoaded(gymId, showRejected);
+                  final key = _keyFor(gymId, showRejected);
                   return _Feed(
                     gymId: gymId,
-                    sections: snapshot.data ?? const <FeedSection>[],
+                    sections: _sectionsByKey[key] ?? const <FeedSection>[],
                     rejected: showRejected,
-                    genresLoading:
-                        snapshot.connectionState != ConnectionState.done,
-                    genresErrored: snapshot.hasError,
+                    genresLoading: _loadingKeys.contains(key),
+                    genresErrored: _erroredKeys.contains(key),
                     selectedIndex: _selectedIndex,
                     onSelected: (i) => setState(() => _selectedIndex = i),
+                    // Real removes (with a logged "why") only in the admin feed.
+                    onPreviewRemove: isAdmin ? _removePreviewVideo : null,
                   );
                 },
               ),
@@ -152,6 +208,9 @@ class _Feed extends StatelessWidget {
   final bool genresErrored;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  // Preview-row remove (admin only; updates the cached sections). The grid
+  // builds its own local-removal handler off the same admin gate.
+  final void Function(Video)? onPreviewRemove;
 
   const _Feed({
     required this.gymId,
@@ -161,14 +220,16 @@ class _Feed extends StatelessWidget {
     required this.genresErrored,
     required this.selectedIndex,
     required this.onSelected,
+    required this.onPreviewRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Pills: [All] [Your videos] [genre…]. "Your videos" (the gym's own
-    // uploads) only belongs to the approved feed — the rejected feed is purely
-    // the scan's discards — so it drops out when rejected is on.
-    final showYourVideos = !rejected;
+    // Pills: [All] [Your videos] [genre…]. "Your videos" is the gym's own
+    // editable feed, so it only shows in the admin context (a real gym is
+    // selected) and never in the rejected feed (the scan's discards). The
+    // public theme browser has no owner feed, so it drops out there.
+    final showYourVideos = !rejected && selectedGym.gymId != null;
     final tags = [for (final s in sections) s.tag];
     final labels = [
       'All',
@@ -191,21 +252,22 @@ class _Feed extends StatelessWidget {
             gymId: gymId,
             sections: sections,
             rejected: rejected,
+            showYourVideos: showYourVideos,
             genresLoading: genresLoading,
             genresErrored: genresErrored,
             onSelected: onSelected,
+            onRemove: onPreviewRemove,
           )
         else if (showYourVideos && index == 1)
-          YourVideosGrid(
-            detail: selectedGym.detail,
-            gymName: selectedGym.displayName,
-          )
+          YourVideosFeed.full(gymId: selectedGym.gymId!)
         else
           _TagPager(
             key: ValueKey('$gymId-$rejected-${tags[index - genreOffset]}'),
             gymId: gymId,
             tag: tags[index - genreOffset],
             rejected: rejected,
+            // The grid drops removed tiles locally; removal is admin-only.
+            enableRemove: onPreviewRemove != null,
           ),
       ],
     );
@@ -219,17 +281,21 @@ class _AllSections extends StatelessWidget {
   final String gymId;
   final List<FeedSection> sections;
   final bool rejected;
+  final bool showYourVideos;
   final bool genresLoading;
   final bool genresErrored;
   final ValueChanged<int> onSelected;
+  final void Function(Video)? onRemove;
 
   const _AllSections({
     required this.gymId,
     required this.sections,
     required this.rejected,
+    required this.showYourVideos,
     required this.genresLoading,
     required this.genresErrored,
     required this.onSelected,
+    required this.onRemove,
   });
 
   @override
@@ -238,11 +304,10 @@ class _AllSections extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        if (!rejected)
-          YourVideosRow(
+        if (showYourVideos)
+          YourVideosFeed.preview(
+            gymId: selectedGym.gymId!,
             onViewAll: () => onSelected(1),
-            detail: selectedGym.detail,
-            gymName: selectedGym.displayName,
           ),
         _genres(),
       ],
@@ -264,7 +329,9 @@ class _AllSections extends StatelessWidget {
             : 'No videos in this feed yet.',
       );
     }
-    final genreOffset = rejected ? 1 : 2;
+    // Pills are [All] [Your videos?] [genre…]; the genre rows start after All
+    // (+ Your videos when shown), so View all jumps to i + this offset.
+    final genreOffset = showYourVideos ? 2 : 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
@@ -274,6 +341,7 @@ class _AllSections extends StatelessWidget {
             section: sections[i],
             rejected: rejected,
             onViewAll: () => onSelected(i + genreOffset),
+            onRemove: onRemove,
           ),
       ],
     );
@@ -287,11 +355,13 @@ class _PreviewRow extends StatelessWidget {
   final FeedSection section;
   final bool rejected;
   final VoidCallback onViewAll;
+  final void Function(Video)? onRemove;
 
   const _PreviewRow({
     required this.section,
     required this.rejected,
     required this.onViewAll,
+    required this.onRemove,
   });
 
   @override
@@ -311,7 +381,8 @@ class _PreviewRow extends StatelessWidget {
         ),
         HorizontalScroller(
           children: [
-            for (final v in section.videos) _tile(v, rejected: rejected),
+            for (final v in section.videos)
+              _tile(v, rejected: rejected, onRemove: onRemove),
           ],
         ),
       ],
@@ -325,12 +396,14 @@ class _TagPager extends StatefulWidget {
   final String gymId;
   final String tag;
   final bool rejected;
+  final bool enableRemove;
 
   const _TagPager({
     super.key,
     required this.gymId,
     required this.tag,
     required this.rejected,
+    required this.enableRemove,
   });
 
   @override
@@ -340,16 +413,36 @@ class _TagPager extends StatefulWidget {
 class _TagPagerState extends State<_TagPager> {
   final List<Video> _videos = [];
   int _total = 0;
+  // DB-row cursor: tracks how many rows the backend has consumed, NOT how many
+  // videos were rendered. The backend may skip rows that fail validation, so
+  // _videos.length can be less than the DB rows consumed — using _videos.length
+  // as the next offset would re-fetch already-seen rows and produce duplicates.
+  int _dbOffset = 0;
   bool _loading = false;
   bool _errored = false;
   bool _loadedFirst = false;
 
-  bool get _hasMore => _videos.length < _total;
+  bool get _hasMore => _dbOffset < _total;
 
   @override
   void initState() {
     super.initState();
     _loadMore();
+  }
+
+  /// Remove a queried video, then drop it from this grid locally — no refetch.
+  // In the rejected view the tile action is "Keep" (un-reject); otherwise it's
+  // the reject (with "why"). Either way drop the tile from this grid locally.
+  Future<void> _remove(Video video) async {
+    final ok = widget.rejected
+        ? await keepGenreVideo(context, video)
+        : await confirmAndRemoveGenreVideo(context, video);
+    if (ok && mounted) {
+      setState(() {
+        _videos.removeWhere((x) => x.videoId == video.videoId);
+        if (_total > 0) _total -= 1;
+      });
+    }
   }
 
   Future<void> _loadMore() async {
@@ -362,12 +455,13 @@ class _TagPagerState extends State<_TagPager> {
       final VideoPage page;
       final adminGymId = selectedGym.gymId;
       if (adminGymId != null) {
-        // Admin: authed real-gym endpoint (no rejected param).
+        // Admin: authed real-gym endpoint (latest run, or its rejected list).
         page = await GymContentRepository(ApiClient()).fetchVideos(
           adminGymId,
           videoType: widget.tag,
+          rejected: widget.rejected,
           limit: _kPageSize,
-          offset: _videos.length,
+          offset: _dbOffset,
         );
       } else {
         // Public browser: unauthenticated template endpoint.
@@ -375,13 +469,18 @@ class _TagPagerState extends State<_TagPager> {
           videoType: widget.tag,
           rejected: widget.rejected,
           limit: _kPageSize,
-          offset: _videos.length,
+          offset: _dbOffset,
         );
       }
       if (!mounted) return;
       setState(() {
         _videos.addAll(page.videos);
         _total = page.total;
+        // Advance the DB cursor by the page size requested, not by the number
+        // of videos returned — the backend may skip rows that fail validation,
+        // and using the rendered count as the next offset would re-fetch those
+        // rows and produce duplicate tiles.
+        _dbOffset += _kPageSize;
         _loadedFirst = true;
         _loading = false;
       });
@@ -417,7 +516,14 @@ class _TagPagerState extends State<_TagPager> {
       spacing: DesignConstants.spacingBig,
       children: [
         VideoWrapGrid(
-          tiles: [for (final v in _videos) _tile(v, rejected: widget.rejected)],
+          tiles: [
+            for (final v in _videos)
+              _tile(
+                v,
+                rejected: widget.rejected,
+                onRemove: widget.enableRemove ? _remove : null,
+              ),
+          ],
         ),
         if (_hasMore)
           Center(
@@ -431,12 +537,85 @@ class _TagPagerState extends State<_TagPager> {
   }
 }
 
-Widget _tile(Video v, {bool rejected = false}) => VideoTile(
-  thumbnail: NetworkImage(v.thumbnailUrl),
+/// Confirm-with-"why" then remove a queried (web_query) video from the admin
+/// gym's feed (the backend logs the reason). Returns true on success so the
+/// caller can drop the tile locally (no refetch). Admin only.
+Future<bool> confirmAndRemoveGenreVideo(
+  BuildContext context,
+  Video video,
+) async {
+  final adminGymId = selectedGym.gymId;
+  if (adminGymId == null) return false;
+  final reason = await VideoCurationDialog.show(
+    context,
+    videoTitle: video.title.isNotEmpty ? video.title : 'this video',
+    teachAgent: true,
+    mode: VideoCurationMode.remove,
+  );
+  if (reason == null) return false;
+  try {
+    await GymContentRepository(ApiClient()).removeVideo(
+      adminGymId,
+      video.videoId,
+      reason: reason.isEmpty ? null : reason,
+    );
+    return true;
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn’t remove that video. Try again.')),
+      );
+    }
+    return false;
+  }
+}
+
+/// Confirm-with-"why" then "Keep" a rejected video (un-reject → back to the
+/// served feed). The optional reason is stored as `accept_reason` and teaches
+/// the feed-learning refiner to surface videos like it. Returns true on success
+/// so the caller can drop it from the rejected list.
+Future<bool> keepGenreVideo(BuildContext context, Video video) async {
+  final adminGymId = selectedGym.gymId;
+  if (adminGymId == null) return false;
+  final reason = await VideoCurationDialog.show(
+    context,
+    videoTitle: video.title.isNotEmpty ? video.title : 'this video',
+    teachAgent: true,
+    mode: VideoCurationMode.keep,
+  );
+  if (reason == null) return false;
+  try {
+    await GymContentRepository(ApiClient()).keepVideo(
+      adminGymId,
+      video.videoId,
+      reason: reason.isEmpty ? null : reason,
+    );
+    return true;
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn’t keep that video. Try again.')),
+      );
+    }
+    return false;
+  }
+}
+
+Widget _tile(
+  Video v, {
+  bool rejected = false,
+  void Function(Video)? onRemove,
+}) => VideoTile(
+  // Use the stored thumbnail; show nothing when there isn't one.
+  thumbnail: v.thumbnailUrl.isNotEmpty ? NetworkImage(v.thumbnailUrl) : null,
   avatar: NetworkImage(v.channelAvatarUrl),
   title: v.title,
   meta: v.metaLabel,
   rejected: rejected,
+  onTap: () => openVideoInNewTab(v.url),
+  // When wired (admin), a real remove (with logged why); else VideoTile falls
+  // back to its internal curation dialog (public/rejected demo).
+  onRemove: onRemove != null ? () => onRemove(v) : null,
 );
 
 /// A small inline spinner for a section that's still loading (no card chrome).

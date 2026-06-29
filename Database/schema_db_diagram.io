@@ -743,7 +743,11 @@ Table video {
   relevance_index integer [not null]
   transcript_error text
   transcript text
+  gym_id uuid [note: 'owning gym for a custom owner-added video (private); NULL = shared web-query/scraped']
+  added_via video_source [not null, default: 'web_query', note: 'enum: web_query | manual — how it entered + whether deletable (web_query = reject only, manual = hard delete)']
 }
+
+Ref: video.gym_id > gyms.gym_id
 
 Table video_gym_feed {
   gym_id text [not null]
@@ -780,39 +784,49 @@ Ref: video_cost_log.gym_id > video_gym.gym_id
 // videos domain (VideosService). Separate from the template video_gym* tables.
 // ============================================================
 
+// gym_video_spec is APPEND-ONLY VERSIONED. Rows are never UPDATE'd.
+// The gym_video_spec_latest VIEW surfaces the most-recent version per gym;
+// all read paths use that view, not the table directly.
+// Three writers stamp distinct source values: admin_update (videos agent/save — src/videos/service/video_agent/),
+// system_update (presets import — src/presets/), feed_update (VideoFeedRefiner — src/videos/service/).
 Table gym_video_spec {
   spec_id uuid [primary key, default: `uuid_generate_v4()`]
-  gym_id uuid [not null, note: 'FK to gyms.gym_id (real customer gym)']
+  gym_id uuid [not null, note: 'FK to gyms.gym_id (real customer gym); NOT unique — multiple version rows per gym']
   videos_desc text [not null]
   avoid_desc text [not null]
   short_videos_desc text
   short_avoid_desc text
+  queries jsonb [not null, default: `'[]'`, note: 'array of search query strings (was gym_video_query table — now folded in)']
+  source gym_video_spec_source [not null, note: 'enum: admin_update | system_update | feed_update']
   created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    gym_id [unique, note: 'one spec per gym']
+    gym_id [note: 'non-unique — multiple versions per gym; order by created_at DESC to get latest']
   }
+}
+
+Table video_run {
+  run_id uuid [primary key, default: `gen_random_uuid()`]
+  gym_id uuid [not null, note: 'FK to gyms.gym_id']
+  created_at timestamptz [not null, default: `now()`]
 }
 
 Table gym_video_feed {
+  feed_id uuid [primary key, default: `gen_random_uuid()`, note: 'surrogate PK']
   gym_id uuid [not null, note: 'FK to gyms.gym_id']
   video_id text [not null, note: 'FK to video.video_id']
-  status video_gym_feed_status [not null, note: 'enum: good | rejected']
-
-  indexes {
-    (gym_id, video_id) [pk]
-    (gym_id, status)
-  }
+  video_run_id uuid [note: 'NULL = owner "Your videos" section (always served); set = a scan run (served only while latest)']
+  scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected']
+  curation_type gym_video_curation_type [not null, default: 'automatic', note: 'enum: automatic | manual; how the current scan_status was set']
+  curation_reason text [note: 'nullable; owner free-text reason for the latest manual curation; NULL for automatic rows']
+  rejected_at timestamptz [note: 'last rejection time; retained across re-acceptance (history)']
+  curated_at timestamptz [note: 'nullable; when the owner last manually curated this row (reject/keep/re-add)']
 }
 
-Table gym_video_query {
-  query_id uuid [primary key, default: `uuid_generate_v4()`]
-  gym_id uuid [not null, note: 'FK to gyms.gym_id']
-  query text [not null]
-}
+// gym_video_query was DROPPED — queries now live in gym_video_spec.queries JSONB.
 
 Ref: gym_video_spec.gym_id > gyms.gym_id
+Ref: video_run.gym_id > gyms.gym_id
 Ref: gym_video_feed.gym_id > gyms.gym_id
 Ref: gym_video_feed.video_id > video.video_id
-Ref: gym_video_query.gym_id > gyms.gym_id
+Ref: gym_video_feed.video_run_id > video_run.run_id
