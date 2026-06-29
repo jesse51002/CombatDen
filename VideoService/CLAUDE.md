@@ -5,13 +5,21 @@ CustomYoutubeService — renamed when the scope expanded beyond YouTube.)
 
 > **Standalone by design.** This service owns the full gym-video lifecycle:
 > gym config authoring, video pool scraping + classification, feed scanning, and
-> a read-only API consumed by other systems. Data lives in the **shared Supabase
-> Postgres** (the `video_*` tables defined in `../Database/`): the read API
-> queries it, and the pipeline scripts write it. The hand-authored gym configs
-> stay git-tracked YAML (`gyms/<id>.yaml`) and are loaded into SQL by
-> `make sync-gyms`. The Pydantic schema may still eventually fold into
-> `../FastApiBackend/`; keep the surface small. All SQL lives in `.sql` files
-> read via `sql_loader` — never inline.
+> a read-only API. Data lives in the **shared Supabase Postgres** (the `video_*`
+> tables defined in `../Database/`): the read API queries it, and the pipeline
+> scripts write it. The hand-authored gym configs stay git-tracked YAML
+> (`gyms/<id>.yaml`) and are loaded into SQL by `make sync-gyms`. All SQL lives in
+> `.sql` files read via `sql_loader` — never inline.
+>
+> **The read API has been merged into the FastApiBackend** (`../FastApiBackend/src/videos`
+> — a re-authored port keyed by the real gym UUID, with a public slug-keyed
+> template catalog + a `presets` import that copies a template into a gym's real
+> prod tables; see `Business/pivots/2026-06-24-22-videoservice-api-merged-into-backend.md`).
+> The **CRM and the public theme browser now call that backend**, not this service.
+> This read API (`src/api`, port 8002, `video.combatden.net`) stays live only as
+> the source for the member **MobileApp**, which has not been repointed yet — once
+> it is, this read API can be retired. The **batch job** (scrape / classify / scan,
+> `scripts/`) and the gym-config YAML authoring remain owned here regardless.
 
 ---
 

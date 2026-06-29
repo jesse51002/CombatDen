@@ -22,3 +22,6 @@ class GymCreate(SeedModel):
     # Stripe Connect account the backend creates products/customers/
     # subscriptions against on this gym's behalf. UNIQUE per gym.
     stripe_account_id: str | None = None
+    # ThemeService design id selected for this gym's member app (branding only;
+    # ThemeService stays a separate service). The app id is a hardcoded constant.
+    theme_design_id: str | None = None

@@ -1,7 +1,7 @@
 flowchart TB
   %% ---------- CLIENTS ----------
   MobileApp["📱 <b>MobileApp</b> — Flutter member app<br/>videos feed · gym detail · home / booking<br/>rewards / stats · style-select · core / AppConfig"]
-  CRM["🖥️ <b>CRM</b> — gym admin web (full CRM)<br/>login · Supabase auth<br/>api_client (dio + auth interceptor) · BLoC repositories → FastApiBackend<br/>members list · member detail (billing) · gym setup (Stripe Connect)<br/>members video tab (VideoService — read-only)<br/>live theme preview + showcase (ThemeService — read-only)<br/>theme-browser target · schedule board · shared widgets / deploy"]
+  CRM["🖥️ <b>CRM</b> — gym admin web (full CRM)<br/>login · Supabase auth<br/>api_client (dio + auth interceptor) · BLoC repositories → FastApiBackend<br/>members list · member detail (billing) · gym setup (Stripe Connect)<br/>members video tab (FastApiBackend videos domain)<br/>live theme preview + showcase (ThemeService — read-only)<br/>theme-browser target · schedule board · shared widgets / deploy"]
   LandingPage["🌐 <b>LandingPage</b> — React-via-CDN site<br/>hero carousel · feed demo · loyalty loop<br/>pricing table · hifi/ copy + ds · S3 deploy"]
 
   %% ---------- THEME SERVICE: creation vs api (separate) ----------
@@ -38,7 +38,7 @@ flowchart TB
     VSc_gym --> VSc_scrape --> VSc_scan --> VSc_writer
     VSc_sync --> VSc_writer
   end
-  subgraph VS_api["🎬 VideoService · READ API"]
+  subgraph VS_api["🎬 VideoService · READ API (MobileApp source — transitional)"]
     direction TB
     VSa_api["read API<br/>/gyms · /gyms/{id} · /videos"]
     VSa_svc["service layer<br/>feed · avatar fallback"]
@@ -46,15 +46,15 @@ flowchart TB
   end
 
   %% ---------- BACKEND + DATABASE ----------
-  subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (not deployed)"]
+  subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts"]
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + LLM spec/agent authoring · Pydantic AI)<br/>presets (template catalog + import) · theme (gym showcase)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator · VideoSpecAuthoring · VideoFeedRefiner<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
   end
-  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract<br/>tables: member · gym · rank/reward · membership/billing · class · video_*"]
+  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract<br/>tables: member · gym · rank/reward · membership/billing · class · video_* · gym_video_*"]
 
   %% ---------- EXTERNAL ----------
   Stripe["Stripe"]
@@ -64,13 +64,13 @@ flowchart TB
   GoogleFonts["Google Fonts"]
   Recraft["Recraft"]
   CDN["S3 + CloudFront CDN<br/>cdn.combatden.net"]
+  LLMProvider["🤖 Anthropic / LLM<br/>agent: Pydantic AI (AnthropicModel)<br/>regular calls: litellm (LiteLLMClient)<br/>default claude-sonnet-4-6"]
 
   %% ---------- CROSS-SYSTEM (root siblings only) ----------
   MobileApp -->|"GET /apps/{id}/styles"| TS_api
   MobileApp -->|"GET /gyms · /videos"| VS_api
   CRM -->|"live theme preview"| TS_api
-  CRM -->|"member feed (read-only)"| VS_api
-  CRM -->|"authd API"| FastApiBackend
+  CRM -->|"authd API (billing + video content)"| FastApiBackend
   CRM -->|"Supabase Auth (login)"| Database
   LandingPage -->|"links to themes.combatden.net"| CRM
   LandingPage -.->|"build-time screenshots"| MobileApp
@@ -88,11 +88,12 @@ flowchart TB
   VS_api -->|"read video_* tables"| Database
   FastApiBackend -->|"read/write · Supabase Auth"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
+  FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   class MobileApp,CRM,LandingPage client;
-  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN ext;
+  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN,LLMProvider ext;
   style TS_create fill:#dff0e6,stroke:#2f8f53;
   style TS_api fill:#eafff2,stroke:#2f8f53;
   style VS_create fill:#dff0e6,stroke:#2f8f53;

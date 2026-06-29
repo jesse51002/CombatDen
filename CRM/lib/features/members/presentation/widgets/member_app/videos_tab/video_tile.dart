@@ -15,14 +15,22 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 /// [rejected] flips the action to a green "Keep this video" (the tile is one
 /// the scan rejected, shown in the rejected section so the admin can keep it
 /// back) instead of the red Remove.
+///
+/// [onTap] makes the thumbnail clickable — used to open the video's watch page
+/// in a new browser tab. [onRemove], when given (the gym's own "Your videos"
+/// feed), wires the red Remove straight to a real backend delete; without it,
+/// Remove falls back to the curation dialog used by the member-preview feed.
 class VideoTile extends StatelessWidget {
-  final ImageProvider thumbnail;
+  // Null (or a URL that fails to load) shows NO thumbnail — no placeholder box.
+  final ImageProvider? thumbnail;
   final ImageProvider avatar;
   final String title;
   final String meta;
   final String? pillLabel;
   final bool showEdit;
   final bool rejected;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
 
   const VideoTile({
     super.key,
@@ -33,6 +41,8 @@ class VideoTile extends StatelessWidget {
     this.pillLabel,
     this.showEdit = false,
     this.rejected = false,
+    this.onTap,
+    this.onRemove,
   });
 
   static const double _kWidth = 280;
@@ -51,17 +61,22 @@ class VideoTile extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingLarge,
           children: [
-            _Thumbnail(
-              image: thumbnail,
-              pillLabel: pillLabel,
-              rejected: rejected,
-            ),
+            // No thumbnail → render nothing (no placeholder); the info then
+            // gets its own top padding below.
+            if (thumbnail != null) ...[
+              _Thumbnail(
+                image: thumbnail!,
+                pillLabel: pillLabel,
+                rejected: rejected,
+                onTap: onTap,
+              ),
+              const SizedBox(height: DesignConstants.spacingLarge),
+            ],
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 DesignConstants.spacingMedium,
-                0,
+                thumbnail != null ? 0 : DesignConstants.spacingMedium,
                 DesignConstants.spacingMedium,
                 DesignConstants.spacingMedium,
               ),
@@ -73,6 +88,7 @@ class VideoTile extends StatelessWidget {
                   _Actions(
                     showEdit: showEdit,
                     rejected: rejected,
+                    onRemove: onRemove,
                     onPrimary: () => VideoCurationDialog.show(
                       context,
                       videoTitle: title,
@@ -96,16 +112,18 @@ class _Thumbnail extends StatelessWidget {
   final ImageProvider image;
   final String? pillLabel;
   final bool rejected;
+  final VoidCallback? onTap;
 
   const _Thumbnail({
     required this.image,
     required this.pillLabel,
     required this.rejected,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final thumb = SizedBox(
       height: VideoTile._kThumbHeight,
       child: Stack(
         fit: StackFit.expand,
@@ -113,7 +131,9 @@ class _Thumbnail extends StatelessWidget {
           Image(
             image: image,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => ColoredBox(color: DesignConstants.card),
+            // A stored thumbnail that won't load (e.g. a maxres URL that 404s for
+            // a non-HD video) shows nothing rather than a placeholder box.
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
           // A rejected tile takes the corner marker (solid red) so it's clear
           // at a glance; otherwise show the optional content pill.
@@ -134,6 +154,12 @@ class _Thumbnail extends StatelessWidget {
             ),
         ],
       ),
+    );
+    if (onTap == null) return thumb;
+    // Clickable thumbnail → opens the video (a new browser tab on web).
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: thumb),
     );
   }
 }
@@ -222,27 +248,33 @@ class _Actions extends StatelessWidget {
   final bool showEdit;
   final bool rejected;
   final VoidCallback onPrimary;
+  final VoidCallback? onRemove;
 
   const _Actions({
     required this.showEdit,
     required this.rejected,
     required this.onPrimary,
+    this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
     if (rejected) {
+      // The wired action (real un-reject) when given; else the demo dialog.
       return _ActionButton(
         label: 'Keep this video',
         color: DesignConstants.goodGreen,
-        onPressed: onPrimary,
+        onPressed: onRemove ?? onPrimary,
       );
     }
+    // A real backend delete (Your videos) when wired; otherwise the
+    // member-preview curation dialog.
+    final removeAction = onRemove ?? onPrimary;
     if (!showEdit) {
       return _ActionButton(
         label: 'Remove',
-        color: DesignConstants.redDark,
-        onPressed: onPrimary,
+        color: DesignConstants.badRed,
+        onPressed: removeAction,
       );
     }
     return Row(
@@ -258,8 +290,8 @@ class _Actions extends StatelessWidget {
         Expanded(
           child: _ActionButton(
             label: 'Remove',
-            color: DesignConstants.redDark,
-            onPressed: onPrimary,
+            color: DesignConstants.badRed,
+            onPressed: removeAction,
           ),
         ),
       ],
@@ -284,7 +316,7 @@ class _ActionButton extends StatelessWidget {
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
-        foregroundColor: DesignConstants.text,
+        foregroundColor: DesignConstants.onAccent,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
           horizontal: DesignConstants.paddingSmall,
@@ -294,7 +326,11 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
         ),
       ),
-      child: Text(label, style: DesignConstants.h3),
+      // Light label for contrast on the saturated red/green fills.
+      child: Text(
+        label,
+        style: DesignConstants.h3.copyWith(color: DesignConstants.onAccent),
+      ),
     );
   }
 }

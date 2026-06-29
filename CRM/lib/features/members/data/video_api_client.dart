@@ -4,14 +4,13 @@ import 'package:http/http.dart' as http;
 
 import 'package:crm/features/members/data/video_feed.dart';
 
-/// Read-only client for the public VideoService. This is part of the
-/// prototype's read-only VideoService carve-out: the member feed is pulled
-/// live so the admin previews real thumbnails, not mock art.
+/// Read-only client for the public backend video templates API. The member
+/// feed is pulled live so the admin previews real thumbnails, not mock art.
 ///
-/// Base URL defaults to localhost; override at launch with
-/// `--dart-define=VIDEO_BASE_URL=http://<host>:8002`. The feed is fetched by
-/// **gym** ([gymId]) — the selected gym — and paginated server-side, so the
-/// preview's videos change with the selected gym.
+/// Base URL defaults to the FastApiBackend localhost; override at launch with
+/// `--dart-define=BACKEND_BASE_URL=http://<host>:8000`. The feed is fetched
+/// by **video_gym** slug ([gymId]) and paginated server-side, so the preview's
+/// videos change with the selected gym.
 class VideoApiClient {
   VideoApiClient({
     String? baseUrl,
@@ -22,15 +21,16 @@ class VideoApiClient {
   final String gymId;
 
   static const String _kDefaultBaseUrl = String.fromEnvironment(
-    'VIDEO_BASE_URL',
-    defaultValue: 'http://localhost:8002',
+    'BACKEND_BASE_URL',
+    defaultValue: 'http://localhost:8000',
   );
 
   // Generous so a cold call that hydrates a big feed (or the one-shot preview)
   // has room to finish instead of failing a row.
   static const Duration _kTimeout = Duration(seconds: 30);
 
-  /// `GET /gyms/{gymId}/videos` — one page of the gym's feed.
+  /// `GET /api/v1/presets/templates/{gymId}/videos` — one page of the
+  /// template's feed.
   ///
   /// Each genre section fetches its own slice: pass [videoType] to filter to a
   /// single genre, [limit]/[offset] to page. Set [rejected] to pull the scan's
@@ -45,7 +45,9 @@ class VideoApiClient {
     int limit = 20,
     int offset = 0,
   }) async {
-    final uri = Uri.parse('$baseUrl/gyms/$gymId/videos').replace(
+    final uri = Uri.parse(
+      '$baseUrl/api/v1/presets/templates/$gymId/videos',
+    ).replace(
       queryParameters: {
         'limit': '$limit',
         'offset': '$offset',
@@ -71,16 +73,18 @@ class VideoApiClient {
     throw Exception('Video feed response missing a videos array');
   }
 
-  /// `GET /gyms/{gymId}/videos/preview` — the whole "All" view in ONE request:
-  /// one [FeedSection] per genre in the feed, each capped to [perTag] videos,
-  /// sampled server-side so no genre is starved. Replaces firing a request per
-  /// genre row (which saturated the browser's connection limit and timed out).
-  /// [rejected] previews the scan's rejected list. Throws so the UI can degrade.
+  /// `GET /api/v1/presets/templates/{gymId}/videos/preview` — the whole "All"
+  /// view in ONE request: one [FeedSection] per genre, each capped to [perTag]
+  /// videos, sampled server-side so no genre is starved. Replaces firing a
+  /// request per genre row. [rejected] previews the scan's rejected list.
+  /// Throws so the UI can degrade.
   Future<List<FeedSection>> fetchPreview({
     bool rejected = false,
     int perTag = 10,
   }) async {
-    final uri = Uri.parse('$baseUrl/gyms/$gymId/videos/preview').replace(
+    final uri = Uri.parse(
+      '$baseUrl/api/v1/presets/templates/$gymId/videos/preview',
+    ).replace(
       queryParameters: {
         'per_tag': '$perTag',
         if (rejected) 'rejected': 'true',

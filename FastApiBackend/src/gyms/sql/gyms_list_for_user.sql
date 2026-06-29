@@ -6,6 +6,7 @@ SELECT g.gym_id,
        g.gym_name,
        g.gym_description,
        g.timezone,
+       g.theme_design_id,
        ge.employee_type,
        ge.theme_preference
 FROM gyms g

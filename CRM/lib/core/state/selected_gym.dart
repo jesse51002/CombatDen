@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/members/data/gym_api_client.dart';
+import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/gym_detail.dart';
 
 /// The app-wide **selected gym** — and it carries **two distinct gym ids**,
@@ -77,6 +79,28 @@ class SelectedGym extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update the VideoService content gym id after a preset import, and (in the
+  /// admin context) re-fetch the real gym's showcase so the preview surfaces
+  /// immediately reflect the imported content.
+  ///
+  /// **Does NOT touch the theme.** Theme selection/application is the Theme
+  /// tab's job — a preset import from Settings only changes content, never the
+  /// live design. (The imported theme id is persisted server-side on the gym;
+  /// the Theme tab reads/applies it.) This avoids the engine-not-ready throw
+  /// that would otherwise surface when importing before the Theme tab has booted
+  /// the theme runtime.
+  ///
+  /// Keeps the two id spaces ([gymId] / [videoGymId]) intact — only the video
+  /// content key changes here; the real gym UUID is untouched.
+  void setVideoGymId({required String videoGymId}) {
+    _videoGymId = videoGymId;
+    // Admin: re-fetch showcase so Loyalty/classes/schedule reflect the import.
+    if (_gymId != null) {
+      _fetchDetail(videoGymId);
+    }
+    notifyListeners();
+  }
+
   /// Clear all selection on sign-out — both the admin gym ([gymId]/[role]) and
   /// the VideoService content selection — so the next authenticated session
   /// resolves gyms from scratch. Without this, [gymId] persists past logout and
@@ -139,18 +163,41 @@ class SelectedGym extends ChangeNotifier {
     _error = null;
     _isLoading = true;
     notifyListeners();
-    try {
-      final detail = await _client.fetchGym(videoGymId);
-      // A newer selection may have superseded this fetch — drop the stale one.
-      if (_videoGymId != videoGymId) return;
-      _detail = detail;
-    } catch (e) {
-      if (_videoGymId != videoGymId) return;
-      _error = e;
-    } finally {
-      if (_videoGymId == videoGymId) {
-        _isLoading = false;
-        notifyListeners();
+    if (_gymId != null) {
+      // Admin path: fetch real gym showcase via authed ApiClient.
+      // Guard staleness on the real gym UUID — if the admin switches gyms
+      // (sign-out / gym picker) during the fetch, drop the stale result.
+      final gymIdAtStart = _gymId!;
+      try {
+        final detail = await GymContentRepository(
+          ApiClient(),
+        ).fetchShowcase(gymIdAtStart);
+        if (_gymId != gymIdAtStart) return;
+        _detail = detail;
+      } catch (e) {
+        if (_gymId != gymIdAtStart) return;
+        _error = e;
+      } finally {
+        if (_gymId == gymIdAtStart) {
+          _isLoading = false;
+          notifyListeners();
+        }
+      }
+    } else {
+      // Public browser path: fetch template by video_gym slug (unauthenticated).
+      // Guard staleness on the slug — a newer picker selection supersedes this.
+      try {
+        final detail = await _client.fetchGym(videoGymId);
+        if (_videoGymId != videoGymId) return;
+        _detail = detail;
+      } catch (e) {
+        if (_videoGymId != videoGymId) return;
+        _error = e;
+      } finally {
+        if (_videoGymId == videoGymId) {
+          _isLoading = false;
+          notifyListeners();
+        }
       }
     }
   }

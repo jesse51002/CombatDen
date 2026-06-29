@@ -20,7 +20,7 @@ class AgentMessageBubble extends StatelessWidget {
             color: DesignConstants.card,
             borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
           ),
-          child: Text(text, style: DesignConstants.p),
+          child: Text(text, style: DesignConstants.h3Regular),
         ),
       ),
     );

@@ -56,6 +56,27 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
+    # YouTube Data API v3 — used when an owner adds a single video to a gym's
+    # feed: the backend fetches the real title / channel / thumbnail / views /
+    # duration / channel avatar for that id. Same key family the VideoService
+    # scraper uses (a Google API key, ``AIza…``); set ``YOUTUBE_API_KEY`` in .env.
+    youtube_api_key: str
+    youtube_data_api_base_url: str = "https://www.googleapis.com/youtube/v3"
+
+    # LLM layer for the videos domain. Two separate model settings because the
+    # single-shot structured calls (query gen, feed refiner) use litellm (with its
+    # ``provider/name`` format), while the conversational agent uses Pydantic AI's
+    # explicit ``AnthropicModel`` (bare model name only). Keys default to empty so
+    # the backend boots without them; set the relevant key in .env to enable calls.
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    # litellm model string for VideoQueryGenerator + VideoFeedRefiner.
+    video_llm_model: str = "anthropic/claude-sonnet-4-6"
+    # Bare Anthropic model name for the Pydantic AI VideoAgentService.
+    video_agent_model: str = "claude-sonnet-4-6"
+    video_agent_retries: int = 3
+
     # Logging Configuration
     log_level: str = "DEBUG"
 
@@ -123,6 +144,12 @@ class Settings(BaseSettings):
     task_item_max_attempts: int = 3
     task_item_retry_delay_seconds: int = 10
     task_stale_running_seconds: int = 120
+
+    # Presets: email allowlist for the preset import endpoint.
+    # Comma-separated; controls who may call POST /api/v1/gyms/{id}/presets/import.
+    # The import itself is a real production write path — this gate is a demo
+    # control only, not a security boundary (the owner check still applies).
+    preset_import_allowed_emails: str = "owner1@test.com"
 
 
 settings = Settings()

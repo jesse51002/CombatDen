@@ -70,6 +70,8 @@ from src.payments.service.subscription import (
 from src.plans.service.plans_service import (
     MembershipPlansService,
 )
+from src.presets.service.presets_service import PresetsService
+from src.presets.service.presets_template_service import PresetsTemplateService
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -96,6 +98,7 @@ from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.litellm_client import LiteLLMClient
 from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
 from src.shared.resource_lock import ResourceLock
@@ -138,6 +141,15 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refiner import VideoFeedRefiner
+from src.videos.service.video_feed_service import VideoFeedService
+from src.videos.service.video_query_generator import VideoQueryGenerator
+from src.videos.service.video_spec_authoring import VideoSpecAuthoring
+from src.videos.service.video_spec_service import VideoSpecService
+from src.videos.service.videos_service import VideosService
+from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -164,6 +176,9 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
             "src.tasks.tasks_router",
+            "src.videos.videos_router",
+            "src.presets.presets_router",
+            "src.theme.theme_router",
         ],
     )
 
@@ -190,6 +205,92 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Waivers: plain gym config (versioned documents + read-only e-sign
     # tracking), no Stripe.
     waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
+
+    # Videos: the slug-keyed template catalog + a real gym's live
+    # feed/spec/showcase from the gym_video_* tables, plus the owner's feed
+    # add/remove. The add fetches real metadata from the YouTube Data API. No
+    # Stripe.
+    youtube_metadata_client = providers.Singleton(
+        YouTubeMetadataClient,
+        api_key=settings.youtube_api_key,
+        base_url=settings.youtube_data_api_base_url,
+    )
+
+    # Video spec domain: the LLM authoring surface for a gym's append-only spec
+    # (keep/avoid criteria + search queries). litellm drives the single-shot
+    # structured calls; Pydantic AI drives the conversational agent. Keys default
+    # to empty so the backend boots without them. No Stripe.
+    # Sub-services are defined BEFORE videos_service (the facade that composes them).
+    litellm_client = providers.Singleton(
+        LiteLLMClient,
+        anthropic_api_key=settings.anthropic_api_key,
+        openai_api_key=settings.openai_api_key,
+        gemini_api_key=settings.gemini_api_key,
+    )
+    video_spec_service = providers.Singleton(
+        VideoSpecService,
+        db_pool=db_pool,
+    )
+    video_query_generator = providers.Singleton(
+        VideoQueryGenerator,
+        litellm_client=litellm_client,
+        model=settings.video_llm_model,
+    )
+    video_spec_authoring = providers.Singleton(
+        VideoSpecAuthoring,
+        spec_service=video_spec_service,
+        query_generator=video_query_generator,
+    )
+    video_feed_refiner = providers.Singleton(
+        VideoFeedRefiner,
+        db_pool=db_pool,
+        spec_service=video_spec_service,
+        litellm_client=litellm_client,
+        model=settings.video_llm_model,
+        authoring=video_spec_authoring,
+    )
+    # Concern services — stateless, composed by the facade.
+    video_feed_service = providers.Factory(
+        VideoFeedService,
+        db_pool=db_pool,
+        youtube_client=youtube_metadata_client,
+    )
+    # Facade: composes feed + spec sub-services. Template catalog reads are in
+    # PresetsTemplateService; showcase reads are in ThemeShowcaseService.
+    videos_service = providers.Factory(
+        VideosService,
+        feed_service=video_feed_service,
+        spec_service=video_spec_service,
+        authoring=video_spec_authoring,
+        feed_refiner=video_feed_refiner,
+    )
+    # Theme: branded class/reward cards for the showcase surface.
+    theme_showcase_service = providers.Factory(
+        ThemeShowcaseService,
+        db_pool=db_pool,
+    )
+    # Presets: template catalog reads (list, detail, feed ids).
+    presets_template_service = providers.Factory(
+        PresetsTemplateService,
+        db_pool=db_pool,
+    )
+    # The conversational agent builds its Pydantic AI Agent internally with an
+    # explicit AnthropicModel — no env writes. Singleton: VideoAgentService has
+    # no per-request mutable state (message history + gym_id are call arguments,
+    # not instance state). The injected videos_service (and its deps) are also
+    # stateless per-request — DB calls go through async context managers on the
+    # shared pool, so pinning one instance is safe.
+    video_agent_service = providers.Singleton(
+        VideoAgentService,
+        videos_service=videos_service,
+        model_name=settings.video_agent_model,
+        retries=settings.video_agent_retries,
+        anthropic_api_key=settings.anthropic_api_key,
+    )
+
+    # Presets: transactional import of a video_gym template into a real gym's
+    # production tables. Owner-gated + email allowlist. No Stripe.
+    presets_service = providers.Factory(PresetsService, db_pool=db_pool)
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).

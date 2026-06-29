@@ -55,7 +55,7 @@ const List<NavSection> kNavSections = [
   ),
   NavSection(
     icon: Symbols.group_sharp,
-    label: 'Members',
+    label: 'People',
     route: AppRoutes.members,
   ),
   NavSection(
@@ -78,11 +78,6 @@ const List<NavSection> kNavSections = [
     label: 'Member App',
     railLabel: 'Member\nApp',
     route: AppRoutes.memberAppPreview,
-  ),
-  NavSection(
-    icon: Symbols.badge_sharp,
-    label: 'Employees',
-    route: AppRoutes.employees,
   ),
   NavSection(
     icon: Symbols.settings_sharp,

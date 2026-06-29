@@ -25,8 +25,8 @@ gym-check:
 # Run after the migration creates the video_* tables.
 # Usage: make sync-gyms GYM_ID=vinyasa  (GYM_ID=all for every gym).
 # Targets the local DB (.env) by default; ENV_FILE=.env.prod targets prod, e.g.
-#   ENV_FILE=.env.prod make sync GYM_ID=all
-sync:
+#   ENV_FILE=.env.prod make sync-gyms GYM_ID=all
+sync-gyms:
 	poetry run python -m scripts.sync_gyms.run $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
 	poetry run python -m scripts.import_yaml.run --skip-cost-log
 
@@ -35,7 +35,7 @@ sync:
 # before any write so you can confirm you're hitting prod. ENV_FILE propagates
 # through the sync-gyms call, so this runs the sync + import against prod.
 # Usage: make sync-gyms-prod GYM_ID=all
-sync-prod:
+sync-gyms-prod:
 	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
 
 # Scrape + classify the shared pool in one run: gather the gyms' queries, fetch

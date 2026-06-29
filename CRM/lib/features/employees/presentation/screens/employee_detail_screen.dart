@@ -12,7 +12,7 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// Employees table.
 ///
 /// Composition (left to right), matching the member detail screen:
-///   1. SectionsBar (via AppShell, active item = Employees)
+///   1. SectionsBar (via AppShell, active item = People)
 ///   2. The employee profile (de-carded sections, hairline-separated)
 ///   3. A right rail to jump between employees without going back
 ///
@@ -27,7 +27,9 @@ class EmployeeDetailScreen extends StatelessWidget {
     final employee = _resolveEmployee(context);
 
     return AppShell(
-      activeRoute: AppRoutes.employees,
+      // The People rail item is routed at /members; pin to it so it stays lit
+      // on employee detail (the Employees tab lives under the People screen).
+      activeRoute: AppRoutes.members,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
