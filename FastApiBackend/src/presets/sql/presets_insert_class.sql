@@ -13,5 +13,10 @@ INSERT INTO gym_classes (
     TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE,
     CAST(:instructor_id AS UUID), CAST(:instructor_id AS UUID), CAST(:instructor_id AS UUID),
     CAST(:instructor_id AS UUID), CAST(:instructor_id AS UUID),
-    CURRENT_DATE
+    -- Backdated ~35 days so the weekly recurrence already covers the past month
+    -- (the seeded class_history + attendance window) AND the current week. The
+    -- schedule board expands from start_date forward, so this only means the
+    -- class "has been running" for a month — the live board is unaffected.
+    CAST(CURRENT_DATE - INTERVAL '35 days' AS DATE)
 )
+RETURNING class_id, start_date

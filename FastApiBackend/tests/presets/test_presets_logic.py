@@ -19,18 +19,19 @@ from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
 from src.presets.service.presets_service import (
-    _DEFAULT_CLASS_TIME,
+    _CLASS_TIME_SLOTS,
     PresetsService,
 )
 from src.presets.service.presets_template_service import PresetsTemplateService
 from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup
 
 
-def test_default_class_time_is_a_time_not_a_string():
-    # Regression: the synthesized class_time is bound to a Postgres TIME param,
+def test_class_time_slots_are_times_not_strings():
+    # Regression: each synthesized class_time is bound to a Postgres TIME param,
     # and asyncpg's TIME codec requires a datetime.time — a "HH:MM" string fails
     # with "'str' object has no attribute 'hour'" and rolls back the import.
-    assert isinstance(_DEFAULT_CLASS_TIME, time)
+    assert _CLASS_TIME_SLOTS  # non-empty so the modulo cycle is well-defined
+    assert all(isinstance(slot, time) for slot in _CLASS_TIME_SLOTS)
 
 
 def test_split_name_two_parts():

@@ -350,8 +350,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # Presets: transactional import of a video_gym template into a real gym's
-    # production tables. Owner-gated + email allowlist. No Stripe.
-    presets_service = providers.Factory(PresetsService, db_pool=db_pool)
+    # production tables. Owner-gated + email allowlist. No Stripe. Reuses the
+    # canonical classes_expander to seed each imported class's past month of
+    # class_history + attendance (so the demo gym shows realistic counts).
+    presets_service = providers.Factory(
+        PresetsService, db_pool=db_pool, expander=classes_expander
+    )
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).

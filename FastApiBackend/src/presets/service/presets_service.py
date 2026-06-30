@@ -17,26 +17,50 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import time
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
+from schema.gym_class import RecurringUnit
 from schema.video import GymVideoSpecSource
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.classes.schema.classes_expander_schema import ExpanderClass
+from src.classes.service.classes_expander import ClassesExpander
 from src.presets import SQL_DIR
 from src.presets.schema.presets_schema import PresetImportResponse
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 # ── Synthesised schedule defaults ────────────────────────────────────────────
-# These values are applied to every imported class because the template does
-# not carry a time-of-day or duration — the owner edits them after import.
-# class_time MUST be a datetime.time (not a "HH:MM" string): the SQL binds it to
-# a Postgres TIME parameter, and asyncpg's TIME codec requires a time object.
-_DEFAULT_CLASS_TIME = time(9, 0)
+# The template carries no time-of-day or duration, so the import synthesises a
+# realistic schedule. Class times cycle through _CLASS_TIME_SLOTS by index so an
+# imported lineup spreads across the day (early-morning → evening) instead of all
+# landing at one hour; duration/points stay fixed defaults the owner edits later.
+# Each slot MUST be a datetime.time (not a "HH:MM" string): the SQL binds it to a
+# Postgres TIME parameter, and asyncpg's TIME codec requires a time object.
+_CLASS_TIME_SLOTS = [
+    time(6, 0),
+    time(7, 30),
+    time(9, 0),
+    time(12, 0),
+    time(17, 0),
+    time(18, 30),
+    time(20, 0),
+]
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
+
+# Past-history seeding: how far back to materialize class_history + attendance so
+# a freshly-imported gym shows realistic attendance counts. Occurrences are
+# expanded over [today - _PAST_HISTORY_DAYS, today] and only the past ones kept.
+_PAST_HISTORY_DAYS = 30
+# Attendance spread per occurrence: draw a random subset (0..MAX_FRACTION) of the
+# eligible attendee pool, plus an explicit empty chance, so the seeded history is
+# a realistic mix of busy, lightly-attended, and empty occurrences.
+_ATTENDANCE_MAX_FRACTION = 0.6
+_EMPTY_OCCURRENCE_CHANCE = 0.15
 
 # Demo: how many of the imported videos to re-mark as 'manual' so the gym's
 # "Your videos" section isn't empty right after an import.
@@ -45,12 +69,24 @@ _MANUAL_SEED_COUNT = 3
 # Fallback last-name when an instructor is listed under a single word only.
 _FALLBACK_LAST_NAME = "Coach"
 
+# The eligible attendee pool for past-occurrence seeding: one (member_id,
+# plan_id, item_id) tuple per member who holds any synced membership. The
+# membership pins the NOT-NULL attendance attribution; it need NOT span the
+# occurrence date (demo check-ins are attributed loosely).
+_AttendeePool = list[tuple[UUID, UUID, UUID]]
+
 
 class PresetsService:
     """Transactionally imports a video_gym template into a real gym's tables."""
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self, db_pool: DirectDatabasePool, expander: ClassesExpander
+    ) -> None:
         self._db = db_pool
+        # The canonical recurrence expander (pure, stateless) — reused to
+        # materialize each imported class's past occurrences exactly as the live
+        # board / check-in paths would, so seeded history can never disagree.
+        self._expander = expander
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -88,6 +124,12 @@ class PresetsService:
         count_owner_sql = load_sql(SQL_DIR / "presets_count_owner_feed.sql")
         soft_delete_classes_sql = load_sql(
             SQL_DIR / "presets_soft_delete_classes.sql"
+        )
+        delete_attendance_sql = load_sql(
+            SQL_DIR / "presets_delete_attendance.sql"
+        )
+        delete_class_history_sql = load_sql(
+            SQL_DIR / "presets_delete_class_history.sql"
         )
         insert_class_sql = load_sql(SQL_DIR / "presets_insert_class.sql")
         deactivate_rewards_sql = load_sql(
@@ -180,15 +222,26 @@ class PresetsService:
             else:
                 videos_imported = 0
 
-            # ── Classes + instructors (soft-delete then insert) ───────────
+            # ── Classes + instructors (reset, insert, then seed history) ──
+            # Reset: soft-delete prior classes and hard-wipe this gym's seeded
+            # class_history + attendance (FK order: attendance before history)
+            # so a re-import (demo reset) regenerates a clean past month instead
+            # of piling up duplicate occurrences.
             await session.execute(
                 text(soft_delete_classes_sql), {"gym_id": gym_id_str}
+            )
+            await session.execute(
+                text(delete_attendance_sql), {"gym_id": gym_id_str}
+            )
+            await session.execute(
+                text(delete_class_history_sql), {"gym_id": gym_id_str}
             )
             trainer_cache: dict[tuple[str, str], str] = {}
             classes = (
                 self._as_list(row["classes"]) if row["has_classes"] else []
             )
-            for c in classes:
+            expander_classes: list[ExpanderClass] = []
+            for i, c in enumerate(classes):
                 first, last = self._split_name(c["instructor_name"])
                 emp_id = await self._resolve_trainer(
                     session=session,
@@ -199,19 +252,38 @@ class PresetsService:
                     bio=c["instructor_bio"],
                     cache=trainer_cache,
                 )
-                await session.execute(
-                    text(insert_class_sql),
-                    {
-                        "gym_id": gym_id_str,
-                        "class_name": c["name"],
-                        "class_description": c["description"],
-                        "image_url": c["image_url"],
-                        "points_worth": _DEFAULT_POINTS_WORTH,
-                        "class_time": _DEFAULT_CLASS_TIME,
-                        "duration_minutes": _DEFAULT_DURATION_MINUTES,
-                        "instructor_id": emp_id,
-                    },
+                # Spread class start times across the day by index.
+                class_time = _CLASS_TIME_SLOTS[i % len(_CLASS_TIME_SLOTS)]
+                inserted = (
+                    await session.execute(
+                        text(insert_class_sql),
+                        {
+                            "gym_id": gym_id_str,
+                            "class_name": c["name"],
+                            "class_description": c["description"],
+                            "image_url": c["image_url"],
+                            "points_worth": _DEFAULT_POINTS_WORTH,
+                            "class_time": class_time,
+                            "duration_minutes": _DEFAULT_DURATION_MINUTES,
+                            "instructor_id": emp_id,
+                        },
+                    )
+                ).mappings().fetchone()
+                expander_classes.append(
+                    self._to_expander_class(
+                        class_id=inserted["class_id"],
+                        gym_id=gym_id,
+                        class_time=class_time,
+                        instructor_id=emp_id,
+                        start_date=inserted["start_date"],
+                    )
                 )
+
+            # Seed the past month of class_history + attendance for these
+            # classes so the imported gym shows realistic attendance counts.
+            await self._seed_history_and_attendance(
+                session, gym_id_str, expander_classes
+            )
 
             # ── Rewards (deactivate then insert) ──────────────────────────
             await session.execute(
@@ -240,6 +312,211 @@ class PresetsService:
             rewards_imported=len(rewards),
             theme_design_id=row["theme"],
         )
+
+    # ── Class history + attendance seeding ─────────────────────────────────────
+
+    def _to_expander_class(
+        self,
+        class_id: UUID,
+        gym_id: UUID,
+        class_time: time,
+        instructor_id: str,
+        start_date: date,
+    ) -> ExpanderClass:
+        """Project a just-inserted preset class onto the expander contract.
+
+        Preset classes are always weekly Mon–Fri (the insert SQL hard-codes the
+        flags) with one instructor across every weekday and no end date, so the
+        expander reproduces exactly the occurrences the live board would show.
+        """
+        return ExpanderClass(
+            class_id=class_id,
+            gym_id=gym_id,
+            class_time=class_time,
+            duration_minutes=_DEFAULT_DURATION_MINUTES,
+            recurring_unit=RecurringUnit.weekly,
+            recurring_interval=1,
+            mon=True,
+            tue=True,
+            wed=True,
+            thu=True,
+            fri=True,
+            sat=False,
+            sun=False,
+            mon_instructor_id=instructor_id,
+            tue_instructor_id=instructor_id,
+            wed_instructor_id=instructor_id,
+            thu_instructor_id=instructor_id,
+            fri_instructor_id=instructor_id,
+            start_date=start_date,
+            end_date=None,
+        )
+
+    async def _seed_history_and_attendance(
+        self,
+        session: AsyncSession,
+        gym_id_str: str,
+        expander_classes: list[ExpanderClass],
+    ) -> None:
+        """Materialize the past month of class_history + attendance.
+
+        For each imported class, expand its occurrences over
+        ``[today - _PAST_HISTORY_DAYS, today]`` via the canonical expander, keep
+        only the ones that have already occurred, write a ``class_history`` row
+        per occurrence, and attribute a random subset of the gym's eligible
+        members to it. Eligibility is date-independent for this demo seed: any
+        member holding a synced membership can attend any past occurrence,
+        attributed to one of their memberships (NOT-NULL plan_id/item_id) — so
+        attendance spreads evenly across the whole month instead of bunching on
+        the dates that members' memberships happen to span. A no-op when the
+        import wrote no classes.
+        """
+        if not expander_classes:
+            return
+
+        gym_tz = (
+            await session.execute(
+                text(load_sql(SQL_DIR / "presets_load_gym_timezone.sql")),
+                {"gym_id": gym_id_str},
+            )
+        ).scalar_one()
+        membership_rows = (
+            await session.execute(
+                text(load_sql(SQL_DIR / "presets_load_gym_memberships.sql")),
+                {"gym_id": gym_id_str},
+            )
+        ).mappings().all()
+
+        today = date.today()
+        window_start = today - timedelta(days=_PAST_HISTORY_DAYS)
+        now = datetime.now(UTC)
+        pool = self._eligible_attendees(membership_rows)
+
+        insert_history_sql = load_sql(
+            SQL_DIR / "presets_insert_class_history.sql"
+        )
+        insert_attendance_sql = load_sql(
+            SQL_DIR / "presets_insert_attendance.sql"
+        )
+        for gym_class in expander_classes:
+            await self._seed_one_class(
+                session=session,
+                gym_id_str=gym_id_str,
+                gym_class=gym_class,
+                gym_tz=gym_tz,
+                window_start=window_start,
+                window_end=today,
+                now=now,
+                pool=pool,
+                insert_history_sql=insert_history_sql,
+                insert_attendance_sql=insert_attendance_sql,
+            )
+
+    async def _seed_one_class(
+        self,
+        session: AsyncSession,
+        gym_id_str: str,
+        gym_class: ExpanderClass,
+        gym_tz: str,
+        window_start: date,
+        window_end: date,
+        now: datetime,
+        pool: _AttendeePool,
+        insert_history_sql: str,
+        insert_attendance_sql: str,
+    ) -> None:
+        """Write class_history + attendance for one class's past occurrences."""
+        occurrences = self._expander.expand(
+            gym_class, [], [], window_start, window_end, gym_tz
+        )
+        for occ in occurrences:
+            if occ.occurred_at >= now:
+                continue  # hasn't happened yet — history is past-only
+            class_history_id = (
+                await session.execute(
+                    text(insert_history_sql),
+                    {
+                        "class_id": str(gym_class.class_id),
+                        "gym_id": gym_id_str,
+                        "instructor_id": (
+                            str(occ.instructor_id)
+                            if occ.instructor_id is not None
+                            else None
+                        ),
+                        "occurred_at": occ.occurred_at,
+                        "duration_minutes": occ.duration_minutes,
+                    },
+                )
+            ).scalar_one()
+            await self._seed_attendance(
+                session=session,
+                gym_id_str=gym_id_str,
+                class_history_id=class_history_id,
+                pool=pool,
+                insert_attendance_sql=insert_attendance_sql,
+            )
+
+    async def _seed_attendance(
+        self,
+        session: AsyncSession,
+        gym_id_str: str,
+        class_history_id: UUID,
+        pool: _AttendeePool,
+        insert_attendance_sql: str,
+    ) -> None:
+        """Attribute a random subset of the eligible pool to one occurrence.
+
+        The pool is date-independent (every member with a synced membership), so
+        attendance spreads evenly across the month. A fraction
+        (0..``_ATTENDANCE_MAX_FRACTION``) of the pool attends, with an explicit
+        empty chance, so the seeded history is a busy / light / empty mix.
+        Distinct members per occurrence satisfy UNIQUE(member_id,
+        class_history_id); each row is attributed to that member's pinned
+        membership (plan_id + item_id).
+        """
+        if not pool or random.random() < _EMPTY_OCCURRENCE_CHANCE:
+            return
+        n = random.randint(0, int(len(pool) * _ATTENDANCE_MAX_FRACTION))
+        if n == 0:
+            return
+        rows = [
+            {
+                "member_id": str(member_id),
+                "gym_id": gym_id_str,
+                "class_history_id": str(class_history_id),
+                "plan_id": str(plan_id),
+                "item_id": str(item_id),
+            }
+            for member_id, plan_id, item_id in random.sample(pool, n)
+        ]
+        await session.execute(text(insert_attendance_sql), rows)
+
+    @staticmethod
+    def _eligible_attendees(
+        membership_rows: Sequence[Mapping],
+    ) -> _AttendeePool:
+        """One membership per member for date-independent attendance seeding.
+
+        Every member holding any synced membership is eligible for every past
+        occurrence (demo check-ins are attributed loosely — the membership need
+        not span the occurrence date). When a member holds several, prefer an
+        active (no end/cancel) one, then the most recent start — a deterministic
+        pick for the NOT-NULL plan_id/item_id attribution. A member with no
+        membership at all is absent (the schema's NOT-NULL floor).
+        """
+        best: dict[UUID, tuple[bool, date, UUID, UUID]] = {}
+        for m in membership_rows:
+            member_id = m["member_id"]
+            ranked = (
+                m["end_date"] is None and m["cancel_date"] is None,
+                m["start_date"],
+                m["plan_id"],
+                m["item_id"],
+            )
+            current = best.get(member_id)
+            if current is None or ranked[:2] > current[:2]:
+                best[member_id] = ranked
+        return [(mid, v[2], v[3]) for mid, v in best.items()]
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
