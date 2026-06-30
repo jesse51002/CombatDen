@@ -23,6 +23,12 @@ import 'package:crm/shared/widgets/centered_processing_view.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 
+/// Check-in opens this many hours before a class starts (mirrors the backend
+/// `checkin_opens_hours_before_start`); "Update attendees" is hidden for an
+/// occurrence further out than this — 2h so back-to-back classes can be checked
+/// in together.
+const int _kCheckInOpensHours = 2;
+
 /// Which mutation the screen is running (drives the success copy).
 enum _Action { override, cancelInstance }
 
@@ -77,6 +83,23 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return !widget.entry.classDate.isBefore(today);
+  }
+
+  /// Whether check-in is open for this occurrence: its start is within the early
+  /// window (or already started / passed). The backend enforces the same rule.
+  bool get _checkInOpen {
+    final time = _classTime;
+    if (time == null) return true;
+    final start = DateTime(
+      widget.entry.classDate.year,
+      widget.entry.classDate.month,
+      widget.entry.classDate.day,
+      time.hour,
+      time.minute,
+    );
+    return !start.isAfter(
+      DateTime.now().add(const Duration(hours: _kCheckInOpensHours)),
+    );
   }
 
   bool get _pastOrToday {
@@ -247,6 +270,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
             occurrenceDate: widget.entry.classDate,
             cancellable: _cancellable,
             isCancelled: widget.entry.isCancelled,
+            canCheckIn: _checkInOpen,
             onUpdateAttendees: _updateAttendees,
             onCancelInstance: _cancelThisClass,
             roster: _rosterFor(),

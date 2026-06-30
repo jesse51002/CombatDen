@@ -10,8 +10,10 @@ final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 /// Single-occurrence actions inside the class edit form, shown when the form
 /// was opened from a tapped board card (a specific date). Mirrors the retired
 /// manage-popup's choices, now in-screen:
-/// - **Update attendees** — opens the batch staff check-in for this date
-///   (offered for any non-cancelled occurrence, past or upcoming).
+/// - **Update attendees** — opens the batch staff check-in for this date, shown
+///   only when check-in is open ([canCheckIn]): the class has started / passed,
+///   or starts within the early window. Hidden for an occurrence too far in the
+///   future to check into yet (the backend rejects those anyway).
 /// - **Cancel this class** — cancels just this date ([cancellable] only: an
 ///   upcoming, not-already-cancelled occurrence).
 /// A cancelled occurrence shows a note instead of the actions. For a past /
@@ -21,6 +23,10 @@ class ClassOccurrenceActions extends StatelessWidget {
   final DateTime occurrenceDate;
   final bool cancellable;
   final bool isCancelled;
+
+  /// Whether check-in is open for this occurrence (it has started / passed, or
+  /// starts within the early window) — gates the "Update attendees" action.
+  final bool canCheckIn;
   final VoidCallback onUpdateAttendees;
   final VoidCallback onCancelInstance;
 
@@ -33,6 +39,7 @@ class ClassOccurrenceActions extends StatelessWidget {
     required this.occurrenceDate,
     required this.cancellable,
     required this.isCancelled,
+    required this.canCheckIn,
     required this.onUpdateAttendees,
     required this.onCancelInstance,
     this.roster,
@@ -41,6 +48,10 @@ class ClassOccurrenceActions extends StatelessWidget {
   String get _note {
     final date = _dateLabel.format(occurrenceDate);
     if (isCancelled) return 'This class is cancelled on $date.';
+    if (!canCheckIn) {
+      return 'Check-in opens closer to the class — you can still cancel just '
+          'this day.';
+    }
     return 'Manage who attended on $date, or cancel just this day.';
   }
 
@@ -60,10 +71,11 @@ class ClassOccurrenceActions extends StatelessWidget {
             Row(
               spacing: DesignConstants.spacingLarge,
               children: [
-                AppOutlineButton(
-                  text: 'Update attendees',
-                  onPressed: onUpdateAttendees,
-                ),
+                if (canCheckIn)
+                  AppOutlineButton(
+                    text: 'Update attendees',
+                    onPressed: onUpdateAttendees,
+                  ),
                 if (cancellable)
                   AppOutlineButton(
                     text: 'Cancel this class',

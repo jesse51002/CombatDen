@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     # (logged warning) — it never expands or writes.
     class_history_lookback_days: int = 14
 
+    # Check-in early window: how many hours BEFORE a class's start time check-in
+    # opens. A check-in (single or batch "update attendees") for an occurrence
+    # whose start is further than this in the future is rejected. 2h (not the
+    # usual ~30m) so staff can check a member into several back-to-back classes
+    # at once. Past / in-session occurrences are always check-in-able.
+    checkin_opens_hours_before_start: int = 2
+
     # On-demand post-op invoice fetch: right after an invoice-creating
     # membership op, pull that payer's new invoices straight from Stripe and
     # apply them (deterministic) instead of waiting on the invoice.paid /

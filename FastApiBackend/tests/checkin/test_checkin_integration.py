@@ -21,7 +21,7 @@ materialize step — a migration block, not a code defect.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -36,6 +36,9 @@ GYM_ID = SEEDED_GYM_ID
 _ENV_PATH = "/var/home/jm/Documents/CombatDen/codebase/FastApiBackend/.env"
 # How far ahead to scan the schedule board for a usable occurrence.
 _BOARD_WINDOW_DAYS = 45
+# Mirror settings.checkin_opens_hours_before_start: check-in opens this many
+# hours before a class starts, so a target further out is rejected.
+_CHECKIN_OPENS_HOURS = 2
 
 
 def _get_db_url() -> str:
@@ -97,12 +100,8 @@ LIMIT 1
 """
 
 
-def _covered_target(api: httpx.Client, covering: dict[str, dict]) -> dict | None:
-    """Intersect the schedule board with covering members -> a check-in target.
-
-    Returns the first non-cancelled board occurrence whose class has a covering
-    member, as ``{member_id, class_id, points_worth, occurrence_date}``.
-    """
+def _board_occurrences(api: httpx.Client) -> list[dict]:
+    """The gym's board occurrences over the scan window (empty on a non-200)."""
     today = date.today()
     resp = api.get(
         "/api/v1/classes/instances",
@@ -112,13 +111,32 @@ def _covered_target(api: httpx.Client, covering: dict[str, dict]) -> dict | None
             "end_date": (today + timedelta(days=_BOARD_WINDOW_DAYS)).isoformat(),
         },
     )
-    if resp.status_code != 200:
-        return None
-    for occ in resp.json()["items"]:
+    return resp.json()["items"] if resp.status_code == 200 else []
+
+
+def _pick_target(
+    occurrences: list[dict],
+    covering: dict[str, dict],
+    *,
+    checkin_open: bool,
+) -> dict | None:
+    """First non-cancelled occurrence with a covering member on the requested
+    side of the check-in window.
+
+    ``checkin_open=True`` -> a target that can be checked into now (its start is
+    within the ``_CHECKIN_OPENS_HOURS`` window or already past); ``False`` -> one
+    too far in the future to check into yet. Picking by window (not just "the
+    first occurrence") keeps the tests deterministic regardless of the hour.
+    """
+    cutoff = datetime.now(UTC) + timedelta(hours=_CHECKIN_OPENS_HOURS)
+    for occ in occurrences:
         if occ["is_cancelled"]:
             continue
         cover = covering.get(occ["class_id"])
         if cover is None:
+            continue
+        is_open = datetime.fromisoformat(occ["occurred_at"]) <= cutoff
+        if is_open != checkin_open:
             continue
         return {
             "member_id": cover["member_id"],
@@ -157,7 +175,13 @@ def seed_ids(api: httpx.Client) -> dict:
         ids = _run_async(_discover())
     except Exception as exc:  # noqa: BLE001 — any DB issue means skip, not fail
         pytest.skip(f"Seeded DB not reachable for discovery: {exc}")
-    ids["covered"] = _covered_target(api, ids["covering"])
+    occurrences = _board_occurrences(api)
+    ids["covered"] = _pick_target(
+        occurrences, ids["covering"], checkin_open=True
+    )
+    ids["too_early"] = _pick_target(
+        occurrences, ids["covering"], checkin_open=False
+    )
     return ids
 
 
@@ -410,6 +434,26 @@ class TestGatedCheckin:
                 _teardown_checkin(
                     member_id, class_history_id, new_activity_ids, before_points
                 )
+
+    def test_checkin_rejected_too_far_in_the_future(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        """A check-in for an occurrence further than the open window before it
+        starts is rejected (check-in isn't open yet) — nothing materialized."""
+        row = seed_ids["too_early"]
+        if row is None:
+            pytest.skip("No too-far-future coverable occurrence on the board")
+        resp = api.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": row["member_id"],
+                "gym_id": GYM_ID,
+                "class_id": row["class_id"],
+                "occurrence_date": row["occurrence_date"],
+            },
+        )
+        assert resp.status_code == 400, resp.text
+        assert "not open" in resp.json()["detail"].lower()
 
     def test_remove_checkin_reverses_attendance_points_and_activity(
         self, api: httpx.Client, seed_ids: dict

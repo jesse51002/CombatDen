@@ -13,7 +13,7 @@ mappings, all of which stay in the ``classes`` domain.
 """
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from src.checkin.schema.checkin_schema import OccurrenceContext
@@ -26,6 +26,7 @@ from src.classes.service.classes_expander_mapping import (
     to_expander_range,
 )
 from src.classes.service.classes_materializer import ClassesMaterializer
+from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 
 
@@ -58,8 +59,10 @@ class CheckinOccurrenceResolver:
 
         Raises:
             ValueError: If the class does not exist / is deleted / is inactive,
-                the gym is missing, or no real non-cancelled occurrence lands on
-                ``occurrence_date``.
+                the gym is missing, no real non-cancelled occurrence lands on
+                ``occurrence_date``, or the occurrence starts further than
+                ``settings.checkin_opens_hours_before_start`` in the future
+                (check-in isn't open yet).
         """
         class_row = await self._queries.get_class_for_checkin(
             class_id, gym_id, occurrence_date
@@ -81,6 +84,20 @@ class CheckinOccurrenceResolver:
         if occurrence is None:
             raise ValueError(
                 f"No class occurrence on {occurrence_date} for this class"
+            )
+
+        # Check-in opens a fixed window before the class starts (2h by default,
+        # so back-to-back classes can be checked in together). A check-in for an
+        # occurrence further out than that is rejected before anything is
+        # materialized. Past / in-session occurrences always pass.
+        opens_at = datetime.now(UTC) + timedelta(
+            hours=settings.checkin_opens_hours_before_start
+        )
+        if occurrence.occurred_at > opens_at:
+            raise ValueError(
+                "Check-in is not open yet — it opens "
+                f"{settings.checkin_opens_hours_before_start} hours before the "
+                "class starts"
             )
 
         effective_capacity = (
