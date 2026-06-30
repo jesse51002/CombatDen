@@ -131,11 +131,23 @@ class ClassesScheduleReaderService:
             include_cancelled=True,
         )
         instance_dates = {row["original_date"] for row in instance_rows}
+        # Effective per-day capacity: an instance exception's new_max_capacity
+        # wins over the class default for that date. The expander resolves the
+        # time / instructor / duration overrides but not capacity, and the
+        # check-in capacity gate resolves new_max_capacity on its own path — so
+        # the board read resolves it here too, keeping the displayed (and
+        # prefill) capacity consistent with what check-in enforces.
+        capacity_overrides = {
+            row["original_date"]: row["new_max_capacity"]
+            for row in instance_rows
+            if row["new_max_capacity"] is not None
+        }
         return [
             self._build_row(
                 occ,
                 class_row,
                 instance_dates,
+                capacity_overrides,
                 range_rows,
                 instructors,
                 attendance,
@@ -148,6 +160,7 @@ class ClassesScheduleReaderService:
         occ: EffectiveOccurrence,
         class_row: dict,
         instance_dates: set[date],
+        capacity_overrides: dict[date, int],
         range_rows: list[dict],
         instructors: dict[str, str],
         attendance: dict[tuple[str, datetime], int],
@@ -175,7 +188,9 @@ class ClassesScheduleReaderService:
             resolved_instructor_name=instructor_name,
             image_url=class_row["image_url"],
             points_worth=class_row["points_worth"],
-            max_capacity=class_row["max_capacity"],
+            max_capacity=capacity_overrides.get(
+                occ.original_date, class_row["max_capacity"]
+            ),
             is_cancelled=occ.is_cancelled,
             has_instance_exception=occ.original_date in instance_dates,
             has_range_exception=has_range,
