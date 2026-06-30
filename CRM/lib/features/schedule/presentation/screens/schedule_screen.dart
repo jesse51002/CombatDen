@@ -23,7 +23,6 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
-final DateFormat _monthFormat = DateFormat('MMMM, yyyy');
 final DateFormat _rangeFormat = DateFormat('MMM d, yyyy');
 final DateFormat _dayColumnFormat = DateFormat('EEE, MMM d');
 
@@ -170,7 +169,6 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
       children: [
         const _ScheduleTitle(),
         ScheduleHeaderBar(
-          monthLabel: _monthFormat.format(_weekStart),
           rangeLabel:
               '${_rangeFormat.format(_weekStart)} - '
               '${_rangeFormat.format(weekEnd)}',

@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/schedule/presentation/widgets/header/date_range_pill.dart';
 import 'package:crm/features/schedule/presentation/widgets/header/month_navigator.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Top action row of the Schedule screen.
 ///
-/// Layout (left to right): month label + prev/next chevrons (which move the
-/// board a week at a time), flexible spacer, the visible-week range pill, and
-/// the "Add New Class" button.
+/// Layout (left to right): the visible week's date range + prev/next chevrons
+/// (which move the board a week at a time), a flexible spacer, and the
+/// "Add New Class" button.
 class ScheduleHeaderBar extends StatelessWidget {
-  final String monthLabel;
   final String rangeLabel;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
@@ -21,7 +19,6 @@ class ScheduleHeaderBar extends StatelessWidget {
 
   const ScheduleHeaderBar({
     super.key,
-    required this.monthLabel,
     required this.rangeLabel,
     required this.onPrevious,
     required this.onNext,
@@ -35,12 +32,11 @@ class ScheduleHeaderBar extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         MonthNavigator(
-          monthLabel: monthLabel,
+          label: rangeLabel,
           onPrevious: onPrevious,
           onNext: onNext,
         ),
         const Spacer(),
-        DateRangePill(label: rangeLabel),
         AppPrimaryButton(
           text: 'Add New Class',
           onPressed: onAddClass,
