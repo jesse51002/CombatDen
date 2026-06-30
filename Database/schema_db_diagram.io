@@ -201,8 +201,8 @@ Table member_attendance {
   member_id uuid [not null]
   gym_id uuid [not null]
   class_history_id uuid [not null]
-  plan_id uuid [not null, note: 'FK (plan_id, gym_id) -> membership_plans_unfiltered; billing attribution']
-  item_id uuid [not null, note: 'FK (item_id, member_id) -> member_memberships_unfiltered; covering membership']
+  plan_id uuid [note: 'FK (plan_id, gym_id) -> membership_plans_unfiltered; billing attribution. NULL together with item_id for a no-membership admin check-in']
+  item_id uuid [note: 'FK (item_id, member_id) -> member_memberships_unfiltered; covering membership. NULL together with plan_id for a no-membership admin check-in']
 
   indexes {
     (member_id, class_history_id) [unique]
