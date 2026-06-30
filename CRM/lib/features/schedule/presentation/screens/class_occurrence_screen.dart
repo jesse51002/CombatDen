@@ -252,6 +252,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           ClassOccurrenceHeader(
             className: widget.entry.name,
             date: widget.entry.classDate,
+            imageUrl: widget.entry.imageUrl,
             onBack: _close,
           ),
           if (_inlineError != null) ErrorMessage(message: _inlineError!),

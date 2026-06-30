@@ -184,8 +184,13 @@ class _AttendeeListState extends State<_AttendeeList> {
               shrinkWrap: true,
               padding: EdgeInsets.zero,
               itemCount: filtered.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(height: DesignConstants.spacingSmall),
+              // A full-width divider between rows so a name and its remove (×)
+              // stay visually linked across the wide screen.
+              separatorBuilder: (_, _) => Divider(
+                height: DesignConstants.spacingMedium,
+                thickness: DesignConstants.dividerThickness,
+                color: DesignConstants.divider,
+              ),
               itemBuilder: (context, i) {
                 final attendee = filtered[i];
                 return MemberRowTile(
