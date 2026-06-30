@@ -1,8 +1,8 @@
 -- Past materialized occurrences for the schedule board: every class_history row
--- for the gym in the window that has ALREADY started/run (occurred_at before
--- NOW -- the occurrence's own start instant has passed, so a class earlier today
--- counts as past too), joined to its class for the display fields and its
--- recorded attendance count.
+-- for the gym in the window that has ALREADY ENDED (occurred_at + duration is
+-- before NOW -- the class is over, not still in session; a class earlier today
+-- that has finished counts as past, but one mid-session does not), joined to its
+-- class for the display fields and its recorded attendance count.
 --
 -- The board renders the past from this immutable table, NOT by re-expanding the
 -- current class definition, so editing a class's recurring rules (or deleting
@@ -25,7 +25,8 @@ JOIN gym_classes gc ON gc.class_id = ch.class_id
 LEFT JOIN member_attendance ma ON ma.class_history_id = ch.class_history_id
 WHERE ch.gym_id = CAST(:gym_id AS UUID)
   AND ch.occurred_at >= CAST(:lower AS TIMESTAMPTZ)
-  AND ch.occurred_at <  CAST(:now AS TIMESTAMPTZ)
+  AND ch.occurred_at + ch.duration_minutes * INTERVAL '1 minute'
+        <= CAST(:now AS TIMESTAMPTZ)
   AND ch.occurred_at <  CAST(:upper AS TIMESTAMPTZ)
 GROUP BY
     ch.class_id,

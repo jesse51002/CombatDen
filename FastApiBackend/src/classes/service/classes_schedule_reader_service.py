@@ -233,8 +233,8 @@ class ClassesScheduleReaderService:
             return False
         created = False
         for occ in occurrences:
-            if occ.occurred_at >= now:
-                continue
+            if not self._has_ended(occ, now):
+                continue  # still in session or upcoming — not finished yet
             if (str(cid), occ.effective_date) in materialized_days:
                 continue
             if await self._materialize_one(class_row, gym_id, occ):
@@ -277,15 +277,15 @@ class ClassesScheduleReaderService:
         attendance: dict[tuple[str, datetime], int],
         now: datetime,
     ) -> list[EffectiveClassInstanceResponse]:
-        """Expand one class into its current + upcoming rows, plus cancelled days.
+        """Expand one class into its in-session + upcoming rows + cancelled days.
 
-        An occurrence whose start time has already passed (``occurred_at`` before
-        ``now``, including earlier today) and actually RAN is dropped here — the
-        board renders it from class_history instead (immutable, so a definition
-        edit can't rewrite it). A *cancelled* day is kept even when past: it
-        leaves no class_history row, so the expander is the only source that knows
-        it was a scheduled-then-cancelled day. The still-upcoming occurrences come
-        from the live expansion of the current definition.
+        An occurrence that has already ENDED (``occurred_at`` + its duration is
+        before ``now``) is dropped here — the board renders it from class_history
+        instead (immutable, so a definition edit can't rewrite it). An occurrence
+        still in session (started but not finished) or upcoming is kept and comes
+        from the live expansion of the current definition. A *cancelled* day is
+        kept even when past: it leaves no class_history row, so the expander is the
+        only source that knows it was a scheduled-then-cancelled day.
         """
         occurrences = self._expander.expand(
             to_expander_class(class_row),
@@ -299,7 +299,7 @@ class ClassesScheduleReaderService:
         occurrences = [
             occ
             for occ in occurrences
-            if occ.occurred_at >= now or occ.is_cancelled
+            if not self._has_ended(occ, now) or occ.is_cancelled
         ]
         instance_dates = {row["original_date"] for row in instance_rows}
         # Effective per-day capacity: an instance exception's new_max_capacity
@@ -409,6 +409,17 @@ class ClassesScheduleReaderService:
         """Gym-local midnight of ``day``, in UTC (a window bound)."""
         zone = ZoneInfo(gym_tz)
         return datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
+
+    @staticmethod
+    def _has_ended(occ: EffectiveOccurrence, now: datetime) -> bool:
+        """Whether the occurrence is over — its start + duration is at/before now.
+
+        A class still in session (started but not finished) is NOT ended: it
+        stays a live, expander-rendered row rather than dropping to the immutable
+        history (and isn't materialized until it actually finishes).
+        """
+        end = occ.occurred_at + timedelta(minutes=occ.duration_minutes)
+        return end <= now
 
     # -- loads -----------------------------------------------------------
 

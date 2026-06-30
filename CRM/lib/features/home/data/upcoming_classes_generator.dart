@@ -13,7 +13,9 @@ final DateFormat _dayLabel = DateFormat('EEEE, MMM d');
 /// Day-grouped view models for the dashboard "Upcoming Classes" card, built
 /// from the real effective class instances (`GET /api/v1/classes/instances`).
 ///
-/// Filters to non-cancelled occurrences still in the future, sorts by the UTC
+/// Keeps non-cancelled occurrences that are still in session or upcoming —
+/// those whose END time (start + duration) is after now, so a class currently
+/// running is included, not just strictly-future ones — sorts by the UTC
 /// `occurred_at` instant, caps at [kUpcomingClassesLimit], then groups by the
 /// occurrence's local date (a friendly "Today" / "Tomorrow" / weekday label).
 List<ScheduledClassDayGroup> upcomingClassesFromInstances(
@@ -21,7 +23,11 @@ List<ScheduledClassDayGroup> upcomingClassesFromInstances(
 ) {
   final now = DateTime.now();
   final upcoming = instances
-      .where((i) => !i.isCancelled && i.occurredAt.isAfter(now))
+      .where((i) =>
+          !i.isCancelled &&
+          i.occurredAt
+              .add(Duration(minutes: i.resolvedDurationMinutes))
+              .isAfter(now))
       .toList()
     ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
   final capped = upcoming.take(kUpcomingClassesLimit);
