@@ -634,15 +634,15 @@ class MemberRepository {
 
   // ----- Class check-in -----
 
-  /// `POST /api/v1/classes/checkin` — staff single check-in for [req]'s member
-  /// into the occurrence addressed by `class_id` + `occurrence_date`. Returns
-  /// the [CheckInResponse]: a recorded attendance (points awarded), an
-  /// idempotent repeat (`already_checked_in`), or a skip carrying a
-  /// `skip_reason` (nothing written) that the caller can retry with
-  /// `allow_override`.
+  /// `POST /api/v1/checkin` — staff single check-in for [req]'s member into the
+  /// occurrence addressed by `class_id` + `occurrence_date`. The CRM always
+  /// sends `is_member: false`, so the check-in is ALWAYS recorded: the
+  /// [CheckInResponse] is a fresh attendance (points awarded) or an idempotent
+  /// repeat (`already_checked_in`), and any gate conditions come back as
+  /// non-blocking `warnings`.
   Future<CheckInResponse> checkInMember(CheckInRequest req) async {
     final response = await _apiClient.post(
-      '/api/v1/classes/checkin',
+      '/api/v1/checkin',
       data: req.toJson(),
     );
     return CheckInResponse.fromJson(

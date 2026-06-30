@@ -12,7 +12,9 @@ Map<String, dynamic> _$BatchCheckInRequestToJson(
   'stringify': instance.stringify,
   'hash_code': instance.hashCode,
   'gym_id': instance.gymId,
+  'class_id': instance.classId,
+  'occurrence_date': instance.occurrenceDate,
   'member_ids': instance.memberIds,
-  'allow_override': instance.allowOverride,
+  'is_member': instance.isMember,
   'props': instance.props,
 };

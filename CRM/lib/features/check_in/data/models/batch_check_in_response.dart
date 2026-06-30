@@ -5,7 +5,7 @@ import 'package:crm/features/check_in/data/models/batch_check_in_result_item.dar
 
 part 'batch_check_in_response.g.dart';
 
-/// Response body for the batch staff check-in (returned with 207 Multi-Status —
+/// Response body for the batch check-in (returned with 207 Multi-Status —
 /// a 2xx, so it lands on the success path, not as an exception).
 ///
 /// Mirrors the backend `BatchCheckinResponse`. [classHistoryId] is the single
@@ -41,13 +41,6 @@ class BatchCheckInResponse extends Equatable {
 
   List<BatchCheckInResultItem> get failed =>
       results.where((r) => r.status.isFailed).toList();
-
-  List<BatchCheckInResultItem> get skipped =>
-      results.where((r) => r.status.isSkipped).toList();
-
-  /// Skipped + failed — the items a "check in anyway" retry resubmits.
-  List<BatchCheckInResultItem> get unresolved =>
-      results.where((r) => r.isUnresolved).toList();
 
   bool get hasFailures => failed.isNotEmpty;
 

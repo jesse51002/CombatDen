@@ -16,5 +16,8 @@ CheckInResponse _$CheckInResponseFromJson(Map<String, dynamic> json) =>
       chosenPlanId: json['chosen_plan_id'] as String?,
       chosenItemId: json['chosen_item_id'] as String?,
       pointsAwarded: (json['points_awarded'] as num?)?.toInt() ?? 0,
-      skipReason: skipReasonFromJson(json['skip_reason'] as String?),
+      skipReason: checkInWarningFromJson(json['skip_reason'] as String?),
+      warnings: json['warnings'] == null
+          ? const []
+          : checkInWarningsFromJson(json['warnings'] as List?),
     );

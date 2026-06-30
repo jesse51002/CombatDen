@@ -3,7 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 /// Per-member outcome inside a batch staff check-in.
 ///
 /// Mirrors the backend `BatchCheckinItemStatus`
-/// (`../FastApiBackend/src/classes/schema/classes_batch_checkin_schema.py`).
+/// (`../FastApiBackend/src/checkin/schema/batch_checkin_schema.py`).
 /// [unknown] is the resilient fallback so a new backend status never crashes
 /// the results UI.
 @JsonEnum(valueField: 'value')

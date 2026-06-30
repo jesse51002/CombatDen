@@ -72,26 +72,23 @@ class ScheduleInstanceCancelled extends ScheduleEvent {
 
 /// Staff batch check-in ("Update attendees"): check [memberIds] into the
 /// occurrence of [classId] on [occurrenceDate], then reload the board so the
-/// attendance count updates. The outcome lands on `batchCheckInResult` (the
-/// per-member 207 breakdown) or `checkInError`. [allowOverride] forces every
-/// member past the eligibility / capacity gates (retroactive / over-capacity /
-/// depleted).
+/// attendance count updates. The CRM is the staff surface (`is_member: false`),
+/// so every member is recorded; the outcome lands on `batchCheckInResult` (the
+/// per-member 207 breakdown, each row carrying any non-blocking warnings) or
+/// `checkInError`.
 class ScheduleBatchCheckInRequested extends ScheduleEvent {
   final String classId;
   final DateTime occurrenceDate;
   final List<String> memberIds;
-  final bool allowOverride;
 
   const ScheduleBatchCheckInRequested({
     required this.classId,
     required this.occurrenceDate,
     required this.memberIds,
-    this.allowOverride = false,
   });
 
   @override
-  List<Object?> get props =>
-      [classId, occurrenceDate, memberIds, allowOverride];
+  List<Object?> get props => [classId, occurrenceDate, memberIds];
 }
 
 /// Clears the batch check-in outcome (result + error) when the check-in dialog

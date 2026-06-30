@@ -3,11 +3,13 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
+import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 
 /// Terminal outcome of a member check-in. The dialog footer drives the next
-/// action (Done / Check in anyway / Try again); this view only states what
-/// happened: a recorded check-in (✓ "+N points"), an idempotent repeat, a skip
-/// with its reason, or an unexpected error.
+/// action (Done / Try again); this view only states what happened. Staff always
+/// records, so a recorded check-in (✓ "+N points") names the class and shows
+/// any gate warnings as a non-blocking note; an idempotent repeat and an
+/// unexpected error are the other two outcomes.
 class MemberCheckInResultView extends StatelessWidget {
   final String instanceName;
   final CheckInResponse? result;
@@ -32,15 +34,6 @@ class MemberCheckInResultView extends StatelessWidget {
     }
     final r = result;
     if (r == null) return const SizedBox.shrink();
-    if (r.isSkipped) {
-      return _Outcome(
-        icon: Symbols.do_not_disturb_on_sharp,
-        color: DesignConstants.text2nd,
-        title: 'Not checked in to $instanceName',
-        detail: '${r.skipReason!.displayLabel}. Use “Check in anyway” to '
-            'override the gate (front-desk coverage).',
-      );
-    }
     if (r.alreadyCheckedIn) {
       return _Outcome(
         icon: Symbols.check_circle_sharp,
@@ -54,6 +47,7 @@ class MemberCheckInResultView extends StatelessWidget {
       color: DesignConstants.goodGreen,
       title: 'Checked into $instanceName',
       detail: '+${r.pointsAwarded} points awarded.',
+      note: r.hasWarnings ? CheckInWarning.summarize(r.warnings) : null,
     );
   }
 }
@@ -64,11 +58,16 @@ class _Outcome extends StatelessWidget {
   final String title;
   final String detail;
 
+  /// A non-blocking heads-up (the recorded check-in's gate warnings), shown
+  /// under the detail in the secondary tone.
+  final String? note;
+
   const _Outcome({
     required this.icon,
     required this.color,
     required this.title,
     required this.detail,
+    this.note,
   });
 
   @override
@@ -98,6 +97,14 @@ class _Outcome extends StatelessWidget {
                 color: DesignConstants.text2nd,
               ),
             ),
+            if (note != null)
+              Text(
+                note!,
+                textAlign: TextAlign.center,
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.okYellow,
+                ),
+              ),
           ],
         ),
       ],

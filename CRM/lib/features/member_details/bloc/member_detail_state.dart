@@ -128,16 +128,14 @@ class MemberDetailLoaded extends MemberDetailState {
   /// loading + terminal treatment (mirrors [isChargingCard]).
   final bool isCheckingIn;
 
-  /// The last check-in's result — a recorded attendance, an
-  /// idempotent repeat, or a skip carrying a reason. Rendered by
-  /// the check-in dialog's terminal step (a skip offers "check in
-  /// anyway"); cleared via [MemberCheckInCleared].
+  /// The last check-in's result — a recorded attendance (with any
+  /// non-blocking warnings) or an idempotent repeat. Rendered by the
+  /// check-in dialog's terminal step; cleared via [MemberCheckInCleared].
   final CheckInResponse? checkInResult;
 
-  /// The last check-in failure (an unexpected error — a skip is NOT
-  /// an error, it arrives as [checkInResult]). Kept off [actionError]
-  /// so the screen-level error dialog doesn't swallow it while the
-  /// check-in dialog is open (mirrors [chargeCardError]).
+  /// The last check-in failure (an unexpected error). Kept off
+  /// [actionError] so the screen-level error dialog doesn't swallow it
+  /// while the check-in dialog is open (mirrors [chargeCardError]).
   final String? checkInError;
 
   /// Monotonic counter bumped on every successful mutation

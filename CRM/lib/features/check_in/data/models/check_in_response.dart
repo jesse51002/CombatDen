@@ -1,15 +1,19 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-import 'package:crm/features/check_in/data/models/check_in_skip_reason.dart';
+import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 
 part 'check_in_response.g.dart';
 
-/// Response for the single staff check-in (`POST /api/v1/classes/checkin`).
+/// Response for the single check-in (`POST /api/v1/checkin`).
 ///
-/// Mirrors the backend `CheckinResponse`. A skipped check-in writes nothing:
-/// [logId] is null and [skipReason] explains why. An idempotent repeat returns
-/// the existing [logId] with [alreadyCheckedIn] true and no points.
+/// Mirrors the backend `CheckinResponse`. A CRM (staff) check-in is always
+/// recorded: [logId] is set and any gate conditions come back in [warnings]
+/// (the attendance may carry a null [chosenPlanId] / [chosenItemId] when the
+/// member has no membership). An idempotent repeat returns the existing [logId]
+/// with [alreadyCheckedIn] true and no points. [skipReason] is the kiosk-only
+/// rejection reason — always null for the CRM (`is_member: false`); parsed for
+/// contract completeness.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -24,8 +28,10 @@ class CheckInResponse extends Equatable {
   final String? chosenItemId;
   @JsonKey(defaultValue: 0)
   final int pointsAwarded;
-  @JsonKey(fromJson: skipReasonFromJson)
-  final CheckInSkipReason? skipReason;
+  @JsonKey(fromJson: checkInWarningFromJson)
+  final CheckInWarning? skipReason;
+  @JsonKey(fromJson: checkInWarningsFromJson)
+  final List<CheckInWarning> warnings;
 
   const CheckInResponse({
     this.logId,
@@ -37,18 +43,18 @@ class CheckInResponse extends Equatable {
     this.chosenItemId,
     this.pointsAwarded = 0,
     this.skipReason,
+    this.warnings = const [],
   });
 
   factory CheckInResponse.fromJson(Map<String, dynamic> json) =>
       _$CheckInResponseFromJson(json);
 
-  /// A fresh attendance row was recorded (points awarded) — not a skip and not
-  /// an idempotent repeat.
+  /// A fresh attendance row was recorded (points awarded) — not an idempotent
+  /// repeat.
   bool get isRecorded => logId != null && !alreadyCheckedIn;
 
-  /// The check-in was rejected by a gate (nothing written) — the "check in
-  /// anyway" override path.
-  bool get isSkipped => skipReason != null;
+  /// Whether the recorded check-in carries any non-blocking gate warnings.
+  bool get hasWarnings => warnings.isNotEmpty;
 
   @override
   List<Object?> get props => [
@@ -61,5 +67,6 @@ class CheckInResponse extends Equatable {
         chosenItemId,
         pointsAwarded,
         skipReason,
+        warnings,
       ];
 }

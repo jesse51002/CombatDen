@@ -3,12 +3,13 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_result_item.dart';
-import 'package:crm/features/check_in/data/models/check_in_skip_reason.dart';
+import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/check_in/data/models/class_check_in_status.dart';
 
 /// One per-member result line in the batch breakdown: checked in (✓ "+N pts"),
-/// already in, skipped (— reason), or failed (✗ — reason), labelled with the
-/// member's name.
+/// already in, or failed (✗ — reason), labelled with the member's name. Any
+/// non-blocking gate warnings on a recorded check-in show as a small note
+/// beneath the detail.
 class BatchCheckInResultRow extends StatelessWidget {
   final BatchCheckInResultItem item;
   final String memberName;
@@ -40,12 +41,14 @@ class BatchCheckInResultRow extends StatelessWidget {
         ClassCheckInStatus.alreadyCheckedIn =>
           'Already checked in — no change',
         ClassCheckInStatus.skipped =>
-          'Skipped — ${CheckInSkipReason.humanize(item.reason)}',
+          'Skipped — ${CheckInWarning.humanize(item.reason)}',
         _ => item.reason ?? 'Could not be checked in',
       };
 
   @override
   Widget build(BuildContext context) {
+    final warnings =
+        item.warnings.isEmpty ? null : CheckInWarning.summarize(item.warnings);
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -73,6 +76,13 @@ class BatchCheckInResultRow extends StatelessWidget {
                   _detail,
                   style: DesignConstants.pSmall.copyWith(color: _color),
                 ),
+                if (warnings != null)
+                  Text(
+                    warnings,
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.okYellow,
+                    ),
+                  ),
               ],
             ),
           ),

@@ -7,31 +7,25 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/batch_check_in_member_tile.dart';
-import 'package:crm/features/schedule/presentation/dialogs/check_in/batch_check_in_override_toggle.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 /// Select body for the batch check-in: a searchable, paginated multi-select
-/// roster (checkbox tiles driven by the parent's [selectedIds]) plus the
-/// override toggle. Owns its own gym-scoped member-list page source; the parent
-/// owns the [Set] of picked ids and the override flag.
+/// roster (checkbox tiles driven by the parent's [selectedIds]). Owns its own
+/// gym-scoped member-list page source; the parent owns the [Set] of picked ids.
 class BatchCheckInPicker extends StatefulWidget {
   final String gymId;
   final String className;
   final Set<String> selectedIds;
-  final bool allowOverride;
   final String? inlineError;
   final ValueChanged<MemberPickerEntry> onToggle;
-  final ValueChanged<bool> onOverrideChanged;
 
   const BatchCheckInPicker({
     super.key,
     required this.gymId,
     required this.className,
     required this.selectedIds,
-    required this.allowOverride,
     required this.onToggle,
-    required this.onOverrideChanged,
     this.inlineError,
   });
 
@@ -92,10 +86,6 @@ class _BatchCheckInPickerState extends State<BatchCheckInPicker> {
               onTap: onTap,
             ),
           ),
-        ),
-        BatchCheckInOverrideToggle(
-          value: widget.allowOverride,
-          onChanged: widget.onOverrideChanged,
         ),
         if (widget.inlineError != null)
           ErrorMessage(message: widget.inlineError!),

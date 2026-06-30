@@ -16,4 +16,7 @@ BatchCheckInResultItem _$BatchCheckInResultItemFromJson(
   chosenPlanId: json['chosen_plan_id'] as String?,
   chosenItemId: json['chosen_item_id'] as String?,
   logId: json['log_id'] as String?,
+  warnings: json['warnings'] == null
+      ? const []
+      : checkInWarningsFromJson(json['warnings'] as List?),
 );

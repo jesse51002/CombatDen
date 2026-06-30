@@ -17,6 +17,7 @@ import 'package:crm/features/schedule/data/models/recurring_unit.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_range_cancel_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
+import 'package:crm/features/schedule/presentation/widgets/form/class_attendee_roster.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_days_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_details_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_form_actions.dart';
@@ -121,6 +122,32 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return !date.isBefore(today);
+  }
+
+  /// A past or current-day, non-cancelled occurrence is materialized (or
+  /// materializable) — show its attendee roster. A future occurrence has no
+  /// attendance yet, so the roster is hidden there.
+  bool get _occurrencePastOrToday {
+    final date = widget.occurrenceDate;
+    if (date == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !date.isAfter(today);
+  }
+
+  /// The attendee roster for a past / materialized occurrence, or null when it
+  /// shouldn't render (future, cancelled, or no active gym).
+  Widget? _rosterFor() {
+    final existing = widget.existing;
+    final date = widget.occurrenceDate;
+    final gymId = selectedGym.gymId;
+    if (existing == null || date == null || gymId == null) return null;
+    if (widget.occurrenceCancelled || !_occurrencePastOrToday) return null;
+    return ClassAttendeeRoster(
+      gymId: gymId,
+      classId: existing.classId,
+      occurrenceDate: date,
+    );
   }
 
   @override
@@ -498,6 +525,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
               isCancelled: widget.occurrenceCancelled,
               onUpdateAttendees: _updateAttendees,
               onCancelInstance: _cancelThisClass,
+              roster: _rosterFor(),
             ),
           ClassDetailsSection(
             nameController: _nameController,

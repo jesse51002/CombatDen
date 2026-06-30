@@ -1,6 +1,7 @@
 import 'dart:developer';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 
 import 'package:crm/features/check_in/data/models/batch_check_in_request.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
@@ -14,6 +15,9 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// navigation, and runs the class create / edit / soft-delete mutations,
 /// reloading the board on success.
 class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
+  /// Backend `occurrence_date` body fields are bare `YYYY-MM-DD` (gym-local).
+  static final DateFormat _dateParam = DateFormat('yyyy-MM-dd');
+
   final ScheduleRepository _repository;
 
   /// Captured from [ScheduleInitRequested] so week changes + mutation reloads
@@ -114,12 +118,11 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     final BatchCheckInResponse result;
     try {
       result = await _repository.batchCheckIn(
-        event.classId,
-        event.occurrenceDate,
         BatchCheckInRequest(
           gymId: _gymId,
+          classId: event.classId,
+          occurrenceDate: _dateParam.format(event.occurrenceDate),
           memberIds: event.memberIds,
-          allowOverride: event.allowOverride,
         ),
       );
     } catch (e, stackTrace) {

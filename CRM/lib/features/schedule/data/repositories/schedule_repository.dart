@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_request.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
+import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/models/class_instance_exception_request.dart';
 import 'package:crm/features/schedule/data/models/class_range_exception_request.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
@@ -88,26 +89,43 @@ class ScheduleRepository {
     await _apiClient.delete('/api/v1/classes/$classId');
   }
 
-  /// `POST /api/v1/classes/{class_id}/occurrences/{occurrence_date}/`
-  /// `checkin-batch` — staff batch check-in. The occurrence is addressed by the
-  /// [classId] + [occurrenceDate] PATH params; [req] carries the gym, member
-  /// ids, and the override.
+  /// `POST /api/v1/checkin/batch` — staff batch check-in. The occurrence is now
+  /// addressed by the `class_id` + `occurrence_date` BODY fields (carried on
+  /// [req] alongside the gym, member ids, and `is_member`); the path no longer
+  /// carries them.
   ///
   /// Returns **207 Multi-Status** — a 2xx, so Dio does NOT throw: the
   /// per-member split arrives here on the SUCCESS path and is parsed as a
   /// [BatchCheckInResponse]. (A total failure is a 500 and throws; an invalid
   /// occurrence is 400/404.)
-  Future<BatchCheckInResponse> batchCheckIn(
-    String classId,
-    DateTime occurrenceDate,
-    BatchCheckInRequest req,
-  ) async {
+  Future<BatchCheckInResponse> batchCheckIn(BatchCheckInRequest req) async {
     final response = await _apiClient.post(
-      '/api/v1/classes/$classId/occurrences/'
-      '${_dateParam.format(occurrenceDate)}/checkin-batch',
+      '/api/v1/checkin/batch',
       data: req.toJson(),
     );
     return BatchCheckInResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `GET /api/v1/checkin/attendees?gym_id=&class_id=&occurrence_date=` — the
+  /// members who attended a materialized occurrence (read-only). An occurrence
+  /// that was never materialized (no check-ins yet) comes back with a null
+  /// `class_history_id` and an empty list.
+  Future<AttendeeListResponse> listAttendees(
+    String gymId,
+    String classId,
+    DateTime occurrenceDate,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/checkin/attendees',
+      queryParameters: {
+        'gym_id': gymId,
+        'class_id': classId,
+        'occurrence_date': _dateParam.format(occurrenceDate),
+      },
+    );
+    return AttendeeListResponse.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

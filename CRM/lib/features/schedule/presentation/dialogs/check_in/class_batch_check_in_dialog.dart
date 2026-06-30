@@ -14,8 +14,10 @@ import 'package:crm/shared/widgets/paginated_member_picker.dart';
 enum _Phase { select, processing, results }
 
 /// Batch staff check-in ("Update attendees") for one class occurrence: pick
-/// members → submit (207) → a per-member results step with a "check in anyway"
-/// retry. Shares the board's [ScheduleBloc] (a successful run reloads the week).
+/// members → submit (207) → a per-member results step (each row shows ✓ checked
+/// in / already in / ✗ failed, plus any non-blocking warnings). Staff always
+/// records, so there is no "check in anyway" retry. Shares the board's
+/// [ScheduleBloc] (a successful run reloads the week).
 class ClassBatchCheckInDialog extends StatefulWidget {
   final String classId;
   final String gymId;
@@ -61,7 +63,6 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
   _Phase _phase = _Phase.select;
   final Set<String> _selectedIds = {};
   final Map<String, String> _names = {};
-  bool _allowOverride = false;
   String? _inlineError;
 
   @override
@@ -82,14 +83,13 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
     });
   }
 
-  void _submit(List<String> ids, bool allowOverride) {
+  void _submit(List<String> ids) {
     if (ids.isEmpty) return;
     setState(() => _phase = _Phase.processing);
     context.read<ScheduleBloc>().add(ScheduleBatchCheckInRequested(
           classId: widget.classId,
           occurrenceDate: widget.occurrenceDate,
           memberIds: ids,
-          allowOverride: allowOverride,
         ));
   }
 
@@ -117,10 +117,7 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
           ),
         _Phase.results => AppDialog(
             title: 'Update attendees',
-            body: BatchCheckInResultsView(
-              memberNames: _names,
-              onRetryUnresolved: (ids) => _submit(ids, true),
-            ),
+            body: BatchCheckInResultsView(memberNames: _names),
             actions: checkInDoneActions(context),
           ),
         _Phase.select => AppDialog(
@@ -129,10 +126,8 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
               gymId: widget.gymId,
               className: widget.className,
               selectedIds: _selectedIds,
-              allowOverride: _allowOverride,
               inlineError: _inlineError,
               onToggle: _toggle,
-              onOverrideChanged: (v) => setState(() => _allowOverride = v),
             ),
             actions: checkInChoiceActions(
               primaryLabel: _selectedIds.isEmpty
@@ -140,7 +135,7 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
                   : 'Check in ${_selectedIds.length}',
               onPrimary: _selectedIds.isEmpty
                   ? null
-                  : () => _submit(_selectedIds.toList(), _allowOverride),
+                  : () => _submit(_selectedIds.toList()),
               dismissLabel: 'Cancel',
             ),
           ),

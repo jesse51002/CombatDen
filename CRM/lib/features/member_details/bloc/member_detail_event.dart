@@ -373,24 +373,21 @@ class RefundChargeRequested extends MemberDetailEvent {
 // ----- Class check-in -----
 
 /// Check the viewed member into the occurrence of [classId] on
-/// [occurrenceDate] (a local calendar day). The outcome lands on the loaded
-/// state as `checkInResult` (recorded / already-checked-in / skipped-with-a-
-/// reason) or `checkInError`. [allowOverride] forces past the eligibility /
-/// capacity gates — the dialog re-dispatches with it true on a skip's "check
-/// in anyway".
+/// [occurrenceDate] (a local calendar day). The CRM is the staff surface
+/// (`is_member: false`), so the check-in is ALWAYS recorded — the outcome lands
+/// on the loaded state as `checkInResult` (recorded or already-checked-in, with
+/// any non-blocking `warnings`) or `checkInError`.
 class MemberCheckInRequested extends MemberDetailEvent {
   final String classId;
   final DateTime occurrenceDate;
-  final bool allowOverride;
 
   const MemberCheckInRequested({
     required this.classId,
     required this.occurrenceDate,
-    this.allowOverride = false,
   });
 
   @override
-  List<Object?> get props => [classId, occurrenceDate, allowOverride];
+  List<Object?> get props => [classId, occurrenceDate];
 }
 
 /// Clears the check-in outcome (result + error) when the check-in dialog opens

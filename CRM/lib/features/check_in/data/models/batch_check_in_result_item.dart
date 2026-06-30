@@ -1,16 +1,18 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/check_in/data/models/class_check_in_status.dart';
 
 part 'batch_check_in_result_item.g.dart';
 
-/// One member's result inside a batch staff check-in.
+/// One member's result inside a batch check-in.
 ///
-/// Mirrors the backend `BatchCheckinItemResult`. [reason] is the skip reason
-/// (a `CheckInSkipReason` code) when [status] is skipped, or the error message
-/// when failed; null on the two success outcomes. [pointsAwarded] is the
-/// class's points on a fresh check-in, 0 otherwise.
+/// Mirrors the backend `BatchCheckinItemResult`. [reason] is the error message
+/// when [status] is failed (or, for a kiosk batch, the skip reason); null on
+/// the two success outcomes. [warnings] are the non-blocking gate conditions a
+/// staff check-in recorded through. [pointsAwarded] is the class's points on a
+/// fresh check-in, 0 otherwise.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -25,6 +27,8 @@ class BatchCheckInResultItem extends Equatable {
   final String? chosenPlanId;
   final String? chosenItemId;
   final String? logId;
+  @JsonKey(fromJson: checkInWarningsFromJson)
+  final List<CheckInWarning> warnings;
 
   const BatchCheckInResultItem({
     required this.memberId,
@@ -34,14 +38,11 @@ class BatchCheckInResultItem extends Equatable {
     this.chosenPlanId,
     this.chosenItemId,
     this.logId,
+    this.warnings = const [],
   });
 
   factory BatchCheckInResultItem.fromJson(Map<String, dynamic> json) =>
       _$BatchCheckInResultItemFromJson(json);
-
-  /// True for skipped / failed — the outcomes a "check in anyway" retry
-  /// resubmits.
-  bool get isUnresolved => status.isSkipped || status.isFailed;
 
   @override
   List<Object?> get props => [
@@ -52,5 +53,6 @@ class BatchCheckInResultItem extends Equatable {
         chosenPlanId,
         chosenItemId,
         logId,
+        warnings,
       ];
 }

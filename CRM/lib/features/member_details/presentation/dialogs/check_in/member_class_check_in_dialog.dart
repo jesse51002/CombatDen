@@ -17,9 +17,10 @@ enum _Phase { pick, processing, result }
 
 /// Two-section staff check-in for the viewed member: TODAY's classes (Active,
 /// emphasized) and the LAST 7 DAYS (Past). Pick one → "Check in" dispatches
-/// [MemberCheckInRequested]; a skip offers "Check in anyway" (override). Reads
-/// occurrences via the member-detail screen's [ScheduleRepository] and runs the
-/// check-in through the [MemberDetailBloc]'s dedicated channel.
+/// [MemberCheckInRequested]; staff always records, so the result names the
+/// class + points and surfaces any non-blocking warnings (no "check in anyway"
+/// retry). Reads occurrences via the member-detail screen's [ScheduleRepository]
+/// and runs the check-in through the [MemberDetailBloc]'s dedicated channel.
 class MemberClassCheckInDialog extends StatefulWidget {
   final String gymId;
 
@@ -52,7 +53,6 @@ class _MemberClassCheckInDialogState
     extends State<MemberClassCheckInDialog> {
   _Phase _phase = _Phase.pick;
   EffectiveClassInstance? _selected;
-  bool _lastOverride = false;
 
   @override
   void initState() {
@@ -60,16 +60,14 @@ class _MemberClassCheckInDialogState
     context.read<MemberDetailBloc>().add(const MemberCheckInCleared());
   }
 
-  void _submit(bool allowOverride) {
+  void _submit() {
     final selected = _selected;
     if (selected == null) return;
-    _lastOverride = allowOverride;
     setState(() => _phase = _Phase.processing);
     context.read<MemberDetailBloc>().add(
           MemberCheckInRequested(
             classId: selected.classId,
             occurrenceDate: selected.classDate,
-            allowOverride: allowOverride,
           ),
         );
   }
@@ -126,14 +124,7 @@ class _MemberClassCheckInDialogState
         if (loaded?.checkInError != null) {
           return checkInChoiceActions(
             primaryLabel: 'Try again',
-            onPrimary: () => _submit(_lastOverride),
-            dismissLabel: 'Close',
-          );
-        }
-        if (loaded?.checkInResult?.isSkipped ?? false) {
-          return checkInChoiceActions(
-            primaryLabel: 'Check in anyway',
-            onPrimary: () => _submit(true),
+            onPrimary: _submit,
             dismissLabel: 'Close',
           );
         }
@@ -141,7 +132,7 @@ class _MemberClassCheckInDialogState
       case _Phase.pick:
         return checkInChoiceActions(
           primaryLabel: 'Check in',
-          onPrimary: _selected == null ? null : () => _submit(false),
+          onPrimary: _selected == null ? null : _submit,
           dismissLabel: 'Cancel',
         );
     }

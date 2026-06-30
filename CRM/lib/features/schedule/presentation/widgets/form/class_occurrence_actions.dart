@@ -14,13 +14,19 @@ final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 ///   (offered for any non-cancelled occurrence, past or upcoming).
 /// - **Cancel this class** — cancels just this date ([cancellable] only: an
 ///   upcoming, not-already-cancelled occurrence).
-/// A cancelled occurrence shows a note instead of the actions.
+/// A cancelled occurrence shows a note instead of the actions. For a past /
+/// materialized occurrence the caller also passes a [roster] (the read-only
+/// attendee list), rendered beneath the actions in the same block.
 class ClassOccurrenceActions extends StatelessWidget {
   final DateTime occurrenceDate;
   final bool cancellable;
   final bool isCancelled;
   final VoidCallback onUpdateAttendees;
   final VoidCallback onCancelInstance;
+
+  /// The read-only attendee roster for a past / materialized occurrence; null
+  /// for a future occurrence (no attendance yet).
+  final Widget? roster;
 
   const ClassOccurrenceActions({
     super.key,
@@ -29,6 +35,7 @@ class ClassOccurrenceActions extends StatelessWidget {
     required this.isCancelled,
     required this.onUpdateAttendees,
     required this.onCancelInstance,
+    this.roster,
   });
 
   String get _note {
@@ -66,6 +73,7 @@ class ClassOccurrenceActions extends StatelessWidget {
                   ),
               ],
             ),
+          ?roster,
         ],
       ),
     );

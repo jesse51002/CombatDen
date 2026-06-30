@@ -904,11 +904,11 @@ class MemberDetailBloc
   /// The check-in dialog's mutation. Like [_onChargeCard] it rides a DEDICATED
   /// channel ([isCheckingIn] / [checkInResult] / [checkInError]) so the
   /// screen-level overlay + error dialog never fire while the dialog is open;
-  /// the dialog flips to its own terminal step off the result. A skip is NOT an
-  /// error — it arrives as a [CheckInResponse] with a `skip_reason` so the
-  /// dialog can offer "check in anyway". Only a real recorded attendance bumps
-  /// `refreshToken` (so last-class / attendance / rewards refresh) — a skip or
-  /// idempotent repeat changes nothing.
+  /// the dialog flips to its own terminal step off the result. The CRM sends
+  /// `is_member: false`, so the check-in is ALWAYS recorded; any gate
+  /// conditions ride along as non-blocking `warnings`. Only a real recorded
+  /// attendance bumps `refreshToken` (so last-class / attendance / rewards
+  /// refresh) — an idempotent repeat changes nothing.
   Future<void> _onCheckIn(
     MemberCheckInRequested event,
     Emitter<MemberDetailState> emit,
@@ -928,7 +928,6 @@ class MemberDetailBloc
           gymId: s.member.gymId,
           classId: event.classId,
           occurrenceDate: _occurrenceDate.format(event.occurrenceDate),
-          allowOverride: event.allowOverride,
         ),
       );
     } catch (e, stackTrace) {
@@ -946,7 +945,7 @@ class MemberDetailBloc
 
     final committed = state;
     if (committed is! MemberDetailLoaded) return;
-    // A skip / idempotent repeat wrote nothing — surface the result without a
+    // An idempotent repeat wrote nothing — surface the result without a
     // refresh. A fresh attendance bumps `refreshToken` so the detail surfaces
     // (last class, attendance, rewards) re-read behind the still-open dialog.
     emit(committed.copyWith(
