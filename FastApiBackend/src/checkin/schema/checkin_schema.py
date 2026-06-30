@@ -213,6 +213,27 @@ class CheckinResponse(BaseModel):
     memberships: list[CheckinMembershipBreakdown] = []
 
 
+class CheckinRemoveResponse(BaseModel):
+    """Result of removing one member's check-in from an occurrence.
+
+    The full reversal of a check-in, scoped to one member (delete attendance,
+    claw back points, reverse the pack auto-end, drop a feed activity) — the
+    occurrence itself is kept.
+
+    Attributes:
+        removed: True when an attendance row was deleted; False when the member
+            was not checked in, or the occurrence was never materialized.
+        points_reverted: The class's ``points_worth`` reversed off the member's
+            balance (floored at 0 by the balance CHECK); 0 when nothing removed.
+        membership_unended: The pack whose auto-end was reversed (its ``end_date``
+            cleared because the removal dropped it back below capacity), else None.
+    """
+
+    removed: bool
+    points_reverted: int = 0
+    membership_unended: UUID | None = None
+
+
 class Attendee(BaseModel):
     """One member who attended a class occurrence.
 

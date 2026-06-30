@@ -193,6 +193,56 @@ def _class_attended_activity_ids(member_id: str, class_id: str) -> set[UUID]:
     return _run_async(_run())
 
 
+def _attendance_exists(member_id: str, class_history_id: str) -> bool:
+    async def _run() -> bool:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            return await conn.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM member_attendance "
+                "WHERE member_id = $1 AND class_history_id = $2)",
+                UUID(member_id),
+                UUID(class_history_id),
+            )
+        finally:
+            await conn.close()
+
+    return _run_async(_run())
+
+
+def _history_exists(class_history_id: str) -> bool:
+    async def _run() -> bool:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            return await conn.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM class_history "
+                "WHERE class_history_id = $1)",
+                UUID(class_history_id),
+            )
+        finally:
+            await conn.close()
+
+    return _run_async(_run())
+
+
+def _delete_history_if_empty(class_history_id: str) -> None:
+    """Teardown: drop the (now attendance-free) occurrence the test materialized,
+    leaving a seed-shared occurrence (one still holding seeded attendance) be."""
+
+    async def _run() -> None:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            await conn.execute(
+                "DELETE FROM class_history WHERE class_history_id = $1 "
+                "AND NOT EXISTS (SELECT 1 FROM member_attendance "
+                "WHERE class_history_id = $1)",
+                UUID(class_history_id),
+            )
+        finally:
+            await conn.close()
+
+    _run_async(_run())
+
+
 def _teardown_checkin(
     member_id: str,
     class_history_id: str,
@@ -360,6 +410,59 @@ class TestGatedCheckin:
                 _teardown_checkin(
                     member_id, class_history_id, new_activity_ids, before_points
                 )
+
+    def test_remove_checkin_reverses_attendance_points_and_activity(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        """DELETE /checkin removes one member's attendance, claws back the
+        awarded points (balance back to before), and drops the class_attended
+        activity — the occurrence (class_history) stays. A second remove is a
+        clean no-op (removed=False)."""
+        row = seed_ids["covered"]
+        if row is None:
+            pytest.skip("No board occurrence for a coverable class in seed")
+        member_id = row["member_id"]
+        class_id = row["class_id"]
+        points_worth = row["points_worth"]
+        params = {
+            "member_id": member_id,
+            "gym_id": GYM_ID,
+            "class_id": class_id,
+            "occurrence_date": row["occurrence_date"],
+        }
+
+        before_points = _member_points(member_id)
+        before_activities = _class_attended_activity_ids(member_id, class_id)
+
+        checkin = api.post("/api/v1/checkin", json=params)
+        assert checkin.status_code == 200, checkin.text
+        if checkin.json()["already_checked_in"]:
+            pytest.skip("covered member already seeded onto this occurrence")
+        class_history_id = checkin.json()["class_history_id"]
+        try:
+            assert _member_points(member_id) == before_points + points_worth
+
+            removed = api.request("DELETE", "/api/v1/checkin", params=params)
+            assert removed.status_code == 200, removed.text
+            body = removed.json()
+            assert body["removed"] is True
+            assert body["points_reverted"] == points_worth
+            # Attendance + points + activity reverted to the pre-check-in state.
+            assert _attendance_exists(member_id, class_history_id) is False
+            assert _member_points(member_id) == before_points
+            assert (
+                _class_attended_activity_ids(member_id, class_id)
+                == before_activities
+            )
+            # The occurrence itself is kept (the class still happened).
+            assert _history_exists(class_history_id) is True
+
+            # A second remove is a clean no-op.
+            again = api.request("DELETE", "/api/v1/checkin", params=params)
+            assert again.status_code == 200, again.text
+            assert again.json()["removed"] is False
+        finally:
+            _delete_history_if_empty(class_history_id)
 
     def test_duplicate_checkin_is_idempotent_and_awards_no_extra_points(
         self, api: httpx.Client, seed_ids: dict

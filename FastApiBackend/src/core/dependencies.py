@@ -10,6 +10,7 @@ from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_occurrence_resolver import (
     CheckinOccurrenceResolver,
 )
+from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.classes.service.classes_crud_service import ClassesCrudService
@@ -247,6 +248,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     # resolve of the materialized class_history → member_attendance join).
     checkin_attendees_service = providers.Factory(
         CheckinAttendeesService,
+        db_pool=db_pool,
+    )
+    # Reverse one member's check-in: delete attendance, claw back points, reverse
+    # the pack auto-end (reuses the classes undo SQL), drop a feed activity.
+    checkin_remover = providers.Factory(
+        CheckinRemover,
         db_pool=db_pool,
     )
 

@@ -21,6 +21,7 @@ from src.checkin.schema.batch_checkin_schema import (
 )
 from src.checkin.schema.checkin_schema import (
     AttendeeListResponse,
+    CheckinRemoveResponse,
     CheckinRequest,
     CheckinResponse,
     StreakResponse,
@@ -33,6 +34,7 @@ from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_occurrence_resolver import (
     CheckinOccurrenceResolver,
 )
+from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
@@ -119,6 +121,68 @@ async def checkin(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to record check-in",
+        ) from None
+
+
+@checkin_router.delete(
+    "/checkin",
+    response_model=CheckinRemoveResponse,
+    summary="Remove one member's check-in from a class occurrence",
+    description=(
+        "Reverses one member's check-in on the occurrence addressed by "
+        "``class_id`` + ``occurrence_date``: deletes their attendance row, claws "
+        "back the class's points (floored at 0), drops a ``class_attended`` "
+        "activity, and — when the removal drops a trial / punch-card pack back "
+        "below capacity — reverses the auto-end (clears the pack's "
+        "``end_date``). The occurrence itself is kept (the class still "
+        "happened). A member who was not checked in (or an occurrence never "
+        "materialized) returns ``removed = false`` with a 200. Admin / owner "
+        "only."
+    ),
+    responses={
+        200: {"description": "Removal result (removed true / false)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def remove_checkin(
+    member_id: UUID,
+    gym_id: UUID,
+    class_id: UUID,
+    occurrence_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    remover: CheckinRemover = Depends(
+        Provide[DependencyInjector.checkin_remover]
+    ),
+) -> CheckinRemoveResponse:
+    """Reverse one member's check-in (staff)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+
+    try:
+        return await remover.remove(
+            class_id, gym_id, occurrence_date, member_id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Remove check-in failed: member_id=%s, class_id=%s, "
+            "occurrence_date=%s",
+            member_id,
+            class_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove check-in",
         ) from None
 
 
