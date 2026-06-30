@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from schema.membership_plan import PlanType
 
 
-class ClassesCycleCountsRequest(BaseModel):
+class CheckinCycleCountsRequest(BaseModel):
     """Request body for fetching current-cycle class counts.
 
     Attributes:
@@ -69,7 +69,7 @@ class UserCycleCounts(BaseModel):
     memberships: list[MembershipUsage]
 
 
-class ClassesCycleCountsResponse(BaseModel):
+class CheckinCycleCountsResponse(BaseModel):
     """Response for the cycle-counts endpoint.
 
     Attributes:

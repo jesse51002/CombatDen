@@ -19,7 +19,7 @@ from src.checkin.schema.batch_checkin_schema import (
 )
 from src.checkin.schema.checkin_schema import (
     CheckinResponse,
-    CheckinSkipReason,
+    CheckinWarning,
     OccurrenceContext,
 )
 from src.checkin.service.batch_checkin_service import BatchCheckinService
@@ -179,7 +179,7 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
             chosen_plan_id=None,
             chosen_item_id=None,
             points_awarded=0,
-            skip_reason=CheckinSkipReason.no_membership,
+            skip_reason=CheckinWarning.no_membership,
             memberships=[],
         )
 
@@ -221,3 +221,35 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
     assert skip.reason == "no_membership"
     assert skip.log_id is None
     assert skip.points_awarded == 0
+
+
+async def test_warnings_propagate_to_batch_item() -> None:
+    """A staff (warned) check-in carries its warnings onto the batch item."""
+    ctx = _ctx()
+    member = uuid4()
+
+    def warned(_ctx, member_id, _is_member):
+        return CheckinResponse(
+            log_id=uuid4(),
+            member_id=member_id,
+            class_history_id=ctx.class_history_id,
+            class_id=ctx.class_id,
+            already_checked_in=False,
+            chosen_plan_id=None,
+            chosen_item_id=None,
+            points_awarded=ctx.points_worth,
+            skip_reason=None,
+            warnings=[CheckinWarning.no_membership],
+            memberships=[],
+        )
+
+    service, _ = _service(ctx, warned)
+
+    response, all_failed = await service.batch_checkin(
+        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [member], False
+    )
+
+    assert all_failed is False
+    item = response.results[0]
+    assert item.status == BatchCheckinItemStatus.checked_in
+    assert item.warnings == [CheckinWarning.no_membership]

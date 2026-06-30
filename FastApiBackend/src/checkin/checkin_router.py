@@ -1,6 +1,11 @@
-"""API routes for the checkin domain (single + batch check-in, streak)."""
+"""API routes for the checkin domain.
+
+Single + batch check-in, the per-occurrence attendee list, and the attendance
+streak.
+"""
 
 import logging
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -15,11 +20,15 @@ from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinResponse,
 )
 from src.checkin.schema.checkin_schema import (
+    AttendeeListResponse,
     CheckinRequest,
     CheckinResponse,
     StreakResponse,
 )
 from src.checkin.service.batch_checkin_service import BatchCheckinService
+from src.checkin.service.checkin_attendees_service import (
+    CheckinAttendeesService,
+)
 from src.checkin.service.checkin_service import CheckinService
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
@@ -39,18 +48,20 @@ checkin_router = APIRouter(
     summary="Check a member into a class instance",
     description=(
         "Addresses the occurrence by ``class_id`` + ``occurrence_date`` and "
-        "lazily materializes the ``class_history`` row. Selects the best "
-        "eligible membership plan with remaining capacity (trial -> one_time "
-        "-> recurring), logs the attendance against it, bumps ``last_class``, "
+        "lazily materializes the ``class_history`` row, bumps ``last_class``, "
         "awards the class's points, and auto-ends trial / punch-card "
-        "memberships once depleted. Gated by plan eligibility, punch-card "
-        "capacity, and the room's ``max_capacity``; a skipped check-in returns "
-        "``log_id = null`` with a ``skip_reason`` and writes nothing. "
-        "``allow_override = true`` forces past those gates (front-desk "
-        "coverage), attributing to the member's best active membership even if "
-        "depleted. Idempotent — a repeat for the same (member, occurrence) "
-        "returns the existing log_id with ``already_checked_in = True``, "
-        "consumes no capacity, and awards no points."
+        "memberships once depleted. ``is_member = true`` (kiosk / member "
+        "self-check-in) runs the strict gate — selects the best eligible "
+        "membership with remaining capacity (trial -> one_time -> recurring) "
+        "and, if none covers / the room is full, returns ``log_id = null`` "
+        "with a ``skip_reason`` and writes nothing. ``is_member = false`` "
+        "(default — staff / admin) ALWAYS records: it attributes to the "
+        "member's best available membership (eligibility + remaining count "
+        "ignored; NULL plan/item when the member has none) and returns any gate "
+        "conditions in ``warnings``. Idempotent — a repeat for the same "
+        "(member, occurrence) returns the existing log_id with "
+        "``already_checked_in = True``, consumes no capacity, and awards no "
+        "points."
     ),
     responses={
         200: {"description": "Check-in result returned (recorded or skipped)"},
@@ -111,9 +122,10 @@ async def checkin(
         "Returns **207 Multi-Status** with a per-member split (``checked_in`` / "
         "``already_checked_in`` / ``skipped`` / ``failed``). A total failure "
         "(every member failed) is **500**; an invalid occurrence is **400 / "
-        "404** before any member is processed. ``allow_override = true`` forces "
-        "every member past the eligibility, punch-card, and room-capacity gates "
-        "(front-desk coverage). Admin/owner only."
+        "404** before any member is processed. ``is_member`` applies to every "
+        "member: ``false`` (default — a staff batch) records each member with "
+        "``warnings``; ``true`` runs the strict kiosk gate per member, skipping "
+        "the uncovered / over-capacity. Admin/owner only."
     ),
     responses={
         207: {
@@ -149,7 +161,7 @@ async def checkin_batch(
             request.gym_id,
             request.occurrence_date,
             request.member_ids,
-            request.allow_override,
+            request.is_member,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -194,6 +206,63 @@ async def checkin_batch(
         status_code=status.HTTP_207_MULTI_STATUS,
         content=jsonable_encoder(response),
     )
+
+
+@checkin_router.get(
+    "/checkin/attendees",
+    response_model=AttendeeListResponse,
+    summary="List the members who attended a class occurrence",
+    description=(
+        "Resolves the materialized ``class_history`` row for the (``class_id``, "
+        "gym-local ``occurrence_date``) and returns the members who attended it "
+        "— ``member_id`` + ``full_name`` + the attributed ``plan_id`` / "
+        "``item_id`` (NULL for a no-membership staff check-in). An occurrence "
+        "that was never materialized (no check-ins yet) returns "
+        "``class_history_id = null`` with an empty list. Gym-employee gated."
+    ),
+    responses={
+        200: {"description": "Attendee list returned (possibly empty)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Gym not found"},
+    },
+)
+@inject
+async def list_attendees(
+    gym_id: UUID,
+    class_id: UUID,
+    occurrence_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    attendees_service: CheckinAttendeesService = Depends(
+        Provide[DependencyInjector.checkin_attendees_service]
+    ),
+) -> AttendeeListResponse:
+    """The members who attended one occurrence (empty when unmaterialized)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await attendees_service.list_attendees(
+            gym_id, class_id, occurrence_date
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Attendee list failed: gym_id=%s, class_id=%s, occurrence_date=%s",
+            gym_id,
+            class_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list attendees",
+        ) from None
 
 
 @checkin_router.get(

@@ -1,4 +1,12 @@
-"""Transactional write path for the gated class check-in."""
+"""Transactional write path for the class check-in.
+
+The attribution columns are nullable: a staff check-in of a member with no
+covering membership writes the attendance with NULL ``plan_id`` / ``item_id``
+(no pack is drawn). Points are still awarded on every newly-inserted row
+regardless of attribution; the auto-end only fires for an actual depleting
+membership, so a NULL-attribution row never ends anything (``should_end`` is
+False with no membership to end).
+"""
 
 import json
 from uuid import UUID
@@ -33,14 +41,17 @@ class CheckinWriter:
         self,
         ctx: OccurrenceContext,
         member_id: UUID,
-        plan_id: UUID,
-        item_id: UUID,
+        plan_id: UUID | None,
+        item_id: UUID | None,
         should_end: bool,
     ) -> tuple[UUID, bool, int]:
         """Insert attendance, bump last_class, award points, conditionally end.
 
-        Points are awarded ONLY on a newly-inserted attendance row, in the same
-        transaction: an ON CONFLICT idempotent repeat awards nothing.
+        ``plan_id`` / ``item_id`` are both None for a no-membership staff
+        check-in (the attendance row carries NULL attribution); they are bound
+        as SQL NULL. Points are awarded ONLY on a newly-inserted attendance row,
+        in the same transaction (membership or not): an ON CONFLICT idempotent
+        repeat awards nothing.
 
         Returns:
             ``(log_id, already_checked_in, points_awarded)``.
@@ -61,8 +72,12 @@ class CheckinWriter:
                             "member_id": str(member_id),
                             "gym_id": str(ctx.gym_id),
                             "class_history_id": str(ctx.class_history_id),
-                            "plan_id": str(plan_id),
-                            "item_id": str(item_id),
+                            "plan_id": str(plan_id)
+                            if plan_id is not None
+                            else None,
+                            "item_id": str(item_id)
+                            if item_id is not None
+                            else None,
                         },
                     )
                 )

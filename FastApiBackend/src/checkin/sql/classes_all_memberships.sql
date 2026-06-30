@@ -42,6 +42,9 @@ LEFT JOIN (
     FROM member_attendance ma
     JOIN class_history ch
         ON  ch.class_history_id = ma.class_history_id
+    -- A no-membership staff check-in carries NULL item_id; that row never
+    -- matches an mm.item_id here, so it is naturally excluded from every
+    -- membership's cycle count (it draws down no pack).
     JOIN member_memberships_status mm
         ON  mm.item_id = ma.item_id
     JOIN gyms g2 ON g2.gym_id = ma.gym_id

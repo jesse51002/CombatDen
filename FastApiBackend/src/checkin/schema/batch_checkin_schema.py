@@ -17,6 +17,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.checkin.schema.checkin_schema import CheckinWarning
+
 
 class BatchCheckinRequest(BaseModel):
     """Body for the batch check-in.
@@ -27,17 +29,19 @@ class BatchCheckinRequest(BaseModel):
         occurrence_date: The local calendar date of the occurrence.
         member_ids: The members to check in (at least one; de-duped, order
             preserved).
-        allow_override: When True, force every member's check-in past the
-            eligibility, punch-card, and room-capacity gates (front-desk
-            coverage), attributing to each member's best active membership even
-            if depleted. A member with no active membership is still skipped.
+        is_member: Applies to every member in the batch. ``False`` (the default
+            — a staff batch) records every member, attributing to their best
+            available membership (NULL when none) and reporting gate conditions
+            as ``warnings``. ``True`` runs the strict kiosk gate per member,
+            skipping any that no eligible covering membership with capacity
+            covers (or that is over capacity).
     """
 
     gym_id: UUID
     class_id: UUID
     occurrence_date: date
     member_ids: list[UUID] = Field(min_length=1)
-    allow_override: bool = False
+    is_member: bool = False
 
 
 class BatchCheckinItemStatus(StrEnum):
@@ -48,8 +52,9 @@ class BatchCheckinItemStatus(StrEnum):
         already_checked_in: An attendance row already existed for this
             (member, occurrence) — idempotent; no capacity consumed, no points
             re-awarded.
-        skipped: The gate rejected this member (capacity full / no membership /
-            no eligible plan); nothing written.
+        skipped: The strict kiosk gate (``is_member=True``) rejected this member
+            (over capacity / no membership / out of classes / ineligible plan);
+            nothing written.
         failed: An unexpected error hit this member; the rest of the batch was
             still processed.
     """
@@ -73,9 +78,12 @@ class BatchCheckinItemResult(BaseModel):
         chosen_plan_id: The plan charged (checked_in / already_checked_in);
             None on skip / fail.
         chosen_item_id: The membership row charged (checked_in /
-            already_checked_in); None on skip / fail.
+            already_checked_in); None on skip / fail or a no-membership staff
+            check-in.
         log_id: The attendance row (checked_in / already_checked_in); None on
             skip / fail.
+        warnings: Gate conditions a staff (``is_member=False``) check-in
+            recorded through (empty otherwise).
     """
 
     member_id: UUID
@@ -85,6 +93,7 @@ class BatchCheckinItemResult(BaseModel):
     chosen_plan_id: UUID | None = None
     chosen_item_id: UUID | None = None
     log_id: UUID | None = None
+    warnings: list[CheckinWarning] = []
 
 
 class BatchCheckinResponse(BaseModel):

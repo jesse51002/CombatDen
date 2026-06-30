@@ -8,19 +8,33 @@ from pydantic import BaseModel
 from schema.membership_plan import PlanType
 
 
-class CheckinSkipReason(StrEnum):
-    """Why a non-override check-in was skipped (no attendance written).
+class CheckinWarning(StrEnum):
+    """A gate condition that would block a kiosk check-in.
+
+    The gate evaluates these once per (member, occurrence). ``is_member``
+    decides what they mean:
+
+    * ``is_member=True`` (kiosk / member self-check-in) — a blocking condition
+      *rejects* the check-in (returned as the response ``skip_reason``, nothing
+      written).
+    * ``is_member=False`` (staff / admin) — the same conditions become
+      ``warnings`` on a check-in that is still recorded.
 
     Attributes:
-        no_membership: The member has no active membership to attribute to.
-        no_eligible_plan: No active membership covers this class with remaining
-            capacity (eligibility / punch-card gate).
-        capacity_full: The room is at ``max_capacity`` for this occurrence.
+        no_membership: The member has no active membership; a staff check-in
+            attributes with NULL ``plan_id`` / ``item_id``.
+        out_of_classes: The attributed membership's punch-card is depleted
+            (a staff check-in over-draws it).
+        ineligible_plan: The attributed membership's plan is not in the class's
+            ``allowed_plan_ids``.
+        over_capacity: The room is at ``max_capacity`` for this occurrence (the
+            headcount gate).
     """
 
     no_membership = "no_membership"
-    no_eligible_plan = "no_eligible_plan"
-    capacity_full = "capacity_full"
+    out_of_classes = "out_of_classes"
+    ineligible_plan = "ineligible_plan"
+    over_capacity = "over_capacity"
 
 
 class CheckinRequest(BaseModel):
@@ -28,16 +42,26 @@ class CheckinRequest(BaseModel):
 
     The occurrence is addressed by ``class_id`` + ``occurrence_date`` (the local
     calendar date the class runs); the backend resolves / lazily materializes
-    the ``class_history`` row. ``allow_override`` forces the check-in past the
-    eligibility, punch-card, and room-capacity gates (front-desk coverage),
-    attributing to the member's best active membership even if depleted.
+    the ``class_history`` row.
+
+    ``is_member`` selects the gate:
+
+    * ``True`` — the member self-checks-in (kiosk). The strict gate applies: if
+      no eligible covering membership has remaining capacity, the member is out
+      of classes, the room is full, or the plan is ineligible, the check-in is
+      rejected (``log_id = null`` + a ``skip_reason``, nothing written).
+    * ``False`` (default — staff / admin) — the check-in is ALWAYS recorded.
+      It is attributed to the member's best available membership (eligibility
+      and remaining count ignored); with no active membership the attendance is
+      written with NULL ``plan_id`` / ``item_id``. Conditions that would have
+      blocked a kiosk check-in come back as ``warnings`` instead.
     """
 
     member_id: UUID
     gym_id: UUID
     class_id: UUID
     occurrence_date: date
-    allow_override: bool = False
+    is_member: bool = False
 
 
 class OccurrenceContext(BaseModel):
@@ -107,27 +131,36 @@ class CheckinMembershipBreakdown(BaseModel):
 class CheckinResponse(BaseModel):
     """Response for POST /api/v1/checkin.
 
-    The check-in is gated: a covering active membership with remaining
-    capacity must exist or the check-in is rejected (``log_id`` /
-    ``chosen_plan_id`` / ``chosen_item_id`` are ``None`` and no
-    attendance row is written). The ``memberships`` breakdown explains
-    the decision either way.
+    The outcome depends on ``is_member`` (see ``CheckinRequest``):
+
+    * A kiosk check-in (``is_member=True``) that hits the gate is *rejected* —
+      ``log_id`` / ``chosen_plan_id`` / ``chosen_item_id`` are ``None``, nothing
+      is written, and ``skip_reason`` says why.
+    * A staff check-in (``is_member=False``) is always recorded — ``log_id`` is
+      set and any gate conditions are reported in ``warnings`` (the attendance
+      may carry NULL plan/item when the member has no membership).
+
+    The ``memberships`` breakdown explains the decision either way.
 
     Attributes:
-        log_id: The attendance row. None when the check-in was rejected.
+        log_id: The attendance row. None when a kiosk check-in was rejected.
         member_id: The member who checked in.
         class_history_id: The resolved/materialized class instance attended.
         class_id: The class the occurrence belongs to.
         already_checked_in: True when an attendance row already existed
             for this (member, class instance) — the check-in was
             idempotent and no capacity was consumed.
-        chosen_plan_id: The plan charged. None when rejected.
-        chosen_item_id: The membership row charged. None when rejected.
+        chosen_plan_id: The plan charged. None when rejected or when a staff
+            check-in had no membership to attribute to.
+        chosen_item_id: The membership row charged. None when rejected or when a
+            staff check-in had no membership to attribute to.
         points_awarded: Points added to the member's balance — the class's
-            ``points_worth`` on a newly-recorded check-in, 0 on an idempotent
-            repeat or a skip.
-        skip_reason: Why the check-in was skipped (no attendance written);
+            ``points_worth`` on a newly-recorded check-in (membership or not),
+            0 on an idempotent repeat or a rejection.
+        skip_reason: Why a kiosk check-in was rejected (no attendance written);
             None when recorded or an idempotent repeat.
+        warnings: Gate conditions a staff check-in recorded through (empty on a
+            kiosk check-in and on a clean staff check-in).
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -139,8 +172,46 @@ class CheckinResponse(BaseModel):
     chosen_plan_id: UUID | None = None
     chosen_item_id: UUID | None = None
     points_awarded: int = 0
-    skip_reason: CheckinSkipReason | None = None
+    skip_reason: CheckinWarning | None = None
+    warnings: list[CheckinWarning] = []
     memberships: list[CheckinMembershipBreakdown] = []
+
+
+class Attendee(BaseModel):
+    """One member who attended a class occurrence.
+
+    Attributes:
+        member_id: The attending member.
+        full_name: The member's display name.
+        log_id: The attendance row.
+        plan_id: The plan the attendance was attributed to (None for a
+            no-membership staff check-in).
+        item_id: The membership row the attendance was attributed to (None for a
+            no-membership staff check-in).
+    """
+
+    member_id: UUID
+    full_name: str
+    log_id: UUID
+    plan_id: UUID | None = None
+    item_id: UUID | None = None
+
+
+class AttendeeListResponse(BaseModel):
+    """Response for GET /api/v1/checkin/attendees.
+
+    Attributes:
+        class_id: The class the occurrence belongs to.
+        occurrence_date: The gym-local calendar date queried.
+        class_history_id: The materialized occurrence row, or None when the
+            occurrence was never materialized (no check-ins yet → empty list).
+        attendees: The members who attended, ordered by name.
+    """
+
+    class_id: UUID
+    occurrence_date: date
+    class_history_id: UUID | None
+    attendees: list[Attendee]
 
 
 class StreakResponse(BaseModel):

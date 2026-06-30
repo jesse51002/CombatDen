@@ -47,7 +47,7 @@ class BatchCheckinService:
         gym_id: UUID,
         occurrence_date: date,
         member_ids: list[UUID],
-        allow_override: bool,
+        is_member: bool,
     ) -> tuple[BatchCheckinResponse, bool]:
         """Resolve the occurrence once, then check each member in.
 
@@ -57,8 +57,9 @@ class BatchCheckinService:
             occurrence_date: The local calendar date of the occurrence.
             member_ids: The members to check in (at least one; de-duped,
                 order preserved).
-            allow_override: Force every member past the eligibility,
-                punch-card, and room-capacity gates (front-desk coverage).
+            is_member: Applies to every member. ``False`` (a staff batch)
+                records every member with warnings; ``True`` runs the strict
+                kiosk gate per member (skipping the uncovered / over-capacity).
 
         Returns:
             ``(response, all_failed)`` — the per-member results plus whether
@@ -77,7 +78,7 @@ class BatchCheckinService:
         results: list[BatchCheckinItemResult] = []
         for member_id in self._dedupe(member_ids):
             results.append(
-                await self._checkin_one(ctx, member_id, allow_override)
+                await self._checkin_one(ctx, member_id, is_member)
             )
 
         all_failed = bool(results) and all(
@@ -96,14 +97,14 @@ class BatchCheckinService:
         self,
         ctx: OccurrenceContext,
         member_id: UUID,
-        allow_override: bool,
+        is_member: bool,
     ) -> BatchCheckinItemResult:
         """Check one member in against the resolved occurrence, mapping the
         result to a batch item. An exception becomes a ``failed`` item so a
         single bad member never aborts the batch."""
         try:
             res = await self._checkin_service.checkin_member(
-                ctx, member_id, allow_override
+                ctx, member_id, is_member
             )
         except Exception as exc:  # noqa: BLE001 — isolate one member's failure
             return BatchCheckinItemResult(
@@ -143,6 +144,7 @@ class BatchCheckinService:
             chosen_plan_id=res.chosen_plan_id,
             chosen_item_id=res.chosen_item_id,
             log_id=res.log_id,
+            warnings=res.warnings,
         )
 
     @staticmethod

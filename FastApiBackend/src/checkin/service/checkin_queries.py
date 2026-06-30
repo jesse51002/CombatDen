@@ -9,7 +9,7 @@ importing ``ClassesExpander`` / ``ClassesMaterializer``. The check-in-only reads
 live in this domain's own ``sql/`` dir.
 """
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -173,6 +173,58 @@ class CheckinQueries:
                 .all()
             )
         return {row["plan_id"] for row in rows}
+
+    async def find_history_for_day(
+        self,
+        class_id: UUID,
+        gym_id: UUID,
+        day_start: datetime,
+        day_end: datetime,
+    ) -> UUID | None:
+        """Find the materialized class_history row for a gym-local calendar day.
+
+        ``day_start`` / ``day_end`` are the day's UTC bounds (gym-local midnight
+        to the next, converted to UTC), so a per-occurrence time override still
+        resolves to the same row. None when the occurrence was never
+        materialized (no check-ins yet).
+        """
+        sql = load_sql(SQL_DIR / "find_history_for_day.sql")
+        async with self._db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(sql),
+                        {
+                            "class_id": str(class_id),
+                            "gym_id": str(gym_id),
+                            "day_start": day_start,
+                            "day_end": day_end,
+                        },
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+        return row["class_history_id"] if row else None
+
+    async def get_attendees(
+        self,
+        class_history_id: UUID,
+        gym_id: UUID,
+    ) -> list[dict]:
+        """List the members who attended a materialized occurrence.
+
+        Joins ``member_attendance`` to ``members`` for ``full_name`` and carries
+        the attributed ``plan_id`` / ``item_id`` (both NULL for a no-membership
+        staff check-in). Gym-scoped for the employee auth boundary.
+        """
+        return await self._read_all(
+            SQL_DIR / "attendees_for_occurrence.sql",
+            {
+                "class_history_id": str(class_history_id),
+                "gym_id": str(gym_id),
+            },
+        )
 
     async def _read_all(self, sql_path: Path, params: dict) -> list[dict]:
         sql = load_sql(sql_path)

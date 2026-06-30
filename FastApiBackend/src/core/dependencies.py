@@ -3,6 +3,9 @@ from schema.task import TaskType
 
 import src.shared.db_schema_path  # noqa: F401
 from src.checkin.service.batch_checkin_service import BatchCheckinService
+from src.checkin.service.checkin_attendees_service import (
+    CheckinAttendeesService,
+)
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_occurrence_resolver import (
     CheckinOccurrenceResolver,
@@ -245,6 +248,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     batch_checkin_service = providers.Factory(
         BatchCheckinService,
         checkin_service=checkin_service,
+    )
+    # Read-only: the members who attended one occurrence (gym-local day-bounds
+    # resolve of the materialized class_history → member_attendance join).
+    checkin_attendees_service = providers.Factory(
+        CheckinAttendeesService,
+        db_pool=db_pool,
     )
 
     # Class CRUD + exceptions + the schedule board.

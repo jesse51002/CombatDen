@@ -328,8 +328,8 @@ class TestBatchCheckin:
     def test_mixed_batch_207_and_single_history_row(
         self, api: httpx.Client, batch_ids: dict
     ) -> None:
-        """A mixed batch returns 207 with one checked_in, one
-        already_checked_in, and one skipped(no_membership), materializing
+        """A mixed KIOSK batch (is_member=True) returns 207 with one checked_in,
+        one already_checked_in, and one skipped(no_membership), materializing
         EXACTLY ONE class_history row for the occurrence regardless of member
         count. Fully cleaned up after."""
         target = batch_ids["target"]
@@ -380,6 +380,7 @@ class TestBatchCheckin:
                     "class_id": class_id,
                     "occurrence_date": occurrence_date,
                     "member_ids": [member_a, member_b, no_mem],
+                    "is_member": True,
                 },
             )
             assert resp.status_code == 207, resp.text
@@ -391,6 +392,7 @@ class TestBatchCheckin:
             assert by_member[member_a]["points_awarded"] == 0
             assert by_member[member_b]["status"] == "checked_in"
             assert by_member[member_b]["points_awarded"] == points_worth
+            # Kiosk gate rejects the membership-less member.
             assert by_member[no_mem]["status"] == "skipped"
             assert by_member[no_mem]["reason"] == "no_membership"
 
@@ -466,6 +468,73 @@ class TestBatchCheckin:
                 )
             _teardown_batch(
                 [member_a, member_b], class_history_id, new_acts, before_points
+            )
+
+
+    def test_staff_batch_records_no_membership_with_warning(
+        self, api: httpx.Client, batch_ids: dict
+    ) -> None:
+        """A STAFF batch (is_member=False) records every member — including a
+        membership-less one, who comes back checked_in with NULL attribution and
+        a no_membership warning. Fully cleaned up after."""
+        target = batch_ids["target"]
+        no_membership = batch_ids["no_membership"]
+        if target is None or no_membership is None:
+            pytest.skip(
+                "No 2-cover class + membership-less member in seed/board"
+            )
+        member_a = target["members"][0]
+        no_mem = str(no_membership["member_id"])
+        class_id = target["class_id"]
+        occurrence_date = target["occurrence_date"]
+
+        before_points = {m: _member_points(m) for m in (member_a, no_mem)}
+        before_acts = {
+            m: _class_attended_activity_ids(m, class_id)
+            for m in (member_a, no_mem)
+        }
+
+        resp = api.post(
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "class_id": class_id,
+                "occurrence_date": occurrence_date,
+                "member_ids": [member_a, no_mem],
+                # is_member omitted -> staff (False) by default.
+            },
+        )
+        class_history_id = (
+            resp.json().get("class_history_id")
+            if resp.headers.get("content-type", "").startswith(
+                "application/json"
+            )
+            else None
+        )
+        try:
+            assert resp.status_code == 207, resp.text
+            by_member = {r["member_id"]: r for r in resp.json()["results"]}
+
+            # The covered member records cleanly (no warnings).
+            assert by_member[member_a]["status"] == "checked_in"
+            assert by_member[member_a]["warnings"] == []
+
+            # The membership-less member is RECORDED with NULL attribution + a
+            # no_membership warning (a staff batch never skips).
+            no_mem_row = by_member[no_mem]
+            assert no_mem_row["status"] == "checked_in"
+            assert no_mem_row["chosen_plan_id"] is None
+            assert no_mem_row["chosen_item_id"] is None
+            assert "no_membership" in no_mem_row["warnings"]
+            assert no_mem_row["log_id"] is not None
+        finally:
+            new_acts: set[UUID] = set()
+            for m in (member_a, no_mem):
+                new_acts |= (
+                    _class_attended_activity_ids(m, class_id) - before_acts[m]
+                )
+            _teardown_batch(
+                [member_a, no_mem], class_history_id, new_acts, before_points
             )
 
 

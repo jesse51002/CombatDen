@@ -49,10 +49,11 @@ class CheckinService:
 
         Args:
             request: member / gym / class identifiers, the occurrence date, and
-                the override flag.
+                the ``is_member`` flag (kiosk strict gate vs staff always-record).
 
         Returns:
-            The check-in result (recorded, idempotent repeat, or skipped).
+            The check-in result (recorded, idempotent repeat, or — for a
+            rejected kiosk check-in — skipped).
 
         Raises:
             ValueError: If the class is missing / deleted / inactive, or the
@@ -63,7 +64,7 @@ class CheckinService:
             request.class_id, request.gym_id, request.occurrence_date
         )
         return await self._member_gate.checkin_member(
-            ctx, request.member_id, request.allow_override
+            ctx, request.member_id, request.is_member
         )
 
     async def resolve_occurrence(
@@ -87,21 +88,22 @@ class CheckinService:
         self,
         ctx: OccurrenceContext,
         member_id: UUID,
-        allow_override: bool = False,
+        is_member: bool = False,
     ) -> CheckinResponse:
         """Gate + write one member against a resolved occurrence (batch seam).
 
         Args:
             ctx: The resolved occurrence (from ``resolve_occurrence``).
             member_id: The member checking in.
-            allow_override: When True, bypass the eligibility, punch-card, and
-                room-capacity gates (coverage); attribute to the member's best
-                active membership even if depleted. A member with no active
-                membership is still skipped.
+            is_member: ``True`` for the kiosk strict gate (reject when
+                uncovered / full); ``False`` (default) for a staff check-in
+                (always record, gate conditions become warnings, NULL
+                attribution when the member has no membership).
 
         Returns:
-            The check-in result (recorded, idempotent repeat, or skipped).
+            The check-in result (recorded, idempotent repeat, or — for a
+            rejected kiosk check-in — skipped).
         """
         return await self._member_gate.checkin_member(
-            ctx, member_id, allow_override
+            ctx, member_id, is_member
         )

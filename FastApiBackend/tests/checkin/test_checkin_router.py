@@ -17,8 +17,10 @@ from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinResponse,
 )
 from src.checkin.schema.checkin_schema import (
+    AttendeeListResponse,
     CheckinMembershipBreakdown,
     CheckinResponse,
+    CheckinWarning,
 )
 from src.main import app
 
@@ -96,7 +98,7 @@ def test_checkin_records_when_a_plan_covers_the_class(
 def test_checkin_rejected_when_no_plan_covers(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A hard-gate skip returns 200 with null log_id, no chosen plan, a
+    """A kiosk-gate rejection returns 200 with null log_id, no chosen plan, a
     skip_reason, and 0 points."""
     class_id = str(uuid4())
     class_history_id = str(uuid4())
@@ -109,7 +111,54 @@ def test_checkin_rejected_when_no_plan_covers(
         chosen_plan_id=None,
         chosen_item_id=None,
         points_awarded=0,
-        skip_reason="no_eligible_plan",
+        skip_reason=CheckinWarning.ineligible_plan,
+        memberships=[],
+    )
+    _override_checkin(response)
+    try:
+        resp = client.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": fake_member_id,
+                "gym_id": fake_gym_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
+                "is_member": True,
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.checkin_service.reset_override()
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["log_id"] is None
+    assert body["chosen_plan_id"] is None
+    assert body["chosen_item_id"] is None
+    assert body["already_checked_in"] is False
+    assert body["points_awarded"] == 0
+    assert body["skip_reason"] == "ineligible_plan"
+
+
+def test_checkin_staff_records_with_warnings(
+    client, auth_headers, fake_member_id, fake_gym_id
+):
+    """A staff (is_member=False) check-in of a no-membership member returns 200
+    with a log_id, NULL attribution, and a no_membership warning."""
+    log_id = str(uuid4())
+    class_id = str(uuid4())
+    class_history_id = str(uuid4())
+    response = CheckinResponse(
+        log_id=log_id,
+        member_id=fake_member_id,
+        class_history_id=class_history_id,
+        class_id=class_id,
+        already_checked_in=False,
+        chosen_plan_id=None,
+        chosen_item_id=None,
+        points_awarded=50,
+        skip_reason=None,
+        warnings=[CheckinWarning.no_membership],
         memberships=[],
     )
     _override_checkin(response)
@@ -129,12 +178,11 @@ def test_checkin_rejected_when_no_plan_covers(
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["log_id"] is None
+    assert body["log_id"] == log_id
     assert body["chosen_plan_id"] is None
-    assert body["chosen_item_id"] is None
-    assert body["already_checked_in"] is False
-    assert body["points_awarded"] == 0
-    assert body["skip_reason"] == "no_eligible_plan"
+    assert body["skip_reason"] is None
+    assert body["warnings"] == ["no_membership"]
+    assert body["points_awarded"] == 50
 
 
 def test_checkin_idempotent_returns_already_checked_in(
@@ -346,6 +394,69 @@ def test_batch_checkin_empty_member_ids_returns_422(
     resp = client.post(
         _BATCH_URL,
         json=_batch_body(fake_gym_id, []),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_attendees_returns_list(client, auth_headers, fake_gym_id):
+    """GET /api/v1/checkin/attendees returns the attendee list (a member with a
+    NULL-membership attribution included), serializing plan/item as null."""
+    class_id = uuid4()
+    history_id = uuid4()
+    member_a, member_b = uuid4(), uuid4()
+    plan_id, item_id = uuid4(), uuid4()
+    response = AttendeeListResponse(
+        class_id=class_id,
+        occurrence_date=date(2026, 6, 1),
+        class_history_id=history_id,
+        attendees=[
+            {
+                "member_id": member_a,
+                "full_name": "Aaron Ant",
+                "log_id": uuid4(),
+                "plan_id": plan_id,
+                "item_id": item_id,
+            },
+            {
+                "member_id": member_b,
+                "full_name": "Bea Bee",
+                "log_id": uuid4(),
+                "plan_id": None,
+                "item_id": None,
+            },
+        ],
+    )
+    service = MagicMock()
+    service.list_attendees = AsyncMock(return_value=response)
+    app.container.checkin_attendees_service.override(service)
+    try:
+        resp = client.get(
+            "/api/v1/checkin/attendees",
+            params={
+                "gym_id": fake_gym_id,
+                "class_id": str(class_id),
+                "occurrence_date": "2026-06-01",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.checkin_attendees_service.reset_override()
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["class_history_id"] == str(history_id)
+    assert len(body["attendees"]) == 2
+    assert body["attendees"][0]["full_name"] == "Aaron Ant"
+    assert body["attendees"][1]["plan_id"] is None
+    assert body["attendees"][1]["item_id"] is None
+
+
+def test_attendees_missing_params_returns_422(client, auth_headers, fake_gym_id):
+    """Omitting class_id / occurrence_date violates the query contract -> 422."""
+    resp = client.get(
+        "/api/v1/checkin/attendees",
+        params={"gym_id": fake_gym_id},
         headers=auth_headers,
     )
     assert resp.status_code == 422

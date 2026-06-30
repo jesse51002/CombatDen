@@ -400,11 +400,12 @@ class TestGatedCheckin:
                     before_points,
                 )
 
-    def test_checkin_without_membership_is_skipped(
+    def test_kiosk_checkin_without_membership_is_rejected(
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
-        """A member with no active membership is skipped: null log_id,
-        skip_reason=no_membership, nothing written (no cleanup needed)."""
+        """A KIOSK check-in (is_member=True) of a member with no active
+        membership is rejected: null log_id, skip_reason=no_membership, nothing
+        written (no cleanup needed)."""
         covered = seed_ids["covered"]
         member_row = seed_ids["no_membership"]
         if covered is None or member_row is None:
@@ -420,6 +421,7 @@ class TestGatedCheckin:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "is_member": True,
             },
         )
         assert resp.status_code == 200, resp.text
@@ -429,6 +431,159 @@ class TestGatedCheckin:
         assert body["already_checked_in"] is False
         assert body["points_awarded"] == 0
         assert body["skip_reason"] == "no_membership"
+
+    def test_staff_checkin_without_membership_records_null_and_warns(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        """A STAFF check-in (is_member=False, the default) of a member with no
+        active membership IS recorded: a log_id, NULL plan/item attribution, a
+        no_membership warning, and points still awarded. Fully cleaned up."""
+        covered = seed_ids["covered"]
+        member_row = seed_ids["no_membership"]
+        if covered is None or member_row is None:
+            pytest.skip("No membership-less member / coverable class in seed")
+        member_id = str(member_row["member_id"])
+        class_id = covered["class_id"]
+        points_worth = covered["points_worth"]
+        occurrence_date = covered["occurrence_date"]
+
+        before_points = _member_points(member_id)
+        before_activities = _class_attended_activity_ids(member_id, class_id)
+
+        resp = api.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": member_id,
+                "gym_id": GYM_ID,
+                "class_id": class_id,
+                "occurrence_date": occurrence_date,
+            },
+        )
+        body = resp.json()
+        class_history_id = body.get("class_history_id")
+        after_activities = _class_attended_activity_ids(member_id, class_id)
+        new_activity_ids = after_activities - before_activities
+        try:
+            assert resp.status_code == 200, resp.text
+            assert body["log_id"] is not None
+            UUID(body["log_id"])
+            assert body["already_checked_in"] is False
+            # No membership to attribute to -> NULL plan/item.
+            assert body["chosen_plan_id"] is None
+            assert body["chosen_item_id"] is None
+            assert "no_membership" in body["warnings"]
+            assert body["skip_reason"] is None
+            # Points are awarded regardless of membership.
+            assert body["points_awarded"] == points_worth
+            assert _member_points(member_id) == before_points + points_worth
+            assert len(new_activity_ids) == 1
+        finally:
+            if class_history_id:
+                _teardown_checkin(
+                    member_id, class_history_id, new_activity_ids, before_points
+                )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/checkin/attendees
+# ---------------------------------------------------------------------------
+
+
+class TestAttendees:
+    def test_attendees_lists_a_null_membership_checkin(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        """After a staff check-in of a no-membership member, the attendees
+        endpoint lists that member with NULL plan/item attribution and the
+        materialized class_history_id. Fully cleaned up."""
+        covered = seed_ids["covered"]
+        member_row = seed_ids["no_membership"]
+        if covered is None or member_row is None:
+            pytest.skip("No membership-less member / coverable class in seed")
+        member_id = str(member_row["member_id"])
+        class_id = covered["class_id"]
+        occurrence_date = covered["occurrence_date"]
+
+        before_points = _member_points(member_id)
+        before_activities = _class_attended_activity_ids(member_id, class_id)
+
+        checkin = api.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": member_id,
+                "gym_id": GYM_ID,
+                "class_id": class_id,
+                "occurrence_date": occurrence_date,
+            },
+        )
+        class_history_id = checkin.json().get("class_history_id")
+        try:
+            assert checkin.status_code == 200, checkin.text
+
+            resp = api.get(
+                "/api/v1/checkin/attendees",
+                params={
+                    "gym_id": GYM_ID,
+                    "class_id": class_id,
+                    "occurrence_date": occurrence_date,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["class_history_id"] == class_history_id
+            by_member = {a["member_id"]: a for a in body["attendees"]}
+            assert member_id in by_member
+            attendee = by_member[member_id]
+            assert attendee["plan_id"] is None
+            assert attendee["item_id"] is None
+            assert attendee["full_name"]
+        finally:
+            new_activity_ids = (
+                _class_attended_activity_ids(member_id, class_id)
+                - before_activities
+            )
+            if class_history_id:
+                _teardown_checkin(
+                    member_id, class_history_id, new_activity_ids, before_points
+                )
+
+    def test_attendees_empty_when_unmaterialized(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        """An occurrence with no check-ins (never materialized) returns a null
+        class_history_id and an empty attendee list."""
+        covered = seed_ids["covered"]
+        if covered is None:
+            pytest.skip("No coverable class in seed")
+
+        resp = api.get(
+            "/api/v1/checkin/attendees",
+            params={
+                "gym_id": GYM_ID,
+                "class_id": covered["class_id"],
+                # A date no check-in materializes.
+                "occurrence_date": "2999-12-31",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["class_history_id"] is None
+        assert body["attendees"] == []
+
+    def test_attendees_unknown_gym_returns_404(self, api: httpx.Client) -> None:
+        """An unknown gym_id 404s (employee auth runs first, but a discovered
+        gym with no tz still maps the service's 'Gym not found' to 404)."""
+        resp = api.get(
+            "/api/v1/checkin/attendees",
+            params={
+                "gym_id": str(uuid4()),
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
+            },
+        )
+        # 403 (not an employee of the unknown gym) or 404 (gym not found) are
+        # both valid rejections; the point is it is not a 200 with data.
+        assert resp.status_code in (403, 404), resp.text
 
 
 # ---------------------------------------------------------------------------

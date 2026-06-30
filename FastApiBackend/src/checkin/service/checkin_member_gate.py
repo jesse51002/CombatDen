@@ -3,19 +3,31 @@
 ``checkin_member`` runs the per-member gate + write against a resolved
 ``OccurrenceContext``, so a batch can resolve once then loop over members.
 
-The gate is faithful to the original CRM: resolve the member's active
-memberships, gate by plan eligibility + remaining punch-card capacity + the
-room's ``max_capacity``, select the best covering plan (trial -> one_time ->
-recurring, then lowest class_count first), log the attendance against that
-membership, award the class's points, and auto-end trial / punch-card
-memberships once depleted. ``allow_override`` forces past the eligibility,
-punch-card, and room gates (front-desk coverage), attributing to the member's
-best active membership even if depleted (over-draw allowed); a member with NO
-active membership is still skipped. Idempotent: a repeat check-in for the same
-(member, class instance) returns the existing row without consuming capacity,
-re-awarding points, or re-ending a membership.
+``is_member`` selects how the gate behaves:
+
+* ``is_member=True`` (kiosk / member self-check-in) — the strict gate: resolve
+  the member's active memberships, gate by plan eligibility + remaining
+  punch-card capacity + the room's ``max_capacity``, and check in against the
+  best covering plan (trial -> one_time -> recurring, then lowest class_count,
+  then oldest pack). If no eligible covering membership has capacity, the room
+  is full, or the member has no membership, the check-in is *rejected* (skipped,
+  ``log_id`` None, with a ``skip_reason``); nothing is written.
+* ``is_member=False`` (staff / admin — the default) — the check-in is ALWAYS
+  recorded. It is attributed to the member's best available membership via
+  ``select_best_membership_forced`` (eligibility + remaining count ignored, an
+  over-draw allowed); with no active membership the attendance is written with
+  NULL ``plan_id`` / ``item_id``. Every condition that would have blocked a
+  kiosk check-in is returned as a ``warnings`` entry instead of blocking.
+
+Points are awarded on every newly-inserted attendance row regardless of
+membership (a no-membership staff check-in still earns the class's points).
+The gate evaluates the blocking conditions ONCE (relative to the attributed
+"best available" membership); ``is_member`` decides block-vs-warn. Idempotent: a
+repeat check-in for the same (member, class instance) returns the existing row
+without consuming capacity, re-awarding points, or re-ending a membership.
 """
 
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from schema.member_membership import MembershipDbStatus
@@ -24,11 +36,11 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin.schema.checkin_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
-    CheckinSkipReason,
+    CheckinWarning,
     OccurrenceContext,
 )
 from src.checkin.schema.cycle_counts_schema import (
-    ClassesCycleCountsRequest,
+    CheckinCycleCountsRequest,
     MembershipUsage,
 )
 from src.checkin.service.checkin_plan_selector import CheckinPlanSelector
@@ -36,6 +48,48 @@ from src.checkin.service.checkin_queries import CheckinQueries
 from src.checkin.service.checkin_writer import CheckinWriter
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.shared.database import DirectDatabasePool
+
+# Order a set of blocking reasons into a single primary ``skip_reason`` for a
+# rejected kiosk check-in: the room being full and a missing membership are the
+# hardest stops, then punch-card depletion, then plan ineligibility.
+_REASON_PRIORITY: tuple[CheckinWarning, ...] = (
+    CheckinWarning.over_capacity,
+    CheckinWarning.no_membership,
+    CheckinWarning.out_of_classes,
+    CheckinWarning.ineligible_plan,
+)
+
+
+@dataclass
+class _GateEvaluation:
+    """The single gate evaluation reused by both check-in modes.
+
+    Attributes:
+        reasons: Blocking conditions relative to the attributed "best available"
+            membership (``forced``) — these become a staff check-in's warnings.
+        strict: The best eligible membership with remaining capacity, or None
+            (the kiosk gate blocks when this is None).
+        forced: The best available membership ignoring eligibility / capacity,
+            or None when the member has no active membership (the staff
+            attribution target).
+    """
+
+    reasons: set[CheckinWarning] = field(default_factory=set)
+    strict: MembershipUsage | None = None
+    forced: MembershipUsage | None = None
+
+    @property
+    def blocked(self) -> bool:
+        """Whether the strict kiosk gate rejects this member.
+
+        Blocked iff the room is full, the member has no membership, or no
+        eligible covering membership has remaining capacity (``strict`` None).
+        """
+        return (
+            CheckinWarning.over_capacity in self.reasons
+            or self.forced is None
+            or self.strict is None
+        )
 
 
 class CheckinMemberGate:
@@ -60,20 +114,20 @@ class CheckinMemberGate:
         self,
         ctx: OccurrenceContext,
         member_id: UUID,
-        allow_override: bool = False,
+        is_member: bool = False,
     ) -> CheckinResponse:
         """Gate + write one member against a resolved occurrence.
 
         Args:
             ctx: The resolved occurrence (from the occurrence resolver).
             member_id: The member checking in.
-            allow_override: When True, bypass the eligibility, punch-card, and
-                room-capacity gates (coverage); attribute to the member's best
-                active membership even if depleted. A member with no active
-                membership is still skipped.
+            is_member: ``True`` for a kiosk / member self-check-in (strict gate
+                — reject when uncovered / full); ``False`` (default) for a staff
+                check-in (always record, gate conditions become warnings).
 
         Returns:
-            The check-in result (recorded, idempotent repeat, or skipped).
+            The check-in result (recorded, idempotent repeat, or — for a
+            rejected kiosk check-in — skipped).
         """
         existing = await self._queries.get_existing_attendance(
             member_id, ctx.class_history_id
@@ -87,50 +141,89 @@ class CheckinMemberGate:
                 existing["item_id"],
             )
 
-        if not allow_override and ctx.max_capacity is not None:
-            count = await self._queries.count_attendance(ctx.class_history_id)
-            if count >= ctx.max_capacity:
-                return self._skipped(
-                    ctx, member_id, CheckinSkipReason.capacity_full, []
-                )
-
         active = await self._active_memberships(member_id, ctx.gym_id)
-        if not active:
-            return self._skipped(
-                ctx, member_id, CheckinSkipReason.no_membership, []
+        eligible = (
+            await self._queries.get_eligible_plans(
+                ctx.gym_id, ctx.class_id, [m.plan_id for m in active]
             )
-
-        eligible = await self._queries.get_eligible_plans(
-            ctx.gym_id,
-            ctx.class_id,
-            [m.plan_id for m in active],
+            if active
+            else set()
         )
-        chosen = (
-            self._plan_selector.select_best_membership_forced(active)
-            if allow_override
-            else self._plan_selector.select_best_membership(active, eligible)
-        )
-        if chosen is None:
-            breakdown = self._plan_selector.build_breakdown(
-                active, eligible, None
-            )
-            return self._skipped(
-                ctx, member_id, CheckinSkipReason.no_eligible_plan, breakdown
-            )
+        over_capacity = await self._is_over_capacity(ctx)
+        evaluation = self._evaluate(active, eligible, over_capacity)
 
-        should_end = self._plan_selector.should_end_membership(chosen)
+        if is_member:
+            return await self._checkin_kiosk(
+                ctx, member_id, active, eligible, evaluation
+            )
+        return await self._checkin_staff(
+            ctx, member_id, active, eligible, evaluation
+        )
+
+    # -- mode handlers ---------------------------------------------------
+
+    async def _checkin_kiosk(
+        self,
+        ctx: OccurrenceContext,
+        member_id: UUID,
+        active: list[MembershipUsage],
+        eligible: set[UUID],
+        evaluation: _GateEvaluation,
+    ) -> CheckinResponse:
+        """Strict gate: reject when blocked, else record against ``strict``."""
+        if evaluation.blocked:
+            return self._skipped(
+                ctx,
+                member_id,
+                self._primary_reason(evaluation.reasons),
+                self._plan_selector.build_breakdown(active, eligible, None),
+            )
+        return await self._record(
+            ctx, member_id, active, eligible, evaluation.strict, warnings=[]
+        )
+
+    async def _checkin_staff(
+        self,
+        ctx: OccurrenceContext,
+        member_id: UUID,
+        active: list[MembershipUsage],
+        eligible: set[UUID],
+        evaluation: _GateEvaluation,
+    ) -> CheckinResponse:
+        """Always record, attributing to ``forced`` (NULL when none), surfacing
+        the blocking conditions as warnings."""
+        warnings = sorted(
+            evaluation.reasons, key=_REASON_PRIORITY.index
+        )
+        return await self._record(
+            ctx, member_id, active, eligible, evaluation.forced, warnings
+        )
+
+    async def _record(
+        self,
+        ctx: OccurrenceContext,
+        member_id: UUID,
+        active: list[MembershipUsage],
+        eligible: set[UUID],
+        chosen: MembershipUsage | None,
+        warnings: list[CheckinWarning],
+    ) -> CheckinResponse:
+        """Write the attendance (NULL attribution when ``chosen`` is None) and
+        build the recorded / idempotent-repeat response."""
+        plan_id = chosen.plan_id if chosen is not None else None
+        item_id = chosen.item_id if chosen is not None else None
+        should_end = (
+            self._plan_selector.should_end_membership(chosen)
+            if chosen is not None
+            else False
+        )
 
         log_id, already, points = await self._writer.write_checkin(
-            ctx,
-            member_id,
-            chosen.plan_id,
-            chosen.item_id,
-            should_end,
+            ctx, member_id, plan_id, item_id, should_end
         )
-
         if already:
             return self._already_checked_in(
-                ctx, member_id, log_id, chosen.plan_id, chosen.item_id
+                ctx, member_id, log_id, plan_id, item_id
             )
 
         return CheckinResponse(
@@ -139,14 +232,78 @@ class CheckinMemberGate:
             class_history_id=ctx.class_history_id,
             class_id=ctx.class_id,
             already_checked_in=False,
-            chosen_plan_id=chosen.plan_id,
-            chosen_item_id=chosen.item_id,
+            chosen_plan_id=plan_id,
+            chosen_item_id=item_id,
             points_awarded=points,
             skip_reason=None,
+            warnings=warnings,
             memberships=self._plan_selector.build_breakdown(
-                active, eligible, chosen.item_id
+                active, eligible, item_id
             ),
         )
+
+    # -- gate evaluation -------------------------------------------------
+
+    def _evaluate(
+        self,
+        active: list[MembershipUsage],
+        eligible: set[UUID],
+        over_capacity: bool,
+    ) -> _GateEvaluation:
+        """Evaluate the blocking conditions ONCE for both modes.
+
+        ``reasons`` describe the attributed "best available" membership
+        (``forced``) — depletion / ineligibility of the row a staff check-in
+        draws down. ``strict`` (best eligible-with-capacity membership) drives
+        the kiosk block decision; the two diverge only when a clean covering
+        membership exists but a higher-priority pack is the staff attribution
+        target, in which case the staff path warns while the kiosk path admits.
+        """
+        evaluation = _GateEvaluation()
+        if over_capacity:
+            evaluation.reasons.add(CheckinWarning.over_capacity)
+
+        if not active:
+            evaluation.reasons.add(CheckinWarning.no_membership)
+            return evaluation
+
+        evaluation.strict = self._plan_selector.select_best_membership(
+            active, eligible
+        )
+        evaluation.forced = self._plan_selector.select_best_membership_forced(
+            active
+        )
+        self._add_membership_reasons(evaluation.forced, eligible, evaluation)
+        return evaluation
+
+    @staticmethod
+    def _add_membership_reasons(
+        forced: MembershipUsage | None,
+        eligible: set[UUID],
+        evaluation: _GateEvaluation,
+    ) -> None:
+        """Flag ineligibility / depletion of the attribution target."""
+        if forced is None:
+            return
+        if forced.plan_id not in eligible:
+            evaluation.reasons.add(CheckinWarning.ineligible_plan)
+        if (
+            forced.class_count is not None
+            and forced.classes_used >= forced.class_count
+        ):
+            evaluation.reasons.add(CheckinWarning.out_of_classes)
+
+    @staticmethod
+    def _primary_reason(reasons: set[CheckinWarning]) -> CheckinWarning:
+        """Pick the single ``skip_reason`` for a rejected kiosk check-in."""
+        return min(reasons, key=_REASON_PRIORITY.index)
+
+    async def _is_over_capacity(self, ctx: OccurrenceContext) -> bool:
+        """Whether the room is at / over ``max_capacity`` for this occurrence."""
+        if ctx.max_capacity is None:
+            return False
+        count = await self._queries.count_attendance(ctx.class_history_id)
+        return count >= ctx.max_capacity
 
     # -- helpers ---------------------------------------------------------
 
@@ -156,7 +313,7 @@ class CheckinMemberGate:
         gym_id: UUID,
     ) -> list[MembershipUsage]:
         """Return the member's active memberships with current usage."""
-        counts_request = ClassesCycleCountsRequest(
+        counts_request = CheckinCycleCountsRequest(
             gym_id=gym_id,
             member_ids=[member_id],
         )
@@ -174,8 +331,8 @@ class CheckinMemberGate:
         ctx: OccurrenceContext,
         member_id: UUID,
         log_id: UUID,
-        plan_id: UUID,
-        item_id: UUID,
+        plan_id: UUID | None,
+        item_id: UUID | None,
     ) -> CheckinResponse:
         """Build the idempotent-repeat response (no points re-awarded)."""
         return CheckinResponse(
@@ -188,6 +345,7 @@ class CheckinMemberGate:
             chosen_item_id=item_id,
             points_awarded=0,
             skip_reason=None,
+            warnings=[],
             memberships=[],
         )
 
@@ -195,10 +353,10 @@ class CheckinMemberGate:
         self,
         ctx: OccurrenceContext,
         member_id: UUID,
-        reason: CheckinSkipReason,
+        reason: CheckinWarning,
         memberships: list[CheckinMembershipBreakdown],
     ) -> CheckinResponse:
-        """Build a skip response (nothing written, no points awarded)."""
+        """Build a kiosk-rejected response (nothing written, no points)."""
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
@@ -209,5 +367,6 @@ class CheckinMemberGate:
             chosen_item_id=None,
             points_awarded=0,
             skip_reason=reason,
+            warnings=[],
             memberships=memberships,
         )

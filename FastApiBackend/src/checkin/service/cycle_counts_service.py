@@ -8,8 +8,8 @@ from sqlalchemy import text
 
 from src.checkin import SQL_DIR
 from src.checkin.schema.cycle_counts_schema import (
-    ClassesCycleCountsRequest,
-    ClassesCycleCountsResponse,
+    CheckinCycleCountsRequest,
+    CheckinCycleCountsResponse,
     MembershipUsage,
     UserCycleCounts,
 )
@@ -29,8 +29,8 @@ class CycleCountsService:
 
     async def get_cycle_counts(
         self,
-        request: ClassesCycleCountsRequest,
-    ) -> ClassesCycleCountsResponse:
+        request: CheckinCycleCountsRequest,
+    ) -> CheckinCycleCountsResponse:
         """Get current-cycle class usage for each membership.
 
         Args:
@@ -53,7 +53,7 @@ class CycleCountsService:
         return self._build_response(rows)
 
     @staticmethod
-    def _build_response(rows: list) -> ClassesCycleCountsResponse:
+    def _build_response(rows: list) -> CheckinCycleCountsResponse:
         """Build structured response from combined query rows.
 
         Args:
@@ -89,4 +89,4 @@ class CycleCountsService:
             for uid, memberships in user_memberships.items()
         ]
 
-        return ClassesCycleCountsResponse(users=users)
+        return CheckinCycleCountsResponse(users=users)
