@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import random
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from uuid import UUID
 
 from schema.gym_class import RecurringUnit
@@ -52,10 +52,15 @@ _CLASS_TIME_SLOTS = [
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
 
-# Past-history seeding: how far back to materialize class_history + attendance so
-# a freshly-imported gym shows realistic attendance counts. Occurrences are
-# expanded over [today - _PAST_HISTORY_DAYS, today] and only the past ones kept.
+# History + sign-up seeding: how far back to materialize recorded attendance and
+# how far ahead to materialize sign-ups, so a freshly-imported gym shows
+# realistic counts on both past and upcoming classes. Occurrences are expanded
+# over [today - _PAST_HISTORY_DAYS, today + _FUTURE_SIGNUP_DAYS]; the ones that
+# have already happened become attendance, the upcoming ones become sign-ups
+# (the same class_history + member_attendance rows either way — the schedule UI
+# labels them by whether the occurrence has passed).
 _PAST_HISTORY_DAYS = 30
+_FUTURE_SIGNUP_DAYS = 7
 # Attendance spread per occurrence: draw a random subset (0..MAX_FRACTION) of the
 # eligible attendee pool, plus an explicit empty chance, so the seeded history is
 # a realistic mix of busy, lightly-attended, and empty occurrences.
@@ -279,8 +284,9 @@ class PresetsService:
                     )
                 )
 
-            # Seed the past month of class_history + attendance for these
-            # classes so the imported gym shows realistic attendance counts.
+            # Seed the past month of attendance + the upcoming week of sign-ups
+            # for these classes so the imported gym shows realistic counts on
+            # both past and upcoming occurrences.
             await self._seed_history_and_attendance(
                 session, gym_id_str, expander_classes
             )
@@ -358,18 +364,19 @@ class PresetsService:
         gym_id_str: str,
         expander_classes: list[ExpanderClass],
     ) -> None:
-        """Materialize the past month of class_history + attendance.
+        """Materialize the past month of attendance + the upcoming week of sign-ups.
 
         For each imported class, expand its occurrences over
-        ``[today - _PAST_HISTORY_DAYS, today]`` via the canonical expander, keep
-        only the ones that have already occurred, write a ``class_history`` row
-        per occurrence, and attribute a random subset of the gym's eligible
-        members to it. Eligibility is date-independent for this demo seed: any
-        member holding a synced membership can attend any past occurrence,
-        attributed to one of their memberships (NOT-NULL plan_id/item_id) — so
-        attendance spreads evenly across the whole month instead of bunching on
-        the dates that members' memberships happen to span. A no-op when the
-        import wrote no classes.
+        ``[today - _PAST_HISTORY_DAYS, today + _FUTURE_SIGNUP_DAYS]`` via the
+        canonical expander, write a ``class_history`` row per occurrence, and
+        attribute a random subset of the gym's eligible members to it — past
+        occurrences read as recorded attendance, upcoming ones as sign-ups.
+        Eligibility is date-independent for this demo seed: any member holding a
+        synced membership can attend / sign up for any occurrence, attributed to
+        one of their memberships (NOT-NULL plan_id/item_id) — so participation
+        spreads evenly across the window instead of bunching on the dates that
+        members' memberships happen to span. A no-op when the import wrote no
+        classes.
         """
         if not expander_classes:
             return
@@ -389,7 +396,7 @@ class PresetsService:
 
         today = date.today()
         window_start = today - timedelta(days=_PAST_HISTORY_DAYS)
-        now = datetime.now(UTC)
+        window_end = today + timedelta(days=_FUTURE_SIGNUP_DAYS)
         pool = self._eligible_attendees(membership_rows)
 
         insert_history_sql = load_sql(
@@ -405,8 +412,7 @@ class PresetsService:
                 gym_class=gym_class,
                 gym_tz=gym_tz,
                 window_start=window_start,
-                window_end=today,
-                now=now,
+                window_end=window_end,
                 pool=pool,
                 insert_history_sql=insert_history_sql,
                 insert_attendance_sql=insert_attendance_sql,
@@ -420,18 +426,21 @@ class PresetsService:
         gym_tz: str,
         window_start: date,
         window_end: date,
-        now: datetime,
         pool: _AttendeePool,
         insert_history_sql: str,
         insert_attendance_sql: str,
     ) -> None:
-        """Write class_history + attendance for one class's past occurrences."""
+        """Write class_history + attendance for every occurrence in the window.
+
+        Past occurrences become recorded attendance and upcoming ones (up to a
+        week ahead) become sign-ups — the same class_history + member_attendance
+        rows either way; the schedule UI labels them by whether the occurrence
+        has already passed.
+        """
         occurrences = self._expander.expand(
             gym_class, [], [], window_start, window_end, gym_tz
         )
         for occ in occurrences:
-            if occ.occurred_at >= now:
-                continue  # hasn't happened yet — history is past-only
             class_history_id = (
                 await session.execute(
                     text(insert_history_sql),
