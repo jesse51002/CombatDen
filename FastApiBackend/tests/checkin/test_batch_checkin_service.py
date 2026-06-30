@@ -1,9 +1,10 @@
 """Unit tests for BatchCheckinService (no DB / no Stripe).
 
-The batch service is driven against a mocked ``CheckinService``:
-``resolve_occurrence`` returns a fixed ``OccurrenceContext`` and
-``checkin_member`` is a side-effect that returns a ``CheckinResponse`` (or
-raises) per member. Covers: the occurrence is resolved exactly once; one member
+The batch service is driven against a mocked resolver + member gate: the
+resolver's ``resolve_occurrence`` returns a fixed ``OccurrenceContext`` and the
+gate's ``checkin_member`` is a side-effect that returns a ``CheckinResponse``
+(or raises) per member. Covers: the occurrence is resolved exactly once; one
+member
 raising becomes a ``failed`` item without aborting the rest; an all-failed batch
 sets ``all_failed``; duplicate member ids are de-duped; and the
 CheckinResponse -> BatchCheckinItemResult status mapping (checked_in /
@@ -28,7 +29,7 @@ _OCCURRENCE_DATE = date(2026, 6, 1)
 
 
 def _ctx() -> OccurrenceContext:
-    """A resolved occurrence the mocked checkin_service hands back."""
+    """A resolved occurrence the mocked resolver hands back."""
     return OccurrenceContext(
         class_history_id=uuid4(),
         class_id=uuid4(),
@@ -44,17 +45,20 @@ def _ctx() -> OccurrenceContext:
 
 
 def _service(ctx: OccurrenceContext, side_effect) -> tuple[
-    BatchCheckinService, MagicMock
+    BatchCheckinService, MagicMock, MagicMock
 ]:
-    """A batch service over a mocked CheckinService.
+    """A batch service over a mocked resolver + member gate.
 
-    ``resolve_occurrence`` returns ``ctx``; ``checkin_member`` runs
-    ``side_effect`` (a sync callable returning a CheckinResponse or raising).
+    The resolver's ``resolve_occurrence`` returns ``ctx``; the gate's
+    ``checkin_member`` runs ``side_effect`` (a sync callable returning a
+    CheckinResponse or raising), called positionally as
+    ``checkin_member(ctx, member_id, is_member)``.
     """
-    checkin_service = MagicMock()
-    checkin_service.resolve_occurrence = AsyncMock(return_value=ctx)
-    checkin_service.checkin_member = AsyncMock(side_effect=side_effect)
-    return BatchCheckinService(checkin_service), checkin_service
+    resolver = MagicMock()
+    resolver.resolve_occurrence = AsyncMock(return_value=ctx)
+    member_gate = MagicMock()
+    member_gate.checkin_member = AsyncMock(side_effect=side_effect)
+    return BatchCheckinService(resolver, member_gate), resolver, member_gate
 
 
 def _recorded(ctx: OccurrenceContext, member_id: UUID) -> CheckinResponse:
@@ -79,12 +83,12 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     ctx = _ctx()
     m1, m2, m3 = uuid4(), uuid4(), uuid4()
 
-    def side_effect(_ctx, member_id, _allow):
+    def side_effect(_ctx, member_id, _is_member):
         if member_id == m2:
             raise RuntimeError("boom")
         return _recorded(ctx, member_id)
 
-    service, checkin_service = _service(ctx, side_effect)
+    service, resolver, member_gate = _service(ctx, side_effect)
 
     response, all_failed = await service.batch_checkin(
         ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m2, m3], False
@@ -99,9 +103,9 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     assert by_member[m2].reason == "boom"
     assert by_member[m3].status == BatchCheckinItemStatus.checked_in
     # All three members were attempted despite m2 blowing up.
-    assert checkin_service.checkin_member.await_count == 3
+    assert member_gate.checkin_member.await_count == 3
     # The occurrence is materialized exactly once for the whole batch.
-    checkin_service.resolve_occurrence.assert_awaited_once()
+    resolver.resolve_occurrence.assert_awaited_once()
 
 
 async def test_all_members_failing_sets_all_failed() -> None:
@@ -110,10 +114,10 @@ async def test_all_members_failing_sets_all_failed() -> None:
     ctx = _ctx()
     m1, m2 = uuid4(), uuid4()
 
-    def side_effect(_ctx, _member_id, _allow):
+    def side_effect(_ctx, _member_id, _is_member):
         raise RuntimeError("db down")
 
-    service, _ = _service(ctx, side_effect)
+    service, _, _ = _service(ctx, side_effect)
 
     response, all_failed = await service.batch_checkin(
         ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m2], False
@@ -132,10 +136,10 @@ async def test_duplicate_member_ids_are_deduped() -> None:
     ctx = _ctx()
     m1 = uuid4()
 
-    def side_effect(_ctx, member_id, _allow):
+    def side_effect(_ctx, member_id, _is_member):
         return _recorded(ctx, member_id)
 
-    service, checkin_service = _service(ctx, side_effect)
+    service, _, member_gate = _service(ctx, side_effect)
 
     response, all_failed = await service.batch_checkin(
         ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m1, m1], False
@@ -145,7 +149,7 @@ async def test_duplicate_member_ids_are_deduped() -> None:
     assert len(response.results) == 1
     assert response.results[0].member_id == m1
     # checkin_member called once despite m1 listed three times.
-    assert checkin_service.checkin_member.await_count == 1
+    assert member_gate.checkin_member.await_count == 1
 
 
 async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
@@ -183,14 +187,14 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
             memberships=[],
         )
 
-    def side_effect(_ctx, member_id, _allow):
+    def side_effect(_ctx, member_id, _is_member):
         if member_id == already_m:
             return already(member_id)
         if member_id == skipped_m:
             return skipped(member_id)
         return _recorded(ctx, member_id)
 
-    service, _ = _service(ctx, side_effect)
+    service, _, _ = _service(ctx, side_effect)
 
     response, all_failed = await service.batch_checkin(
         ctx.class_id,
@@ -243,7 +247,7 @@ async def test_warnings_propagate_to_batch_item() -> None:
             memberships=[],
         )
 
-    service, _ = _service(ctx, warned)
+    service, _, _ = _service(ctx, warned)
 
     response, all_failed = await service.batch_checkin(
         ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [member], False

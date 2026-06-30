@@ -1,8 +1,8 @@
 """Smoke + edge tests for the checkin router.
 
 The gated check-in flow runs many DB queries plus the cycle-counts service, so
-these router tests override the ``checkin_service`` provider with a double and
-assert the router's wiring (auth -> service -> response serialization). The
+these router tests override the resolver + member-gate providers with doubles
+and assert the router's wiring (auth -> resolve -> gate -> serialization). The
 gating *logic* is unit-tested directly in
 ``checkin/test_checkin_plan_selector.py``.
 """
@@ -25,15 +25,22 @@ from src.checkin.schema.checkin_schema import (
 from src.main import app
 
 
-def _override_checkin(response: CheckinResponse):
-    """Override the checkin_service provider with a double returning ``response``.
-
-    Returns the service mock; caller resets the override.
+def _override_checkin(response: CheckinResponse) -> None:
+    """Double the resolver + member gate so the single-checkin handler returns
+    ``response`` without touching the DB. Caller resets via ``_reset_checkin``.
     """
-    service = MagicMock()
-    service.checkin = AsyncMock(return_value=response)
-    app.container.checkin_service.override(service)
-    return service
+    resolver = MagicMock()
+    resolver.resolve_occurrence = AsyncMock(return_value=MagicMock())
+    gate = MagicMock()
+    gate.checkin_member = AsyncMock(return_value=response)
+    app.container.checkin_occurrence_resolver.override(resolver)
+    app.container.checkin_member_gate.override(gate)
+
+
+def _reset_checkin() -> None:
+    """Undo the ``_override_checkin`` provider overrides."""
+    app.container.checkin_occurrence_resolver.reset_override()
+    app.container.checkin_member_gate.reset_override()
 
 
 def test_checkin_records_when_a_plan_covers_the_class(
@@ -83,7 +90,7 @@ def test_checkin_records_when_a_plan_covers_the_class(
             headers=auth_headers,
         )
     finally:
-        app.container.checkin_service.reset_override()
+        _reset_checkin()
 
     assert resp.status_code == 200
     body = resp.json()
@@ -128,7 +135,7 @@ def test_checkin_rejected_when_no_plan_covers(
             headers=auth_headers,
         )
     finally:
-        app.container.checkin_service.reset_override()
+        _reset_checkin()
 
     assert resp.status_code == 200
     body = resp.json()
@@ -174,7 +181,7 @@ def test_checkin_staff_records_with_warnings(
             headers=auth_headers,
         )
     finally:
-        app.container.checkin_service.reset_override()
+        _reset_checkin()
 
     assert resp.status_code == 200
     body = resp.json()
@@ -219,7 +226,7 @@ def test_checkin_idempotent_returns_already_checked_in(
             headers=auth_headers,
         )
     finally:
-        app.container.checkin_service.reset_override()
+        _reset_checkin()
 
     assert resp.status_code == 200
     body = resp.json()

@@ -216,10 +216,15 @@ def _teardown_checkin(
                     "DELETE FROM member_activities WHERE activity_id = ANY($1)",
                     list(new_activity_ids),
                 )
-            # The materializer creates a fresh class_history row (its gym-tz UTC
-            # occurred_at differs from the seed's naive stamp), so delete it.
+            # The check-in may have materialized a fresh class_history row OR
+            # found a seed-shared one (seed and runtime now stamp the same
+            # gym-tz occurred_at, so a check-in can land on a seeded occurrence).
+            # Delete the row only when no attendance remains on it — a row still
+            # referenced by seeded attendance is left intact (we didn't create it).
             await conn.execute(
-                "DELETE FROM class_history WHERE class_history_id = $1",
+                "DELETE FROM class_history WHERE class_history_id = $1 "
+                "AND NOT EXISTS (SELECT 1 FROM member_attendance "
+                "WHERE class_history_id = $1)",
                 UUID(class_history_id),
             )
             await conn.execute(

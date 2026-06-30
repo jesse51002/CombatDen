@@ -29,7 +29,10 @@ from src.checkin.service.batch_checkin_service import BatchCheckinService
 from src.checkin.service.checkin_attendees_service import (
     CheckinAttendeesService,
 )
-from src.checkin.service.checkin_service import CheckinService
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_occurrence_resolver import (
+    CheckinOccurrenceResolver,
+)
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
@@ -76,16 +79,24 @@ async def checkin(
     request: CheckinRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    checkin_service: CheckinService = Depends(
-        Provide[DependencyInjector.checkin_service]
+    resolver: CheckinOccurrenceResolver = Depends(
+        Provide[DependencyInjector.checkin_occurrence_resolver]
+    ),
+    member_gate: CheckinMemberGate = Depends(
+        Provide[DependencyInjector.checkin_member_gate]
     ),
 ) -> CheckinResponse:
-    """Record attendance."""
+    """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        return await checkin_service.checkin(request)
+        ctx = await resolver.resolve_occurrence(
+            request.class_id, request.gym_id, request.occurrence_date
+        )
+        return await member_gate.checkin_member(
+            ctx, request.member_id, request.is_member
+        )
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

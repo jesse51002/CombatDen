@@ -1,10 +1,11 @@
 """Batch staff check-in against a single resolved class occurrence.
 
-Reuses the seams on ``CheckinService``: ``resolve_occurrence`` loads +
-validates + materializes the ``class_history`` row ONCE (so a 50-member batch
-creates exactly one occurrence row), then ``checkin_member`` runs the per-member
-gate + write for each member. The batch resolves once, then loops a de-duped,
-order-preserving member list.
+Injects the two check-in seams directly (no facade): the
+``CheckinOccurrenceResolver`` loads + validates + materializes the
+``class_history`` row ONCE (so a 50-member batch creates exactly one occurrence
+row), then the ``CheckinMemberGate`` runs the per-member gate + write for each
+member. The batch resolves once, then loops a de-duped, order-preserving member
+list.
 
 One bad member never sinks the batch: each member is checked in inside its own
 ``try``, and any exception becomes a ``failed`` item carrying the error message
@@ -26,20 +27,27 @@ from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     OccurrenceContext,
 )
-from src.checkin.service.checkin_service import CheckinService
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_occurrence_resolver import (
+    CheckinOccurrenceResolver,
+)
 
 
 class BatchCheckinService:
     """Checks many members into one class occurrence.
 
     Args:
-        checkin_service: The single-member check-in facade. Its
-            ``resolve_occurrence`` seam materializes the occurrence once and
-            ``checkin_member`` runs the per-member gate + write.
+        resolver: Resolves + materializes the occurrence once for the batch.
+        member_gate: Runs the per-member gate + write for each member.
     """
 
-    def __init__(self, checkin_service: CheckinService) -> None:
-        self._checkin_service = checkin_service
+    def __init__(
+        self,
+        resolver: CheckinOccurrenceResolver,
+        member_gate: CheckinMemberGate,
+    ) -> None:
+        self._resolver = resolver
+        self._member_gate = member_gate
 
     async def batch_checkin(
         self,
@@ -71,7 +79,7 @@ class BatchCheckinService:
                 occurrence on that date). Raised before any per-member work, so
                 the whole request fails (router -> 404 / 400).
         """
-        ctx = await self._checkin_service.resolve_occurrence(
+        ctx = await self._resolver.resolve_occurrence(
             class_id, gym_id, occurrence_date
         )
 
@@ -103,7 +111,7 @@ class BatchCheckinService:
         result to a batch item. An exception becomes a ``failed`` item so a
         single bad member never aborts the batch."""
         try:
-            res = await self._checkin_service.checkin_member(
+            res = await self._member_gate.checkin_member(
                 ctx, member_id, is_member
             )
         except Exception as exc:  # noqa: BLE001 — isolate one member's failure

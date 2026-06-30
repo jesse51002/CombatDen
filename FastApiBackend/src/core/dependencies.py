@@ -10,7 +10,6 @@ from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_occurrence_resolver import (
     CheckinOccurrenceResolver,
 )
-from src.checkin.service.checkin_service import CheckinService
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.classes.service.classes_crud_service import ClassesCrudService
@@ -236,18 +235,13 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         cycle_counts_service=cycle_counts_service,
     )
-    # Facade: composes resolve + per-member gate.
-    checkin_service = providers.Factory(
-        CheckinService,
-        resolver=checkin_occurrence_resolver,
-        member_gate=checkin_member_gate,
-    )
-    # Batch staff check-in. Resolves the occurrence ONCE via the facade's
-    # seams, then loops checkin_member over a de-duped member list. Reuses
-    # checkin_service — does not re-wire the gate.
+    # Batch staff check-in. Resolves the occurrence ONCE via the resolver, then
+    # loops the member gate over a de-duped member list — the same two seams the
+    # single-check-in router injects directly.
     batch_checkin_service = providers.Factory(
         BatchCheckinService,
-        checkin_service=checkin_service,
+        resolver=checkin_occurrence_resolver,
+        member_gate=checkin_member_gate,
     )
     # Read-only: the members who attended one occurrence (gym-local day-bounds
     # resolve of the materialized class_history → member_attendance join).

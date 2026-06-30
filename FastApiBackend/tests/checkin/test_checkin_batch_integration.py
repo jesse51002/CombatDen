@@ -224,8 +224,14 @@ def _teardown_batch(
                     list(new_activity_ids),
                 )
             if class_history_id is not None:
+                # Delete the occurrence row only when no attendance remains on
+                # it — seed and runtime now stamp the same gym-tz occurred_at, so
+                # a batch can land on a seeded occurrence whose seeded attendance
+                # must outlive this test (we didn't create that row).
                 await conn.execute(
-                    "DELETE FROM class_history WHERE class_history_id = $1",
+                    "DELETE FROM class_history WHERE class_history_id = $1 "
+                    "AND NOT EXISTS (SELECT 1 FROM member_attendance "
+                    "WHERE class_history_id = $1)",
                     UUID(class_history_id),
                 )
             for member_id, points in points_by_member.items():
