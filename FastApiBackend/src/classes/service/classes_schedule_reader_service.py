@@ -29,6 +29,7 @@ from src.classes.service.classes_expander_mapping import (
     to_expander_range,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,27 @@ class ClassesScheduleReaderService:
             gym_id, start_date, end_date, gym_tz
         )
 
+        # The past/future split point: a strictly-past occurrence (before the
+        # gym's local today) renders from the immutable class_history table; today
+        # and the future render by expanding the current definition. So editing a
+        # class's recurring rules never rewrites or hides what already happened.
+        today_start = self._today_start_utc(gym_tz)
+        past_by_class = self._group_by_class(
+            await self._read_all(
+                "classes_board_past_history.sql",
+                {
+                    "gym_id": str(gym_id),
+                    "lower": self._day_start_utc(start_date, gym_tz),
+                    "today_start": today_start,
+                    "upper": self._day_start_utc(
+                        end_date + timedelta(days=1), gym_tz
+                    ),
+                },
+            )
+        )
+
         items: list[EffectiveClassInstanceResponse] = []
+        # Today + future: expand the current (editable) definition.
         for class_row in classes:
             items.extend(
                 self._board_rows_for_class(
@@ -102,7 +123,15 @@ class ClassesScheduleReaderService:
                     gym_tz,
                     instructors,
                     attendance,
+                    today_start,
                 )
+            )
+        # Strictly past: the immutable history (every gym class, deleted ones
+        # included), so a definition edit never changes occurrences that ran.
+        for history_rows in past_by_class.values():
+            items.extend(
+                self._build_past_row(row, gym_tz, instructors)
+                for row in history_rows
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
@@ -119,8 +148,17 @@ class ClassesScheduleReaderService:
         gym_tz: str,
         instructors: dict[str, str],
         attendance: dict[tuple[str, datetime], int],
+        today_start: datetime,
     ) -> list[EffectiveClassInstanceResponse]:
-        """Expand one class and enrich each occurrence into a board row."""
+        """Expand one class into today + future rows, plus any cancelled day.
+
+        A strictly-past occurrence that actually RAN is dropped here — the board
+        renders it from class_history instead (immutable, so a definition edit
+        can't rewrite it). A *cancelled* day is kept even when past: it leaves no
+        class_history row, so the expander is the only source that knows it was a
+        scheduled-then-cancelled day. Today and the future come from the live
+        expansion of the current definition.
+        """
         occurrences = self._expander.expand(
             to_expander_class(class_row),
             [to_expander_instance(row) for row in instance_rows],
@@ -130,6 +168,11 @@ class ClassesScheduleReaderService:
             gym_tz,
             include_cancelled=True,
         )
+        occurrences = [
+            occ
+            for occ in occurrences
+            if occ.occurred_at >= today_start or occ.is_cancelled
+        ]
         instance_dates = {row["original_date"] for row in instance_rows}
         # Effective per-day capacity: an instance exception's new_max_capacity
         # wins over the class default for that date. The expander resolves the
@@ -196,6 +239,56 @@ class ClassesScheduleReaderService:
             has_range_exception=has_range,
             attendance_count=count,
         )
+
+    @staticmethod
+    def _build_past_row(
+        h: dict, gym_tz: str, instructors: dict[str, str]
+    ) -> EffectiveClassInstanceResponse:
+        """One board row from an immutable past class_history occurrence.
+
+        The history row carries the effective instructor / duration / start
+        instant as they ran; the class row supplies the stable display fields
+        (name, image, points, default capacity). Never cancelled — a cancelled
+        day leaves no history row.
+        """
+        local = h["occurred_at"].astimezone(ZoneInfo(gym_tz))
+        instructor_name = (
+            instructors.get(str(h["instructor_id"]))
+            if h["instructor_id"] is not None
+            else None
+        )
+        return EffectiveClassInstanceResponse(
+            class_id=h["class_id"],
+            gym_id=h["gym_id"],
+            class_name=h["class_name"],
+            class_date=local.date(),
+            occurred_at=h["occurred_at"],
+            resolved_class_time=local.time(),
+            resolved_duration_minutes=h["duration_minutes"],
+            resolved_instructor_id=h["instructor_id"],
+            resolved_instructor_name=instructor_name,
+            image_url=h["image_url"],
+            points_worth=h["points_worth"],
+            max_capacity=h["max_capacity"],
+            is_cancelled=False,
+            has_instance_exception=False,
+            has_range_exception=False,
+            attendance_count=h["attendance_count"],
+        )
+
+    @staticmethod
+    def _today_start_utc(gym_tz: str) -> datetime:
+        """Gym-local midnight today, in UTC — the past/future split point."""
+        zone = ZoneInfo(gym_tz)
+        return datetime.combine(
+            gym_today(gym_tz), time.min, tzinfo=zone
+        ).astimezone(UTC)
+
+    @staticmethod
+    def _day_start_utc(day: date, gym_tz: str) -> datetime:
+        """Gym-local midnight of ``day``, in UTC (a window bound)."""
+        zone = ZoneInfo(gym_tz)
+        return datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
 
     # -- loads -----------------------------------------------------------
 
