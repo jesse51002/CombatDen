@@ -27,7 +27,6 @@ repeat check-in for the same (member, class instance) returns the existing row
 without consuming capacity, re-awarding points, or re-ending a membership.
 """
 
-from dataclasses import dataclass, field
 from uuid import UUID
 
 from schema.member_membership import MembershipDbStatus
@@ -37,6 +36,7 @@ from src.checkin.schema.checkin_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
     CheckinWarning,
+    GateEvaluation,
     OccurrenceContext,
 )
 from src.checkin.schema.cycle_counts_schema import (
@@ -58,38 +58,6 @@ _REASON_PRIORITY: tuple[CheckinWarning, ...] = (
     CheckinWarning.out_of_classes,
     CheckinWarning.ineligible_plan,
 )
-
-
-@dataclass
-class _GateEvaluation:
-    """The single gate evaluation reused by both check-in modes.
-
-    Attributes:
-        reasons: Blocking conditions relative to the attributed "best available"
-            membership (``forced``) — these become a staff check-in's warnings.
-        strict: The best eligible membership with remaining capacity, or None
-            (the kiosk gate blocks when this is None).
-        forced: The best available membership ignoring eligibility / capacity,
-            or None when the member has no active membership (the staff
-            attribution target).
-    """
-
-    reasons: set[CheckinWarning] = field(default_factory=set)
-    strict: MembershipUsage | None = None
-    forced: MembershipUsage | None = None
-
-    @property
-    def blocked(self) -> bool:
-        """Whether the strict kiosk gate rejects this member.
-
-        Blocked iff the room is full, the member has no membership, or no
-        eligible covering membership has remaining capacity (``strict`` None).
-        """
-        return (
-            CheckinWarning.over_capacity in self.reasons
-            or self.forced is None
-            or self.strict is None
-        )
 
 
 class CheckinMemberGate:
@@ -168,7 +136,7 @@ class CheckinMemberGate:
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
-        evaluation: _GateEvaluation,
+        evaluation: GateEvaluation,
     ) -> CheckinResponse:
         """Strict gate: reject when blocked, else record against ``strict``."""
         if evaluation.blocked:
@@ -188,7 +156,7 @@ class CheckinMemberGate:
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
-        evaluation: _GateEvaluation,
+        evaluation: GateEvaluation,
     ) -> CheckinResponse:
         """Always record, attributing to ``forced`` (NULL when none), surfacing
         the blocking conditions as warnings."""
@@ -249,7 +217,7 @@ class CheckinMemberGate:
         active: list[MembershipUsage],
         eligible: set[UUID],
         over_capacity: bool,
-    ) -> _GateEvaluation:
+    ) -> GateEvaluation:
         """Evaluate the blocking conditions ONCE for both modes.
 
         ``reasons`` describe the attributed "best available" membership
@@ -259,7 +227,7 @@ class CheckinMemberGate:
         membership exists but a higher-priority pack is the staff attribution
         target, in which case the staff path warns while the kiosk path admits.
         """
-        evaluation = _GateEvaluation()
+        evaluation = GateEvaluation()
         if over_capacity:
             evaluation.reasons.add(CheckinWarning.over_capacity)
 
@@ -280,7 +248,7 @@ class CheckinMemberGate:
     def _add_membership_reasons(
         forced: MembershipUsage | None,
         eligible: set[UUID],
-        evaluation: _GateEvaluation,
+        evaluation: GateEvaluation,
     ) -> None:
         """Flag ineligibility / depletion of the attribution target."""
         if forced is None:

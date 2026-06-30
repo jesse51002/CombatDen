@@ -4,8 +4,10 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schema.membership_plan import PlanType
+
+from src.checkin.schema.cycle_counts_schema import MembershipUsage
 
 
 class CheckinWarning(StrEnum):
@@ -35,6 +37,40 @@ class CheckinWarning(StrEnum):
     out_of_classes = "out_of_classes"
     ineligible_plan = "ineligible_plan"
     over_capacity = "over_capacity"
+
+
+class GateEvaluation(BaseModel):
+    """The single gate evaluation reused by both check-in modes.
+
+    Built once per (member, occurrence) by ``CheckinMemberGate`` and read by
+    both the kiosk (strict) and staff (always-record) paths.
+
+    Attributes:
+        reasons: Blocking conditions relative to the attributed "best available"
+            membership (``forced``) — these become a staff check-in's warnings.
+        strict: The best eligible membership with remaining capacity, or None
+            (the kiosk gate blocks when this is None).
+        forced: The best available membership ignoring eligibility / capacity,
+            or None when the member has no active membership (the staff
+            attribution target).
+    """
+
+    reasons: set[CheckinWarning] = Field(default_factory=set)
+    strict: MembershipUsage | None = None
+    forced: MembershipUsage | None = None
+
+    @property
+    def blocked(self) -> bool:
+        """Whether the strict kiosk gate rejects this member.
+
+        Blocked iff the room is full, the member has no membership, or no
+        eligible covering membership has remaining capacity (``strict`` None).
+        """
+        return (
+            CheckinWarning.over_capacity in self.reasons
+            or self.forced is None
+            or self.strict is None
+        )
 
 
 class CheckinRequest(BaseModel):
