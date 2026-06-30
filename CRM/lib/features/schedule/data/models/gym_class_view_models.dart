@@ -24,7 +24,11 @@ class ScheduleClassEntry {
   final String? instructorName;
   final String? imageUrl;
   final int? pointsWorth;
-  final int? attendingCount;
+  final int? attendeeCount;
+
+  /// True when this occurrence has already happened — the card's attendee chip
+  /// then reads "attended" (past) rather than "signed up" (upcoming).
+  final bool occurrenceInPast;
 
   /// True when this occurrence is cancelled — the card shows a badge.
   final bool isCancelled;
@@ -37,7 +41,8 @@ class ScheduleClassEntry {
     this.instructorName,
     this.imageUrl,
     this.pointsWorth,
-    this.attendingCount,
+    this.attendeeCount,
+    this.occurrenceInPast = false,
     this.isCancelled = false,
   });
 }

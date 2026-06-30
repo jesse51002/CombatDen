@@ -17,7 +17,13 @@ class ClassRow extends StatelessWidget {
   /// resolves.
   final String? imageUrl;
   final String? imageAsset;
-  final int? attendingCount;
+  final int? attendeeCount;
+
+  /// True when this occurrence has already happened — the attendee chip then
+  /// reads "N attended" (past) rather than "N signed up" (upcoming). The
+  /// dashboard Upcoming Classes list is always upcoming, so it leaves this
+  /// false.
+  final bool occurrenceInPast;
   final int? checkedInCount;
   final bool inSession;
   final VoidCallback? onTap;
@@ -29,7 +35,8 @@ class ClassRow extends StatelessWidget {
     this.instructorName,
     this.imageUrl,
     this.imageAsset,
-    this.attendingCount,
+    this.attendeeCount,
+    this.occurrenceInPast = false,
     this.checkedInCount,
     this.inSession = false,
     this.onTap,
@@ -90,10 +97,11 @@ class _ClassDetails extends StatelessWidget {
             text: '${row.checkedInCount} checked in',
             color: DesignConstants.primaryColor,
           )
-        else if (row.attendingCount != null)
+        else if (row.attendeeCount != null)
           ClassMetaChip(
             icon: Symbols.person_sharp,
-            text: '${row.attendingCount} attending',
+            text: '${row.attendeeCount} '
+                '${row.occurrenceInPast ? 'attended' : 'signed up'}',
             color: DesignConstants.text2nd,
           ),
       ],

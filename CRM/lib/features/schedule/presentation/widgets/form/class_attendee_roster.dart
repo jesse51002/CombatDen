@@ -5,9 +5,14 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Read-only roster of the members who attended this occurrence, shown inside
+/// Max height the scrollable participant list grows to before it scrolls
+/// internally — the parent form scrolls too, so the inner list stays bounded.
+const double _kMaxRosterHeight = 280;
+
+/// Searchable, scrollable roster of the members on this occurrence. Shown inside
 /// the class form's "This session" block for a past / materialized occurrence
 /// (today or earlier). A self-contained side fetch (a [FutureBuilder] over its
 /// own [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
@@ -46,34 +51,101 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<AttendeeListResponse>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _Framed(
+            child: const Padding(
+              padding: EdgeInsets.all(DesignConstants.spacingSmall),
+              child: AppSpinner(),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return _Framed(child: _Hint('We couldn’t load the attendee list.'));
+        }
+        final attendees = snapshot.data?.attendees ?? const [];
+        if (attendees.isEmpty) {
+          return _Framed(child: _Hint('No attendees yet.'));
+        }
+        return _AttendeeList(attendees: attendees);
+      },
+    );
+  }
+}
+
+/// "Attendees" header above a body — the loading / error / empty shell.
+class _Framed extends StatelessWidget {
+  final Widget child;
+
+  const _Framed({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
         Text('Attendees', style: DesignConstants.pSemibold),
-        FutureBuilder<AttendeeListResponse>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(DesignConstants.spacingSmall),
-                child: AppSpinner(),
-              );
-            }
-            if (snapshot.hasError) {
-              return _Hint('We couldn’t load the attendee list.');
-            }
-            final attendees = snapshot.data?.attendees ?? const [];
-            if (attendees.isEmpty) return _Hint('No attendees yet.');
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingSmall,
-              children: [
-                for (final a in attendees) _AttendeeRow(name: a.fullName),
-              ],
-            );
-          },
+        child,
+      ],
+    );
+  }
+}
+
+/// The loaded roster: a count header, a name search, and the bounded,
+/// scrollable list of matching participants.
+class _AttendeeList extends StatefulWidget {
+  final List<Attendee> attendees;
+
+  const _AttendeeList({required this.attendees});
+
+  @override
+  State<_AttendeeList> createState() => _AttendeeListState();
+}
+
+class _AttendeeListState extends State<_AttendeeList> {
+  String _query = '';
+
+  List<Attendee> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return widget.attendees;
+    return widget.attendees
+        .where((a) => a.fullName.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Text(
+          'Attendees (${widget.attendees.length})',
+          style: DesignConstants.pSemibold,
         ),
+        AppSearchBox(
+          hintText: 'Search participants…',
+          onChanged: (value) => setState(() => _query = value),
+        ),
+        if (filtered.isEmpty)
+          _Hint('No participants match “${_query.trim()}”.')
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: _kMaxRosterHeight),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: filtered.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: DesignConstants.spacingSmall),
+              itemBuilder: (context, i) =>
+                  _AttendeeRow(name: filtered[i].fullName),
+            ),
+          ),
       ],
     );
   }
@@ -109,7 +181,7 @@ class _AttendeeRow extends StatelessWidget {
   }
 }
 
-/// Secondary-tone hint line (empty / error states).
+/// Secondary-tone hint line (empty / error / no-match states).
 class _Hint extends StatelessWidget {
   final String message;
 

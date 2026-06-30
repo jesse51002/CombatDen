@@ -40,7 +40,7 @@ class _ClassesList extends StatelessWidget {
           timeLabel: c.timeLabel,
           instructorName: c.instructorName,
           imageUrl: c.imageUrl,
-          attendingCount: c.attendingCount,
+          attendeeCount: c.attendeeCount,
           onTap: () => Navigator.pushNamed(context, AppRoutes.schedule),
         ),
       );

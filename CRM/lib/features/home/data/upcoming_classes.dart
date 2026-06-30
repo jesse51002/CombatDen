@@ -12,8 +12,9 @@ class ScheduledClass {
   final String timeLabel;
   final String? instructorName;
 
-  /// Recorded attendance once a `class_history` row exists; null otherwise.
-  final int? attendingCount;
+  /// Sign-ups once a `class_history` row exists; null otherwise. These are
+  /// always upcoming occurrences, so the row labels them "signed up".
+  final int? attendeeCount;
   final String? imageUrl;
 
   const ScheduledClass({
@@ -21,7 +22,7 @@ class ScheduledClass {
     required this.name,
     required this.timeLabel,
     this.instructorName,
-    this.attendingCount,
+    this.attendeeCount,
     this.imageUrl,
   });
 }

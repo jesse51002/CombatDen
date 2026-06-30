@@ -27,7 +27,11 @@ class ClassCard extends StatelessWidget {
   final String? imageUrl;
   final String? imageAsset;
   final int? pointsWorth;
-  final int? attendingCount;
+  final int? attendeeCount;
+
+  /// True when this occurrence has already happened — the attendee chip then
+  /// reads "N attended" (past) rather than "N signed up" (upcoming).
+  final bool occurrenceInPast;
 
   /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
   final bool isCancelled;
@@ -43,7 +47,8 @@ class ClassCard extends StatelessWidget {
     this.imageUrl,
     this.imageAsset,
     this.pointsWorth,
-    this.attendingCount,
+    this.attendeeCount,
+    this.occurrenceInPast = false,
     this.isCancelled = false,
     this.onTap,
   });
@@ -148,7 +153,7 @@ class _CardDetails extends StatelessWidget {
             color: DesignConstants.badRed,
           ),
         if (card.instructorName != null) _InstructorLine(card: card),
-        if (card.pointsWorth != null || card.attendingCount != null)
+        if (card.pointsWorth != null || card.attendeeCount != null)
           _MetaRow(card: card),
       ],
     );
@@ -200,10 +205,11 @@ class _MetaRow extends StatelessWidget {
             text: '${card.pointsWorth} pts',
             color: DesignConstants.primaryColor,
           ),
-        if (card.attendingCount != null)
+        if (card.attendeeCount != null)
           ClassMetaChip(
             icon: Symbols.group_sharp,
-            text: '${card.attendingCount} attending',
+            text: '${card.attendeeCount} '
+                '${card.occurrenceInPast ? 'attended' : 'signed up'}',
             color: DesignConstants.text2nd,
           ),
       ],

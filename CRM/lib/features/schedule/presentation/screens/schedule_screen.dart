@@ -249,7 +249,8 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       instructorName: i.resolvedInstructorName,
       imageUrl: i.imageUrl,
       pointsWorth: i.pointsWorth,
-      attendingCount: i.attendanceCount,
+      attendeeCount: i.attendanceCount,
+      occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
       isCancelled: i.isCancelled,
     );
 
