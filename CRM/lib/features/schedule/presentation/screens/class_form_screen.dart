@@ -14,25 +14,29 @@ import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_update_request.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/data/models/recurring_unit.dart';
+import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_range_cancel_dialog.dart';
+import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_days_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_details_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_form_actions.dart';
+import 'package:crm/features/schedule/presentation/widgets/form/class_occurrence_actions.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_rewards_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_schedule_section.dart';
-import 'package:crm/shared/widgets/app_primary_button.dart';
+import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 
 /// Which mutation the form is running (drives the success copy).
-enum _ClassAction { create, update, delete }
+enum _ClassAction { create, update, delete, cancelInstance }
 
-/// The terminal-state machine for a save/delete: edit the fields, then
-/// processing → success (the user dismisses). A failure returns to editing
-/// with an inline error (the Save button retries).
-enum _Step { editing, processing, success }
+/// The form's run state: edit the fields, or processing (a spinner) while a
+/// mutation + board reload run. A committed mutation surfaces a success
+/// **dialog** over the spinner, then pops the form; a failure returns to
+/// editing with an inline error (the Save button retries).
+enum _Step { editing, processing }
 
 /// Full-page Add/Edit Class form, wired live to the FastAPI `classes` domain
 /// through the board's shared [ScheduleBloc] (provided by the caller via
@@ -43,10 +47,27 @@ enum _Step { editing, processing, success }
 ///
 /// Pass [existing] (the real [GymClassResponse] from the board) to edit;
 /// omit it to create.
+///
+/// When opened from a tapped board card the caller also passes
+/// [occurrenceDate] (and [occurrenceCancelled]) — the form then hosts that
+/// single occurrence's actions ("Update attendees" / "Cancel this class"),
+/// replacing the old manage-occurrence popup.
 class ClassFormScreen extends StatefulWidget {
   final GymClassResponse? existing;
 
-  const ClassFormScreen({super.key, this.existing});
+  /// The tapped occurrence's effective local date; null for the header
+  /// "Add class" path (a brand-new class has no occurrence yet).
+  final DateTime? occurrenceDate;
+
+  /// Whether the tapped occurrence is already cancelled for its day.
+  final bool occurrenceCancelled;
+
+  const ClassFormScreen({
+    super.key,
+    this.existing,
+    this.occurrenceDate,
+    this.occurrenceCancelled = false,
+  });
 
   @override
   State<ClassFormScreen> createState() => _ClassFormScreenState();
@@ -82,7 +103,25 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   /// increase means our write committed.
   int _successBaseline = 0;
 
+  /// Latched once a committed mutation starts surfacing its success dialog, so
+  /// the listener fires the terminal flow exactly once.
+  bool _completing = false;
+
   bool get _isEdit => widget.existing != null;
+
+  /// True when the form was opened from a tapped occurrence (edit + a date),
+  /// so the single-occurrence actions block renders.
+  bool get _hasOccurrence => _isEdit && widget.occurrenceDate != null;
+
+  /// An upcoming, not-already-cancelled occurrence can be cancelled for its
+  /// day (mirrors the retired manage-popup's `cancellable` gate).
+  bool get _occurrenceCancellable {
+    final date = widget.occurrenceDate;
+    if (date == null || widget.occurrenceCancelled) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !date.isBefore(today);
+  }
 
   @override
   void initState() {
@@ -318,6 +357,42 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     );
   }
 
+  /// Open the batch staff check-in ("Update attendees") for this occurrence,
+  /// sharing the form's [ScheduleBloc] so a successful run reloads the board.
+  void _updateAttendees() {
+    final existing = widget.existing;
+    final date = widget.occurrenceDate;
+    final gymId = selectedGym.gymId;
+    if (existing == null || date == null || gymId == null) return;
+    ClassBatchCheckInDialog.show(
+      context: context,
+      classId: existing.classId,
+      gymId: gymId,
+      className: existing.className,
+      occurrenceDate: date,
+    );
+  }
+
+  /// Cancel just this occurrence (after a confirm) through the board's bloc.
+  /// On commit the form shows its success dialog and pops back to the board.
+  Future<void> _cancelThisClass() async {
+    final existing = widget.existing;
+    final date = widget.occurrenceDate;
+    if (existing == null || date == null) return;
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: 'Cancel this class?',
+      message: 'Only this date is cancelled — other dates are not affected.',
+      confirmLabel: 'Cancel this class',
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed || !mounted) return;
+    final bloc = context.read<ScheduleBloc>();
+    _action = _ClassAction.cancelInstance;
+    _beginMutation(bloc);
+    bloc.add(ScheduleInstanceCancelled(classId: existing.classId, date: date));
+  }
+
   void _beginMutation(ScheduleBloc bloc) {
     final state = bloc.state;
     _successBaseline =
@@ -329,15 +404,57 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   }
 
   void _onState(BuildContext context, ScheduleState state) {
-    if (_step != _Step.processing) return;
+    if (_step != _Step.processing || _completing) return;
     if (state is! ScheduleLoaded || state.isMutating) return;
     if (state.actionSuccessCount > _successBaseline) {
-      setState(() => _step = _Step.success);
+      _completing = true;
+      _completeWithSuccessDialog();
     } else if (state.actionError != null) {
       setState(() {
         _step = _Step.editing;
         _inlineError = state.actionError;
       });
+    }
+  }
+
+  /// A committed mutation ends in a success **dialog** (not a full-screen
+  /// step); dismissing it pops the form back to the already-reloaded board.
+  /// The spinner stays behind the dialog until the form pops.
+  Future<void> _completeWithSuccessDialog() async {
+    await AppDialog.show<void>(
+      context: context,
+      title: _successTitle,
+      body: ScheduleCancelSuccess(message: _successMessage),
+      primaryLabel: 'Done',
+      primaryOnPressed: (ctx) => Navigator.of(ctx).pop(),
+      secondaryLabel: null,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  String get _successTitle {
+    switch (_action) {
+      case _ClassAction.create:
+        return 'Class added';
+      case _ClassAction.update:
+        return 'Class updated';
+      case _ClassAction.delete:
+        return 'Class deleted';
+      case _ClassAction.cancelInstance:
+        return 'Class cancelled';
+    }
+  }
+
+  String get _successMessage {
+    switch (_action) {
+      case _ClassAction.create:
+        return 'Class added to the schedule.';
+      case _ClassAction.update:
+        return 'Class updated.';
+      case _ClassAction.delete:
+        return 'Class removed from the schedule.';
+      case _ClassAction.cancelInstance:
+        return 'This class is cancelled for that day.';
     }
   }
 
@@ -351,8 +468,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
           switch (_step) {
             case _Step.processing:
               return const _ProcessingView();
-            case _Step.success:
-              return _SuccessView(action: _action, onDone: _close);
             case _Step.editing:
               final classes = state is ScheduleLoaded
                   ? state.classes
@@ -376,6 +491,14 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             onBack: _close,
           ),
           if (_inlineError != null) ErrorMessage(message: _inlineError!),
+          if (_hasOccurrence)
+            ClassOccurrenceActions(
+              occurrenceDate: widget.occurrenceDate!,
+              cancellable: _occurrenceCancellable,
+              isCancelled: widget.occurrenceCancelled,
+              onUpdateAttendees: _updateAttendees,
+              onCancelInstance: _cancelThisClass,
+            ),
           ClassDetailsSection(
             nameController: _nameController,
             descriptionController: _descriptionController,
@@ -466,61 +589,3 @@ class _ProcessingView extends StatelessWidget {
   }
 }
 
-/// The terminal success step the user dismisses (the board is already fresh).
-class _SuccessView extends StatelessWidget {
-  final _ClassAction action;
-  final VoidCallback onDone;
-
-  const _SuccessView({required this.action, required this.onDone});
-
-  String get _message {
-    switch (action) {
-      case _ClassAction.create:
-        return 'Class added to the schedule.';
-      case _ClassAction.update:
-        return 'Class updated.';
-      case _ClassAction.delete:
-        return 'Class removed from the schedule.';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(DesignConstants.paddingBig),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: DesignConstants.spacingLarge,
-          children: [
-            Icon(
-              Symbols.check_circle_sharp,
-              weight: DesignConstants.iconWeight,
-              size: DesignConstants.iconSizeBig,
-              color: DesignConstants.goodGreen,
-            ),
-            Text(
-              action == _ClassAction.delete ? 'Class deleted' : 'Saved',
-              style: DesignConstants.h2,
-            ),
-            Text(
-              _message,
-              textAlign: TextAlign.center,
-              style: DesignConstants.p.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-            AppPrimaryButton(
-              text: 'Done',
-              onPressed: onDone,
-              padding: const EdgeInsets.symmetric(
-                horizontal: DesignConstants.paddingBig,
-                vertical: DesignConstants.spacingMedium,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -202,7 +202,7 @@ class _MetaRow extends StatelessWidget {
           ),
         if (card.attendingCount != null)
           ClassMetaChip(
-            icon: Symbols.person_sharp,
+            icon: Symbols.group_sharp,
             text: '${card.attendingCount} attending',
             color: DesignConstants.text2nd,
           ),

@@ -9,12 +9,11 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
+import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
-import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
-import 'package:crm/features/schedule/presentation/dialogs/class_cancel_dialog.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
 import 'package:crm/features/schedule/presentation/widgets/header/schedule_header_bar.dart';
 import 'package:crm/features/schedule/presentation/widgets/list/schedule_class_list.dart';
@@ -25,7 +24,6 @@ import 'package:crm/shared/widgets/section_card.dart';
 final DateFormat _monthFormat = DateFormat('MMMM, yyyy');
 final DateFormat _rangeFormat = DateFormat('MMM d, yyyy');
 final DateFormat _dayColumnFormat = DateFormat('EEE, MMM d');
-final DateFormat _timeFormat = DateFormat.jm();
 
 /// Gym Class Schedule screen — the read-only week board, wired live to the
 /// FastAPI `classes` domain (`GET /api/v1/classes/instances`).
@@ -82,7 +80,17 @@ DateTime _currentWeekStart() {
 /// form — so the form sub-route keeps the schedule URL and inherits the bloc
 /// (a bare named route could not). [context] must sit under the board's
 /// `BlocProvider<ScheduleBloc>`.
-void _openClassForm(BuildContext context, {GymClassResponse? existing}) {
+///
+/// Pass [occurrenceDate] (and [occurrenceCancelled]) when opening from a tapped
+/// board card: the form then surfaces the single-occurrence actions ("Update
+/// attendees" / "Cancel this class") for that date. Omit them for the header
+/// "Add class" button (a brand-new class, no occurrence yet).
+void _openClassForm(
+  BuildContext context, {
+  GymClassResponse? existing,
+  DateTime? occurrenceDate,
+  bool occurrenceCancelled = false,
+}) {
   final bloc = context.read<ScheduleBloc>();
   Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -93,72 +101,37 @@ void _openClassForm(BuildContext context, {GymClassResponse? existing}) {
       ),
       builder: (_) => BlocProvider<ScheduleBloc>.value(
         value: bloc,
-        child: ClassFormScreen(existing: existing),
+        child: ClassFormScreen(
+          existing: existing,
+          occurrenceDate: occurrenceDate,
+          occurrenceCancelled: occurrenceCancelled,
+        ),
       ),
     ),
   );
 }
 
-/// Resolve a tapped card's class id to its real [GymClassResponse] from the
-/// loaded catalog, then open the edit form. A miss (the class vanished from a
-/// concurrent reload) is ignored.
-void _openEditClass(
-  BuildContext context,
-  List<GymClassResponse> classes,
-  String classId,
-) {
-  for (final c in classes) {
-    if (c.classId == classId) {
-      _openClassForm(context, existing: c);
-      return;
-    }
-  }
-}
-
-/// Open the manage-occurrence dialog for a tapped board card: update who
-/// attended (batch check-in), edit the whole class, or cancel just this day.
-/// "Update attendees" is offered for any non-cancelled day; "Cancel this class"
-/// only for an upcoming, not-already-cancelled occurrence (cancelling dispatches
-/// [ScheduleInstanceCancelled] on the board's bloc, which reloads the board so
-/// the day shows its "Cancelled" badge).
+/// Tapping a board card opens the class **edit form** directly (no manage
+/// popup), carrying the tapped occurrence's date + cancelled state so the form
+/// can host that occurrence's actions. Resolves the card's class id to its real
+/// [GymClassResponse] from the loaded catalog first; a miss (the class vanished
+/// from a concurrent reload) is ignored.
 void _onInstanceTap(
   BuildContext context,
   List<GymClassResponse> classes,
   ScheduleClassEntry entry,
 ) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final isUpcoming = !entry.classDate.isBefore(today);
-  ClassCancelDialog.show(
-    context: context,
-    className: entry.name,
-    classDate: entry.classDate,
-    cancellable: !entry.isCancelled && isUpcoming,
-    isCancelled: entry.isCancelled,
-    onEdit: () => _openEditClass(context, classes, entry.classId),
-    onCancelInstance: () => context.read<ScheduleBloc>().add(
-          ScheduleInstanceCancelled(
-            classId: entry.classId,
-            date: entry.classDate,
-          ),
-        ),
-    onUpdateAttendees: () => _openBatchCheckIn(context, entry),
-  );
-}
-
-/// Open the batch check-in ("Update attendees") dialog for a tapped occurrence,
-/// sharing the board's [ScheduleBloc] so a successful run reloads the week. The
-/// gym is the active gym (the screen only renders the board when it is set).
-void _openBatchCheckIn(BuildContext context, ScheduleClassEntry entry) {
-  final gymId = selectedGym.gymId;
-  if (gymId == null) return;
-  ClassBatchCheckInDialog.show(
-    context: context,
-    classId: entry.classId,
-    gymId: gymId,
-    className: entry.name,
-    occurrenceDate: entry.classDate,
-  );
+  for (final c in classes) {
+    if (c.classId == entry.classId) {
+      _openClassForm(
+        context,
+        existing: c,
+        occurrenceDate: entry.classDate,
+        occurrenceCancelled: entry.isCancelled,
+      );
+      return;
+    }
+  }
 }
 
 class _ScheduleBody extends StatefulWidget {
@@ -271,24 +244,14 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       classId: i.classId,
       classDate: i.classDate,
       name: i.className,
-      timeLabel: _timeLabel(i.resolvedClassTime, i.resolvedDurationMinutes),
+      timeLabel:
+          classTimeRangeLabel(i.resolvedClassTime, i.resolvedDurationMinutes),
       instructorName: i.resolvedInstructorName,
       imageUrl: i.imageUrl,
       pointsWorth: i.pointsWorth,
       attendingCount: i.attendanceCount,
       isCancelled: i.isCancelled,
     );
-
-/// `6:00 PM - 7:00 PM` from a `HH:MM:SS` local time + a duration in minutes.
-/// The anchor date is arbitrary (formatting only) — no timezone is applied.
-String _timeLabel(String classTime, int durationMinutes) {
-  final parts = classTime.split(':');
-  final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
-  final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
-  final start = DateTime(2000, 1, 1, hour, minute);
-  final end = start.add(Duration(minutes: durationMinutes));
-  return '${_timeFormat.format(start)} - ${_timeFormat.format(end)}';
-}
 
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;

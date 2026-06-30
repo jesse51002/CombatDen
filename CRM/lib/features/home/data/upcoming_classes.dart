@@ -1,33 +1,27 @@
 /// View models for the dashboard's "Upcoming Classes" card.
 ///
-/// Populated live from the selected gym's classes by
-/// `upcoming_classes_generator.dart` — the gym feed serves the class image as
-/// a network URL, so [ScheduledClass] carries an [imageUrl] (not a bundled
-/// asset). The first class of the first day can be flagged [inSession] to
-/// highlight it in the primary accent. Field names mirror what a real API
-/// would return so the future swap to a repository is mechanical.
+/// Built live from the real schedule feed (the same
+/// `GET /api/v1/classes/instances` occurrences the Schedule board reads) by
+/// `upcoming_classes_generator.dart`. Each entry carries a pre-formatted
+/// [timeLabel] (resolved start–end) and the gym feed's class [imageUrl].
 class ScheduledClass {
   final String id;
   final String name;
-  final String startTime;
-  final String endTime;
-  final String durationLabel;
-  final String instructorName;
+
+  /// Pre-formatted resolved time range, e.g. `6:00 PM - 7:00 PM`.
+  final String timeLabel;
+  final String? instructorName;
+
+  /// Recorded attendance once a `class_history` row exists; null otherwise.
   final int? attendingCount;
-  final int? checkedInCount;
-  final bool inSession;
   final String? imageUrl;
 
   const ScheduledClass({
     required this.id,
     required this.name,
-    required this.startTime,
-    required this.endTime,
-    required this.durationLabel,
-    required this.instructorName,
+    required this.timeLabel,
+    this.instructorName,
     this.attendingCount,
-    this.checkedInCount,
-    this.inSession = false,
     this.imageUrl,
   });
 }

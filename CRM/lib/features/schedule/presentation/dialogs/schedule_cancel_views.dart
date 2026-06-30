@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/form/app_date_field.dart';
-
-final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 
 /// Fixed-height spinner body shared by the schedule cancel dialogs while the
 /// exception write + board reload run.
@@ -48,54 +45,6 @@ class ScheduleCancelSuccess extends StatelessWidget {
           textAlign: TextAlign.center,
           style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
         ),
-      ],
-    );
-  }
-}
-
-/// Confirm body for cancelling one occurrence: a sentence describing what the
-/// cancel does (or why it can't), plus the inline error after a failed attempt.
-/// The copy keys off the occurrence's state — [isCancelled] / [cancellable] —
-/// so the dialog itself stays a pure state machine.
-class ClassCancelConfirmBody extends StatelessWidget {
-  final DateTime classDate;
-  final bool cancellable;
-  final bool isCancelled;
-  final String? inlineError;
-
-  const ClassCancelConfirmBody({
-    super.key,
-    required this.classDate,
-    required this.cancellable,
-    required this.isCancelled,
-    this.inlineError,
-  });
-
-  String get _message {
-    final date = _dateLabel.format(classDate);
-    if (isCancelled) {
-      return 'This class is cancelled on $date. You can still edit the '
-          'class details.';
-    }
-    if (!cancellable) {
-      return 'This class occurred on $date. Update who attended, or edit '
-          'the class details. (Only upcoming classes can be cancelled.)';
-    }
-    return 'Update who attended on $date, cancel just this day, or edit '
-        'the class details. Cancelling affects only this date.';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Text(
-          _message,
-          style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-        ),
-        if (inlineError != null) ErrorMessage(message: inlineError!),
       ],
     );
   }

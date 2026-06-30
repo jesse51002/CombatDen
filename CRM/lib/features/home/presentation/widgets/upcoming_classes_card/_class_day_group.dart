@@ -37,12 +37,10 @@ class _ClassesList extends StatelessWidget {
       children.add(
         ClassRow(
           name: c.name,
-          timeLabel: '${c.startTime} - ${c.endTime} (${c.durationLabel})',
+          timeLabel: c.timeLabel,
           instructorName: c.instructorName,
           imageUrl: c.imageUrl,
           attendingCount: c.attendingCount,
-          checkedInCount: c.checkedInCount,
-          inSession: c.inSession,
           onTap: () => Navigator.pushNamed(context, AppRoutes.schedule),
         ),
       );
