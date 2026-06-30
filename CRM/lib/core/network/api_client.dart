@@ -74,13 +74,19 @@ class ApiClient {
     );
   }
 
-  /// Sends a DELETE request to [path] with optional [data] body.
+  /// Sends a DELETE request to [path] with optional [data] body and/or
+  /// [queryParameters].
   Future<Response<T>> delete<T>(
     String path, {
     Object? data,
+    Map<String, dynamic>? queryParameters,
   }) async {
     return _handleRequest(
-      () => _dio.delete<T>(path, data: data),
+      () => _dio.delete<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      ),
     );
   }
 

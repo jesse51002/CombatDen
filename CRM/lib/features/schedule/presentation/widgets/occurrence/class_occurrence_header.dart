@@ -38,22 +38,24 @@ class ClassOccurrenceHeader extends StatelessWidget {
             ),
           ),
         ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: DesignConstants.spacingTiny,
-          children: [
-            Text(
-              className,
-              style:
-                  DesignConstants.h1.copyWith(color: DesignConstants.text2nd),
-            ),
-            Text(
-              _dateLabel.format(date),
-              style: DesignConstants.p.copyWith(
-                color: DesignConstants.text2nd,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(
+                className,
+                style: DesignConstants.h1.copyWith(color: DesignConstants.text),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+              Text(
+                _dateLabel.format(date),
+                style: DesignConstants.pBig
+                    .copyWith(color: DesignConstants.text2nd),
+              ),
+            ],
+          ),
         ),
       ],
     );

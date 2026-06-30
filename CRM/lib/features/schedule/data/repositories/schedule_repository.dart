@@ -130,6 +130,30 @@ class ScheduleRepository {
     );
   }
 
+  /// `DELETE /api/v1/checkin?member_id=&gym_id=&class_id=&occurrence_date=` —
+  /// reverse one member's check-in on this occurrence (a staff correction):
+  /// deletes their attendance row, claws back the class's points, and
+  /// reverses any pack auto-end the removal drops back below capacity. The
+  /// response's `removed` flag is `false` (still 200) when the member wasn't
+  /// checked in — this method only signals success/failure via throw, so the
+  /// roster doesn't need the body.
+  Future<void> removeAttendee(
+    String gymId,
+    String classId,
+    DateTime occurrenceDate,
+    String memberId,
+  ) async {
+    await _apiClient.delete(
+      '/api/v1/checkin',
+      queryParameters: {
+        'member_id': memberId,
+        'gym_id': gymId,
+        'class_id': classId,
+        'occurrence_date': _dateParam.format(occurrenceDate),
+      },
+    );
+  }
+
   /// `POST /api/v1/classes/{class_id}/exceptions/instance` with
   /// `is_cancelled: true` — cancel the single occurrence on [originalDate].
   /// Upserts the one-day exception; the response body is ignored (the board is

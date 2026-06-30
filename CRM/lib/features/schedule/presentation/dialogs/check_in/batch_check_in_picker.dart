@@ -82,6 +82,7 @@ class _BatchCheckInPickerState extends State<BatchCheckInPicker> {
             onSelected: widget.onToggle,
             itemBuilder: (context, entry, _, onTap) => BatchCheckInMemberTile(
               name: entry.name,
+              avatarUrl: entry.avatarUrl,
               selected: widget.selectedIds.contains(entry.id),
               onTap: onTap,
             ),

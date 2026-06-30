@@ -7,6 +7,8 @@ import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
+import 'package:crm/shared/widgets/member_row_tile.dart';
 
 /// Max height the scrollable participant list grows to before it scrolls
 /// internally — the parent form scrolls too, so the inner list stays bounded.
@@ -18,6 +20,11 @@ const double _kMaxRosterHeight = 280;
 /// own [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
 /// own-repository pattern. An unmaterialized occurrence (no check-ins yet) and
 /// an empty roster both read "No attendees yet."
+///
+/// Each row also carries a remove (×) action — a staff correction that
+/// reverses the member's check-in (`DELETE /api/v1/checkin`). Tapping it
+/// confirms, then on success refetches the roster and surfaces a SnackBar;
+/// on failure surfaces an error SnackBar. Never a silent dismiss.
 class ClassAttendeeRoster extends StatefulWidget {
   final String gymId;
   final String classId;
@@ -37,15 +44,48 @@ class ClassAttendeeRoster extends StatefulWidget {
 class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
   final ScheduleRepository _repository =
       ScheduleRepository(apiClient: ApiClient());
-  late final Future<AttendeeListResponse> _future;
+  late Future<AttendeeListResponse> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _repository.listAttendees(
-      widget.gymId,
-      widget.classId,
-      widget.occurrenceDate,
+    _future = _fetch();
+  }
+
+  Future<AttendeeListResponse> _fetch() => _repository.listAttendees(
+        widget.gymId,
+        widget.classId,
+        widget.occurrenceDate,
+      );
+
+  Future<void> _removeAttendee(Attendee attendee) async {
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: 'Remove attendee?',
+      message: 'Remove ${attendee.fullName} from this class?',
+      confirmLabel: 'Remove',
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await _repository.removeAttendee(
+        widget.gymId,
+        widget.classId,
+        widget.occurrenceDate,
+        attendee.memberId,
+      );
+      if (!mounted) return;
+      setState(() => _future = _fetch());
+      _toast('Removed from class');
+    } catch (_) {
+      if (!mounted) return;
+      _toast('Couldn’t remove ${attendee.fullName}. Try again.');
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -69,7 +109,10 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         if (attendees.isEmpty) {
           return _Framed(child: _Hint('No attendees yet.'));
         }
-        return _AttendeeList(attendees: attendees);
+        return _AttendeeList(
+          attendees: attendees,
+          onRemove: _removeAttendee,
+        );
       },
     );
   }
@@ -98,8 +141,9 @@ class _Framed extends StatelessWidget {
 /// scrollable list of matching participants.
 class _AttendeeList extends StatefulWidget {
   final List<Attendee> attendees;
+  final ValueChanged<Attendee> onRemove;
 
-  const _AttendeeList({required this.attendees});
+  const _AttendeeList({required this.attendees, required this.onRemove});
 
   @override
   State<_AttendeeList> createState() => _AttendeeListState();
@@ -142,8 +186,16 @@ class _AttendeeListState extends State<_AttendeeList> {
               itemCount: filtered.length,
               separatorBuilder: (_, _) =>
                   const SizedBox(height: DesignConstants.spacingSmall),
-              itemBuilder: (context, i) =>
-                  _AttendeeRow(name: filtered[i].fullName),
+              itemBuilder: (context, i) {
+                final attendee = filtered[i];
+                return MemberRowTile(
+                  name: attendee.fullName,
+                  trailing: _RemoveAttendeeButton(
+                    name: attendee.fullName,
+                    onPressed: () => widget.onRemove(attendee),
+                  ),
+                );
+              },
             ),
           ),
       ],
@@ -151,32 +203,28 @@ class _AttendeeListState extends State<_AttendeeList> {
   }
 }
 
-/// One attendee name with a person glyph.
-class _AttendeeRow extends StatelessWidget {
+/// Remove (×) action on one attendee row — a staff correction that reverses
+/// the member's check-in.
+class _RemoveAttendeeButton extends StatelessWidget {
   final String name;
+  final VoidCallback onPressed;
 
-  const _AttendeeRow({required this.name});
+  const _RemoveAttendeeButton({required this.name, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Icon(
-          Symbols.person_sharp,
-          size: DesignConstants.iconSizeSmall,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.text2nd,
-        ),
-        Expanded(
-          child: Text(
-            name,
-            style: DesignConstants.p,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: 'Remove $name from this class',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      icon: Icon(
+        Symbols.close_sharp,
+        size: DesignConstants.iconSizeSmall,
+        weight: DesignConstants.iconWeight,
+        color: DesignConstants.badRed,
+      ),
     );
   }
 }
