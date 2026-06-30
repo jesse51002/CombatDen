@@ -36,6 +36,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     on<ScheduleClassUpdated>(_onClassUpdated);
     on<ScheduleClassDeleted>(_onClassDeleted);
     on<ScheduleInstanceCancelled>(_onInstanceCancelled);
+    on<ScheduleInstanceOverridden>(_onInstanceOverridden);
     on<ScheduleRangeCancelled>(_onRangeCancelled);
     on<ScheduleBatchCheckInRequested>(_onBatchCheckIn);
     on<ScheduleBatchCheckInCleared>(_onBatchCheckInCleared);
@@ -88,6 +89,22 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
       _mutateAndReload(
         emit,
         () => _repository.cancelInstance(event.classId, event.date),
+      );
+
+  Future<void> _onInstanceOverridden(
+    ScheduleInstanceOverridden event,
+    Emitter<ScheduleState> emit,
+  ) =>
+      _mutateAndReload(
+        emit,
+        () => _repository.overrideInstance(
+          event.classId,
+          event.date,
+          newClassTime: event.newClassTime,
+          newDurationMinutes: event.newDurationMinutes,
+          newMaxCapacity: event.newMaxCapacity,
+          newInstructorId: event.newInstructorId,
+        ),
       );
 
   Future<void> _onRangeCancelled(

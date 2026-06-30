@@ -14,7 +14,9 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:crm/features/schedule/presentation/dialogs/class_occurrence_chooser_dialog.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
+import 'package:crm/features/schedule/presentation/screens/class_occurrence_screen.dart';
 import 'package:crm/features/schedule/presentation/widgets/header/schedule_header_bar.dart';
 import 'package:crm/features/schedule/presentation/widgets/list/schedule_class_list.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -74,23 +76,13 @@ DateTime _currentWeekStart() {
   return today.subtract(Duration(days: today.weekday % 7));
 }
 
-/// Open the create / edit class form, **sharing the board's [ScheduleBloc]**
-/// (via `BlocProvider.value`) so a save reloads the board the user returns to.
-/// Pushed directly with a `RouteSettings(name:)` — like the membership-plan
-/// form — so the form sub-route keeps the schedule URL and inherits the bloc
-/// (a bare named route could not). [context] must sit under the board's
-/// `BlocProvider<ScheduleBloc>`.
-///
-/// Pass [occurrenceDate] (and [occurrenceCancelled]) when opening from a tapped
-/// board card: the form then surfaces the single-occurrence actions ("Update
-/// attendees" / "Cancel this class") for that date. Omit them for the header
-/// "Add class" button (a brand-new class, no occurrence yet).
-void _openClassForm(
-  BuildContext context, {
-  GymClassResponse? existing,
-  DateTime? occurrenceDate,
-  bool occurrenceCancelled = false,
-}) {
+/// Open the **class definition** form (create, or edit a class's recurring
+/// rules), **sharing the board's [ScheduleBloc]** (via `BlocProvider.value`) so
+/// a save reloads the board the user returns to. Pushed directly with a
+/// `RouteSettings(name:)` — like the membership-plan form — so the form
+/// sub-route keeps the schedule URL and inherits the bloc (a bare named route
+/// could not). [context] must sit under the board's `BlocProvider<ScheduleBloc>`.
+void _openClassForm(BuildContext context, {GymClassResponse? existing}) {
   final bloc = context.read<ScheduleBloc>();
   Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -101,21 +93,34 @@ void _openClassForm(
       ),
       builder: (_) => BlocProvider<ScheduleBloc>.value(
         value: bloc,
-        child: ClassFormScreen(
-          existing: existing,
-          occurrenceDate: occurrenceDate,
-          occurrenceCancelled: occurrenceCancelled,
-        ),
+        child: ClassFormScreen(existing: existing),
       ),
     ),
   );
 }
 
-/// Tapping a board card opens the class **edit form** directly (no manage
-/// popup), carrying the tapped occurrence's date + cancelled state so the form
-/// can host that occurrence's actions. Resolves the card's class id to its real
-/// [GymClassResponse] from the loaded catalog first; a miss (the class vanished
-/// from a concurrent reload) is ignored.
+/// Open the **occurrence-edit** screen for one tapped board card (this day's
+/// instructor / time / capacity overrides, attendance, cancel-this-day).
+/// Sharing the board's [ScheduleBloc] like [_openClassForm].
+void _openOccurrenceScreen(BuildContext context, ScheduleClassEntry entry) {
+  final bloc = context.read<ScheduleBloc>();
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      settings: const RouteSettings(name: AppRoutes.scheduleOccurrence),
+      builder: (_) => BlocProvider<ScheduleBloc>.value(
+        value: bloc,
+        child: ClassOccurrenceScreen(entry: entry),
+      ),
+    ),
+  );
+}
+
+/// Tapping a board card opens a small **chooser dialog** first: "This
+/// occurrence" (the occurrence-edit screen) or "All future occurrences" (the
+/// class definition editor). Resolves the card's class id to its real
+/// [GymClassResponse] from the loaded catalog first (needed for the
+/// definition-editor path); a miss (the class vanished from a concurrent
+/// reload) is ignored.
 void _onInstanceTap(
   BuildContext context,
   List<GymClassResponse> classes,
@@ -123,11 +128,12 @@ void _onInstanceTap(
 ) {
   for (final c in classes) {
     if (c.classId == entry.classId) {
-      _openClassForm(
-        context,
-        existing: c,
+      ClassOccurrenceChooserDialog.show(
+        context: context,
+        className: entry.name,
         occurrenceDate: entry.classDate,
-        occurrenceCancelled: entry.isCancelled,
+        onThisOccurrence: () => _openOccurrenceScreen(context, entry),
+        onAllFuture: () => _openClassForm(context, existing: c),
       );
       return;
     }
@@ -252,6 +258,10 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       attendeeCount: i.attendanceCount,
       occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
       isCancelled: i.isCancelled,
+      resolvedClassTime: i.resolvedClassTime,
+      resolvedInstructorId: i.resolvedInstructorId,
+      resolvedDurationMinutes: i.resolvedDurationMinutes,
+      maxCapacity: i.maxCapacity,
     );
 
 bool _isSameDay(DateTime a, DateTime b) =>

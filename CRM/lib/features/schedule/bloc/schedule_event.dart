@@ -97,6 +97,41 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
   const ScheduleBatchCheckInCleared();
 }
 
+/// Override the single occurrence of [classId] on [date] (a one-day
+/// exception): set its effective instructor / start time / max capacity, then
+/// reload the board. Mirrors [ScheduleInstanceCancelled] but with
+/// `is_cancelled: false` and the override fields populated. [newClassTime] is
+/// `HH:MM:SS`; [newDurationMinutes] is carried through unedited (the
+/// occurrence-edit screen has no duration field) so the upsert doesn't blank a
+/// previously-set duration override.
+class ScheduleInstanceOverridden extends ScheduleEvent {
+  final String classId;
+  final DateTime date;
+  final String newClassTime;
+  final int newDurationMinutes;
+  final int? newMaxCapacity;
+  final String? newInstructorId;
+
+  const ScheduleInstanceOverridden({
+    required this.classId,
+    required this.date,
+    required this.newClassTime,
+    required this.newDurationMinutes,
+    this.newMaxCapacity,
+    this.newInstructorId,
+  });
+
+  @override
+  List<Object?> get props => [
+        classId,
+        date,
+        newClassTime,
+        newDurationMinutes,
+        newMaxCapacity,
+        newInstructorId,
+      ];
+}
+
 /// Cancel every occurrence of [classId] in the inclusive range `[start, end]`
 /// (a range exception), then reload the board.
 class ScheduleRangeCancelled extends ScheduleEvent {

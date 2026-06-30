@@ -144,6 +144,32 @@ class ScheduleRepository {
     );
   }
 
+  /// `POST /api/v1/classes/{class_id}/exceptions/instance` with
+  /// `is_cancelled: false` and the override fields set — upsert this single
+  /// occurrence's effective instructor / start time / max capacity / duration.
+  /// The response body is ignored (the board reloads from `/instances`
+  /// instead).
+  Future<void> overrideInstance(
+    String classId,
+    DateTime originalDate, {
+    required String newClassTime,
+    required int newDurationMinutes,
+    int? newMaxCapacity,
+    String? newInstructorId,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/classes/$classId/exceptions/instance',
+      data: ClassInstanceExceptionRequest(
+        originalDate: _dateParam.format(originalDate),
+        isCancelled: false,
+        newClassTime: newClassTime,
+        newDurationMinutes: newDurationMinutes,
+        newMaxCapacity: newMaxCapacity,
+        newInstructorId: newInstructorId,
+      ).toJson(),
+    );
+  }
+
   /// `POST /api/v1/classes/{class_id}/exceptions/range` with
   /// `is_cancelled: true` — cancel every occurrence in `[startDate, endDate]`
   /// (inclusive). The response body is ignored (the board reloads instead).

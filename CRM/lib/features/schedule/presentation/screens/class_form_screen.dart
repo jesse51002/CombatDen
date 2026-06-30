@@ -9,29 +9,27 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
+import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/gym_class_create_request.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_update_request.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/data/models/recurring_unit.dart';
-import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_range_cancel_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
-import 'package:crm/features/schedule/presentation/widgets/form/class_attendee_roster.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_days_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_details_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_form_actions.dart';
-import 'package:crm/features/schedule/presentation/widgets/form/class_occurrence_actions.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_rewards_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_schedule_section.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
-import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/centered_processing_view.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 
 /// Which mutation the form is running (drives the success copy).
-enum _ClassAction { create, update, delete, cancelInstance }
+enum _ClassAction { create, update, delete }
 
 /// The form's run state: edit the fields, or processing (a spinner) while a
 /// mutation + board reload run. A committed mutation surfaces a success
@@ -39,36 +37,24 @@ enum _ClassAction { create, update, delete, cancelInstance }
 /// editing with an inline error (the Save button retries).
 enum _Step { editing, processing }
 
-/// Full-page Add/Edit Class form, wired live to the FastAPI `classes` domain
-/// through the board's shared [ScheduleBloc] (provided by the caller via
-/// `BlocProvider.value`). Saving dispatches `ScheduleClassCreated` /
+/// Full-page Add/Edit Class **definition** form, wired live to the FastAPI
+/// `classes` domain through the board's shared [ScheduleBloc] (provided by the
+/// caller via `BlocProvider.value`). Saving dispatches `ScheduleClassCreated` /
 /// `ScheduleClassUpdated`; deleting dispatches `ScheduleClassDeleted`. The
 /// bloc reloads the board on success, so dismissing the confirmation drops the
 /// user back onto an already-fresh schedule.
 ///
-/// Pass [existing] (the real [GymClassResponse] from the board) to edit;
-/// omit it to create.
-///
-/// When opened from a tapped board card the caller also passes
-/// [occurrenceDate] (and [occurrenceCancelled]) — the form then hosts that
-/// single occurrence's actions ("Update attendees" / "Cancel this class"),
-/// replacing the old manage-occurrence popup.
+/// Pass [existing] (the real [GymClassResponse] from the board) to edit; omit
+/// it to create. This screen edits the **recurring definition only** — name,
+/// description, recurrence, per-weekday instructors, capacity, points, image,
+/// start/end date, and (edit mode) "Cancel a date range" / delete. A single
+/// occurrence's overrides / attendance / cancel-this-day live on the separate
+/// `class_occurrence_screen.dart`, opened from the chooser dialog's "This
+/// occurrence" option instead.
 class ClassFormScreen extends StatefulWidget {
   final GymClassResponse? existing;
 
-  /// The tapped occurrence's effective local date; null for the header
-  /// "Add class" path (a brand-new class has no occurrence yet).
-  final DateTime? occurrenceDate;
-
-  /// Whether the tapped occurrence is already cancelled for its day.
-  final bool occurrenceCancelled;
-
-  const ClassFormScreen({
-    super.key,
-    this.existing,
-    this.occurrenceDate,
-    this.occurrenceCancelled = false,
-  });
+  const ClassFormScreen({super.key, this.existing});
 
   @override
   State<ClassFormScreen> createState() => _ClassFormScreenState();
@@ -110,46 +96,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
 
   bool get _isEdit => widget.existing != null;
 
-  /// True when the form was opened from a tapped occurrence (edit + a date),
-  /// so the single-occurrence actions block renders.
-  bool get _hasOccurrence => _isEdit && widget.occurrenceDate != null;
-
-  /// An upcoming, not-already-cancelled occurrence can be cancelled for its
-  /// day (mirrors the retired manage-popup's `cancellable` gate).
-  bool get _occurrenceCancellable {
-    final date = widget.occurrenceDate;
-    if (date == null || widget.occurrenceCancelled) return false;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return !date.isBefore(today);
-  }
-
-  /// A past or current-day, non-cancelled occurrence is materialized (or
-  /// materializable) — show its attendee roster. A future occurrence has no
-  /// attendance yet, so the roster is hidden there.
-  bool get _occurrencePastOrToday {
-    final date = widget.occurrenceDate;
-    if (date == null) return false;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return !date.isAfter(today);
-  }
-
-  /// The attendee roster for a past / materialized occurrence, or null when it
-  /// shouldn't render (future, cancelled, or no active gym).
-  Widget? _rosterFor() {
-    final existing = widget.existing;
-    final date = widget.occurrenceDate;
-    final gymId = selectedGym.gymId;
-    if (existing == null || date == null || gymId == null) return null;
-    if (widget.occurrenceCancelled || !_occurrencePastOrToday) return null;
-    return ClassAttendeeRoster(
-      gymId: gymId,
-      classId: existing.classId,
-      occurrenceDate: date,
-    );
-  }
-
   @override
   void initState() {
     super.initState();
@@ -164,7 +110,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     _capacityController.text = c.maxCapacity?.toString() ?? '';
     _durationController.text = c.durationMinutes.toString();
     _intervalController.text = c.recurringInterval.toString();
-    _classTime = _parseTime(c.classTime);
+    _classTime = parseHmsTime(c.classTime);
     _recurringUnit = c.recurringUnit == RecurringUnit.unknown
         ? RecurringUnit.weekly
         : c.recurringUnit;
@@ -220,21 +166,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  /// `HH:MM:SS` -> [TimeOfDay] (seconds ignored).
-  static TimeOfDay? _parseTime(String hms) {
-    final parts = hms.split(':');
-    if (parts.length < 2) return null;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (h == null || m == null) return null;
-    return TimeOfDay(hour: h, minute: m);
-  }
-
-  /// [TimeOfDay] -> `HH:MM:SS`.
-  static String _formatTime(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:'
-      '${t.minute.toString().padLeft(2, '0')}:00';
-
   bool _day(int i) => _selectedDays.contains(i);
 
   /// The instructor for day [i] — only when that day is active.
@@ -275,7 +206,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         gymId: gymId,
         className: _nameController.text.trim(),
         classDescription: _descriptionOrNull(),
-        classTime: _formatTime(_classTime!),
+        classTime: formatTimeOfDayHms(_classTime!),
         durationMinutes: int.parse(_durationController.text.trim()),
         recurringUnit: _safeUnit,
         recurringInterval: int.parse(_intervalController.text.trim()),
@@ -304,7 +235,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   GymClassUpdateData _buildUpdate() => GymClassUpdateData(
         className: _nameController.text.trim(),
         classDescription: _descriptionOrNull(),
-        classTime: _formatTime(_classTime!),
+        classTime: formatTimeOfDayHms(_classTime!),
         durationMinutes: int.parse(_durationController.text.trim()),
         recurringUnit: _safeUnit,
         recurringInterval: int.parse(_intervalController.text.trim()),
@@ -384,42 +315,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     );
   }
 
-  /// Open the batch staff check-in ("Update attendees") for this occurrence,
-  /// sharing the form's [ScheduleBloc] so a successful run reloads the board.
-  void _updateAttendees() {
-    final existing = widget.existing;
-    final date = widget.occurrenceDate;
-    final gymId = selectedGym.gymId;
-    if (existing == null || date == null || gymId == null) return;
-    ClassBatchCheckInDialog.show(
-      context: context,
-      classId: existing.classId,
-      gymId: gymId,
-      className: existing.className,
-      occurrenceDate: date,
-    );
-  }
-
-  /// Cancel just this occurrence (after a confirm) through the board's bloc.
-  /// On commit the form shows its success dialog and pops back to the board.
-  Future<void> _cancelThisClass() async {
-    final existing = widget.existing;
-    final date = widget.occurrenceDate;
-    if (existing == null || date == null) return;
-    final confirmed = await ConfirmationModal.show(
-      context: context,
-      title: 'Cancel this class?',
-      message: 'Only this date is cancelled — other dates are not affected.',
-      confirmLabel: 'Cancel this class',
-      confirmColor: DesignConstants.badRed,
-    );
-    if (!confirmed || !mounted) return;
-    final bloc = context.read<ScheduleBloc>();
-    _action = _ClassAction.cancelInstance;
-    _beginMutation(bloc);
-    bloc.add(ScheduleInstanceCancelled(classId: existing.classId, date: date));
-  }
-
   void _beginMutation(ScheduleBloc bloc) {
     final state = bloc.state;
     _successBaseline =
@@ -467,8 +362,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         return 'Class updated';
       case _ClassAction.delete:
         return 'Class deleted';
-      case _ClassAction.cancelInstance:
-        return 'Class cancelled';
     }
   }
 
@@ -480,8 +373,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         return 'Class updated.';
       case _ClassAction.delete:
         return 'Class removed from the schedule.';
-      case _ClassAction.cancelInstance:
-        return 'This class is cancelled for that day.';
     }
   }
 
@@ -494,7 +385,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         builder: (context, state) {
           switch (_step) {
             case _Step.processing:
-              return const _ProcessingView();
+              return const CenteredProcessingView();
             case _Step.editing:
               final classes = state is ScheduleLoaded
                   ? state.classes
@@ -518,15 +409,6 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             onBack: _close,
           ),
           if (_inlineError != null) ErrorMessage(message: _inlineError!),
-          if (_hasOccurrence)
-            ClassOccurrenceActions(
-              occurrenceDate: widget.occurrenceDate!,
-              cancellable: _occurrenceCancellable,
-              isCancelled: widget.occurrenceCancelled,
-              onUpdateAttendees: _updateAttendees,
-              onCancelInstance: _cancelThisClass,
-              roster: _rosterFor(),
-            ),
           ClassDetailsSection(
             nameController: _nameController,
             descriptionController: _descriptionController,
@@ -598,21 +480,6 @@ class _FormHeader extends StatelessWidget {
           style: DesignConstants.h1.copyWith(color: DesignConstants.text2nd),
         ),
       ],
-    );
-  }
-}
-
-/// The in-flight step: a centered spinner while the write + reload run.
-class _ProcessingView extends StatelessWidget {
-  const _ProcessingView();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(DesignConstants.paddingBig),
-        child: AppSpinner(),
-      ),
     );
   }
 }

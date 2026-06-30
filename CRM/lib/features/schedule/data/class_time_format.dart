@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 final DateFormat _timeFormat = DateFormat.jm();
@@ -14,3 +15,20 @@ String classTimeRangeLabel(String classTime, int durationMinutes) {
   final end = start.add(Duration(minutes: durationMinutes));
   return '${_timeFormat.format(start)} - ${_timeFormat.format(end)}';
 }
+
+/// `HH:MM:SS` (seconds ignored) -> [TimeOfDay], or null on a malformed
+/// string. Shared by the series editor and the occurrence-edit screen's time
+/// pickers.
+TimeOfDay? parseHmsTime(String hms) {
+  final parts = hms.split(':');
+  if (parts.length < 2) return null;
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return null;
+  return TimeOfDay(hour: h, minute: m);
+}
+
+/// [TimeOfDay] -> `HH:MM:SS`, the backend's local-time wire format.
+String formatTimeOfDayHms(TimeOfDay t) =>
+    '${t.hour.toString().padLeft(2, '0')}:'
+    '${t.minute.toString().padLeft(2, '0')}:00';
