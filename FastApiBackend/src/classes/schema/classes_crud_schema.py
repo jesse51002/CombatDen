@@ -24,17 +24,19 @@ from pydantic import BaseModel, Field
 from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.shared.partial_model import partial_model
 
 
-class GymClassCreateRequest(BaseModel):
-    """Body for POST /api/v1/classes — create a gym class.
+class GymClassFields(BaseModel):
+    """The writable ``gym_classes`` columns — defined ONCE, shared by create
+    and update so the long field list can't drift between them.
 
-    Mirrors the writable ``gym_classes`` columns. ``is_active`` / ``is_deleted``
-    are not accepted (they default TRUE / FALSE and are managed by the
-    soft-delete path).
+    ``GymClassCreateRequest`` inherits this (fields keep their declared
+    required-ness); ``GymClassUpdateData`` is the all-optional partial derived
+    from it via :func:`partial_model`. The recurrence is embedded, and the seven
+    per-weekday instructor slots are nullable.
     """
 
-    gym_id: UUID
     class_name: str = Field(min_length=1)
     class_description: str | None = None
     class_time: time
@@ -63,43 +65,31 @@ class GymClassCreateRequest(BaseModel):
     points_worth: int = Field(default=50, gt=0)
 
 
-class GymClassUpdateData(BaseModel):
-    """Mutable fields on a ``gym_classes`` row.
+class GymClassCreateRequest(GymClassFields):
+    """Body for POST /api/v1/classes — create a gym class.
 
-    Every field is optional. The service extracts only the fields the caller
-    explicitly set (``model_fields_set``), so a provided ``None`` clears the
-    column while an absent field leaves it unchanged. The change keys are
-    validated against the ``GYM_CLASSES`` immutable frozenset before any write.
+    The writable columns are inherited from ``GymClassFields``. ``is_active`` /
+    ``is_deleted`` are not accepted (they default TRUE / FALSE and are managed
+    by the soft-delete path).
     """
 
-    class_name: str | None = Field(default=None, min_length=1)
-    class_description: str | None = None
-    class_time: time | None = None
-    duration_minutes: int | None = Field(default=None, gt=0)
-    recurring_unit: RecurringUnit | None = None
-    recurring_interval: int | None = Field(default=None, gt=0)
-    sun: bool | None = None
-    mon: bool | None = None
-    tue: bool | None = None
-    wed: bool | None = None
-    thu: bool | None = None
-    fri: bool | None = None
-    sat: bool | None = None
-    sun_instructor_id: UUID | None = None
-    mon_instructor_id: UUID | None = None
-    tue_instructor_id: UUID | None = None
-    wed_instructor_id: UUID | None = None
-    thu_instructor_id: UUID | None = None
-    fri_instructor_id: UUID | None = None
-    sat_instructor_id: UUID | None = None
-    start_date: date | None = None
-    end_date: date | None = None
-    max_capacity: int | None = Field(default=None, gt=0)
-    allowed_plan_ids: list[UUID] | None = None
-    image_url: str | None = None
-    points_worth: int | None = Field(default=None, gt=0)
-    is_active: bool | None = None
-    is_deleted: bool | None = None
+    gym_id: UUID
+
+
+# Update body: every ``GymClassFields`` column made optional (the service writes
+# only the keys in ``model_fields_set``, so a provided ``None`` clears a column
+# and an absent field is untouched; the change keys are validated against the
+# ``GYM_CLASSES`` immutable frozenset before any write), plus the two status
+# flags only an update may set. Derived from the one field definition above, so
+# it can never drift from ``GymClassCreateRequest``.
+GymClassUpdateData = partial_model(
+    "GymClassUpdateData",
+    GymClassFields,
+    extra={
+        "is_active": (bool | None, None),
+        "is_deleted": (bool | None, None),
+    },
+)
 
 
 class GymClassUpdateRequest(BaseModel):
