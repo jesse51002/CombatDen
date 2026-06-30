@@ -28,8 +28,8 @@ from src.classes.service.classes_expander_mapping import (
     to_expander_instance,
     to_expander_range,
 )
+from src.classes.service.classes_materializer import ClassesMaterializer
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -46,9 +46,11 @@ class ClassesScheduleReaderService:
         self,
         db_pool: DirectDatabasePool,
         expander: ClassesExpander,
+        materializer: ClassesMaterializer,
     ) -> None:
         self._db_pool = db_pool
         self._expander = expander
+        self._materializer = materializer
 
     async def list_effective_instances(
         self,
@@ -91,27 +93,45 @@ class ClassesScheduleReaderService:
             gym_id, start_date, end_date, gym_tz
         )
 
-        # The past/future split point: a strictly-past occurrence (before the
-        # gym's local today) renders from the immutable class_history table; today
-        # and the future render by expanding the current definition. So editing a
-        # class's recurring rules never rewrites or hides what already happened.
-        today_start = self._today_start_utc(gym_tz)
-        past_by_class = self._group_by_class(
-            await self._read_all(
-                "classes_board_past_history.sql",
-                {
-                    "gym_id": str(gym_id),
-                    "lower": self._day_start_utc(start_date, gym_tz),
-                    "today_start": today_start,
-                    "upper": self._day_start_utc(
-                        end_date + timedelta(days=1), gym_tz
-                    ),
-                },
-            )
+        # The past/future split point is NOW — the occurrence's own start instant.
+        # An occurrence whose start time has already passed (including earlier
+        # today) renders from the immutable class_history table; one still upcoming
+        # renders by expanding the current definition. So editing a class's
+        # recurring rules never rewrites or hides an occurrence that has already
+        # started / run.
+        now = datetime.now(UTC)
+        past_params = {
+            "gym_id": str(gym_id),
+            "lower": self._day_start_utc(start_date, gym_tz),
+            "now": now,
+            "upper": self._day_start_utc(end_date + timedelta(days=1), gym_tz),
+        }
+        past_rows = await self._read_all(
+            "classes_board_past_history.sql", past_params
         )
+        # Opening the board "starts" any past, non-cancelled occurrence that has
+        # run but was never materialized (nobody checked in + the reconciler
+        # hasn't swept it): it gets a class_history row so it renders from the
+        # immutable record like everything else. A re-read after that picks the
+        # new rows up.
+        if await self._materialize_started_occurrences(
+            gym_id,
+            classes,
+            instances_by_class,
+            ranges_by_class,
+            start_date,
+            end_date,
+            gym_tz,
+            now,
+            past_rows,
+        ):
+            past_rows = await self._read_all(
+                "classes_board_past_history.sql", past_params
+            )
+        past_by_class = self._group_by_class(past_rows)
 
         items: list[EffectiveClassInstanceResponse] = []
-        # Today + future: expand the current (editable) definition.
+        # Now + upcoming: expand the current (editable) definition.
         for class_row in classes:
             items.extend(
                 self._board_rows_for_class(
@@ -123,7 +143,7 @@ class ClassesScheduleReaderService:
                     gym_tz,
                     instructors,
                     attendance,
-                    today_start,
+                    now,
                 )
             )
         # Strictly past: the immutable history (every gym class, deleted ones
@@ -135,6 +155,113 @@ class ClassesScheduleReaderService:
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
+
+    # -- materialize started-but-unrecorded occurrences ------------------
+
+    async def _materialize_started_occurrences(
+        self,
+        gym_id: UUID,
+        classes: list[dict],
+        instances_by_class: dict[object, list[dict]],
+        ranges_by_class: dict[object, list[dict]],
+        start_date: date,
+        end_date: date,
+        gym_tz: str,
+        now: datetime,
+        existing_past: list[dict],
+    ) -> bool:
+        """Find-or-create class_history for every past, non-cancelled occurrence
+        in the window whose DAY isn't materialized yet.
+
+        Opening the board "starts" a class that has already run but was never
+        recorded (nobody checked in + the reconciler hasn't swept it). Dedup is by
+        ``(class_id, local date)`` — NOT the exact instant — so re-timing a class
+        never adds a second history row for a day that already has one. Mirrors
+        the reconciler ``ClassHistorySweep``; the materializer's ON CONFLICT keeps
+        each insert idempotent and race-safe. Returns whether any row was created.
+        """
+        zone = ZoneInfo(gym_tz)
+        materialized_days = {
+            (str(row["class_id"]), row["occurred_at"].astimezone(zone).date())
+            for row in existing_past
+        }
+        created = False
+        for class_row in classes:
+            if await self._materialize_class_past(
+                class_row,
+                gym_id,
+                instances_by_class.get(class_row["class_id"], []),
+                ranges_by_class.get(class_row["class_id"], []),
+                start_date,
+                end_date,
+                gym_tz,
+                now,
+                materialized_days,
+            ):
+                created = True
+        return created
+
+    async def _materialize_class_past(
+        self,
+        class_row: dict,
+        gym_id: UUID,
+        instance_rows: list[dict],
+        range_rows: list[dict],
+        start_date: date,
+        end_date: date,
+        gym_tz: str,
+        now: datetime,
+        materialized_days: set[tuple[str, date]],
+    ) -> bool:
+        """Materialize one class's past, not-yet-recorded occurrences (by day)."""
+        cid = class_row["class_id"]
+        try:
+            occurrences = self._expander.expand(
+                to_expander_class(class_row),
+                [to_expander_instance(r) for r in instance_rows],
+                [to_expander_range(r) for r in range_rows],
+                start_date,
+                end_date,
+                gym_tz,
+            )  # cancelled dropped (default) — a cancelled day is never started
+        except Exception:
+            logger.warning(
+                "Board materialize: expand failed for class %s",
+                cid,
+                exc_info=True,
+            )
+            return False
+        created = False
+        for occ in occurrences:
+            if occ.occurred_at >= now:
+                continue
+            if (str(cid), occ.effective_date) in materialized_days:
+                continue
+            if await self._materialize_one(class_row, gym_id, occ):
+                created = True
+        return created
+
+    async def _materialize_one(
+        self, class_row: dict, gym_id: UUID, occ: EffectiveOccurrence
+    ) -> bool:
+        """Find-or-create one occurrence's history row; True if newly created."""
+        try:
+            _, was_created = await self._materializer.find_or_create_history(
+                class_row["class_id"],
+                gym_id,
+                occ.occurred_at,
+                occ.instructor_id,
+                occ.duration_minutes,
+            )
+        except Exception:
+            logger.warning(
+                "Board materialize: insert failed for class %s @ %s",
+                class_row["class_id"],
+                occ.occurred_at,
+                exc_info=True,
+            )
+            return False
+        return was_created
 
     # -- per-class expansion + enrichment --------------------------------
 
@@ -148,16 +275,17 @@ class ClassesScheduleReaderService:
         gym_tz: str,
         instructors: dict[str, str],
         attendance: dict[tuple[str, datetime], int],
-        today_start: datetime,
+        now: datetime,
     ) -> list[EffectiveClassInstanceResponse]:
-        """Expand one class into today + future rows, plus any cancelled day.
+        """Expand one class into its current + upcoming rows, plus cancelled days.
 
-        A strictly-past occurrence that actually RAN is dropped here — the board
-        renders it from class_history instead (immutable, so a definition edit
-        can't rewrite it). A *cancelled* day is kept even when past: it leaves no
-        class_history row, so the expander is the only source that knows it was a
-        scheduled-then-cancelled day. Today and the future come from the live
-        expansion of the current definition.
+        An occurrence whose start time has already passed (``occurred_at`` before
+        ``now``, including earlier today) and actually RAN is dropped here — the
+        board renders it from class_history instead (immutable, so a definition
+        edit can't rewrite it). A *cancelled* day is kept even when past: it
+        leaves no class_history row, so the expander is the only source that knows
+        it was a scheduled-then-cancelled day. The still-upcoming occurrences come
+        from the live expansion of the current definition.
         """
         occurrences = self._expander.expand(
             to_expander_class(class_row),
@@ -171,7 +299,7 @@ class ClassesScheduleReaderService:
         occurrences = [
             occ
             for occ in occurrences
-            if occ.occurred_at >= today_start or occ.is_cancelled
+            if occ.occurred_at >= now or occ.is_cancelled
         ]
         instance_dates = {row["original_date"] for row in instance_rows}
         # Effective per-day capacity: an instance exception's new_max_capacity
@@ -275,14 +403,6 @@ class ClassesScheduleReaderService:
             has_range_exception=False,
             attendance_count=h["attendance_count"],
         )
-
-    @staticmethod
-    def _today_start_utc(gym_tz: str) -> datetime:
-        """Gym-local midnight today, in UTC — the past/future split point."""
-        zone = ZoneInfo(gym_tz)
-        return datetime.combine(
-            gym_today(gym_tz), time.min, tzinfo=zone
-        ).astimezone(UTC)
 
     @staticmethod
     def _day_start_utc(day: date, gym_tz: str) -> datetime:

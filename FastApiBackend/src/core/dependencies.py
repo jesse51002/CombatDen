@@ -271,6 +271,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesScheduleReaderService,
         db_pool=db_pool,
         expander=classes_expander,
+        materializer=classes_materializer,
     )
     # Phase 6: un-occur (cancel) + reschedule a single occurrence. Billing-
     # adjacent (deletes member_attendance, may clear an auto-end end_date), so
