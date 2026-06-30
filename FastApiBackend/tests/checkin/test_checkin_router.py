@@ -1,22 +1,22 @@
-"""Smoke + edge tests for the classes router.
+"""Smoke + edge tests for the checkin router.
 
 The gated check-in flow runs many DB queries plus the cycle-counts service, so
 these router tests override the ``checkin_service`` provider with a double and
 assert the router's wiring (auth -> service -> response serialization). The
 gating *logic* is unit-tested directly in
-``classes/service/checkin/test_classes_checkin_plan_selector.py``.
+``checkin/test_checkin_plan_selector.py``.
 """
 
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from src.classes.schema.classes_batch_checkin_schema import (
+from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinItemResult,
     BatchCheckinItemStatus,
     BatchCheckinResponse,
 )
-from src.classes.schema.classes_schema import (
+from src.checkin.schema.checkin_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
 )
@@ -71,7 +71,7 @@ def test_checkin_records_when_a_plan_covers_the_class(
     _override_checkin(response)
     try:
         resp = client.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
@@ -115,7 +115,7 @@ def test_checkin_rejected_when_no_plan_covers(
     _override_checkin(response)
     try:
         resp = client.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
@@ -161,7 +161,7 @@ def test_checkin_idempotent_returns_already_checked_in(
     _override_checkin(response)
     try:
         resp = client.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": fake_member_id,
                 "gym_id": fake_gym_id,
@@ -181,24 +181,28 @@ def test_checkin_idempotent_returns_already_checked_in(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/classes/{class_id}/occurrences/{occurrence_date}/checkin-batch
+# POST /api/v1/checkin/batch
 #
-# The batch service is overridden with a double; these assert the router's
-# status-code mapping (207 on any processed mix, 500 on total failure, 404/400
-# on an unresolved occurrence, 422 on an empty member list) + serialization.
-# The batch FLOW is unit-tested in
-# classes/service/test_classes_batch_checkin_service.py.
+# class_id + occurrence_date now ride in the body (not the path). The batch
+# service is overridden with a double; these assert the router's status-code
+# mapping (207 on any processed mix, 500 on total failure, 404/400 on an
+# unresolved occurrence, 422 on an empty member list) + serialization. The batch
+# FLOW is unit-tested in checkin/test_batch_checkin_service.py.
 # ---------------------------------------------------------------------------
 
 _BATCH_CLASS_ID = uuid4()
 _BATCH_OCCURRENCE_DATE = "2026-06-01"
+_BATCH_URL = "/api/v1/checkin/batch"
 
 
-def _batch_url() -> str:
-    return (
-        f"/api/v1/classes/{_BATCH_CLASS_ID}"
-        f"/occurrences/{_BATCH_OCCURRENCE_DATE}/checkin-batch"
-    )
+def _batch_body(gym_id, member_ids: list[str]) -> dict:
+    """A batch request body with class_id + occurrence_date in the body."""
+    return {
+        "gym_id": gym_id,
+        "class_id": str(_BATCH_CLASS_ID),
+        "occurrence_date": _BATCH_OCCURRENCE_DATE,
+        "member_ids": member_ids,
+    }
 
 
 def _override_batch(*, return_value=None, side_effect=None):
@@ -207,7 +211,7 @@ def _override_batch(*, return_value=None, side_effect=None):
     service.batch_checkin = AsyncMock(
         return_value=return_value, side_effect=side_effect
     )
-    app.container.classes_batch_checkin_service.override(service)
+    app.container.batch_checkin_service.override(service)
     return service
 
 
@@ -248,15 +252,12 @@ def test_batch_checkin_returns_207_with_per_member_results(
     _override_batch(return_value=(response, False))
     try:
         resp = client.post(
-            _batch_url(),
-            json={
-                "gym_id": fake_gym_id,
-                "member_ids": [str(m1), str(m2), str(m3)],
-            },
+            _BATCH_URL,
+            json=_batch_body(fake_gym_id, [str(m1), str(m2), str(m3)]),
             headers=auth_headers,
         )
     finally:
-        app.container.classes_batch_checkin_service.reset_override()
+        app.container.batch_checkin_service.reset_override()
 
     assert resp.status_code == 207
     body = resp.json()
@@ -290,12 +291,12 @@ def test_batch_checkin_total_failure_returns_500(
     _override_batch(return_value=(response, True))
     try:
         resp = client.post(
-            _batch_url(),
-            json={"gym_id": fake_gym_id, "member_ids": [str(m1)]},
+            _BATCH_URL,
+            json=_batch_body(fake_gym_id, [str(m1)]),
             headers=auth_headers,
         )
     finally:
-        app.container.classes_batch_checkin_service.reset_override()
+        app.container.batch_checkin_service.reset_override()
 
     assert resp.status_code == 500
 
@@ -307,12 +308,12 @@ def test_batch_checkin_class_not_found_returns_404(
     _override_batch(side_effect=ValueError("Class not found"))
     try:
         resp = client.post(
-            _batch_url(),
-            json={"gym_id": fake_gym_id, "member_ids": [str(uuid4())]},
+            _BATCH_URL,
+            json=_batch_body(fake_gym_id, [str(uuid4())]),
             headers=auth_headers,
         )
     finally:
-        app.container.classes_batch_checkin_service.reset_override()
+        app.container.batch_checkin_service.reset_override()
 
     assert resp.status_code == 404
 
@@ -328,12 +329,12 @@ def test_batch_checkin_invalid_occurrence_returns_400(
     )
     try:
         resp = client.post(
-            _batch_url(),
-            json={"gym_id": fake_gym_id, "member_ids": [str(uuid4())]},
+            _BATCH_URL,
+            json=_batch_body(fake_gym_id, [str(uuid4())]),
             headers=auth_headers,
         )
     finally:
-        app.container.classes_batch_checkin_service.reset_override()
+        app.container.batch_checkin_service.reset_override()
 
     assert resp.status_code == 400
 
@@ -343,8 +344,8 @@ def test_batch_checkin_empty_member_ids_returns_422(
 ):
     """An empty member list violates min_length=1 -> 422 (no service call)."""
     resp = client.post(
-        _batch_url(),
-        json={"gym_id": fake_gym_id, "member_ids": []},
+        _BATCH_URL,
+        json=_batch_body(fake_gym_id, []),
         headers=auth_headers,
     )
     assert resp.status_code == 422
@@ -353,7 +354,7 @@ def test_batch_checkin_empty_member_ids_returns_422(
 def test_streak_returns_zero_when_no_attendance(
     client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id
 ):
-    """GET /api/v1/classes/streak returns 0 weeks for a never-attended member."""
+    """GET /api/v1/streak returns 0 weeks for a never-attended member."""
     streak_result = MagicMock()
     streak_result.all.return_value = []
 
@@ -361,7 +362,7 @@ def test_streak_returns_zero_when_no_attendance(
     session.execute = AsyncMock(return_value=streak_result)
 
     response = client.get(
-        f"/api/v1/classes/streak?member_id={fake_member_id}&gym_id={fake_gym_id}",
+        f"/api/v1/streak?member_id={fake_member_id}&gym_id={fake_gym_id}",
         headers=auth_headers,
     )
     assert response.status_code == 200

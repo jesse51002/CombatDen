@@ -1,20 +1,21 @@
-"""Live integration tests for the classes domain (Phase-4 gated check-in).
+"""Live integration tests for the checkin domain (gated check-in + streak).
 
 Endpoints under test:
-  POST /api/v1/classes/checkin   (class_id + occurrence_date; lazy materialize,
-                                  plan gate + room capacity + points + override)
-  GET  /api/v1/classes/streak
+  POST /api/v1/checkin   (class_id + occurrence_date; lazy materialize,
+                          plan gate + room capacity + points + override)
+  GET  /api/v1/streak
 
 These run against the live backend + the seeded DB. Rather than hard-code seed
 ids (which drift every reseed), the suite DISCOVERS suitable rows from the DB at
 session start and skips gracefully when the DB isn't reachable / seeded. The
-``api`` fixture (tests/integration/conftest.py) provides an authorised client;
-``SEEDED_GYM_ID`` is the single seeded gym.
+``api`` fixture (re-exported in tests/checkin/conftest.py from the integration
+conftest) provides an authorised client; ``SEEDED_GYM_ID`` is the single seeded
+gym. The schedule board it reads (``GET /api/v1/classes/instances``) stays in
+the classes domain.
 
-NOTE: the Phase-1 migration (``uq_class_history_occurrence`` UNIQUE) must be
-applied for the lazy materializer's ON CONFLICT to work. Until then the gated
-check-in tests fail at the materialize step — that is expected and is a missing
-migration, not a code defect.
+NOTE: the lazy materializer's ON CONFLICT needs the ``uq_class_history_occurrence``
+UNIQUE constraint. When it is absent the gated check-in tests fail at the
+materialize step — a migration block, not a code defect.
 """
 
 from __future__ import annotations
@@ -233,7 +234,7 @@ def _teardown_checkin(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/classes/checkin — 422 validation (no DB writes / no seed needed)
+# POST /api/v1/checkin — 422 validation (no DB writes / no seed needed)
 # ---------------------------------------------------------------------------
 
 
@@ -241,12 +242,12 @@ class TestCheckinValidation:
     """422 validation for the new (class_id + occurrence_date) body shape."""
 
     def test_missing_body_returns_422(self, api: httpx.Client) -> None:
-        resp = api.post("/api/v1/classes/checkin")
+        resp = api.post("/api/v1/checkin")
         assert resp.status_code == 422
 
     def test_missing_member_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
@@ -257,7 +258,7 @@ class TestCheckinValidation:
 
     def test_missing_class_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": str(uuid4()),
                 "gym_id": GYM_ID,
@@ -268,7 +269,7 @@ class TestCheckinValidation:
 
     def test_missing_occurrence_date_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": str(uuid4()),
                 "gym_id": GYM_ID,
@@ -279,7 +280,7 @@ class TestCheckinValidation:
 
     def test_invalid_uuid_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": "not-a-uuid",
                 "gym_id": GYM_ID,
@@ -291,7 +292,7 @@ class TestCheckinValidation:
 
     def test_invalid_date_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": str(uuid4()),
                 "gym_id": GYM_ID,
@@ -303,7 +304,7 @@ class TestCheckinValidation:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/classes/checkin — gated behavior (needs the seeded DB + the
+# POST /api/v1/checkin — gated behavior (needs the seeded DB + the
 # uq_class_history_occurrence migration for the materializer's ON CONFLICT)
 # ---------------------------------------------------------------------------
 
@@ -327,7 +328,7 @@ class TestGatedCheckin:
         before_activities = _class_attended_activity_ids(member_id, class_id)
 
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": member_id,
                 "gym_id": GYM_ID,
@@ -376,13 +377,13 @@ class TestGatedCheckin:
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
 
-        first = api.post("/api/v1/classes/checkin", json=payload)
+        first = api.post("/api/v1/checkin", json=payload)
         class_history_id = first.json().get("class_history_id")
         try:
             assert first.status_code == 200, first.text
             after_first_points = _member_points(member_id)
 
-            second = api.post("/api/v1/classes/checkin", json=payload)
+            second = api.post("/api/v1/checkin", json=payload)
             assert second.status_code == 200, second.text
             body = second.json()
             assert body["already_checked_in"] is True
@@ -413,7 +414,7 @@ class TestGatedCheckin:
         occurrence_date = covered["occurrence_date"]
 
         resp = api.post(
-            "/api/v1/classes/checkin",
+            "/api/v1/checkin",
             json={
                 "member_id": member_id,
                 "gym_id": GYM_ID,
@@ -431,30 +432,30 @@ class TestGatedCheckin:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/classes/streak
+# GET /api/v1/streak
 # ---------------------------------------------------------------------------
 
 
 class TestStreakValidation:
-    """422 validation for GET /api/v1/classes/streak — no DB writes."""
+    """422 validation for GET /api/v1/streak — no DB writes."""
 
     def test_missing_params_returns_422(self, api: httpx.Client) -> None:
-        resp = api.get("/api/v1/classes/streak")
+        resp = api.get("/api/v1/streak")
         assert resp.status_code == 422
 
     def test_missing_gym_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.get(
-            "/api/v1/classes/streak", params={"member_id": str(uuid4())}
+            "/api/v1/streak", params={"member_id": str(uuid4())}
         )
         assert resp.status_code == 422
 
     def test_missing_member_id_returns_422(self, api: httpx.Client) -> None:
-        resp = api.get("/api/v1/classes/streak", params={"gym_id": GYM_ID})
+        resp = api.get("/api/v1/streak", params={"gym_id": GYM_ID})
         assert resp.status_code == 422
 
     def test_invalid_uuid_member_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.get(
-            "/api/v1/classes/streak",
+            "/api/v1/streak",
             params={"member_id": "not-a-uuid", "gym_id": GYM_ID},
         )
         assert resp.status_code == 422
@@ -470,7 +471,7 @@ class TestStreakResponse:
         member_id = str(row["member_id"])
 
         resp = api.get(
-            "/api/v1/classes/streak",
+            "/api/v1/streak",
             params={"member_id": member_id, "gym_id": GYM_ID},
         )
         assert resp.status_code == 200, resp.text
@@ -485,7 +486,7 @@ class TestStreakResponse:
         """auth.verify_can_view_member 404s on an unknown member before the
         streak service runs — intentional, not a bug."""
         resp = api.get(
-            "/api/v1/classes/streak",
+            "/api/v1/streak",
             params={"member_id": str(uuid4()), "gym_id": GYM_ID},
         )
         assert resp.status_code == 404, resp.text

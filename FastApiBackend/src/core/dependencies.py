@@ -2,16 +2,15 @@ from dependency_injector import containers, providers
 from schema.task import TaskType
 
 import src.shared.db_schema_path  # noqa: F401
-from src.classes.service.checkin.classes_checkin_service import (
-    ClassesCheckinService,
+from src.checkin.service.batch_checkin_service import BatchCheckinService
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_occurrence_resolver import (
+    CheckinOccurrenceResolver,
 )
-from src.classes.service.classes_batch_checkin_service import (
-    ClassesBatchCheckinService,
-)
+from src.checkin.service.checkin_service import CheckinService
+from src.checkin.service.cycle_counts_service import CycleCountsService
+from src.checkin.service.streak_service import StreakService
 from src.classes.service.classes_crud_service import ClassesCrudService
-from src.classes.service.classes_cycle_counts_service import (
-    ClassesCycleCountsService,
-)
 from src.classes.service.classes_exceptions_service import (
     ClassesExceptionsService,
 )
@@ -20,7 +19,6 @@ from src.classes.service.classes_materializer import ClassesMaterializer
 from src.classes.service.classes_schedule_reader_service import (
     ClassesScheduleReaderService,
 )
-from src.classes.service.classes_streak_service import ClassesStreakService
 from src.classes.service.classes_undo_service import ClassesUndoService
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
@@ -179,6 +177,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
         modules=[
             "src.main",
+            "src.checkin.checkin_router",
             "src.classes.classes_router",
             "src.gyms.gyms_router",
             "src.members.members_router",
@@ -202,15 +201,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
 
-    streak_service = providers.Factory(ClassesStreakService, db_pool=db_pool)
-    cycle_counts_service = providers.Factory(
-        ClassesCycleCountsService,
-        db_pool=db_pool,
-    )
-
     # The canonical recurrence + exception expander is pure (no I/O), so a
     # single shared instance is reused by the check-in resolve seam, the
-    # exception reschedule-conflict check, and the schedule reader.
+    # exception reschedule-conflict check, the schedule reader, the presets
+    # importer, and the reconciler's class-history sweep.
     classes_expander = providers.Singleton(ClassesExpander)
     # Lazy find-or-create of the class_history occurrence (idempotent +
     # race-safe via uq_class_history_occurrence).
@@ -218,18 +212,38 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesMaterializer,
         db_pool=db_pool,
     )
-    checkin_service = providers.Factory(
-        ClassesCheckinService,
+
+    # ── Checkin domain (the class consumer side) ─────────────────
+    # Gated lazy check-in (resolve → per-member gate), staff batch, attendance
+    # streak, and per-cycle class usage (also feeds member billing detail).
+    cycle_counts_service = providers.Factory(CycleCountsService, db_pool=db_pool)
+    streak_service = providers.Factory(StreakService, db_pool=db_pool)
+    # Resolve + lazily materialize a single occurrence. Injects the pure
+    # expander + the materializer (both stay in classes) — the one-way
+    # checkin → classes dependency.
+    checkin_occurrence_resolver = providers.Factory(
+        CheckinOccurrenceResolver,
         db_pool=db_pool,
-        cycle_counts_service=cycle_counts_service,
         expander=classes_expander,
         materializer=classes_materializer,
     )
-    # Phase 4b: batch staff check-in. Resolves the occurrence ONCE via the
-    # single-member check-in service's seams, then loops checkin_member over a
-    # de-duped member list. Reuses checkin_service — does not re-wire the gate.
-    classes_batch_checkin_service = providers.Factory(
-        ClassesBatchCheckinService,
+    # Per-member gate + write (eligibility, capacity, plan selection, auto-end).
+    checkin_member_gate = providers.Factory(
+        CheckinMemberGate,
+        db_pool=db_pool,
+        cycle_counts_service=cycle_counts_service,
+    )
+    # Facade: composes resolve + per-member gate.
+    checkin_service = providers.Factory(
+        CheckinService,
+        resolver=checkin_occurrence_resolver,
+        member_gate=checkin_member_gate,
+    )
+    # Batch staff check-in. Resolves the occurrence ONCE via the facade's
+    # seams, then loops checkin_member over a de-duped member list. Reuses
+    # checkin_service — does not re-wire the gate.
+    batch_checkin_service = providers.Factory(
+        BatchCheckinService,
         checkin_service=checkin_service,
     )
 

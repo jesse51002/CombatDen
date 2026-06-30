@@ -25,7 +25,7 @@ from uuid import uuid4
 
 from schema.membership_plan import PlanType
 
-from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
+from src.checkin.schema.cycle_counts_schema import MembershipUsage
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
 )

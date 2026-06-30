@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.checkin.checkin_router import checkin_router
 from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
         LockBusyError, _handle_lock_busy_error
     )
 
+    application.include_router(checkin_router)
     application.include_router(classes_router)
     application.include_router(gyms_router)
     application.include_router(members_router)

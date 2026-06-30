@@ -1,6 +1,6 @@
-"""Unit tests for ClassesBatchCheckinService (no DB / no Stripe).
+"""Unit tests for BatchCheckinService (no DB / no Stripe).
 
-The batch service is driven against a mocked ``ClassesCheckinService``:
+The batch service is driven against a mocked ``CheckinService``:
 ``resolve_occurrence`` returns a fixed ``OccurrenceContext`` and
 ``checkin_member`` is a side-effect that returns a ``CheckinResponse`` (or
 raises) per member. Covers: the occurrence is resolved exactly once; one member
@@ -14,17 +14,15 @@ from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
-from src.classes.schema.classes_batch_checkin_schema import (
+from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinItemStatus,
 )
-from src.classes.schema.classes_schema import (
+from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     CheckinSkipReason,
     OccurrenceContext,
 )
-from src.classes.service.classes_batch_checkin_service import (
-    ClassesBatchCheckinService,
-)
+from src.checkin.service.batch_checkin_service import BatchCheckinService
 
 _OCCURRENCE_DATE = date(2026, 6, 1)
 
@@ -46,9 +44,9 @@ def _ctx() -> OccurrenceContext:
 
 
 def _service(ctx: OccurrenceContext, side_effect) -> tuple[
-    ClassesBatchCheckinService, MagicMock
+    BatchCheckinService, MagicMock
 ]:
-    """A batch service over a mocked ClassesCheckinService.
+    """A batch service over a mocked CheckinService.
 
     ``resolve_occurrence`` returns ``ctx``; ``checkin_member`` runs
     ``side_effect`` (a sync callable returning a CheckinResponse or raising).
@@ -56,7 +54,7 @@ def _service(ctx: OccurrenceContext, side_effect) -> tuple[
     checkin_service = MagicMock()
     checkin_service.resolve_occurrence = AsyncMock(return_value=ctx)
     checkin_service.checkin_member = AsyncMock(side_effect=side_effect)
-    return ClassesBatchCheckinService(checkin_service), checkin_service
+    return BatchCheckinService(checkin_service), checkin_service
 
 
 def _recorded(ctx: OccurrenceContext, member_id: UUID) -> CheckinResponse:

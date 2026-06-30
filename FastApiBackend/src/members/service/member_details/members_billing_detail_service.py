@@ -9,10 +9,8 @@ from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.classes.service.classes_cycle_counts_service import (
-    ClassesCycleCountsService,
-)
-from src.classes.service.classes_streak_service import ClassesStreakService
+from src.checkin.service.cycle_counts_service import CycleCountsService
+from src.checkin.service.streak_service import StreakService
 from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
     BillingCardOnFile,
@@ -60,8 +58,8 @@ class MembersBillingDetailService:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        streak_service: ClassesStreakService,
-        cycle_counts_service: ClassesCycleCountsService,
+        streak_service: StreakService,
+        cycle_counts_service: CycleCountsService,
     ) -> None:
         self._db_pool = db_pool
         self._grouper = MembersBillingGrouper()

@@ -1,10 +1,10 @@
 """Unit tests for points awarding + skip behavior in the gated check-in.
 
 No DB / no Stripe: the writer is driven against a mocked session whose
-``execute`` returns sequenced results, and the service skip path is driven with
-mocked queries. Covers: points awarded exactly once on a NEW attendance row,
-0 on an ON CONFLICT idempotent repeat, the class_attended activity_info shape,
-and 0 points on a skip (capacity full / no membership).
+``execute`` returns sequenced results, and the member-gate skip path is driven
+with mocked queries. Covers: points awarded exactly once on a NEW attendance
+row, 0 on an ON CONFLICT idempotent repeat, the class_attended activity_info
+shape, and 0 points on a skip (capacity full / no membership).
 """
 
 import json
@@ -12,19 +12,17 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from src.classes.schema.classes_cycle_counts_schema import (
-    ClassesCycleCountsResponse,
-)
-from src.classes.schema.classes_schema import (
+from src.checkin.schema.checkin_schema import (
     CheckinSkipReason,
     OccurrenceContext,
 )
-from src.classes.service.checkin.classes_checkin_service import (
-    ClassesCheckinService,
+from src.checkin.schema.cycle_counts_schema import (
+    ClassesCycleCountsResponse,
 )
-from src.classes.service.checkin.classes_checkin_writer import (
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_writer import (
     CLASS_ATTENDED_ACTIVITY_TYPE,
-    ClassesCheckinWriter,
+    CheckinWriter,
 )
 
 
@@ -51,7 +49,7 @@ def _result(row: dict | None) -> MagicMock:
     return result
 
 
-def _writer_with_results(results: list[MagicMock]) -> tuple[ClassesCheckinWriter, AsyncMock]:
+def _writer_with_results(results: list[MagicMock]) -> tuple[CheckinWriter, AsyncMock]:
     """A writer whose session.execute yields ``results`` in order."""
     session = AsyncMock()
     session.__aenter__.return_value = session
@@ -61,7 +59,7 @@ def _writer_with_results(results: list[MagicMock]) -> tuple[ClassesCheckinWriter
 
     pool = MagicMock()
     pool.session.return_value = session
-    return ClassesCheckinWriter(pool), session
+    return CheckinWriter(pool), session
 
 
 # ── writer: points awarded on a NEW row ──────────────────────────────
@@ -149,49 +147,47 @@ async def test_no_points_on_conflict() -> None:
     assert session.execute.call_count == 2
 
 
-# ── service: 0 points on a skip ──────────────────────────────────────
+# ── member gate: 0 points on a skip ──────────────────────────────────
 
 
-def _service_with_mocks() -> ClassesCheckinService:
-    """A ClassesCheckinService whose collaborators are all mocked."""
-    service = ClassesCheckinService(
+def _member_gate_with_mocks() -> CheckinMemberGate:
+    """A CheckinMemberGate whose collaborators are all mocked."""
+    gate = CheckinMemberGate(
         db_pool=MagicMock(),
         cycle_counts_service=MagicMock(),
-        expander=MagicMock(),
-        materializer=MagicMock(),
     )
-    service._queries = MagicMock()
-    service._queries.get_existing_attendance = AsyncMock(return_value=None)
-    service._writer = MagicMock()
-    service._writer.write_checkin = AsyncMock()
-    return service
+    gate._queries = MagicMock()
+    gate._queries.get_existing_attendance = AsyncMock(return_value=None)
+    gate._writer = MagicMock()
+    gate._writer.write_checkin = AsyncMock()
+    return gate
 
 
 async def test_capacity_full_skip_awards_zero() -> None:
     """A full room skips a non-override check-in: 0 points, no write."""
-    service = _service_with_mocks()
-    service._queries.count_attendance = AsyncMock(return_value=10)
+    gate = _member_gate_with_mocks()
+    gate._queries.count_attendance = AsyncMock(return_value=10)
     ctx = _ctx(max_capacity=5)
 
-    result = await service.checkin_member(ctx, uuid4(), allow_override=False)
+    result = await gate.checkin_member(ctx, uuid4(), allow_override=False)
 
     assert result.log_id is None
     assert result.points_awarded == 0
     assert result.skip_reason == CheckinSkipReason.capacity_full
-    service._writer.write_checkin.assert_not_called()
+    gate._writer.write_checkin.assert_not_called()
 
 
 async def test_no_membership_skip_awards_zero() -> None:
     """A member with no active membership skips: 0 points, no write."""
-    service = _service_with_mocks()
-    service._cycle_counts.get_cycle_counts = AsyncMock(
+    gate = _member_gate_with_mocks()
+    gate._cycle_counts.get_cycle_counts = AsyncMock(
         return_value=ClassesCycleCountsResponse(users=[])
     )
     ctx = _ctx(max_capacity=None)
 
-    result = await service.checkin_member(ctx, uuid4(), allow_override=False)
+    result = await gate.checkin_member(ctx, uuid4(), allow_override=False)
 
     assert result.log_id is None
     assert result.points_awarded == 0
     assert result.skip_reason == CheckinSkipReason.no_membership
-    service._writer.write_checkin.assert_not_called()
+    gate._writer.write_checkin.assert_not_called()

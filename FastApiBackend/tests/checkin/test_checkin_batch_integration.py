@@ -1,9 +1,9 @@
-"""Live integration tests for the batch staff check-in (Phase 4b).
+"""Live integration tests for the batch staff check-in.
 
 Endpoint under test:
-  POST /api/v1/classes/{class_id}/occurrences/{occurrence_date}/checkin-batch
+  POST /api/v1/checkin/batch   (class_id + occurrence_date in the body)
 
-Same live-discovery approach as test_classes_integration.py: rather than
+Same live-discovery approach as test_checkin_integration.py: rather than
 hard-code seed ids (which drift every reseed), the suite DISCOVERS a class with
 >= 2 covering members (active UNLIMITED eligible plan), a board occurrence for
 it, and a membership-less member, then exercises a mixed batch + an idempotent
@@ -11,19 +11,19 @@ re-post. It cleans up EXACTLY what it creates (attendance + lazily-created
 class_history + new class_attended activities) and restores each member's
 points_balance.
 
-NOTE: the Phase-1 migration (``uq_class_history_occurrence`` UNIQUE) is NOT
-applied to the shared test DB, so ``resolve_occurrence``'s lazy materialize
-(``INSERT ... ON CONFLICT ON CONSTRAINT uq_class_history_occurrence``) raises a
-Postgres ``42704 undefined_object`` BEFORE any per-member work. The router maps
-that to **500** ("Failed to record batch check-in"), so these tests fail at the
-first POST (expecting 207, getting 500). That is the documented migration block,
-not a code defect.
+NOTE: the lazy materialize needs the ``uq_class_history_occurrence`` UNIQUE
+constraint (``INSERT ... ON CONFLICT ON CONSTRAINT uq_class_history_occurrence``)
+for ``resolve_occurrence``. When that constraint is absent the first POST raises
+a Postgres ``42704 undefined_object`` BEFORE any per-member work and the router
+maps it to **500** ("Failed to record batch check-in"); these tests then fail at
+the first POST (expecting 207, getting 500) — a migration block, not a code
+defect.
 
 The ``all_failed -> 500`` status mapping is covered deterministically (no DB) in
-``tests/test_classes_router.py::test_batch_checkin_total_failure_returns_500``.
-It is intentionally NOT asserted here: under the migration block every POST
-returns 500 from the generic handler, so a 500 assertion in this file would pass
-for the WRONG reason (the migration, not all_failed) — exactly the kind of
+``tests/checkin/test_checkin_router.py::test_batch_checkin_total_failure_returns_500``.
+It is intentionally NOT asserted here: under a migration block every POST returns
+500 from the generic handler, so a 500 assertion in this file would pass for the
+WRONG reason (the missing constraint, not all_failed) — exactly the kind of
 write-around the FastApiBackend rules forbid.
 """
 
@@ -246,37 +246,60 @@ def _teardown_batch(
 # ---------------------------------------------------------------------------
 
 
-class TestBatchCheckinValidation:
-    """422 validation for the batch body shape + PATH params."""
+_BATCH_URL = "/api/v1/checkin/batch"
 
-    def _url(self, occurrence_date: str = "2026-06-01") -> str:
-        return (
-            f"/api/v1/classes/{uuid4()}"
-            f"/occurrences/{occurrence_date}/checkin-batch"
-        )
+
+class TestBatchCheckinValidation:
+    """422 validation for the batch body shape (class_id + occurrence_date now
+    ride in the body, not the path)."""
 
     def test_missing_body_returns_422(self, api: httpx.Client) -> None:
-        resp = api.post(self._url())
+        resp = api.post(_BATCH_URL)
         assert resp.status_code == 422
 
     def test_empty_member_ids_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            self._url(),
-            json={"gym_id": GYM_ID, "member_ids": []},
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
+                "member_ids": [],
+            },
         )
         assert resp.status_code == 422
 
     def test_missing_gym_id_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            self._url(),
-            json={"member_ids": [str(uuid4())]},
+            _BATCH_URL,
+            json={
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
+                "member_ids": [str(uuid4())],
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_missing_class_id_returns_422(self, api: httpx.Client) -> None:
+        resp = api.post(
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "occurrence_date": "2026-06-01",
+                "member_ids": [str(uuid4())],
+            },
         )
         assert resp.status_code == 422
 
     def test_invalid_member_uuid_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(
-            self._url(),
-            json={"gym_id": GYM_ID, "member_ids": ["not-a-uuid"]},
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
+                "member_ids": ["not-a-uuid"],
+            },
         )
         assert resp.status_code == 422
 
@@ -284,15 +307,20 @@ class TestBatchCheckinValidation:
         self, api: httpx.Client
     ) -> None:
         resp = api.post(
-            self._url(occurrence_date="not-a-date"),
-            json={"gym_id": GYM_ID, "member_ids": [str(uuid4())]},
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "class_id": str(uuid4()),
+                "occurrence_date": "not-a-date",
+                "member_ids": [str(uuid4())],
+            },
         )
         assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
 # Batch behavior (needs the seeded DB + the uq_class_history_occurrence
-# migration for the materializer's ON CONFLICT — migration-blocked today).
+# constraint for the materializer's ON CONFLICT).
 # ---------------------------------------------------------------------------
 
 
@@ -315,10 +343,6 @@ class TestBatchCheckin:
         class_id = target["class_id"]
         occurrence_date = target["occurrence_date"]
         points_worth = target["points_worth"]
-        url = (
-            f"/api/v1/classes/{class_id}"
-            f"/occurrences/{occurrence_date}/checkin-batch"
-        )
 
         before_points = {
             m: _member_points(m) for m in (member_a, member_b)
@@ -330,7 +354,13 @@ class TestBatchCheckin:
 
         # Pre-check member_a in so it is already_checked_in in the mixed batch.
         first = api.post(
-            url, json={"gym_id": GYM_ID, "member_ids": [member_a]}
+            _BATCH_URL,
+            json={
+                "gym_id": GYM_ID,
+                "class_id": class_id,
+                "occurrence_date": occurrence_date,
+                "member_ids": [member_a],
+            },
         )
         class_history_id = (
             first.json().get("class_history_id")
@@ -344,9 +374,11 @@ class TestBatchCheckin:
             assert first.status_code == 207, first.text
 
             resp = api.post(
-                url,
+                _BATCH_URL,
                 json={
                     "gym_id": GYM_ID,
+                    "class_id": class_id,
+                    "occurrence_date": occurrence_date,
                     "member_ids": [member_a, member_b, no_mem],
                 },
             )
@@ -390,11 +422,12 @@ class TestBatchCheckin:
         member_a, member_b = target["members"]
         class_id = target["class_id"]
         occurrence_date = target["occurrence_date"]
-        url = (
-            f"/api/v1/classes/{class_id}"
-            f"/occurrences/{occurrence_date}/checkin-batch"
-        )
-        payload = {"gym_id": GYM_ID, "member_ids": [member_a, member_b]}
+        payload = {
+            "gym_id": GYM_ID,
+            "class_id": class_id,
+            "occurrence_date": occurrence_date,
+            "member_ids": [member_a, member_b],
+        }
 
         before_points = {
             m: _member_points(m) for m in (member_a, member_b)
@@ -404,7 +437,7 @@ class TestBatchCheckin:
             for m in (member_a, member_b)
         }
 
-        first = api.post(url, json=payload)
+        first = api.post(_BATCH_URL, json=payload)
         class_history_id = (
             first.json().get("class_history_id")
             if first.headers.get("content-type", "").startswith(
@@ -416,7 +449,7 @@ class TestBatchCheckin:
             assert first.status_code == 207, first.text
             after_first = {m: _member_points(m) for m in (member_a, member_b)}
 
-            second = api.post(url, json=payload)
+            second = api.post(_BATCH_URL, json=payload)
             assert second.status_code == 207, second.text
             for result in second.json()["results"]:
                 assert result["status"] == "already_checked_in"

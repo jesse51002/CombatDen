@@ -222,15 +222,18 @@ src/
 - Promotes separation of concerns
 
 **Service-Layer Organization**
-- When a service grows past one file, its pieces live **flat in `service/`** — all sibling files, no sub-subfolder grouping. The facade is `service/<domain>_service.py`; helpers are `service/<domain>_start.py`, `service/<domain>_cancel.py`, etc.
+- When a service grows past one file, its pieces live **flat in `service/`** by default — sibling files, the facade as `service/<domain>_service.py`; helpers are `service/<domain>_start.py`, `service/<domain>_cancel.py`, etc.
   - Good: `memberships/service/memberships_service.py` (facade), `memberships/service/memberships_start.py`, `memberships/service/memberships_cancel.py` — all flat in `service/`.
   - Good: `sync/service/sync_service.py` (orchestrator), `sync/service/sync_builder.py`, `sync/service/sync_queries.py` — all flat in `service/`.
-  - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder for a single group.
+- **A large domain MAY group a distinct sub-concern cluster into a subfolder** when that materially aids clarity — flat stays the *default*, but a domain that has grown big enough to hold a self-contained multi-file sub-concern can put it in its own `service/<sub-concern>/` folder. Reach for this only for a genuine multi-file cluster, **never for a single file**.
+  - Good: `videos/service/video_agent/` holds the conversational-agent wrapper (`video_agent_service.py`), a self-contained sub-concern of the otherwise-flat `videos/service/`.
+  - The `checkin` domain itself decomposes its big check-in service into a **flat facade + parts**: `checkin/service/checkin_service.py` (facade) composes `checkin_occurrence_resolver.py` (the one-way `checkin → classes` seam: imports `ClassesExpander` + `ClassesMaterializer`) and `checkin_member_gate.py` (the per-member eligibility/capacity/select/write gate), over `checkin_queries.py` / `checkin_writer.py` / `checkin_plan_selector.py`, alongside the sibling `cycle_counts_service.py` / `streak_service.py` / `batch_checkin_service.py` — all flat in `checkin/service/`. A facade + sibling parts is the preferred way to tame a big service before reaching for a subfolder.
+  - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder wrapping a *single* group / file.
 - The orchestrator / facade **lives inside `service/` as `<domain>_service.py`**, grouped with the files it orchestrates — never floating one level above.
   - Legacy note: `members/service/management/members_management_service.py` predates the flat rule and uses a nested layout (`management/` subdir with `members_management_create.py`, `_update.py`, …). That layout is not wrong for that domain, but new domains use the flat layout described above.
   - Bad: `members/service/members_management_service.py` floating above a sibling `management/` folder.
 - A genuinely standalone service with no peers stays as a single file at the `service/` top level — fine (a future one-file service belongs flat at `service/`, not buried in a one-member subdir).
-- **Don't add a nesting level for a single group.** If a folder would only ever hold one related set, keep those files flat in `service/` instead of burying them (e.g. webhook handlers live directly in `stripe_webhooks/service/`, not in a `handlers/` subdir).
+- **Don't add a nesting level for a single file/group.** If a folder would only ever hold one related set, keep those files flat in `service/` instead of burying them (e.g. webhook handlers live directly in `stripe_webhooks/service/`, not in a `handlers/` subdir). The subfolder allowance above is for a genuine *multi-file* sub-concern, not a single file.
 - No bare module-level helper functions in a service file — fold them into the service class as private methods (see *Code Complexity & Nesting → No loose module-level functions in a service file*).
 
 ## FastAPI Patterns
