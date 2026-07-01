@@ -512,7 +512,8 @@ class TestGatedCheckin:
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
         """A second check-in for the same (member, occurrence) is idempotent:
-        already_checked_in=True, points_awarded=0, balance unchanged."""
+        already_checked_in=True, the points echoed (not re-awarded), balance
+        unchanged."""
         row = seed_ids["covered"]
         if row is None:
             pytest.skip("No board occurrence for a coverable class in seed")
@@ -534,13 +535,15 @@ class TestGatedCheckin:
         try:
             assert first.status_code == 200, first.text
             after_first_points = _member_points(member_id)
+            awarded = first.json()["points_awarded"]
 
             second = api.post("/api/v1/checkin", json=payload)
             assert second.status_code == 200, second.text
             body = second.json()
             assert body["already_checked_in"] is True
-            assert body["points_awarded"] == 0
-            # No extra points on the repeat.
+            # The repeat echoes the class's points (already awarded), not 0.
+            assert body["points_awarded"] == awarded
+            # No EXTRA points on the repeat — the balance doesn't move.
             assert _member_points(member_id) == after_first_points
         finally:
             after_activities = _class_attended_activity_ids(member_id, class_id)
@@ -669,6 +672,9 @@ class TestAttendees:
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
 
+        # A no-membership staff check-in needs the override to actually record
+        # (warn-first holds it for confirmation otherwise) — we want the
+        # NULL-attribution attendance row so the attendees list can surface it.
         checkin = api.post(
             "/api/v1/checkin",
             json={
@@ -676,6 +682,7 @@ class TestAttendees:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "ignore_warnings": True,
             },
         )
         class_history_id = checkin.json().get("class_history_id")
