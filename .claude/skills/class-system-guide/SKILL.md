@@ -3,7 +3,11 @@ name: class-system-guide
 description: >-
   The single source of truth for the CombatDen CLASS SYSTEM — scheduling (the
   producer) + attendance/reservations (the consumer) across two FastApiBackend
-  domains and the CRM schedule surfaces. Covers the virtual-occurrence model
+  domains and the CRM schedule surfaces. THE CENTRAL SPLIT (§0): every occurrence
+  is either MATERIALIZED (a class_history row, immutable, typically past) or
+  VIRTUAL (expander-computed, typically future) — every feature must handle both
+  sides, and getting only one is the recurring bug. Covers the virtual-occurrence
+  model
   (gym_classes recurrence + class_instance/range_exceptions + the ONE pure
   ClassesExpander), materialization into class_history (the single
   ClassesMaterializer.materialize(gym,start,end) entry + materialize_current +
@@ -28,6 +32,40 @@ un-occur/reschedule, materialization). **`src/checkin/`** = the **consumer**
 usage, and **sign-ups/reservations**). The routes stayed `/api/v1/checkin*` +
 `/api/v1/signup` + `/api/v1/streak` (a proposed `checkin→attendance` rename was
 dropped — the domain is still `checkin`).
+
+## 0. THE CENTRAL SPLIT — materialized vs virtual (read this first)
+**Every occurrence is in one of two states, and this split is the center of the
+whole system — every feature must handle BOTH cases:**
+
+- **VIRTUAL** — no `class_history` row. The occurrence exists only as a
+  computation from the recurrence + exceptions (the `ClassesExpander`). Default
+  for future (and any not-yet-touched) occurrences. It follows the live class
+  definition — edit the class and the virtual occurrence changes.
+- **MATERIALIZED** — has a `class_history` row (`find_or_create_history`, created
+  lazily at check-in / on a board read of an ENDED occurrence / by the reconciler
+  sweep). Past/happened occurrences are materialized so they're an **immutable
+  snapshot**; `member_attendance` references `class_history_id`. It no longer
+  follows the class definition — editing the class does NOT change a past
+  occurrence.
+
+**How each part handles both sides — the load-bearing table:**
+
+| Part | VIRTUAL (typically future) | MATERIALIZED (typically past) |
+|---|---|---|
+| Board read (§3) | expand the live definition | render from `class_history` (immutable) |
+| Check-in (§5) | materialize the exact occurrence FIRST (any date), then gate | row exists → gate + write attendance |
+| Edit / override (§2) | write only the exception; materialize-on-read applies it later | ALSO **sync the `class_history` snapshot** or the edit won't show |
+| Reschedule (§4) | move the exception; no attendance to move | **wipe** (future target) or **keep + re-date** the history + attendance |
+| Sign-ups (§6) | keyed by `(class_id, occurrence_date)` — needs NO `class_history` | same key; roster/capacity join attendance via `class_history` |
+| Roster (§6) | sign-ups exist with no history row → don't short-circuit on missing history | sign-ups ∪ attendance |
+| Capacity (§5) | count sign-ups by date | count sign-ups by date ∪ attendance via `class_history` |
+
+**The recurring bug shape:** code that assumes an occurrence is EITHER always a
+`class_history` row OR always an expander computation. It's neither universally —
+which side you're on depends on whether it's been materialized yet. A past edit
+that only writes an exception (forgetting the snapshot sync), a sign-up path that
+short-circuits when `class_history` is absent, a board that re-expands the past —
+all are the same mistake: handling one side and not the other.
 
 ## 1. The occurrence model — occurrences are VIRTUAL
 A class's occurrences are not rows; they're computed. `gym_classes` embeds the
