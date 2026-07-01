@@ -40,7 +40,7 @@ def _fake_session(execute_mock: AsyncMock) -> object:
         execute = execute_mock
         commit = AsyncMock()
 
-        async def __aenter__(self) -> _Session:
+        async def __aenter__(self) -> "_Session":
             return self
 
         async def __aexit__(self, *exc: object) -> bool:
