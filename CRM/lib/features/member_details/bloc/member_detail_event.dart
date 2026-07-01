@@ -400,6 +400,35 @@ class MemberCheckInCleared extends MemberDetailEvent {
   const MemberCheckInCleared();
 }
 
+// ----- Class reserve (sign-up) -----
+
+/// Reserve (sign up) the viewed member for the occurrence of [classId] on
+/// [occurrenceDate] — a single-member wrapper over the schedule feature's
+/// `ScheduleRepository.signUp`, NOT attendance. Idempotent
+/// (`SignupResponse.alreadySignedUp` on a repeat, no extra capacity
+/// consumed); rejected with e.g. "Class is full" once the occurrence's
+/// effective capacity is reached — surfaced as `reserveError`. There is no
+/// "confirm anyway" override here (mirrors the schedule feature's own
+/// "Sign up members" dialog): a reserve either succeeds or the room is full.
+class MemberReserveRequested extends MemberDetailEvent {
+  final String classId;
+  final DateTime occurrenceDate;
+
+  const MemberReserveRequested({
+    required this.classId,
+    required this.occurrenceDate,
+  });
+
+  @override
+  List<Object?> get props => [classId, occurrenceDate];
+}
+
+/// Clears the reserve outcome (result + error) when the check-in/reserve
+/// dialog opens or closes, so a later run opens clean.
+class MemberReserveCleared extends MemberDetailEvent {
+  const MemberReserveCleared();
+}
+
 // ----- Invoice polling -----
 
 /// One tick of the post-charge invoice poll. Dispatched by the

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
+import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
@@ -138,6 +139,21 @@ class MemberDetailLoaded extends MemberDetailState {
   /// while the check-in dialog is open (mirrors [chargeCardError]).
   final String? checkInError;
 
+  /// True while the reserve (sign-up) POST is in flight. Separate from
+  /// [isCheckingIn] so the check-in/reserve dialog's terminal step can tell
+  /// which action it's watching.
+  final bool isReserving;
+
+  /// The last reserve's result — a new reservation or an idempotent repeat
+  /// (`SignupResponse.alreadySignedUp`). Rendered by the check-in/reserve
+  /// dialog's terminal step; cleared via [MemberReserveCleared].
+  final SignupResponse? reserveResult;
+
+  /// The last reserve failure (e.g. "Class is full"). Kept off
+  /// [actionError] so the screen-level error dialog doesn't swallow it
+  /// while the dialog is open (mirrors [checkInError]).
+  final String? reserveError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -172,6 +188,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isCheckingIn = false,
     this.checkInResult,
     this.checkInError,
+    this.isReserving = false,
+    this.reserveResult,
+    this.reserveError,
     this.refreshToken = 0,
   });
 
@@ -219,6 +238,10 @@ class MemberDetailLoaded extends MemberDetailState {
     CheckInResponse? checkInResult,
     String? checkInError,
     bool clearCheckInOutcome = false,
+    bool? isReserving,
+    SignupResponse? reserveResult,
+    String? reserveError,
+    bool clearReserveOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -275,6 +298,13 @@ class MemberDetailLoaded extends MemberDetailState {
       checkInError: clearCheckInOutcome
           ? null
           : (checkInError ?? this.checkInError),
+      isReserving: isReserving ?? this.isReserving,
+      reserveResult: clearReserveOutcome
+          ? null
+          : (reserveResult ?? this.reserveResult),
+      reserveError: clearReserveOutcome
+          ? null
+          : (reserveError ?? this.reserveError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -307,6 +337,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isCheckingIn,
         checkInResult,
         checkInError,
+        isReserving,
+        reserveResult,
+        reserveError,
         refreshToken,
       ];
 }

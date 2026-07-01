@@ -2,25 +2,30 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_instance_tile.dart';
+import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_reserve_selection.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
-/// One labelled section of pickable occurrences in the check-in dialog — the
-/// emphasized "Today" (Active) list and the secondary "Last 7 days" (Past)
-/// list. Renders [emptyLabel] when [instances] is empty so the Active section
-/// always communicates state; the parent simply omits an empty Past section.
+/// One labelled, single-[action] section of pickable occurrences in the
+/// check-in/reserve dialog — the emphasized "Check in" list, the revealed
+/// "Past classes" list (also a check-in action, retroactive), or the
+/// "Reserve" list. Renders [emptyLabel] when [instances] is empty so a
+/// section that should always communicate state (Check in) can; the parent
+/// simply omits an empty optional section instead.
 class CheckInSection extends StatelessWidget {
   final String title;
+  final CheckInReserveAction action;
   final List<EffectiveClassInstance> instances;
-  final String? selectedClassDateKey;
-  final ValueChanged<EffectiveClassInstance> onSelect;
+  final String? selectedKey;
+  final ValueChanged<CheckInReserveSelection> onSelect;
   final String? emptyLabel;
 
   const CheckInSection({
     super.key,
     required this.title,
+    required this.action,
     required this.instances,
     required this.onSelect,
-    this.selectedClassDateKey,
+    this.selectedKey,
     this.emptyLabel,
   });
 
@@ -46,8 +51,10 @@ class CheckInSection extends StatelessWidget {
                 .map(
                   (i) => CheckInInstanceTile(
                     instance: i,
-                    selected: _keyFor(i) == selectedClassDateKey,
-                    onTap: () => onSelect(i),
+                    selected: keyFor(action, i) == selectedKey,
+                    onTap: () => onSelect(
+                      CheckInReserveSelection(instance: i, action: action),
+                    ),
                   ),
                 )
                 .toList(),
@@ -56,10 +63,12 @@ class CheckInSection extends StatelessWidget {
     );
   }
 
-  /// A class can recur across the window, so a (classId, classDate) pair — not
-  /// the classId alone — identifies the selected occurrence.
-  static String keyFor(EffectiveClassInstance i) => _keyFor(i);
-
-  static String _keyFor(EffectiveClassInstance i) =>
-      '${i.classId}@${i.classDate.toIso8601String()}';
+  /// A class can recur across the load window AND — since Check-in and
+  /// Reserve intentionally overlap for an occurrence starting within the
+  /// check-in window — the SAME occurrence can appear in two sections at
+  /// once. The composite key is (action, classId, classDate), not just the
+  /// occurrence, so only the actually-picked tile (in its picked section)
+  /// highlights.
+  static String keyFor(CheckInReserveAction action, EffectiveClassInstance i) =>
+      '${action.name}:${i.classId}@${i.classDate.toIso8601String()}';
 }

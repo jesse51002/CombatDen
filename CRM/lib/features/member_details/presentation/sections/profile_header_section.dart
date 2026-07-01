@@ -15,9 +15,9 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
 /// Profile header: avatar, name, membership summary, paid
-/// badge, the member-level action row (Check In / Charge
-/// Card / Add or Update Card / Start Membership / Edit),
-/// and the linked-accounts block.
+/// badge, the member-level action row (Check In / Reserve /
+/// Charge Card / Add or Update Card / Start Membership /
+/// Edit), and the linked-accounts block.
 class ProfileHeaderSection extends StatelessWidget {
   final MemberDetailResponse member;
   final ValueChanged<String>? onLinkedAccountTap;
@@ -183,7 +183,7 @@ class _ActionButtonsRow extends StatelessWidget {
       runSpacing: DesignConstants.spacingMedium,
       children: [
         _ActionButton(
-          label: 'Check In',
+          label: 'Check In / Reserve',
           onPressed: () => MemberClassCheckInDialog.show(
             context: context,
             gymId: member.gymId,

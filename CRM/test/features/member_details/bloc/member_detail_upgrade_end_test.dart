@@ -9,10 +9,13 @@ import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
+
+class MockScheduleRepository extends Mock implements ScheduleRepository {}
 
 /// No real timers (upgrade triggers the invoice poll; the schedule itself
 /// is proven in `invoice_poller_test.dart`).
@@ -50,6 +53,7 @@ void main() {
       );
 
   late MockMemberRepository repo;
+  late MockScheduleRepository scheduleRepo;
 
   setUpAll(() {
     registerFallbackValue(
@@ -65,12 +69,13 @@ void main() {
 
   setUp(() {
     repo = MockMemberRepository();
+    scheduleRepo = MockScheduleRepository();
     when(() => repo.getMemberDetail(any()))
         .thenAnswer((_) async => buildMember());
   });
 
   MemberDetailBloc build() =>
-      MemberDetailBloc(repository: repo, poller: FakeInvoicePoller());
+      MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo, poller: FakeInvoicePoller());
 
   group('upgrade channel', () {
     blocTest<MemberDetailBloc, MemberDetailState>(

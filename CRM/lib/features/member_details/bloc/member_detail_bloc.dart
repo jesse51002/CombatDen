@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
+import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -19,11 +20,17 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
 class MemberDetailBloc
     extends Bloc<MemberDetailEvent, MemberDetailState> {
   final MemberRepository _repository;
+
+  /// Reserve (sign-up) is a cross-feature reuse of the schedule feature's
+  /// wiring (`ScheduleRepository.signUp`) for this one member/occurrence —
+  /// there is no `MemberRepository` equivalent.
+  final ScheduleRepository _scheduleRepository;
 
   /// Drives the post-charge invoice poll (5/10/15/30/60s). Each
   /// charge / start / refund / mark-paid-cash restarts it, so a new
@@ -39,8 +46,10 @@ class MemberDetailBloc
 
   MemberDetailBloc({
     required MemberRepository repository,
+    required ScheduleRepository scheduleRepository,
     InvoicePoller? poller,
   })  : _repository = repository,
+        _scheduleRepository = scheduleRepository,
         _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
@@ -85,6 +94,9 @@ class MemberDetailBloc
 
     on<MemberCheckInRequested>(_onCheckIn);
     on<MemberCheckInCleared>(_onCheckInCleared);
+
+    on<MemberReserveRequested>(_onReserve);
+    on<MemberReserveCleared>(_onReserveCleared);
 
     on<InvoicePollRequested>(_onInvoicePoll);
   }
@@ -983,6 +995,63 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     emit(s.copyWith(clearCheckInOutcome: true));
+  }
+
+  // ----- Class reserve (sign-up) -----
+
+  /// The check-in/reserve dialog's Reserve mutation. Rides its own DEDICATED
+  /// channel ([isReserving] / [reserveResult] / [reserveError]) mirroring
+  /// [_onCheckIn]'s shape. A reservation doesn't change points/attendance/
+  /// billing, so — unlike check-in — there is no member-detail refresh and
+  /// no `refreshToken` bump; the result is rendered straight from
+  /// [SignupResponse].
+  Future<void> _onReserve(
+    MemberReserveRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isReserving: true,
+      clearReserveOutcome: true,
+    ));
+
+    final SignupResponse result;
+    try {
+      result = await _scheduleRepository.signUp(
+        s.member.gymId,
+        event.classId,
+        event.occurrenceDate,
+        s.member.memberId,
+      );
+    } catch (e, stackTrace) {
+      log('Reserve failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isReserving: false,
+        reserveError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    final current = state;
+    if (current is! MemberDetailLoaded) return;
+    emit(current.copyWith(
+      isReserving: false,
+      reserveResult: result,
+    ));
+  }
+
+  void _onReserveCleared(
+    MemberReserveCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearReserveOutcome: true));
   }
 
   // ----- Invoice polling -----

@@ -13,10 +13,13 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
+
+class MockScheduleRepository extends Mock implements ScheduleRepository {}
 
 class MockMembersManagementResponse extends Mock
     implements MembersManagementResponse {}
@@ -68,6 +71,7 @@ void main() {
       );
 
   late MockMemberRepository repo;
+  late MockScheduleRepository scheduleRepo;
   late FakeInvoicePoller poller;
 
   setUpAll(() {
@@ -90,6 +94,7 @@ void main() {
 
   setUp(() {
     repo = MockMemberRepository();
+    scheduleRepo = MockScheduleRepository();
     poller = FakeInvoicePoller();
     when(() => repo.getMemberDetail(any()))
         .thenAnswer((_) async => buildMember());
@@ -126,7 +131,7 @@ void main() {
   });
 
   MemberDetailBloc build() =>
-      MemberDetailBloc(repository: repo, poller: poller);
+      MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo, poller: poller);
 
   group('triggers start the invoice poll', () {
     blocTest<MemberDetailBloc, MemberDetailState>(

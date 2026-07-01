@@ -56,9 +56,10 @@ class MemberDetailScreen extends StatelessWidget {
         RepositoryProvider<TasksRepository>(
           create: (_) => TasksRepository(apiClient: ApiClient()),
         ),
-        // The class check-in dialog reads today's / recent occurrences for the
-        // member-page "Check In" surface — cross-feature reuse of the schedule
-        // repo (no schedule bloc; a read-only side fetch).
+        // The "Check in / Reserve" dialog reads occurrences across a
+        // [today-30d, today+14d] window for its pick body, and Reserve posts
+        // a sign-up straight through this repo (via [MemberDetailBloc]) —
+        // cross-feature reuse of the schedule repo (no schedule bloc).
         RepositoryProvider<ScheduleRepository>(
           create: (_) => ScheduleRepository(apiClient: ApiClient()),
         ),
@@ -68,6 +69,7 @@ class MemberDetailScreen extends StatelessWidget {
           BlocProvider<MemberDetailBloc>(
             create: (ctx) => MemberDetailBloc(
               repository: ctx.read<MemberRepository>(),
+              scheduleRepository: ctx.read<ScheduleRepository>(),
             )..add(
                 MemberDetailRequested(memberId, gymId: _gymId),
               ),
