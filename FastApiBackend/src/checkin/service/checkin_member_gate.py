@@ -83,6 +83,7 @@ class CheckinMemberGate:
         ctx: OccurrenceContext,
         member_id: UUID,
         is_member: bool = False,
+        ignore_warnings: bool = False,
     ) -> CheckinResponse:
         """Gate + write one member against a resolved occurrence.
 
@@ -91,11 +92,16 @@ class CheckinMemberGate:
             member_id: The member checking in.
             is_member: ``True`` for a kiosk / member self-check-in (strict gate
                 — reject when uncovered / full); ``False`` (default) for a staff
-                check-in (always record, gate conditions become warnings).
+                check-in.
+            ignore_warnings: Staff override. When ``False`` (default) a staff
+                check-in that raises any warning is NOT recorded — it returns
+                ``requires_confirmation`` with the warnings; ``True`` records it
+                anyway. Ignored for a kiosk check-in.
 
         Returns:
-            The check-in result (recorded, idempotent repeat, or — for a
-            rejected kiosk check-in — skipped).
+            The check-in result — recorded, an idempotent repeat, a rejected
+            kiosk skip, or a staff check-in held for confirmation
+            (``requires_confirmation``).
         """
         existing = await self._queries.get_existing_attendance(
             member_id, ctx.class_history_id
@@ -125,7 +131,7 @@ class CheckinMemberGate:
                 ctx, member_id, active, eligible, evaluation
             )
         return await self._checkin_staff(
-            ctx, member_id, active, eligible, evaluation
+            ctx, member_id, active, eligible, evaluation, ignore_warnings
         )
 
     # -- mode handlers ---------------------------------------------------
@@ -157,14 +163,48 @@ class CheckinMemberGate:
         active: list[MembershipUsage],
         eligible: set[UUID],
         evaluation: GateEvaluation,
+        ignore_warnings: bool,
     ) -> CheckinResponse:
-        """Always record, attributing to ``forced`` (NULL when none), surfacing
-        the blocking conditions as warnings."""
+        """Record a clean staff check-in. When the gate raised any warning, DON'T
+        record unless ``ignore_warnings`` overrides — return the warnings for
+        confirmation so staff can decide, then resend with the override."""
         warnings = sorted(
             evaluation.reasons, key=_REASON_PRIORITY.index
         )
+        if warnings and not ignore_warnings:
+            return self._needs_confirmation(
+                ctx, member_id, active, eligible, warnings
+            )
         return await self._record(
             ctx, member_id, active, eligible, evaluation.forced, warnings
+        )
+
+    def _needs_confirmation(
+        self,
+        ctx: OccurrenceContext,
+        member_id: UUID,
+        active: list[MembershipUsage],
+        eligible: set[UUID],
+        warnings: list[CheckinWarning],
+    ) -> CheckinResponse:
+        """A staff check-in held for confirmation: nothing is written; the
+        warnings come back so staff can resend with ``ignore_warnings`` to
+        record it."""
+        return CheckinResponse(
+            log_id=None,
+            member_id=member_id,
+            class_history_id=ctx.class_history_id,
+            class_id=ctx.class_id,
+            already_checked_in=False,
+            chosen_plan_id=None,
+            chosen_item_id=None,
+            points_awarded=0,
+            skip_reason=None,
+            warnings=warnings,
+            requires_confirmation=True,
+            memberships=self._plan_selector.build_breakdown(
+                active, eligible, None
+            ),
         )
 
     async def _record(

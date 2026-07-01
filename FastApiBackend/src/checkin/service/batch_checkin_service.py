@@ -56,6 +56,7 @@ class BatchCheckinService:
         occurrence_date: date,
         member_ids: list[UUID],
         is_member: bool,
+        ignore_warnings: bool = False,
     ) -> tuple[BatchCheckinResponse, bool]:
         """Resolve the occurrence once, then check each member in.
 
@@ -66,8 +67,11 @@ class BatchCheckinService:
             member_ids: The members to check in (at least one; de-duped,
                 order preserved).
             is_member: Applies to every member. ``False`` (a staff batch)
-                records every member with warnings; ``True`` runs the strict
-                kiosk gate per member (skipping the uncovered / over-capacity).
+                records a clean member and holds a warned one as
+                ``needs_confirmation``; ``True`` runs the strict kiosk gate per
+                member (skipping the uncovered / over-capacity).
+            ignore_warnings: Staff override applied to every member — record the
+                warned ones anyway. Ignored when ``is_member`` is True.
 
         Returns:
             ``(response, all_failed)`` — the per-member results plus whether
@@ -86,7 +90,9 @@ class BatchCheckinService:
         results: list[BatchCheckinItemResult] = []
         for member_id in self._dedupe(member_ids):
             results.append(
-                await self._checkin_one(ctx, member_id, is_member)
+                await self._checkin_one(
+                    ctx, member_id, is_member, ignore_warnings
+                )
             )
 
         all_failed = bool(results) and all(
@@ -106,13 +112,14 @@ class BatchCheckinService:
         ctx: OccurrenceContext,
         member_id: UUID,
         is_member: bool,
+        ignore_warnings: bool,
     ) -> BatchCheckinItemResult:
         """Check one member in against the resolved occurrence, mapping the
         result to a batch item. An exception becomes a ``failed`` item so a
         single bad member never aborts the batch."""
         try:
             res = await self._member_gate.checkin_member(
-                ctx, member_id, is_member
+                ctx, member_id, is_member, ignore_warnings
             )
         except Exception as exc:  # noqa: BLE001 — isolate one member's failure
             return BatchCheckinItemResult(
@@ -129,15 +136,20 @@ class BatchCheckinService:
         """Map a single-member ``CheckinResponse`` to a batch item.
 
         * ``already_checked_in`` -> already_checked_in (log_id / plan / item
-          carried, points 0).
+          carried).
+        * ``requires_confirmation`` (staff warned, not recorded) ->
+          needs_confirmation, ``reason`` = the primary warning's value.
+        * skipped (kiosk reject, ``log_id`` None) -> skipped, ``reason`` = the
+          skip reason's value.
         * recorded (``log_id`` set, not a repeat) -> checked_in (points + plan
           + item + log_id carried).
-        * skipped (``log_id`` is None) -> skipped, ``reason`` = the skip
-          reason's value.
         """
         if res.already_checked_in:
             status = BatchCheckinItemStatus.already_checked_in
             reason = None
+        elif res.requires_confirmation:
+            status = BatchCheckinItemStatus.needs_confirmation
+            reason = res.warnings[0].value if res.warnings else None
         elif res.log_id is None:
             status = BatchCheckinItemStatus.skipped
             reason = res.skip_reason.value if res.skip_reason else None

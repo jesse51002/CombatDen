@@ -97,7 +97,7 @@ async def checkin(
             request.class_id, request.gym_id, request.occurrence_date
         )
         return await member_gate.checkin_member(
-            ctx, request.member_id, request.is_member
+            ctx, request.member_id, request.is_member, request.ignore_warnings
         )
     except ValueError as exc:
         msg = str(exc)
@@ -237,6 +237,7 @@ async def checkin_batch(
             request.occurrence_date,
             request.member_ids,
             request.is_member,
+            request.ignore_warnings,
         )
     except ValueError as exc:
         msg = str(exc)

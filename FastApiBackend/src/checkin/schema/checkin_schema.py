@@ -19,14 +19,16 @@ class CheckinWarning(StrEnum):
     * ``is_member=True`` (kiosk / member self-check-in) — a blocking condition
       *rejects* the check-in (returned as the response ``skip_reason``, nothing
       written).
-    * ``is_member=False`` (staff / admin) — the same conditions become
-      ``warnings`` on a check-in that is still recorded.
+    * ``is_member=False`` (staff / admin) — the same conditions come back as
+      ``warnings`` that hold the check-in for confirmation
+      (``requires_confirmation``, nothing written) unless ``ignore_warnings``
+      overrides, which records through them.
 
     Attributes:
-        no_membership: The member has no active membership; a staff check-in
-            attributes with NULL ``plan_id`` / ``item_id``.
+        no_membership: The member has no active membership; an overridden staff
+            check-in attributes with NULL ``plan_id`` / ``item_id``.
         out_of_classes: The attributed membership's punch-card is depleted
-            (a staff check-in over-draws it).
+            (an overridden staff check-in over-draws it).
         ineligible_plan: The attributed membership's plan is not in the class's
             ``allowed_plan_ids``.
         over_capacity: The room is at ``max_capacity`` for this occurrence (the
@@ -86,11 +88,16 @@ class CheckinRequest(BaseModel):
       no eligible covering membership has remaining capacity, the member is out
       of classes, the room is full, or the plan is ineligible, the check-in is
       rejected (``log_id = null`` + a ``skip_reason``, nothing written).
-    * ``False`` (default — staff / admin) — the check-in is ALWAYS recorded.
-      It is attributed to the member's best available membership (eligibility
-      and remaining count ignored); with no active membership the attendance is
-      written with NULL ``plan_id`` / ``item_id``. Conditions that would have
-      blocked a kiosk check-in come back as ``warnings`` instead.
+    * ``False`` (default — staff / admin) — a clean check-in is recorded. But if
+      the gate raises any warning (no membership / out of classes / ineligible /
+      over capacity), the check-in is NOT recorded: the response comes back with
+      ``requires_confirmation = true`` and the ``warnings``, so staff can decide.
+      To go ahead anyway, resend with ``ignore_warnings = true`` — then it is
+      recorded (attributed to the best available membership, NULL plan/item when
+      none) with the warnings surfaced.
+
+    ``ignore_warnings`` only applies to a staff check-in (``is_member = false``);
+    a kiosk check-in is never overridable.
     """
 
     member_id: UUID
@@ -98,6 +105,7 @@ class CheckinRequest(BaseModel):
     class_id: UUID
     occurrence_date: date
     is_member: bool = False
+    ignore_warnings: bool = False
 
 
 class OccurrenceContext(BaseModel):
@@ -172,9 +180,12 @@ class CheckinResponse(BaseModel):
     * A kiosk check-in (``is_member=True``) that hits the gate is *rejected* —
       ``log_id`` / ``chosen_plan_id`` / ``chosen_item_id`` are ``None``, nothing
       is written, and ``skip_reason`` says why.
-    * A staff check-in (``is_member=False``) is always recorded — ``log_id`` is
-      set and any gate conditions are reported in ``warnings`` (the attendance
-      may carry NULL plan/item when the member has no membership).
+    * A staff check-in (``is_member=False``) that hits a warning is NOT recorded
+      unless ``ignore_warnings`` was set — ``log_id`` is null,
+      ``requires_confirmation`` is true, and ``warnings`` say why, so staff can
+      resend with ``ignore_warnings=true``. A clean (or overridden) staff
+      check-in IS recorded — ``log_id`` set, warnings surfaced when overridden,
+      NULL plan/item when the member has no membership.
 
     The ``memberships`` breakdown explains the decision either way.
 
@@ -198,8 +209,14 @@ class CheckinResponse(BaseModel):
             a repeat's echo.
         skip_reason: Why a kiosk check-in was rejected (no attendance written);
             None when recorded or an idempotent repeat.
-        warnings: Gate conditions a staff check-in recorded through (empty on a
-            kiosk check-in and on a clean staff check-in).
+        warnings: Gate conditions surfaced to staff — the reasons this check-in
+            needs confirmation (when ``requires_confirmation``), or the conditions
+            it was recorded through (when overridden with ``ignore_warnings``).
+            Empty on a kiosk check-in and on a clean staff check-in.
+        requires_confirmation: True when a staff check-in was NOT recorded because
+            of ``warnings`` and no ``ignore_warnings`` override — resend with
+            ``ignore_warnings=true`` to record it. Always False on a kiosk
+            check-in, a clean check-in, or a repeat.
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -213,6 +230,7 @@ class CheckinResponse(BaseModel):
     points_awarded: int = 0
     skip_reason: CheckinWarning | None = None
     warnings: list[CheckinWarning] = []
+    requires_confirmation: bool = False
     memberships: list[CheckinMembershipBreakdown] = []
 
 

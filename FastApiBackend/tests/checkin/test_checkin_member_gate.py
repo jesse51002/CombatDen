@@ -8,10 +8,11 @@ stays real). Covers the ``is_member`` block-vs-warn split:
   admitted (even when a higher-priority pack is depleted), while no membership /
   out of classes / ineligible plan / over capacity is rejected with the matching
   ``skip_reason`` and nothing is written.
-* ``is_member=False`` (staff) — always records, attributing to the best
-  available membership (NULL when none, over-drawing a depleted pack), with the
-  blocking conditions returned as ``warnings``. Points are awarded on every new
-  row (membership or not).
+* ``is_member=False`` (staff) — a clean check-in records; any blocking condition
+  holds it for confirmation (``requires_confirmation``, nothing written) with the
+  reasons as ``warnings``, UNLESS ``ignore_warnings`` overrides — which records,
+  attributing to the best available membership (NULL when none, over-drawing a
+  depleted pack). Points are awarded on every new row (membership or not).
 """
 
 from datetime import UTC, date, datetime
@@ -111,7 +112,7 @@ def _gate(
     return gate, writer
 
 
-# ── staff (is_member=False): always records ──────────────────────────
+# ── staff (is_member=False): clean records; a warning needs confirmation ──
 
 
 async def test_staff_clean_covered_records_no_warnings() -> None:
@@ -132,12 +133,31 @@ async def test_staff_clean_covered_records_no_warnings() -> None:
     assert plan_arg == plan and item_arg == m.item_id and should_end is False
 
 
-async def test_staff_no_membership_records_null_attribution_and_warns() -> None:
-    """No membership: records with NULL plan/item, no_membership warning, points
-    still awarded."""
+async def test_staff_no_membership_needs_confirmation() -> None:
+    """No membership: NOT recorded — requires_confirmation with a no_membership
+    warning, nothing written."""
     gate, writer = _gate(memberships=[], eligible=set())
 
     res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert res.chosen_plan_id is None
+    assert res.chosen_item_id is None
+    assert res.warnings == [CheckinWarning.no_membership]
+    assert res.points_awarded == 0
+    assert res.memberships == []
+    writer.assert_not_awaited()
+
+
+async def test_staff_no_membership_override_records_null_attribution() -> None:
+    """ignore_warnings overrides: records with NULL plan/item, the warning
+    surfaced, points awarded."""
+    gate, writer = _gate(memberships=[], eligible=set())
+
+    res = await gate.checkin_member(
+        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+    )
 
     assert res.log_id is not None
     assert res.chosen_plan_id is None
@@ -147,17 +167,31 @@ async def test_staff_no_membership_records_null_attribution_and_warns() -> None:
     writer.assert_awaited_once()
     _, _, plan_arg, item_arg, should_end = writer.await_args.args
     assert plan_arg is None and item_arg is None and should_end is False
-    assert res.memberships == []
 
 
-async def test_staff_out_of_classes_overdraws_and_warns() -> None:
-    """A depleted eligible pack is over-drawn (should_end True) with an
-    out_of_classes warning."""
+async def test_staff_out_of_classes_needs_confirmation() -> None:
+    """A depleted eligible pack is held for confirmation, not over-drawn."""
     plan = uuid4()
     pack = _usage(plan, PlanType.one_time, class_count=5, classes_used=5)
     gate, writer = _gate(memberships=[pack], eligible={plan})
 
     res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert res.warnings == [CheckinWarning.out_of_classes]
+    writer.assert_not_awaited()
+
+
+async def test_staff_out_of_classes_override_overdraws() -> None:
+    """ignore_warnings over-draws the depleted pack (should_end True)."""
+    plan = uuid4()
+    pack = _usage(plan, PlanType.one_time, class_count=5, classes_used=5)
+    gate, writer = _gate(memberships=[pack], eligible={plan})
+
+    res = await gate.checkin_member(
+        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+    )
 
     assert res.chosen_item_id == pack.item_id
     assert res.warnings == [CheckinWarning.out_of_classes]
@@ -165,20 +199,36 @@ async def test_staff_out_of_classes_overdraws_and_warns() -> None:
     assert should_end is True  # over-draw re-ends the depleted pack
 
 
-async def test_staff_ineligible_plan_records_and_warns() -> None:
-    """An ineligible membership is attributed with an ineligible_plan warning."""
+async def test_staff_ineligible_plan_needs_confirmation() -> None:
+    """An ineligible membership is held for confirmation."""
     plan = uuid4()
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
-    gate, _ = _gate(memberships=[m], eligible=set())  # plan not eligible
+    gate, writer = _gate(memberships=[m], eligible=set())  # plan not eligible
 
     res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert res.warnings == [CheckinWarning.ineligible_plan]
+    writer.assert_not_awaited()
+
+
+async def test_staff_ineligible_plan_override_records() -> None:
+    """ignore_warnings records, attributing the ineligible membership."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, _ = _gate(memberships=[m], eligible=set())
+
+    res = await gate.checkin_member(
+        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+    )
 
     assert res.chosen_plan_id == plan
     assert res.warnings == [CheckinWarning.ineligible_plan]
 
 
-async def test_staff_over_capacity_records_and_warns() -> None:
-    """A full room warns but still records for staff."""
+async def test_staff_over_capacity_needs_confirmation() -> None:
+    """A full room is held for confirmation for staff."""
     plan = uuid4()
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
     gate, writer = _gate(
@@ -189,19 +239,39 @@ async def test_staff_over_capacity_records_and_warns() -> None:
         _ctx(max_capacity=5), uuid4(), is_member=False
     )
 
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert res.warnings == [CheckinWarning.over_capacity]
+    writer.assert_not_awaited()
+
+
+async def test_staff_over_capacity_override_records() -> None:
+    """ignore_warnings records into the full room."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, writer = _gate(
+        memberships=[m], eligible={plan}, attendance_count=10
+    )
+
+    res = await gate.checkin_member(
+        _ctx(max_capacity=5), uuid4(), is_member=False, ignore_warnings=True
+    )
+
     assert res.log_id is not None
     assert res.warnings == [CheckinWarning.over_capacity]
     writer.assert_awaited_once()
 
 
 async def test_staff_combined_warnings_sorted_by_priority() -> None:
-    """A depleted ineligible pack surfaces both reasons, priority-ordered."""
+    """A depleted ineligible pack surfaces both reasons, priority-ordered, held
+    for confirmation."""
     plan = uuid4()
     pack = _usage(plan, PlanType.one_time, class_count=3, classes_used=3)
     gate, _ = _gate(memberships=[pack], eligible=set())  # ineligible + depleted
 
     res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
 
+    assert res.requires_confirmation is True
     assert res.warnings == [
         CheckinWarning.out_of_classes,
         CheckinWarning.ineligible_plan,
@@ -296,8 +366,8 @@ async def test_kiosk_admits_when_a_clean_membership_covers_despite_depleted_pack
     assert res.chosen_item_id == covering.item_id
 
 
-async def test_staff_overdraws_depleted_pack_even_when_a_clean_membership_covers() -> None:
-    """Same shape, staff mode: forced selection over-draws the depleted trial
+async def test_staff_override_overdraws_depleted_pack_over_clean_membership() -> None:
+    """Same shape, staff override: forced selection over-draws the depleted trial
     (priority 0) and warns out_of_classes — the documented divergence."""
     pack_plan, rec_plan = uuid4(), uuid4()
     depleted = _usage(pack_plan, PlanType.trial, class_count=3, classes_used=3)
@@ -306,7 +376,9 @@ async def test_staff_overdraws_depleted_pack_even_when_a_clean_membership_covers
         memberships=[depleted, covering], eligible={pack_plan, rec_plan}
     )
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(
+        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+    )
 
     assert res.chosen_plan_id == pack_plan
     assert res.warnings == [CheckinWarning.out_of_classes]

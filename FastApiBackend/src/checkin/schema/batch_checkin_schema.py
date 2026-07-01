@@ -30,11 +30,14 @@ class BatchCheckinRequest(BaseModel):
         member_ids: The members to check in (at least one; de-duped, order
             preserved).
         is_member: Applies to every member in the batch. ``False`` (the default
-            — a staff batch) records every member, attributing to their best
-            available membership (NULL when none) and reporting gate conditions
-            as ``warnings``. ``True`` runs the strict kiosk gate per member,
-            skipping any that no eligible covering membership with capacity
-            covers (or that is over capacity).
+            — a staff batch) records a clean member; a member the gate warns on
+            is held as ``needs_confirmation`` (not recorded) unless
+            ``ignore_warnings`` overrides. ``True`` runs the strict kiosk gate
+            per member, skipping any that no eligible covering membership with
+            capacity covers (or that is over capacity).
+        ignore_warnings: Staff override, applied to every member. When ``True`` a
+            warned member is recorded anyway (best-available attribution, NULL
+            when none) with the warnings surfaced. Ignored for ``is_member=True``.
     """
 
     gym_id: UUID
@@ -42,6 +45,7 @@ class BatchCheckinRequest(BaseModel):
     occurrence_date: date
     member_ids: list[UUID] = Field(min_length=1)
     is_member: bool = False
+    ignore_warnings: bool = False
 
 
 class BatchCheckinItemStatus(StrEnum):
@@ -55,6 +59,9 @@ class BatchCheckinItemStatus(StrEnum):
         skipped: The strict kiosk gate (``is_member=True``) rejected this member
             (over capacity / no membership / out of classes / ineligible plan);
             nothing written.
+        needs_confirmation: A staff (``is_member=False``) check-in the gate warned
+            on was NOT recorded — resend the batch with ``ignore_warnings=true`` to
+            record the warned members. ``warnings`` say why. Nothing written.
         failed: An unexpected error hit this member; the rest of the batch was
             still processed.
     """
@@ -62,6 +69,7 @@ class BatchCheckinItemStatus(StrEnum):
     checked_in = "checked_in"
     already_checked_in = "already_checked_in"
     skipped = "skipped"
+    needs_confirmation = "needs_confirmation"
     failed = "failed"
 
 
@@ -82,8 +90,9 @@ class BatchCheckinItemResult(BaseModel):
             check-in.
         log_id: The attendance row (checked_in / already_checked_in); None on
             skip / fail.
-        warnings: Gate conditions a staff (``is_member=False``) check-in
-            recorded through (empty otherwise).
+        warnings: Gate conditions on a staff (``is_member=False``) member — the
+            reasons a ``needs_confirmation`` member was not recorded, or the
+            conditions a recorded member was overridden through. Empty otherwise.
     """
 
     member_id: UUID

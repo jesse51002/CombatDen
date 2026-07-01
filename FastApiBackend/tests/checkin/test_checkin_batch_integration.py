@@ -486,12 +486,13 @@ class TestBatchCheckin:
             )
 
 
-    def test_staff_batch_records_no_membership_with_warning(
+    def test_staff_batch_holds_no_membership_then_override_records(
         self, api: httpx.Client, batch_ids: dict
     ) -> None:
-        """A STAFF batch (is_member=False) records every member — including a
-        membership-less one, who comes back checked_in with NULL attribution and
-        a no_membership warning. Fully cleaned up after."""
+        """A STAFF batch (is_member=False) records the covered member but holds a
+        membership-less one as needs_confirmation (not recorded); resending with
+        ignore_warnings records it (checked_in, NULL attribution, no_membership
+        warning). Fully cleaned up after."""
         target = batch_ids["target"]
         no_membership = batch_ids["no_membership"]
         if target is None or no_membership is None:
@@ -534,14 +535,30 @@ class TestBatchCheckin:
             assert by_member[member_a]["status"] == "checked_in"
             assert by_member[member_a]["warnings"] == []
 
-            # The membership-less member is RECORDED with NULL attribution + a
-            # no_membership warning (a staff batch never skips).
+            # The membership-less member is held for confirmation, not recorded.
             no_mem_row = by_member[no_mem]
-            assert no_mem_row["status"] == "checked_in"
-            assert no_mem_row["chosen_plan_id"] is None
-            assert no_mem_row["chosen_item_id"] is None
+            assert no_mem_row["status"] == "needs_confirmation"
+            assert no_mem_row["log_id"] is None
             assert "no_membership" in no_mem_row["warnings"]
-            assert no_mem_row["log_id"] is not None
+
+            # Resending with ignore_warnings records the warned member.
+            override = api.post(
+                _BATCH_URL,
+                json={
+                    "gym_id": GYM_ID,
+                    "class_id": class_id,
+                    "occurrence_date": occurrence_date,
+                    "member_ids": [no_mem],
+                    "ignore_warnings": True,
+                },
+            )
+            assert override.status_code == 207, override.text
+            o_row = override.json()["results"][0]
+            assert o_row["status"] == "checked_in"
+            assert o_row["chosen_plan_id"] is None
+            assert o_row["chosen_item_id"] is None
+            assert "no_membership" in o_row["warnings"]
+            assert o_row["log_id"] is not None
         finally:
             new_acts: set[UUID] = set()
             for m in (member_a, no_mem):

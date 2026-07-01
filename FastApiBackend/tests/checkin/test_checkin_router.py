@@ -147,25 +147,26 @@ def test_checkin_rejected_when_no_plan_covers(
     assert body["skip_reason"] == "ineligible_plan"
 
 
-def test_checkin_staff_records_with_warnings(
+def test_checkin_staff_needs_confirmation(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A staff (is_member=False) check-in of a no-membership member returns 200
-    with a log_id, NULL attribution, and a no_membership warning."""
-    log_id = str(uuid4())
+    """A staff (is_member=False) check-in the gate warns on, without an override,
+    is held for confirmation: 200, log_id null, requires_confirmation true, the
+    warning, nothing written."""
     class_id = str(uuid4())
     class_history_id = str(uuid4())
     response = CheckinResponse(
-        log_id=log_id,
+        log_id=None,
         member_id=fake_member_id,
         class_history_id=class_history_id,
         class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=None,
         chosen_item_id=None,
-        points_awarded=50,
+        points_awarded=0,
         skip_reason=None,
         warnings=[CheckinWarning.no_membership],
+        requires_confirmation=True,
         memberships=[],
     )
     _override_checkin(response)
@@ -185,11 +186,12 @@ def test_checkin_staff_records_with_warnings(
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["log_id"] == log_id
+    assert body["log_id"] is None
+    assert body["requires_confirmation"] is True
     assert body["chosen_plan_id"] is None
     assert body["skip_reason"] is None
     assert body["warnings"] == ["no_membership"]
-    assert body["points_awarded"] == 50
+    assert body["points_awarded"] == 0
 
 
 def test_checkin_idempotent_returns_already_checked_in(

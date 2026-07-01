@@ -587,9 +587,10 @@ class TestGatedCheckin:
     def test_staff_checkin_without_membership_records_null_and_warns(
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
-        """A STAFF check-in (is_member=False, the default) of a member with no
-        active membership IS recorded: a log_id, NULL plan/item attribution, a
-        no_membership warning, and points still awarded. Fully cleaned up."""
+        """A STAFF check-in (is_member=False) of a member with no active
+        membership is held for confirmation (requires_confirmation, nothing
+        written); resending with ignore_warnings records it — NULL plan/item
+        attribution, a no_membership warning, points awarded. Fully cleaned up."""
         covered = seed_ids["covered"]
         member_row = seed_ids["no_membership"]
         if covered is None or member_row is None:
@@ -601,15 +602,25 @@ class TestGatedCheckin:
 
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
+        payload = {
+            "member_id": member_id,
+            "gym_id": GYM_ID,
+            "class_id": class_id,
+            "occurrence_date": occurrence_date,
+        }
 
+        # Default: held for confirmation — nothing written, no points.
+        first = api.post("/api/v1/checkin", json=payload)
+        assert first.status_code == 200, first.text
+        first_body = first.json()
+        assert first_body["log_id"] is None
+        assert first_body["requires_confirmation"] is True
+        assert "no_membership" in first_body["warnings"]
+        assert _member_points(member_id) == before_points
+
+        # Override: records with NULL attribution + points.
         resp = api.post(
-            "/api/v1/checkin",
-            json={
-                "member_id": member_id,
-                "gym_id": GYM_ID,
-                "class_id": class_id,
-                "occurrence_date": occurrence_date,
-            },
+            "/api/v1/checkin", json={**payload, "ignore_warnings": True}
         )
         body = resp.json()
         class_history_id = body.get("class_history_id")
@@ -620,12 +631,11 @@ class TestGatedCheckin:
             assert body["log_id"] is not None
             UUID(body["log_id"])
             assert body["already_checked_in"] is False
-            # No membership to attribute to -> NULL plan/item.
             assert body["chosen_plan_id"] is None
             assert body["chosen_item_id"] is None
             assert "no_membership" in body["warnings"]
+            assert body["requires_confirmation"] is False
             assert body["skip_reason"] is None
-            # Points are awarded regardless of membership.
             assert body["points_awarded"] == points_worth
             assert _member_points(member_id) == before_points + points_worth
             assert len(new_activity_ids) == 1
