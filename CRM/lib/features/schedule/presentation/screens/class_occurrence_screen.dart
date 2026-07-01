@@ -105,19 +105,19 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     _selectedDate = widget.entry.classDate;
   }
 
-  bool get _cancellable {
-    if (widget.entry.isCancelled) return false;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return !widget.entry.classDate.isBefore(today);
-  }
+  /// Whether this occurrence can be cancelled — any occurrence that isn't
+  /// already cancelled, past OR future. No time window: the backend
+  /// (`cancel_occurrence`) accepts any date, and cancelling a past day is a
+  /// legitimate "this didn't actually happen" correction (it also wipes that
+  /// day's attendance + points). Contrast [_canSignUp], which DOES keep a
+  /// today-or-later window — you can't reserve a spot in a class that passed.
+  bool get _cancellable => !widget.entry.isCancelled;
 
   /// Whether members can still be signed up for this occurrence — the
   /// FUTURE-side counterpart of [_checkInOpen]: available while the
-  /// occurrence hasn't already passed (today or later), mirroring
-  /// [_cancellable]'s window (the sign-up endpoint itself imposes no time
-  /// gate, but offering to reserve a spot in an already-passed session
-  /// wouldn't make sense).
+  /// occurrence hasn't already passed (today or later). The sign-up endpoint
+  /// itself imposes no time gate, but offering to reserve a spot in an
+  /// already-passed session wouldn't make sense.
   bool get _canSignUp {
     if (widget.entry.isCancelled) return false;
     final now = DateTime.now();
