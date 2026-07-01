@@ -5,7 +5,7 @@ flowchart TB
     r_mem["<b>members</b> · /api/v1/members · 16 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link (authorize payer + sign waiver)<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/remove/preview<br/>POST /{member_id}/link/remove (cascade-cancel + de-authorize)<br/>GET /{member_id}/authorized-payer-waiver<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
     r_gym["<b>gyms</b> · /api/v1/gyms · 6 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}<br/>PUT /{gym_id}/employees/me/theme"]
     r_cls["<b>classes</b> · /api/v1/classes · 12 routes<br/>GET / · POST / · GET /{id} · PUT /{id} · DELETE /{id} (class CRUD)<br/>POST+GET /{id}/exceptions/instance<br/>POST+GET /{id}/exceptions/range<br/>GET /instances (schedule board)<br/>DELETE /{id}/occurrences/{date} (un-occur)<br/>POST /{id}/occurrences/{date}/reschedule"]
-    r_chk["<b>checkin</b> · /api/v1 · 4 routes<br/>POST /checkin (is_member gate · lazy materialize · staff clean-records / warns→confirm; ignore_warnings overrides · kiosk strict)<br/>POST /checkin/batch (207 · class_id+occurrence_date in body)<br/>GET /checkin/attendees (per-occurrence attendee list)<br/>GET /streak"]
+    r_chk["<b>checkin</b> · /api/v1 · 5 routes<br/>POST /checkin (is_member gate · lazy materialize · staff clean-records / warns→confirm; ignore_warnings overrides · kiosk strict)<br/>DELETE /checkin (reverse one member's check-in)<br/>POST /checkin/batch (207 · class_id+occurrence_date in body)<br/>GET /checkin/attendees (per-occurrence attendee list)<br/>GET /streak"]
     r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
@@ -22,6 +22,8 @@ flowchart TB
     cycle_counts_service["CycleCountsService<br/>src/checkin/"]
     batch_checkin_service["BatchCheckinService<br/>src/checkin/ · staff batch check-in (207); resolves the occurrence once, loops checkin"]
     checkin_attendees_service["CheckinAttendeesService<br/>src/checkin/ · read-only: the members who attended one occurrence"]
+    checkin_remover["CheckinRemover<br/>src/checkin/ · reverse one member's check-in: find the occurrence, delegate to CheckinReverser"]
+    checkin_reverser["CheckinReverser<br/>src/checkin/ · shared per-member reversal core (attendance/points/activity/auto-end); imports nothing from src.classes"]
     classes_crud_service["ClassesCrudService<br/>src/classes/ · class CRUD + soft-delete (admin/owner-gated writes)"]
     classes_exceptions_service["ClassesExceptionsService<br/>src/classes/ · instance + range exception upsert/list<br/>(reschedule-conflict check via the expander)"]
     classes_schedule_reader_service["ClassesScheduleReaderService<br/>src/classes/ · the schedule board: expand classes + exceptions over a window"]
@@ -106,15 +108,18 @@ flowchart TB
     r_chk --> checkin_member_gate
     r_chk --> batch_checkin_service
     r_chk --> checkin_attendees_service
+    r_chk --> checkin_remover
     r_chk --> streak_service
     checkin_member_gate --> cycle_counts_service
     checkin_class_resolver --> classes_expander
     checkin_class_resolver --> classes_materializer
     batch_checkin_service --> checkin_class_resolver
     batch_checkin_service --> checkin_member_gate
+    checkin_remover --> checkin_reverser
     classes_exceptions_service --> classes_expander
     classes_schedule_reader_service --> classes_expander
     classes_undo_service --> classes_expander
+    classes_undo_service --> checkin_reverser
     r_rank --> ranks_service
     r_rew --> rewards_redemption_service
     r_rew --> rewards_service
@@ -211,7 +216,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe,YouTube,LLMProvider ext;
   class r_mem,r_gym,r_cls,r_chk,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme route;
-  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,classes_undo_service,classes_expander,classes_materializer,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
+  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,classes_undo_service,classes_expander,classes_materializer,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

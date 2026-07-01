@@ -15,16 +15,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
-from src.checkin.schema.checkin_schema import ResolvedClass
+from src.checkin.schema.checkin_schema import (
+    CLASS_ATTENDED_ACTIVITY_TYPE,
+    ResolvedClass,
+)
 from src.classes import SQL_DIR as CLASSES_SQL_DIR
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 _FALLBACK_TIMEZONE = "America/Chicago"
-# member_activities.activity_type value for a recorded class attendance (the
-# seed's convention — see Database/python_data/generators/activities.py).
-CLASS_ATTENDED_ACTIVITY_TYPE = "class_attended"
 
 
 class CheckinWriter:

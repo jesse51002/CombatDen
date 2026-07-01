@@ -11,6 +11,7 @@ from src.checkin.service.checkin_class_resolver import (
 )
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
+from src.checkin.service.checkin_reverser import CheckinReverser
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.classes.service.classes_crud_service import ClassesCrudService
@@ -250,11 +251,18 @@ class DependencyInjector(containers.DeclarativeContainer):
         CheckinAttendeesService,
         db_pool=db_pool,
     )
-    # Reverse one member's check-in: delete attendance, claw back points, reverse
-    # the pack auto-end (reuses the classes undo SQL), drop a feed activity.
+    # Shared per-member check-in reverser: delete attendance, claw back points,
+    # drop a feed activity, reverse the pack auto-end — on a KNOWN occurrence, in
+    # the caller's transaction, importing nothing from src.classes. Built before
+    # both consumers (checkin_remover below and classes_undo_service, which loops
+    # it over every attendee — the deliberate classes -> checkin dependency).
+    checkin_reverser = providers.Factory(CheckinReverser)
+    # Reverse one member's check-in: find the occurrence, then delegate the
+    # reversal to the shared checkin_reverser for that single member.
     checkin_remover = providers.Factory(
         CheckinRemover,
         db_pool=db_pool,
+        reverser=checkin_reverser,
     )
 
     # Class CRUD + exceptions + the schedule board.
@@ -264,13 +272,17 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
     # (deletes member_attendance, claws back points, may clear an auto-end
-    # end_date), so each op runs in one transaction. Also HOSTS the shared
-    # reschedule engine (time-aware conflict check + attendance wipe / re-date)
-    # that ClassesExceptionsService delegates to — hence defined before it.
+    # end_date), so each op runs in one transaction. Its wipe loops the shared
+    # checkin_reverser (defined above) over every attendee — a deliberate
+    # classes -> checkin dependency that avoids duplicating the reversal. Also
+    # HOSTS the shared reschedule engine (time-aware conflict check + attendance
+    # wipe / re-date) that ClassesExceptionsService delegates to — hence defined
+    # before it.
     classes_undo_service = providers.Factory(
         ClassesUndoService,
         db_pool=db_pool,
         expander=classes_expander,
+        reverser=checkin_reverser,
     )
     # A reschedule (new_date) on an instance-exception upsert delegates the
     # conflict check + attendance move to the undo service's engine, then writes

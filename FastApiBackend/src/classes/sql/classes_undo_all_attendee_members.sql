@@ -1,8 +1,8 @@
--- Every member with attendance on one occurrence (pre-delete snapshot), for the
--- points/activity reversal when the occurrence is un-occurred. Unlike
--- classes_undo_find_attendees.sql this is NOT joined to memberships, so a
--- no-membership (NULL-attribution) attendee — who still earned points — is
--- included.
+-- Every member with attendance on one occurrence (pre-delete snapshot), to
+-- drive the per-attendee check-in reverser loop when the occurrence is
+-- un-occurred. NOT joined to memberships, so a no-membership (NULL-attribution)
+-- attendee — who still earned points — is included; the reverser reads each
+-- member's own attribution from the row it deletes.
 SELECT DISTINCT member_id
 FROM member_attendance
 WHERE class_history_id = CAST(:class_history_id AS UUID)

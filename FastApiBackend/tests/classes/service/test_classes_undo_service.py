@@ -45,9 +45,13 @@ def _class_row(class_id: UUID, gym_id: UUID) -> dict:
 
 @pytest.fixture
 def service() -> ClassesUndoService:
-    # db_pool is never touched: every DB read is stubbed to empty, so only the
-    # pure expander (real) decides the conflict.
-    svc = ClassesUndoService(db_pool=None, expander=ClassesExpander())  # type: ignore[arg-type]
+    # db_pool + reverser are never touched: every DB read is stubbed to empty and
+    # the conflict check does no wiping, so only the pure expander (real) decides.
+    svc = ClassesUndoService(
+        db_pool=None,  # type: ignore[arg-type]
+        expander=ClassesExpander(),
+        reverser=None,  # type: ignore[arg-type]
+    )
 
     async def _no_db_reads(sql: str, params: dict) -> list:
         return []

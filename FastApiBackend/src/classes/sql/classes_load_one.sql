@@ -1,5 +1,7 @@
--- The expander-relevant columns for a single class (used by the reschedule
--- conflict check). Returns nothing for a deleted/absent class.
+-- A single class row: the expander-relevant columns (used by the reschedule
+-- conflict check) plus points_worth (the per-check-in award the un-occur /
+-- future-reschedule teardown claws back, loaded once per occurrence). Returns
+-- nothing for a deleted/absent class.
 SELECT
     class_id,
     gym_id,
@@ -16,7 +18,8 @@ SELECT
     fri_instructor_id,
     sat_instructor_id,
     start_date,
-    end_date
+    end_date,
+    points_worth
 FROM gym_classes
 WHERE class_id = :class_id
   AND is_deleted = FALSE

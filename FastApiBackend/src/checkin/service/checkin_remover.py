@@ -1,29 +1,32 @@
 """Remove one member's check-in from a class occurrence (reverse the award).
 
-The inverse of the check-in writer, scoped to a single member: delete the
-attendance row, claw back the awarded points (clamped at 0), remove a
-``class_attended`` activity, and -- UNLIKE the whole-occurrence undo -- reverse
-the auto-end on the charged pack when the removal drops it back below capacity.
+A thin occurrence-finding wrapper over the shared per-member reverser
+(``CheckinReverser``): resolve the materialized ``class_history`` row for the
+gym-local calendar day, then delegate the actual reversal — delete the member's
+attendance, claw back the awarded points (clamped at 0), remove a
+``class_attended`` activity, and reverse the auto-end on the charged pack when
+the removal drops it back below capacity — to the reverser for this one member.
 The occurrence (``class_history``) itself is left intact: the class still
 happened, this one member just didn't attend.
 
-One-way ``checkin -> classes`` dependency: the gym-local day bounds, the gym
-timezone, and the pack-capacity reversal reuse the classes SQL (loaded from
-``CLASSES_SQL_DIR``), exactly as the writer reuses the classes timezone SQL.
+One-way ``checkin -> classes`` dependency: the occurrence resolution here (the
+gym timezone + the gym-local day-bounds ``class_history`` lookup) reuses the
+classes SQL (loaded from ``CLASSES_SQL_DIR``), exactly as the writer reuses the
+classes timezone SQL. The reversal core itself (``CheckinReverser``) imports
+nothing from ``src.classes``.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from schema.membership_plan import PlanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin import SQL_DIR
 from src.checkin.schema.checkin_schema import CheckinRemoveResponse
-from src.checkin.service.checkin_writer import CLASS_ATTENDED_ACTIVITY_TYPE
+from src.checkin.service.checkin_reverser import CheckinReverser
 from src.classes import SQL_DIR as CLASSES_SQL_DIR
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -37,10 +40,15 @@ class CheckinRemover:
 
     Args:
         db_pool: Injected database connection pool.
+        reverser: The shared per-member reversal core (delete attendance + claw
+            back points + drop activity + reverse the pack auto-end).
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self, db_pool: DirectDatabasePool, reverser: CheckinReverser
+    ) -> None:
         self._db_pool = db_pool
+        self._reverser = reverser
 
     async def remove(
         self,
@@ -67,27 +75,19 @@ class CheckinRemover:
             if history_id is None:
                 return CheckinRemoveResponse(removed=False)
 
-            deleted = await self._delete_attendance(
-                session, member_id, history_id
+            result = await self._reverser.reverse(
+                session,
+                history_id,
+                member_id,
+                gym_id,
+                class_id,
+                points_worth,
             )
-            if deleted is None:
-                return CheckinRemoveResponse(removed=False)
-
-            await self._revert_points(session, member_id, gym_id, points_worth)
-            await self._delete_activity(session, member_id, gym_id, class_id)
-            unended = await self._reverse_auto_end(
-                session, member_id, deleted["item_id"]
-            )
-
             await session.commit()
 
-        return CheckinRemoveResponse(
-            removed=True,
-            points_reverted=points_worth,
-            membership_unended=unended,
-        )
+        return result
 
-    # -- steps -----------------------------------------------------------
+    # -- occurrence resolution -------------------------------------------
 
     async def _load_class(
         self, session: AsyncSession, class_id: UUID, gym_id: UUID
@@ -129,90 +129,6 @@ class CheckinRemover:
         )
         return row["class_history_id"] if row else None
 
-    async def _delete_attendance(
-        self, session: AsyncSession, member_id: UUID, history_id: UUID
-    ) -> dict | None:
-        """Delete the member's attendance row; return its (item_id, plan_id)."""
-        return await self._fetchone(
-            session,
-            load_sql(SQL_DIR / "checkin_delete_member_attendance.sql"),
-            {"member_id": str(member_id), "class_history_id": str(history_id)},
-        )
-
-    async def _revert_points(
-        self,
-        session: AsyncSession,
-        member_id: UUID,
-        gym_id: UUID,
-        points: int,
-    ) -> None:
-        """Claw back the awarded points, floored at 0 (the balance CHECK)."""
-        await session.execute(
-            text(load_sql(SQL_DIR / "checkin_revert_points.sql")),
-            {"points": points, "m": str(member_id), "g": str(gym_id)},
-        )
-
-    async def _delete_activity(
-        self,
-        session: AsyncSession,
-        member_id: UUID,
-        gym_id: UUID,
-        class_id: UUID,
-    ) -> None:
-        """Remove one matching class_attended loyalty-feed row (best effort)."""
-        await session.execute(
-            text(load_sql(SQL_DIR / "checkin_delete_attended_activity.sql")),
-            {
-                "m": str(member_id),
-                "g": str(gym_id),
-                "activity_type": CLASS_ATTENDED_ACTIVITY_TYPE,
-                "class_id": str(class_id),
-            },
-        )
-
-    async def _reverse_auto_end(
-        self,
-        session: AsyncSession,
-        member_id: UUID,
-        item_id: UUID | None,
-    ) -> UUID | None:
-        """Clear the pack's auto-end end_date if the removal drops it below
-        capacity. None item_id (no-membership attendance) charged nothing, so
-        there is nothing to reverse."""
-        if item_id is None:
-            return None
-        info = await self._fetchone(
-            session,
-            load_sql(SQL_DIR / "checkin_load_membership_for_reversal.sql"),
-            {"item_id": str(item_id)},
-        )
-        if info is None or not self._is_depletion_auto_end(info):
-            return None
-        remaining = await self._count_attendance(session, item_id, member_id)
-        capacity = int(info["class_count"]) * int(info["quantity"])
-        if remaining >= capacity:
-            return None
-        await session.execute(
-            text(
-                load_sql(
-                    CLASSES_SQL_DIR / "classes_undo_reverse_membership_end.sql"
-                )
-            ),
-            {"item_id": str(item_id), "member_id": str(member_id)},
-        )
-        return item_id
-
-    async def _count_attendance(
-        self, session: AsyncSession, item_id: UUID, member_id: UUID
-    ) -> int:
-        """Attendance still recorded against the pack (post-delete)."""
-        row = await self._fetchone(
-            session,
-            load_sql(CLASSES_SQL_DIR / "classes_undo_count_attendance.sql"),
-            {"item_id": str(item_id), "member_id": str(member_id)},
-        )
-        return int(row["attendance_count"]) if row else 0
-
     async def _gym_timezone(
         self, session: AsyncSession, gym_id: UUID
     ) -> str:
@@ -223,17 +139,6 @@ class CheckinRemover:
             {"gym_id": str(gym_id)},
         )
         return row["timezone"] if row else _FALLBACK_TIMEZONE
-
-    @staticmethod
-    def _is_depletion_auto_end(info: dict) -> bool:
-        """Whether the pack's end_date is a depletion auto-end to reverse: a
-        non-null end_date on a finite-count trial / one_time pack."""
-        if info["end_date"] is None or info["class_count"] is None:
-            return False
-        return PlanType(info["plan_type"]) in (
-            PlanType.trial,
-            PlanType.one_time,
-        )
 
     @staticmethod
     async def _fetchone(
