@@ -19,4 +19,7 @@ INSERT INTO gym_classes (
     -- class "has been running" for a month — the live board is unaffected.
     CAST(CURRENT_DATE - INTERVAL '35 days' AS DATE)
 )
-RETURNING class_id, start_date
+-- max_capacity isn't set above (no capacity column in the INSERT list), so
+-- this always returns NULL today -- but the sign-up seeding reads it here
+-- rather than assuming NULL, so it stays correct if a capacity ever gets set.
+RETURNING class_id, start_date, max_capacity
