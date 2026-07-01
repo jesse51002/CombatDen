@@ -15,6 +15,12 @@ import 'package:crm/shared/widgets/view_switcher.dart';
 /// internally — the parent form scrolls too, so the inner list stays bounded.
 const double _kMaxRosterHeight = 280;
 
+/// Right gutter reserved on each row so its remove (×) clears the overlay
+/// scrollbar that appears once the list overflows — otherwise the two sit on
+/// the same right edge and collide. The row is padded (not the whole list) so
+/// the divider still spans full-width.
+const double _kScrollbarGutter = DesignConstants.spacingLarge;
+
 /// Which of the roster's lists is showing. Order matches display order —
 /// Attended first (when it exists at all), Reserved second.
 enum _RosterTab { attended, reserved }
@@ -320,13 +326,16 @@ class _TabbedRosterState extends State<_TabbedRoster> {
                 // member apart from a no-show.
                 final showAttendedMark =
                     widget.tab == _RosterTab.reserved && attendee.attended;
-                return MemberRowTile(
-                  name: attendee.fullName,
-                  subtitle: showAttendedMark ? const _AttendedMark() : null,
-                  trailing: _RemoveButton(
+                return Padding(
+                  padding: const EdgeInsets.only(right: _kScrollbarGutter),
+                  child: MemberRowTile(
                     name: attendee.fullName,
-                    tab: widget.tab,
-                    onPressed: () => onRemove(attendee),
+                    subtitle: showAttendedMark ? const _AttendedMark() : null,
+                    trailing: _RemoveButton(
+                      name: attendee.fullName,
+                      tab: widget.tab,
+                      onPressed: () => onRemove(attendee),
+                    ),
                   ),
                 );
               },
