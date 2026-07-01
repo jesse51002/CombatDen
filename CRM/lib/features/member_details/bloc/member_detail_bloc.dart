@@ -905,10 +905,13 @@ class MemberDetailBloc
   /// channel ([isCheckingIn] / [checkInResult] / [checkInError]) so the
   /// screen-level overlay + error dialog never fire while the dialog is open;
   /// the dialog flips to its own terminal step off the result. The CRM sends
-  /// `is_member: false`, so the check-in is ALWAYS recorded; any gate
-  /// conditions ride along as non-blocking `warnings`. Only a real recorded
-  /// attendance bumps `refreshToken` (so last-class / attendance / rewards
-  /// refresh) — an idempotent repeat changes nothing.
+  /// `is_member: false`: a clean check-in is recorded, any gate conditions ride
+  /// along as non-blocking `warnings`; one that hits a warning is NOT recorded
+  /// (`requiresConfirmation` true) unless [MemberCheckInRequested.ignoreWarnings]
+  /// is set — the dialog re-dispatches with it true on "Check in anyway". Only
+  /// a real recorded attendance bumps `refreshToken` (so last-class /
+  /// attendance / rewards refresh) — an idempotent repeat or a
+  /// needs-confirmation hold changes nothing.
   Future<void> _onCheckIn(
     MemberCheckInRequested event,
     Emitter<MemberDetailState> emit,
@@ -928,6 +931,7 @@ class MemberDetailBloc
           gymId: s.member.gymId,
           classId: event.classId,
           occurrenceDate: _occurrenceDate.format(event.occurrenceDate),
+          ignoreWarnings: event.ignoreWarnings,
         ),
       );
     } catch (e, stackTrace) {

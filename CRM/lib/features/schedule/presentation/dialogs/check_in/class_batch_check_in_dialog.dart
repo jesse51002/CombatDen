@@ -15,9 +15,12 @@ enum _Phase { select, processing, results }
 
 /// Batch staff check-in ("Update attendees") for one class occurrence: pick
 /// members → submit (207) → a per-member results step (each row shows ✓ checked
-/// in / already in / ✗ failed, plus any non-blocking warnings). Staff always
-/// records, so there is no "check in anyway" retry. Shares the board's
-/// [ScheduleBloc] (a successful run reloads the week).
+/// in / already in / needs confirmation / ✗ failed, plus any non-blocking
+/// warnings). A `needs_confirmation` member was NOT recorded — the results step
+/// offers "Check in the remaining N anyway", which resubmits just that subset
+/// with `ignoreWarnings: true` and merges the (partial) response back into the
+/// full breakdown. Shares the board's [ScheduleBloc] (a successful run reloads
+/// the week).
 class ClassBatchCheckInDialog extends StatefulWidget {
   final String classId;
   final String gymId;
@@ -65,6 +68,12 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
   final Map<String, String> _names = {};
   String? _inlineError;
 
+  /// True while the in-flight request is a "Check in anyway" confirmation
+  /// retry (as opposed to the initial pick-step submit) — decides whether a
+  /// transport failure returns to the picker (fresh submit) or stays on the
+  /// results step (retry, so the already-rendered breakdown isn't lost).
+  bool _confirmingWarnings = false;
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +94,7 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
 
   void _submit(List<String> ids) {
     if (ids.isEmpty) return;
+    _confirmingWarnings = false;
     setState(() => _phase = _Phase.processing);
     context.read<ScheduleBloc>().add(ScheduleBatchCheckInRequested(
           classId: widget.classId,
@@ -93,14 +103,37 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
         ));
   }
 
+  /// "Check in the remaining N anyway": resubmit just the `needsConfirmation`
+  /// subset with `ignoreWarnings: true`.
+  void _confirmWarnings(List<String> ids) {
+    if (ids.isEmpty) return;
+    _confirmingWarnings = true;
+    setState(() {
+      _phase = _Phase.processing;
+      _inlineError = null;
+    });
+    context.read<ScheduleBloc>().add(ScheduleBatchCheckInRequested(
+          classId: widget.classId,
+          occurrenceDate: widget.occurrenceDate,
+          memberIds: ids,
+          ignoreWarnings: true,
+        ));
+  }
+
   void _onState(BuildContext context, ScheduleState state) {
     if (_phase != _Phase.processing) return;
     if (state is! ScheduleLoaded || state.isCheckingIn) return;
     if (state.batchCheckInResult != null) {
-      setState(() => _phase = _Phase.results);
+      setState(() {
+        _phase = _Phase.results;
+        _inlineError = null;
+      });
     } else if (state.checkInError != null) {
       setState(() {
-        _phase = _Phase.select;
+        // A confirmation retry's failure stays on the results step (the prior
+        // breakdown is still valid and shouldn't disappear); a fresh submit's
+        // failure returns to the picker.
+        _phase = _confirmingWarnings ? _Phase.results : _Phase.select;
         _inlineError = state.checkInError;
       });
     }
@@ -117,7 +150,11 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
           ),
         _Phase.results => AppDialog(
             title: 'Update attendees',
-            body: BatchCheckInResultsView(memberNames: _names),
+            body: BatchCheckInResultsView(
+              memberNames: _names,
+              onConfirmWarnings: _confirmWarnings,
+              inlineError: _inlineError,
+            ),
             actions: checkInDoneActions(context),
           ),
         _Phase.select => AppDialog(

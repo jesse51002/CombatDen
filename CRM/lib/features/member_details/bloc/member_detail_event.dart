@@ -374,20 +374,24 @@ class RefundChargeRequested extends MemberDetailEvent {
 
 /// Check the viewed member into the occurrence of [classId] on
 /// [occurrenceDate] (a local calendar day). The CRM is the staff surface
-/// (`is_member: false`), so the check-in is ALWAYS recorded — the outcome lands
-/// on the loaded state as `checkInResult` (recorded or already-checked-in, with
-/// any non-blocking `warnings`) or `checkInError`.
+/// (`is_member: false`): a clean check-in is recorded, but one that hits a gate
+/// warning is NOT recorded — the outcome lands on the loaded state as
+/// `checkInResult` with `requiresConfirmation` true and the `warnings`, so the
+/// dialog can offer "Check in anyway" (re-dispatched with [ignoreWarnings]
+/// true) — or as `checkInError` on an unexpected failure.
 class MemberCheckInRequested extends MemberDetailEvent {
   final String classId;
   final DateTime occurrenceDate;
+  final bool ignoreWarnings;
 
   const MemberCheckInRequested({
     required this.classId,
     required this.occurrenceDate,
+    this.ignoreWarnings = false,
   });
 
   @override
-  List<Object?> get props => [classId, occurrenceDate];
+  List<Object?> get props => [classId, occurrenceDate, ignoreWarnings];
 }
 
 /// Clears the check-in outcome (result + error) when the check-in dialog opens

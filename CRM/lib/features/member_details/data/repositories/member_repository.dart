@@ -636,10 +636,12 @@ class MemberRepository {
 
   /// `POST /api/v1/checkin` — staff single check-in for [req]'s member into the
   /// occurrence addressed by `class_id` + `occurrence_date`. The CRM always
-  /// sends `is_member: false`, so the check-in is ALWAYS recorded: the
+  /// sends `is_member: false`: a clean check-in is recorded — the
   /// [CheckInResponse] is a fresh attendance (points awarded) or an idempotent
-  /// repeat (`already_checked_in`), and any gate conditions come back as
-  /// non-blocking `warnings`.
+  /// repeat (`already_checked_in`), with any gate conditions as non-blocking
+  /// `warnings` — but one that hits a warning is NOT recorded
+  /// (`requires_confirmation` true, `log_id` null) unless [req] carries
+  /// `ignore_warnings: true`.
   Future<CheckInResponse> checkInMember(CheckInRequest req) async {
     final response = await _apiClient.post(
       '/api/v1/checkin',

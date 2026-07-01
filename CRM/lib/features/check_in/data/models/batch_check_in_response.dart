@@ -42,7 +42,27 @@ class BatchCheckInResponse extends Equatable {
   List<BatchCheckInResultItem> get failed =>
       results.where((r) => r.status.isFailed).toList();
 
+  /// Members the gate warned on and held for confirmation — nothing written
+  /// for these. Resend a batch of just their ids with `ignore_warnings: true`
+  /// (the "Check in anyway" override) to record them.
+  List<BatchCheckInResultItem> get needsConfirmation =>
+      results.where((r) => r.status.isNeedsConfirmation).toList();
+
   bool get hasFailures => failed.isNotEmpty;
+
+  /// Merge a confirmation retry's response — covering only the subset of
+  /// members resubmitted with `ignore_warnings: true` — back into this full
+  /// result set, replacing each resubmitted member's row in place while
+  /// leaving every other member's outcome untouched.
+  BatchCheckInResponse mergeConfirmed(BatchCheckInResponse retry) {
+    final updates = {for (final r in retry.results) r.memberId: r};
+    return BatchCheckInResponse(
+      classId: classId,
+      occurrenceDate: occurrenceDate,
+      classHistoryId: classHistoryId,
+      results: results.map((r) => updates[r.memberId] ?? r).toList(),
+    );
+  }
 
   @override
   List<Object?> get props =>

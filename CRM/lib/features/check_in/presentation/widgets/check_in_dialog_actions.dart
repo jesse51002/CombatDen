@@ -12,9 +12,9 @@ AppDialogActions checkInDoneActions(BuildContext context) => AppDialogActions(
     );
 
 /// A primary action over a dismiss button (the dismiss pops via the default).
-/// Drives the pick/select step ("Check in"), the skip step ("Check in
-/// anyway"), and the error step ("Try again"). A null [onPrimary] disables the
-/// primary (nothing selected yet).
+/// Drives the pick/select step ("Check in"), the needs-confirmation step
+/// ("Check in anyway"), and the error step ("Try again"). A null [onPrimary]
+/// disables the primary (nothing selected yet).
 AppDialogActions checkInChoiceActions({
   required String primaryLabel,
   required VoidCallback? onPrimary,

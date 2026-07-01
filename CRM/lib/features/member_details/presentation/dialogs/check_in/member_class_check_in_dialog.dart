@@ -17,10 +17,13 @@ enum _Phase { pick, processing, result }
 
 /// Two-section staff check-in for the viewed member: TODAY's classes (Active,
 /// emphasized) and the LAST 7 DAYS (Past). Pick one → "Check in" dispatches
-/// [MemberCheckInRequested]; staff always records, so the result names the
-/// class + points and surfaces any non-blocking warnings (no "check in anyway"
-/// retry). Reads occurrences via the member-detail screen's [ScheduleRepository]
-/// and runs the check-in through the [MemberDetailBloc]'s dedicated channel.
+/// [MemberCheckInRequested]. A clean check-in records and the result names the
+/// class + points (with any non-blocking warnings); one that hits a gate
+/// warning is held for confirmation (`requiresConfirmation`, nothing written)
+/// and the result step offers "Check in anyway", which re-dispatches the same
+/// check-in with `ignoreWarnings: true`. Reads occurrences via the
+/// member-detail screen's [ScheduleRepository] and runs the check-in through
+/// the [MemberDetailBloc]'s dedicated channel.
 class MemberClassCheckInDialog extends StatefulWidget {
   final String gymId;
 
@@ -54,20 +57,27 @@ class _MemberClassCheckInDialogState
   _Phase _phase = _Phase.pick;
   EffectiveClassInstance? _selected;
 
+  /// The `ignoreWarnings` value of the last dispatched check-in, so "Try
+  /// again" (on an unexpected error) retries with the same intent as the
+  /// attempt that failed — including a failed "Check in anyway" retry.
+  bool _lastIgnoreWarnings = false;
+
   @override
   void initState() {
     super.initState();
     context.read<MemberDetailBloc>().add(const MemberCheckInCleared());
   }
 
-  void _submit() {
+  void _submit({bool ignoreWarnings = false}) {
     final selected = _selected;
     if (selected == null) return;
+    _lastIgnoreWarnings = ignoreWarnings;
     setState(() => _phase = _Phase.processing);
     context.read<MemberDetailBloc>().add(
           MemberCheckInRequested(
             classId: selected.classId,
             occurrenceDate: selected.classDate,
+            ignoreWarnings: ignoreWarnings,
           ),
         );
   }
@@ -124,7 +134,14 @@ class _MemberClassCheckInDialogState
         if (loaded?.checkInError != null) {
           return checkInChoiceActions(
             primaryLabel: 'Try again',
-            onPrimary: _submit,
+            onPrimary: () => _submit(ignoreWarnings: _lastIgnoreWarnings),
+            dismissLabel: 'Close',
+          );
+        }
+        if (loaded?.checkInResult?.requiresConfirmation ?? false) {
+          return checkInChoiceActions(
+            primaryLabel: 'Check in anyway',
+            onPrimary: () => _submit(ignoreWarnings: true),
             dismissLabel: 'Close',
           );
         }
@@ -132,7 +149,7 @@ class _MemberClassCheckInDialogState
       case _Phase.pick:
         return checkInChoiceActions(
           primaryLabel: 'Check in',
-          onPrimary: _selected == null ? null : _submit,
+          onPrimary: _selected == null ? null : () => _submit(),
           dismissLabel: 'Cancel',
         );
     }

@@ -8,8 +8,11 @@ part 'check_in_request.g.dart';
 /// Mirrors the backend `CheckinRequest`. The occurrence is addressed by
 /// [classId] + [occurrenceDate] (a gym-local `YYYY-MM-DD` date string — sent as
 /// a bare date, never an ISO datetime). [isMember] selects the gate: the CRM is
-/// the STAFF surface, so it is always `false` — the check-in is ALWAYS recorded
-/// and any gate conditions come back as non-blocking `warnings`.
+/// the STAFF surface, so it is always `false` — a clean check-in is recorded,
+/// but one that hits a gate warning is held for confirmation (nothing
+/// written; see `CheckInResponse.requiresConfirmation`) unless [ignoreWarnings]
+/// overrides — resend the identical body with it `true` to record through the
+/// warnings (the "Check in anyway" override).
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createFactory: false,
@@ -20,6 +23,7 @@ class CheckInRequest extends Equatable {
   final String classId;
   final String occurrenceDate;
   final bool isMember;
+  final bool ignoreWarnings;
 
   const CheckInRequest({
     required this.memberId,
@@ -27,11 +31,12 @@ class CheckInRequest extends Equatable {
     required this.classId,
     required this.occurrenceDate,
     this.isMember = false,
+    this.ignoreWarnings = false,
   });
 
   Map<String, dynamic> toJson() => _$CheckInRequestToJson(this);
 
   @override
   List<Object?> get props =>
-      [memberId, gymId, classId, occurrenceDate, isMember];
+      [memberId, gymId, classId, occurrenceDate, isMember, ignoreWarnings];
 }

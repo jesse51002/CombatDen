@@ -20,4 +20,5 @@ CheckInResponse _$CheckInResponseFromJson(Map<String, dynamic> json) =>
       warnings: json['warnings'] == null
           ? const []
           : checkInWarningsFromJson(json['warnings'] as List?),
+      requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
     );

@@ -15,5 +15,6 @@ Map<String, dynamic> _$CheckInRequestToJson(CheckInRequest instance) =>
       'class_id': instance.classId,
       'occurrence_date': instance.occurrenceDate,
       'is_member': instance.isMember,
+      'ignore_warnings': instance.ignoreWarnings,
       'props': instance.props,
     };

@@ -11,6 +11,7 @@ enum ClassCheckInStatus {
   checkedIn('checked_in', 'Checked in'),
   alreadyCheckedIn('already_checked_in', 'Already checked in'),
   skipped('skipped', 'Skipped'),
+  needsConfirmation('needs_confirmation', 'Needs confirmation'),
   failed('failed', 'Failed'),
   unknown('unknown', 'Unknown');
 
@@ -32,6 +33,8 @@ enum ClassCheckInStatus {
   bool get isAlreadyCheckedIn =>
       this == ClassCheckInStatus.alreadyCheckedIn;
   bool get isSkipped => this == ClassCheckInStatus.skipped;
+  bool get isNeedsConfirmation =>
+      this == ClassCheckInStatus.needsConfirmation;
   bool get isFailed => this == ClassCheckInStatus.failed;
 
   /// A recorded or pre-existing attendance row (the two "green" outcomes).

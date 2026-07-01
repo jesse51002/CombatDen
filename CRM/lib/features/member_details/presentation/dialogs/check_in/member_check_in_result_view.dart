@@ -6,10 +6,11 @@ import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 
 /// Terminal outcome of a member check-in. The dialog footer drives the next
-/// action (Done / Try again); this view only states what happened. Staff always
-/// records, so a recorded check-in (✓ "+N points") names the class and shows
-/// any gate warnings as a non-blocking note; an idempotent repeat and an
-/// unexpected error are the other two outcomes.
+/// action (Done / Check in anyway / Try again); this view only states what
+/// happened: a recorded check-in (✓ "+N points", any gate warnings as a
+/// non-blocking note), an idempotent repeat, a hold for confirmation (the gate
+/// warned and nothing was written — offer "Check in anyway"), or an unexpected
+/// error.
 class MemberCheckInResultView extends StatelessWidget {
   final String instanceName;
   final CheckInResponse? result;
@@ -34,6 +35,15 @@ class MemberCheckInResultView extends StatelessWidget {
     }
     final r = result;
     if (r == null) return const SizedBox.shrink();
+    if (r.requiresConfirmation) {
+      return _Outcome(
+        icon: Symbols.warning_sharp,
+        color: DesignConstants.okYellow,
+        title: 'Not checked in to $instanceName',
+        detail: '${CheckInWarning.summarize(r.warnings)}. Use "Check in '
+            'anyway" to override the gate (front-desk coverage).',
+      );
+    }
     if (r.alreadyCheckedIn) {
       return _Outcome(
         icon: Symbols.check_circle_sharp,

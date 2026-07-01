@@ -10,9 +10,12 @@ part 'batch_check_in_result_item.g.dart';
 ///
 /// Mirrors the backend `BatchCheckinItemResult`. [reason] is the error message
 /// when [status] is failed (or, for a kiosk batch, the skip reason); null on
-/// the two success outcomes. [warnings] are the non-blocking gate conditions a
-/// staff check-in recorded through. [pointsAwarded] is the class's points on a
-/// fresh check-in, 0 otherwise.
+/// the two success outcomes and on `needs_confirmation` (its reasons are in
+/// [warnings] instead). [warnings] are the gate conditions a `needs_confirmation`
+/// member was NOT recorded for (resend with `ignore_warnings: true` — "Check in
+/// anyway" — to record them), or the conditions a recorded member was
+/// overridden through. [pointsAwarded] is the class's points on a fresh
+/// check-in, 0 otherwise.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,

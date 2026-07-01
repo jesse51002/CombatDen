@@ -125,13 +125,20 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
   /// returns 207 Multi-Status (a 2xx; Dio does not throw), so the per-member
   /// breakdown arrives on the success path. On success the visible week is
   /// reloaded so the attendance count updates behind the still-open results.
+  /// A confirmation retry ([event.ignoreWarnings] true, resubmitting just the
+  /// prior `needs_confirmation` subset) keeps the channel's existing result
+  /// alive instead of clearing it, and merges the retry's (partial) response
+  /// back into the full breakdown rather than replacing it.
   Future<void> _onBatchCheckIn(
     ScheduleBatchCheckInRequested event,
     Emitter<ScheduleState> emit,
   ) async {
     final current = state;
     if (current is! ScheduleLoaded) return;
-    emit(current.copyWith(isCheckingIn: true, clearCheckIn: true));
+    emit(current.copyWith(
+      isCheckingIn: true,
+      clearCheckIn: !event.ignoreWarnings,
+    ));
 
     final BatchCheckInResponse result;
     try {
@@ -141,6 +148,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
           classId: event.classId,
           occurrenceDate: _dateParam.format(event.occurrenceDate),
           memberIds: event.memberIds,
+          ignoreWarnings: event.ignoreWarnings,
         ),
       );
     } catch (e, stackTrace) {
@@ -159,9 +167,13 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     // look failed. Mirrors the charge-card "commit before refresh" pattern.
     final committed = state;
     if (committed is! ScheduleLoaded) return;
+    final priorResult = committed.batchCheckInResult;
+    final mergedResult = (event.ignoreWarnings && priorResult != null)
+        ? priorResult.mergeConfirmed(result)
+        : result;
     emit(committed.copyWith(
       isCheckingIn: false,
-      batchCheckInResult: result,
+      batchCheckInResult: mergedResult,
     ));
 
     // Best-effort: reload the visible week so the board's attendance count

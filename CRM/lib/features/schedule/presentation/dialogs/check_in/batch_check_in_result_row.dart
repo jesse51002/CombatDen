@@ -7,9 +7,10 @@ import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/check_in/data/models/class_check_in_status.dart';
 
 /// One per-member result line in the batch breakdown: checked in (✓ "+N pts"),
-/// already in, or failed (✗ — reason), labelled with the member's name. Any
-/// non-blocking gate warnings on a recorded check-in show as a small note
-/// beneath the detail.
+/// already in, needs confirmation (not recorded — the gate warned), or failed
+/// (✗ — reason), labelled with the member's name. Any non-blocking gate
+/// warnings — including a `needsConfirmation` member's reasons — show as a
+/// small note beneath the detail.
 class BatchCheckInResultRow extends StatelessWidget {
   final BatchCheckInResultItem item;
   final String memberName;
@@ -24,6 +25,7 @@ class BatchCheckInResultRow extends StatelessWidget {
         ClassCheckInStatus.checkedIn ||
         ClassCheckInStatus.alreadyCheckedIn =>
           DesignConstants.goodGreen,
+        ClassCheckInStatus.needsConfirmation => DesignConstants.okYellow,
         ClassCheckInStatus.failed => DesignConstants.badRed,
         _ => DesignConstants.text2nd,
       };
@@ -32,6 +34,7 @@ class BatchCheckInResultRow extends StatelessWidget {
         ClassCheckInStatus.checkedIn ||
         ClassCheckInStatus.alreadyCheckedIn =>
           Symbols.check_circle_sharp,
+        ClassCheckInStatus.needsConfirmation => Symbols.warning_sharp,
         ClassCheckInStatus.failed => Symbols.cancel_sharp,
         _ => Symbols.do_not_disturb_on_sharp,
       };
@@ -42,6 +45,8 @@ class BatchCheckInResultRow extends StatelessWidget {
           'Already checked in — no change',
         ClassCheckInStatus.skipped =>
           'Skipped — ${CheckInWarning.humanize(item.reason)}',
+        ClassCheckInStatus.needsConfirmation =>
+          'Not recorded — needs confirmation',
         _ => item.reason ?? 'Could not be checked in',
       };
 

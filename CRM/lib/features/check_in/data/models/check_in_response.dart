@@ -7,13 +7,16 @@ part 'check_in_response.g.dart';
 
 /// Response for the single check-in (`POST /api/v1/checkin`).
 ///
-/// Mirrors the backend `CheckinResponse`. A CRM (staff) check-in is always
-/// recorded: [logId] is set and any gate conditions come back in [warnings]
-/// (the attendance may carry a null [chosenPlanId] / [chosenItemId] when the
-/// member has no membership). An idempotent repeat returns the existing [logId]
-/// with [alreadyCheckedIn] true and no points. [skipReason] is the kiosk-only
-/// rejection reason — always null for the CRM (`is_member: false`); parsed for
-/// contract completeness.
+/// Mirrors the backend `CheckinResponse`. A CRM (staff) check-in that is clean
+/// (or resent with `ignore_warnings: true`) is recorded: [logId] is set and any
+/// gate conditions come back in [warnings] (the attendance may carry a null
+/// [chosenPlanId] / [chosenItemId] when the member has no membership). One that
+/// hits a gate warning without the override is NOT recorded —
+/// [requiresConfirmation] is true, [logId] is null, and [warnings] say why;
+/// resend the identical request with `ignore_warnings: true` to record it. An
+/// idempotent repeat returns the existing [logId] with [alreadyCheckedIn] true
+/// and no points. [skipReason] is the kiosk-only rejection reason — always null
+/// for the CRM (`is_member: false`); parsed for contract completeness.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -32,6 +35,8 @@ class CheckInResponse extends Equatable {
   final CheckInWarning? skipReason;
   @JsonKey(fromJson: checkInWarningsFromJson)
   final List<CheckInWarning> warnings;
+  @JsonKey(defaultValue: false)
+  final bool requiresConfirmation;
 
   const CheckInResponse({
     this.logId,
@@ -44,13 +49,14 @@ class CheckInResponse extends Equatable {
     this.pointsAwarded = 0,
     this.skipReason,
     this.warnings = const [],
+    this.requiresConfirmation = false,
   });
 
   factory CheckInResponse.fromJson(Map<String, dynamic> json) =>
       _$CheckInResponseFromJson(json);
 
   /// A fresh attendance row was recorded (points awarded) — not an idempotent
-  /// repeat.
+  /// repeat, and not a warning held for confirmation.
   bool get isRecorded => logId != null && !alreadyCheckedIn;
 
   /// Whether the recorded check-in carries any non-blocking gate warnings.
@@ -68,5 +74,6 @@ class CheckInResponse extends Equatable {
         pointsAwarded,
         skipReason,
         warnings,
+        requiresConfirmation,
       ];
 }

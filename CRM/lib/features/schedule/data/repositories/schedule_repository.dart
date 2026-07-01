@@ -91,8 +91,8 @@ class ScheduleRepository {
 
   /// `POST /api/v1/checkin/batch` — staff batch check-in. The occurrence is now
   /// addressed by the `class_id` + `occurrence_date` BODY fields (carried on
-  /// [req] alongside the gym, member ids, and `is_member`); the path no longer
-  /// carries them.
+  /// [req] alongside the gym, member ids, `is_member`, and `ignore_warnings`);
+  /// the path no longer carries them.
   ///
   /// Returns **207 Multi-Status** — a 2xx, so Dio does NOT throw: the
   /// per-member split arrives here on the SUCCESS path and is parsed as a

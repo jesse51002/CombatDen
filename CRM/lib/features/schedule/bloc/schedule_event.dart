@@ -72,23 +72,29 @@ class ScheduleInstanceCancelled extends ScheduleEvent {
 
 /// Staff batch check-in ("Update attendees"): check [memberIds] into the
 /// occurrence of [classId] on [occurrenceDate], then reload the board so the
-/// attendance count updates. The CRM is the staff surface (`is_member: false`),
-/// so every member is recorded; the outcome lands on `batchCheckInResult` (the
-/// per-member 207 breakdown, each row carrying any non-blocking warnings) or
-/// `checkInError`.
+/// attendance count updates. The CRM is the staff surface (`is_member: false`):
+/// a clean member is recorded, and one the gate warns on comes back as
+/// `needs_confirmation` (nothing written) unless [ignoreWarnings] is set — the
+/// results dialog resubmits just the `needs_confirmation` subset with it true
+/// ("Check in anyway"), merging the confirmation response back into the full
+/// breakdown. The outcome lands on `batchCheckInResult` (the per-member 207
+/// breakdown, each row carrying any non-blocking warnings) or `checkInError`.
 class ScheduleBatchCheckInRequested extends ScheduleEvent {
   final String classId;
   final DateTime occurrenceDate;
   final List<String> memberIds;
+  final bool ignoreWarnings;
 
   const ScheduleBatchCheckInRequested({
     required this.classId,
     required this.occurrenceDate,
     required this.memberIds,
+    this.ignoreWarnings = false,
   });
 
   @override
-  List<Object?> get props => [classId, occurrenceDate, memberIds];
+  List<Object?> get props =>
+      [classId, occurrenceDate, memberIds, ignoreWarnings];
 }
 
 /// Clears the batch check-in outcome (result + error) when the check-in dialog
