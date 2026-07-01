@@ -156,9 +156,10 @@ class ClassInstanceExceptionUpsertRequest(BaseModel):
     """Body for POST /api/v1/classes/{class_id}/exceptions/instance.
 
     Upserts the single-date override keyed unique per ``(class_id,
-    original_date)``. ``new_date`` (reschedule target) must be strictly after
-    ``original_date`` and may not collide with an existing non-cancelled
-    occurrence (enforced by the service).
+    original_date)``. ``new_date`` (reschedule target) may be any date — past,
+    today, or future — and may not collide with an existing non-cancelled
+    occurrence at the exact target instant (new_date + start time; enforced by
+    the service, which also moves the occurrence's attendance).
     """
 
     original_date: date

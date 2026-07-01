@@ -262,25 +262,29 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesCrudService,
         db_pool=db_pool,
     )
+    # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
+    # (deletes member_attendance, claws back points, may clear an auto-end
+    # end_date), so each op runs in one transaction. Also HOSTS the shared
+    # reschedule engine (time-aware conflict check + attendance wipe / re-date)
+    # that ClassesExceptionsService delegates to — hence defined before it.
+    classes_undo_service = providers.Factory(
+        ClassesUndoService,
+        db_pool=db_pool,
+        expander=classes_expander,
+    )
+    # A reschedule (new_date) on an instance-exception upsert delegates the
+    # conflict check + attendance move to the undo service's engine, then writes
+    # the override row in the same transaction.
     classes_exceptions_service = providers.Factory(
         ClassesExceptionsService,
         db_pool=db_pool,
-        expander=classes_expander,
+        undo_service=classes_undo_service,
     )
     classes_schedule_reader_service = providers.Factory(
         ClassesScheduleReaderService,
         db_pool=db_pool,
         expander=classes_expander,
         materializer=classes_materializer,
-    )
-    # Phase 6: un-occur (cancel) + reschedule a single occurrence. Billing-
-    # adjacent (deletes member_attendance, may clear an auto-end end_date), so
-    # the cancel runs in one transaction. Reuses the pure expander to validate
-    # the source occurrence and the reschedule target.
-    classes_undo_service = providers.Factory(
-        ClassesUndoService,
-        db_pool=db_pool,
-        expander=classes_expander,
     )
 
     rewards_service = providers.Factory(RewardsService, db_pool=db_pool)

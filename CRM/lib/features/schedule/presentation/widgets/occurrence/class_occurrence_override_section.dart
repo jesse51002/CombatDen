@@ -19,12 +19,10 @@ import 'package:crm/shared/widgets/subtitle_section.dart';
 /// (see [onCancel]).
 ///
 /// The **date** field reschedules the occurrence to another day: it defaults
-/// to [originalDate] (no move) and its picker floors at `originalDate + 1
-/// day` — the backend's reschedule is **forward-only** (a DB CHECK) and also
-/// rejects a collision with an existing occurrence. Scope note: this assumes
-/// [originalDate] is the occurrence's original, not-yet-moved date;
-/// rescheduling an already-rescheduled occurrence a second time is out of
-/// scope.
+/// to the occurrence's current date (no move) and accepts ANY date. Moving to
+/// a future date clears the occurrence's check-ins; moving to a past/today date
+/// keeps them, re-dated onto the new day (the backend handles this). The move
+/// is rejected only when the exact target date + time is already taken.
 class ClassOccurrenceOverrideSection extends StatelessWidget {
   final String? instructorId;
   final ValueChanged<String?> onInstructorChanged;
@@ -32,7 +30,6 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
   final TimeOfDay? classTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
   final TextEditingController capacityController;
-  final DateTime originalDate;
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateChanged;
   final VoidCallback onSave;
@@ -46,7 +43,6 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
     required this.classTime,
     required this.onTimeChanged,
     required this.capacityController,
-    required this.originalDate,
     required this.selectedDate,
     required this.onDateChanged,
     required this.onSave,
@@ -100,11 +96,11 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
               AppDateField(
                 label: 'Date',
                 value: selectedDate,
-                firstDate: originalDate.add(const Duration(days: 1)),
                 onChanged: onDateChanged,
               ),
               Text(
-                'A class can only be moved to a later date.',
+                'Move this occurrence to any date. A future date clears its '
+                'check-ins; a past/today date keeps them on the new day.',
                 style: DesignConstants.pSmall
                     .copyWith(color: DesignConstants.text2nd),
               ),

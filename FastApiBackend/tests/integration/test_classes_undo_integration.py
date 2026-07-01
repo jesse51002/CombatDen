@@ -23,6 +23,17 @@ NOTE (migration-blocked): the Phase-1 migration — ``class_instance_exceptions`
 These tests assert the CORRECT post-migration behavior and are EXPECTED to fail
 at runtime until the migration lands — that is a missing migration, not a code
 defect. They are written against the right behavior, never reshaped to pass.
+
+NOTE (constraint-drop-blocked): a reschedule may now move an occurrence to ANY
+date — past, today, or future — so the ``chk_instance_exception_new_date_future``
+CHECK (``new_date > original_date``) is being DROPPED (schema file updated; the
+user runs ``ALTER TABLE class_instance_exceptions DROP CONSTRAINT
+chk_instance_exception_new_date_future;``). Until that runs, any test that writes
+``new_date <= original_date`` (the "move to an earlier date is accepted" cases)
+is rejected by the still-present CHECK and surfaces as a 400 / 409, NOT the 200
+the new behavior mandates. Those cases are flagged inline and assert the correct
+post-drop behavior anyway — a pending constraint drop, not a code defect. The
+future / later-date moves clear the CHECK and pass today.
 """
 
 from __future__ import annotations
@@ -53,6 +64,10 @@ _PACK_DATE = date(2025, 1, 8)
 _MATERIALIZED_DATE = date(2025, 1, 7)
 _RESCHEDULE_FROM = date(2025, 1, 10)
 _RESCHEDULE_TO = date(2025, 1, 20)
+# Free (outside the class window) target dates for the attendance-move cases.
+_KEEP_TO = date(2025, 1, 20)  # past + after original -> keeps + re-dates
+_FUTURE_TO = date(2027, 6, 1)  # future -> wipes the check-ins
+_EARLIER_TO = date(2025, 1, 3)  # before original -> CHECK-drop-blocked
 _CLASS_TIME = time(9, 0)
 
 
@@ -543,16 +558,18 @@ class TestRescheduleOccurrence:
         )
         assert resp.status_code == 409, resp.text
 
-    def test_reschedule_already_materialized_conflicts(
+    def test_reschedule_materialized_past_keeps_and_redates(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """An occurrence that already has a class_history row cannot be moved —
-        cancel it first (409)."""
+        """A materialized PAST occurrence moved to a free past date KEEPS its
+        attendance, re-dated onto the new day (no wipe, no 409). ``new_date`` is
+        after the original and outside the class window, so it clears the CHECK
+        and has no natural occurrence to collide with."""
         membership = seed["unlimited"]
         if membership is None:
             pytest.skip("No membership in seed to materialize against")
         class_id = _create_class(api, created, seed)
-        _run_async(
+        history_id = _run_async(
             _materialize_with_attendance(
                 class_id,
                 seed["timezone"],
@@ -565,20 +582,27 @@ class TestRescheduleOccurrence:
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
             f"{_MATERIALIZED_DATE.isoformat()}/reschedule",
-            json={"gym_id": GYM_ID, "new_date": date(2025, 1, 21).isoformat()},
+            json={"gym_id": GYM_ID, "new_date": _KEEP_TO.isoformat()},
         )
-        assert resp.status_code == 409, resp.text
-
-    def test_reschedule_earlier_date_returns_400(
-        self, api: httpx.Client, created: _Created, seed: dict
-    ) -> None:
-        class_id = _create_class(api, created, seed)
-        resp = api.post(
-            f"{CLASSES_BASE}/{class_id}/occurrences/"
-            f"{_RESCHEDULE_FROM.isoformat()}/reschedule",
-            json={"gym_id": GYM_ID, "new_date": _START.isoformat()},
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["new_date"] == _KEEP_TO.isoformat()
+        # Attendance kept on the SAME history row, re-dated onto the new day.
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_attendance "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 1
         )
-        assert resp.status_code == 400, resp.text
+        assert (
+            _db_scalar(
+                "SELECT occurred_at FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == _occurred_at(_KEEP_TO, seed["timezone"])
+        )
 
     def test_reschedule_unknown_class_returns_404(
         self, api: httpx.Client
@@ -589,3 +613,168 @@ class TestRescheduleOccurrence:
             json={"gym_id": GYM_ID, "new_date": _RESCHEDULE_TO.isoformat()},
         )
         assert resp.status_code == 404, resp.text
+
+
+# ---------------------------------------------------------------------------
+# POST /exceptions/instance — the CRM's single-request move (attendance follows)
+# ---------------------------------------------------------------------------
+
+
+class TestRescheduleAttendance:
+    """The CRM's ``POST /exceptions/instance`` reschedule (``new_date`` set)
+    moves the occurrence AND its attendance atomically, per the locked rule:
+    a FUTURE target wipes the check-ins (points clawed back); a today / PAST
+    target keeps them, re-dated onto the new day."""
+
+    def _move(
+        self,
+        api: httpx.Client,
+        class_id: str,
+        original_date: date,
+        new_date: date,
+    ) -> httpx.Response:
+        return api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": original_date.isoformat(),
+                "new_date": new_date.isoformat(),
+            },
+        )
+
+    def test_move_to_past_keeps_and_redates_attendance(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """A PAST target keeps the check-ins, re-dated onto the new day: the
+        attendance rows (unchanged class_history_id) now render on new_date."""
+        membership = seed["unlimited"]
+        if membership is None:
+            pytest.skip("No unlimited membership in seed")
+        class_id = _create_class(api, created, seed)
+        history_id = _run_async(
+            _materialize_with_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                membership["member_id"],
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+
+        resp = self._move(api, class_id, _ATTEND_DATE, _KEEP_TO)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["new_date"] == _KEEP_TO.isoformat()
+
+        # Same history row, attendance kept, re-dated onto the new day.
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_attendance "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 1
+        )
+        assert (
+            _db_scalar(
+                "SELECT occurred_at FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == _occurred_at(_KEEP_TO, seed["timezone"])
+        )
+
+    def test_move_to_future_wipes_and_reverts_points(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """A FUTURE target wipes the moved occurrence's check-ins: attendance +
+        history deleted, points clawed back (floored at 0), class_attended
+        activity dropped."""
+        membership = seed["unlimited"]
+        if membership is None:
+            pytest.skip("No unlimited membership in seed")
+        member_id = membership["member_id"]
+        class_id = _create_class(api, created, seed)
+        history_id = _run_async(
+            _materialize_with_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                member_id,
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+        activity_id = _db_scalar(
+            "INSERT INTO member_activities "
+            "(member_id, gym_id, activity_type, activity_info) "
+            "VALUES ($1, $2, 'class_attended', $3) RETURNING activity_id",
+            member_id,
+            UUID(GYM_ID),
+            json.dumps({"class_id": class_id}),
+        )
+        created.track_activity(str(activity_id))
+        before_points = _db_scalar(
+            "SELECT points_balance FROM members WHERE member_id = $1", member_id
+        )
+
+        resp = self._move(api, class_id, _ATTEND_DATE, _FUTURE_TO)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["new_date"] == _FUTURE_TO.isoformat()
+
+        # Attendance + history wiped.
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_attendance "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 0
+        )
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM class_history WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 0
+        )
+        # Points clawed back (floored at 0) + the class_attended activity dropped.
+        points_worth = _db_scalar(
+            "SELECT points_worth FROM gym_classes WHERE class_id = $1",
+            UUID(class_id),
+        )
+        assert (
+            _db_scalar(
+                "SELECT points_balance FROM members WHERE member_id = $1",
+                member_id,
+            )
+            == max(before_points - points_worth, 0)
+        )
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_activities WHERE activity_id = $1",
+                activity_id,
+            )
+            == 0
+        )
+
+    def test_move_to_earlier_date_accepted(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """Any date is accepted — INCLUDING new_date < original_date.
+
+        CONSTRAINT-DROP-BLOCKED: the shared local DB still has the
+        ``chk_instance_exception_new_date_future`` CHECK, so this earlier-date
+        write is rejected (surfaced as 400) until the user drops the constraint.
+        Asserts the correct post-drop behavior (200 + the exception written)."""
+        class_id = _create_class(api, created, seed)
+        resp = self._move(api, class_id, _ATTEND_DATE, _EARLIER_TO)
+        assert resp.status_code == 200, resp.text
+        assert (
+            _db_scalar(
+                "SELECT new_date FROM class_instance_exceptions "
+                "WHERE class_id = $1 AND original_date = $2",
+                UUID(class_id),
+                _ATTEND_DATE,
+            )
+            == _EARLIER_TO
+        )

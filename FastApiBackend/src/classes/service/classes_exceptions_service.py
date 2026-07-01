@@ -1,14 +1,19 @@
 """CRUD over ``class_instance_exceptions`` and ``class_range_exceptions``.
 
 Instance exceptions upsert (unique per ``(class_id, original_date)``); range
-exceptions insert. A reschedule (``new_date`` set) is validated against the
-expander first so a moved occurrence can never collide with one that already
-lands on the target date.
+exceptions insert. A reschedule (``new_date`` set) is the CRM's single
+``POST /exceptions/instance`` move: it delegates the time-aware conflict check
+and the attendance wipe / re-date to the reschedule engine on
+``ClassesUndoService`` (the owner of the teardown + transaction machinery), then
+writes the full override row in the SAME transaction so the whole move is atomic.
+A non-reschedule override (``new_date`` unset — retime / instructor / capacity /
+cancel) is a plain idempotent upsert with no attendance side effects.
 """
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -23,13 +28,9 @@ from src.classes.schema.classes_crud_schema import (
     ClassRangeExceptionListResponse,
     ClassRangeExceptionResponse,
 )
-from src.classes.service.classes_expander import ClassesExpander
-from src.classes.service.classes_expander_mapping import (
-    to_expander_class,
-    to_expander_instance,
-    to_expander_range,
-)
+from src.classes.service.classes_undo_service import ClassesUndoService
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -42,22 +43,27 @@ _BAD_EXCEPTION_MSG = (
     "Invalid exception: check the date range and that the instructor is an "
     "employee of this gym."
 )
-
-
-class RescheduleConflictError(Exception):
-    """A reschedule target already has a non-cancelled occurrence (→ 409)."""
+_CLASS_NOT_FOUND_MSG = "Class not found"
 
 
 class ClassesExceptionsService:
-    """Instance + range exception writes / reads for a class."""
+    """Instance + range exception writes / reads for a class.
+
+    A reschedule move (``new_date`` on an instance-exception upsert) is delegated
+    to the shared reschedule engine on ``ClassesUndoService``: the two reschedule
+    entry points (this upsert and the ``/reschedule`` endpoint) share one
+    time-aware conflict check + one attendance wipe / re-date, so they can never
+    diverge. ``RescheduleConflictError`` is raised from that engine (imported
+    from the undo module to avoid a circular dependency).
+    """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        expander: ClassesExpander,
+        undo_service: ClassesUndoService,
     ) -> None:
         self._db_pool = db_pool
-        self._expander = expander
+        self._undo_service = undo_service
 
     async def upsert_instance_exception(
         self,
@@ -67,30 +73,22 @@ class ClassesExceptionsService:
     ) -> ClassInstanceExceptionResponse:
         """Insert or replace the single-date override for ``original_date``.
 
-        When ``new_date`` is set (a reschedule), the move is rejected with a
-        ``RescheduleConflictError`` if a non-cancelled occurrence already lands
-        on the target date.
+        When ``new_date`` is set (a reschedule), the whole move — the time-aware
+        conflict check, the attendance wipe (future) / re-date (today / past),
+        and the exception write — runs atomically via the reschedule engine
+        (``_reschedule_with_attendance``); the exact target instant already being
+        taken by a non-cancelled occurrence raises ``RescheduleConflictError``.
+        Otherwise this is a plain override upsert with no attendance effects.
         """
         if request.new_date is not None:
-            await self._reject_reschedule_conflict(class_id, request)
+            return await self._reschedule_with_attendance(
+                class_id, gym_id, request
+            )
 
         sql = load_sql(SQL_DIR / "classes_instance_exception_upsert.sql")
-        params = {
-            "class_id": str(class_id),
-            "gym_id": str(gym_id),
-            "original_date": request.original_date,
-            "is_cancelled": request.is_cancelled,
-            "new_class_time": request.new_class_time,
-            "new_duration_minutes": request.new_duration_minutes,
-            "new_max_capacity": request.new_max_capacity,
-            "new_instructor_id": (
-                str(request.new_instructor_id)
-                if request.new_instructor_id is not None
-                else None
-            ),
-            "new_date": request.new_date,
-        }
-        row = await self._write_returning(sql, params)
+        row = await self._write_returning(
+            sql, self._upsert_params(class_id, gym_id, request)
+        )
         return ClassInstanceExceptionResponse(**row)
 
     async def create_range_exception(
@@ -159,76 +157,138 @@ class ClassesExceptionsService:
             items=[ClassRangeExceptionResponse(**row) for row in rows],
         )
 
-    # -- reschedule conflict check ---------------------------------------
+    # -- reschedule (delegates to the shared engine) ---------------------
 
-    async def _reject_reschedule_conflict(
+    async def _reschedule_with_attendance(
         self,
         class_id: UUID,
+        gym_id: UUID,
         request: ClassInstanceExceptionUpsertRequest,
-    ) -> None:
-        """Raise if moving the occurrence to ``new_date`` double-books it.
+    ) -> ClassInstanceExceptionResponse:
+        """Move the occurrence to ``request.new_date``, attendance following.
 
-        Two independent checks:
-          1. A direct query: another non-cancelled reschedule (different
-             ``original_date``) already targets this ``new_date`` — a collision
-             the single-day expander below cannot see (it only visits the
-             target date itself).
-          2. The expander over ``[new_date, new_date]``: the recurrence (or an
-             override) already produces a non-cancelled occurrence there.
+        The moved occurrence's effective start time = ``request.new_class_time``
+        when set, else the class default; its duration =
+        ``request.new_duration_minutes`` when set, else the class default (the
+        full upsert REPLACES the row, so an omitted override falls back to the
+        class default, not to any prior override). The conflict check + the
+        attendance wipe / re-date come from the shared engine; the override row
+        is written in the SAME transaction as the attendance handling.
         """
-        target = request.new_date
-        if target is None:
-            return
-
-        collisions = await self._read_all(
-            load_sql(SQL_DIR / "classes_instance_reschedule_collision.sql"),
-            {
-                "class_id": str(class_id),
-                "new_date": target,
-                "original_date": request.original_date,
-            },
-        )
-        if collisions:
-            raise RescheduleConflictError(
-                f"Another occurrence is already rescheduled to {target}."
-            )
-
         class_row = await self._read_one(
             load_sql(SQL_DIR / "classes_load_one.sql"),
             {"class_id": str(class_id)},
         )
         if class_row is None:
-            raise ValueError("Class not found")
-
+            raise ValueError(_CLASS_NOT_FOUND_MSG)
         gym_tz = await self._gym_timezone(class_row["gym_id"])
-        instances = await self._read_all(
-            load_sql(SQL_DIR / "classes_instance_exception_list.sql"),
-            {
-                "class_id": str(class_id),
-                "start_date": target,
-                "end_date": target,
-            },
+
+        new_date = request.new_date
+        effective_time = (
+            request.new_class_time
+            if request.new_class_time is not None
+            else class_row["class_time"]
         )
-        ranges = await self._read_all(
-            load_sql(SQL_DIR / "classes_range_exception_list.sql"),
-            {
-                "class_id": str(class_id),
-                "start_date": target,
-                "end_date": target,
-            },
+        effective_duration = (
+            request.new_duration_minutes
+            if request.new_duration_minutes is not None
+            else class_row["duration_minutes"]
         )
-        occurrences = self._expander.expand(
-            to_expander_class(class_row),
-            [to_expander_instance(row) for row in instances],
-            [to_expander_range(row) for row in ranges],
-            target,
-            target,
+        new_occurred_at = datetime.combine(
+            new_date, effective_time, tzinfo=ZoneInfo(gym_tz)
+        ).astimezone(UTC)
+
+        await self._undo_service.assert_no_reschedule_conflict(
+            class_row,
+            class_id,
+            request.original_date,
+            new_date,
+            effective_time,
+            new_occurred_at,
             gym_tz,
         )
-        if any(occ.effective_date == target for occ in occurrences):
-            raise RescheduleConflictError(
-                f"A class already occurs on {target}; cannot reschedule onto it."
-            )
+
+        is_future = new_date > gym_today(gym_tz)
+        row = await self._write_reschedule(
+            class_id,
+            gym_id,
+            request,
+            new_occurred_at,
+            effective_duration,
+            is_future,
+            gym_tz,
+        )
+        return ClassInstanceExceptionResponse(**row)
+
+    async def _write_reschedule(
+        self,
+        class_id: UUID,
+        gym_id: UUID,
+        request: ClassInstanceExceptionUpsertRequest,
+        new_occurred_at: datetime,
+        effective_duration: int,
+        is_future: bool,
+        gym_tz: str,
+    ) -> dict:
+        """Attendance handling + the full override upsert in ONE transaction.
+
+        A bad instructor / duration on the override surfaces as an
+        ``IntegrityError`` → 400 (the full upsert's dominant failure); a redate
+        instant-collision that slipped past the conflict check would too, but the
+        conflict check covers it in the common case.
+        """
+        sql = load_sql(SQL_DIR / "classes_instance_exception_upsert.sql")
+        try:
+            async with self._db_pool.session() as session:
+                await self._undo_service.apply_reschedule_attendance(
+                    session,
+                    class_id,
+                    gym_id,
+                    request.original_date,
+                    new_occurred_at,
+                    effective_duration,
+                    is_future,
+                    gym_tz,
+                )
+                row = (
+                    (
+                        await session.execute(
+                            text(sql),
+                            self._upsert_params(class_id, gym_id, request),
+                        )
+                    )
+                    .mappings()
+                    .fetchone()
+                )
+                await session.commit()
+        except IntegrityError as exc:
+            raise ValueError(_BAD_EXCEPTION_MSG) from exc
+        if not row:
+            raise RuntimeError("Write did not return a row")
+        return dict(row)
+
+    @staticmethod
+    def _upsert_params(
+        class_id: UUID,
+        gym_id: UUID,
+        request: ClassInstanceExceptionUpsertRequest,
+    ) -> dict:
+        """Bind params for the full ``class_instance_exception_upsert.sql``."""
+        return {
+            "class_id": str(class_id),
+            "gym_id": str(gym_id),
+            "original_date": request.original_date,
+            "is_cancelled": request.is_cancelled,
+            "new_class_time": request.new_class_time,
+            "new_duration_minutes": request.new_duration_minutes,
+            "new_max_capacity": request.new_max_capacity,
+            "new_instructor_id": (
+                str(request.new_instructor_id)
+                if request.new_instructor_id is not None
+                else None
+            ),
+            "new_date": request.new_date,
+        }
 
     async def _gym_timezone(self, gym_id: object) -> str:
         """Read the gym's IANA timezone."""

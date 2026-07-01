@@ -30,12 +30,14 @@ from src.classes.schema.classes_undo_schema import (
 from src.classes.service.classes_crud_service import ClassesCrudService
 from src.classes.service.classes_exceptions_service import (
     ClassesExceptionsService,
-    RescheduleConflictError,
 )
 from src.classes.service.classes_schedule_reader_service import (
     ClassesScheduleReaderService,
 )
-from src.classes.service.classes_undo_service import ClassesUndoService
+from src.classes.service.classes_undo_service import (
+    ClassesUndoService,
+    RescheduleConflictError,
+)
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
 
@@ -59,16 +61,16 @@ classes_router = APIRouter(
 def _raise_for_undo_value_error(msg: str) -> NoReturn:
     """Map a service ValueError message to its HTTP status (never 5xx-retryable).
 
-    ``not found`` -> 404; ``already materialized`` / ``conflict`` -> 409; every
-    other validation message -> 400.
+    ``not found`` -> 404; every other validation message -> 400. A reschedule
+    collision is raised as ``RescheduleConflictError`` (mapped to 409 at the
+    call site), never as a ValueError, so it never reaches here.
     """
     lowered = msg.lower()
-    if "not found" in lowered:
-        code = status.HTTP_404_NOT_FOUND
-    elif "already materialized" in lowered or "conflict" in lowered:
-        code = status.HTTP_409_CONFLICT
-    else:
-        code = status.HTTP_400_BAD_REQUEST
+    code = (
+        status.HTTP_404_NOT_FOUND
+        if "not found" in lowered
+        else status.HTTP_400_BAD_REQUEST
+    )
     raise HTTPException(status_code=code, detail=msg) from None
 
 
@@ -131,22 +133,24 @@ async def cancel_occurrence(
 @classes_router.post(
     "/{class_id}/occurrences/{occurrence_date}/reschedule",
     response_model=OccurrenceRescheduleResponse,
-    summary="Reschedule a single class occurrence to a later date",
+    summary="Reschedule a single class occurrence to any date",
     description=(
-        "Moves the occurrence on ``occurrence_date`` to ``new_date`` (must be "
-        "strictly later) by upserting the instance exception's ``new_date`` — "
-        "no history / attendance is touched. Rejected with 409 if the source "
-        "occurrence has already been materialized (cancel it first) or a "
-        "non-cancelled occurrence already lands on ``new_date``. Admin/owner "
-        "only."
+        "Moves the occurrence on ``occurrence_date`` to ``new_date`` (any date — "
+        "past, today, or future) by upserting the instance exception's "
+        "``new_date``. Attendance follows the move: a FUTURE target wipes the "
+        "occurrence's check-ins (points clawed back); a today / PAST target "
+        "keeps them, re-dated onto the new day — all in one transaction. "
+        "Rejected with 409 only when the exact target instant (new_date + start "
+        "time) is already taken by a non-cancelled occurrence (landing on a busy "
+        "day at a different time is allowed). Admin/owner only."
     ),
     responses={
         200: {"description": "Occurrence rescheduled"},
-        400: {"description": "Invalid request (bad dates / not an occurrence)"},
+        400: {"description": "Invalid request (not an occurrence)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Class not found for this gym"},
-        409: {"description": "Already materialized or target date occupied"},
+        409: {"description": "Target instant already occupied"},
     },
 )
 @inject
@@ -168,6 +172,11 @@ async def reschedule_occurrence(
         return await undo_service.reschedule_occurrence(
             class_id, request.gym_id, occurrence_date, request.new_date
         )
+    except RescheduleConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         _raise_for_undo_value_error(str(exc))
     except Exception:
@@ -328,8 +337,11 @@ async def list_effective_instances(
     summary="Upsert a single-date class exception",
     description=(
         "Inserts or replaces the override for one occurrence (unique per "
-        "class + original_date). A reschedule (``new_date``) is rejected with "
-        "409 if a non-cancelled occurrence already lands on the target date."
+        "class + original_date). A reschedule (``new_date``, any date) moves the "
+        "occurrence and its attendance atomically — a FUTURE target wipes the "
+        "check-ins (points clawed back), a today / PAST target keeps them "
+        "re-dated — and is rejected with 409 only when the exact target instant "
+        "(new_date + start time) is already taken by a non-cancelled occurrence."
     ),
     responses={
         200: {"description": "Exception upserted"},
@@ -337,7 +349,7 @@ async def list_effective_instances(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Class not found"},
-        409: {"description": "Reschedule target already occupied"},
+        409: {"description": "Reschedule target instant already occupied"},
     },
 )
 @inject

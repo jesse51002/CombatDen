@@ -9,8 +9,10 @@ occurrence:
   trial / one_time packs that were drawn for it, and writes the cancelled
   instance exception so the occurrence never re-materializes. Points are NEVER
   clawed back.
-* **Reschedule** — moves a future occurrence to a later date by upserting the
-  instance exception's ``new_date`` (no history / attendance touched).
+* **Reschedule** — moves an occurrence to ``new_date`` (any date — past, today,
+  or future) by upserting the instance exception's ``new_date``, with attendance
+  following the move: a future target wipes the occurrence's check-ins (points
+  clawed back), a today / past target keeps them re-dated onto the new day.
 """
 
 from datetime import date
@@ -49,8 +51,9 @@ class OccurrenceRescheduleRequest(BaseModel):
 
     Attributes:
         gym_id: The owning gym (used for the auth gate + the exception row).
-        new_date: The date to move the occurrence to (must be strictly after
-            the original occurrence date).
+        new_date: The date to move the occurrence to — any date (past, today, or
+            future); the original occurrence date is only the anchor, not a
+            lower bound.
     """
 
     gym_id: UUID

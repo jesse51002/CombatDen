@@ -18,10 +18,21 @@ Two operations:
   spent on rewards are never un-bought) and one ``member_activities``
   class_attended row per attendee is dropped.
 
-* ``reschedule_occurrence`` — move a future occurrence to a later date by
-  upserting the instance exception's ``new_date`` (no history / attendance
-  touched). Rejects a move onto an already-occupied date, and refuses to move
-  an occurrence that has already been materialized (cancel it first).
+* ``reschedule_occurrence`` — move an occurrence to ``new_date`` (ANY date —
+  past, today, or future; ``original_date`` is only the anchor, not a lower
+  bound) by upserting the instance exception's ``new_date``. Attendance follows
+  the move: a FUTURE target wipes the moved occurrence's check-ins (the same
+  teardown as ``cancel_occurrence``, points clawed back); a today / PAST target
+  keeps them, re-dated onto the new day (the class_history row's ``occurred_at``
+  is updated so the unchanged attendance rows render on the new date's roster).
+  The move is rejected only when the exact target instant (new_date + start
+  time) is already taken by a non-cancelled occurrence — landing on a busy day
+  at a different time is allowed. The whole move (attendance handling + the
+  exception write) runs in ONE transaction. The same
+  ``assert_no_reschedule_conflict`` + ``apply_reschedule_attendance`` engine
+  backs the CRM's ``POST /exceptions/instance`` reschedule
+  (``ClassesExceptionsService`` delegates to it), so the two entry points can
+  never diverge.
 
 Auto-end reversal — IMPORTANT, inexact by necessity: there is no stored link
 recording that a membership's ``end_date`` came from an auto-end-on-depletion
@@ -49,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
+from src.classes.schema.classes_expander_schema import EffectiveOccurrence
 from src.classes.schema.classes_undo_schema import (
     OccurrenceCancelResponse,
     OccurrenceRescheduleResponse,
@@ -60,14 +72,24 @@ from src.classes.service.classes_expander_mapping import (
     to_expander_range,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import get_gym_timezone
+from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
 
 _CLASS_NOT_FOUND_MSG = "Class not found"
-_BAD_RESCHEDULE_MSG = (
-    "Invalid reschedule: check the target date is after the original and "
-    "within the class's schedule."
+_REDATE_CONFLICT_MSG = (
+    "conflict: the reschedule target instant is already taken by a "
+    "materialized occurrence."
 )
+
+
+class RescheduleConflictError(Exception):
+    """A reschedule target instant already has a non-cancelled occurrence.
+
+    Raised by the shared time-aware conflict check and mapped to a 409 by both
+    reschedule routers. Lives here (the reschedule engine's home) so
+    ``ClassesExceptionsService`` can import it without a circular dependency —
+    exceptions delegates its reschedule to this service.
+    """
 
 
 class ClassesUndoService:
@@ -113,19 +135,9 @@ class ClassesUndoService:
             attendance_deleted = 0
             unended: list[UUID] = []
             if history_id is not None:
-                attendees = await self._find_attendees(session, history_id)
-                members = await self._find_all_attendee_members(
-                    session, history_id
+                attendance_deleted, unended = await self._wipe_occurrence(
+                    session, history_id, gym_id, class_id
                 )
-                points_worth = await self._load_points(session, class_id)
-                attendance_deleted = await self._delete_attendance(
-                    session, history_id
-                )
-                unended = await self._reverse_auto_ends(session, attendees)
-                await self._reverse_points_and_activities(
-                    session, members, gym_id, class_id, points_worth
-                )
-                await self._delete_history(session, history_id)
 
             await self._upsert_cancelled_exception(
                 session, class_id, gym_id, occurrence_date
@@ -139,6 +151,54 @@ class ClassesUndoService:
             class_history_id=history_id,
             attendance_rows_deleted=attendance_deleted,
             memberships_unended=unended,
+        )
+
+    async def _wipe_occurrence(
+        self,
+        session: AsyncSession,
+        history_id: UUID,
+        gym_id: UUID,
+        class_id: UUID,
+    ) -> tuple[int, list[UUID]]:
+        """Tear down one materialized occurrence's attendance — the shared,
+        billing-adjacent teardown used by BOTH ``cancel_occurrence`` and a
+        FUTURE reschedule (see ``apply_reschedule_attendance``).
+
+        Deletes the occurrence's ``member_attendance`` + ``class_history``, claws
+        back each attendee's points (floored at 0) and drops one class_attended
+        activity apiece, and reverses the auto-end on any trial / one_time pack
+        the delete drops back below capacity. Runs in the caller's transaction.
+
+        Returns ``(attendance_rows_deleted, memberships_unended)``.
+        """
+        attendees = await self._find_attendees(session, history_id)
+        members = await self._find_all_attendee_members(session, history_id)
+        points_worth = await self._load_points(session, class_id)
+        attendance_deleted = await self._delete_attendance(session, history_id)
+        unended = await self._reverse_auto_ends(session, attendees)
+        await self._reverse_points_and_activities(
+            session, members, gym_id, class_id, points_worth
+        )
+        await self._delete_history(session, history_id)
+        return attendance_deleted, unended
+
+    async def _redate_history(
+        self,
+        session: AsyncSession,
+        history_id: UUID,
+        new_occurred_at: datetime,
+        new_duration_minutes: int,
+    ) -> None:
+        """Re-date a KEPT (today / past) rescheduled occurrence's history onto
+        the new instant + duration; its attendance rows (unchanged
+        class_history_id) then render on the new date's roster."""
+        await session.execute(
+            text(load_sql(SQL_DIR / "classes_reschedule_redate_history.sql")),
+            {
+                "class_history_id": str(history_id),
+                "occurred_at": new_occurred_at,
+                "duration_minutes": new_duration_minutes,
+            },
         )
 
     async def _verify_class_in_gym(
@@ -383,47 +443,178 @@ class ClassesUndoService:
         occurrence_date: date,
         new_date: date,
     ) -> OccurrenceRescheduleResponse:
-        """Move a future, not-yet-materialized occurrence to ``new_date``.
+        """Move an occurrence to ``new_date`` (any date), attendance following.
+
+        The occurrence keeps its currently-effective start time / duration (a
+        bare move carries no override); a FUTURE target wipes its check-ins, a
+        today / PAST target keeps them re-dated — all in one transaction with the
+        exception write. See the module docstring.
 
         Raises:
-            ValueError: ``new_date`` not after ``occurrence_date`` / not a real
-                occurrence (400); class missing (404, "not found"); already
-                materialized or the target date is occupied (409, "already
-                materialized" / "conflict").
+            ValueError: no real occurrence on ``occurrence_date`` (400); class
+                missing (404, "not found").
+            RescheduleConflictError: the exact target instant (new_date + start
+                time) is already taken by a non-cancelled occurrence (409).
         """
-        if new_date <= occurrence_date:
-            raise ValueError("new_date must be after the occurrence date")
-
         class_row = await self._load_class_in_gym(class_id, gym_id)
         gym_tz = await self._gym_timezone(gym_id)
 
-        if not await self._occurs_on(class_row, class_id, occurrence_date, gym_tz):
+        source = await self._occurrence_on(
+            class_row, class_id, occurrence_date, gym_tz
+        )
+        if source is None:
             raise ValueError(
                 f"No class occurrence on {occurrence_date} to reschedule"
             )
-        if await self._is_materialized(class_id, occurrence_date, gym_tz):
-            raise ValueError(
-                "Occurrence already materialized; cancel it first."
-            )
-        await self._reject_new_date_collision(
-            class_row, class_id, occurrence_date, new_date, gym_tz
+
+        effective_time = source.class_time
+        new_occurred_at = datetime.combine(
+            new_date, effective_time, tzinfo=ZoneInfo(gym_tz)
+        ).astimezone(UTC)
+        await self.assert_no_reschedule_conflict(
+            class_row,
+            class_id,
+            occurrence_date,
+            new_date,
+            effective_time,
+            new_occurred_at,
+            gym_tz,
         )
 
-        row = await self._write_returning(
-            load_sql(SQL_DIR / "classes_reschedule_upsert_exception.sql"),
-            {
-                "class_id": str(class_id),
-                "gym_id": str(gym_id),
-                "original_date": occurrence_date,
-                "new_date": new_date,
-            },
-        )
+        is_future = new_date > gym_today(gym_tz)
+        try:
+            async with self._db_pool.session() as session:
+                await self.apply_reschedule_attendance(
+                    session,
+                    class_id,
+                    gym_id,
+                    occurrence_date,
+                    new_occurred_at,
+                    source.duration_minutes,
+                    is_future,
+                    gym_tz,
+                )
+                row = (
+                    (
+                        await session.execute(
+                            text(
+                                load_sql(
+                                    SQL_DIR
+                                    / "classes_reschedule_upsert_exception.sql"
+                                )
+                            ),
+                            {
+                                "class_id": str(class_id),
+                                "gym_id": str(gym_id),
+                                "original_date": occurrence_date,
+                                "new_date": new_date,
+                            },
+                        )
+                    )
+                    .mappings()
+                    .fetchone()
+                )
+                await session.commit()
+        except IntegrityError as exc:
+            raise RescheduleConflictError(_REDATE_CONFLICT_MSG) from exc
+        if not row:
+            raise RuntimeError("Reschedule write did not return a row")
         return OccurrenceRescheduleResponse(
             exception_id=row["exception_id"],
             class_id=row["class_id"],
             original_date=row["original_date"],
             new_date=row["new_date"],
         )
+
+    async def assert_no_reschedule_conflict(
+        self,
+        class_row: dict,
+        class_id: UUID,
+        original_date: date,
+        new_date: date,
+        effective_time: time,
+        new_occurred_at: datetime,
+        gym_tz: str,
+    ) -> None:
+        """Raise ``RescheduleConflictError`` (→ 409) when the exact target
+        instant is already taken by a non-cancelled occurrence of this class.
+
+        Time-aware: the rejection keys on the full ``occurred_at`` (date AND
+        effective start time), so landing on a busy day at a DIFFERENT time is
+        allowed. Two independent checks, both keyed on the instant:
+
+        1. A direct query for another reschedule (a different ``original_date``)
+           already targeting this ``(new_date, effective_time)`` — the collision
+           the single-day expander can't see (it only visits the target date
+           itself, keyed on ``original_date``).
+        2. The expander over ``[new_date, new_date]``: a recurrence / override
+           occurrence whose ``occurred_at`` equals ``new_occurred_at``.
+
+        The single home of the time-aware rule — both reschedule entry points
+        (this service's endpoint and the ``ClassesExceptionsService`` upsert)
+        call it, so they can never diverge.
+        """
+        collisions = await self._read_all(
+            load_sql(SQL_DIR / "classes_instance_reschedule_collision.sql"),
+            {
+                "class_id": str(class_id),
+                "new_date": new_date,
+                "original_date": original_date,
+                "class_time": class_row["class_time"],
+                "effective_time": effective_time,
+            },
+        )
+        if collisions:
+            raise RescheduleConflictError(
+                f"Another occurrence is already rescheduled to {new_date} at "
+                f"{effective_time}."
+            )
+
+        occurrences = await self._expand_day(
+            class_row, class_id, new_date, gym_tz
+        )
+        if any(occ.occurred_at == new_occurred_at for occ in occurrences):
+            raise RescheduleConflictError(
+                f"A class already occurs on {new_date} at {effective_time}; "
+                f"cannot reschedule onto it."
+            )
+
+    async def apply_reschedule_attendance(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        gym_id: UUID,
+        original_date: date,
+        new_occurred_at: datetime,
+        new_duration_minutes: int,
+        is_future: bool,
+        gym_tz: str,
+    ) -> UUID | None:
+        """Move the moved occurrence's materialized attendance, in the caller's
+        OPEN transaction (no commit here — the caller owns the txn so the
+        exception write lands atomically with this).
+
+        * ``is_future`` (new_date after today, gym-local): WIPE the occurrence's
+          check-ins via the shared ``_wipe_occurrence`` teardown — the moved
+          occurrence re-materializes fresh when the class is next attended.
+        * today / past: KEEP the check-ins, re-dated onto ``new_occurred_at``.
+
+        A never-materialized occurrence (no ``class_history`` on
+        ``original_date``) is a no-op. Returns the moved ``class_history_id`` (or
+        None when nothing was materialized).
+        """
+        history_id = await self._find_history_id(
+            session, class_id, original_date, gym_tz
+        )
+        if history_id is None:
+            return None
+        if is_future:
+            await self._wipe_occurrence(session, history_id, gym_id, class_id)
+        else:
+            await self._redate_history(
+                session, history_id, new_occurred_at, new_duration_minutes
+            )
+        return history_id
 
     async def _load_class_in_gym(self, class_id: UUID, gym_id: UUID) -> dict:
         """Load the class row, asserting it belongs to ``gym_id`` (else 404)."""
@@ -437,68 +628,23 @@ class ClassesUndoService:
             raise ValueError(_CLASS_NOT_FOUND_MSG)
         return row
 
-    async def _occurs_on(
+    async def _occurrence_on(
         self,
         class_row: dict,
         class_id: UUID,
         when: date,
         gym_tz: str,
-    ) -> bool:
-        """Whether a real, non-cancelled occurrence lands on ``when``."""
-        occurrences = await self._expand_day(class_row, class_id, when, gym_tz)
-        return any(occ.effective_date == when for occ in occurrences)
+    ) -> EffectiveOccurrence | None:
+        """The real, non-cancelled occurrence that lands on ``when`` (or None).
 
-    async def _is_materialized(
-        self,
-        class_id: UUID,
-        occurrence_date: date,
-        gym_tz: str,
-    ) -> bool:
-        """Whether the occurrence already has a class_history row."""
-        async with self._db_pool.session() as session:
-            history_id = await self._find_history_id(
-                session, class_id, occurrence_date, gym_tz
-            )
-        return history_id is not None
-
-    async def _reject_new_date_collision(
-        self,
-        class_row: dict,
-        class_id: UUID,
-        occurrence_date: date,
-        new_date: date,
-        gym_tz: str,
-    ) -> None:
-        """Raise (conflict -> 409) if a non-cancelled occurrence already lands on
-        ``new_date``.
-
-        Two checks, mirroring the Phase-3 reschedule-conflict guard: a direct
-        query for another reschedule already targeting ``new_date`` (reusing
-        ``classes_instance_reschedule_collision.sql``), then the expander over
-        ``[new_date, new_date]`` for a recurrence / override occurrence there.
+        Carries the occurrence's effective time / duration so a bare move keeps
+        the slot's current schedule.
         """
-        collisions = await self._read_all(
-            load_sql(SQL_DIR / "classes_instance_reschedule_collision.sql"),
-            {
-                "class_id": str(class_id),
-                "new_date": new_date,
-                "original_date": occurrence_date,
-            },
-        )
-        if collisions:
-            raise ValueError(
-                f"conflict: another occurrence is already rescheduled to "
-                f"{new_date}."
-            )
-
-        occurrences = await self._expand_day(
-            class_row, class_id, new_date, gym_tz
-        )
-        if any(occ.effective_date == new_date for occ in occurrences):
-            raise ValueError(
-                f"conflict: a class already occurs on {new_date}; cannot "
-                f"reschedule onto it."
-            )
+        occurrences = await self._expand_day(class_row, class_id, when, gym_tz)
+        for occ in occurrences:
+            if occ.effective_date == when:
+                return occ
+        return None
 
     async def _expand_day(
         self,
@@ -553,20 +699,3 @@ class ClassesUndoService:
     async def _read_all(self, sql: str, params: dict) -> list[dict]:
         async with self._db_pool.session() as session:
             return await self._fetchall(session, sql, params)
-
-    async def _write_returning(self, sql: str, params: dict) -> dict:
-        """Run a write + return its single RETURNING row, mapping a constraint
-        violation (bad date range / cross-gym class) to a 400."""
-        try:
-            async with self._db_pool.session() as session:
-                row = (
-                    (await session.execute(text(sql), params))
-                    .mappings()
-                    .fetchone()
-                )
-                await session.commit()
-        except IntegrityError as exc:
-            raise ValueError(_BAD_RESCHEDULE_MSG) from exc
-        if not row:
-            raise RuntimeError("Write did not return a row")
-        return dict(row)

@@ -331,7 +331,6 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           classTime: _classTime,
           onTimeChanged: (t) => setState(() => _classTime = t),
           capacityController: _capacityController,
-          originalDate: widget.entry.classDate,
           selectedDate: _selectedDate,
           onDateChanged: (d) => setState(() => _selectedDate = d),
           onSave: _save,
