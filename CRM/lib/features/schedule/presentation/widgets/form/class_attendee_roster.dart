@@ -15,17 +15,29 @@ import 'package:crm/shared/widgets/view_switcher.dart';
 /// internally — the parent form scrolls too, so the inner list stays bounded.
 const double _kMaxRosterHeight = 280;
 
-/// Which of the roster's two lists is showing.
-enum _RosterTab { reserved, attended }
+/// Which of the roster's lists is showing. Order matches display order —
+/// Attended first (when it exists at all), Reserved second.
+enum _RosterTab { attended, reserved }
 
-/// Searchable, scrollable, **two-tab** roster — **Reserved** (everyone with a
-/// `class_signups` row for this occurrence) and **Attended** (everyone with a
-/// `member_attendance` row) — shown inside the class form's "This session"
-/// block for a past / materialized occurrence (today or earlier). A
-/// self-contained side fetch (a [FutureBuilder] over its own
+/// Searchable, scrollable roster — **Attended** (everyone with a
+/// `member_attendance` row) and **Reserved** (everyone with a
+/// `class_signups` row for this occurrence) — shown inside the class form's
+/// "This session" block for a past / materialized occurrence (today or
+/// earlier). A self-contained side fetch (a [FutureBuilder] over its own
 /// [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
 /// own-repository pattern. An unmaterialized occurrence with no sign-ups
 /// either and an empty roster both read "No attendees yet."
+///
+/// The **Attended** tab only exists once someone has attended — with no
+/// attendance recorded yet, the roster skips the two-tab switcher entirely
+/// and renders the **Reserved** list directly (its own count standing in for
+/// the switcher). Once the occurrence has ≥1 attended entry, both tabs show
+/// — **Attended first, Reserved second** — and the view defaults to
+/// Attended. A reserved member who has also attended is marked with a green
+/// check + "attended" caption on their Reserved row too (driven by
+/// [Attendee.attended]), so a no-show reads differently from someone who
+/// showed up; the Attended tab needs no such mark since every row there is
+/// attended by definition.
 ///
 /// A member can appear on both tabs (reserved AND attended) — which tab a
 /// row is on determines what its remove (×) does, not the member's own
@@ -35,9 +47,9 @@ enum _RosterTab { reserved, attended }
 /// then on success refetches the roster and surfaces a SnackBar; on failure
 /// surfaces an error SnackBar. Never a silent dismiss.
 ///
-/// Defaults to whichever tab has entries (Reserved if both or neither do),
-/// then stays on whatever the staff member picked across a refetch — an
-/// action on one row shouldn't snap the view back to the default tab.
+/// Once the Attended tab exists, the view defaults to it, then stays on
+/// whatever the staff member picked across a refetch — an action on one row
+/// shouldn't snap the view back to the default tab.
 class ClassAttendeeRoster extends StatefulWidget {
   final String gymId;
   final String classId;
@@ -59,8 +71,10 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
       ScheduleRepository(apiClient: ApiClient());
   late Future<AttendeeListResponse> _future;
 
-  /// Null until the first load picks a default; stays as the staff member's
-  /// choice afterwards (see class doc).
+  /// The staff member's explicit tab pick; null means "use the default"
+  /// (Attended once it exists, otherwise the Reserved-only view — see class
+  /// doc). Left null by the default itself so a refetch that removes the
+  /// last attended entry falls back to Reserved automatically.
   _RosterTab? _tab;
 
   @override
@@ -159,16 +173,18 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         }
         final reserved = attendees.where((a) => a.signedUp).toList();
         final attended = attendees.where((a) => a.attended).toList();
-        // Default to whichever tab has entries; Reserved when both do (or
-        // neither does). Only picked once — later refetches (after a row
-        // action) keep whatever the staff member is looking at.
-        _tab ??= reserved.isNotEmpty || attended.isEmpty
-            ? _RosterTab.reserved
-            : _RosterTab.attended;
+        final hasAttended = attended.isNotEmpty;
+        // The Attended tab (and the switcher itself) only exists once
+        // someone has attended; while it does, default to Attended unless
+        // the staff member explicitly picked a tab. Recomputed every build
+        // (not "picked once") so a refetch that drops the last attended
+        // entry falls back to the Reserved-only view automatically.
+        final tab = hasAttended ? (_tab ?? _RosterTab.attended) : _RosterTab.reserved;
         return _TabbedRoster(
           reserved: reserved,
           attended: attended,
-          tab: _tab!,
+          hasAttended: hasAttended,
+          tab: tab,
           onTabChanged: (tab) => setState(() => _tab = tab),
           onCancelReservation: _cancelReservation,
           onRemoveCheckIn: _removeCheckIn,
@@ -197,12 +213,18 @@ class _Framed extends StatelessWidget {
   }
 }
 
-/// The loaded roster: a header, the Reserved/Attended [ViewSwitcher] (each
-/// label carrying its count), a name search scoped to the active tab, and
-/// the bounded, scrollable list of matching participants.
+/// The loaded roster: a header, then either the Attended/Reserved
+/// [ViewSwitcher] (each label carrying its count, Attended first — only once
+/// [hasAttended]) or, before anyone has attended, just the Reserved list's
+/// own count where the switcher would sit; a name search scoped to the
+/// active tab, and the bounded, scrollable list of matching participants.
 class _TabbedRoster extends StatefulWidget {
   final List<Attendee> reserved;
   final List<Attendee> attended;
+
+  /// Whether the Attended tab exists at all (≥1 attended entry). When false
+  /// [tab] is always [_RosterTab.reserved] and no switcher renders.
+  final bool hasAttended;
   final _RosterTab tab;
   final ValueChanged<_RosterTab> onTabChanged;
   final ValueChanged<Attendee> onCancelReservation;
@@ -211,6 +233,7 @@ class _TabbedRoster extends StatefulWidget {
   const _TabbedRoster({
     required this.reserved,
     required this.attended,
+    required this.hasAttended,
     required this.tab,
     required this.onTabChanged,
     required this.onCancelReservation,
@@ -245,15 +268,24 @@ class _TabbedRosterState extends State<_TabbedRoster> {
       spacing: DesignConstants.spacingMedium,
       children: [
         Text('Attendees', style: DesignConstants.pSemibold),
-        ViewSwitcher(
-          labels: [
+        if (widget.hasAttended)
+          ViewSwitcher(
+            labels: [
+              'Attended (${widget.attended.length})',
+              'Reserved (${widget.reserved.length})',
+            ],
+            selectedIndex: widget.tab == _RosterTab.attended ? 0 : 1,
+            onSelected: (i) => widget.onTabChanged(
+              i == 0 ? _RosterTab.attended : _RosterTab.reserved,
+            ),
+          )
+        else
+          // No one has attended yet — nothing to switch between, so this
+          // stands in for the switcher with just the Reserved count.
+          Text(
             'Reserved (${widget.reserved.length})',
-            'Attended (${widget.attended.length})',
-          ],
-          selectedIndex: widget.tab == _RosterTab.reserved ? 0 : 1,
-          onSelected: (i) =>
-              widget.onTabChanged(i == 0 ? _RosterTab.reserved : _RosterTab.attended),
-        ),
+            style: DesignConstants.pSmall.copyWith(color: DesignConstants.text2nd),
+          ),
         AppSearchBox(
           hintText: 'Search participants…',
           onChanged: (value) => setState(() => _query = value),
@@ -282,8 +314,14 @@ class _TabbedRosterState extends State<_TabbedRoster> {
               ),
               itemBuilder: (context, i) {
                 final attendee = filtered[i];
+                // The Attended tab is attended by definition — only the
+                // Reserved tab needs the mark, to tell a reserved-and-showed
+                // member apart from a no-show.
+                final showAttendedMark =
+                    widget.tab == _RosterTab.reserved && attendee.attended;
                 return MemberRowTile(
                   name: attendee.fullName,
+                  subtitle: showAttendedMark ? const _AttendedMark() : null,
                   trailing: _RemoveButton(
                     name: attendee.fullName,
                     tab: widget.tab,
@@ -328,6 +366,35 @@ class _RemoveButton extends StatelessWidget {
         weight: DesignConstants.iconWeight,
         color: DesignConstants.badRed,
       ),
+    );
+  }
+}
+
+/// Small green check + "attended" caption shown under a Reserved-tab row
+/// whose member also has an attendance record, so a no-show reads
+/// differently from someone who showed up. Rendered via
+/// [MemberRowTile.subtitle].
+class _AttendedMark extends StatelessWidget {
+  const _AttendedMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingTiny,
+      children: [
+        Icon(
+          Symbols.check_circle_sharp,
+          size: DesignConstants.iconSizeTiny,
+          weight: DesignConstants.iconWeight,
+          color: DesignConstants.goodGreen,
+        ),
+        Text(
+          'attended',
+          style:
+              DesignConstants.pSmall.copyWith(color: DesignConstants.goodGreen),
+        ),
+      ],
     );
   }
 }

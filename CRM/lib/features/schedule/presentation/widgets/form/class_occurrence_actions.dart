@@ -76,18 +76,31 @@ class ClassOccurrenceActions extends StatelessWidget {
             style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
           ),
           if (!isCancelled)
-            Row(
-              spacing: DesignConstants.spacingLarge,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingSmall,
               children: [
-                if (canSignUp)
-                  AppOutlineButton(
-                    text: 'Reserve members',
-                    onPressed: onSignUpMembers,
-                  ),
+                Row(
+                  spacing: DesignConstants.spacingLarge,
+                  children: [
+                    if (canSignUp)
+                      AppOutlineButton(
+                        text: 'Reserve members',
+                        onPressed: onSignUpMembers,
+                      ),
+                    if (canCheckIn)
+                      AppOutlineButton(
+                        text: 'Update attendees',
+                        onPressed: onUpdateAttendees,
+                      ),
+                  ],
+                ),
                 if (canCheckIn)
-                  AppOutlineButton(
-                    text: 'Update attendees',
-                    onPressed: onUpdateAttendees,
+                  Text(
+                    'Adding an attendee checks them in and awards their '
+                    'class points.',
+                    style: DesignConstants.pSmall
+                        .copyWith(color: DesignConstants.text2nd),
                   ),
               ],
             ),
