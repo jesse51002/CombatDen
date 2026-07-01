@@ -302,7 +302,13 @@ class CheckinMemberGate:
         plan_id: UUID | None,
         item_id: UUID | None,
     ) -> CheckinResponse:
-        """Build the idempotent-repeat response (no points re-awarded)."""
+        """Build the idempotent-repeat response.
+
+        No points are re-awarded (the balance is untouched), but
+        ``points_awarded`` reports the class's ``points_worth`` — the amount this
+        check-in was originally worth — so the caller can still show it for
+        clarity, told apart from a fresh award by ``already_checked_in``.
+        """
         return CheckinResponse(
             log_id=log_id,
             member_id=member_id,
@@ -311,7 +317,7 @@ class CheckinMemberGate:
             already_checked_in=True,
             chosen_plan_id=plan_id,
             chosen_item_id=item_id,
-            points_awarded=0,
+            points_awarded=ctx.points_worth,
             skip_reason=None,
             warnings=[],
             memberships=[],

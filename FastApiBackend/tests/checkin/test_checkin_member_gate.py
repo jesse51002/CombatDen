@@ -325,10 +325,12 @@ async def test_existing_attendance_is_idempotent_repeat() -> None:
         existing={"log_id": log_id, "plan_id": plan, "item_id": item},
     )
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    ctx = _ctx()
+    res = await gate.checkin_member(ctx, uuid4(), is_member=False)
 
     assert res.already_checked_in is True
     assert res.log_id == log_id
     assert res.chosen_plan_id == plan
-    assert res.points_awarded == 0
+    # The repeat echoes the class's points (already in the balance), not 0.
+    assert res.points_awarded == ctx.points_worth
     writer.assert_not_awaited()

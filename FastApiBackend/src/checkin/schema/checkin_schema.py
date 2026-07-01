@@ -190,9 +190,12 @@ class CheckinResponse(BaseModel):
             check-in had no membership to attribute to.
         chosen_item_id: The membership row charged. None when rejected or when a
             staff check-in had no membership to attribute to.
-        points_awarded: Points added to the member's balance — the class's
-            ``points_worth`` on a newly-recorded check-in (membership or not),
-            0 on an idempotent repeat or a rejection.
+        points_awarded: The class's ``points_worth`` this check-in is worth —
+            actually added to the balance on a newly-recorded check-in (membership
+            or not), or merely REPORTED (balance untouched) on an idempotent
+            repeat so it can still be shown; 0 only on a rejection (nothing
+            written). Use ``already_checked_in`` to tell a fresh award apart from
+            a repeat's echo.
         skip_reason: Why a kiosk check-in was rejected (no attendance written);
             None when recorded or an idempotent repeat.
         warnings: Gate conditions a staff check-in recorded through (empty on a

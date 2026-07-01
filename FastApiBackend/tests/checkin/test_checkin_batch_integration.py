@@ -30,7 +30,7 @@ write-around the FastApiBackend rules forbid.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -45,6 +45,9 @@ GYM_ID = SEEDED_GYM_ID
 _ENV_PATH = "/var/home/jm/Documents/CombatDen/codebase/FastApiBackend/.env"
 # How far ahead to scan the schedule board for a usable occurrence.
 _BOARD_WINDOW_DAYS = 45
+# Mirror settings.checkin_opens_hours_before_start: only an occurrence starting
+# within this window (or already past) can be checked into.
+_CHECKIN_OPENS_HOURS = 2
 
 # Covering members (active UNLIMITED eligible plan) for each active, non-deleted
 # class. Grouped in Python to find a class with >= 2 distinct covering members,
@@ -117,8 +120,12 @@ def _multi_covered_target(
     )
     if resp.status_code != 200:
         return None
+    cutoff = datetime.now(UTC) + timedelta(hours=_CHECKIN_OPENS_HOURS)
     for occ in resp.json()["items"]:
         if occ["is_cancelled"]:
+            continue
+        # Skip occurrences too far out to check into yet (the 2h early window).
+        if datetime.fromisoformat(occ["occurred_at"]) > cutoff:
             continue
         members = by_class.get(occ["class_id"])
         if members is None or len(members) < 2:
@@ -395,7 +402,8 @@ class TestBatchCheckin:
             by_member = {r["member_id"]: r for r in body["results"]}
 
             assert by_member[member_a]["status"] == "already_checked_in"
-            assert by_member[member_a]["points_awarded"] == 0
+            # A repeat echoes the class's points (already awarded, not re-added).
+            assert by_member[member_a]["points_awarded"] == points_worth
             assert by_member[member_b]["status"] == "checked_in"
             assert by_member[member_b]["points_awarded"] == points_worth
             # Kiosk gate rejects the membership-less member.
@@ -461,7 +469,8 @@ class TestBatchCheckin:
             assert second.status_code == 207, second.text
             for result in second.json()["results"]:
                 assert result["status"] == "already_checked_in"
-                assert result["points_awarded"] == 0
+                # Repeat echoes the class's points (already awarded, not re-added).
+                assert result["points_awarded"] == target["points_worth"]
             # No extra points on the repeat.
             assert {
                 m: _member_points(m) for m in (member_a, member_b)
