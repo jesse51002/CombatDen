@@ -88,6 +88,9 @@ async def checkin(
     member_gate: CheckinMemberGate = Depends(
         Provide[DependencyInjector.checkin_member_gate]
     ),
+    streak_service: StreakService = Depends(
+        Provide[DependencyInjector.streak_service]
+    ),
 ) -> CheckinResponse:
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
@@ -97,12 +100,21 @@ async def checkin(
         resolved_class = await resolver.resolve(
             request.class_id, request.gym_id, request.occurrence_date
         )
-        return await member_gate.checkin_member(
+        result = await member_gate.checkin_member(
             resolved_class,
             request.member_id,
             request.is_member,
             request.ignore_warnings,
         )
+        # Fold in the member's streak (after this check-in) so the caller needn't
+        # make a second GET /streak call. Only meaningful when the check-in was
+        # actually recorded (or an idempotent repeat) — a rejection /
+        # needs-confirmation leaves it at 0.
+        if result.log_id is not None or result.already_checked_in:
+            result.class_streak_weeks = await streak_service.get_streak(
+                request.member_id, request.gym_id
+            )
+        return result
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

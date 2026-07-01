@@ -24,23 +24,30 @@ from src.checkin.schema.checkin_schema import (
 )
 from src.main import app
 
+_STUB_STREAK_WEEKS = 3
+
 
 def _override_checkin(response: CheckinResponse) -> None:
-    """Double the resolver + member gate so the single-checkin handler returns
-    ``response`` without touching the DB. Caller resets via ``_reset_checkin``.
+    """Double the resolver + member gate + streak service so the single-checkin
+    handler returns ``response`` (enriched with a stub streak) without touching
+    the DB. Caller resets via ``_reset_checkin``.
     """
     resolver = MagicMock()
     resolver.resolve = AsyncMock(return_value=MagicMock())
     gate = MagicMock()
     gate.checkin_member = AsyncMock(return_value=response)
+    streak = MagicMock()
+    streak.get_streak = AsyncMock(return_value=_STUB_STREAK_WEEKS)
     app.container.checkin_class_resolver.override(resolver)
     app.container.checkin_member_gate.override(gate)
+    app.container.streak_service.override(streak)
 
 
 def _reset_checkin() -> None:
     """Undo the ``_override_checkin`` provider overrides."""
     app.container.checkin_class_resolver.reset_override()
     app.container.checkin_member_gate.reset_override()
+    app.container.streak_service.reset_override()
 
 
 def test_checkin_records_when_a_plan_covers_the_class(
@@ -96,6 +103,8 @@ def test_checkin_records_when_a_plan_covers_the_class(
     body = resp.json()
     assert body["log_id"] == log_id
     assert body["already_checked_in"] is False
+    # A recorded check-in folds in the member's streak.
+    assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
     assert body["chosen_plan_id"] == str(plan_id)
     assert body["chosen_item_id"] == str(item_id)
     assert body["points_awarded"] == 50
@@ -188,6 +197,8 @@ def test_checkin_staff_needs_confirmation(
     body = resp.json()
     assert body["log_id"] is None
     assert body["requires_confirmation"] is True
+    # Not recorded -> no streak fetched, stays 0.
+    assert body["class_streak_weeks"] == 0
     assert body["chosen_plan_id"] is None
     assert body["skip_reason"] is None
     assert body["warnings"] == ["no_membership"]
@@ -234,6 +245,8 @@ def test_checkin_idempotent_returns_already_checked_in(
     body = resp.json()
     assert body["log_id"] == log_id
     assert body["already_checked_in"] is True
+    # A repeat still folds in the current streak.
+    assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
     assert body["points_awarded"] == 0
 
 

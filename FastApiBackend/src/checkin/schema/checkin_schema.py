@@ -217,6 +217,10 @@ class CheckinResponse(BaseModel):
             of ``warnings`` and no ``ignore_warnings`` override — resend with
             ``ignore_warnings=true`` to record it. Always False on a kiosk
             check-in, a clean check-in, or a repeat.
+        class_streak_weeks: The member's current weekly attendance streak AFTER
+            this check-in — the same value ``GET /api/v1/streak`` returns, folded
+            into the check-in response so the caller needn't make a second call.
+            0 when the check-in was not recorded (a rejection / needs-confirmation).
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -231,6 +235,7 @@ class CheckinResponse(BaseModel):
     skip_reason: CheckinWarning | None = None
     warnings: list[CheckinWarning] = []
     requires_confirmation: bool = False
+    class_streak_weeks: int = 0
     memberships: list[CheckinMembershipBreakdown] = []
 
 
