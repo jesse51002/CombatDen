@@ -82,9 +82,11 @@ cancels ONE date (incl. `new_date` = reschedule target, `new_max_capacity`,
 `class_range_exceptions` cancels/substitutes a continuous range.
 
 **`ClassesExpander` (`src/classes/service/classes_expander.py`) is the ONE pure
-recurrence+exception engine** (no I/O). It's used by CRUD reads, materialization,
+recurrence+exception engine** (no I/O). It's used by the schedule-board reads,
+materialization, check-in + sign-up occurrence validation, and
 reschedule-collision checks, AND mirrored by the demo seed — never re-derive
-recurrence anywhere else. Instance-exception-wins-over-range precedence; monthly
+recurrence anywhere else (it is NOT used by `ClassesCrudService`, which only
+touches the `gym_classes` catalog). Instance-exception-wins-over-range precedence; monthly
 last-day clamp; `ZoneInfo(gym.timezone)` DST; cancelled dropped. `instructor_for`
 is public (weekday-slot lookup) so the snapshot-sync fallback can't drift from it.
 
@@ -100,7 +102,8 @@ mutates it — the snapshot sync / reschedule re-date / cancel delete). **`Class
   non-cancelled occurrence, with a **forward cutoff `occurred_at <= now +
   settings.materialize_future_hours (=2)` applied inside** so a wide display
   window never freezes not-yet-started classes. `materialize_current(gym)` =
-  `materialize(gym, today − class_history_lookback_days, today + future_hours)`.
+  `materialize(gym, today − class_history_lookback_days (=14), today + future_hours)`
+  (a non-positive lookback is a no-op).
 - **Three callers route through it:** check-in (`CheckinClassResolver.resolve` →
   `materialize(gym, occurrence_date, occurrence_date)` then find-or-create the
   exact occurrence — **any date, incl. retroactive**, works because it's
@@ -125,13 +128,21 @@ insulated from class-DEFINITION drift, incl. soft-deleted classes —
 `classes_board_past_history.sql`); an in-session or future
 one renders from the **live expander**. Opening the board (and the dashboard's
 Upcoming Classes, whose window reaches ~7d into the recent past) MATERIALIZES
-ended-but-unrecorded occurrences via `materialize`. Dedup is by (class_id, gym-local
-day), so re-timing a class never doubles a past day.
+ended-but-unrecorded occurrences via `materialize`. `materialize` is idempotent by
+the **EXACT instant** (`uq_class_history_occurrence` = `class_id` + `occurred_at`),
+and the past/live split is the END-time check (`_has_ended`), so a **fixed-time**
+occurrence renders from exactly ONE source. Re-timing an occurrence THROUGH an
+instance override or reschedule reuses the SAME history row —
+`ClassesUndoService.find_history_id` matches by `class_id` + gym-local day, then
+`sync_history_snapshot` UPDATEs it in place — so it never doubles that day.
 
 ## 4. Reschedule — any date, attendance follows
-A move writes an instance exception with `new_date` (POST `/exceptions/instance`;
-the forward-only DB CHECK was dropped — `new_date` is any date). `original_date`
-is only the anchor. **One shared engine on `ClassesUndoService`**
+A move writes an instance exception with `new_date` — via either the dedicated
+`POST /{class_id}/occurrences/{occurrence_date}/reschedule`
+(`ClassesUndoService.reschedule_occurrence`) or the general
+`POST /{class_id}/exceptions/instance` (`ClassesExceptionsService`, which delegates
+to the same engine); the forward-only DB CHECK was dropped — `new_date` is any date.
+`original_date` is only the anchor. **One shared engine on `ClassesUndoService`**
 (`ClassesExceptionsService` delegates); `assert_no_reschedule_conflict` is
 **time-aware** — a move is rejected only if the exact target date+time
 (`occurred_at`) is already taken (landing on a busy day at a different time is
@@ -192,7 +203,7 @@ builds `checkin_reverser` before both consumers; no import cycle.
 ## 8. CRM surfaces
 - **Schedule board** (`features/schedule`): week grid of `ClassCard`s; chip stacks
   "N reserved" / (past) "M attended" on separate lines; tap → chooser (This
-  occurrence vs All future).
+  occurrence vs All future occurrences).
 - **Occurrence screen** (`class_occurrence_screen.dart`): view-first (read-only
   details + **Edit** and **Cancel this class** side by side) / edit (override
   section incl. a **date** field = reschedule); a two-tab **Reserved | Attended**
@@ -202,8 +213,9 @@ builds `checkin_reverser` before both consumers; no import cycle.
   not-yet-started; intentionally overlaps the 2h check-in window).
 
 ## 9. Gotchas / operational
-- **The board 500s for everyone until `class_signups` exists** (it joins the table
-  for `signup_count`). Run the migration.
+- **The board 500s for everyone until `class_signups` exists** (it reads the table
+  unconditionally for `signup_count` — a standalone `SELECT`, joined in memory).
+  Run the migration.
 - **Migrations are HAND-WRITTEN, never `supabase db diff`** (per `Database/CLAUDE.md`)
   — edit schema files, delegate migration authoring to a sub-agent, the USER runs
   `npx supabase migration up`.
