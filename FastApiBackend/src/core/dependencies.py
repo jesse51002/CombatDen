@@ -13,6 +13,7 @@ from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.checkin_reverser import CheckinReverser
 from src.checkin.service.cycle_counts_service import CycleCountsService
+from src.checkin.service.signup_service import SignupService
 from src.checkin.service.streak_service import StreakService
 from src.classes.service.classes_crud_service import ClassesCrudService
 from src.classes.service.classes_exceptions_service import (
@@ -252,10 +253,17 @@ class DependencyInjector(containers.DeclarativeContainer):
         resolver=checkin_class_resolver,
         member_gate=checkin_member_gate,
     )
-    # Read-only: the members who attended one occurrence (gym-local day-bounds
-    # resolve of the materialized class_history → member_attendance join).
+    # Read-only: the combined signed-up-or-attended roster of one occurrence
+    # (gym-local day-bounds resolve, class_signups + member_attendance join).
     checkin_attendees_service = providers.Factory(
         CheckinAttendeesService,
+        db_pool=db_pool,
+    )
+    # Create / remove a member's sign-up (reservation) for an occurrence. Its
+    # create-time capacity check reads the same signed-up-or-attended union the
+    # check-in capacity gate reads (both go through CheckinQueries).
+    signup_service = providers.Factory(
+        SignupService,
         db_pool=db_pool,
     )
     # Shared per-member check-in reverser: delete attendance, claw back points,

@@ -123,7 +123,7 @@ class CheckinMemberGate:
             if active
             else set()
         )
-        over_capacity = await self._is_over_capacity(resolved_class)
+        over_capacity = await self._is_over_capacity(resolved_class, member_id)
         evaluation = self._evaluate(active, eligible, over_capacity)
 
         if is_member:
@@ -306,12 +306,27 @@ class CheckinMemberGate:
         """Pick the single ``skip_reason`` for a rejected kiosk check-in."""
         return min(reasons, key=_REASON_PRIORITY.index)
 
-    async def _is_over_capacity(self, resolved_class: ResolvedClass) -> bool:
-        """Whether the room is at / over ``max_capacity`` for this occurrence."""
+    async def _is_over_capacity(
+        self, resolved_class: ResolvedClass, member_id: UUID
+    ) -> bool:
+        """Whether checking THIS member in would exceed ``max_capacity``.
+
+        Capacity is reserving: counts the DISTINCT signed-up-or-attended union
+        (``class_signups`` ∪ ``member_attendance``), not raw attendance — so a
+        member already counted (a prior sign-up, or an idempotent repeat
+        check-in) never blocks on their own presence, while a fresh walk-in
+        is blocked once the union fills the room.
+        """
         if resolved_class.max_capacity is None:
             return False
-        count = await self._queries.count_attendance(resolved_class.class_history_id)
-        return count >= resolved_class.max_capacity
+        members = await self._queries.get_signup_or_attended_members(
+            resolved_class.class_id,
+            resolved_class.gym_id,
+            resolved_class.occurrence_date,
+        )
+        if member_id in members:
+            return False
+        return len(members) >= resolved_class.max_capacity
 
     # -- helpers ---------------------------------------------------------
 

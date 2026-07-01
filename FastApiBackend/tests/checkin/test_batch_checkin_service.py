@@ -34,6 +34,7 @@ def _resolved_class() -> ResolvedClass:
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
+        occurrence_date=_OCCURRENCE_DATE,
         occurred_at=datetime(2026, 6, 1, 17, 0, tzinfo=UTC),
         points_worth=50,
         class_name="Evening BJJ",

@@ -133,6 +133,7 @@ class CheckinClassResolver:
             class_history_id=class_history_id,
             class_id=class_id,
             gym_id=gym_id,
+            occurrence_date=occurrence_date,
             occurred_at=occurrence.occurred_at,
             points_worth=class_row["points_worth"],
             class_name=class_row["class_name"],

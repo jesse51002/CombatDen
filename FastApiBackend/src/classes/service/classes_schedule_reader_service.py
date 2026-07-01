@@ -92,6 +92,7 @@ class ClassesScheduleReaderService:
         attendance = await self._attendance_counts(
             gym_id, start_date, end_date, gym_tz
         )
+        signups = await self._signup_counts(gym_id, start_date, end_date)
 
         # The past/future split point is NOW — the occurrence's own start instant.
         # An occurrence whose start time has already passed (including earlier
@@ -134,6 +135,7 @@ class ClassesScheduleReaderService:
                     gym_tz,
                     instructors,
                     attendance,
+                    signups,
                     now,
                 )
             )
@@ -141,7 +143,7 @@ class ClassesScheduleReaderService:
         # included), so a definition edit never changes occurrences that ran.
         for history_rows in past_by_class.values():
             items.extend(
-                self._build_past_row(row, gym_tz, instructors)
+                self._build_past_row(row, gym_tz, instructors, signups)
                 for row in history_rows
             )
         items.sort(key=lambda row: row.occurred_at)
@@ -159,6 +161,7 @@ class ClassesScheduleReaderService:
         gym_tz: str,
         instructors: dict[str, str],
         attendance: dict[tuple[str, datetime], int],
+        signups: dict[tuple[str, date], int],
         now: datetime,
     ) -> list[EffectiveClassInstanceResponse]:
         """Expand one class into its in-session + upcoming rows + cancelled days.
@@ -206,6 +209,7 @@ class ClassesScheduleReaderService:
                 range_rows,
                 instructors,
                 attendance,
+                signups,
             )
             for occ in occurrences
         ]
@@ -219,6 +223,7 @@ class ClassesScheduleReaderService:
         range_rows: list[dict],
         instructors: dict[str, str],
         attendance: dict[tuple[str, datetime], int],
+        signups: dict[tuple[str, date], int],
     ) -> EffectiveClassInstanceResponse:
         """Assemble one enriched board row from an effective occurrence."""
         instructor_name = (
@@ -231,6 +236,9 @@ class ClassesScheduleReaderService:
             for row in range_rows
         )
         count = attendance.get((str(class_row["class_id"]), occ.occurred_at))
+        signup_count = signups.get(
+            (str(class_row["class_id"]), occ.effective_date), 0
+        )
         return EffectiveClassInstanceResponse(
             class_id=class_row["class_id"],
             gym_id=class_row["gym_id"],
@@ -250,11 +258,15 @@ class ClassesScheduleReaderService:
             has_instance_exception=occ.original_date in instance_dates,
             has_range_exception=has_range,
             attendance_count=count,
+            signup_count=signup_count,
         )
 
     @staticmethod
     def _build_past_row(
-        h: dict, gym_tz: str, instructors: dict[str, str]
+        h: dict,
+        gym_tz: str,
+        instructors: dict[str, str],
+        signups: dict[tuple[str, date], int],
     ) -> EffectiveClassInstanceResponse:
         """One board row from an immutable past class_history occurrence.
 
@@ -269,6 +281,7 @@ class ClassesScheduleReaderService:
             if h["instructor_id"] is not None
             else None
         )
+        signup_count = signups.get((str(h["class_id"]), local.date()), 0)
         return EffectiveClassInstanceResponse(
             class_id=h["class_id"],
             gym_id=h["gym_id"],
@@ -286,6 +299,7 @@ class ClassesScheduleReaderService:
             has_instance_exception=False,
             has_range_exception=False,
             attendance_count=h["attendance_count"],
+            signup_count=signup_count,
         )
 
     @staticmethod
@@ -357,6 +371,32 @@ class ClassesScheduleReaderService:
         )
         return {
             (str(row["class_id"]), row["occurred_at"]): row["attendance_count"]
+            for row in rows
+        }
+
+    async def _signup_counts(
+        self,
+        gym_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> dict[tuple[str, date], int]:
+        """Map ``(class_id, occurrence_date)`` -> sign-up count.
+
+        Keyed by the gym-local calendar date (unlike ``_attendance_counts``,
+        which keys off the UTC ``occurred_at`` instant) since ``class_signups``
+        stores the occurrence's local date, not its UTC instant. Covers both
+        future and past occurrences in the window — no ``now`` bound.
+        """
+        rows = await self._read_all(
+            "classes_signup_counts.sql",
+            {
+                "gym_id": str(gym_id),
+                "start_date": start_date,
+                "end_date": end_date,
+            },
+        )
+        return {
+            (str(row["class_id"]), row["occurrence_date"]): row["signup_count"]
             for row in rows
         }
 

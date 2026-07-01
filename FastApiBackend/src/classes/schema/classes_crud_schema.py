@@ -256,6 +256,10 @@ class EffectiveClassInstanceResponse(BaseModel):
         attendance_count: Recorded attendance for this occurrence when a
             ``class_history`` row exists for it; None when no history row has
             been materialized yet.
+        signup_count: Members signed up (reserved) for this occurrence — 0
+            when none. Shown for both future AND past occurrences (a sign-up
+            can be created ahead of a class that hasn't run yet, and the past
+            count is a record of how many reserved a class that already ran).
     """
 
     class_id: UUID
@@ -274,6 +278,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     has_instance_exception: bool
     has_range_exception: bool
     attendance_count: int | None
+    signup_count: int = 0
 
 
 class EffectiveClassInstanceListResponse(BaseModel):

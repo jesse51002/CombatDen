@@ -101,3 +101,17 @@ class MemberAttendanceCreate(SeedModel):
     class_history_id: UUID
     plan_id: UUID
     item_id: UUID
+
+
+class ClassSignupCreate(SeedModel):
+    """A member's reservation for a class occurrence (not attendance).
+
+    Registered for round-trip parity with the schema; no seed generator
+    currently produces these rows (see the class-system build report).
+    """
+
+    signup_id: UUID
+    gym_id: UUID
+    class_id: UUID
+    member_id: UUID
+    occurrence_date: date

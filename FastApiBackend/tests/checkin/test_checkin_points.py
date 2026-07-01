@@ -12,7 +12,7 @@ The gate's block-vs-warn behavior is unit-tested in
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -31,6 +31,7 @@ def _resolved_class(
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
+        occurrence_date=date(2026, 6, 1),
         occurred_at=datetime(2026, 6, 1, 17, 0, tzinfo=UTC),
         points_worth=points_worth,
         class_name="Evening BJJ",

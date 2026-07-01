@@ -211,6 +211,21 @@ Table member_attendance {
   }
 }
 
+Table class_signups {
+  signup_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  class_id uuid [not null]
+  member_id uuid [not null]
+  occurrence_date date [not null, note: 'gym-local calendar date of the reserved occurrence -- NOT attendance']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (class_id, member_id, occurrence_date) [unique]
+    (class_id, occurrence_date)
+    (member_id, gym_id)
+  }
+}
+
 Table gym_rewards {
   reward_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
@@ -351,6 +366,10 @@ Ref: member_attendance.gym_id > gyms.gym_id
 Ref: member_attendance.class_history_id > class_history.class_history_id
 Ref: member_attendance.plan_id > membership_plans_unfiltered.plan_id
 Ref: member_attendance.item_id > member_memberships_unfiltered.item_id
+
+Ref: class_signups.gym_id > gyms.gym_id
+Ref: class_signups.class_id > gym_classes.class_id
+Ref: class_signups.member_id > members.member_id
 
 Ref: gym_rewards.gym_id > gyms.gym_id
 

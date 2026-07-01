@@ -1,6 +1,6 @@
 """Utilities for a gym's timezone — date math + the shared timezone lookup."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -23,6 +23,30 @@ def gym_today(tz_name: str) -> date:
         The current date in the given timezone.
     """
     return datetime.now(UTC).astimezone(ZoneInfo(tz_name)).date()
+
+
+def gym_local_day_bounds_utc(
+    day: date, tz_name: str
+) -> tuple[datetime, datetime]:
+    """The gym-local calendar day ``[00:00, next 00:00)`` as UTC bounds.
+
+    Used to match a UTC instant (e.g. ``class_history.occurred_at``) against a
+    gym-local calendar date regardless of a per-occurrence time override or the
+    gym's UTC offset / DST.
+
+    Args:
+        day: The gym-local calendar date.
+        tz_name: IANA timezone name (e.g., 'America/Chicago').
+
+    Returns:
+        ``(day_start, day_end)`` — UTC, timezone-aware, half-open bounds.
+    """
+    zone = ZoneInfo(tz_name)
+    day_start = datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
+    day_end = datetime.combine(
+        day + timedelta(days=1), time.min, tzinfo=zone
+    ).astimezone(UTC)
+    return day_start, day_end
 
 
 def stripe_ts_to_gym_date(ts: int, tz_name: str) -> date:

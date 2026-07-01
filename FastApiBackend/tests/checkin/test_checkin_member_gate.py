@@ -39,6 +39,7 @@ def _resolved_class(*, points_worth: int = 50, max_capacity: int | None = None) 
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
+        occurrence_date=date(2026, 6, 1),
         occurred_at=datetime(2026, 6, 1, 17, 0, tzinfo=UTC),
         points_worth=points_worth,
         class_name="Evening BJJ",
@@ -93,7 +94,13 @@ def _gate(
     gate._queries = MagicMock()
     gate._queries.get_existing_attendance = AsyncMock(return_value=existing)
     gate._queries.get_eligible_plans = AsyncMock(return_value=eligible)
-    gate._queries.count_attendance = AsyncMock(return_value=attendance_count)
+    # A set of ``attendance_count`` OTHER members already signed-up-or-attended
+    # (never the member under test) -- the gate's capacity check is len(set)
+    # vs max_capacity, skipped entirely when the tested member is already in
+    # the set (covered by its own dedicated tests below).
+    gate._queries.get_signup_or_attended_members = AsyncMock(
+        return_value={uuid4() for _ in range(attendance_count)}
+    )
 
     gate._cycle_counts = MagicMock()
     gate._cycle_counts.get_cycle_counts = AsyncMock(
@@ -344,6 +351,28 @@ async def test_kiosk_over_capacity_blocks_even_when_covered() -> None:
     assert res.log_id is None
     assert res.skip_reason == CheckinWarning.over_capacity
     writer.assert_not_awaited()
+
+
+async def test_kiosk_admits_when_already_in_the_signed_up_or_attended_union() -> None:
+    """A member already counted in the union (e.g. a prior sign-up) is
+    admitted even when the room is nominally full -- the capacity gate skips
+    a member who is already part of the count."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    member_id = uuid4()
+    gate, writer = _gate(memberships=[m], eligible={plan})
+    # The room is at capacity (3/3) but this member is already one of the 3.
+    gate._queries.get_signup_or_attended_members = AsyncMock(
+        return_value={member_id, uuid4(), uuid4()}
+    )
+
+    res = await gate.checkin_member(
+        _resolved_class(max_capacity=3), member_id, is_member=True
+    )
+
+    assert res.log_id is not None
+    assert res.skip_reason is None
+    writer.assert_awaited_once()
 
 
 async def test_kiosk_admits_when_a_clean_membership_covers_despite_depleted_pack() -> None:

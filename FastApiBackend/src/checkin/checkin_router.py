@@ -1,7 +1,7 @@
 """API routes for the checkin domain.
 
-Single + batch check-in, the per-occurrence attendee list, and the attendance
-streak.
+Single + batch check-in, sign-ups (reservations), the per-occurrence combined
+roster, and the attendance streak.
 """
 
 import logging
@@ -26,6 +26,11 @@ from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     StreakResponse,
 )
+from src.checkin.schema.signup_schema import (
+    SignupRemoveResponse,
+    SignupRequest,
+    SignupResponse,
+)
 from src.checkin.service.batch_checkin_service import BatchCheckinService
 from src.checkin.service.checkin_attendees_service import (
     CheckinAttendeesService,
@@ -35,6 +40,7 @@ from src.checkin.service.checkin_class_resolver import (
 )
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
+from src.checkin.service.signup_service import SignupService
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
@@ -203,6 +209,121 @@ async def remove_checkin(
 
 
 @checkin_router.post(
+    "/signup",
+    response_model=SignupResponse,
+    summary="Reserve a member a spot on a class occurrence",
+    description=(
+        "Reserves ``member_id`` a spot on the occurrence addressed by "
+        "``class_id`` + ``occurrence_date``. A sign-up is a reservation, NOT "
+        "attendance — ``member_attendance`` is still only written by a "
+        "check-in. Capacity is reserving: rejected with 'Class is full' when "
+        "the occurrence's effective ``max_capacity`` is already reached by "
+        "the DISTINCT count of members signed-up OR attended (NULL capacity "
+        "= unlimited, never blocks). Idempotent — signing up twice for the "
+        "same (member, occurrence) returns the existing ``signup_id`` with "
+        "``already_signed_up = true`` and consumes no extra capacity. Both "
+        "staff (any employee of the gym) and the member themselves may call "
+        "this."
+    ),
+    responses={
+        200: {"description": "Sign-up created (or an idempotent repeat)"},
+        400: {"description": "Class is full"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this member"},
+        404: {"description": "Class not found"},
+    },
+)
+@inject
+async def signup(
+    request: SignupRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    signup_service: SignupService = Depends(
+        Provide[DependencyInjector.signup_service]
+    ),
+) -> SignupResponse:
+    """Reserve a member a spot on a class occurrence."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        return await signup_service.create(
+            request.member_id,
+            request.gym_id,
+            request.class_id,
+            request.occurrence_date,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Sign-up failed: member_id=%s, class_id=%s, occurrence_date=%s",
+            request.member_id,
+            request.class_id,
+            request.occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record sign-up",
+        ) from None
+
+
+@checkin_router.delete(
+    "/signup",
+    response_model=SignupRemoveResponse,
+    summary="Cancel a member's sign-up for a class occurrence",
+    responses={
+        200: {"description": "Removal result (removed true / false)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this member"},
+    },
+)
+@inject
+async def remove_signup(
+    member_id: UUID,
+    gym_id: UUID,
+    class_id: UUID,
+    occurrence_date: date,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    signup_service: SignupService = Depends(
+        Provide[DependencyInjector.signup_service]
+    ),
+) -> SignupRemoveResponse:
+    """Cancel a member's sign-up (staff or the member themselves)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await signup_service.remove(
+            member_id, gym_id, class_id, occurrence_date
+        )
+    except Exception:
+        logger.error(
+            "Remove sign-up failed: member_id=%s, class_id=%s, "
+            "occurrence_date=%s",
+            member_id,
+            class_id,
+            occurrence_date,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove sign-up",
+        ) from None
+
+
+@checkin_router.post(
     "/checkin/batch",
     summary="Check many members into one class occurrence (staff batch)",
     description=(
@@ -305,17 +426,20 @@ async def checkin_batch(
 @checkin_router.get(
     "/checkin/attendees",
     response_model=AttendeeListResponse,
-    summary="List the members who attended a class occurrence",
+    summary="List the combined roster (signed-up + attended) of an occurrence",
     description=(
-        "Resolves the materialized ``class_history`` row for the (``class_id``, "
-        "gym-local ``occurrence_date``) and returns the members who attended it "
-        "— ``member_id`` + ``full_name`` + the attributed ``plan_id`` / "
-        "``item_id`` (NULL for a no-membership staff check-in). An occurrence "
-        "that was never materialized (no check-ins yet) returns "
-        "``class_history_id = null`` with an empty list. Gym-employee gated."
+        "Returns the combined roster for the occurrence addressed by "
+        "(``class_id``, gym-local ``occurrence_date``): every member who "
+        "signed up (``class_signups``) OR attended (``member_attendance``), "
+        "each flagged ``signed_up`` / ``attended`` — ``member_id`` + "
+        "``full_name`` + the attributed ``plan_id`` / ``item_id`` (NULL when "
+        "not attended). A signed-up-only member can appear even when the "
+        "occurrence was never materialized (a future occurrence can carry "
+        "sign-ups with no ``class_history`` row yet) — ``class_history_id`` "
+        "is null in that case. Gym-employee gated."
     ),
     responses={
-        200: {"description": "Attendee list returned (possibly empty)"},
+        200: {"description": "Roster returned (possibly empty)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Gym not found"},

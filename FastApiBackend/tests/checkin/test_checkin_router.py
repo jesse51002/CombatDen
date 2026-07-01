@@ -22,6 +22,10 @@ from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     CheckinWarning,
 )
+from src.checkin.schema.signup_schema import (
+    SignupRemoveResponse,
+    SignupResponse,
+)
 from src.main import app
 
 _STUB_STREAK_WEEKS = 3
@@ -421,9 +425,140 @@ def test_batch_checkin_empty_member_ids_returns_422(
     assert resp.status_code == 422
 
 
+# ---------------------------------------------------------------------------
+# POST /api/v1/signup, DELETE /api/v1/signup
+# ---------------------------------------------------------------------------
+
+
+def _signup_body(gym_id: str, member_id: str, class_id: str) -> dict:
+    return {
+        "member_id": member_id,
+        "gym_id": gym_id,
+        "class_id": class_id,
+        "occurrence_date": "2026-06-01",
+    }
+
+
+def test_signup_creates_and_returns_id(client, auth_headers, fake_gym_id):
+    """A fresh sign-up returns 200 with already_signed_up=False."""
+    signup_id = uuid4()
+    service = MagicMock()
+    service.create = AsyncMock(
+        return_value=SignupResponse(signup_id=signup_id, already_signed_up=False)
+    )
+    app.container.signup_service.override(service)
+    try:
+        resp = client.post(
+            "/api/v1/signup",
+            json=_signup_body(fake_gym_id, str(uuid4()), str(uuid4())),
+            headers=auth_headers,
+        )
+    finally:
+        app.container.signup_service.reset_override()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["signup_id"] == str(signup_id)
+    assert body["already_signed_up"] is False
+
+
+def test_signup_idempotent_repeat_returns_existing_id(
+    client, auth_headers, fake_gym_id
+):
+    """A repeat sign-up returns the existing signup_id, already_signed_up=True."""
+    signup_id = uuid4()
+    service = MagicMock()
+    service.create = AsyncMock(
+        return_value=SignupResponse(signup_id=signup_id, already_signed_up=True)
+    )
+    app.container.signup_service.override(service)
+    try:
+        resp = client.post(
+            "/api/v1/signup",
+            json=_signup_body(fake_gym_id, str(uuid4()), str(uuid4())),
+            headers=auth_headers,
+        )
+    finally:
+        app.container.signup_service.reset_override()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["signup_id"] == str(signup_id)
+    assert body["already_signed_up"] is True
+
+
+def test_signup_full_class_returns_400(client, auth_headers, fake_gym_id):
+    """A ValueError('Class is full') from the service maps to 400."""
+    service = MagicMock()
+    service.create = AsyncMock(side_effect=ValueError("Class is full"))
+    app.container.signup_service.override(service)
+    try:
+        resp = client.post(
+            "/api/v1/signup",
+            json=_signup_body(fake_gym_id, str(uuid4()), str(uuid4())),
+            headers=auth_headers,
+        )
+    finally:
+        app.container.signup_service.reset_override()
+
+    assert resp.status_code == 400, resp.text
+    assert "full" in resp.json()["detail"].lower()
+
+
+def test_signup_unknown_class_returns_404(client, auth_headers, fake_gym_id):
+    """A ValueError('Class not found') from the service maps to 404."""
+    service = MagicMock()
+    service.create = AsyncMock(side_effect=ValueError("Class not found"))
+    app.container.signup_service.override(service)
+    try:
+        resp = client.post(
+            "/api/v1/signup",
+            json=_signup_body(fake_gym_id, str(uuid4()), str(uuid4())),
+            headers=auth_headers,
+        )
+    finally:
+        app.container.signup_service.reset_override()
+
+    assert resp.status_code == 404, resp.text
+
+
+def test_signup_missing_body_returns_422(client, auth_headers) -> None:
+    resp = client.post("/api/v1/signup", headers=auth_headers)
+    assert resp.status_code == 422
+
+
+def test_remove_signup_returns_removed_true(client, auth_headers, fake_gym_id):
+    service = MagicMock()
+    service.remove = AsyncMock(return_value=SignupRemoveResponse(removed=True))
+    app.container.signup_service.override(service)
+    try:
+        resp = client.request(
+            "DELETE",
+            "/api/v1/signup",
+            params={
+                "member_id": str(uuid4()),
+                "gym_id": fake_gym_id,
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.signup_service.reset_override()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["removed"] is True
+
+
+def test_remove_signup_missing_params_returns_422(client, auth_headers) -> None:
+    resp = client.request("DELETE", "/api/v1/signup", headers=auth_headers)
+    assert resp.status_code == 422
+
+
 def test_attendees_returns_list(client, auth_headers, fake_gym_id):
-    """GET /api/v1/checkin/attendees returns the attendee list (a member with a
-    NULL-membership attribution included), serializing plan/item as null."""
+    """GET /api/v1/checkin/attendees returns the combined roster: an attended
+    member (with billing attribution) and a signed-up-only member (attendance
+    fields null)."""
     class_id = uuid4()
     history_id = uuid4()
     member_a, member_b = uuid4(), uuid4()
@@ -436,6 +571,8 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
             {
                 "member_id": member_a,
                 "full_name": "Aaron Ant",
+                "signed_up": True,
+                "attended": True,
                 "log_id": uuid4(),
                 "plan_id": plan_id,
                 "item_id": item_id,
@@ -443,7 +580,9 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
             {
                 "member_id": member_b,
                 "full_name": "Bea Bee",
-                "log_id": uuid4(),
+                "signed_up": True,
+                "attended": False,
+                "log_id": None,
                 "plan_id": None,
                 "item_id": None,
             },
@@ -470,6 +609,11 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
     assert body["class_history_id"] == str(history_id)
     assert len(body["attendees"]) == 2
     assert body["attendees"][0]["full_name"] == "Aaron Ant"
+    assert body["attendees"][0]["signed_up"] is True
+    assert body["attendees"][0]["attended"] is True
+    assert body["attendees"][1]["signed_up"] is True
+    assert body["attendees"][1]["attended"] is False
+    assert body["attendees"][1]["log_id"] is None
     assert body["attendees"][1]["plan_id"] is None
     assert body["attendees"][1]["item_id"] is None
 

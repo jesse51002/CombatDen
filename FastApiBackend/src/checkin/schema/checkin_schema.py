@@ -127,6 +127,9 @@ class ResolvedClass(BaseModel):
         class_history_id: The materialized occurrence row (find-or-create).
         class_id: The owning class.
         gym_id: The owning gym.
+        occurrence_date: The gym-local calendar date of the occurrence (the
+            same date the caller addressed it by) — used by the capacity gate
+            to read the signed-up-or-attended union for this occurrence.
         occurred_at: UTC, timezone-aware start instant of the occurrence.
         points_worth: Points awarded for attending this class.
         class_name: The class's display name (snapshotted into the activity).
@@ -142,6 +145,7 @@ class ResolvedClass(BaseModel):
     class_history_id: UUID
     class_id: UUID
     gym_id: UUID
+    occurrence_date: date
     occurred_at: datetime
     points_worth: int
     class_name: str
@@ -269,34 +273,45 @@ class CheckinRemoveResponse(BaseModel):
 
 
 class Attendee(BaseModel):
-    """One member who attended a class occurrence.
+    """One member who signed up for, attended, or both, a class occurrence.
 
     Attributes:
-        member_id: The attending member.
+        member_id: The member.
         full_name: The member's display name.
-        log_id: The attendance row.
-        plan_id: The plan the attendance was attributed to (None for a
-            no-membership staff check-in).
-        item_id: The membership row the attendance was attributed to (None for a
-            no-membership staff check-in).
+        signed_up: True when the member has a ``class_signups`` row for this
+            occurrence.
+        attended: True when the member has a ``member_attendance`` row for
+            this occurrence.
+        log_id: The attendance row. None when not attended (signed-up-only).
+        plan_id: The plan the attendance was attributed to. None when not
+            attended, or a no-membership staff check-in.
+        item_id: The membership row the attendance was attributed to. None
+            when not attended, or a no-membership staff check-in.
     """
 
     member_id: UUID
     full_name: str
-    log_id: UUID
+    signed_up: bool
+    attended: bool
+    log_id: UUID | None = None
     plan_id: UUID | None = None
     item_id: UUID | None = None
 
 
 class AttendeeListResponse(BaseModel):
-    """Response for GET /api/v1/checkin/attendees.
+    """Response for GET /api/v1/checkin/attendees — the combined roster.
+
+    Everyone who signed up OR attended the occurrence, each flagged. A
+    signed-up-only member can appear even when the occurrence was never
+    materialized (a future occurrence can carry sign-ups with no
+    ``class_history`` row yet).
 
     Attributes:
         class_id: The class the occurrence belongs to.
         occurrence_date: The gym-local calendar date queried.
         class_history_id: The materialized occurrence row, or None when the
-            occurrence was never materialized (no check-ins yet → empty list).
-        attendees: The members who attended, ordered by name.
+            occurrence was never materialized (no check-ins yet).
+        attendees: Everyone signed up or attended, ordered by name.
     """
 
     class_id: UUID

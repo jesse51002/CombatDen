@@ -72,6 +72,9 @@ schema_paths = [
     "./schemas/class_instance_exceptions.sql",
     "./schemas/class_range_exceptions.sql",
     "./schemas/class_history.sql",
+    # A member's reservation for an occurrence; FKs gyms + gym_classes + members,
+    # all already loaded above.
+    "./schemas/class_signups.sql",
     "./schemas/gym_rewards.sql",
     "./schemas/member_reward_redemptions.sql",
     # Waiver catalog + versioning + e-sign tracking. Plain gym config (FK gyms +

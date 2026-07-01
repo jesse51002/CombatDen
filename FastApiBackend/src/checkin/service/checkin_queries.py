@@ -18,6 +18,7 @@ from sqlalchemy import text
 from src.checkin import SQL_DIR
 from src.classes import SQL_DIR as CLASSES_SQL_DIR
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_local_day_bounds_utc
 from src.shared.sql_loader import load_sql
 
 
@@ -110,21 +111,45 @@ class CheckinQueries:
             )
         return row["timezone"] if row else None
 
-    async def count_attendance(self, class_history_id: UUID) -> int:
-        """Current recorded attendance for an occurrence (capacity gate)."""
-        sql = load_sql(SQL_DIR / "classes_count_attendance.sql")
+    async def get_signup_or_attended_members(
+        self,
+        class_id: UUID,
+        gym_id: UUID,
+        occurrence_date: date,
+    ) -> set[UUID]:
+        """Distinct members signed-up OR attended for one occurrence.
+
+        The capacity-reserving set (``signup_capacity_count.sql``) — shared by
+        ``SignupService``'s create-time capacity check and the check-in
+        capacity gate, so a member already counted (a prior sign-up, or a
+        prior/walk-in check-in) is never double-counted against the room.
+
+        Raises:
+            ValueError: If the gym does not exist.
+        """
+        gym_tz = await self.get_gym_timezone(gym_id)
+        if gym_tz is None:
+            raise ValueError("Gym not found")
+        day_start, day_end = gym_local_day_bounds_utc(occurrence_date, gym_tz)
+        sql = load_sql(SQL_DIR / "signup_capacity_count.sql")
         async with self._db_pool.session() as session:
-            row = (
+            rows = (
                 (
                     await session.execute(
                         text(sql),
-                        {"class_history_id": str(class_history_id)},
+                        {
+                            "class_id": str(class_id),
+                            "gym_id": str(gym_id),
+                            "occurrence_date": occurrence_date,
+                            "day_start": day_start,
+                            "day_end": day_end,
+                        },
                     )
                 )
                 .mappings()
-                .fetchone()
+                .all()
             )
-        return int(row["attendance_count"]) if row else 0
+        return {row["member_id"] for row in rows}
 
     async def get_existing_attendance(
         self,
@@ -207,22 +232,31 @@ class CheckinQueries:
             )
         return row["class_history_id"] if row else None
 
-    async def get_attendees(
+    async def get_roster(
         self,
-        class_history_id: UUID,
+        class_id: UUID,
         gym_id: UUID,
+        occurrence_date: date,
+        day_start: datetime,
+        day_end: datetime,
     ) -> list[dict]:
-        """List the members who attended a materialized occurrence.
+        """List everyone who signed up OR attended one occurrence.
 
-        Joins ``member_attendance`` to ``members`` for ``full_name`` and carries
-        the attributed ``plan_id`` / ``item_id`` (both NULL for a no-membership
-        staff check-in). Gym-scoped for the employee auth boundary.
+        Joins ``class_signups`` and ``member_attendance`` (attendance via the
+        occurrence's ``class_history`` row, matched to the gym-local calendar
+        day) to ``members`` for ``full_name``, flagging each with
+        ``signed_up`` / ``attended`` and carrying the billing attribution
+        (``plan_id`` / ``item_id``, NULL when not attended). Gym-scoped for
+        the employee auth boundary.
         """
         return await self._read_all(
-            SQL_DIR / "attendees_for_occurrence.sql",
+            SQL_DIR / "roster_for_occurrence.sql",
             {
-                "class_history_id": str(class_history_id),
+                "class_id": str(class_id),
                 "gym_id": str(gym_id),
+                "occurrence_date": occurrence_date,
+                "day_start": day_start,
+                "day_end": day_end,
             },
         )
 

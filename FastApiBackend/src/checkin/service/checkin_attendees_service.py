@@ -1,20 +1,21 @@
-"""Read the members who attended one class occurrence.
+"""Read the combined roster (signed-up ∪ attended) of one class occurrence.
 
 ``list_attendees`` resolves the materialized ``class_history`` row for a
 (class, gym, gym-local occurrence date) the same way the undo service does —
 by the gym-local day's UTC bounds, so a per-occurrence time override still
-resolves to the same row — then joins ``member_attendance`` to ``members``.
-When the occurrence was never materialized (no check-ins yet) the attendee list
-is empty.
+resolves to the same row — for reporting purposes, then reads the combined
+roster: every member who is signed up (``class_signups``) OR attended
+(``member_attendance``), each flagged. A signed-up-only member's attendance
+fields are NULL; the occurrence need not be materialized for sign-ups to show
+(a future occurrence can carry sign-ups with no ``class_history`` row yet).
 
 This is a read-only sibling of the check-in write path: no expander, no
 materialize. It reuses ``CheckinQueries`` for the gym timezone, the
-find-history-for-day lookup, and the attendees join.
+find-history-for-day lookup, and the roster join.
 """
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from src.checkin.schema.checkin_schema import (
     Attendee,
@@ -22,10 +23,11 @@ from src.checkin.schema.checkin_schema import (
 )
 from src.checkin.service.checkin_queries import CheckinQueries
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_local_day_bounds_utc
 
 
 class CheckinAttendeesService:
-    """Lists the attendees of a single class occurrence.
+    """Lists the combined signed-up-or-attended roster of one occurrence.
 
     Args:
         db_pool: Injected database connection pool.
@@ -40,7 +42,7 @@ class CheckinAttendeesService:
         class_id: UUID,
         occurrence_date: date,
     ) -> AttendeeListResponse:
-        """Return the members who attended the occurrence on ``occurrence_date``.
+        """Return everyone signed up or attended on ``occurrence_date``.
 
         Raises:
             ValueError: If the gym does not exist (mapped to 404 by the router).
@@ -49,19 +51,14 @@ class CheckinAttendeesService:
         if gym_tz is None:
             raise ValueError("Gym not found")
 
-        day_start, day_end = self._day_bounds_utc(occurrence_date, gym_tz)
+        day_start, day_end = gym_local_day_bounds_utc(occurrence_date, gym_tz)
         history_id = await self._queries.find_history_for_day(
             class_id, gym_id, day_start, day_end
         )
-        if history_id is None:
-            return AttendeeListResponse(
-                class_id=class_id,
-                occurrence_date=occurrence_date,
-                class_history_id=None,
-                attendees=[],
-            )
 
-        rows = await self._queries.get_attendees(history_id, gym_id)
+        rows = await self._queries.get_roster(
+            class_id, gym_id, occurrence_date, day_start, day_end
+        )
         return AttendeeListResponse(
             class_id=class_id,
             occurrence_date=occurrence_date,
@@ -70,6 +67,8 @@ class CheckinAttendeesService:
                 Attendee(
                     member_id=row["member_id"],
                     full_name=row["full_name"],
+                    signed_up=row["signed_up"],
+                    attended=row["attended"],
                     log_id=row["log_id"],
                     plan_id=row["plan_id"],
                     item_id=row["item_id"],
@@ -77,18 +76,3 @@ class CheckinAttendeesService:
                 for row in rows
             ],
         )
-
-    @staticmethod
-    def _day_bounds_utc(
-        occurrence_date: date,
-        gym_tz: str,
-    ) -> tuple[datetime, datetime]:
-        """The gym-local day [00:00, next-00:00) converted to UTC bounds."""
-        zone = ZoneInfo(gym_tz)
-        day_start = datetime.combine(
-            occurrence_date, time(0, 0), tzinfo=zone
-        ).astimezone(UTC)
-        day_end = datetime.combine(
-            occurrence_date + timedelta(days=1), time(0, 0), tzinfo=zone
-        ).astimezone(UTC)
-        return day_start, day_end

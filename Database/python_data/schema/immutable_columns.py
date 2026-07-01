@@ -102,6 +102,17 @@ MEMBER_ATTENDANCE: frozenset[str] = frozenset(
     }
 )
 
+CLASS_SIGNUPS: frozenset[str] = frozenset(
+    {
+        "signup_id",  # PK, auto-generated UUID
+        "class_id",  # identity FK, part of UNIQUE constraint
+        "gym_id",  # identity FK, per-gym resource
+        "member_id",  # identity FK, part of UNIQUE constraint
+        "occurrence_date",  # part of UNIQUE constraint
+        "created_at",  # auto-generated timestamp
+    }
+)
+
 RANK_PRESETS: frozenset[str] = frozenset(
     {
         "preset_id",  # PK, auto-generated UUID
