@@ -106,15 +106,22 @@ class _ClassDetails extends StatelessWidget {
             text: '${row.checkedInCount} checked in',
             color: DesignConstants.primaryColor,
           )
-        else if (row.signupCount != null)
-          ClassMetaChip(
-            icon: Symbols.person_sharp,
-            text: row.occurrenceInPast
-                ? '${row.signupCount} signed up · '
-                    '${row.attendeeCount ?? 0} attended'
-                : '${row.signupCount} signed up',
-            color: DesignConstants.text2nd,
-          ),
+        // Stacked, one count per line — "N signed up · M attended" on one line
+        // overflows a narrow card.
+        else ...[
+          if (row.signupCount != null)
+            ClassMetaChip(
+              icon: Symbols.group_sharp,
+              text: '${row.signupCount} signed up',
+              color: DesignConstants.text2nd,
+            ),
+          if (row.signupCount != null && row.occurrenceInPast)
+            ClassMetaChip(
+              icon: Symbols.check_circle_sharp,
+              text: '${row.attendeeCount ?? 0} attended',
+              color: DesignConstants.text2nd,
+            ),
+        ],
       ],
     );
   }

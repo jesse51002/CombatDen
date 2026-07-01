@@ -204,9 +204,11 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: DesignConstants.spacingMedium,
-      runSpacing: DesignConstants.spacingSmall,
+    // Stacked, one chip per line — a narrow card can't fit
+    // "N signed up · M attended" on a single line without overflowing.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingSmall,
       children: [
         if (card.pointsWorth != null)
           ClassMetaChip(
@@ -217,10 +219,13 @@ class _MetaRow extends StatelessWidget {
         if (card.signupCount != null)
           ClassMetaChip(
             icon: Symbols.group_sharp,
-            text: card.occurrenceInPast
-                ? '${card.signupCount} signed up · '
-                    '${card.attendeeCount ?? 0} attended'
-                : '${card.signupCount} signed up',
+            text: '${card.signupCount} signed up',
+            color: DesignConstants.text2nd,
+          ),
+        if (card.signupCount != null && card.occurrenceInPast)
+          ClassMetaChip(
+            icon: Symbols.check_circle_sharp,
+            text: '${card.attendeeCount ?? 0} attended',
             color: DesignConstants.text2nd,
           ),
       ],
