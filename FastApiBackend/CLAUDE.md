@@ -36,6 +36,16 @@ real customers, so it is edited under a stricter rule than the rest of the repo:
   (a living document) — read it before touching `src/sync/`, and update it in the
   same change when the engine changes.
 
+## Domain builds — settle before code, audit after
+
+When a task builds or heavily reshapes a domain (tables + services + routes):
+
+- **Lock the schema shape with the founder before writing migrations or service code.** Pause at every schema inflection point and get the structure approved — rework is most expensive here.
+- **Confirm domain placement explicitly** — new domain vs fold into an existing one, and which domain owns the feature (per the root *No assumptions* rule).
+- **No demo-only code paths.** Presets/demos/imports go through the production write paths and produce production-shaped data — no special-case logic.
+- **Default to deterministic code over agent/LLM steps** for anything that can run as plain code after a user decision (diff-check → derive → save); an agent converses, the commit path is code.
+- **When the build reaches "works", run the `refine-backend` skill** as the post-build audit before hand-off.
+
 ## Workflow
 
 **Always Ask Clarifying Questions**
