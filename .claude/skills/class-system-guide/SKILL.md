@@ -4,7 +4,7 @@ description: >-
   The single source of truth for the CombatDen CLASS SYSTEM — scheduling (the
   producer) + attendance/reservations (the consumer) across two FastApiBackend
   domains and the CRM schedule surfaces. THE CENTRAL SPLIT (§0): every occurrence
-  is either MATERIALIZED (a class_history row, immutable, typically past) or
+  is either MATERIALIZED (a class_history row the backend mutates freely, past) or
   VIRTUAL (expander-computed, typically future) — every feature must handle both
   sides, and getting only one is the recurring bug. Covers the virtual-occurrence
   model
@@ -43,16 +43,22 @@ whole system — every feature must handle BOTH cases:**
   definition — edit the class and the virtual occurrence changes.
 - **MATERIALIZED** — has a `class_history` row (`find_or_create_history`, created
   lazily at check-in / on a board read of an ENDED occurrence / by the reconciler
-  sweep). Past/happened occurrences are materialized so they're an **immutable
-  snapshot**; `member_attendance` references `class_history_id`. It no longer
-  follows the class definition — editing the class does NOT change a past
-  occurrence.
+  sweep); `member_attendance` references `class_history_id`. **NOT immutable** —
+  the backend (service_role) freely changes it: the snapshot sync rewrites its
+  `occurred_at`/`duration_minutes`/`instructor_id` when you edit the occurrence,
+  reschedule re-dates or wipes it, cancel deletes it (it's append-only only for
+  `authenticated` clients, via RLS `REVOKE UPDATE`). What a materialized
+  occurrence does NOT do is auto-track **class-DEFINITION** edits — changing the
+  recurrence / name / default time never retroactively alters it (that insulation
+  is the whole reason the past renders from `class_history` instead of
+  re-expanding). You change a materialized occurrence by editing THAT occurrence,
+  which the snapshot sync writes through to its row.
 
 **How each part handles both sides — the load-bearing table:**
 
 | Part | VIRTUAL (typically future) | MATERIALIZED (typically past) |
 |---|---|---|
-| Board read (§3) | expand the live definition | render from `class_history` (immutable) |
+| Board read (§3) | expand the live definition | render from the stored `class_history` row (not re-expanded) |
 | Check-in (§5) | materialize the exact occurrence FIRST (any date), then gate | row exists → gate + write attendance |
 | Edit / override (§2) | write only the exception; materialize-on-read applies it later | ALSO **sync the `class_history` snapshot** or the edit won't show |
 | Reschedule (§4) | move the exception; no attendance to move | **wipe** (future target) or **keep + re-date** the history + attendance |
@@ -83,8 +89,9 @@ last-day clamp; `ZoneInfo(gym.timezone)` DST; cancelled dropped. `instructor_for
 is public (weekday-slot lookup) so the snapshot-sync fallback can't drift from it.
 
 ## 2. Materialization — ONE entry, idempotent, called broadly
-Materializing = writing a `class_history` row (append-only, `UNIQUE(class_id,
-occurred_at)` — the idempotency anchor). **`ClassesMaterializer`
+Materializing = writing a `class_history` row (`UNIQUE(class_id, occurred_at)` =
+the idempotency anchor; append-only for `authenticated` clients, but the backend
+mutates it — the snapshot sync / reschedule re-date / cancel delete). **`ClassesMaterializer`
 (`src/classes/service/classes_materializer.py`):**
 - `find_or_create_history(...)` — the only writer, `INSERT … ON CONFLICT DO
   NOTHING`. Never insert `class_history` elsewhere (except the seed).
@@ -106,14 +113,16 @@ occurred_at)` — the idempotency anchor). **`ClassesMaterializer`
 + instructor_id` (SQL `classes_history_snapshot_sync.sql`, service_role UPDATE).
 Called by BOTH the same-date override (`ClassesExceptionsService`) AND the
 reschedule keep-path. **Why it's load-bearing:** the past board renders from the
-immutable `class_history` row, NOT by re-expanding, so a past edit that only wrote
-an exception wouldn't show — the snapshot sync is what makes it show.
+stored `class_history` row, NOT by re-expanding, so a past edit that only wrote
+an exception (without the snapshot sync) wouldn't show — the sync is what writes
+the edit through to the materialized row.
 
 ## 3. The board past/future split
 The schedule board (`ClassesScheduleReaderService`, `GET /api/v1/classes/instances`)
 splits at the occurrence's **END** time (`occurred_at + duration`, `_has_ended`):
-a strictly-ENDED occurrence renders from **`class_history`** (immutable, incl.
-soft-deleted classes — `classes_board_past_history.sql`); an in-session or future
+a strictly-ENDED occurrence renders from **`class_history`** (the stored snapshot,
+insulated from class-DEFINITION drift, incl. soft-deleted classes —
+`classes_board_past_history.sql`); an in-session or future
 one renders from the **live expander**. Opening the board (and the dashboard's
 Upcoming Classes, whose window reaches ~7d into the recent past) MATERIALIZES
 ended-but-unrecorded occurrences via `materialize`. Dedup is by (class_id, gym-local
