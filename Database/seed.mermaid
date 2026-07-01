@@ -139,6 +139,18 @@ flowchart TB
   Attendance -->|"95%"| a_yes["attended · covered members attend a 1–15 subset"]
   Attendance -->|"5%"| a_no["never attended"]
 
+  %% ── Class sign-ups (reservations, NOT attendance -- member_attendance is
+  %% still only written by a check-in). Each row is exactly ONE of these
+  %% (mutually exclusive -- simple fan). Past sign-ups reuse the class_history
+  %% / attendance rows above (same members, same occurrence dates) but
+  %% class_signups has no FK to class_history, so it's its own tree rather
+  %% than nested under Attendance. Every sign-up (past or future) is capped by
+  %% the occurrence's effective max_capacity (never over-fills the room).
+  Signups["🙋 Class sign-ups (reservations)"]
+  Signups -->|"past · ~65% of attended"| sg_att["signed-up-and-attended"]
+  Signups -->|"past · capacity-capped"| sg_noshow["no-show<br/>signed up, never attended"]
+  Signups -.->|"future · ≤7-day horizon<br/>active classes only"| sg_future["future sign-ups only<br/>no attendance yet · capacity-capped"]
+
   %% ── Rewards ×4 + redemptions (two simple splits) ──
   Rewards["🎁 Rewards ×4 (50–500 pts)"]
   Rewards -->|"~80%"| rw_active["active"]
@@ -169,12 +181,12 @@ flowchart TB
 
   %% ── Waivers ×1 — the undeletable default authorized-payer waiver per gym ──
   Waivers["📜 Waivers ×1"]
-  Waivers -->|"v1"| w_default["default authorized-payer (is_default)<br/>1 catalog + 1 version · seed-copied from platform default · editable · undeletable"]
+  Waivers -->|"v1"| w_dflt["default authorized-payer (is_default)<br/>1 catalog + 1 version · seed-copied from platform default · editable · undeletable"]
 
   %% ── styling: hub = entity · dim = co-occurring dimension · leaf = a type ──
   classDef hub  fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
-  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History,Waivers hub;
+  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Signups,Rewards,Activities,Financials,History,Waivers hub;
   class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day,w_default leaf;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,sg_att,sg_noshow,sg_future,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day,w_dflt leaf;

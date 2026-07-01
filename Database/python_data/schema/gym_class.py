@@ -106,8 +106,10 @@ class MemberAttendanceCreate(SeedModel):
 class ClassSignupCreate(SeedModel):
     """A member's reservation for a class occurrence (not attendance).
 
-    Registered for round-trip parity with the schema; no seed generator
-    currently produces these rows (see the class-system build report).
+    Seeded by `generators.classes.generate_class_signups` for both past
+    occurrences (mixed with the already-seeded class_history / attendance,
+    for a signed-up-and-attended / no-show / walk-in mix) and future
+    occurrences (sign-ups only -- a future occurrence has no attendance yet).
     """
 
     signup_id: UUID

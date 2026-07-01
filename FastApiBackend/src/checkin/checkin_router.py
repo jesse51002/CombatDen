@@ -216,21 +216,32 @@ async def remove_checkin(
         "Reserves ``member_id`` a spot on the occurrence addressed by "
         "``class_id`` + ``occurrence_date``. A sign-up is a reservation, NOT "
         "attendance — ``member_attendance`` is still only written by a "
-        "check-in. Capacity is reserving: rejected with 'Class is full' when "
-        "the occurrence's effective ``max_capacity`` is already reached by "
-        "the DISTINCT count of members signed-up OR attended (NULL capacity "
-        "= unlimited, never blocks). Idempotent — signing up twice for the "
-        "same (member, occurrence) returns the existing ``signup_id`` with "
-        "``already_signed_up = true`` and consumes no extra capacity. Both "
-        "staff (any employee of the gym) and the member themselves may call "
-        "this."
+        "check-in. The occurrence is validated (WITHOUT materializing "
+        "``class_history`` — sign-ups are routinely for future occurrences) "
+        "before capacity is checked: rejected with 'Class has been deleted' "
+        "/ 'Class is not active' for a soft-deleted / inactive class, "
+        "'Not a class occurrence on that date' / 'This class is cancelled "
+        "that day' when ``occurrence_date`` isn't a real, non-cancelled "
+        "occurrence of the class. Capacity is reserving: rejected with "
+        "'Class is full' when the occurrence's effective ``max_capacity`` is "
+        "already reached by the DISTINCT count of members signed-up OR "
+        "attended (NULL capacity = unlimited, never blocks). Idempotent — "
+        "signing up twice for the same (member, occurrence) returns the "
+        "existing ``signup_id`` with ``already_signed_up = true`` and "
+        "consumes no extra capacity. Both staff (any employee of the gym) "
+        "and the member themselves may call this."
     ),
     responses={
         200: {"description": "Sign-up created (or an idempotent repeat)"},
-        400: {"description": "Class is full"},
+        400: {
+            "description": (
+                "Class is full / deleted / inactive, or the date isn't a "
+                "real, non-cancelled occurrence of the class"
+            )
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this member"},
-        404: {"description": "Class not found"},
+        404: {"description": "Class or gym not found"},
     },
 )
 @inject

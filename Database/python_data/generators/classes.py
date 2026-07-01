@@ -15,16 +15,20 @@ from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 
 from schema.gym_class import (
-    MemberAttendanceCreate,
     ClassHistoryCreate,
     ClassInstanceExceptionCreate,
     ClassRangeExceptionCreate,
+    ClassSignupCreate,
     GymClassCreate,
+    MemberAttendanceCreate,
     RecurringUnit,
 )
 from schema.gym_employee import GymEmployeeCreate
 from schema.member import MemberCreate
 from schema.member_membership import MemberMembershipCreate
+
+# How far ahead of today a class's future occurrences get seeded sign-ups.
+FUTURE_SIGNUP_HORIZON_DAYS = 7
 
 CLASS_TEMPLATES = [
     {"class_name": "Morning BJJ", "class_description": "Fundamentals and sparring for all levels.", "duration_minutes": 60},
@@ -448,3 +452,217 @@ def generate_class_history_and_attendance(
             )
 
     return history, attendance
+
+
+def _effective_capacity(
+    cls: GymClassCreate,
+    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    occurrence_date: date,
+) -> int | None:
+    """The class's max_capacity, overridden per-occurrence by an instance
+    exception's new_max_capacity when one is set for that date. None means
+    unlimited -- never blocks. Mirrors SignupService._effective_capacity's
+    resolution (class default, exception override wins) on the live path.
+    """
+    exc = instances_by_class.get(cls.class_id, {}).get(occurrence_date)
+    if exc is not None and exc.new_max_capacity is not None:
+        return exc.new_max_capacity
+    return cls.max_capacity
+
+
+def _is_cancelled_on(
+    original_date: date,
+    instance_exceptions: dict[date, ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> bool:
+    """Whether `original_date` is cancelled, honoring the same precedence
+    ClassesExpander uses: an instance exception on the exact date is
+    authoritative; absent one, the earliest-created covering range exception
+    applies. (The seed never generates a reschedule -- `new_date` is always
+    None on a seeded instance exception -- so unlike `_resolve_occurrence`
+    this doesn't need to special-case one.)
+    """
+    instance = instance_exceptions.get(original_date)
+    if instance is not None:
+        return instance.is_cancelled
+    covering = _covering_range(range_exceptions, original_date)
+    return covering is not None and covering.is_cancelled
+
+
+def _future_occurrence_dates(
+    cls: GymClassCreate,
+    today: date,
+    instance_exceptions: dict[date, ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> list[date]:
+    """Non-cancelled occurrence dates from tomorrow through
+    FUTURE_SIGNUP_HORIZON_DAYS ahead.
+
+    Reuses `_enumerate_occurrences`'s recurrence walk (the same
+    day-flag/interval math the expander mirrors) with the horizon as its
+    `until` bound and a generous `max_count`, then keeps only the
+    strictly-future, non-cancelled dates -- `_enumerate_occurrences` itself
+    only ever looks backward from `today`, so this is the one place the seed
+    looks forward.
+    """
+    horizon = today + timedelta(days=FUTURE_SIGNUP_HORIZON_DAYS)
+    all_dates = _enumerate_occurrences(cls, horizon, max_count=10_000)
+    return [
+        d
+        for d in all_dates
+        if d > today
+        and not _is_cancelled_on(d, instance_exceptions, range_exceptions)
+    ]
+
+
+def _past_signups(
+    gym_id: uuid.UUID,
+    gym_timezone: str,
+    history: list[ClassHistoryCreate],
+    attendance: list[MemberAttendanceCreate],
+    classes_by_id: dict[UUID, GymClassCreate],
+    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    member_ids: list[UUID],
+) -> list[ClassSignupCreate]:
+    """Sign-ups for already-occurred class_history rows: a realistic mix of
+    signed-up-and-attended, no-show (signed up, never attended), and walk-in
+    (attended, no sign-up row -- left alone, so attendance is untouched).
+
+    Respects each occurrence's effective max_capacity by never growing the
+    signed-up-or-attended union past it: no-show sign-ups only fill the
+    remaining room after the occurrence's (already-generated, unbounded)
+    attendance count -- when attendance alone already fills/exceeds the
+    room, only already-attended members get a mirrored sign-up row.
+    """
+    attendance_by_history: dict[UUID, list[MemberAttendanceCreate]] = defaultdict(list)
+    for a in attendance:
+        attendance_by_history[a.class_history_id].append(a)
+
+    signups: list[ClassSignupCreate] = []
+    for h in history:
+        attended_ids = [a.member_id for a in attendance_by_history.get(h.class_history_id, [])]
+        if not attended_ids and random.random() < 0.7:
+            continue  # most attendance-less occurrences stay signup-less too
+
+        cls = classes_by_id[h.class_id]
+        occ_date = h.occurred_at.astimezone(ZoneInfo(gym_timezone)).date()
+        effective_capacity = _effective_capacity(cls, instances_by_class, occ_date)
+
+        # Some attended members also get a mirrored sign-up row
+        # (signed-up-and-attended); the rest stay walk-ins.
+        signed_and_attended = {m for m in attended_ids if random.random() < 0.65}
+
+        # No-shows: signed up, never attended -- capped by whatever room is
+        # left under the effective capacity after the attended count.
+        room = (
+            3
+            if effective_capacity is None
+            else max(effective_capacity - len(attended_ids), 0)
+        )
+        no_show_pool = [m for m in member_ids if m not in attended_ids]
+        no_shows: set[UUID] = set()
+        max_no_shows = min(len(no_show_pool), 3, room)
+        if max_no_shows > 0 and random.random() < 0.5:
+            no_shows = set(random.sample(no_show_pool, random.randint(1, max_no_shows)))
+
+        for member_id in signed_and_attended | no_shows:
+            signups.append(
+                ClassSignupCreate(
+                    signup_id=uuid.uuid4(),
+                    gym_id=gym_id,
+                    class_id=h.class_id,
+                    member_id=member_id,
+                    occurrence_date=occ_date,
+                )
+            )
+    return signups
+
+
+def _future_signups(
+    gym_id: uuid.UUID,
+    classes: list[GymClassCreate],
+    today: date,
+    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    ranges_by_class: dict[UUID, list[ClassRangeExceptionCreate]],
+    member_ids: list[UUID],
+) -> list[ClassSignupCreate]:
+    """Sign-ups-only (no attendance exists yet) for each active class's
+    non-cancelled occurrences up to FUTURE_SIGNUP_HORIZON_DAYS ahead.
+    Respects each occurrence's effective max_capacity.
+    """
+    signups: list[ClassSignupCreate] = []
+    for cls in classes:
+        if not cls.is_active or cls.is_deleted:
+            continue  # mirrors SignupService's occurrence validation
+
+        cls_instances = instances_by_class.get(cls.class_id, {})
+        cls_ranges = ranges_by_class.get(cls.class_id, [])
+        for occ_date in _future_occurrence_dates(cls, today, cls_instances, cls_ranges):
+            effective_capacity = _effective_capacity(cls, instances_by_class, occ_date)
+            pool_size = (
+                min(len(member_ids), 8)
+                if effective_capacity is None
+                else min(effective_capacity, len(member_ids))
+            )
+            if pool_size == 0:
+                continue
+            k = random.randint(0, pool_size)
+            if k == 0:
+                continue
+            for member_id in random.sample(member_ids, k):
+                signups.append(
+                    ClassSignupCreate(
+                        signup_id=uuid.uuid4(),
+                        gym_id=gym_id,
+                        class_id=cls.class_id,
+                        member_id=member_id,
+                        occurrence_date=occ_date,
+                    )
+                )
+    return signups
+
+
+def generate_class_signups(
+    gym_id: uuid.UUID,
+    gym_timezone: str,
+    classes: list[GymClassCreate],
+    members: list[MemberCreate],
+    history: list[ClassHistoryCreate],
+    attendance: list[MemberAttendanceCreate],
+    instance_exceptions: list[ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> list[ClassSignupCreate]:
+    """Seed class_signups (reservations, NOT attendance) for both past and
+    future occurrences, so old classes show a realistic "N signed up / M
+    attended" mix and upcoming classes show "N signed up".
+
+    Past occurrences reuse the class_history/attendance rows already built
+    by `generate_class_history_and_attendance` (see `_past_signups`). Future
+    occurrences are freshly enumerated up to FUTURE_SIGNUP_HORIZON_DAYS
+    ahead for active, non-deleted, non-cancelled class-days only --
+    `member_attendance` is never written for a future occurrence; a sign-up
+    is a reservation, not attendance, so the future side of this function is
+    the only seeding a not-yet-occurred class gets.
+    """
+    if not members or not classes:
+        return []
+
+    today = date.today()
+    classes_by_id = {c.class_id: c for c in classes}
+    instances_by_class = _instance_exceptions_by_class(instance_exceptions)
+    ranges_by_class = _range_exceptions_by_class(range_exceptions)
+    member_ids = [m.member_id for m in members]
+
+    signups = _past_signups(
+        gym_id,
+        gym_timezone,
+        history,
+        attendance,
+        classes_by_id,
+        instances_by_class,
+        member_ids,
+    )
+    signups += _future_signups(
+        gym_id, classes, today, instances_by_class, ranges_by_class, member_ids
+    )
+    return signups

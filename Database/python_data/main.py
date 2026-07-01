@@ -28,7 +28,8 @@ Flow:
           on one worker, several families at once.
        g. A couple of overdue members via Stripe test clocks (direct Stripe).
        i. Engagement (direct DB, keyed on the backend member_ids): classes,
-          class_history + attendance, rewards + redemptions, activities.
+          class_history + attendance, class_signups (past + future
+          reservations), rewards + redemptions, activities.
        j. Invoice + charge history (direct DB, synthetic Stripe IDs).
        k. gym_history rollup.
 
@@ -185,7 +186,7 @@ def seed() -> None:
         gym_rewards = bs_rewards.create(client, gym_id)
 
         progress.log("Creating class history + attendance...")
-        bs_classes.create_history_and_attendance(
+        history, attendance = bs_classes.create_history_and_attendance(
             client,
             gym_id,
             bundle.gym.timezone,
@@ -193,6 +194,20 @@ def seed() -> None:
             classes,
             members,
             membership_rows,
+            instance_exc,
+            range_exc,
+        )
+
+        progress.log("Creating class sign-ups...")
+        bs_classes.create_signups(
+            client,
+            gym_id,
+            bundle.gym.timezone,
+            bundle.gym_name,
+            classes,
+            members,
+            history,
+            attendance,
             instance_exc,
             range_exc,
         )

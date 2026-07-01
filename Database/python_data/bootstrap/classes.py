@@ -10,11 +10,12 @@ import uuid
 from constants import CLASSES_PER_GYM
 from generators import classes as classes_generator
 from schema.gym_class import (
-    MemberAttendanceCreate,
     ClassHistoryCreate,
     ClassInstanceExceptionCreate,
     ClassRangeExceptionCreate,
+    ClassSignupCreate,
     GymClassCreate,
+    MemberAttendanceCreate,
 )
 from schema.gym_employee import GymEmployeeCreate
 from schema.member import MemberCreate
@@ -91,6 +92,40 @@ def create_history_and_attendance(
             ).execute()
 
     return history, attendance
+
+
+def create_signups(
+    client: Client,
+    gym_id: uuid.UUID,
+    gym_timezone: str,
+    gym_name: str,
+    classes: list[GymClassCreate],
+    members: list[MemberCreate],
+    history: list[ClassHistoryCreate],
+    attendance: list[MemberAttendanceCreate],
+    instance_exceptions: list[ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> list[ClassSignupCreate]:
+    """Seed class_signups (reservations) for both past and future occurrences.
+
+    Past sign-ups reuse the already-generated `history` / `attendance` rows
+    (a realistic signed-up-and-attended / no-show / walk-in mix); future
+    sign-ups are sign-ups only -- a future occurrence has no attendance yet.
+    """
+    signups = classes_generator.generate_class_signups(
+        gym_id,
+        gym_timezone,
+        classes,
+        members,
+        history,
+        attendance,
+        instance_exceptions,
+        range_exceptions,
+    )
+    if signups:
+        _bulk_insert(client, "class_signups", signups)
+    print(f"  {gym_name}: {len(signups)} class sign-ups")
+    return signups
 
 
 def _bulk_insert(client: Client, table: str, rows: list) -> None:

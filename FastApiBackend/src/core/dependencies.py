@@ -259,12 +259,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         CheckinAttendeesService,
         db_pool=db_pool,
     )
-    # Create / remove a member's sign-up (reservation) for an occurrence. Its
-    # create-time capacity check reads the same signed-up-or-attended union the
-    # check-in capacity gate reads (both go through CheckinQueries).
+    # Create / remove a member's sign-up (reservation) for an occurrence.
+    # create() validates the occurrence via the same classes_expander used by
+    # checkin_class_resolver (WITHOUT materializing), then its capacity check
+    # reads the same signed-up-or-attended union the check-in capacity gate
+    # reads (both go through CheckinQueries).
     signup_service = providers.Factory(
         SignupService,
         db_pool=db_pool,
+        expander=classes_expander,
     )
     # Shared per-member check-in reverser: delete attendance, claw back points,
     # drop a feed activity, reverse the pack auto-end — on a KNOWN occurrence, in
