@@ -13,15 +13,15 @@ import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 enum _Phase { select, processing, results }
 
-/// "Sign up members" for one class occurrence — the FUTURE-side counterpart
+/// "Reserve members" for one class occurrence — the FUTURE-side counterpart
 /// of `ClassBatchCheckInDialog`: pick members → submit → a per-member results
-/// step (✓ signed up / already signed up / ✗ failed, e.g. "Class is full").
+/// step (✓ reserved / already reserved / ✗ failed, e.g. "Class is full").
 /// There is no batch sign-up endpoint — [ScheduleBloc] loops
 /// `POST /api/v1/signup` once per member; one member's failure never sinks
 /// the rest, and there's no "confirm anyway" retry (unlike check-in's
-/// warnings) since a sign-up either succeeds or the room is full. Shares the
-/// board's [ScheduleBloc] (a successful run reloads the week so the board's
-/// "N signed up" chip updates).
+/// warnings) since a reservation either succeeds or the room is full. Shares
+/// the board's [ScheduleBloc] (a successful run reloads the week so the
+/// board's "N reserved" chip updates).
 class ClassSignupDialog extends StatefulWidget {
   final String classId;
   final String gymId;
@@ -108,16 +108,16 @@ class _ClassSignupDialogState extends State<ClassSignupDialog> {
       listener: _onState,
       child: switch (_phase) {
         _Phase.processing => const AppDialog(
-            title: 'Sign up members',
+            title: 'Reserve members',
             body: CheckInProcessingView(),
           ),
         _Phase.results => AppDialog(
-            title: 'Sign up members',
+            title: 'Reserve members',
             body: SignupResultsView(memberNames: _names),
             actions: checkInDoneActions(context),
           ),
         _Phase.select => AppDialog(
-            title: 'Sign up members',
+            title: 'Reserve members',
             body: BatchCheckInPicker(
               gymId: widget.gymId,
               description: 'Pick the members to reserve a spot in this '
@@ -127,8 +127,8 @@ class _ClassSignupDialogState extends State<ClassSignupDialog> {
             ),
             actions: checkInChoiceActions(
               primaryLabel: _selectedIds.isEmpty
-                  ? 'Sign up'
-                  : 'Sign up ${_selectedIds.length}',
+                  ? 'Reserve'
+                  : 'Reserve ${_selectedIds.length}',
               onPrimary: _selectedIds.isEmpty
                   ? null
                   : () => _submit(_selectedIds.toList()),

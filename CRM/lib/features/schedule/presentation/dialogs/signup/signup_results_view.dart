@@ -7,11 +7,11 @@ import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/presentation/dialogs/signup/signup_result_row.dart';
 
-/// The "Sign up members" per-member breakdown, read live off the
-/// [ScheduleBloc]: a summary line, then one row per member (signed up /
-/// already signed up / failed — e.g. "Class is full"). There is no retry
+/// The "Reserve members" per-member breakdown, read live off the
+/// [ScheduleBloc]: a summary line, then one row per member (reserved /
+/// already reserved / failed — e.g. "Class is full"). There is no retry
 /// step here (unlike the batch check-in's "needs confirmation" override) —
-/// a failed sign-up (usually the room filling up) is just reported.
+/// a failed reservation (usually the room filling up) is just reported.
 class SignupResultsView extends StatelessWidget {
   final Map<String, String> memberNames;
 
@@ -29,7 +29,7 @@ class SignupResultsView extends StatelessWidget {
           children: [
             Text(
               '${result.signedUpCount} of ${result.results.length} '
-              'newly signed up.',
+              'newly reserved.',
               style:
                   DesignConstants.p.copyWith(color: DesignConstants.text2nd),
             ),

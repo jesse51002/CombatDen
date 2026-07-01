@@ -106,13 +106,13 @@ class _ClassDetails extends StatelessWidget {
             text: '${row.checkedInCount} checked in',
             color: DesignConstants.primaryColor,
           )
-        // Stacked, one count per line — "N signed up · M attended" on one line
+        // Stacked, one count per line — "N reserved · M attended" on one line
         // overflows a narrow card.
         else ...[
           if (row.signupCount != null)
             ClassMetaChip(
               icon: Symbols.group_sharp,
-              text: '${row.signupCount} signed up',
+              text: '${row.signupCount} reserved',
               color: DesignConstants.text2nd,
             ),
           if (row.signupCount != null && row.occurrenceInPast)

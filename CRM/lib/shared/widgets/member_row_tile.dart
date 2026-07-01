@@ -16,9 +16,8 @@ class MemberRowTile extends StatelessWidget {
   final String name;
   final String? avatarUrl;
 
-  /// Optional small content rendered under the name (e.g. an "attended"
-  /// status badge on the attendee roster) — null renders the name alone,
-  /// the original single-line row.
+  /// Optional small content rendered under the name (e.g. a status badge) —
+  /// null renders the name alone, the original single-line row.
   final Widget? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;

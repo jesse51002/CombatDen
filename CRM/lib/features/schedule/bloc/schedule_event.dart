@@ -103,9 +103,9 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
   const ScheduleBatchCheckInCleared();
 }
 
-/// "Sign up members": reserve [memberIds] a spot on the occurrence of
+/// "Reserve members": reserve [memberIds] a spot on the occurrence of
 /// [classId] on [occurrenceDate], then reload the board so the board's
-/// sign-up count updates. There is no batch sign-up endpoint — the
+/// reserved count updates. There is no batch sign-up endpoint — the
 /// repository loops `POST /api/v1/signup` once per member; one member's
 /// failure (e.g. "Class is full", a transport error) never sinks the rest.
 /// The per-member breakdown lands on `signupResult`.
@@ -124,7 +124,7 @@ class ScheduleSignUpRequested extends ScheduleEvent {
   List<Object?> get props => [classId, occurrenceDate, memberIds];
 }
 
-/// Clears the sign-up outcome when the "Sign up members" dialog opens or
+/// Clears the sign-up outcome when the "Reserve members" dialog opens or
 /// closes, so a later run opens clean.
 class ScheduleSignUpCleared extends ScheduleEvent {
   const ScheduleSignUpCleared();

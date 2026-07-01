@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-/// Outcome of one member's sign-up attempt inside a "Sign up members" batch.
+/// Outcome of one member's sign-up attempt inside a "Reserve members" batch.
 ///
 /// A CRM-side aggregate — there is no backend batch sign-up endpoint, so
 /// [ScheduleBloc] loops `POST /api/v1/signup` once per member and collects
@@ -23,7 +23,7 @@ class SignupBatchResultItem extends Equatable {
   List<Object?> get props => [memberId, status, reason];
 }
 
-/// The full per-member breakdown of a "Sign up members" batch, in request
+/// The full per-member breakdown of a "Reserve members" batch, in request
 /// order. One bad member (e.g. the room is full) never sinks the rest — each
 /// [SignupBatchResultItem] is independent.
 class SignupBatchResponse extends Equatable {

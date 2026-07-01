@@ -9,30 +9,35 @@ import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/member_row_tile.dart';
+import 'package:crm/shared/widgets/view_switcher.dart';
 
 /// Max height the scrollable participant list grows to before it scrolls
 /// internally — the parent form scrolls too, so the inner list stays bounded.
 const double _kMaxRosterHeight = 280;
 
-/// Searchable, scrollable **combined roster** — everyone signed up OR
-/// attended this occurrence — shown inside the class form's "This session"
+/// Which of the roster's two lists is showing.
+enum _RosterTab { reserved, attended }
+
+/// Searchable, scrollable, **two-tab** roster — **Reserved** (everyone with a
+/// `class_signups` row for this occurrence) and **Attended** (everyone with a
+/// `member_attendance` row) — shown inside the class form's "This session"
 /// block for a past / materialized occurrence (today or earlier). A
 /// self-contained side fetch (a [FutureBuilder] over its own
 /// [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
 /// own-repository pattern. An unmaterialized occurrence with no sign-ups
 /// either and an empty roster both read "No attendees yet."
 ///
-/// An attended member shows a green ✓ + a small "attended" caption under
-/// their name (via [MemberRowTile.subtitle]); a signed-up-not-attended
-/// member (a no-show, once the class has passed) shows without it.
+/// A member can appear on both tabs (reserved AND attended) — which tab a
+/// row is on determines what its remove (×) does, not the member's own
+/// [Attendee.attended] flag: a **Reserved** row's removal cancels the
+/// reservation (`DELETE /api/v1/signup`); an **Attended** row's removal
+/// reverses the check-in (`DELETE /api/v1/checkin`). Tapping it confirms,
+/// then on success refetches the roster and surfaces a SnackBar; on failure
+/// surfaces an error SnackBar. Never a silent dismiss.
 ///
-/// Each row also carries a remove (×) action — a staff correction — that
-/// branches on the member's [Attendee.attended]: an attended member's
-/// removal reverses their check-in (`DELETE /api/v1/checkin`); a
-/// signed-up-only member's removal cancels their reservation
-/// (`DELETE /api/v1/signup`). Tapping it confirms, then on success refetches
-/// the roster and surfaces a SnackBar; on failure surfaces an error SnackBar.
-/// Never a silent dismiss.
+/// Defaults to whichever tab has entries (Reserved if both or neither do),
+/// then stays on whatever the staff member picked across a refetch — an
+/// action on one row shouldn't snap the view back to the default tab.
 class ClassAttendeeRoster extends StatefulWidget {
   final String gymId;
   final String classId;
@@ -54,6 +59,10 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
       ScheduleRepository(apiClient: ApiClient());
   late Future<AttendeeListResponse> _future;
 
+  /// Null until the first load picks a default; stays as the staff member's
+  /// choice afterwards (see class doc).
+  _RosterTab? _tab;
+
   @override
   void initState() {
     super.initState();
@@ -66,47 +75,59 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         widget.occurrenceDate,
       );
 
-  /// Removes [attendee] from the roster — branches on [Attendee.attended]:
-  /// an attended member's removal reverses their check-in; a
-  /// signed-up-only member's removal cancels their sign-up instead.
-  Future<void> _removeAttendee(Attendee attendee) async {
-    final attended = attendee.attended;
+  void _refetch() => setState(() => _future = _fetch());
+
+  /// **Reserved** row removal — cancels [attendee]'s reservation for this
+  /// occurrence, regardless of whether they also attended.
+  Future<void> _cancelReservation(Attendee attendee) async {
     final confirmed = await ConfirmationModal.show(
       context: context,
-      title: attended ? 'Remove attendee?' : 'Cancel sign-up?',
-      message: attended
-          ? 'Remove ${attendee.fullName} from this class?'
-          : 'Cancel ${attendee.fullName}’s sign-up for this class?',
-      confirmLabel: attended ? 'Remove' : 'Cancel sign-up',
+      title: 'Cancel reservation?',
+      message: 'Cancel ${attendee.fullName}’s reservation for this class?',
+      confirmLabel: 'Cancel reservation',
       confirmColor: DesignConstants.badRed,
     );
     if (!confirmed || !mounted) return;
     try {
-      if (attended) {
-        await _repository.removeAttendee(
-          widget.gymId,
-          widget.classId,
-          widget.occurrenceDate,
-          attendee.memberId,
-        );
-      } else {
-        await _repository.cancelSignup(
-          widget.gymId,
-          widget.classId,
-          widget.occurrenceDate,
-          attendee.memberId,
-        );
-      }
+      await _repository.cancelSignup(
+        widget.gymId,
+        widget.classId,
+        widget.occurrenceDate,
+        attendee.memberId,
+      );
       if (!mounted) return;
-      setState(() => _future = _fetch());
-      _toast(attended ? 'Removed from class' : 'Sign-up cancelled');
+      _refetch();
+      _toast('Reservation cancelled');
     } catch (_) {
       if (!mounted) return;
-      _toast(
-        attended
-            ? 'Couldn’t remove ${attendee.fullName}. Try again.'
-            : 'Couldn’t cancel ${attendee.fullName}’s sign-up. Try again.',
+      _toast('Couldn’t cancel ${attendee.fullName}’s reservation. Try again.');
+    }
+  }
+
+  /// **Attended** row removal — reverses [attendee]'s check-in for this
+  /// occurrence, regardless of whether they're also still reserved.
+  Future<void> _removeCheckIn(Attendee attendee) async {
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: 'Remove attendee?',
+      message: 'Remove ${attendee.fullName} from this class?',
+      confirmLabel: 'Remove',
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await _repository.removeAttendee(
+        widget.gymId,
+        widget.classId,
+        widget.occurrenceDate,
+        attendee.memberId,
       );
+      if (!mounted) return;
+      _refetch();
+      _toast('Removed from class');
+    } catch (_) {
+      if (!mounted) return;
+      _toast('Couldn’t remove ${attendee.fullName}. Try again.');
     }
   }
 
@@ -136,9 +157,21 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         if (attendees.isEmpty) {
           return _Framed(child: _Hint('No attendees yet.'));
         }
-        return _AttendeeList(
-          attendees: attendees,
-          onRemove: _removeAttendee,
+        final reserved = attendees.where((a) => a.signedUp).toList();
+        final attended = attendees.where((a) => a.attended).toList();
+        // Default to whichever tab has entries; Reserved when both do (or
+        // neither does). Only picked once — later refetches (after a row
+        // action) keep whatever the staff member is looking at.
+        _tab ??= reserved.isNotEmpty || attended.isEmpty
+            ? _RosterTab.reserved
+            : _RosterTab.attended;
+        return _TabbedRoster(
+          reserved: reserved,
+          attended: attended,
+          tab: _tab!,
+          onTabChanged: (tab) => setState(() => _tab = tab),
+          onCancelReservation: _cancelReservation,
+          onRemoveCheckIn: _removeCheckIn,
         );
       },
     );
@@ -164,46 +197,75 @@ class _Framed extends StatelessWidget {
   }
 }
 
-/// The loaded roster: a count header, a name search, and the bounded,
-/// scrollable list of matching participants.
-class _AttendeeList extends StatefulWidget {
-  final List<Attendee> attendees;
-  final ValueChanged<Attendee> onRemove;
+/// The loaded roster: a header, the Reserved/Attended [ViewSwitcher] (each
+/// label carrying its count), a name search scoped to the active tab, and
+/// the bounded, scrollable list of matching participants.
+class _TabbedRoster extends StatefulWidget {
+  final List<Attendee> reserved;
+  final List<Attendee> attended;
+  final _RosterTab tab;
+  final ValueChanged<_RosterTab> onTabChanged;
+  final ValueChanged<Attendee> onCancelReservation;
+  final ValueChanged<Attendee> onRemoveCheckIn;
 
-  const _AttendeeList({required this.attendees, required this.onRemove});
+  const _TabbedRoster({
+    required this.reserved,
+    required this.attended,
+    required this.tab,
+    required this.onTabChanged,
+    required this.onCancelReservation,
+    required this.onRemoveCheckIn,
+  });
 
   @override
-  State<_AttendeeList> createState() => _AttendeeListState();
+  State<_TabbedRoster> createState() => _TabbedRosterState();
 }
 
-class _AttendeeListState extends State<_AttendeeList> {
+class _TabbedRosterState extends State<_TabbedRoster> {
   String _query = '';
+
+  List<Attendee> get _activeList =>
+      widget.tab == _RosterTab.reserved ? widget.reserved : widget.attended;
 
   List<Attendee> get _filtered {
     final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return widget.attendees;
-    return widget.attendees
-        .where((a) => a.fullName.toLowerCase().contains(q))
-        .toList();
+    final list = _activeList;
+    if (q.isEmpty) return list;
+    return list.where((a) => a.fullName.toLowerCase().contains(q)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
+    final onRemove = widget.tab == _RosterTab.reserved
+        ? widget.onCancelReservation
+        : widget.onRemoveCheckIn;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(
-          'Attendees (${widget.attendees.length})',
-          style: DesignConstants.pSemibold,
+        Text('Attendees', style: DesignConstants.pSemibold),
+        ViewSwitcher(
+          labels: [
+            'Reserved (${widget.reserved.length})',
+            'Attended (${widget.attended.length})',
+          ],
+          selectedIndex: widget.tab == _RosterTab.reserved ? 0 : 1,
+          onSelected: (i) =>
+              widget.onTabChanged(i == 0 ? _RosterTab.reserved : _RosterTab.attended),
         ),
         AppSearchBox(
           hintText: 'Search participants…',
           onChanged: (value) => setState(() => _query = value),
         ),
         if (filtered.isEmpty)
-          _Hint('No participants match “${_query.trim()}”.')
+          _Hint(
+            _activeList.isEmpty
+                ? (widget.tab == _RosterTab.reserved
+                    ? 'No one has reserved a spot yet.'
+                    : 'No one has attended yet.')
+                : 'No participants match “${_query.trim()}”.',
+          )
         else
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: _kMaxRosterHeight),
@@ -222,11 +284,10 @@ class _AttendeeListState extends State<_AttendeeList> {
                 final attendee = filtered[i];
                 return MemberRowTile(
                   name: attendee.fullName,
-                  subtitle: attendee.attended ? const _AttendedBadge() : null,
-                  trailing: _RemoveAttendeeButton(
+                  trailing: _RemoveButton(
                     name: attendee.fullName,
-                    attended: attendee.attended,
-                    onPressed: () => widget.onRemove(attendee),
+                    tab: widget.tab,
+                    onPressed: () => onRemove(attendee),
                   ),
                 );
               },
@@ -237,16 +298,17 @@ class _AttendeeListState extends State<_AttendeeList> {
   }
 }
 
-/// Remove (×) action on one roster row — a staff correction that reverses
-/// the member's check-in ([attended]) or cancels their sign-up (otherwise).
-class _RemoveAttendeeButton extends StatelessWidget {
+/// Remove (×) action on one roster row — a staff correction that cancels the
+/// reservation (Reserved tab) or reverses the check-in (Attended tab),
+/// whichever tab the row is showing on.
+class _RemoveButton extends StatelessWidget {
   final String name;
-  final bool attended;
+  final _RosterTab tab;
   final VoidCallback onPressed;
 
-  const _RemoveAttendeeButton({
+  const _RemoveButton({
     required this.name,
-    required this.attended,
+    required this.tab,
     required this.onPressed,
   });
 
@@ -254,9 +316,9 @@ class _RemoveAttendeeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      tooltip: attended
-          ? 'Remove $name from this class'
-          : 'Cancel $name’s sign-up',
+      tooltip: tab == _RosterTab.reserved
+          ? 'Cancel $name’s reservation'
+          : 'Remove $name from this class',
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -266,35 +328,6 @@ class _RemoveAttendeeButton extends StatelessWidget {
         weight: DesignConstants.iconWeight,
         color: DesignConstants.badRed,
       ),
-    );
-  }
-}
-
-/// Small "attended" status badge shown under an attended member's name on
-/// the combined roster — a check icon + label distinguishing them from a
-/// signed-up-not-yet-attended member.
-class _AttendedBadge extends StatelessWidget {
-  const _AttendedBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingTiny,
-      children: [
-        Icon(
-          Symbols.check_circle_sharp,
-          size: DesignConstants.iconSizeTiny,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.goodGreen,
-        ),
-        Text(
-          'attended',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.goodGreen,
-          ),
-        ),
-      ],
     );
   }
 }

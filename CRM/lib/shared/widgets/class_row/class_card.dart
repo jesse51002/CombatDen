@@ -205,7 +205,7 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Stacked, one chip per line — a narrow card can't fit
-    // "N signed up · M attended" on a single line without overflowing.
+    // "N reserved · M attended" on a single line without overflowing.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
@@ -219,7 +219,7 @@ class _MetaRow extends StatelessWidget {
         if (card.signupCount != null)
           ClassMetaChip(
             icon: Symbols.group_sharp,
-            text: '${card.signupCount} signed up',
+            text: '${card.signupCount} reserved',
             color: DesignConstants.text2nd,
           ),
         if (card.signupCount != null && card.occurrenceInPast)

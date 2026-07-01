@@ -16,9 +16,10 @@ final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 /// "This day's details" — the occurrence screen's default **view** mode: the
 /// occurrence's date / start time / instructor / max capacity as a readable
 /// detail panel ([DetailField] tiles in a responsive [FillGrid]), plus an
-/// "Edit" button that switches to `ClassOccurrenceOverrideSection`. A tapped
-/// occurrence is opened to be SEEN first, not dropped straight into an
-/// editable form.
+/// "Edit" button that switches to `ClassOccurrenceOverrideSection` — and,
+/// when [cancellable], a destructive-styled "Cancel this class" button
+/// beside it. A tapped occurrence is opened to be SEEN first, not dropped
+/// straight into an editable form.
 ///
 /// Always sourced from [entry] (never the editable form state) — a
 /// successful save pops the whole screen rather than returning here, so
@@ -27,10 +28,17 @@ class ClassOccurrenceReadOnlyDetails extends StatelessWidget {
   final ScheduleClassEntry entry;
   final VoidCallback onEdit;
 
+  /// Whether this occurrence can still be cancelled (upcoming, not already
+  /// cancelled) — gates the "Cancel this class" button.
+  final bool cancellable;
+  final VoidCallback onCancel;
+
   const ClassOccurrenceReadOnlyDetails({
     super.key,
     required this.entry,
     required this.onEdit,
+    required this.cancellable,
+    required this.onCancel,
   });
 
   @override
@@ -72,7 +80,20 @@ class ClassOccurrenceReadOnlyDetails extends StatelessWidget {
           const Hairline(),
           Align(
             alignment: Alignment.centerRight,
-            child: AppOutlineButton(text: 'Edit', onPressed: onEdit),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingLarge,
+              children: [
+                if (cancellable)
+                  AppOutlineButton(
+                    text: 'Cancel this class',
+                    onPressed: onCancel,
+                    borderColor: DesignConstants.badRed,
+                    textColor: DesignConstants.badRed,
+                  ),
+                AppOutlineButton(text: 'Edit', onPressed: onEdit),
+              ],
+            ),
           ),
         ],
       ),

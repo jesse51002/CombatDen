@@ -4,10 +4,10 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/schedule/data/models/signup_batch_result.dart';
 
-/// One per-member result line in the "Sign up members" breakdown: signed up
-/// (✓), already signed up (✓, no change), or failed (✗ — [item]'s `reason`,
+/// One per-member result line in the "Reserve members" breakdown: reserved
+/// (✓), already reserved (✓, no change), or failed (✗ — [item]'s `reason`,
 /// e.g. "Class is full"). Mirrors `BatchCheckInResultRow`'s shape for the
-/// simpler sign-up outcome set (no warnings / needs-confirmation).
+/// simpler reservation outcome set (no warnings / needs-confirmation).
 class SignupResultRow extends StatelessWidget {
   final SignupBatchResultItem item;
   final String memberName;
@@ -33,9 +33,10 @@ class SignupResultRow extends StatelessWidget {
       };
 
   String get _detail => switch (item.status) {
-        SignupBatchStatus.signedUp => 'Signed up',
-        SignupBatchStatus.alreadySignedUp => 'Already signed up — no change',
-        SignupBatchStatus.failed => item.reason ?? 'Could not sign up',
+        SignupBatchStatus.signedUp => 'Reserved',
+        SignupBatchStatus.alreadySignedUp => 'Already reserved — no change',
+        SignupBatchStatus.failed =>
+          item.reason ?? 'Couldn’t reserve a spot',
       };
 
   @override

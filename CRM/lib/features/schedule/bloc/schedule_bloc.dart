@@ -216,14 +216,14 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     emit(current.copyWith(clearCheckIn: true));
   }
 
-  /// "Sign up members". There is no batch sign-up endpoint, so this LOOPS
+  /// "Reserve members". There is no batch sign-up endpoint, so this LOOPS
   /// `POST /api/v1/signup` once per member on its own DEDICATED channel
   /// (`isSigningUp` / `signupResult` on [ScheduleLoaded]) — mirrors
   /// [_onBatchCheckIn]'s shape. Each member's request is isolated in its own
   /// try/catch so one failure (e.g. "Class is full") never stops the rest
   /// from being attempted; the full breakdown is committed BEFORE the
   /// best-effort board reload below, so a reload failure can't make a real
-  /// sign-up look failed.
+  /// reservation look failed.
   Future<void> _onSignUp(
     ScheduleSignUpRequested event,
     Emitter<ScheduleState> emit,

@@ -14,7 +14,7 @@ import 'package:crm/shared/widgets/paginated_member_picker.dart';
 /// multi-select roster (checkbox tiles driven by the parent's [selectedIds]).
 /// Owns its own gym-scoped member-list page source; the parent owns the
 /// [Set] of picked ids. Shared by the batch staff check-in ("Update
-/// attendees") and the "Sign up members" dialog — [description] carries each
+/// attendees") and the "Reserve members" dialog — [description] carries each
 /// caller's own copy (the two flows read differently: "attended" vs. "to
 /// reserve a spot").
 class BatchCheckInPicker extends StatefulWidget {

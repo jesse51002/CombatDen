@@ -59,15 +59,15 @@ class ScheduleLoaded extends ScheduleState {
   /// while the check-in dialog is open.
   final String? checkInError;
 
-  /// True while a "Sign up members" batch is in flight — its own channel,
+  /// True while a "Reserve members" batch is in flight — its own channel,
   /// mirroring [isCheckingIn], so it doesn't collide with class-CRUD
   /// [isMutating] or the check-in channel (both dialogs can, in principle,
   /// be opened from the same occurrence screen at different times).
   final bool isSigningUp;
 
-  /// The last "Sign up members" batch's per-member breakdown. There is no
+  /// The last "Reserve members" batch's per-member breakdown. There is no
   /// backend batch sign-up endpoint — [ScheduleBloc] loops `POST
-  /// /api/v1/signup` and assembles this itself. Rendered by the sign-up
+  /// /api/v1/signup` and assembles this itself. Rendered by the reserve
   /// dialog's results step; cleared via [ScheduleSignUpCleared].
   final SignupBatchResponse? signupResult;
 

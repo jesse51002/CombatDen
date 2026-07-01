@@ -47,16 +47,18 @@ enum _DetailsMode { view, edit }
 /// Single-occurrence screen, opened from the chooser dialog's "This
 /// occurrence" option, sharing the board's [ScheduleBloc] (via
 /// `BlocProvider.value`). Hosts: a view/edit **"This day's details"** block —
-/// read-only by default (`ClassOccurrenceReadOnlyDetails`, an Edit button
-/// switches modes) or the editable override section (instructor / start time
-/// / max capacity / date for just this day, pre-filled from [entry]'s
-/// effective values, plus a Cancel affordance back to the read-only view)
-/// whose Save dispatches `ScheduleInstanceOverridden`; the relocated
-/// `ClassOccurrenceActions` block (update attendees / cancel this day / the
-/// past-occurrence attendee roster). A cancelled occurrence collapses to just
-/// that block's note. While a mutation + reload run, the real content stays
-/// rendered under a dimmed [OccurrenceMutationOverlay] (see [build]) so the
-/// terminal success dialog appears over it, not a blank spinner page.
+/// read-only by default (`ClassOccurrenceReadOnlyDetails`: an "Edit" button
+/// switches modes, and, next to it, a destructive-styled "Cancel this class"
+/// button when the occurrence is still cancellable) or the editable override
+/// section (instructor / start time / max capacity / date for just this day,
+/// pre-filled from [entry]'s effective values, plus a Cancel affordance back
+/// to the read-only view) whose Save dispatches `ScheduleInstanceOverridden`;
+/// the relocated `ClassOccurrenceActions` block (reserve members / update
+/// attendees / the past-occurrence attendee roster). A cancelled occurrence
+/// collapses to just that block's note. While a mutation + reload run, the
+/// real content stays rendered under a dimmed [OccurrenceMutationOverlay]
+/// (see [build]) so the terminal success dialog appears over it, not a blank
+/// spinner page.
 class ClassOccurrenceScreen extends StatefulWidget {
   final ScheduleClassEntry entry;
 
@@ -335,13 +337,11 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           if (!widget.entry.isCancelled) _detailsSection(instructors),
           ClassOccurrenceActions(
             occurrenceDate: widget.entry.classDate,
-            cancellable: _cancellable,
             isCancelled: widget.entry.isCancelled,
             canSignUp: _canSignUp,
             onSignUpMembers: _signUpMembers,
             canCheckIn: _checkInOpen,
             onUpdateAttendees: _updateAttendees,
-            onCancelInstance: _cancelThisClass,
             roster: _rosterFor(),
           ),
         ],
@@ -354,6 +354,8 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       _DetailsMode.view => ClassOccurrenceReadOnlyDetails(
           entry: widget.entry,
           onEdit: _startEdit,
+          cancellable: _cancellable,
+          onCancel: _cancelThisClass,
         ),
       _DetailsMode.edit => ClassOccurrenceOverrideSection(
           instructorId: _instructorId,

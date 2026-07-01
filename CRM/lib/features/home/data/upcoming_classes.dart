@@ -17,8 +17,8 @@ class ScheduledClass {
   /// never shows this here — see [signupCount] for the label it does show.
   final int? attendeeCount;
 
-  /// Members signed up (reserved) for this occurrence — shown as "N signed
-  /// up" (0 when none).
+  /// Members signed up (reserved) for this occurrence — shown as "N
+  /// reserved" (0 when none).
   final int signupCount;
   final String? imageUrl;
 
