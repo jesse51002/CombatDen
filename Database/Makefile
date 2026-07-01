@@ -3,10 +3,6 @@ start:
 	npx supabase start
 	npx supabase migration up
 
-migration: start
-	npx supabase db diff -f $(name)
-	npx supabase migration up
-
 push:
 	npx supabase db push
 

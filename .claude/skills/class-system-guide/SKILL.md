@@ -46,8 +46,11 @@ whole system — every feature must handle BOTH cases:**
   sweep); `member_attendance` references `class_history_id`. **NOT immutable** —
   the backend (service_role) freely changes it: the snapshot sync rewrites its
   `occurred_at`/`duration_minutes`/`instructor_id` when you edit the occurrence,
-  reschedule re-dates or wipes it, cancel deletes it (it's append-only only for
-  `authenticated` clients, via RLS `REVOKE UPDATE`). What a materialized
+  reschedule re-dates or wipes it, cancel deletes it. Only the service-role
+  backend writes it at all — `authenticated` clients have NO write path (RLS
+  `REVOKE INSERT, UPDATE, DELETE`, no write policy), so a raw client can't
+  insert history past the gate; the mutation freedom is the backend's alone.
+  What a materialized
   occurrence does NOT do is auto-track **class-DEFINITION** edits — changing the
   recurrence / name / default time never retroactively alters it (that insulation
   is the whole reason the past renders from `class_history` instead of
@@ -92,8 +95,9 @@ is public (weekday-slot lookup) so the snapshot-sync fallback can't drift from i
 
 ## 2. Materialization — ONE entry, idempotent, called broadly
 Materializing = writing a `class_history` row (`UNIQUE(class_id, occurred_at)` =
-the idempotency anchor; append-only for `authenticated` clients, but the backend
-mutates it — the snapshot sync / reschedule re-date / cancel delete). **`ClassesMaterializer`
+the idempotency anchor; service-role-write-only — `authenticated` clients have NO
+write path, the backend is the only writer and also mutates it — the snapshot
+sync / reschedule re-date / cancel delete). **`ClassesMaterializer`
 (`src/classes/service/classes_materializer.py`):**
 - `find_or_create_history(...)` — the only writer, `INSERT … ON CONFLICT DO
   NOTHING`. Never insert `class_history` elsewhere (except the seed).
