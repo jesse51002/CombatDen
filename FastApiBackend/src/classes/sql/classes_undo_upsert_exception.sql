@@ -1,7 +1,7 @@
--- Mark the occurrence cancelled (un-occur) so it never re-materializes.
--- Idempotent on (class_id, original_date). Cancelling clears any reschedule
--- target (new_date = NULL): the occurrence is gone, not moved -- so cancelling
--- a previously-rescheduled occurrence leaves an unambiguous cancelled row on
+-- Mark the occurrence cancelled (un-occur). Idempotent on
+-- (class_id, original_date). Cancelling clears any reschedule target
+-- (new_date = NULL): the occurrence is gone, not moved -- so cancelling a
+-- previously-rescheduled occurrence leaves an unambiguous cancelled row on
 -- the original date.
 INSERT INTO class_instance_exceptions (
     class_id,

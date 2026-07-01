@@ -3,11 +3,12 @@
 POST /api/v1/checkin/batch
 
 The occurrence is addressed by the ``class_id`` + ``occurrence_date`` BODY
-fields; the body also carries the gym (for the admin/owner auth gate) and the
-members to check in. The endpoint resolves + materializes the single
-``class_history`` row ONCE, then runs the per-member gate over each (de-duped)
-member. One bad member never sinks the batch — its result is a ``failed`` item —
-so the whole call returns 207 Multi-Status with a per-member split (a total
+fields (``occurrence_date`` is always the occurrence's ORIGINAL date); the
+body also carries the gym (for the admin/owner auth gate) and the members to
+check in. The endpoint resolves the occurrence ONCE (a pure read — no
+materialization), then runs the per-member gate over each (de-duped) member.
+One bad member never sinks the batch — its result is a ``failed`` item — so
+the whole call returns 207 Multi-Status with a per-member split (a total
 failure is 500; see the FastApiBackend billing-error rule).
 """
 
@@ -110,13 +111,10 @@ class BatchCheckinResponse(BaseModel):
 
     Attributes:
         class_id: The class the occurrence belongs to.
-        occurrence_date: The local calendar date checked in.
-        class_history_id: The single materialized occurrence row every member
-            was checked into — exactly one row regardless of member count.
+        occurrence_date: The occurrence's ORIGINAL date, checked in.
         results: One result per (de-duped) member, in request order.
     """
 
     class_id: UUID
     occurrence_date: date
-    class_history_id: UUID
     results: list[BatchCheckinItemResult]

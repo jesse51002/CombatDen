@@ -6,7 +6,7 @@ from . import SeedModel
 
 
 class RecurringUnit(StrEnum):
-    """Mirrors the Postgres `recurring_unit` enum in gym_classes.sql."""
+    """Mirrors the Postgres `recurring_unit` enum in gym_class_schedules.sql."""
 
     daily = "daily"
     weekly = "weekly"
@@ -14,7 +14,8 @@ class RecurringUnit(StrEnum):
 
 
 class GymClassCreate(SeedModel):
-    """Gym class with embedded recurring schedule (one root schedule per class)."""
+    """Class IDENTITY only — the schedule shape lives on the versioned
+    GymClassScheduleCreate rows (gym_class_schedules)."""
 
     class_id: UUID
     gym_id: UUID
@@ -27,6 +28,22 @@ class GymClassCreate(SeedModel):
     points_worth: int = 50
     is_active: bool = True
     is_deleted: bool = False
+
+
+class GymClassScheduleCreate(SeedModel):
+    """One append-only schedule VERSION of a class (gym_class_schedules).
+
+    A version owns the occurrences whose original instant (original_date +
+    class_time in the version's own frozen timezone) falls inside
+    [effective_from, next version's effective_from).
+    """
+
+    schedule_id: UUID
+    class_id: UUID
+    gym_id: UUID
+    effective_from: datetime
+    # IANA zone frozen at mint (copied from gyms.timezone).
+    timezone: str
     class_time: time
     duration_minutes: int
     recurring_unit: RecurringUnit
@@ -61,7 +78,7 @@ class ClassInstanceExceptionCreate(SeedModel):
     new_duration_minutes: int | None = None
     new_max_capacity: int | None = None
     new_instructor_id: UUID | None = None
-    # Reschedule target (strictly after original_date); None = not rescheduled.
+    # Reschedule target (any date); None = not rescheduled.
     new_date: date | None = None
 
 
@@ -77,43 +94,40 @@ class ClassRangeExceptionCreate(SeedModel):
     new_instructor_id: UUID | None = None
 
 
-class ClassHistoryCreate(SeedModel):
-    """One row per class instance that actually occurred."""
-
-    class_history_id: UUID
-    class_id: UUID
-    gym_id: UUID
-    instructor_id: UUID | None = None
-    occurred_at: datetime
-    duration_minutes: int
-
-
 class MemberAttendanceCreate(SeedModel):
-    """A member's attendance at a specific class instance (class_history row).
+    """A member's attendance at a class occurrence.
 
-    Attributed to the membership row (item_id) + plan that covered the
-    check-in, mirroring the gated check-in flow.
+    Keyed by the occurrence's ORIGINAL slot (class_id + original_date +
+    original_time — the owning schedule version's slot before exceptions).
+    occurred_at is the denormalized EFFECTIVE start instant. Attributed to
+    the membership row (item_id) + plan that covered the check-in, mirroring
+    the gated check-in flow; both None for a no-membership admin check-in.
     """
 
     log_id: UUID
     member_id: UUID
     gym_id: UUID
-    class_history_id: UUID
-    plan_id: UUID
-    item_id: UUID
+    class_id: UUID
+    original_date: date
+    original_time: time
+    occurred_at: datetime
+    plan_id: UUID | None = None
+    item_id: UUID | None = None
 
 
 class ClassSignupCreate(SeedModel):
     """A member's reservation for a class occurrence (not attendance).
 
-    Seeded by `generators.classes.generate_class_signups` for both past
-    occurrences (mixed with the already-seeded class_history / attendance,
-    for a signed-up-and-attended / no-show / walk-in mix) and future
-    occurrences (sign-ups only -- a future occurrence has no attendance yet).
+    Keyed by the occurrence's ORIGINAL slot, exactly like attendance. Seeded
+    by `generators.classes.generate_class_signups` for both past occurrences
+    (mixed with the already-seeded attendance, for a signed-up-and-attended /
+    no-show / walk-in mix) and future occurrences (sign-ups only -- a future
+    occurrence has no attendance yet).
     """
 
     signup_id: UUID
     gym_id: UUID
     class_id: UUID
     member_id: UUID
-    occurrence_date: date
+    original_date: date
+    original_time: time

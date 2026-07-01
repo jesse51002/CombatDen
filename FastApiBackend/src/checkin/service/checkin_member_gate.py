@@ -104,7 +104,7 @@ class CheckinMemberGate:
             (``requires_confirmation``).
         """
         existing = await self._queries.get_existing_attendance(
-            member_id, resolved_class.class_history_id
+            member_id, resolved_class.class_id, resolved_class.occurrence_date
         )
         if existing is not None:
             return self._already_checked_in(
@@ -193,7 +193,6 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
@@ -237,7 +236,6 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=log_id,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=plan_id,
@@ -367,7 +365,6 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=log_id,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=True,
             chosen_plan_id=plan_id,
@@ -389,7 +386,6 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,

@@ -4,12 +4,9 @@ flowchart TB
   %% APScheduler (app lifespan) fires run() twice daily, then runs five billing
   %% step-services in order: invoice-fetch -> stale-task recovery ->
   %% orphan-cleanup -> payment-push -> subscription-orphans (cancel live Stripe
-  %% subs with no live DB link, last), then a 6th NON-billing step:
-  %% class-history materialize — a THIN per-gym loop calling the class system's
-  %% own ClassesMaterializer.materialize_current(gym_id) (the same range
-  %% materialize entry point the check-in resolve seam + the schedule board
-  %% call) — touches no Stripe / membership / payment state, so it is fully
-  %% independent and last.
+  %% subs with no live DB link, last). The reconciler is billing-only — the
+  %% class system needs no sweep (occurrences are computed from versioned
+  %% schedules, never stored).
   %% Stale-task recovery re-runs unfinished
   %% tracked tasks (src/tasks/) whose in-process run died — the recovery loop
   %% lives here, the tasks engine only knows how to run ONE task.
@@ -31,17 +28,14 @@ flowchart TB
     orphan["OrphanCleanupSweep — delete stranded not_added rows<br/>per orphan: non-blocking try paying-family lock<br/>free → delete (stripe_item_id IS NULL guard) · held → skip (op in flight)"]
     push["PaymentPushSweep — CRM→Stripe converge<br/>distinct paying parents w/ active recurring → bulk_payment_sync<br/>proration none = billing none (no charge)<br/>the sync self-heals a gone sub: cancel the family + null the sub id"]
     suborphan["SubscriptionOrphanSweep — cancel Stripe subs with no live DB link<br/>per Connect acct (deduped): list non-cancelled subs (mirrors invoice-fetch _iter)<br/>skip if younger than reconciler_orphan_min_age_seconds · skip if items &gt; one page<br/>sub item ids vs live rows (applied, unfiltered base) — none → cancel sub<br/>immediate cancel via payments primitive (idempotent) · each cancel isolated"]
-    class_history["ClassHistorySweep — materialize class occurrences (NON-billing)<br/>6th step · independent of every billing step (no Stripe / membership / payment)<br/>THIN per-gym loop: list every gym → materialize_current(gym_id) each<br/>per-gym error isolation: one gym's failure counts an error, never aborts the rest<br/>the load/expand/write logic itself lives in ClassesMaterializer (class system)"]
     fetch --> stale_task
     stale_task --> orphan
     orphan --> push
     push --> suborphan
-    suborphan --> class_history
   end
 
   handlers["📨 webhook handlers (stripe_webhooks) — record(obj) seam<br/>invoice_paid · invoice_payment_paid · invoice_payment_failed · refund"]
   engine["⚙️ PaymentSyncService.bulk_payment_sync<br/>loop families · fresh key + per-family lock · update_payments_recurring<br/>a gone sub → cancel the family + null the sub id (Stripe→CRM), never recreate"]
-  class_engine["⚙️ ClassesMaterializer (src/classes) — THE range materialize entry point<br/>materialize(gym,start,end) / materialize_current: load + expand (via ClassesExpander)<br/>+ find-or-create class_history per occurrence, up to a shared forward cutoff<br/>idempotent via uq_class_history_occurrence; also called by check-in + the schedule board"]
 
   supabase["🗄️ Supabase (service-role) — reconciler_orphan_memberships<br/>reconciler_active_billing_members · gyms_with_connect · resource_locks<br/>cancel_date / 'deleted' writes · null stripe_sub_id_month · delete orphan"]
   stripe["💳 Stripe — gym Connect: list invoices / payments / refunds · retrieve / update / cancel subscription"]
@@ -54,16 +48,14 @@ flowchart TB
   recon -->|"invoice-fetch: list recent activity per gym"| stripe
   recon -->|"subscription-orphans: list subs · cancel unlinked (per Connect acct)"| stripe
   recon -->|"subscription-orphans: live item-id linkage check"| supabase
-  recon -->|"class-history (non-billing): materialize_current(gym_id) per gym"| class_engine
   handlers -->|"upsert invoice / charge / refund rows"| supabase
   engine -->|"read desired state · write back · cancel a gone sub"| supabase
   engine -->|"create / update / cancel subscription"| stripe
-  class_engine -->|"read gym's classes + exceptions + timezone · upsert class_history rows"| supabase
 
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
-  class sched,handlers,engine,class_engine svc;
+  class sched,handlers,engine svc;
   class supabase,stripe ext;
-  class fetch,stale_task,orphan,push,suborphan,class_history svc;
+  class fetch,stale_task,orphan,push,suborphan svc;
   style recon fill:#fdf0c8,stroke:#caab2f;

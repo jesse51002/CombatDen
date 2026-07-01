@@ -16,9 +16,6 @@ did, like the bulk fan-out does.
 
 import logging
 
-from src.reconciler.service.reconciler.reconciler_class_history_sweep import (
-    ClassHistorySweep,
-)
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
 )
@@ -52,14 +49,12 @@ class ReconcilerService:
         invoice_fetch_sweep: InvoiceFetchSweep,
         stale_task_sweep: StaleTaskSweep,
         subscription_orphan_sweep: SubscriptionOrphanSweep,
-        class_history_sweep: ClassHistorySweep,
     ) -> None:
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
         self._invoice_fetch_sweep = invoice_fetch_sweep
         self._stale_task_sweep = stale_task_sweep
         self._subscription_orphan_sweep = subscription_orphan_sweep
-        self._class_history_sweep = class_history_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run every step-service in order and return each one's ``SweepResult``."""
@@ -77,11 +72,6 @@ class ReconcilerService:
         sweeps.append(await self._orphan_cleanup_sweep.run())
         sweeps.append(await self._payment_push_sweep.run())
         sweeps.append(await self._subscription_orphan_sweep.run())
-        # Step 6 — NON-billing class-history materialize. Fully independent of
-        # the billing steps (touches no Stripe / membership / payment state):
-        # appended LAST so the documented five-step billing sequence above stays
-        # pristine. Idempotent; safe to run in any order.
-        sweeps.append(await self._class_history_sweep.run())
         logger.info(
             "Reconciler sweep complete (%d step(s))",
             len(sweeps),

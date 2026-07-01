@@ -42,12 +42,18 @@ _SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 
 
 def test_no_bind_param_immediately_followed_by_cast() -> None:
-    """No production .sql binds a param with `:param::type` (use CAST())."""
+    """No production .sql binds a param with a `::` cast (use CAST()).
+
+    `--` comments are stripped before matching: a comment can't reach the
+    SQLAlchemy parser, and the convention docs legitimately spell out the
+    forbidden pattern in prose.
+    """
     offenders: list[str] = []
     for sql_file in _SRC_DIR.rglob("*.sql"):
         text = sql_file.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
-            for match in _BIND_THEN_CAST.finditer(line):
+            code = line.split("--", 1)[0]
+            for match in _BIND_THEN_CAST.finditer(code):
                 rel = sql_file.relative_to(_SRC_DIR.parent)
                 offenders.append(f"{rel}:{lineno}: {match.group(0)}")
 

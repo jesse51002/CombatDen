@@ -1,12 +1,14 @@
-"""Input contracts and output model for the class recurrence expander.
+"""Input contracts and output model for the class recurrence expanders.
 
-These are intentionally minimal, standalone Pydantic models so the expander
-(``src.classes.service.classes_expander.ClassesExpander``) has NO forward
-dependency on the Phase-3 class-CRUD schemas. Phase 3/4 map DB rows
-(``gym_classes`` / ``class_instance_exceptions`` / ``class_range_exceptions``)
-into these contracts before calling the expander; every later phase (CRUD
-reads, check-in validation, the reconciler sweep, reschedule checks) consumes
-the same ``EffectiveOccurrence`` output, so this is the one authoritative shape.
+These are intentionally minimal, standalone Pydantic models so the expanders
+(``ClassesExpander`` — one schedule shape; ``ClassesVersionExpander`` — a
+class's full version history) have NO forward dependency on the class-CRUD
+schemas. Services map DB rows (``gym_class_schedules`` /
+``class_instance_exceptions`` / ``class_range_exceptions``) into these
+contracts before calling the expanders; every consumer (board reads, check-in
+validation, sign-up validation, reschedule checks, the version-change wipe)
+consumes the same ``EffectiveOccurrence`` output, so this is the one
+authoritative shape.
 
 The recurring-unit enum is reused from the Database package
 (``schema.gym_class.RecurringUnit``) — never redefined here.
@@ -22,11 +24,14 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 
 
 class ExpanderClass(BaseModel):
-    """A class plus its embedded recurring schedule, as the expander needs it.
+    """One recurring-schedule SHAPE, as the single-shape expander needs it.
 
-    A flat projection of a ``gym_classes`` row: the seven ``sun``..``sat`` day
-    flags and the seven ``sun_instructor_id``..``sat_instructor_id`` per-day
-    instructor slots are kept flat (not nested) so a DB row maps in directly.
+    A flat projection of a ``gym_class_schedules`` row's shape columns: the
+    seven ``sun``..``sat`` day flags and the seven
+    ``sun_instructor_id``..``sat_instructor_id`` per-day instructor slots are
+    kept flat (not nested) so a DB row maps in directly. The versioned
+    contract (``ExpanderScheduleVersion``) extends this with the version
+    identity (``schedule_id`` / ``effective_from`` / ``timezone``).
 
     Attributes:
         class_id: The class this schedule belongs to.
@@ -63,6 +68,30 @@ class ExpanderClass(BaseModel):
     sat_instructor_id: UUID | None = None
     start_date: date
     end_date: date | None = None
+
+
+class ExpanderScheduleVersion(ExpanderClass):
+    """One append-only ``gym_class_schedules`` version row.
+
+    The shape fields come from ``ExpanderClass``; this adds the version
+    identity. A version OWNS the occurrences whose ORIGINAL instant
+    (``original_date`` + ``class_time`` in the version's own frozen
+    ``timezone``) falls inside ``[effective_from, next version's
+    effective_from)`` — the window end is derived from the class's next
+    version, never stored.
+
+    Attributes:
+        schedule_id: The version row's identity.
+        effective_from: When this version starts owning occurrences
+            (server-stamped at mint; never future, never edited).
+        timezone: IANA zone frozen at mint — the version always expands with
+            its OWN zone, so a later gym timezone change can never move any
+            existing version's occurrences.
+    """
+
+    schedule_id: UUID
+    effective_from: datetime
+    timezone: str
 
 
 class ExpanderInstanceException(BaseModel):
@@ -122,10 +151,14 @@ class EffectiveOccurrence(BaseModel):
 
     Attributes:
         original_date: The scheduled (pre-reschedule) recurrence date.
+        original_time: The owning schedule's default start time BEFORE any
+            exception — ``(original_date, original_time)`` is the occurrence's
+            permanent identity key (what attendance / sign-ups store; what the
+            version-change exact-slot match compares).
         effective_date: Where the occurrence actually lands —
             ``original_date`` unless an instance exception rescheduled it.
         occurred_at: UTC, timezone-aware start instant (the effective local
-            date + time converted from the gym's timezone).
+            date + time converted from the schedule's timezone).
         class_time: Effective local start time (override or class default).
         duration_minutes: Effective length (override or class default).
         instructor_id: Effective instructor (override or weekday default;
@@ -139,9 +172,17 @@ class EffectiveOccurrence(BaseModel):
             occurrence carries the class's default time / duration / instructor
             (the overrides are irrelevant once cancelled) and stays on its
             ``original_date`` (never rescheduled).
+        schedule_id: The OWNING version row (set by the version expander;
+            None when a single shape was expanded directly).
+        original_start_at: UTC instant of the ORIGINAL slot
+            (``original_date`` + ``original_time`` in the owning version's
+            timezone) — the instant the ownership windowing tested (set by
+            the version expander; None when a single shape was expanded
+            directly).
     """
 
     original_date: date
+    original_time: time
     effective_date: date
     occurred_at: datetime
     class_time: time
@@ -149,3 +190,5 @@ class EffectiveOccurrence(BaseModel):
     instructor_id: UUID | None
     is_rescheduled: bool
     is_cancelled: bool = False
+    schedule_id: UUID | None = None
+    original_start_at: datetime | None = None

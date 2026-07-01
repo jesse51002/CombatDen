@@ -8,9 +8,8 @@ part 'batch_check_in_response.g.dart';
 /// Response body for the batch check-in (returned with 207 Multi-Status —
 /// a 2xx, so it lands on the success path, not as an exception).
 ///
-/// Mirrors the backend `BatchCheckinResponse`. [classHistoryId] is the single
-/// materialized occurrence every member was checked into; [results] is one item
-/// per (de-duped) member, in request order.
+/// Mirrors the backend `BatchCheckinResponse`. [results] is one item per
+/// (de-duped) member, in request order.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -18,17 +17,16 @@ part 'batch_check_in_response.g.dart';
 class BatchCheckInResponse extends Equatable {
   final String classId;
 
-  /// The local calendar date (`YYYY-MM-DD`) checked in — the PATH param echoed
-  /// back. Kept as the raw string (the board renders the date itself).
+  /// The occurrence's IDENTITY date (`YYYY-MM-DD`) checked in — the BODY
+  /// field echoed back. Kept as the raw string (the board renders the
+  /// occurrence's effective/display date itself).
   final String occurrenceDate;
-  final String classHistoryId;
   @JsonKey(defaultValue: [])
   final List<BatchCheckInResultItem> results;
 
   const BatchCheckInResponse({
     required this.classId,
     required this.occurrenceDate,
-    required this.classHistoryId,
     this.results = const [],
   });
 
@@ -59,12 +57,10 @@ class BatchCheckInResponse extends Equatable {
     return BatchCheckInResponse(
       classId: classId,
       occurrenceDate: occurrenceDate,
-      classHistoryId: classHistoryId,
       results: results.map((r) => updates[r.memberId] ?? r).toList(),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [classId, occurrenceDate, classHistoryId, results];
+  List<Object?> get props => [classId, occurrenceDate, results];
 }

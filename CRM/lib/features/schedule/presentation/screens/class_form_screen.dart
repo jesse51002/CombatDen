@@ -235,33 +235,41 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         pointsWorth: int.parse(_pointsController.text.trim()),
       );
 
-  GymClassUpdateData _buildUpdate() => GymClassUpdateData(
-        className: _nameController.text.trim(),
-        classDescription: _descriptionOrNull(),
-        classTime: formatTimeOfDayHms(_classTime!),
-        durationMinutes: int.parse(_durationController.text.trim()),
-        recurringUnit: _safeUnit,
-        recurringInterval: int.parse(_intervalController.text.trim()),
-        sun: _day(0),
-        mon: _day(1),
-        tue: _day(2),
-        wed: _day(3),
-        thu: _day(4),
-        fri: _day(5),
-        sat: _day(6),
-        sunInstructorId: _instructorFor(0),
-        monInstructorId: _instructorFor(1),
-        tueInstructorId: _instructorFor(2),
-        wedInstructorId: _instructorFor(3),
-        thuInstructorId: _instructorFor(4),
-        friInstructorId: _instructorFor(5),
-        satInstructorId: _instructorFor(6),
-        startDate: _dateParam.format(_startDate!),
-        endDate: _endDate == null ? null : _dateParam.format(_endDate!),
-        maxCapacity: _capacityOrNull(),
-        allowedPlanIds: _allowedPlanIds,
-        imageUrl: _imageUrl,
-        pointsWorth: int.parse(_pointsController.text.trim()),
+  /// Builds the split update body. The form doesn't track which half of the
+  /// class actually changed, so it sends BOTH the identity fields and the
+  /// complete schedule shape every time — safe by contract (a schedule
+  /// deep-equal to the current version is a backend no-op).
+  GymClassUpdateRequest _buildUpdate() => GymClassUpdateRequest(
+        identity: GymClassIdentityUpdateData(
+          className: _nameController.text.trim(),
+          classDescription: _descriptionOrNull(),
+          maxCapacity: _capacityOrNull(),
+          allowedPlanIds: _allowedPlanIds,
+          imageUrl: _imageUrl,
+          pointsWorth: int.parse(_pointsController.text.trim()),
+        ),
+        schedule: GymClassScheduleFields(
+          classTime: formatTimeOfDayHms(_classTime!),
+          durationMinutes: int.parse(_durationController.text.trim()),
+          recurringUnit: _safeUnit,
+          recurringInterval: int.parse(_intervalController.text.trim()),
+          sun: _day(0),
+          mon: _day(1),
+          tue: _day(2),
+          wed: _day(3),
+          thu: _day(4),
+          fri: _day(5),
+          sat: _day(6),
+          sunInstructorId: _instructorFor(0),
+          monInstructorId: _instructorFor(1),
+          tueInstructorId: _instructorFor(2),
+          wedInstructorId: _instructorFor(3),
+          thuInstructorId: _instructorFor(4),
+          friInstructorId: _instructorFor(5),
+          satInstructorId: _instructorFor(6),
+          startDate: _dateParam.format(_startDate!),
+          endDate: _endDate == null ? null : _dateParam.format(_endDate!),
+        ),
       );
 
   // ---- mutation lifecycle --------------------------------------------------
@@ -283,7 +291,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     if (_isEdit) {
       bloc.add(ScheduleClassUpdated(
         classId: widget.existing!.classId,
-        data: _buildUpdate(),
+        request: _buildUpdate(),
       ));
     } else {
       bloc.add(ScheduleClassCreated(_buildCreate(gymId)));

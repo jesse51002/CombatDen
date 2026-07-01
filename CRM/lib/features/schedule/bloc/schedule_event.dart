@@ -40,12 +40,13 @@ class ScheduleClassCreated extends ScheduleEvent {
   const ScheduleClassCreated(this.request);
 }
 
-/// Update class [classId] with [data], then reload the board.
+/// Update class [classId] with [request] (split `identity` / `schedule`
+/// halves — see `GymClassUpdateRequest`), then reload the board.
 class ScheduleClassUpdated extends ScheduleEvent {
   final String classId;
-  final GymClassUpdateData data;
+  final GymClassUpdateRequest request;
 
-  const ScheduleClassUpdated({required this.classId, required this.data});
+  const ScheduleClassUpdated({required this.classId, required this.request});
 }
 
 /// Soft-delete class [classId], then reload the board.
@@ -58,21 +59,26 @@ class ScheduleClassDeleted extends ScheduleEvent {
   List<Object?> get props => [classId];
 }
 
-/// Cancel the single occurrence of [classId] on [date] (a one-day exception),
-/// then reload the board so the cancelled day shows its badge.
+/// Cancel the single occurrence of [classId] on [originalDate] (the
+/// occurrence's IDENTITY date — a one-day exception), then reload the board
+/// so the cancelled day shows its badge.
 class ScheduleInstanceCancelled extends ScheduleEvent {
   final String classId;
-  final DateTime date;
+  final DateTime originalDate;
 
-  const ScheduleInstanceCancelled({required this.classId, required this.date});
+  const ScheduleInstanceCancelled({
+    required this.classId,
+    required this.originalDate,
+  });
 
   @override
-  List<Object?> get props => [classId, date];
+  List<Object?> get props => [classId, originalDate];
 }
 
 /// Staff batch check-in ("Update attendees"): check [memberIds] into the
-/// occurrence of [classId] on [occurrenceDate], then reload the board so the
-/// attendance count updates. The CRM is the staff surface (`is_member: false`):
+/// occurrence of [classId] on [occurrenceDate] (the occurrence's IDENTITY
+/// date, never its display date), then reload the board so the attendance
+/// count updates. The CRM is the staff surface (`is_member: false`):
 /// a clean member is recorded, and one the gate warns on comes back as
 /// `needs_confirmation` (nothing written) unless [ignoreWarnings] is set — the
 /// results dialog resubmits just the `needs_confirmation` subset with it true
@@ -104,8 +110,9 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
 }
 
 /// "Reserve members": reserve [memberIds] a spot on the occurrence of
-/// [classId] on [occurrenceDate], then reload the board so the board's
-/// reserved count updates. There is no batch sign-up endpoint — the
+/// [classId] on [occurrenceDate] (the occurrence's IDENTITY date), then
+/// reload the board so the board's reserved count updates. There is no
+/// batch sign-up endpoint — the
 /// repository loops `POST /api/v1/signup` once per member; one member's
 /// failure (e.g. "Class is full", a transport error) never sinks the rest.
 /// The per-member breakdown lands on `signupResult`.
@@ -130,22 +137,24 @@ class ScheduleSignUpCleared extends ScheduleEvent {
   const ScheduleSignUpCleared();
 }
 
-/// Override the single occurrence of [classId] on [date] (a one-day
-/// exception): set its effective instructor / start time / max capacity, then
-/// reload the board. Mirrors [ScheduleInstanceCancelled] but with
-/// `is_cancelled: false` and the override fields populated. [newClassTime] is
-/// `HH:MM:SS`; [newDurationMinutes] is carried through unedited (the
-/// occurrence-edit screen has no duration field) so the upsert doesn't blank a
+/// Override the single occurrence of [classId] on [originalDate] (the
+/// occurrence's IDENTITY date — a one-day exception): set its effective
+/// instructor / start time / max capacity, then reload the board. Mirrors
+/// [ScheduleInstanceCancelled] but with `is_cancelled: false` and the
+/// override fields populated. [newClassTime] is `HH:MM:SS`;
+/// [newDurationMinutes] is carried through unedited (the occurrence-edit
+/// screen has no duration field) so the upsert doesn't blank a
 /// previously-set duration override. [newDate] (`YYYY-MM-DD`) is a
-/// **reschedule** — moving this occurrence to another day — and is only set
-/// when the user actually picked a later date; the backend requires it be
-/// strictly after [date] (forward-only) and rejects a collision with an
-/// existing occurrence. Scope: [date] is assumed to be the occurrence's
-/// original (not-yet-moved) date — rescheduling an already-rescheduled
-/// occurrence a second time is out of scope.
+/// **reschedule** — moving this occurrence to another day, any date (past,
+/// today, or future) — and is only set when the user actually picked a
+/// different date; the backend rejects only a collision with an existing
+/// non-cancelled occurrence at the exact target instant. Scope:
+/// [originalDate] is assumed to be the occurrence's original (not-yet-moved)
+/// date — rescheduling an already-rescheduled occurrence a second time is
+/// out of scope.
 class ScheduleInstanceOverridden extends ScheduleEvent {
   final String classId;
-  final DateTime date;
+  final DateTime originalDate;
   final String newClassTime;
   final int newDurationMinutes;
   final int? newMaxCapacity;
@@ -154,7 +163,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
 
   const ScheduleInstanceOverridden({
     required this.classId,
-    required this.date,
+    required this.originalDate,
     required this.newClassTime,
     required this.newDurationMinutes,
     this.newMaxCapacity,
@@ -165,7 +174,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
   @override
   List<Object?> get props => [
         classId,
-        date,
+        originalDate,
         newClassTime,
         newDurationMinutes,
         newMaxCapacity,

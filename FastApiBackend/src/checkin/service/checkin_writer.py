@@ -19,12 +19,9 @@ from src.checkin.schema.checkin_schema import (
     CLASS_ATTENDED_ACTIVITY_TYPE,
     ResolvedClass,
 )
-from src.classes import SQL_DIR as CLASSES_SQL_DIR
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import gym_today
+from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
-
-_FALLBACK_TIMEZONE = "America/Chicago"
 
 
 class CheckinWriter:
@@ -71,7 +68,10 @@ class CheckinWriter:
                         {
                             "member_id": str(member_id),
                             "gym_id": str(resolved_class.gym_id),
-                            "class_history_id": str(resolved_class.class_history_id),
+                            "class_id": str(resolved_class.class_id),
+                            "original_date": resolved_class.occurrence_date,
+                            "original_time": resolved_class.original_time,
+                            "occurred_at": resolved_class.occurred_at,
                             "plan_id": str(plan_id)
                             if plan_id is not None
                             else None,
@@ -92,7 +92,8 @@ class CheckinWriter:
                             text(existing_sql),
                             {
                                 "member_id": str(member_id),
-                                "class_history_id": str(resolved_class.class_history_id),
+                                "class_id": str(resolved_class.class_id),
+                                "original_date": resolved_class.occurrence_date,
                             },
                         )
                     )
@@ -112,7 +113,7 @@ class CheckinWriter:
                 text(last_class_sql),
                 {
                     "member_id": str(member_id),
-                    "class_history_id": str(resolved_class.class_history_id),
+                    "occurred_at": resolved_class.occurred_at,
                 },
             )
 
@@ -167,20 +168,8 @@ class CheckinWriter:
         item_id: UUID,
     ) -> None:
         """Set end_date on the charged membership to end it (within session)."""
-        tz_sql = load_sql(CLASSES_SQL_DIR / "get_gym_timezone.sql")
         end_sql = load_sql(SQL_DIR / "end_membership.sql")
-
-        tz_row = (
-            (
-                await session.execute(
-                    text(tz_sql),
-                    {"gym_id": str(resolved_class.gym_id)},
-                )
-            )
-            .mappings()
-            .fetchone()
-        )
-        timezone = tz_row["timezone"] if tz_row else _FALLBACK_TIMEZONE
+        timezone = await get_gym_timezone(session, resolved_class.gym_id)
 
         await session.execute(
             text(end_sql),

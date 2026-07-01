@@ -635,7 +635,8 @@ class MemberRepository {
   // ----- Class check-in -----
 
   /// `POST /api/v1/checkin` — staff single check-in for [req]'s member into the
-  /// occurrence addressed by `class_id` + `occurrence_date`. The CRM always
+  /// occurrence addressed by `class_id` + `occurrence_date` (the occurrence's
+  /// IDENTITY date, never its effective/display date). The CRM always
   /// sends `is_member: false`: a clean check-in is recorded — the
   /// [CheckInResponse] is a fresh attendance (points awarded) or an idempotent
   /// repeat (`already_checked_in`), with any gate conditions as non-blocking

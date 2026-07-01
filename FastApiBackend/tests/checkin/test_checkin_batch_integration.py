@@ -7,24 +7,21 @@ Same live-discovery approach as test_checkin_integration.py: rather than
 hard-code seed ids (which drift every reseed), the suite DISCOVERS a class with
 >= 2 covering members (active UNLIMITED eligible plan), a board occurrence for
 it, and a membership-less member, then exercises a mixed batch + an idempotent
-re-post. It cleans up EXACTLY what it creates (attendance + lazily-created
-class_history + new class_attended activities) and restores each member's
-points_balance.
+re-post. It cleans up EXACTLY what it creates (attendance rows, keyed by their
+identity — class_id + original_date — + new class_attended activities) and
+restores each member's points_balance.
 
-NOTE: the lazy materialize needs the ``uq_class_history_occurrence`` UNIQUE
-constraint (``INSERT ... ON CONFLICT ON CONSTRAINT uq_class_history_occurrence``)
-for ``resolve``. When that constraint is absent the first POST raises
-a Postgres ``42704 undefined_object`` BEFORE any per-member work and the router
-maps it to **500** ("Failed to record batch check-in"); these tests then fail at
-the first POST (expecting 207, getting 500) — a migration block, not a code
-defect.
+``occurrence_date`` (both requested and read off the board) is always the
+occurrence's ORIGINAL date (``EffectiveClassInstanceResponse.original_date``),
+never the effective/display ``class_date``.
+
+NOTE: occurrences are versioned-schedule computations (no materialized
+occurrence table); a read against a column or constraint that doesn't exist
+yet is a migration-not-applied gap, not a code defect.
 
 The ``all_failed -> 500`` status mapping is covered deterministically (no DB) in
 ``tests/checkin/test_checkin_router.py::test_batch_checkin_total_failure_returns_500``.
-It is intentionally NOT asserted here: under a migration block every POST returns
-500 from the generic handler, so a 500 assertion in this file would pass for the
-WRONG reason (the missing constraint, not all_failed) — exactly the kind of
-write-around the FastApiBackend rules forbid.
+It is intentionally NOT asserted here.
 """
 
 from __future__ import annotations
@@ -132,7 +129,8 @@ def _multi_covered_target(
             continue
         return {
             "class_id": occ["class_id"],
-            "occurrence_date": occ["class_date"],
+            # Always the ORIGINAL date -- never class_date.
+            "occurrence_date": occ["original_date"],
             "points_worth": members[0]["points_worth"],
             "members": [members[0]["member_id"], members[1]["member_id"]],
         }
@@ -207,39 +205,30 @@ def _class_attended_activity_ids(member_id: str, class_id: str) -> set[UUID]:
 
 def _teardown_batch(
     member_ids: list[str],
-    class_history_id: str | None,
+    class_id: str,
+    occurrence_date: str,
     new_activity_ids: set[UUID],
     points_by_member: dict[str, int],
 ) -> None:
-    """Undo a test batch: delete each member's attendance for the occurrence,
-    the new class_attended activities, the lazily-created class_history row, and
-    restore every member's points_balance."""
+    """Undo a test batch: delete each member's attendance for the occurrence
+    (keyed by its identity — class_id + original_date), the new
+    class_attended activities, and restore every member's points_balance."""
 
     async def _run() -> None:
         conn = await asyncpg.connect(_get_db_url())
         try:
-            if class_history_id is not None:
-                await conn.execute(
-                    "DELETE FROM member_attendance "
-                    "WHERE class_history_id = $1 AND member_id = ANY($2)",
-                    UUID(class_history_id),
-                    [UUID(m) for m in member_ids],
-                )
+            await conn.execute(
+                "DELETE FROM member_attendance "
+                "WHERE class_id = $1 AND original_date = $2 "
+                "AND member_id = ANY($3)",
+                UUID(class_id),
+                date.fromisoformat(occurrence_date),
+                [UUID(m) for m in member_ids],
+            )
             if new_activity_ids:
                 await conn.execute(
                     "DELETE FROM member_activities WHERE activity_id = ANY($1)",
                     list(new_activity_ids),
-                )
-            if class_history_id is not None:
-                # Delete the occurrence row only when no attendance remains on
-                # it — seed and runtime now stamp the same gym-tz occurred_at, so
-                # a batch can land on a seeded occurrence whose seeded attendance
-                # must outlive this test (we didn't create that row).
-                await conn.execute(
-                    "DELETE FROM class_history WHERE class_history_id = $1 "
-                    "AND NOT EXISTS (SELECT 1 FROM member_attendance "
-                    "WHERE class_history_id = $1)",
-                    UUID(class_history_id),
                 )
             for member_id, points in points_by_member.items():
                 await conn.execute(
@@ -332,19 +321,17 @@ class TestBatchCheckinValidation:
 
 
 # ---------------------------------------------------------------------------
-# Batch behavior (needs the seeded DB + the uq_class_history_occurrence
-# constraint for the materializer's ON CONFLICT).
+# Batch behavior (needs the seeded DB + the versioned schedule migration).
 # ---------------------------------------------------------------------------
 
 
 class TestBatchCheckin:
-    def test_mixed_batch_207_and_single_history_row(
+    def test_mixed_batch_207(
         self, api: httpx.Client, batch_ids: dict
     ) -> None:
         """A mixed KIOSK batch (is_member=True) returns 207 with one checked_in,
-        one already_checked_in, and one skipped(no_membership), materializing
-        EXACTLY ONE class_history row for the occurrence regardless of member
-        count. Fully cleaned up after."""
+        one already_checked_in, and one skipped(no_membership). Fully cleaned
+        up after."""
         target = batch_ids["target"]
         no_membership = batch_ids["no_membership"]
         if target is None or no_membership is None:
@@ -375,13 +362,6 @@ class TestBatchCheckin:
                 "member_ids": [member_a],
             },
         )
-        class_history_id = (
-            first.json().get("class_history_id")
-            if first.headers.get("content-type", "").startswith(
-                "application/json"
-            )
-            else None
-        )
 
         try:
             assert first.status_code == 207, first.text
@@ -398,7 +378,6 @@ class TestBatchCheckin:
             )
             assert resp.status_code == 207, resp.text
             body = resp.json()
-            class_history_id = body["class_history_id"]
             by_member = {r["member_id"]: r for r in body["results"]}
 
             assert by_member[member_a]["status"] == "already_checked_in"
@@ -415,8 +394,6 @@ class TestBatchCheckin:
                 _member_points(member_b)
                 == before_points[member_b] + points_worth
             )
-            # Exactly one class_history row for this (class, occurrence).
-            assert _history_row_count(class_id, class_history_id) == 1
         finally:
             new_acts: set[UUID] = set()
             for m in (member_a, member_b):
@@ -424,7 +401,11 @@ class TestBatchCheckin:
                     _class_attended_activity_ids(m, class_id) - before_acts[m]
                 )
             _teardown_batch(
-                [member_a, member_b], class_history_id, new_acts, before_points
+                [member_a, member_b],
+                class_id,
+                occurrence_date,
+                new_acts,
+                before_points,
             )
 
     def test_batch_re_post_is_idempotent(
@@ -454,13 +435,6 @@ class TestBatchCheckin:
         }
 
         first = api.post(_BATCH_URL, json=payload)
-        class_history_id = (
-            first.json().get("class_history_id")
-            if first.headers.get("content-type", "").startswith(
-                "application/json"
-            )
-            else None
-        )
         try:
             assert first.status_code == 207, first.text
             after_first = {m: _member_points(m) for m in (member_a, member_b)}
@@ -482,9 +456,12 @@ class TestBatchCheckin:
                     _class_attended_activity_ids(m, class_id) - before_acts[m]
                 )
             _teardown_batch(
-                [member_a, member_b], class_history_id, new_acts, before_points
+                [member_a, member_b],
+                class_id,
+                occurrence_date,
+                new_acts,
+                before_points,
             )
-
 
     def test_staff_batch_holds_no_membership_then_override_records(
         self, api: httpx.Client, batch_ids: dict
@@ -519,13 +496,6 @@ class TestBatchCheckin:
                 "member_ids": [member_a, no_mem],
                 # is_member omitted -> staff (False) by default.
             },
-        )
-        class_history_id = (
-            resp.json().get("class_history_id")
-            if resp.headers.get("content-type", "").startswith(
-                "application/json"
-            )
-            else None
         )
         try:
             assert resp.status_code == 207, resp.text
@@ -566,28 +536,9 @@ class TestBatchCheckin:
                     _class_attended_activity_ids(m, class_id) - before_acts[m]
                 )
             _teardown_batch(
-                [member_a, no_mem], class_history_id, new_acts, before_points
+                [member_a, no_mem],
+                class_id,
+                occurrence_date,
+                new_acts,
+                before_points,
             )
-
-
-def _history_row_count(class_id: str, class_history_id: str | None) -> int:
-    """Count class_history rows for the class that match the returned id's
-    occurrence — proves the batch materialized exactly one occurrence row."""
-    if class_history_id is None:
-        return 0
-
-    async def _run() -> int:
-        conn = await asyncpg.connect(_get_db_url())
-        try:
-            return await conn.fetchval(
-                "SELECT COUNT(*) FROM class_history "
-                "WHERE class_id = $1 AND occurred_at = ("
-                "  SELECT occurred_at FROM class_history "
-                "  WHERE class_history_id = $2)",
-                UUID(class_id),
-                UUID(class_history_id),
-            )
-        finally:
-            await conn.close()
-
-    return _run_async(_run())

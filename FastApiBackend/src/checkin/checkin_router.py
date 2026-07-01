@@ -58,8 +58,9 @@ checkin_router = APIRouter(
     response_model=CheckinResponse,
     summary="Check a member into a class instance",
     description=(
-        "Addresses the occurrence by ``class_id`` + ``occurrence_date`` and "
-        "lazily materializes the ``class_history`` row, bumps ``last_class``, "
+        "Addresses the occurrence by ``class_id`` + ``occurrence_date`` (the "
+        "occurrence's ORIGINAL date) and resolves it against the class's "
+        "schedule versions + exceptions, bumps ``last_class``, "
         "awards the class's points, and auto-ends trial / punch-card "
         "memberships once depleted. ``is_member = true`` (kiosk / member "
         "self-check-in) runs the strict gate — selects the best eligible "
@@ -214,10 +215,9 @@ async def remove_checkin(
     summary="Reserve a member a spot on a class occurrence",
     description=(
         "Reserves ``member_id`` a spot on the occurrence addressed by "
-        "``class_id`` + ``occurrence_date``. A sign-up is a reservation, NOT "
-        "attendance — ``member_attendance`` is still only written by a "
-        "check-in. The occurrence is validated (WITHOUT materializing "
-        "``class_history`` — sign-ups are routinely for future occurrences) "
+        "``class_id`` + ``occurrence_date`` (the occurrence's ORIGINAL date). "
+        "A sign-up is a reservation, NOT attendance — ``member_attendance`` "
+        "is still only written by a check-in. The occurrence is validated "
         "before capacity is checked: rejected with 'Class has been deleted' "
         "/ 'Class is not active' for a soft-deleted / inactive class, "
         "'Not a class occurrence on that date' / 'This class is cancelled "
@@ -338,10 +338,10 @@ async def remove_signup(
     "/checkin/batch",
     summary="Check many members into one class occurrence (staff batch)",
     description=(
-        "Resolves + materializes the occurrence's single ``class_history`` row "
-        "ONCE (by ``class_id`` + ``occurrence_date`` in the body), then runs "
-        "the per-member check-in gate over each (de-duped) member. One bad "
-        "member never sinks the batch — its result is a ``failed`` item. "
+        "Resolves the occurrence ONCE (by ``class_id`` + ``occurrence_date`` "
+        "— the ORIGINAL date — in the body; a pure read, nothing written), "
+        "then runs the per-member check-in gate over each (de-duped) member. "
+        "One bad member never sinks the batch — its result is a ``failed`` item. "
         "Returns **207 Multi-Status** with a per-member split (``checked_in`` / "
         "``already_checked_in`` / ``skipped`` / ``needs_confirmation`` / "
         "``failed``). A total failure (every member failed) is **500**; an "
@@ -440,14 +440,13 @@ async def checkin_batch(
     summary="List the combined roster (signed-up + attended) of an occurrence",
     description=(
         "Returns the combined roster for the occurrence addressed by "
-        "(``class_id``, gym-local ``occurrence_date``): every member who "
-        "signed up (``class_signups``) OR attended (``member_attendance``), "
-        "each flagged ``signed_up`` / ``attended`` — ``member_id`` + "
-        "``full_name`` + the attributed ``plan_id`` / ``item_id`` (NULL when "
-        "not attended). A signed-up-only member can appear even when the "
-        "occurrence was never materialized (a future occurrence can carry "
-        "sign-ups with no ``class_history`` row yet) — ``class_history_id`` "
-        "is null in that case. Gym-employee gated."
+        "(``class_id``, ``occurrence_date`` — the occurrence's ORIGINAL "
+        "date): every member who signed up (``class_signups``) OR attended "
+        "(``member_attendance``), each flagged ``signed_up`` / ``attended`` "
+        "— ``member_id`` + ``full_name`` + the attributed ``plan_id`` / "
+        "``item_id`` (NULL when not attended). A signed-up-only member can "
+        "appear even when nobody has checked in yet (a future occurrence "
+        "can carry sign-ups with no attendance at all). Gym-employee gated."
     ),
     responses={
         200: {"description": "Roster returned (possibly empty)"},

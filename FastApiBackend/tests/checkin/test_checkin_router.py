@@ -63,12 +63,10 @@ def test_checkin_records_when_a_plan_covers_the_class(
     plan_id = uuid4()
     item_id = uuid4()
     class_id = str(uuid4())
-    class_history_id = str(uuid4())
 
     response = CheckinResponse(
         log_id=log_id,
         member_id=fake_member_id,
-        class_history_id=class_history_id,
         class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=plan_id,
@@ -121,11 +119,9 @@ def test_checkin_rejected_when_no_plan_covers(
     """A kiosk-gate rejection returns 200 with null log_id, no chosen plan, a
     skip_reason, and 0 points."""
     class_id = str(uuid4())
-    class_history_id = str(uuid4())
     response = CheckinResponse(
         log_id=None,
         member_id=fake_member_id,
-        class_history_id=class_history_id,
         class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=None,
@@ -167,11 +163,9 @@ def test_checkin_staff_needs_confirmation(
     is held for confirmation: 200, log_id null, requires_confirmation true, the
     warning, nothing written."""
     class_id = str(uuid4())
-    class_history_id = str(uuid4())
     response = CheckinResponse(
         log_id=None,
         member_id=fake_member_id,
-        class_history_id=class_history_id,
         class_id=class_id,
         already_checked_in=False,
         chosen_plan_id=None,
@@ -217,12 +211,10 @@ def test_checkin_idempotent_returns_already_checked_in(
     plan_id = uuid4()
     item_id = uuid4()
     class_id = str(uuid4())
-    class_history_id = str(uuid4())
 
     response = CheckinResponse(
         log_id=log_id,
         member_id=fake_member_id,
-        class_history_id=class_history_id,
         class_id=class_id,
         already_checked_in=True,
         chosen_plan_id=plan_id,
@@ -293,13 +285,11 @@ def test_batch_checkin_returns_207_with_per_member_results(
     client, auth_headers, fake_gym_id
 ):
     """A mix of checked_in / already_checked_in / skipped returns 207 with the
-    per-member split and the single class_history_id."""
-    class_history_id = uuid4()
+    per-member split."""
     m1, m2, m3 = uuid4(), uuid4(), uuid4()
     response = BatchCheckinResponse(
         class_id=_BATCH_CLASS_ID,
         occurrence_date=date(2026, 6, 1),
-        class_history_id=class_history_id,
         results=[
             BatchCheckinItemResult(
                 member_id=m1,
@@ -335,7 +325,6 @@ def test_batch_checkin_returns_207_with_per_member_results(
 
     assert resp.status_code == 207
     body = resp.json()
-    assert body["class_history_id"] == str(class_history_id)
     assert [r["status"] for r in body["results"]] == [
         "checked_in",
         "already_checked_in",
@@ -353,7 +342,6 @@ def test_batch_checkin_total_failure_returns_500(
     response = BatchCheckinResponse(
         class_id=_BATCH_CLASS_ID,
         occurrence_date=date(2026, 6, 1),
-        class_history_id=uuid4(),
         results=[
             BatchCheckinItemResult(
                 member_id=m1,
@@ -560,13 +548,11 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
     member (with billing attribution) and a signed-up-only member (attendance
     fields null)."""
     class_id = uuid4()
-    history_id = uuid4()
     member_a, member_b = uuid4(), uuid4()
     plan_id, item_id = uuid4(), uuid4()
     response = AttendeeListResponse(
         class_id=class_id,
         occurrence_date=date(2026, 6, 1),
-        class_history_id=history_id,
         attendees=[
             {
                 "member_id": member_a,
@@ -606,7 +592,6 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["class_history_id"] == str(history_id)
     assert len(body["attendees"]) == 2
     assert body["attendees"][0]["full_name"] == "Aaron Ant"
     assert body["attendees"][0]["signed_up"] is True

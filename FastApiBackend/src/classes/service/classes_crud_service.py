@@ -1,9 +1,18 @@
-"""CRUD service over ``gym_classes`` (recurrence embedded).
+"""CRUD service over the class IDENTITY + versioned SCHEDULE pair.
 
-Reads resolve the seven per-weekday instructor slots to display names via a
-join on ``gym_employees`` (see ``classes_get.sql`` / ``classes_list.sql``).
-Writes go to the base table; the enum and JSONB columns are cast functionally
-(``CAST(:p AS …)`` — never ``:p::type``, per the repo SQL rules).
+A class is a ``gym_classes`` identity row plus append-only
+``gym_class_schedules`` versions (the schedule shape). Create writes the
+identity and mints the FIRST version in one transaction; update splits by
+destination — identity fields UPDATE in place, a submitted schedule shape
+mints a NEW version (running the version-change wipe) via
+``ClassesVersionsService``, both halves in ONE transaction. Soft delete flips
+the flags AND runs the future-keyed wipe (a deleted class produces no future
+slots). Reads flatten identity + the CURRENT version
+(``gym_class_schedules_current``) with instructor names joined from
+``gym_employees``, so the response shape is the same flat class the CRM form
+edits. The JSONB / enum columns are cast functionally — always
+``CAST(:p AS …)``, never a ``::`` cast on a bind param, per the repo SQL
+rules.
 """
 
 import json
@@ -19,9 +28,13 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
 from src.classes.schema.classes_crud_schema import (
     GymClassCreateRequest,
+    GymClassIdentityUpdateData,
     GymClassListResponse,
     GymClassResponse,
-    GymClassUpdateData,
+    GymClassScheduleFields,
+)
+from src.classes.service.classes_versions_service import (
+    ClassesVersionsService,
 )
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
@@ -31,9 +44,8 @@ logger = logging.getLogger(__name__)
 
 # Per-weekday flag column names, in week order.
 _DAY_FLAGS: tuple[str, ...] = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
-# Columns whose UPDATE SET assignment needs a functional cast (never :p::type).
+# Identity columns whose UPDATE SET assignment needs a functional cast.
 _CAST_COLUMNS: dict[str, str] = {
-    "recurring_unit": "recurring_unit",
     "allowed_plan_ids": "JSONB",
 }
 _BAD_SCHEDULE_MSG = (
@@ -41,115 +53,137 @@ _BAD_SCHEDULE_MSG = (
     "weekday, end_date must not precede start_date, and every instructor "
     "must be an employee of this gym."
 )
+_BAD_IDENTITY_MSG = "Invalid class fields."
 _WEEKLY_NEEDS_DAY_MSG = "A weekly class must select at least one weekday"
+_CLASS_NOT_FOUND_MSG = "Class not found"
 
 
 class ClassesCrudService:
-    """Gym-class catalog CRUD."""
+    """Gym-class catalog CRUD (identity + versioned schedule)."""
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        versions_service: ClassesVersionsService,
+    ) -> None:
         self._db_pool = db_pool
+        self._versions_service = versions_service
 
     async def create_class(
         self,
         request: GymClassCreateRequest,
     ) -> GymClassResponse:
-        """Insert a new class and return it with resolved instructor names."""
-        days = {flag: getattr(request, flag) for flag in _DAY_FLAGS}
-        self._validate_weekly(request.recurring_unit, days)
+        """Insert the identity row and mint the first schedule version, in one
+        transaction; return the flattened class."""
+        shape = GymClassScheduleFields(
+            **request.model_dump(
+                include=set(GymClassScheduleFields.model_fields)
+            )
+        )
+        self._validate_weekly(shape)
 
         sql = load_sql(SQL_DIR / "classes_create.sql")
-        params = self._create_params(request)
+        params = self._identity_create_params(request)
         try:
             async with self._db_pool.session() as session:
+                timezone = await self._versions_service.gym_timezone(
+                    session, request.gym_id
+                )
                 row = (
                     (await session.execute(text(sql), params))
                     .mappings()
                     .fetchone()
                 )
+                if not row:
+                    raise RuntimeError("INSERT did not return a row")
+                class_id = UUID(str(row["class_id"]))
+                await self._versions_service.mint(
+                    session, class_id, request.gym_id, shape, timezone
+                )
                 await session.commit()
         except IntegrityError as exc:
             raise ValueError(_BAD_SCHEDULE_MSG) from exc
 
-        if not row:
-            raise RuntimeError("INSERT did not return a row")
-        return await self.get_class(UUID(str(row["class_id"])))
+        return await self.get_class(class_id)
 
     async def update_class(
         self,
         class_id: UUID,
-        data: GymClassUpdateData,
+        identity: GymClassIdentityUpdateData | None,
+        schedule: GymClassScheduleFields | None,
     ) -> GymClassResponse:
-        """Update mutable columns and return the refreshed class."""
-        update_fields = data.model_dump(exclude_unset=True)
-        if not update_fields:
+        """Apply the split update — identity in place, schedule as a new
+        version (+ wipe) — in ONE transaction; return the refreshed class."""
+        identity_fields = (
+            identity.model_dump(exclude_unset=True) if identity else {}
+        )
+        if not identity_fields and schedule is None:
             raise ValueError("No fields provided to update")
+        if identity_fields:
+            validate_mutable_columns(
+                GYM_CLASSES_IMMUTABLE, set(identity_fields.keys())
+            )
+        if schedule is not None:
+            self._validate_weekly(schedule)
 
-        validate_mutable_columns(
-            GYM_CLASSES_IMMUTABLE,
-            set(update_fields.keys()),
-        )
-
-        existing = await self.get_class(class_id)
-        self._validate_weekly_merged(existing, update_fields)
-
-        set_clause = ", ".join(
-            self._assignment(col) for col in update_fields
-        )
-        sql = load_sql(
-            SQL_DIR / "classes_update.sql",
-            {"set_clause": set_clause},
-        )
-        params = self._normalize_params(update_fields)
-        params["class_id"] = str(class_id)
+        gym_id = await self._gym_id_of(class_id)
         try:
             async with self._db_pool.session() as session:
-                row = (
-                    (await session.execute(text(sql), params))
-                    .mappings()
-                    .fetchone()
-                )
+                if identity_fields:
+                    await self._update_identity(
+                        session, class_id, identity_fields
+                    )
+                if schedule is not None:
+                    timezone = await self._versions_service.gym_timezone(
+                        session, gym_id
+                    )
+                    await self._versions_service.mint(
+                        session, class_id, gym_id, schedule, timezone
+                    )
                 await session.commit()
         except IntegrityError as exc:
             raise ValueError(_BAD_SCHEDULE_MSG) from exc
 
-        if not row:
-            raise ValueError("Class not found")
         return await self.get_class(class_id)
 
     async def soft_delete_class(self, class_id: UUID) -> GymClassResponse:
-        """Soft-delete a class (``is_deleted = TRUE``, ``is_active = FALSE``)."""
-        sql = load_sql(SQL_DIR / "classes_soft_delete.sql")
-        row = await self._db_pool.execute_with_retry(
-            sql, {"class_id": str(class_id)}
-        )
-        if not row:
-            raise ValueError("Class not found")
-        return await self.get_class(class_id)
-
-    async def get_class(self, class_id: UUID) -> GymClassResponse:
-        """Read a single class with resolved per-weekday instructor names."""
-        sql = load_sql(SQL_DIR / "classes_get.sql")
+        """Soft-delete a class (``is_deleted = TRUE``, ``is_active = FALSE``)
+        AND wipe its future-keyed rows — future sign-ups deleted, early
+        check-ins reversed with points clawed back, future instance
+        exceptions dropped — in one transaction. Wipe FIRST: its points load
+        reads the still-live class row. Past occurrences render forever."""
+        gym_id = await self._gym_id_of(class_id)
         async with self._db_pool.session() as session:
+            await self._versions_service.wipe_all_future(
+                session, class_id, gym_id
+            )
             row = (
                 (
                     await session.execute(
-                        text(sql), {"class_id": str(class_id)}
+                        text(load_sql(SQL_DIR / "classes_soft_delete.sql")),
+                        {"class_id": str(class_id)},
                     )
                 )
                 .mappings()
                 .fetchone()
             )
-        if not row:
-            raise ValueError("Class not found")
-        return GymClassResponse(**dict(row))
+            if not row:
+                raise ValueError(_CLASS_NOT_FOUND_MSG)
+            await session.commit()
+        return await self._get_class_any(class_id)
+
+    async def get_class(self, class_id: UUID) -> GymClassResponse:
+        """Read one class flattened with its CURRENT schedule version and
+        resolved per-weekday instructor names."""
+        return await self._get_class_any(class_id)
 
     async def list_classes(
         self,
         gym_id: UUID,
         include_inactive: bool = False,
     ) -> GymClassListResponse:
-        """List a gym's non-deleted classes (optionally including inactive)."""
+        """List a gym's non-deleted classes (optionally including inactive),
+        each flattened with its current schedule version."""
         sql = load_sql(
             SQL_DIR / "classes_list.sql",
             {"include_inactive": "TRUE" if include_inactive else "FALSE"},
@@ -166,81 +200,102 @@ class ClassesCrudService:
 
     # -- helpers ---------------------------------------------------------
 
-    @staticmethod
-    def _validate_weekly(
-        recurring_unit: RecurringUnit,
-        days: dict[str, bool],
-    ) -> None:
-        """Raise if a weekly class selects no weekday (the DB CHECK, up front)."""
-        if recurring_unit == RecurringUnit.weekly and not any(days.values()):
-            raise ValueError(_WEEKLY_NEEDS_DAY_MSG)
+    async def _get_class_any(self, class_id: UUID) -> GymClassResponse:
+        """The flattened read, deleted classes included (the soft-delete
+        response still shows the class it just deleted)."""
+        sql = load_sql(SQL_DIR / "classes_get.sql")
+        async with self._db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(sql), {"class_id": str(class_id)}
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+        if not row:
+            raise ValueError(_CLASS_NOT_FOUND_MSG)
+        return GymClassResponse(**dict(row))
 
-    def _validate_weekly_merged(
+    async def _gym_id_of(self, class_id: UUID) -> UUID:
+        """The class's gym (a live class only) — 404 when absent/deleted."""
+        async with self._db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(load_sql(SQL_DIR / "classes_load_one.sql")),
+                        {"class_id": str(class_id)},
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+        if not row:
+            raise ValueError(_CLASS_NOT_FOUND_MSG)
+        return row["gym_id"]
+
+    async def _update_identity(
         self,
-        existing: GymClassResponse,
-        update_fields: dict,
+        session,
+        class_id: UUID,
+        identity_fields: dict,
     ) -> None:
-        """Validate the weekly rule against the post-update merged state."""
-        recurring_unit = update_fields.get(
-            "recurring_unit", existing.recurring_unit
+        """UPDATE the provided identity columns in the caller's transaction."""
+        set_clause = ", ".join(
+            self._assignment(col) for col in identity_fields
         )
-        days = {
-            flag: update_fields.get(flag, getattr(existing, flag))
-            for flag in _DAY_FLAGS
-        }
-        # A None for a NOT NULL day flag is a DB error handled at write time;
-        # only count real True flags here.
-        self._validate_weekly(
-            recurring_unit,
-            {flag: bool(value) for flag, value in days.items()},
+        sql = load_sql(
+            SQL_DIR / "classes_update.sql",
+            {"set_clause": set_clause},
         )
+        params = self._normalize_params(identity_fields)
+        params["class_id"] = str(class_id)
+        row = (
+            (await session.execute(text(sql), params)).mappings().fetchone()
+        )
+        if not row:
+            raise ValueError(_CLASS_NOT_FOUND_MSG)
+
+    @staticmethod
+    def _validate_weekly(shape: GymClassScheduleFields) -> None:
+        """Raise if a weekly shape selects no weekday (the DB CHECK, up
+        front). The shape is always complete, so no merge is needed."""
+        if shape.recurring_unit == RecurringUnit.weekly and not any(
+            getattr(shape, flag) for flag in _DAY_FLAGS
+        ):
+            raise ValueError(_WEEKLY_NEEDS_DAY_MSG)
 
     @staticmethod
     def _assignment(column: str) -> str:
-        """Build one SET assignment, casting enum / JSONB columns functionally."""
+        """Build one SET assignment, casting JSONB columns functionally."""
         cast_type = _CAST_COLUMNS.get(column)
         if cast_type is not None:
             return f"{column} = CAST(:{column} AS {cast_type})"
         return f"{column} = :{column}"
 
-    def _create_params(self, request: GymClassCreateRequest) -> dict:
-        """Build the bind params for the INSERT."""
-        params: dict = {
+    def _identity_create_params(
+        self, request: GymClassCreateRequest
+    ) -> dict:
+        """Bind params for the identity INSERT."""
+        return {
             "gym_id": str(request.gym_id),
             "class_name": request.class_name,
             "class_description": request.class_description,
-            "class_time": request.class_time,
-            "duration_minutes": request.duration_minutes,
-            "recurring_unit": request.recurring_unit.value,
-            "recurring_interval": request.recurring_interval,
-            "start_date": request.start_date,
-            "end_date": request.end_date,
             "max_capacity": request.max_capacity,
-            "allowed_plan_ids": self._jsonb_uuid_array(request.allowed_plan_ids),
+            "allowed_plan_ids": self._jsonb_uuid_array(
+                request.allowed_plan_ids
+            ),
             "image_url": request.image_url,
             "points_worth": request.points_worth,
         }
-        for flag in _DAY_FLAGS:
-            params[flag] = getattr(request, flag)
-            instructor = getattr(request, f"{flag}_instructor_id")
-            params[f"{flag}_instructor_id"] = (
-                str(instructor) if instructor is not None else None
-            )
-        return params
 
     def _normalize_params(self, update_fields: dict) -> dict:
-        """Coerce update values to asyncpg-friendly bind params.
-
-        UUIDs -> str, ``allowed_plan_ids`` -> a JSONB text array,
-        ``recurring_unit`` -> its enum string value; everything else passes
-        through (date / time / bool / int / str).
-        """
+        """Coerce identity update values to asyncpg-friendly bind params."""
         params: dict = {}
         for col, value in update_fields.items():
             if col == "allowed_plan_ids":
                 params[col] = self._jsonb_uuid_array(value)
-            elif col == "recurring_unit":
-                params[col] = value.value if value is not None else None
             elif isinstance(value, UUID):
                 params[col] = str(value)
             else:

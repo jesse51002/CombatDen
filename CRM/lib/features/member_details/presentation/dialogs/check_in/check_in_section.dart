@@ -66,9 +66,9 @@ class CheckInSection extends StatelessWidget {
   /// A class can recur across the load window AND — since Check-in and
   /// Reserve intentionally overlap for an occurrence starting within the
   /// check-in window — the SAME occurrence can appear in two sections at
-  /// once. The composite key is (action, classId, classDate), not just the
-  /// occurrence, so only the actually-picked tile (in its picked section)
-  /// highlights.
+  /// once. The composite key is (action, classId, originalDate) — the
+  /// occurrence's IDENTITY date, not just the occurrence, so only the
+  /// actually-picked tile (in its picked section) highlights.
   static String keyFor(CheckInReserveAction action, EffectiveClassInstance i) =>
-      '${action.name}:${i.classId}@${i.classDate.toIso8601String()}';
+      '${action.name}:${i.classId}@${i.originalDate.toIso8601String()}';
 }

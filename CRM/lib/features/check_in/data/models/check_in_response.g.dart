@@ -10,7 +10,6 @@ CheckInResponse _$CheckInResponseFromJson(Map<String, dynamic> json) =>
     CheckInResponse(
       logId: json['log_id'] as String?,
       memberId: json['member_id'] as String,
-      classHistoryId: json['class_history_id'] as String,
       classId: json['class_id'] as String,
       alreadyCheckedIn: json['already_checked_in'] as bool,
       chosenPlanId: json['chosen_plan_id'] as String?,

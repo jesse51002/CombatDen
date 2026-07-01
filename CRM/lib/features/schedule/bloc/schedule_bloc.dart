@@ -76,7 +76,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
   ) =>
       _mutateAndReload(
         emit,
-        () => _repository.updateClass(event.classId, event.data),
+        () => _repository.updateClass(event.classId, event.request),
       );
 
   Future<void> _onClassDeleted(
@@ -91,7 +91,10 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
   ) =>
       _mutateAndReload(
         emit,
-        () => _repository.cancelInstance(event.classId, event.date),
+        () => _repository.cancelInstance(
+          event.classId,
+          event.originalDate,
+        ),
       );
 
   Future<void> _onInstanceOverridden(
@@ -102,7 +105,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         emit,
         () => _repository.overrideInstance(
           event.classId,
-          event.date,
+          event.originalDate,
           newClassTime: event.newClassTime,
           newDurationMinutes: event.newDurationMinutes,
           newMaxCapacity: event.newMaxCapacity,

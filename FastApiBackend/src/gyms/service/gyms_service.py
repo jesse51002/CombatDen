@@ -12,6 +12,9 @@ from schema.gym_employee import ThemeMode
 from schema.immutable_columns import GYMS as GYMS_IMMUTABLE
 from sqlalchemy import text
 
+from src.classes.service.classes_versions_service import (
+    ClassesVersionsService,
+)
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
     EmployeeThemeResponse,
@@ -28,6 +31,7 @@ from src.gyms.service.gyms_onboarding_service import GymsOnboardingService
 from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import get_gym_timezone
 from src.shared.sql_loader import load_sql
 from src.waivers.service.waivers.waivers_service import WaiversService
 
@@ -46,6 +50,13 @@ class GymsService:
             ``GymsCreateService`` so the default authorized-payer waiver
             is seeded atomically (before the Stripe account) and torn
             down cleanly if creation fails.
+        classes_versions_service: Injected schedule-version mint engine —
+            the documented ``gyms -> classes`` edge: a gym TIMEZONE change
+            re-mints a same-shape schedule version (new tz) for every live
+            class, so the class system's frozen-per-version timezones track
+            the gym going forward while every existing version (the past)
+            stays untouched. The wall-clock exact-slot match keeps every
+            future sign-up / check-in — nothing is wiped.
     """
 
     def __init__(
@@ -53,8 +64,10 @@ class GymsService:
         db_pool: DirectDatabasePool,
         stripe_connect_service: GymsStripeConnectService,
         waivers_service: WaiversService,
+        classes_versions_service: ClassesVersionsService,
     ) -> None:
         self._db_pool = db_pool
+        self._classes_versions_service = classes_versions_service
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
@@ -147,13 +160,27 @@ class GymsService:
         gym_id: UUID,
         data: GymUpdateData,
     ) -> GymResponse:
-        """Update mutable fields on a gym row."""
+        """Update mutable fields on a gym row.
+
+        A TIMEZONE change additionally re-mints every live class's schedule
+        version with the new zone (see the constructor note) AFTER the gym
+        row commits. The re-mint is deep-equal-skipping and per-class, so a
+        retry after a partial failure self-heals: already-reminted classes
+        no-op, the rest catch up.
+        """
         update_fields = data.model_dump(exclude_unset=True, exclude_none=True)
 
         if not update_fields:
             raise ValueError("No fields provided to update")
 
         validate_mutable_columns(GYMS_IMMUTABLE, set(update_fields.keys()))
+
+        new_timezone = update_fields.get("timezone")
+        timezone_changed = False
+        if new_timezone is not None:
+            async with self._db_pool.session() as session:
+                old_timezone = await get_gym_timezone(session, gym_id)
+            timezone_changed = old_timezone != new_timezone
 
         set_clause = ", ".join(f"{col} = :{col}" for col in update_fields)
         sql = load_sql(
@@ -166,6 +193,11 @@ class GymsService:
 
         if not row:
             raise ValueError("Gym not found")
+
+        if timezone_changed:
+            await self._classes_versions_service.remint_timezone(
+                gym_id, new_timezone
+            )
 
         return GymResponse(**row)
 

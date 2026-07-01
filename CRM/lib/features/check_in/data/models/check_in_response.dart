@@ -26,7 +26,6 @@ part 'check_in_response.g.dart';
 class CheckInResponse extends Equatable {
   final String? logId;
   final String memberId;
-  final String classHistoryId;
   final String classId;
   final bool alreadyCheckedIn;
   final String? chosenPlanId;
@@ -45,7 +44,6 @@ class CheckInResponse extends Equatable {
   const CheckInResponse({
     this.logId,
     required this.memberId,
-    required this.classHistoryId,
     required this.classId,
     required this.alreadyCheckedIn,
     this.chosenPlanId,
@@ -71,7 +69,6 @@ class CheckInResponse extends Equatable {
   List<Object?> get props => [
         logId,
         memberId,
-        classHistoryId,
         classId,
         alreadyCheckedIn,
         chosenPlanId,

@@ -107,8 +107,12 @@ flowchart TB
   ms_closed --> ms_former["former / re-signup history"]
   Memberships -.->|"overlay"| ms_overdue["overdue ×2 (past_due)"]
 
-  %% ── Classes ×7 — recurrence + state + capacity co-occur (stacked, reconverge);
-  %% schedule exceptions are an overlay on top.
+  %% ── Classes ×7 — recurrence + state + schedule versions + capacity
+  %% co-occur (stacked, reconverge); schedule exceptions are an overlay on
+  %% top. A class is identity (gym_classes) + append-only schedule version(s)
+  %% (gym_class_schedules) -- the ~30% two-version split exercises a real
+  %% historical schedule change (a different class_time or weekday set,
+  %% superseded 1–6 weeks ago by the current shape).
   Classes["📅 Classes ×7"]
   Classes -->|"80%"| c_weekly["weekly"]
   Classes -->|"10%"| c_daily["daily"]
@@ -120,8 +124,14 @@ flowchart TB
   c_state["state (co-occurs)"]
   c_state -->|"85%"| c_active["active"]
   c_state -->|"15%"| c_inactive["inactive"]
-  c_active --> c_cap
-  c_inactive --> c_cap
+  c_active --> c_versions
+  c_inactive --> c_versions
+
+  c_versions["gym_class_schedules (co-occurs)"]
+  c_versions -->|"70%"| c_v1["one version"]
+  c_versions -->|"30%"| c_v2["two versions<br/>(schedule change 1–6wk ago)"]
+  c_v1 --> c_cap
+  c_v2 --> c_cap
 
   c_cap["capacity (co-occurs)"]
   c_cap -->|"70%"| c_capped["capped 10–30"]
@@ -133,19 +143,19 @@ flowchart TB
   c_exc -.->|"~30%"| c_inst["instance<br/>cancelled / rescheduled"]
   c_exc -.->|"~15%"| c_range["range<br/>cancelled / rescheduled"]
 
-  %% ── Class history + attendance (simple split) ──
-  Attendance["✅ Class history + attendance"]
-  Attendance -->|"per class"| a_hist["class_history<br/>≤30 occurrences (½ inactive skipped · exceptions applied)"]
+  %% ── Attendance (simple split) ──
+  Attendance["✅ Attendance"]
+  Attendance -->|"per class"| a_occ["owned occurrences (versions + exceptions resolved)<br/>≤30 per class (½ inactive skipped)"]
   Attendance -->|"95%"| a_yes["attended · covered members attend a 1–15 subset"]
   Attendance -->|"5%"| a_no["never attended"]
 
   %% ── Class sign-ups (reservations, NOT attendance -- member_attendance is
   %% still only written by a check-in). Each row is exactly ONE of these
-  %% (mutually exclusive -- simple fan). Past sign-ups reuse the class_history
-  %% / attendance rows above (same members, same occurrence dates) but
-  %% class_signups has no FK to class_history, so it's its own tree rather
-  %% than nested under Attendance. Every sign-up (past or future) is capped by
-  %% the occurrence's effective max_capacity (never over-fills the room).
+  %% (mutually exclusive -- simple fan). Past sign-ups reuse the attendance
+  %% rows above (same members, same occurrence dates) but class_signups has
+  %% no FK to member_attendance, so it's its own tree rather than nested
+  %% under Attendance. Every sign-up (past or future) is capped by the
+  %% occurrence's effective max_capacity (never over-fills the room).
   Signups["🙋 Class sign-ups (reservations)"]
   Signups -->|"past · ~65% of attended"| sg_att["signed-up-and-attended"]
   Signups -->|"past · capacity-capped"| sg_noshow["no-show<br/>signed up, never attended"]

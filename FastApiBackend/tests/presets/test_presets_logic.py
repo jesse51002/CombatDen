@@ -7,19 +7,32 @@ the import must always produce a non-empty first AND last name so the
 Also covers ``PresetsTemplateService.load_template_feed_page`` with a mocked
 DB session to assert that limit/offset/filter params are forwarded to SQL and
 that total is extracted from the ``COUNT(*) OVER()`` column.
+
+The class-history/attendance/sign-up seeding itself (``_seed_history_and_
+attendance`` and friends) is DB-session-driven and has no unit coverage here
+(mirroring the rest of this file's pure/mockable-only scope) — it is
+exercised only by a live import, not by this suite. The two pieces below
+that ARE pure — the identity->expander-contract mapping and the versioned-
+schedule backdating constants — get dedicated regression tests instead.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import time
+from datetime import date, time
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
+from schema.gym_class import RecurringUnit
 from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
+from src.classes.service.classes_expander import ClassesExpander
 from src.presets.service.presets_service import (
+    _CLASS_RECURRENCE_BACKDATE_DAYS,
     _CLASS_TIME_SLOTS,
+    _PAST_HISTORY_DAYS,
+    _SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS,
     PresetsService,
 )
 from src.presets.service.presets_template_service import PresetsTemplateService
@@ -32,6 +45,55 @@ def test_class_time_slots_are_times_not_strings():
     # with "'str' object has no attribute 'hour'" and rolls back the import.
     assert _CLASS_TIME_SLOTS  # non-empty so the modulo cycle is well-defined
     assert all(isinstance(slot, time) for slot in _CLASS_TIME_SLOTS)
+
+
+def test_schedule_effective_from_predates_earliest_seeded_attendance():
+    # The single imported schedule version's effective_from must land before
+    # the earliest occurrence that can get seeded attendance
+    # (today - _PAST_HISTORY_DAYS), so the backdated value stays honest even
+    # though the FIRST version owns occurrences back to -infinity regardless.
+    assert _SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS > _PAST_HISTORY_DAYS
+
+
+def test_class_recurrence_backdate_covers_past_history_window():
+    # The recurrence start_date must be backdated at least as far as the
+    # seeded past-history window, or the weekly recurrence wouldn't have
+    # started yet for the oldest seeded occurrences.
+    assert _CLASS_RECURRENCE_BACKDATE_DAYS >= _PAST_HISTORY_DAYS
+
+
+def _make_presets_service() -> PresetsService:
+    return PresetsService(db_pool=MagicMock(), expander=ClassesExpander())
+
+
+def test_to_expander_class_is_always_weekly_mon_to_fri():
+    # Preset classes are always weekly Mon-Fri with one instructor across
+    # every weekday and no end date, so the expander reproduces exactly the
+    # occurrences the live board would show for the imported schedule.
+    svc = _make_presets_service()
+    class_id = uuid4()
+    gym_id = uuid4()
+    instructor_id = str(uuid4())
+    class_time = time(7, 30)
+
+    result = svc._to_expander_class(
+        class_id=class_id,
+        gym_id=gym_id,
+        class_time=class_time,
+        instructor_id=instructor_id,
+        start_date=date(2026, 1, 1),
+    )
+
+    assert result.class_id == class_id
+    assert result.gym_id == gym_id
+    assert result.class_time == class_time
+    assert result.recurring_unit == RecurringUnit.weekly
+    assert result.end_date is None
+    for day in ("mon", "tue", "wed", "thu", "fri"):
+        assert getattr(result, day) is True
+        assert str(getattr(result, f"{day}_instructor_id")) == instructor_id
+    for day in ("sat", "sun"):
+        assert getattr(result, day) is False
 
 
 def test_split_name_two_parts():

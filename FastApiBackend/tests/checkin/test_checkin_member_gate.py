@@ -15,7 +15,7 @@ stays real). Covers the ``is_member`` block-vs-warn split:
   depleted pack). Points are awarded on every new row (membership or not).
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -36,10 +36,10 @@ from src.checkin.service.checkin_member_gate import CheckinMemberGate
 
 def _resolved_class(*, points_worth: int = 50, max_capacity: int | None = None) -> ResolvedClass:
     return ResolvedClass(
-        class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
         occurrence_date=date(2026, 6, 1),
+        original_time=time(17, 0),
         occurred_at=datetime(2026, 6, 1, 17, 0, tzinfo=UTC),
         points_worth=points_worth,
         class_name="Evening BJJ",

@@ -13,20 +13,22 @@ same DISTINCT signed-up-or-attended union the check-in capacity gate reads
 (``CheckinQueries.get_signup_or_attended_members``), so a member already
 counted (a prior sign-up, or already attended via a walk-in check-in) never
 double-blocks. The create write is idempotent: ON CONFLICT DO NOTHING on the
-``(class_id, member_id, occurrence_date)`` unique constraint.
+``(class_id, member_id, original_date)`` unique constraint, stamping
+``original_time`` from the resolved occurrence.
 
-Validation deliberately does NOT materialize ``class_history`` — sign-ups are
-routinely for future occurrences, and freezing a not-yet-started occurrence
-into history this early (before anyone checks in) would be wrong. Instead it
-reuses the same pure ``ClassesExpander`` engine + class-load /
-exception-load reads ``CheckinClassResolver`` uses for check-in (via
-``CheckinQueries.get_class_for_checkin`` / ``get_instance_exceptions`` /
-``get_range_exceptions``), run with ``include_cancelled=True`` so a
+Occurrence resolution reuses the same pure ``ClassesVersionExpander`` engine
++ schedule-version / exception reads ``CheckinClassResolver`` uses for
+check-in (via ``CheckinQueries``), run with ``include_cancelled=True`` so a
 cancelled day and a non-recurrence date can be told apart in the error
-message.
+message. The resolution algorithm (including the reschedule-window-widening
+fix) is duplicated from ``CheckinClassResolver`` rather than shared through a
+facade — see that module's docstring for why a bare
+``[occurrence_date, occurrence_date]`` window isn't enough on its own; the
+checkin domain deliberately has no facade, so each occurrence-addressed
+caller resolves its own way.
 """
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from sqlalchemy import text
@@ -38,19 +40,18 @@ from src.checkin.schema.signup_schema import (
 )
 from src.checkin.service.checkin_queries import CheckinQueries
 from src.classes.schema.classes_expander_schema import EffectiveOccurrence
-from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_expander_mapping import (
-    to_expander_class,
     to_expander_instance,
     to_expander_range,
+    to_expander_schedule,
 )
+from src.classes.service.classes_version_expander import ClassesVersionExpander
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 _CLASS_NOT_FOUND_MSG = "Class not found"
 _CLASS_DELETED_MSG = "Class has been deleted"
 _CLASS_INACTIVE_MSG = "Class is not active"
-_GYM_NOT_FOUND_MSG = "Gym not found"
 _NOT_AN_OCCURRENCE_MSG = "Not a class occurrence on that date"
 _CLASS_CANCELLED_MSG = "This class is cancelled that day"
 _CLASS_FULL_MSG = "Class is full"
@@ -61,16 +62,17 @@ class SignupService:
 
     Args:
         db_pool: Injected database connection pool.
-        expander: The canonical recurrence + exception expander (pure), the
-            same engine ``CheckinClassResolver`` uses to resolve an occurrence.
+        version_expander: The versioned recurrence + exception engine (pure),
+            the same engine ``CheckinClassResolver`` uses to resolve an
+            occurrence.
     """
 
     def __init__(
-        self, db_pool: DirectDatabasePool, expander: ClassesExpander
+        self, db_pool: DirectDatabasePool, version_expander: ClassesVersionExpander
     ) -> None:
         self._db_pool = db_pool
         self._queries = CheckinQueries(db_pool)
-        self._expander = expander
+        self._version_expander = version_expander
 
     async def create(
         self,
@@ -81,17 +83,19 @@ class SignupService:
     ) -> SignupResponse:
         """Reserve ``member_id`` a spot on the occurrence.
 
+        ``occurrence_date`` is the occurrence's ORIGINAL date.
+
         Raises:
-            ValueError: "Class not found" / "Gym not found" if the class /
-                gym doesn't exist; "Class has been deleted" / "Class is not
-                active" if the class is soft-deleted / inactive; "Not a
-                class occurrence on that date" / "This class is cancelled
-                that day" if ``occurrence_date`` isn't a real, non-cancelled
-                occurrence of this class; "Class is full" if the occurrence
-                is at its effective ``max_capacity`` and this member isn't
-                already counted (signed up or attended).
+            ValueError: "Class not found" if the class doesn't exist for the
+                gym; "Class has been deleted" / "Class is not active" if the
+                class is soft-deleted / inactive; "Not a class occurrence on
+                that date" / "This class is cancelled that day" if
+                ``occurrence_date`` isn't a real, non-cancelled occurrence of
+                this class; "Class is full" if the occurrence is at its
+                effective ``max_capacity`` and this member isn't already
+                counted (signed up or attended).
         """
-        class_row = await self._validate_occurrence(
+        class_row, occurrence = await self._validate_occurrence(
             class_id, gym_id, occurrence_date
         )
         effective_capacity = (
@@ -103,7 +107,9 @@ class SignupService:
             await self._enforce_capacity(
                 class_id, gym_id, occurrence_date, member_id, effective_capacity
             )
-        return await self._insert(member_id, gym_id, class_id, occurrence_date)
+        return await self._insert(
+            member_id, gym_id, class_id, occurrence_date, occurrence.original_time
+        )
 
     async def remove(
         self,
@@ -122,7 +128,7 @@ class SignupService:
                         {
                             "class_id": str(class_id),
                             "member_id": str(member_id),
-                            "occurrence_date": occurrence_date,
+                            "original_date": occurrence_date,
                         },
                     )
                 )
@@ -139,15 +145,15 @@ class SignupService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
-    ) -> dict:
-        """Load + validate the sign-up target, WITHOUT materializing.
+    ) -> tuple[dict, EffectiveOccurrence]:
+        """Load + validate the sign-up target.
 
         Loads the class row (exists / active / not soft-deleted for this
-        gym), then runs the expander over ``[occurrence_date,
-        occurrence_date]`` to confirm a real, non-cancelled occurrence lands
-        on that date. Returns the class row so the caller can read
-        ``max_capacity`` / ``exception_max_capacity`` off it without a
-        second read.
+        gym), then resolves the occurrence against the class's schedule
+        versions + exceptions to confirm a real, non-cancelled occurrence
+        lands on ``occurrence_date``. Returns the class row (so the caller
+        can read ``max_capacity`` / ``exception_max_capacity`` without a
+        second read) and the resolved occurrence (for ``original_time``).
 
         Raises:
             ValueError: See ``create``'s docstring for the message set.
@@ -162,56 +168,72 @@ class SignupService:
         if not class_row["is_active"]:
             raise ValueError(_CLASS_INACTIVE_MSG)
 
-        gym_tz = await self._queries.get_gym_timezone(gym_id)
-        if gym_tz is None:
-            raise ValueError(_GYM_NOT_FOUND_MSG)
-
-        occurrence = await self._resolve_occurrence(
-            class_row, class_id, occurrence_date, gym_tz
-        )
+        occurrence = await self._resolve_occurrence(class_id, occurrence_date)
         if occurrence is None:
             raise ValueError(_NOT_AN_OCCURRENCE_MSG)
         if occurrence.is_cancelled:
             raise ValueError(_CLASS_CANCELLED_MSG)
-        return class_row
+        return class_row, occurrence
 
     async def _resolve_occurrence(
         self,
-        class_row: dict,
         class_id: UUID,
         occurrence_date: date,
-        gym_tz: str,
     ) -> EffectiveOccurrence | None:
-        """Expand the class over the single day, cancelled days INCLUDED.
+        """The occurrence whose ORIGINAL date is ``occurrence_date``,
+        cancelled days INCLUDED (unlike ``CheckinClassResolver``'s default) so
+        ``_validate_occurrence`` can distinguish a cancelled occurrence from a
+        date that was never a recurrence at all and raise a more specific
+        message for each. See ``CheckinClassResolver``'s module docstring for
+        why the expand window is widened around a reschedule."""
+        versions = await self._queries.get_schedule_versions(class_id)
+        if not versions:
+            return None
 
-        ``include_cancelled=True`` (unlike ``CheckinClassResolver``'s
-        single-day expand) so ``_validate_occurrence`` can distinguish a
-        cancelled occurrence from a date that was never a recurrence at all
-        and raise a more specific message for each.
-        """
+        window_start, window_end = await self._resolution_window(
+            class_id, occurrence_date
+        )
         instances = await self._queries.get_instance_exceptions(
-            class_id, occurrence_date, occurrence_date
+            class_id, window_start, window_end
         )
         ranges = await self._queries.get_range_exceptions(
-            class_id, occurrence_date, occurrence_date
+            class_id, window_start, window_end
         )
-        occurrences = self._expander.expand(
-            to_expander_class(class_row),
+        occurrences = self._version_expander.expand(
+            [to_expander_schedule(row) for row in versions],
             [to_expander_instance(row) for row in instances],
             [to_expander_range(row) for row in ranges],
-            occurrence_date,
-            occurrence_date,
-            gym_tz,
+            window_start,
+            window_end,
             include_cancelled=True,
         )
         return next(
             (
                 occ
                 for occ in occurrences
-                if occ.effective_date == occurrence_date
+                if occ.original_date == occurrence_date
             ),
             None,
         )
+
+    async def _resolution_window(
+        self, class_id: UUID, occurrence_date: date
+    ) -> tuple[date, date]:
+        """The window to expand: normally just ``occurrence_date``, widened
+        to also cover a reschedule's ``new_date`` so the moved occurrence
+        still resolves when addressed by its ORIGINAL date."""
+        same_day = await self._queries.get_instance_exceptions(
+            class_id, occurrence_date, occurrence_date
+        )
+        exception = same_day[0] if same_day else None
+        if (
+            exception is None
+            or exception["is_cancelled"]
+            or exception["new_date"] is None
+        ):
+            return occurrence_date, occurrence_date
+        new_date = exception["new_date"]
+        return min(occurrence_date, new_date), max(occurrence_date, new_date)
 
     # -- write -------------------------------------------------------------
 
@@ -221,6 +243,7 @@ class SignupService:
         gym_id: UUID,
         class_id: UUID,
         occurrence_date: date,
+        original_time: time,
     ) -> SignupResponse:
         """ON CONFLICT DO NOTHING create; falls back to a lookup on repeat.
 
@@ -228,16 +251,20 @@ class SignupService:
         """
         insert_sql = load_sql(SQL_DIR / "signup_insert.sql")
         existing_sql = load_sql(SQL_DIR / "signup_load_existing.sql")
-        params = {
-            "gym_id": str(gym_id),
+        existing_params = {
             "class_id": str(class_id),
             "member_id": str(member_id),
-            "occurrence_date": occurrence_date,
+            "original_date": occurrence_date,
+        }
+        insert_params = {
+            "gym_id": str(gym_id),
+            "original_time": original_time,
+            **existing_params,
         }
 
         async with self._db_pool.session() as session:
             row = (
-                (await session.execute(text(insert_sql), params))
+                (await session.execute(text(insert_sql), insert_params))
                 .mappings()
                 .fetchone()
             )
@@ -248,7 +275,7 @@ class SignupService:
                 )
 
             existing = (
-                (await session.execute(text(existing_sql), params))
+                (await session.execute(text(existing_sql), existing_params))
                 .mappings()
                 .fetchone()
             )

@@ -3,5 +3,5 @@
 DELETE FROM class_signups
 WHERE class_id = CAST(:class_id AS UUID)
   AND member_id = CAST(:member_id AS UUID)
-  AND occurrence_date = CAST(:occurrence_date AS DATE)
+  AND original_date = CAST(:original_date AS DATE)
 RETURNING signup_id

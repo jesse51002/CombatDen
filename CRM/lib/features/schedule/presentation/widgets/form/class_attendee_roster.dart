@@ -59,6 +59,9 @@ enum _RosterTab { attended, reserved }
 class ClassAttendeeRoster extends StatefulWidget {
   final String gymId;
   final String classId;
+
+  /// The occurrence's IDENTITY date (never its effective/display date) —
+  /// this is what addresses the roster read + the remove/cancel actions.
   final DateTime occurrenceDate;
 
   const ClassAttendeeRoster({

@@ -1,8 +1,9 @@
 """Live integration tests for the checkin domain (gated check-in + streak).
 
 Endpoints under test:
-  POST /api/v1/checkin   (class_id + occurrence_date; lazy materialize,
-                          plan gate + room capacity + points + override)
+  POST /api/v1/checkin   (class_id + occurrence_date; the occurrence is
+                          resolved -- a pure read, no materialization --
+                          then gated: plan + room capacity + points + override)
   GET  /api/v1/streak
 
 These run against the live backend + the seeded DB. Rather than hard-code seed
@@ -13,9 +14,14 @@ conftest) provides an authorised client; ``SEEDED_GYM_ID`` is the single seeded
 gym. The schedule board it reads (``GET /api/v1/classes/instances``) stays in
 the classes domain.
 
-NOTE: the lazy materializer's ON CONFLICT needs the ``uq_class_history_occurrence``
-UNIQUE constraint. When it is absent the gated check-in tests fail at the
-materialize step — a migration block, not a code defect.
+``occurrence_date`` (both requested and read off the board) is always the
+occurrence's ORIGINAL date (``EffectiveClassInstanceResponse.original_date``),
+never the effective/display ``class_date`` — see the class-system-guide skill.
+
+NOTE: occurrences are versioned-schedule computations now (there is no
+materialized occurrence table); a check-in / attendance read against a
+column or constraint that doesn't exist yet is a migration-not-applied gap,
+not a code defect.
 """
 
 from __future__ import annotations
@@ -56,9 +62,9 @@ def _run_async(coro):
 
 
 # One covering member (active UNLIMITED plan, eligible) per active, non-deleted
-# class. The check-in materializes class_history lazily, so NO pre-existing
-# class_history row is required -- the occurrence_date comes from the schedule
-# board (the expander), not from seeded history.
+# class. Occurrences are computed (no materialization), so NO pre-existing
+# attendance row is required -- the occurrence_date comes from the schedule
+# board (the expander).
 _COVERING_BY_CLASS_SQL = """
 SELECT DISTINCT ON (gc.class_id)
     gc.class_id,
@@ -81,7 +87,7 @@ ORDER BY gc.class_id, ms.member_id
 
 # An existing attendance row -> a member with attendance, for the streak test.
 _EXISTING_ATTENDANCE_SQL = """
-SELECT member_id, class_history_id, log_id, plan_id, item_id
+SELECT member_id, class_id, original_date, log_id, plan_id, item_id
 FROM member_attendance
 WHERE gym_id = $1
 LIMIT 1
@@ -142,7 +148,9 @@ def _pick_target(
             "member_id": cover["member_id"],
             "class_id": occ["class_id"],
             "points_worth": cover["points_worth"],
-            "occurrence_date": occ["class_date"],
+            # occurrence_date is always the ORIGINAL date -- never class_date
+            # (the effective/display date), per the class-system-guide skill.
+            "occurrence_date": occ["original_date"],
         }
     return None
 
@@ -217,90 +225,51 @@ def _class_attended_activity_ids(member_id: str, class_id: str) -> set[UUID]:
     return _run_async(_run())
 
 
-def _attendance_exists(member_id: str, class_history_id: str) -> bool:
+def _attendance_exists(
+    member_id: str, class_id: str, occurrence_date: str
+) -> bool:
     async def _run() -> bool:
         conn = await asyncpg.connect(_get_db_url())
         try:
             return await conn.fetchval(
                 "SELECT EXISTS (SELECT 1 FROM member_attendance "
-                "WHERE member_id = $1 AND class_history_id = $2)",
+                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3)",
                 UUID(member_id),
-                UUID(class_history_id),
+                UUID(class_id),
+                date.fromisoformat(occurrence_date),
             )
         finally:
             await conn.close()
 
     return _run_async(_run())
-
-
-def _history_exists(class_history_id: str) -> bool:
-    async def _run() -> bool:
-        conn = await asyncpg.connect(_get_db_url())
-        try:
-            return await conn.fetchval(
-                "SELECT EXISTS (SELECT 1 FROM class_history "
-                "WHERE class_history_id = $1)",
-                UUID(class_history_id),
-            )
-        finally:
-            await conn.close()
-
-    return _run_async(_run())
-
-
-def _delete_history_if_empty(class_history_id: str) -> None:
-    """Teardown: drop the (now attendance-free) occurrence the test materialized,
-    leaving a seed-shared occurrence (one still holding seeded attendance) be."""
-
-    async def _run() -> None:
-        conn = await asyncpg.connect(_get_db_url())
-        try:
-            await conn.execute(
-                "DELETE FROM class_history WHERE class_history_id = $1 "
-                "AND NOT EXISTS (SELECT 1 FROM member_attendance "
-                "WHERE class_history_id = $1)",
-                UUID(class_history_id),
-            )
-        finally:
-            await conn.close()
-
-    _run_async(_run())
 
 
 def _teardown_checkin(
     member_id: str,
-    class_history_id: str,
+    class_id: str,
+    occurrence_date: str,
     new_activity_ids: set[UUID],
     restore_points: int,
 ) -> None:
-    """Undo a test check-in: delete the attendance + the (lazily created)
-    class_history row + the new class_attended activities, restore points."""
+    """Undo a test check-in: delete the attendance row (keyed by identity —
+    class_id + original_date) + the new class_attended activities, restore
+    points."""
 
     async def _run() -> None:
         conn = await asyncpg.connect(_get_db_url())
         try:
             await conn.execute(
                 "DELETE FROM member_attendance "
-                "WHERE member_id = $1 AND class_history_id = $2",
+                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3",
                 UUID(member_id),
-                UUID(class_history_id),
+                UUID(class_id),
+                date.fromisoformat(occurrence_date),
             )
             if new_activity_ids:
                 await conn.execute(
                     "DELETE FROM member_activities WHERE activity_id = ANY($1)",
                     list(new_activity_ids),
                 )
-            # The check-in may have materialized a fresh class_history row OR
-            # found a seed-shared one (seed and runtime now stamp the same
-            # gym-tz occurred_at, so a check-in can land on a seeded occurrence).
-            # Delete the row only when no attendance remains on it — a row still
-            # referenced by seeded attendance is left intact (we didn't create it).
-            await conn.execute(
-                "DELETE FROM class_history WHERE class_history_id = $1 "
-                "AND NOT EXISTS (SELECT 1 FROM member_attendance "
-                "WHERE class_history_id = $1)",
-                UUID(class_history_id),
-            )
             await conn.execute(
                 "UPDATE members SET points_balance = $2 WHERE member_id = $1",
                 UUID(member_id),
@@ -318,7 +287,7 @@ def _teardown_checkin(
 
 
 class TestCheckinValidation:
-    """422 validation for the new (class_id + occurrence_date) body shape."""
+    """422 validation for the (class_id + occurrence_date) body shape."""
 
     def test_missing_body_returns_422(self, api: httpx.Client) -> None:
         resp = api.post("/api/v1/checkin")
@@ -383,8 +352,8 @@ class TestCheckinValidation:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/checkin — gated behavior (needs the seeded DB + the
-# uq_class_history_occurrence migration for the materializer's ON CONFLICT)
+# POST /api/v1/checkin — gated behavior (needs the seeded DB + the versioned
+# schedule migration applied)
 # ---------------------------------------------------------------------------
 
 
@@ -416,7 +385,6 @@ class TestGatedCheckin:
             },
         )
         body = resp.json()
-        class_history_id = body.get("class_history_id")
         after_activities = _class_attended_activity_ids(member_id, class_id)
         new_activity_ids = after_activities - before_activities
         try:
@@ -430,16 +398,15 @@ class TestGatedCheckin:
             assert _member_points(member_id) == before_points + points_worth
             assert len(new_activity_ids) == 1
         finally:
-            if class_history_id:
-                _teardown_checkin(
-                    member_id, class_history_id, new_activity_ids, before_points
-                )
+            _teardown_checkin(
+                member_id, class_id, occurrence_date, new_activity_ids, before_points
+            )
 
     def test_checkin_rejected_too_far_in_the_future(
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
         """A check-in for an occurrence further than the open window before it
-        starts is rejected (check-in isn't open yet) — nothing materialized."""
+        starts is rejected (check-in isn't open yet) — nothing recorded."""
         row = seed_ids["too_early"]
         if row is None:
             pytest.skip("No too-far-future coverable occurrence on the board")
@@ -460,19 +427,19 @@ class TestGatedCheckin:
     ) -> None:
         """DELETE /checkin removes one member's attendance, claws back the
         awarded points (balance back to before), and drops the class_attended
-        activity — the occurrence (class_history) stays. A second remove is a
-        clean no-op (removed=False)."""
+        activity. A second remove is a clean no-op (removed=False)."""
         row = seed_ids["covered"]
         if row is None:
             pytest.skip("No board occurrence for a coverable class in seed")
         member_id = row["member_id"]
         class_id = row["class_id"]
         points_worth = row["points_worth"]
+        occurrence_date = row["occurrence_date"]
         params = {
             "member_id": member_id,
             "gym_id": GYM_ID,
             "class_id": class_id,
-            "occurrence_date": row["occurrence_date"],
+            "occurrence_date": occurrence_date,
         }
 
         before_points = _member_points(member_id)
@@ -482,7 +449,6 @@ class TestGatedCheckin:
         assert checkin.status_code == 200, checkin.text
         if checkin.json()["already_checked_in"]:
             pytest.skip("covered member already seeded onto this occurrence")
-        class_history_id = checkin.json()["class_history_id"]
         try:
             assert _member_points(member_id) == before_points + points_worth
 
@@ -492,21 +458,21 @@ class TestGatedCheckin:
             assert body["removed"] is True
             assert body["points_reverted"] == points_worth
             # Attendance + points + activity reverted to the pre-check-in state.
-            assert _attendance_exists(member_id, class_history_id) is False
+            assert (
+                _attendance_exists(member_id, class_id, occurrence_date) is False
+            )
             assert _member_points(member_id) == before_points
             assert (
                 _class_attended_activity_ids(member_id, class_id)
                 == before_activities
             )
-            # The occurrence itself is kept (the class still happened).
-            assert _history_exists(class_history_id) is True
 
             # A second remove is a clean no-op.
             again = api.request("DELETE", "/api/v1/checkin", params=params)
             assert again.status_code == 200, again.text
             assert again.json()["removed"] is False
         finally:
-            _delete_history_if_empty(class_history_id)
+            _teardown_checkin(member_id, class_id, occurrence_date, set(), before_points)
 
     def test_duplicate_checkin_is_idempotent_and_awards_no_extra_points(
         self, api: httpx.Client, seed_ids: dict
@@ -531,7 +497,6 @@ class TestGatedCheckin:
         before_activities = _class_attended_activity_ids(member_id, class_id)
 
         first = api.post("/api/v1/checkin", json=payload)
-        class_history_id = first.json().get("class_history_id")
         try:
             assert first.status_code == 200, first.text
             after_first_points = _member_points(member_id)
@@ -547,13 +512,13 @@ class TestGatedCheckin:
             assert _member_points(member_id) == after_first_points
         finally:
             after_activities = _class_attended_activity_ids(member_id, class_id)
-            if class_history_id:
-                _teardown_checkin(
-                    member_id,
-                    class_history_id,
-                    after_activities - before_activities,
-                    before_points,
-                )
+            _teardown_checkin(
+                member_id,
+                class_id,
+                occurrence_date,
+                after_activities - before_activities,
+                before_points,
+            )
 
     def test_kiosk_checkin_without_membership_is_rejected(
         self, api: httpx.Client, seed_ids: dict
@@ -626,7 +591,6 @@ class TestGatedCheckin:
             "/api/v1/checkin", json={**payload, "ignore_warnings": True}
         )
         body = resp.json()
-        class_history_id = body.get("class_history_id")
         after_activities = _class_attended_activity_ids(member_id, class_id)
         new_activity_ids = after_activities - before_activities
         try:
@@ -643,10 +607,9 @@ class TestGatedCheckin:
             assert _member_points(member_id) == before_points + points_worth
             assert len(new_activity_ids) == 1
         finally:
-            if class_history_id:
-                _teardown_checkin(
-                    member_id, class_history_id, new_activity_ids, before_points
-                )
+            _teardown_checkin(
+                member_id, class_id, occurrence_date, new_activity_ids, before_points
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -659,8 +622,8 @@ class TestAttendees:
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
         """After a staff check-in of a no-membership member, the attendees
-        endpoint lists that member with NULL plan/item attribution and the
-        materialized class_history_id. Fully cleaned up."""
+        endpoint lists that member with NULL plan/item attribution. Fully
+        cleaned up."""
         covered = seed_ids["covered"]
         member_row = seed_ids["no_membership"]
         if covered is None or member_row is None:
@@ -685,7 +648,6 @@ class TestAttendees:
                 "ignore_warnings": True,
             },
         )
-        class_history_id = checkin.json().get("class_history_id")
         try:
             assert checkin.status_code == 200, checkin.text
 
@@ -699,7 +661,6 @@ class TestAttendees:
             )
             assert resp.status_code == 200, resp.text
             body = resp.json()
-            assert body["class_history_id"] == class_history_id
             by_member = {a["member_id"]: a for a in body["attendees"]}
             assert member_id in by_member
             attendee = by_member[member_id]
@@ -711,16 +672,15 @@ class TestAttendees:
                 _class_attended_activity_ids(member_id, class_id)
                 - before_activities
             )
-            if class_history_id:
-                _teardown_checkin(
-                    member_id, class_history_id, new_activity_ids, before_points
-                )
+            _teardown_checkin(
+                member_id, class_id, occurrence_date, new_activity_ids, before_points
+            )
 
-    def test_attendees_empty_when_unmaterialized(
+    def test_attendees_empty_when_no_signups_or_attendance(
         self, api: httpx.Client, seed_ids: dict
     ) -> None:
-        """An occurrence with no check-ins (never materialized) returns a null
-        class_history_id and an empty attendee list."""
+        """An occurrence with no sign-ups or check-ins returns an empty
+        attendee list."""
         covered = seed_ids["covered"]
         if covered is None:
             pytest.skip("No coverable class in seed")
@@ -730,18 +690,22 @@ class TestAttendees:
             params={
                 "gym_id": GYM_ID,
                 "class_id": covered["class_id"],
-                # A date no check-in materializes.
+                # A date nobody has signed up for or attended.
                 "occurrence_date": "2999-12-31",
             },
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["class_history_id"] is None
         assert body["attendees"] == []
 
-    def test_attendees_unknown_gym_returns_404(self, api: httpx.Client) -> None:
-        """An unknown gym_id 404s (employee auth runs first, but a discovered
-        gym with no tz still maps the service's 'Gym not found' to 404)."""
+    def test_attendees_unknown_gym_returns_403_or_404(
+        self, api: httpx.Client
+    ) -> None:
+        """An unknown gym_id is rejected — employee auth
+        (``verify_gym_employee``) runs before the service, so an unknown gym
+        403s (the service itself no longer checks gym existence directly:
+        occurrence resolution is keyed by (class_id, original_date), with no
+        separate gym-timezone read)."""
         resp = api.get(
             "/api/v1/checkin/attendees",
             params={
@@ -750,8 +714,8 @@ class TestAttendees:
                 "occurrence_date": "2026-06-01",
             },
         )
-        # 403 (not an employee of the unknown gym) or 404 (gym not found) are
-        # both valid rejections; the point is it is not a 200 with data.
+        # 403 (not an employee of the unknown gym) or 404 are both valid
+        # rejections; the point is it is not a 200 with data.
         assert resp.status_code in (403, 404), resp.text
 
 

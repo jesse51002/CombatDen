@@ -1,17 +1,14 @@
 """Read the combined roster (signed-up ∪ attended) of one class occurrence.
 
-``list_attendees`` resolves the materialized ``class_history`` row for a
-(class, gym, gym-local occurrence date) the same way the undo service does —
-by the gym-local day's UTC bounds, so a per-occurrence time override still
-resolves to the same row — for reporting purposes, then reads the combined
-roster: every member who is signed up (``class_signups``) OR attended
-(``member_attendance``), each flagged. A signed-up-only member's attendance
-fields are NULL; the occurrence need not be materialized for sign-ups to show
-(a future occurrence can carry sign-ups with no ``class_history`` row yet).
+``list_attendees`` reads the combined roster of one occurrence — every member
+who is signed up (``class_signups``) OR attended (``member_attendance``),
+each flagged — keyed directly by the occurrence's identity
+(``class_id``, ``original_date``). A signed-up-only member's attendance
+fields are NULL; the occurrence doesn't need any attendance for sign-ups to
+show (a future occurrence can carry sign-ups with no check-ins yet).
 
 This is a read-only sibling of the check-in write path: no expander, no
-materialize. It reuses ``CheckinQueries`` for the gym timezone, the
-find-history-for-day lookup, and the roster join.
+occurrence resolution. It reuses ``CheckinQueries`` for the roster join.
 """
 
 from datetime import date
@@ -23,7 +20,6 @@ from src.checkin.schema.checkin_schema import (
 )
 from src.checkin.service.checkin_queries import CheckinQueries
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import gym_local_day_bounds_utc
 
 
 class CheckinAttendeesService:
@@ -42,27 +38,12 @@ class CheckinAttendeesService:
         class_id: UUID,
         occurrence_date: date,
     ) -> AttendeeListResponse:
-        """Return everyone signed up or attended on ``occurrence_date``.
-
-        Raises:
-            ValueError: If the gym does not exist (mapped to 404 by the router).
-        """
-        gym_tz = await self._queries.get_gym_timezone(gym_id)
-        if gym_tz is None:
-            raise ValueError("Gym not found")
-
-        day_start, day_end = gym_local_day_bounds_utc(occurrence_date, gym_tz)
-        history_id = await self._queries.find_history_for_day(
-            class_id, gym_id, day_start, day_end
-        )
-
-        rows = await self._queries.get_roster(
-            class_id, gym_id, occurrence_date, day_start, day_end
-        )
+        """Return everyone signed up or attended on ``occurrence_date`` (the
+        occurrence's ORIGINAL date)."""
+        rows = await self._queries.get_roster(class_id, gym_id, occurrence_date)
         return AttendeeListResponse(
             class_id=class_id,
             occurrence_date=occurrence_date,
-            class_history_id=history_id,
             attendees=[
                 Attendee(
                     member_id=row["member_id"],

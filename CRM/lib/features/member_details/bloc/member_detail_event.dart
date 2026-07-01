@@ -373,8 +373,9 @@ class RefundChargeRequested extends MemberDetailEvent {
 // ----- Class check-in -----
 
 /// Check the viewed member into the occurrence of [classId] on
-/// [occurrenceDate] (a local calendar day). The CRM is the staff surface
-/// (`is_member: false`): a clean check-in is recorded, but one that hits a gate
+/// [occurrenceDate] — the occurrence's IDENTITY date, never its effective/
+/// display date. The CRM is the staff surface (`is_member: false`): a clean
+/// check-in is recorded, but one that hits a gate
 /// warning is NOT recorded — the outcome lands on the loaded state as
 /// `checkInResult` with `requiresConfirmation` true and the `warnings`, so the
 /// dialog can offer "Check in anyway" (re-dispatched with [ignoreWarnings]
@@ -403,7 +404,8 @@ class MemberCheckInCleared extends MemberDetailEvent {
 // ----- Class reserve (sign-up) -----
 
 /// Reserve (sign up) the viewed member for the occurrence of [classId] on
-/// [occurrenceDate] — a single-member wrapper over the schedule feature's
+/// [occurrenceDate] — the occurrence's IDENTITY date, never its effective/
+/// display date — a single-member wrapper over the schedule feature's
 /// `ScheduleRepository.signUp`, NOT attendance. Idempotent
 /// (`SignupResponse.alreadySignedUp` on a repeat, no extra capacity
 /// consumed); rejected with e.g. "Class is full" once the occurrence's

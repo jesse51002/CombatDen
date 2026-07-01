@@ -1,23 +1,29 @@
 """Unit tests for ``ClassesScheduleReaderService.list_effective_instances``
-(no DB) — specifically the past/live dedup by ``(class_id, gym-local day)``.
+(no DB) — the version-aware schedule board.
 
-``_board_rows_for_class`` builds the live (in-session/upcoming) rows from the
-current, editable ``gym_classes`` definition while ``past_by_class`` builds
-the immutable, already-ended rows from ``class_history``. ``PUT
-/classes/{id}`` edits ``gym_classes`` without syncing existing
-``class_history`` rows, so after a default-TIME edit a day can carry BOTH a
-materialized past row (old time, ended) AND a live-expander row (new time,
-not-yet-ended) — the same class rendering twice for that day. These tests
-reproduce that duplicate and confirm the dedup keeps exactly one row, while a
-normal (unedited) day still resolves to exactly one row either way.
+There is no materializer and no past/live day-dedup in the versioned model:
+the board is pure version expansion (``ClassesVersionExpander``,
+``include_cancelled=True``) enriched with instructor names and attendance /
+sign-up counts. These tests cover:
 
-The DB reads (``_read_all`` / ``_gym_timezone``) are stubbed by sql-file name;
-the real ``ClassesExpander`` does the actual expansion; ``now`` is pinned via
-monkeypatching the module's ``datetime`` (mirrors
-``test_classes_materializer.py``'s ``_fixed_datetime`` pattern).
+* a multi-version class renders its pre-mint days from the OLD version and
+  its post-mint days from the NEW version, in the same window;
+* a soft-deleted class renders only occurrences that have already ENDED
+  (no in-session/future rows);
+* attendance / sign-up counts are keyed by the occurrence's IDENTITY
+  ``(class_id, original_date)`` — a rescheduled occurrence's counts follow
+  its ORIGINAL date, not its displayed ``class_date``;
+* every row carries ``original_date`` (distinct from ``class_date`` once
+  rescheduled);
+* a cancelled occurrence is still emitted, flagged.
+
+The DB reads (``_read_all``) are stubbed by sql-file name; the real
+``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``) does the
+actual expansion; ``now`` is pinned via monkeypatching the module's
+``datetime`` (mirrors the pattern the deleted materializer test used).
 """
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -31,32 +37,60 @@ from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_schedule_reader_service import (
     ClassesScheduleReaderService,
 )
+from src.classes.service.classes_version_expander import (
+    ClassesVersionExpander,
+)
 
-_DAY = date(2026, 6, 15)
-_FIXED_NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+_UTC_TZ = "UTC"
 
 
 def _class_row(
     *,
     class_id: UUID,
     gym_id: UUID,
-    class_time: time,
+    class_name: str = "Test Class",
+    max_capacity: int | None = None,
+    is_deleted: bool = False,
 ) -> dict:
-    """A classes_load_for_window.sql-shaped row: daily-recurring, covering
-    ``_DAY``, at the CURRENT (possibly edited) default time."""
-    row = {
+    """A ``classes_board_classes.sql``-shaped identity row."""
+    return {
         "class_id": class_id,
         "gym_id": gym_id,
-        "class_name": "Test Class",
+        "class_name": class_name,
+        "class_description": None,
+        "max_capacity": max_capacity,
+        "allowed_plan_ids": None,
+        "image_url": None,
+        "points_worth": 10,
+        "is_active": True,
+        "is_deleted": is_deleted,
+        "created_at": datetime.now(UTC),
+    }
+
+
+def _version_row(
+    *,
+    class_id: UUID,
+    gym_id: UUID,
+    effective_from: datetime,
+    class_time: time,
+    timezone: str = _UTC_TZ,
+    start_date: date = date(2020, 1, 1),
+    end_date: date | None = None,
+) -> dict:
+    """A ``classes_schedules_for_gym.sql``-shaped daily version row."""
+    row = {
+        "schedule_id": uuid4(),
+        "class_id": class_id,
+        "gym_id": gym_id,
+        "effective_from": effective_from,
+        "timezone": timezone,
         "class_time": class_time,
         "duration_minutes": 60,
         "recurring_unit": RecurringUnit.daily,
         "recurring_interval": 1,
-        "start_date": _DAY - timedelta(days=30),
-        "end_date": None,
-        "max_capacity": None,
-        "image_url": None,
-        "points_worth": 10,
+        "start_date": start_date,
+        "end_date": end_date,
     }
     for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
         row[day] = True
@@ -64,129 +98,210 @@ def _class_row(
     return row
 
 
-def _past_row(*, class_id: UUID, gym_id: UUID, occurred_at: datetime) -> dict:
-    """A classes_board_past_history.sql-shaped row: an already-materialized,
-    ended occurrence."""
+def _instance_row(
+    *,
+    class_id: UUID,
+    gym_id: UUID,
+    original_date: date,
+    is_cancelled: bool = False,
+    new_date: date | None = None,
+) -> dict:
     return {
+        "exception_id": uuid4(),
         "class_id": class_id,
         "gym_id": gym_id,
-        "instructor_id": None,
-        "occurred_at": occurred_at,
-        "duration_minutes": 60,
-        "class_name": "Test Class",
-        "image_url": None,
-        "points_worth": 10,
-        "max_capacity": None,
-        "attendance_count": 0,
+        "original_date": original_date,
+        "is_cancelled": is_cancelled,
+        "new_class_time": None,
+        "new_duration_minutes": None,
+        "new_max_capacity": None,
+        "new_instructor_id": None,
+        "new_date": new_date,
+        "created_at": datetime(2025, 1, 1, tzinfo=UTC),
     }
 
 
 def _service(
     *,
     classes: list[dict],
-    past_rows: list[dict],
+    versions: list[dict],
+    instances: list[dict] | None = None,
+    ranges: list[dict] | None = None,
+    attendance: list[dict] | None = None,
+    signups: list[dict] | None = None,
 ) -> ClassesScheduleReaderService:
     sql_map: dict[str, list[dict]] = {
-        "classes_load_for_window.sql": classes,
-        "classes_instance_exceptions_for_window.sql": [],
-        "classes_range_exceptions_for_window.sql": [],
+        "classes_board_classes.sql": classes,
+        "classes_schedules_for_gym.sql": versions,
+        "classes_instance_exceptions_for_window.sql": instances or [],
+        "classes_range_exceptions_for_window.sql": ranges or [],
         "classes_gym_instructors.sql": [],
-        "classes_attendance_counts.sql": [],
-        "classes_signup_counts.sql": [],
-        "classes_board_past_history.sql": past_rows,
+        "classes_attendance_counts.sql": attendance or [],
+        "classes_signup_counts.sql": signups or [],
     }
 
     async def _read_all_stub(sql_file: str, params: dict) -> list[dict]:
         return sql_map.get(sql_file, [])
 
-    service = ClassesScheduleReaderService(MagicMock(), ClassesExpander(), MagicMock())
-    service._gym_timezone = AsyncMock(return_value="UTC")
+    service = ClassesScheduleReaderService(
+        MagicMock(), ClassesVersionExpander(ClassesExpander())
+    )
     service._read_all = AsyncMock(side_effect=_read_all_stub)
-    service._materializer = MagicMock()
-    service._materializer.materialize = AsyncMock(return_value=0)
     return service
 
 
-def _fixed_datetime() -> type[datetime]:
-    """A datetime subclass whose ``now(tz)`` is pinned to ``_FIXED_NOW``."""
+def _fixed_datetime(now: datetime) -> type[datetime]:
+    """A datetime subclass whose ``now(tz)`` is pinned to ``now``."""
 
     class _FixedDatetime(datetime):
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
-            return _FIXED_NOW
+            return now
 
     return _FixedDatetime
 
 
-async def test_default_time_edit_after_materialize_does_not_duplicate(
+async def test_multi_version_class_renders_old_past_new_future(
     monkeypatch,
 ) -> None:
-    """The bug: the class's default time was edited (9am -> 6pm) for a day
-    already materialized under the OLD time. Before the fix, this rendered
-    TWO rows for the day (the past 9am row + a live 6pm row, since 6pm hasn't
-    ended yet at noon). After the fix, the materialized past row wins and the
-    live row for that same day is dropped -- exactly one row."""
-    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime())
+    """A schedule edit (mint) mid-window: days before the mint render from
+    the OLD version's time, days on/after the mint from the NEW version's —
+    no materialize, no stored-occurrence side."""
     class_id, gym_id = uuid4(), uuid4()
+    mint = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        reader_module, "datetime", _fixed_datetime(mint.replace(hour=12))
+    )
 
+    v1 = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    v2 = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=mint,
+        class_time=time(18, 0),
+    )
     service = _service(
-        classes=[_class_row(class_id=class_id, gym_id=gym_id, class_time=time(18, 0))],
-        past_rows=[
-            _past_row(
-                class_id=class_id,
-                gym_id=gym_id,
-                occurred_at=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
-            )
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[v1, v2],
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, date(2026, 6, 8), date(2026, 6, 12)
+    )
+
+    by_date = {row.original_date: row for row in resp.items}
+    assert len(by_date) == 5
+    assert by_date[date(2026, 6, 8)].resolved_class_time == time(9, 0)
+    assert by_date[date(2026, 6, 9)].resolved_class_time == time(9, 0)
+    assert by_date[date(2026, 6, 10)].resolved_class_time == time(18, 0)
+    assert by_date[date(2026, 6, 11)].resolved_class_time == time(18, 0)
+    assert by_date[date(2026, 6, 12)].resolved_class_time == time(18, 0)
+
+
+async def test_deleted_class_renders_past_only(monkeypatch) -> None:
+    """A soft-deleted class's already-ENDED occurrences render; in-session /
+    future occurrences do not (the delete wipe already cleared their
+    sign-ups/check-ins, so there is nothing to show)."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    # 09:00-10:00 daily; "now" is day3 10:00 -> day3 has JUST ended.
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    service = _service(
+        classes=[
+            _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
         ],
+        versions=[version],
     )
 
-    resp = await service.list_effective_instances(gym_id, _DAY, _DAY)
+    resp = await service.list_effective_instances(gym_id, day1, day5)
 
-    assert len(resp.items) == 1
-    row = resp.items[0]
-    # The materialized (old-time) row is the one that survives -- authoritative
-    # for a day that already ran.
-    assert row.resolved_class_time == time(9, 0)
-    assert row.occurred_at == datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day2, day3}
+    assert day4 not in rendered
+    assert day5 not in rendered
 
 
-async def test_upcoming_unedited_day_renders_once(monkeypatch) -> None:
-    """A normal day that hasn't run yet (no class_history row) -> exactly one
-    row, from the live expansion -- unaffected by the dedup."""
-    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime())
+async def test_counts_keyed_by_original_date_and_cancelled_included(
+    monkeypatch,
+) -> None:
+    """Attendance/sign-up counts key on the occurrence's identity
+    ``(class_id, original_date)``, not the displayed date — a rescheduled
+    occurrence's counts follow it from its original slot. A cancelled
+    occurrence is still emitted (flagged), and every row carries
+    ``original_date``."""
     class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
+    now = datetime(2026, 5, 1, tzinfo=UTC)  # well before the window: nothing
+    # has "ended" yet, so the deleted-class filter is moot (class is live).
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    # day2 cancelled; day1 rescheduled onto day3 (effective-date doubling —
+    # day3 keeps its own natural occurrence too).
+    instances = [
+        _instance_row(
+            class_id=class_id, gym_id=gym_id, original_date=day2,
+            is_cancelled=True,
+        ),
+        _instance_row(
+            class_id=class_id, gym_id=gym_id, original_date=day1,
+            new_date=day3,
+        ),
+    ]
+    attendance = [
+        {"class_id": class_id, "original_date": day1, "attendance_count": 2},
+    ]
+    signups = [
+        {"class_id": class_id, "original_date": day3, "signup_count": 1},
+    ]
     service = _service(
-        classes=[_class_row(class_id=class_id, gym_id=gym_id, class_time=time(18, 0))],
-        past_rows=[],
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+        attendance=attendance,
+        signups=signups,
     )
 
-    resp = await service.list_effective_instances(gym_id, _DAY, _DAY)
+    resp = await service.list_effective_instances(gym_id, day1, day3)
 
-    assert len(resp.items) == 1
-    assert resp.items[0].resolved_class_time == time(18, 0)
-    assert resp.items[0].is_cancelled is False
+    by_original = {row.original_date: row for row in resp.items}
+    assert set(by_original) == {day1, day2, day3}
 
+    cancelled = by_original[day2]
+    assert cancelled.is_cancelled is True
+    assert cancelled.has_instance_exception is True
+    assert cancelled.class_date == day2
+    assert cancelled.attendance_count == 0
+    assert cancelled.signup_count == 0
 
-async def test_ended_unedited_day_renders_once_from_history(monkeypatch) -> None:
-    """A normal day that already ran, definition unchanged (live and history
-    agree on the time) -> exactly one row, from class_history -- the live
-    row is already excluded by the ended-filter regardless of the dedup."""
-    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime())
-    class_id, gym_id = uuid4(), uuid4()
+    moved = by_original[day1]
+    assert moved.class_date == day3  # displayed on the new date...
+    assert moved.original_date == day1  # ...but keyed by its ORIGINAL date
+    assert moved.attendance_count == 2  # follows original_date, not class_date
+    assert moved.signup_count == 0
+    assert moved.has_instance_exception is True
 
-    service = _service(
-        classes=[_class_row(class_id=class_id, gym_id=gym_id, class_time=time(9, 0))],
-        past_rows=[
-            _past_row(
-                class_id=class_id,
-                gym_id=gym_id,
-                occurred_at=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
-            )
-        ],
-    )
-
-    resp = await service.list_effective_instances(gym_id, _DAY, _DAY)
-
-    assert len(resp.items) == 1
-    assert resp.items[0].resolved_class_time == time(9, 0)
+    natural = by_original[day3]
+    assert natural.class_date == day3
+    assert natural.original_date == day3
+    assert natural.attendance_count == 0
+    assert natural.signup_count == 1  # keyed to day3's OWN original_date
+    assert natural.is_cancelled is False

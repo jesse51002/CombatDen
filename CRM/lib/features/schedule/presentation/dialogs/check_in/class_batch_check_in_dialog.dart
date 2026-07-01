@@ -25,6 +25,9 @@ class ClassBatchCheckInDialog extends StatefulWidget {
   final String classId;
   final String gymId;
   final String className;
+
+  /// The occurrence's IDENTITY date (never its effective/display date) —
+  /// this addresses the batch check-in.
   final DateTime occurrenceDate;
 
   const ClassBatchCheckInDialog({

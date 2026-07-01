@@ -1,11 +1,10 @@
 """Batch staff check-in against a single resolved class occurrence.
 
 Injects the two check-in seams directly (no facade): the
-``CheckinClassResolver`` loads + validates + materializes the
-``class_history`` row ONCE (so a 50-member batch creates exactly one occurrence
-row), then the ``CheckinMemberGate`` runs the per-member gate + write for each
-member. The batch resolves once, then loops a de-duped, order-preserving member
-list.
+``CheckinClassResolver`` loads + validates the occurrence ONCE (a pure read —
+so a 50-member batch resolves it exactly once), then the
+``CheckinMemberGate`` runs the per-member gate + write for each member. The
+batch resolves once, then loops a de-duped, order-preserving member list.
 
 One bad member never sinks the batch: each member is checked in inside its own
 ``try``, and any exception becomes a ``failed`` item carrying the error message
@@ -102,7 +101,6 @@ class BatchCheckinService:
         response = BatchCheckinResponse(
             class_id=class_id,
             occurrence_date=occurrence_date,
-            class_history_id=resolved_class.class_history_id,
             results=results,
         )
         return response, all_failed

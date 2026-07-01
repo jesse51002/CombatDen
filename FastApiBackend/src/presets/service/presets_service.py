@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import random
 from collections.abc import Mapping, Sequence
-from datetime import date, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from schema.gym_class import RecurringUnit
@@ -55,18 +55,29 @@ _CLASS_TIME_SLOTS = [
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
 
-# History + sign-up seeding: how far back to materialize recorded attendance
-# and how far ahead to seed upcoming sign-up reservations, so a freshly-
-# imported gym shows realistic counts on both past and upcoming classes.
-# Occurrences are expanded ONCE over [today - _PAST_HISTORY_DAYS, today +
+# The schedule shape's recurrence anchor (gym_class_schedules.start_date):
+# backdated so the weekly recurrence already covers the seeded past month AND
+# the current week. The live board expands from start_date forward, so this
+# only means the class "has been running" for a month.
+_CLASS_RECURRENCE_BACKDATE_DAYS = 35
+# The single imported schedule version's effective_from: backdated well
+# before the earliest seeded attendance date (_PAST_HISTORY_DAYS). Purely
+# cosmetic -- the FIRST version of a class owns occurrences back to negative
+# infinity regardless (ClassesVersionExpander) -- but keeps the stored row
+# honest for anyone reading it.
+_SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS = 40
+
+# Attendance + sign-up seeding: how far back to seed recorded attendance and
+# how far ahead to seed upcoming sign-up reservations, so a freshly-imported
+# gym shows realistic counts on both past and upcoming classes. Occurrences
+# are expanded ONCE over [today - _PAST_HISTORY_DAYS, today +
 # _FUTURE_SIGNUP_DAYS], then split: a past-or-today occurrence gets a
-# class_history row (a real occurrence record) + attendance (a check-in
-# record) + a mirrored mix of class_signups reservations; a future occurrence
-# gets ONLY a class_signups reservation. member_attendance is never written
-# for a future occurrence — a sign-up is a reservation, not a check-in — and
-# class_history is never pre-materialized for one either, mirroring the live
-# sign-up path (``SignupService`` deliberately doesn't materialize history
-# early; see its module docstring).
+# member_attendance row (a real check-in record, keyed by its original slot)
+# + a mirrored mix of class_signups reservations; a future occurrence gets
+# ONLY a class_signups reservation. member_attendance is never written for a
+# future occurrence — a sign-up is a reservation, not a check-in, mirroring
+# the live sign-up path (``SignupService`` deliberately doesn't record
+# attendance early; see its module docstring).
 _PAST_HISTORY_DAYS = 30
 _FUTURE_SIGNUP_DAYS = 7
 # Attendance spread per occurrence: draw a random subset (0..MAX_FRACTION) of the
@@ -151,19 +162,29 @@ class PresetsService:
         )
         seed_manual_sql = load_sql(SQL_DIR / "presets_seed_manual_videos.sql")
         count_owner_sql = load_sql(SQL_DIR / "presets_count_owner_feed.sql")
-        soft_delete_classes_sql = load_sql(
-            SQL_DIR / "presets_soft_delete_classes.sql"
+        delete_class_signups_sql = load_sql(
+            SQL_DIR / "presets_delete_class_signups.sql"
         )
         delete_attendance_sql = load_sql(
             SQL_DIR / "presets_delete_attendance.sql"
         )
-        delete_class_history_sql = load_sql(
-            SQL_DIR / "presets_delete_class_history.sql"
+        delete_instance_exceptions_sql = load_sql(
+            SQL_DIR / "presets_delete_instance_exceptions.sql"
         )
-        delete_class_signups_sql = load_sql(
-            SQL_DIR / "presets_delete_class_signups.sql"
+        delete_range_exceptions_sql = load_sql(
+            SQL_DIR / "presets_delete_range_exceptions.sql"
         )
+        delete_class_schedules_sql = load_sql(
+            SQL_DIR / "presets_delete_class_schedules.sql"
+        )
+        delete_classes_sql = load_sql(SQL_DIR / "presets_delete_classes.sql")
         insert_class_sql = load_sql(SQL_DIR / "presets_insert_class.sql")
+        insert_class_schedule_sql = load_sql(
+            SQL_DIR / "presets_insert_class_schedule.sql"
+        )
+        load_gym_timezone_sql = load_sql(
+            SQL_DIR / "presets_load_gym_timezone.sql"
+        )
         deactivate_rewards_sql = load_sql(
             SQL_DIR / "presets_deactivate_rewards.sql"
         )
@@ -254,24 +275,31 @@ class PresetsService:
             else:
                 videos_imported = 0
 
-            # ── Classes + instructors (reset, insert, then seed history) ──
-            # Reset: soft-delete prior classes and hard-wipe this gym's seeded
-            # class_history + attendance (FK order: attendance before history)
-            # plus its class_signups reservations, so a re-import (demo reset)
-            # regenerates a clean past month + upcoming week instead of piling
-            # up duplicate occurrences / stale reservations.
+            # ── Classes + instructors (reset, insert, then seed attendance) ─
+            # Reset: hard-delete this gym's prior imported classes + ALL
+            # dependents (sign-ups, attendance, exceptions, schedule versions)
+            # in FK-safe order, so a re-import (demo reset) always starts from
+            # a completely clean slate — ghost past occurrences after a
+            # re-import are unacceptable for demo data.
             await session.execute(
-                text(soft_delete_classes_sql), {"gym_id": gym_id_str}
+                text(delete_class_signups_sql), {"gym_id": gym_id_str}
             )
             await session.execute(
                 text(delete_attendance_sql), {"gym_id": gym_id_str}
             )
             await session.execute(
-                text(delete_class_history_sql), {"gym_id": gym_id_str}
+                text(delete_instance_exceptions_sql), {"gym_id": gym_id_str}
             )
             await session.execute(
-                text(delete_class_signups_sql), {"gym_id": gym_id_str}
+                text(delete_range_exceptions_sql), {"gym_id": gym_id_str}
             )
+            await session.execute(
+                text(delete_class_schedules_sql), {"gym_id": gym_id_str}
+            )
+            await session.execute(
+                text(delete_classes_sql), {"gym_id": gym_id_str}
+            )
+
             trainer_cache: dict[tuple[str, str], str] = {}
             classes = (
                 self._as_list(row["classes"]) if row["has_classes"] else []
@@ -282,6 +310,21 @@ class PresetsService:
             # assumed, so the sign-up capacity respect below stays correct if
             # a capacity is ever set here).
             class_capacities: dict[UUID, int | None] = {}
+            gym_tz = (
+                await session.execute(
+                    text(load_gym_timezone_sql), {"gym_id": gym_id_str}
+                )
+            ).scalar_one()
+            # One shared mint instant + recurrence anchor for every class in
+            # this import (see the constants' docstrings) — the per-class
+            # (class_id, effective_from) uniqueness never collides across
+            # distinct classes, so sharing one "now" is safe and simpler.
+            recurrence_start_date = date.today() - timedelta(
+                days=_CLASS_RECURRENCE_BACKDATE_DAYS
+            )
+            schedule_effective_from = datetime.now(UTC) - timedelta(
+                days=_SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS
+            )
             for i, c in enumerate(classes):
                 first, last = self._split_name(c["instructor_name"])
                 emp_id = await self._resolve_trainer(
@@ -304,32 +347,41 @@ class PresetsService:
                             "class_description": c["description"],
                             "image_url": c["image_url"],
                             "points_worth": _DEFAULT_POINTS_WORTH,
-                            "class_time": class_time,
-                            "duration_minutes": _DEFAULT_DURATION_MINUTES,
-                            "instructor_id": emp_id,
                         },
                     )
                 ).mappings().fetchone()
+                class_id: UUID = inserted["class_id"]
+                await session.execute(
+                    text(insert_class_schedule_sql),
+                    {
+                        "class_id": str(class_id),
+                        "gym_id": gym_id_str,
+                        "effective_from": schedule_effective_from,
+                        "timezone": gym_tz,
+                        "class_time": class_time,
+                        "duration_minutes": _DEFAULT_DURATION_MINUTES,
+                        "instructor_id": emp_id,
+                        "start_date": recurrence_start_date,
+                    },
+                )
                 expander_classes.append(
                     self._to_expander_class(
-                        class_id=inserted["class_id"],
+                        class_id=class_id,
                         gym_id=gym_id,
                         class_time=class_time,
                         instructor_id=emp_id,
-                        start_date=inserted["start_date"],
+                        start_date=recurrence_start_date,
                     )
                 )
-                class_capacities[inserted["class_id"]] = inserted[
-                    "max_capacity"
-                ]
+                class_capacities[class_id] = inserted["max_capacity"]
 
-            # Seed the past month of class_history + attendance (real check-in
-            # records) plus a mirrored mix of class_signups reservations, and
-            # the upcoming week of class_signups-only reservations, for these
-            # classes so the imported gym shows realistic counts on both past
-            # and upcoming occurrences.
+            # Seed the past month of member_attendance (real check-in records,
+            # keyed by original slot) plus a mirrored mix of class_signups
+            # reservations, and the upcoming week of class_signups-only
+            # reservations, for these classes so the imported gym shows
+            # realistic counts on both past and upcoming occurrences.
             await self._seed_history_and_attendance(
-                session, gym_id_str, expander_classes, class_capacities
+                session, gym_id_str, gym_tz, expander_classes, class_capacities
             )
 
             # ── Rewards (deactivate then insert) ──────────────────────────
@@ -360,7 +412,7 @@ class PresetsService:
             theme_design_id=row["theme"],
         )
 
-    # ── Class history + attendance + sign-up seeding ────────────────────────────
+    # ── Attendance + sign-up seeding ─────────────────────────────────────────
 
     def _to_expander_class(
         self,
@@ -403,35 +455,31 @@ class PresetsService:
         self,
         session: AsyncSession,
         gym_id_str: str,
+        gym_tz: str,
         expander_classes: list[ExpanderClass],
         class_capacities: dict[UUID, int | None],
     ) -> None:
-        """Materialize the past month of history/attendance + sign-up reservations.
+        """Seed the past month of attendance + upcoming sign-up reservations.
 
         For each imported class, expand its occurrences ONCE over
         ``[today - _PAST_HISTORY_DAYS, today + _FUTURE_SIGNUP_DAYS]`` via the
         canonical expander (the same call the rest of the preset already uses —
         no separate re-derivation for the future side), then split by date: a
-        past-or-today occurrence gets a ``class_history`` row + a random subset
-        of the gym's eligible members as recorded attendance + a mirrored mix
-        of ``class_signups`` reservations; a future occurrence gets ONLY a
-        ``class_signups`` reservation (no history, no attendance — a sign-up is
-        a reservation, not a check-in). Eligibility is date-independent for
-        this demo seed: any member holding a synced membership can attend /
-        sign up for any occurrence, attributed to one of their memberships
-        (NOT-NULL plan_id/item_id) — so participation spreads evenly across the
-        window instead of bunching on the dates that members' memberships
-        happen to span. A no-op when the import wrote no classes.
+        past-or-today occurrence gets a random subset of the gym's eligible
+        members as a recorded ``member_attendance`` row (keyed by its original
+        slot) + a mirrored mix of ``class_signups`` reservations; a future
+        occurrence gets ONLY a ``class_signups`` reservation (no attendance — a
+        sign-up is a reservation, not a check-in). Eligibility is
+        date-independent for this demo seed: any member holding a synced
+        membership can attend / sign up for any occurrence, attributed to one
+        of their memberships (NOT-NULL plan_id/item_id) — so participation
+        spreads evenly across the window instead of bunching on the dates that
+        members' memberships happen to span. A no-op when the import wrote no
+        classes.
         """
         if not expander_classes:
             return
 
-        gym_tz = (
-            await session.execute(
-                text(load_sql(SQL_DIR / "presets_load_gym_timezone.sql")),
-                {"gym_id": gym_id_str},
-            )
-        ).scalar_one()
         membership_rows = (
             await session.execute(
                 text(load_sql(SQL_DIR / "presets_load_gym_memberships.sql")),
@@ -444,9 +492,6 @@ class PresetsService:
         window_end = today + timedelta(days=_FUTURE_SIGNUP_DAYS)
         pool = self._eligible_attendees(membership_rows)
 
-        insert_history_sql = load_sql(
-            SQL_DIR / "presets_insert_class_history.sql"
-        )
         insert_attendance_sql = load_sql(
             SQL_DIR / "presets_insert_attendance.sql"
         )
@@ -464,7 +509,6 @@ class PresetsService:
                 window_start=window_start,
                 window_end=window_end,
                 pool=pool,
-                insert_history_sql=insert_history_sql,
                 insert_attendance_sql=insert_attendance_sql,
                 insert_signup_sql=insert_signup_sql,
             )
@@ -480,19 +524,20 @@ class PresetsService:
         window_start: date,
         window_end: date,
         pool: _AttendeePool,
-        insert_history_sql: str,
         insert_attendance_sql: str,
         insert_signup_sql: str,
     ) -> None:
-        """Write class_history + attendance + sign-ups for every occurrence.
+        """Write attendance + sign-ups for every occurrence of one class.
 
         A past-or-today occurrence (``occ.effective_date <= today``) gets a
-        ``class_history`` row, a random subset of attendance (a real check-in
-        record), and a mirrored mix of sign-up reservations. A future
-        occurrence gets ONLY a sign-up reservation — no ``class_history``, no
-        ``member_attendance`` — mirroring the live sign-up path, which
-        deliberately never pre-materializes history for a not-yet-started
-        occurrence (see ``SignupService``'s module docstring).
+        random subset of attendance (a real check-in record) and a mirrored
+        mix of sign-up reservations. A future occurrence gets ONLY a sign-up
+        reservation — no ``member_attendance`` — mirroring the live sign-up
+        path, which deliberately never records attendance for a not-yet-started
+        occurrence (see ``SignupService``'s module docstring). This import
+        never writes exceptions, so every occurrence's ``original_time``
+        equals the class's schedule ``class_time`` and ``effective_date``
+        equals ``original_date``.
         """
         occurrences = self._expander.expand(
             gym_class, [], [], window_start, window_end, gym_tz
@@ -506,7 +551,6 @@ class PresetsService:
                     occ=occ,
                     max_capacity=max_capacity,
                     pool=pool,
-                    insert_history_sql=insert_history_sql,
                     insert_attendance_sql=insert_attendance_sql,
                     insert_signup_sql=insert_signup_sql,
                 )
@@ -515,7 +559,8 @@ class PresetsService:
                     session=session,
                     gym_id_str=gym_id_str,
                     class_id=gym_class.class_id,
-                    occurrence_date=occ.effective_date,
+                    original_date=occ.original_date,
+                    original_time=occ.original_time,
                     max_capacity=max_capacity,
                     pool=pool,
                     insert_signup_sql=insert_signup_sql,
@@ -529,31 +574,15 @@ class PresetsService:
         occ: EffectiveOccurrence,
         max_capacity: int | None,
         pool: _AttendeePool,
-        insert_history_sql: str,
         insert_attendance_sql: str,
         insert_signup_sql: str,
     ) -> None:
-        """Write one already-occurred occurrence's history + attendance + sign-ups."""
-        class_history_id = (
-            await session.execute(
-                text(insert_history_sql),
-                {
-                    "class_id": str(gym_class.class_id),
-                    "gym_id": gym_id_str,
-                    "instructor_id": (
-                        str(occ.instructor_id)
-                        if occ.instructor_id is not None
-                        else None
-                    ),
-                    "occurred_at": occ.occurred_at,
-                    "duration_minutes": occ.duration_minutes,
-                },
-            )
-        ).scalar_one()
+        """Write one already-occurred occurrence's attendance + sign-ups."""
         attended_ids = await self._seed_attendance(
             session=session,
             gym_id_str=gym_id_str,
-            class_history_id=class_history_id,
+            class_id=gym_class.class_id,
+            occ=occ,
             pool=pool,
             insert_attendance_sql=insert_attendance_sql,
         )
@@ -561,7 +590,8 @@ class PresetsService:
             session=session,
             gym_id_str=gym_id_str,
             class_id=gym_class.class_id,
-            occurrence_date=occ.effective_date,
+            original_date=occ.original_date,
+            original_time=occ.original_time,
             attended_ids=attended_ids,
             max_capacity=max_capacity,
             pool=pool,
@@ -572,7 +602,8 @@ class PresetsService:
         self,
         session: AsyncSession,
         gym_id_str: str,
-        class_history_id: UUID,
+        class_id: UUID,
+        occ: EffectiveOccurrence,
         pool: _AttendeePool,
         insert_attendance_sql: str,
     ) -> list[UUID]:
@@ -582,9 +613,11 @@ class PresetsService:
         attendance spreads evenly across the month. A fraction
         (0..``_ATTENDANCE_MAX_FRACTION``) of the pool attends, with an explicit
         empty chance, so the seeded history is a busy / light / empty mix.
-        Distinct members per occurrence satisfy UNIQUE(member_id,
-        class_history_id); each row is attributed to that member's pinned
-        membership (plan_id + item_id).
+        Distinct members per occurrence satisfy
+        ``UNIQUE(member_id, class_id, original_date)``; each row is attributed
+        to that member's pinned membership (plan_id + item_id) and keyed by
+        the occurrence's original slot (``original_date`` + ``original_time``)
+        with ``occurred_at`` as the denormalized effective UTC instant.
 
         Returns the attended member_ids so the caller can mirror a sign-up
         onto some of them (signed-up-and-attended) without re-deriving who
@@ -600,7 +633,10 @@ class PresetsService:
             {
                 "member_id": str(member_id),
                 "gym_id": gym_id_str,
-                "class_history_id": str(class_history_id),
+                "class_id": str(class_id),
+                "original_date": occ.original_date,
+                "original_time": occ.original_time,
+                "occurred_at": occ.occurred_at,
                 "plan_id": str(plan_id),
                 "item_id": str(item_id),
             }
@@ -616,7 +652,8 @@ class PresetsService:
         session: AsyncSession,
         gym_id_str: str,
         class_id: UUID,
-        occurrence_date: date,
+        original_date: date,
+        original_time: time,
         attended_ids: list[UUID],
         max_capacity: int | None,
         pool: _AttendeePool,
@@ -668,7 +705,8 @@ class PresetsService:
             session,
             gym_id_str,
             class_id,
-            occurrence_date,
+            original_date,
+            original_time,
             signed_and_attended | no_shows,
             insert_signup_sql,
         )
@@ -678,13 +716,14 @@ class PresetsService:
         session: AsyncSession,
         gym_id_str: str,
         class_id: UUID,
-        occurrence_date: date,
+        original_date: date,
+        original_time: time,
         max_capacity: int | None,
         pool: _AttendeePool,
         insert_signup_sql: str,
     ) -> None:
-        """Sign-ups-only for a not-yet-occurred occurrence — no class_history,
-        no attendance exists yet. Mirrors
+        """Sign-ups-only for a not-yet-occurred occurrence — no attendance
+        exists yet. Mirrors
         ``Database/python_data/generators/classes.py::_future_signups``,
         respecting ``max_capacity`` as the draw pool's cap.
         """
@@ -705,7 +744,8 @@ class PresetsService:
             session,
             gym_id_str,
             class_id,
-            occurrence_date,
+            original_date,
+            original_time,
             set(random.sample(member_ids, k)),
             insert_signup_sql,
         )
@@ -715,7 +755,8 @@ class PresetsService:
         session: AsyncSession,
         gym_id_str: str,
         class_id: UUID,
-        occurrence_date: date,
+        original_date: date,
+        original_time: time,
         member_ids: set[UUID],
         insert_signup_sql: str,
     ) -> None:
@@ -731,7 +772,8 @@ class PresetsService:
                 "gym_id": gym_id_str,
                 "class_id": str(class_id),
                 "member_id": str(member_id),
-                "occurrence_date": occurrence_date,
+                "original_date": original_date,
+                "original_time": original_time,
             }
             for member_id in member_ids
         ]

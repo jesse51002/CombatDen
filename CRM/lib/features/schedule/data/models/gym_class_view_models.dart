@@ -8,27 +8,32 @@
 library;
 
 /// One rendered class card in a day column. Built from one effective backend
-/// occurrence: [classId] + [classDate] identify this occurrence so a tap can
-/// open the chooser dialog (this occurrence's overrides, or the class
-/// definition); the rest is display data. [instructorPhotoUrl] is
-/// intentionally absent — the backend serves no instructor photo, so the
-/// avatar falls back to initials.
+/// occurrence: [classId] + [originalDate] identify this occurrence — every
+/// occurrence-addressed call (check-in, sign-up, roster, cancel, reschedule)
+/// uses [originalDate], never [classDate]; the rest is display data.
+/// [instructorPhotoUrl] is intentionally absent — the backend serves no
+/// instructor photo, so the avatar falls back to initials.
 class ScheduleClassEntry {
   /// The owning `gym_classes` id — carried so a tap can open that class.
   final String classId;
 
-  /// This occurrence's effective local date — the cancel/override key for a
-  /// single-day exception.
+  /// This occurrence's effective (post-reschedule) local date — DISPLAY
+  /// only. Render this; address the occurrence by [originalDate] instead.
   final DateTime classDate;
+
+  /// This occurrence's IDENTITY date — the owning schedule version's
+  /// pre-exception slot date. Every occurrence-addressed call passes this,
+  /// never [classDate].
+  final DateTime originalDate;
   final String name;
   final String timeLabel;
   final String? instructorName;
   final String? imageUrl;
   final int? pointsWorth;
 
-  /// Recorded attendance for this occurrence; null when no `class_history`
-  /// row has been materialized yet. Only shown (as "M attended") once
-  /// [occurrenceInPast] — see [signupCount] for the always-shown headcount.
+  /// Recorded attendance for this occurrence (0 when none; never null).
+  /// Only shown (as "M attended") once [occurrenceInPast] — see
+  /// [signupCount] for the always-shown headcount.
   final int? attendeeCount;
 
   /// Members signed up (reserved) for this occurrence — shown for both
@@ -70,6 +75,7 @@ class ScheduleClassEntry {
   const ScheduleClassEntry({
     required this.classId,
     required this.classDate,
+    required this.originalDate,
     required this.name,
     required this.timeLabel,
     required this.resolvedClassTime,

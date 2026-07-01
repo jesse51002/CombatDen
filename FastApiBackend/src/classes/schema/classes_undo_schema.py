@@ -1,18 +1,19 @@
 """Pydantic models for un-occurring (cancelling) and rescheduling a single
-class occurrence — Phase 6 of the class system.
+class occurrence.
 
-Two billing-adjacent operations on one materialized (or not-yet-materialized)
-occurrence:
+Two billing-adjacent operations on one occurrence (identity: ``class_id`` +
+its ORIGINAL date):
 
-* **Cancel / un-occur** — drops the materialized ``class_history`` row and its
-  ``member_attendance``, reverses an auto-end-on-depletion ``end_date`` on the
-  trial / one_time packs that were drawn for it, and writes the cancelled
-  instance exception so the occurrence never re-materializes. Points are NEVER
-  clawed back.
-* **Reschedule** — moves an occurrence to ``new_date`` (any date — past, today,
-  or future) by upserting the instance exception's ``new_date``, with attendance
-  following the move: a future target wipes the occurrence's check-ins (points
-  clawed back), a today / past target keeps them re-dated onto the new day.
+* **Cancel / un-occur** — reverses the occurrence's ``member_attendance``
+  (points clawed back, pack auto-ends reversed), deletes its sign-ups (a
+  cancelled occurrence can't be attended), and writes the cancelled instance
+  exception.
+* **Reschedule** — moves an occurrence to ``new_date`` (any date — past,
+  today, or future) by upserting the instance exception's ``new_date``. The
+  occurrence's identity key never changes, so sign-ups always carry;
+  attendance follows the move: a future target wipes the occurrence's
+  check-ins (points clawed back), a today / past target keeps them with
+  their denormalized ``occurred_at`` re-synced onto the new instant.
 """
 
 from datetime import date
@@ -27,12 +28,10 @@ class OccurrenceCancelResponse(BaseModel):
     Attributes:
         class_id: The class the occurrence belongs to.
         gym_id: The owning gym.
-        occurrence_date: The gym-local calendar date that was cancelled.
-        class_history_id: The materialized occurrence that was deleted, or None
-            when the occurrence had never been materialized (no check-ins yet) —
-            in which case only the cancelled exception is written.
+        occurrence_date: The occurrence's ORIGINAL date that was cancelled.
         attendance_rows_deleted: How many ``member_attendance`` rows were
-            removed (0 when nothing was materialized).
+            reversed (0 when nobody had checked in).
+        signups_deleted: How many sign-ups for the occurrence were deleted.
         memberships_unended: ``item_id``s of trial / one_time memberships whose
             auto-end-on-depletion ``end_date`` was cleared because un-occurring
             this class dropped them back below their pack capacity.
@@ -41,18 +40,18 @@ class OccurrenceCancelResponse(BaseModel):
     class_id: UUID
     gym_id: UUID
     occurrence_date: date
-    class_history_id: UUID | None
     attendance_rows_deleted: int
+    signups_deleted: int
     memberships_unended: list[UUID]
 
 
 class OccurrenceRescheduleRequest(BaseModel):
-    """Body for rescheduling a single occurrence to a later date.
+    """Body for rescheduling a single occurrence.
 
     Attributes:
         gym_id: The owning gym (used for the auth gate + the exception row).
-        new_date: The date to move the occurrence to — any date (past, today, or
-            future); the original occurrence date is only the anchor, not a
+        new_date: The date to move the occurrence to — any date (past, today,
+            or future); the original occurrence date is only the anchor, not a
             lower bound.
     """
 

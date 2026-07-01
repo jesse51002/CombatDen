@@ -73,15 +73,17 @@ class ScheduleRepository {
     return GymClassResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// `PUT /api/v1/classes/{class_id}` — update a class (the [data] changes
-  /// nest under `data`). Returns the updated row.
+  /// `PUT /api/v1/classes/{class_id}` — update a class. [request] is split by
+  /// destination: `identity` (partial) updates `gym_classes` in place;
+  /// `schedule` (a complete shape) mints a new schedule version. Returns the
+  /// updated (flat) row.
   Future<GymClassResponse> updateClass(
     String classId,
-    GymClassUpdateData data,
+    GymClassUpdateRequest request,
   ) async {
     final response = await _apiClient.put(
       '/api/v1/classes/$classId',
-      data: GymClassUpdateRequest(data: data).toJson(),
+      data: request.toJson(),
     );
     return GymClassResponse.fromJson(response.data as Map<String, dynamic>);
   }
@@ -91,10 +93,11 @@ class ScheduleRepository {
     await _apiClient.delete('/api/v1/classes/$classId');
   }
 
-  /// `POST /api/v1/checkin/batch` — staff batch check-in. The occurrence is now
-  /// addressed by the `class_id` + `occurrence_date` BODY fields (carried on
-  /// [req] alongside the gym, member ids, `is_member`, and `ignore_warnings`);
-  /// the path no longer carries them.
+  /// `POST /api/v1/checkin/batch` — staff batch check-in. The occurrence is
+  /// addressed by the `class_id` + `occurrence_date` BODY fields — the
+  /// occurrence's IDENTITY date, never its effective/display date — carried
+  /// on [req] alongside the gym, member ids, `is_member`, and
+  /// `ignore_warnings`; the path does not carry them.
   ///
   /// Returns **207 Multi-Status** — a 2xx, so Dio does NOT throw: the
   /// per-member split arrives here on the SUCCESS path and is parsed as a
@@ -111,9 +114,10 @@ class ScheduleRepository {
   }
 
   /// `GET /api/v1/checkin/attendees?gym_id=&class_id=&occurrence_date=` — the
-  /// members who attended a materialized occurrence (read-only). An occurrence
-  /// that was never materialized (no check-ins yet) comes back with a null
-  /// `class_history_id` and an empty list.
+  /// combined roster (everyone signed up OR attended) for the occurrence
+  /// addressed by [classId] + [occurrenceDate] (its IDENTITY date, never its
+  /// effective/display date), read-only. An occurrence with no sign-ups and
+  /// no check-ins comes back with an empty list.
   Future<AttendeeListResponse> listAttendees(
     String gymId,
     String classId,
@@ -133,7 +137,9 @@ class ScheduleRepository {
   }
 
   /// `DELETE /api/v1/checkin?member_id=&gym_id=&class_id=&occurrence_date=` —
-  /// reverse one member's check-in on this occurrence (a staff correction):
+  /// [occurrenceDate] is the occurrence's IDENTITY date, never its
+  /// effective/display date. Reverse one member's check-in on this
+  /// occurrence (a staff correction):
   /// deletes their attendance row, claws back the class's points, and
   /// reverses any pack auto-end the removal drops back below capacity. The
   /// response's `removed` flag is `false` (still 200) when the member wasn't
@@ -157,7 +163,8 @@ class ScheduleRepository {
   }
 
   /// `POST /api/v1/signup` — reserve [memberId] a spot on the occurrence of
-  /// [classId] on [occurrenceDate] (a reservation, NOT attendance).
+  /// [classId] on [occurrenceDate] (its IDENTITY date, never its effective/
+  /// display date) — a reservation, NOT attendance.
   /// Idempotent (`already_signed_up: true` on a repeat, no extra capacity
   /// consumed); rejected with a 400 `"Class is full"` when the occurrence's
   /// effective capacity (the distinct signed-up-or-attended count) is
@@ -182,8 +189,10 @@ class ScheduleRepository {
   }
 
   /// `DELETE /api/v1/signup?member_id=&gym_id=&class_id=&occurrence_date=` —
-  /// cancel [memberId]'s sign-up (reservation) for this occurrence, a staff
-  /// correction. The response's `removed` flag is `false` (still 200) when
+  /// [occurrenceDate] is the occurrence's IDENTITY date, never its
+  /// effective/display date. Cancel [memberId]'s sign-up (reservation) for
+  /// this occurrence, a staff correction. The response's `removed` flag is
+  /// `false` (still 200) when
   /// the member had no sign-up — this method only signals success/failure
   /// via throw, mirroring [removeAttendee].
   Future<void> cancelSignup(
@@ -220,9 +229,10 @@ class ScheduleRepository {
   /// `POST /api/v1/classes/{class_id}/exceptions/instance` with
   /// `is_cancelled: false` and the override fields set — upsert this single
   /// occurrence's effective instructor / start time / max capacity / duration,
-  /// and optionally reschedule it to [newDate] (must be strictly after
-  /// [originalDate]; the backend rejects a bad date or a collision with a
-  /// 400/409, whose `detail` message is thrown as a `ServerException`). The
+  /// and optionally reschedule it to [newDate] (any date — past, today, or
+  /// future; the backend rejects only a collision with an existing
+  /// non-cancelled occurrence at the exact target instant, surfaced as a
+  /// 400/409 whose `detail` message is thrown as a `ServerException`). The
   /// response body is ignored (the board reloads from `/instances` instead).
   Future<void> overrideInstance(
     String classId,

@@ -79,13 +79,12 @@ def _raise_for_undo_value_error(msg: str) -> NoReturn:
     response_model=OccurrenceCancelResponse,
     summary="Cancel (un-occur) a single class occurrence",
     description=(
-        "Un-occurs the occurrence on ``occurrence_date``: deletes its "
-        "materialized ``class_history`` row and ``member_attendance`` (if any), "
-        "reverses the auto-end on trial / one_time packs that drop back below "
-        "capacity, and writes the cancelled instance exception so the day never "
-        "re-materializes. Points are NEVER clawed back. When nothing was "
-        "materialized yet, only the cancelled exception is written "
-        "(``class_history_id = null``). Admin/owner only."
+        "Un-occurs the occurrence on ``occurrence_date`` (its ORIGINAL "
+        "date): reverses its ``member_attendance`` (points clawed back, "
+        "floored at 0), reverses the auto-end on trial / one_time packs "
+        "that drop back below capacity, deletes the occurrence's sign-ups "
+        "(a cancelled occurrence can't be attended), and writes the "
+        "cancelled instance exception. Admin/owner only."
     ),
     responses={
         200: {"description": "Occurrence cancelled"},
@@ -572,7 +571,16 @@ async def get_class(
 @classes_router.put(
     "/{class_id}",
     response_model=GymClassResponse,
-    summary="Update a class",
+    summary="Update a class (identity in place; schedule mints a version)",
+    description=(
+        "Split by destination: ``identity`` (partial) updates the "
+        "``gym_classes`` row in place; ``schedule`` (a COMPLETE shape) mints "
+        "a new schedule version effective now — wiping future sign-ups / "
+        "early check-ins / instance exceptions whose original slot the new "
+        "shape no longer produces (exact wall-clock matches survive). A "
+        "``schedule`` deep-equal to the current version is a no-op. "
+        "Admin/owner only."
+    ),
     responses={
         200: {"description": "Class updated"},
         400: {"description": "Invalid update"},
@@ -598,7 +606,9 @@ async def update_class(
     )
 
     try:
-        return await crud_service.update_class(class_id, request.data)
+        return await crud_service.update_class(
+            class_id, request.identity, request.schedule
+        )
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

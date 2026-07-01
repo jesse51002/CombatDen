@@ -11,7 +11,6 @@ BatchCheckInResponse _$BatchCheckInResponseFromJson(
 ) => BatchCheckInResponse(
   classId: json['class_id'] as String,
   occurrenceDate: json['occurrence_date'] as String,
-  classHistoryId: json['class_history_id'] as String,
   results:
       (json['results'] as List<dynamic>?)
           ?.map(

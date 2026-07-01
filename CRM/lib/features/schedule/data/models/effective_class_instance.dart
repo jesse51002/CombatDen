@@ -23,8 +23,15 @@ class EffectiveClassInstance extends Equatable {
   final String gymId;
   final String className;
 
-  /// The effective (post-reschedule) local date (`YYYY-MM-DD`).
+  /// The effective (post-reschedule) local date (`YYYY-MM-DD`) — DISPLAY
+  /// only. Render this, never address an occurrence by it.
   final DateTime classDate;
+
+  /// The occurrence's IDENTITY date — the owning schedule version's
+  /// pre-exception slot date (`YYYY-MM-DD`). Every occurrence-addressed call
+  /// (check-in, sign-up, roster, instance exception, cancel, reschedule)
+  /// passes THIS date, never [classDate].
+  final DateTime originalDate;
 
   /// UTC, timezone-aware start instant.
   final DateTime occurredAt;
@@ -43,8 +50,9 @@ class EffectiveClassInstance extends Equatable {
   final bool hasInstanceException;
   final bool hasRangeException;
 
-  /// Recorded attendance when a `class_history` row exists; null otherwise.
-  final int? attendanceCount;
+  /// Recorded attendance for this occurrence (0 when none; never null).
+  @JsonKey(defaultValue: 0)
+  final int attendanceCount;
 
   /// Members signed up (reserved) for this occurrence — shown for both
   /// future AND past occurrences (0 when none; never null).
@@ -56,6 +64,7 @@ class EffectiveClassInstance extends Equatable {
     required this.gymId,
     required this.className,
     required this.classDate,
+    required this.originalDate,
     required this.occurredAt,
     required this.resolvedClassTime,
     required this.resolvedDurationMinutes,
@@ -67,7 +76,7 @@ class EffectiveClassInstance extends Equatable {
     required this.isCancelled,
     required this.hasInstanceException,
     required this.hasRangeException,
-    this.attendanceCount,
+    this.attendanceCount = 0,
     this.signupCount = 0,
   });
 
@@ -80,6 +89,7 @@ class EffectiveClassInstance extends Equatable {
         gymId,
         className,
         classDate,
+        originalDate,
         occurredAt,
         resolvedClassTime,
         resolvedDurationMinutes,

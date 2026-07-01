@@ -96,20 +96,6 @@ class Settings(BaseSettings):
     # to its family, so a sub a live op just created (writeback not yet stamped)
     # must age past any in-flight op before it can be judged an orphan.
     reconciler_orphan_min_age_seconds: int = 3600
-    # Class-history materialize: how many days back ClassesMaterializer.
-    # materialize_current looks (the reconciler sweep's convenience window,
-    # [today - this, today + materialize_future_hours]) to backfill
-    # class_history rows for PAST, non-cancelled occurrences (even
-    # zero-attendee ones). A value <= 0 makes materialize_current a no-op
-    # (logged warning) — it never expands or writes.
-    class_history_lookback_days: int = 14
-    # Class-history materialize: how far AHEAD of "now" an occurrence may be
-    # materialized by ClassesMaterializer.materialize — the single shared
-    # forward cutoff every caller (check-in, the schedule board, the
-    # reconciler sweep) obeys, so a not-yet-started class's editable fields
-    # (time / instructor) aren't frozen into class_history too early. Matches
-    # the check-in-open window (checkin_opens_hours_before_start) by default.
-    materialize_future_hours: int = 2
 
     # Check-in early window: how many hours BEFORE a class's start time check-in
     # opens. A check-in (single or batch "update attendees") for an occurrence

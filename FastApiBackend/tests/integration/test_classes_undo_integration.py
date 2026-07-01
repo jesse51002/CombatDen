@@ -1,41 +1,36 @@
 """Live integration tests for the occurrence undo (cancel) + reschedule
-endpoints — Phase 6 — plus the same-date override's materialized history sync.
+endpoints, plus the same-date override's attendance ``occurred_at`` re-sync.
 
 Endpoints under test (admin/owner gated, hit on the live backend):
   DELETE /api/v1/classes/{class_id}/occurrences/{occurrence_date}            (cancel)
   POST   /api/v1/classes/{class_id}/occurrences/{occurrence_date}/reschedule (move)
   POST   /api/v1/classes/{class_id}/exceptions/instance   (reschedule + same-date override)
 
+``occurrence_date`` is always the occurrence's ORIGINAL date — the identity
+key ``(class_id, original_date, original_time)`` attendance and sign-ups are
+stored under. Attendance lives directly on ``member_attendance`` keyed by
+that slot (there is no ``class_history``); the denormalized ``occurred_at``
+is re-synced by the keep paths (same-date override / reschedule-to-today-past)
+and is the value the streak / cycle / last-class window SQL reads.
+
 Run against the live backend + the seeded DB. The suite DISCOVERS a real
-instructor (plus a SECOND, distinct instructor for the re-instructor / sync
-cases), an unlimited membership (for the cancel-with-attendance case), and a
+instructor (plus a SECOND, distinct instructor for the re-instructor cases),
+an unlimited membership (for the cancel-with-attendance case), and a
 single-class pack plan (for the auto-end-reversal case), and skips gracefully
-when the DB / required seed rows aren't available. Everything created — classes,
-their lazily-materialized history + attendance + exceptions, the test pack
-membership, and a probe activity — is tracked and deleted in FK-safe order on
-teardown (the ``created`` fixture); seed data is never mutated.
+when the DB / required seed rows aren't available. Everything created —
+classes, their attendance + sign-ups + exceptions + schedule versions, the
+test pack membership, and a probe activity — is tracked and deleted in
+FK-safe order on teardown (the ``created`` fixture); seed data is never
+mutated.
 
-NOTE (migration-blocked): the Phase-1 migration — ``class_instance_exceptions``
-``new_date`` + the ``uq_class_history_occurrence`` UNIQUE (class_id, occurred_at)
-— is NOT applied to the shared local DB yet. Until it is:
-  * the reschedule endpoint (reads/writes ``new_date``) and any path that loads
-    instance exceptions fail with an undefined-column error, and
-  * the lazy materializer's ``ON CONFLICT ON CONSTRAINT
-    uq_class_history_occurrence`` has no constraint to target.
-These tests assert the CORRECT post-migration behavior and are EXPECTED to fail
-at runtime until the migration lands — that is a missing migration, not a code
-defect. They are written against the right behavior, never reshaped to pass.
-
-NOTE (constraint-drop-blocked): a reschedule may now move an occurrence to ANY
-date — past, today, or future — so the ``chk_instance_exception_new_date_future``
-CHECK (``new_date > original_date``) is being DROPPED (schema file updated; the
-user runs ``ALTER TABLE class_instance_exceptions DROP CONSTRAINT
-chk_instance_exception_new_date_future;``). Until that runs, any test that writes
-``new_date <= original_date`` (the "move to an earlier date is accepted" cases)
-is rejected by the still-present CHECK and surfaces as a 400 / 409, NOT the 200
-the new behavior mandates. Those cases are flagged inline and assert the correct
-post-drop behavior anyway — a pending constraint drop, not a code defect. The
-future / later-date moves clear the CHECK and pass today.
+NOTE (versioned-schedule migration pending): the class system moved to
+append-only ``gym_class_schedules`` versions (``class_history`` dropped;
+``member_attendance`` re-keyed by original slot). The migration
+(``Database/supabase/migrations/20260701020000_versioned_class_schedules.sql``)
+may not be applied to the shared local DB yet — until it is, these endpoints
+fail at runtime (undefined table/column). The tests assert the CORRECT
+post-migration behavior and are EXPECTED to fail until the user runs the
+migration — a missing migration, not a code defect.
 """
 
 from __future__ import annotations
@@ -63,13 +58,13 @@ _START = date(2025, 1, 6)
 _END = date(2025, 1, 12)
 _ATTEND_DATE = date(2025, 1, 9)
 _PACK_DATE = date(2025, 1, 8)
-_MATERIALIZED_DATE = date(2025, 1, 7)
+_ATTENDED_PAST_DATE = date(2025, 1, 7)
 _RESCHEDULE_FROM = date(2025, 1, 10)
 _RESCHEDULE_TO = date(2025, 1, 20)
 # Free (outside the class window) target dates for the attendance-move cases.
-_KEEP_TO = date(2025, 1, 20)  # past + after original -> keeps + re-dates
-_FUTURE_TO = date(2027, 6, 1)  # future -> wipes the check-ins
-_EARLIER_TO = date(2025, 1, 3)  # before original -> CHECK-drop-blocked
+_KEEP_TO = date(2025, 1, 20)  # past target -> keeps + re-syncs occurred_at
+_FUTURE_TO = date(2027, 6, 1)  # future target -> wipes the check-ins
+_EARLIER_TO = date(2025, 1, 3)  # before the original -> accepted (any date)
 _CLASS_TIME = time(9, 0)
 
 
@@ -180,14 +175,14 @@ class _Created:
             try:
                 for class_id in self.class_ids:
                     cid = UUID(class_id)
+                    # FK-safe order: rows keyed by class_id, then the
+                    # versioned schedule history, then the identity row.
                     await conn.execute(
-                        "DELETE FROM member_attendance WHERE class_history_id IN "
-                        "(SELECT class_history_id FROM class_history "
-                        "WHERE class_id = $1)",
+                        "DELETE FROM member_attendance WHERE class_id = $1",
                         cid,
                     )
                     await conn.execute(
-                        "DELETE FROM class_history WHERE class_id = $1", cid
+                        "DELETE FROM class_signups WHERE class_id = $1", cid
                     )
                     await conn.execute(
                         "DELETE FROM class_instance_exceptions WHERE class_id = $1",
@@ -195,6 +190,10 @@ class _Created:
                     )
                     await conn.execute(
                         "DELETE FROM class_range_exceptions WHERE class_id = $1",
+                        cid,
+                    )
+                    await conn.execute(
+                        "DELETE FROM gym_class_schedules WHERE class_id = $1",
                         cid,
                     )
                     await conn.execute(
@@ -259,43 +258,57 @@ def _create_class(api: httpx.Client, created: _Created, seed: dict) -> str:
     return class_id
 
 
-def _occurred_at(occ_date: date, gym_tz: str) -> datetime:
+def _occurred_at(occ_date: date, gym_tz: str, at: time = _CLASS_TIME) -> datetime:
     return datetime.combine(
-        occ_date, _CLASS_TIME, tzinfo=ZoneInfo(gym_tz)
+        occ_date, at, tzinfo=ZoneInfo(gym_tz)
     ).astimezone(UTC)
 
 
-async def _materialize_with_attendance(
+async def _insert_attendance(
     class_id: str,
     gym_tz: str,
     occ_date: date,
     member_id: UUID,
     plan_id: UUID,
     item_id: UUID,
-) -> str:
-    """Insert a class_history row for the date + one attendance; return its id."""
+) -> None:
+    """Record one attendance keyed by the occurrence's ORIGINAL slot."""
     conn = await asyncpg.connect(_get_db_url())
     try:
-        history_id = await conn.fetchval(
-            "INSERT INTO class_history "
-            "(class_id, gym_id, occurred_at, duration_minutes) "
-            "VALUES ($1, $2, $3, $4) RETURNING class_history_id",
-            UUID(class_id),
-            UUID(GYM_ID),
-            _occurred_at(occ_date, gym_tz),
-            60,
-        )
         await conn.execute(
             "INSERT INTO member_attendance "
-            "(member_id, gym_id, class_history_id, plan_id, item_id) "
-            "VALUES ($1, $2, $3, $4, $5)",
+            "(member_id, gym_id, class_id, original_date, original_time, "
+            " occurred_at, plan_id, item_id) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             member_id,
             UUID(GYM_ID),
-            history_id,
+            UUID(class_id),
+            occ_date,
+            _CLASS_TIME,
+            _occurred_at(occ_date, gym_tz),
             plan_id,
             item_id,
         )
-        return str(history_id)
+    finally:
+        await conn.close()
+
+
+async def _insert_signup(
+    class_id: str, occ_date: date, member_id: UUID
+) -> None:
+    """Reserve the occurrence for the member (keyed by the original slot)."""
+    conn = await asyncpg.connect(_get_db_url())
+    try:
+        await conn.execute(
+            "INSERT INTO class_signups "
+            "(gym_id, class_id, member_id, original_date, original_time) "
+            "VALUES ($1, $2, $3, $4, $5)",
+            UUID(GYM_ID),
+            UUID(class_id),
+            member_id,
+            occ_date,
+            _CLASS_TIME,
+        )
     finally:
         await conn.close()
 
@@ -311,6 +324,33 @@ def _db_scalar(query: str, *args):
     return _run_async(_run())
 
 
+def _attendance_count(class_id: str, occ_date: date) -> int:
+    return _db_scalar(
+        "SELECT COUNT(*) FROM member_attendance "
+        "WHERE class_id = $1 AND original_date = $2",
+        UUID(class_id),
+        occ_date,
+    )
+
+
+def _attendance_occurred_at(class_id: str, occ_date: date) -> datetime | None:
+    return _db_scalar(
+        "SELECT occurred_at FROM member_attendance "
+        "WHERE class_id = $1 AND original_date = $2",
+        UUID(class_id),
+        occ_date,
+    )
+
+
+def _signup_count(class_id: str, occ_date: date) -> int:
+    return _db_scalar(
+        "SELECT COUNT(*) FROM class_signups "
+        "WHERE class_id = $1 AND original_date = $2",
+        UUID(class_id),
+        occ_date,
+    )
+
+
 # ---------------------------------------------------------------------------
 # DELETE — cancel (un-occur)
 # ---------------------------------------------------------------------------
@@ -320,17 +360,18 @@ class TestCancelOccurrence:
     def test_cancel_with_attendance_deletes_rows_and_reverts_points(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """Cancelling an occurrence with attendance removes the attendance + the
-        class_history row, writes the cancelled exception, and claws back each
-        attendee's points (floored at 0) + drops a class_attended activity."""
+        """Cancelling an occurrence with attendance + a sign-up removes the
+        attendance rows AND the occurrence's sign-ups, writes the cancelled
+        exception, and claws back each attendee's points (floored at 0) +
+        drops a class_attended activity."""
         membership = seed["unlimited"]
         if membership is None:
             pytest.skip("No unlimited membership in seed to attribute attendance")
         member_id = membership["member_id"]
         class_id = _create_class(api, created, seed)
 
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _ATTEND_DATE,
@@ -339,6 +380,8 @@ class TestCancelOccurrence:
                 membership["item_id"],
             )
         )
+        # A reservation on the same occurrence — cancel must delete it too.
+        _run_async(_insert_signup(class_id, _ATTEND_DATE, member_id))
 
         # A probe class_attended activity for the class — the cancel claws it back.
         activity_id = _db_scalar(
@@ -361,26 +404,14 @@ class TestCancelOccurrence:
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["class_history_id"] == history_id
+        assert body["occurrence_date"] == _ATTEND_DATE.isoformat()
         assert body["attendance_rows_deleted"] == 1
+        assert body["signups_deleted"] == 1
         assert body["memberships_unended"] == []
 
-        # Attendance + history gone.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 0
-        )
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM class_history WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 0
-        )
+        # Attendance + sign-ups gone (keyed by the original slot).
+        assert _attendance_count(class_id, _ATTEND_DATE) == 0
+        assert _signup_count(class_id, _ATTEND_DATE) == 0
         # Cancelled exception written for the date.
         assert (
             _db_scalar(
@@ -413,11 +444,11 @@ class TestCancelOccurrence:
             == 0
         )
 
-    def test_cancel_unmaterialized_writes_only_the_exception(
+    def test_cancel_unattended_writes_only_the_exception(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """Cancelling a never-materialized occurrence writes just the cancelled
-        exception: class_history_id null, nothing deleted."""
+        """Cancelling an occurrence nobody attended or reserved writes just
+        the cancelled exception: nothing deleted."""
         class_id = _create_class(api, created, seed)
 
         resp = api.delete(
@@ -426,8 +457,8 @@ class TestCancelOccurrence:
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["class_history_id"] is None
         assert body["attendance_rows_deleted"] == 0
+        assert body["signups_deleted"] == 0
         assert body["memberships_unended"] == []
         assert (
             _db_scalar(
@@ -496,8 +527,8 @@ class TestAutoEndReversal:
         created.track_membership(item_id)
 
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _PACK_DATE,
@@ -523,7 +554,6 @@ class TestAutoEndReversal:
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["class_history_id"] == history_id
         assert body["attendance_rows_deleted"] == 1
         assert body["memberships_unended"] == [item_id]
 
@@ -562,7 +592,8 @@ class TestRescheduleOccurrence:
     def test_reschedule_onto_occupied_date_conflicts(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """Moving onto an in-window occurring date is a 409 (collision)."""
+        """Moving onto an in-window occurring date (same start time) is a
+        409 — the exact target instant is already taken."""
         class_id = _create_class(api, created, seed)
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
@@ -571,51 +602,47 @@ class TestRescheduleOccurrence:
         )
         assert resp.status_code == 409, resp.text
 
-    def test_reschedule_materialized_past_keeps_and_redates(
+    def test_reschedule_attended_past_keeps_and_resyncs_occurred_at(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """A materialized PAST occurrence moved to a free past date KEEPS its
-        attendance, re-dated onto the new day (no wipe, no 409). ``new_date`` is
-        after the original and outside the class window, so it clears the CHECK
-        and has no natural occurrence to collide with."""
+        """An attended PAST occurrence moved to a free past date KEEPS its
+        attendance (identity key unchanged) with the denormalized
+        ``occurred_at`` re-synced onto the move's effective instant (no wipe,
+        no 409). Sign-ups also carry — a reschedule never touches them."""
         membership = seed["unlimited"]
         if membership is None:
-            pytest.skip("No membership in seed to materialize against")
+            pytest.skip("No membership in seed to attribute attendance to")
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
-                _MATERIALIZED_DATE,
+                _ATTENDED_PAST_DATE,
                 membership["member_id"],
                 membership["plan_id"],
                 membership["item_id"],
             )
         )
+        _run_async(
+            _insert_signup(
+                class_id, _ATTENDED_PAST_DATE, membership["member_id"]
+            )
+        )
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
-            f"{_MATERIALIZED_DATE.isoformat()}/reschedule",
+            f"{_ATTENDED_PAST_DATE.isoformat()}/reschedule",
             json={"gym_id": GYM_ID, "new_date": _KEEP_TO.isoformat()},
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["new_date"] == _KEEP_TO.isoformat()
-        # Attendance kept on the SAME history row, re-dated onto the new day.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 1
-        )
-        assert (
-            _db_scalar(
-                "SELECT occurred_at FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == _occurred_at(_KEEP_TO, seed["timezone"])
-        )
+        # Attendance kept under its ORIGINAL slot key, occurred_at re-synced
+        # onto the new effective instant.
+        assert _attendance_count(class_id, _ATTENDED_PAST_DATE) == 1
+        assert _attendance_occurred_at(
+            class_id, _ATTENDED_PAST_DATE
+        ) == _occurred_at(_KEEP_TO, seed["timezone"])
+        # The sign-up carried (identity key untouched).
+        assert _signup_count(class_id, _ATTENDED_PAST_DATE) == 1
 
     def test_reschedule_unknown_class_returns_404(
         self, api: httpx.Client
@@ -637,7 +664,8 @@ class TestRescheduleAttendance:
     """The CRM's ``POST /exceptions/instance`` reschedule (``new_date`` set)
     moves the occurrence AND its attendance atomically, per the locked rule:
     a FUTURE target wipes the check-ins (points clawed back); a today / PAST
-    target keeps them, re-dated onto the new day."""
+    target keeps them with ``occurred_at`` re-synced. Sign-ups always carry
+    (the occurrence's identity key never changes)."""
 
     def _move(
         self,
@@ -658,17 +686,17 @@ class TestRescheduleAttendance:
             json=payload,
         )
 
-    def test_move_to_past_keeps_and_redates_attendance(
+    def test_move_to_past_keeps_and_resyncs_occurred_at(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """A PAST target keeps the check-ins, re-dated onto the new day: the
-        attendance rows (unchanged class_history_id) now render on new_date."""
+        """A PAST target keeps the check-ins under their original slot key,
+        with ``occurred_at`` re-synced onto the move's effective instant."""
         membership = seed["unlimited"]
         if membership is None:
             pytest.skip("No unlimited membership in seed")
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _ATTEND_DATE,
@@ -682,31 +710,20 @@ class TestRescheduleAttendance:
         assert resp.status_code == 200, resp.text
         assert resp.json()["new_date"] == _KEEP_TO.isoformat()
 
-        # Same history row, attendance kept, re-dated onto the new day.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 1
-        )
-        assert (
-            _db_scalar(
-                "SELECT occurred_at FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == _occurred_at(_KEEP_TO, seed["timezone"])
-        )
+        # Same identity key, attendance kept, occurred_at re-synced.
+        assert _attendance_count(class_id, _ATTEND_DATE) == 1
+        assert _attendance_occurred_at(
+            class_id, _ATTEND_DATE
+        ) == _occurred_at(_KEEP_TO, seed["timezone"])
 
-    def test_move_to_past_with_instructor_change_syncs_history(
+    def test_move_to_past_with_instructor_change_resolves_on_the_board(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """A today/PAST reschedule that ALSO changes the instructor syncs the
-        materialized history row's instructor_id, not just occurred_at — the
-        generalized ``sync_history_snapshot`` keep-path now threads the
-        effective instructor through ``apply_reschedule_attendance``."""
+        """A today/PAST reschedule that ALSO changes the instructor: the
+        attendance keeps its key with ``occurred_at`` re-synced, the override
+        row stores the new instructor, and the board resolves the moved
+        occurrence to the NEW instructor (there is no snapshot to sync —
+        instructor resolution happens at read time from the exception)."""
         membership = seed["unlimited"]
         instructor2 = seed["instructor2"]
         if membership is None or instructor2 is None:
@@ -714,8 +731,8 @@ class TestRescheduleAttendance:
                 "Need an unlimited membership + a second instructor in seed"
             )
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _ATTEND_DATE,
@@ -735,46 +752,50 @@ class TestRescheduleAttendance:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["new_date"] == _KEEP_TO.isoformat()
+        assert resp.json()["new_instructor_id"] == new_instructor_id
 
-        # Same history row, attendance kept, re-dated AND re-instructor-ed.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 1
+        # Attendance kept + re-synced.
+        assert _attendance_count(class_id, _ATTEND_DATE) == 1
+        assert _attendance_occurred_at(
+            class_id, _ATTEND_DATE
+        ) == _occurred_at(_KEEP_TO, seed["timezone"])
+
+        # The board (window covering both the original and target dates)
+        # renders the moved occurrence keyed by its ORIGINAL date, displayed
+        # on the new date, resolved to the NEW instructor, count intact.
+        board = api.get(
+            f"{CLASSES_BASE}/instances",
+            params={
+                "gym_id": GYM_ID,
+                "start_date": _START.isoformat(),
+                "end_date": _KEEP_TO.isoformat(),
+            },
         )
-        assert (
-            _db_scalar(
-                "SELECT occurred_at FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == _occurred_at(_KEEP_TO, seed["timezone"])
+        assert board.status_code == 200, board.text
+        moved = next(
+            row
+            for row in board.json()["items"]
+            if row["class_id"] == class_id
+            and row["original_date"] == _ATTEND_DATE.isoformat()
         )
-        assert (
-            _db_scalar(
-                "SELECT instructor_id FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == UUID(new_instructor_id)
-        )
+        assert moved["class_date"] == _KEEP_TO.isoformat()
+        assert moved["resolved_instructor_id"] == new_instructor_id
+        assert moved["attendance_count"] == 1
 
     def test_move_to_future_wipes_and_reverts_points(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """A FUTURE target wipes the moved occurrence's check-ins: attendance +
-        history deleted, points clawed back (floored at 0), class_attended
-        activity dropped."""
+        """A FUTURE target wipes the moved occurrence's check-ins: attendance
+        deleted, points clawed back (floored at 0), class_attended activity
+        dropped — while the sign-ups still carry (never wiped by a
+        reschedule)."""
         membership = seed["unlimited"]
         if membership is None:
             pytest.skip("No unlimited membership in seed")
         member_id = membership["member_id"]
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _ATTEND_DATE,
@@ -783,6 +804,7 @@ class TestRescheduleAttendance:
                 membership["item_id"],
             )
         )
+        _run_async(_insert_signup(class_id, _ATTEND_DATE, member_id))
         activity_id = _db_scalar(
             "INSERT INTO member_activities "
             "(member_id, gym_id, activity_type, activity_info) "
@@ -800,22 +822,9 @@ class TestRescheduleAttendance:
         assert resp.status_code == 200, resp.text
         assert resp.json()["new_date"] == _FUTURE_TO.isoformat()
 
-        # Attendance + history wiped.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 0
-        )
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM class_history WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 0
-        )
+        # Attendance wiped; the sign-up carried.
+        assert _attendance_count(class_id, _ATTEND_DATE) == 0
+        assert _signup_count(class_id, _ATTEND_DATE) == 1
         # Points clawed back (floored at 0) + the class_attended activity dropped.
         points_worth = _db_scalar(
             "SELECT points_worth FROM gym_classes WHERE class_id = $1",
@@ -839,12 +848,8 @@ class TestRescheduleAttendance:
     def test_move_to_earlier_date_accepted(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """Any date is accepted — INCLUDING new_date < original_date.
-
-        CONSTRAINT-DROP-BLOCKED: the shared local DB still has the
-        ``chk_instance_exception_new_date_future`` CHECK, so this earlier-date
-        write is rejected (surfaced as 400) until the user drops the constraint.
-        Asserts the correct post-drop behavior (200 + the exception written)."""
+        """Any date is accepted — INCLUDING new_date < original_date (the
+        original date is only the anchor, not a lower bound)."""
         class_id = _create_class(api, created, seed)
         resp = self._move(api, class_id, _ATTEND_DATE, _EARLIER_TO)
         assert resp.status_code == 200, resp.text
@@ -860,28 +865,27 @@ class TestRescheduleAttendance:
 
 
 # ---------------------------------------------------------------------------
-# POST /exceptions/instance — same-date override (new_date unset) syncs a
-# MATERIALIZED occurrence's class_history snapshot
+# POST /exceptions/instance — same-date override (new_date unset) re-syncs an
+# ATTENDED occurrence's denormalized occurred_at
 # ---------------------------------------------------------------------------
 
 
-class TestOverrideMaterializedSync:
+class TestOverrideAttendanceSync:
     """A same-date override (``new_date`` unset — retime / re-instructor /
-    re-duration) on an already-materialized occurrence syncs the
-    ``class_history`` snapshot (occurred_at + duration_minutes +
-    instructor_id) to the override's effective values, in the SAME
-    transaction as the exception write. A non-materialized occurrence is
-    unaffected: just the exception row."""
+    re-duration) on an ATTENDED occurrence re-syncs the attendance rows'
+    denormalized ``occurred_at`` to the override's effective start instant,
+    in the SAME transaction as the exception write. The override's duration /
+    instructor resolve at read time from the exception row (nothing else is
+    stored). An un-attended occurrence gets just the exception row."""
 
-    def test_override_on_materialized_occurrence_syncs_history_snapshot(
+    def test_override_on_attended_occurrence_resyncs_occurred_at(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """Retime + re-duration + re-instructor a PAST materialized occurrence
-        via the plain override (no ``new_date``): the class_history row's
-        occurred_at / duration_minutes / instructor_id all sync to the
-        override's effective values, attendance is untouched, and the past
-        schedule board (which renders straight from class_history) reflects
-        the change."""
+        """Retime + re-duration + re-instructor a PAST attended occurrence
+        via the plain override (no ``new_date``): the attendance rows'
+        ``occurred_at`` re-syncs to the override's effective instant (key
+        unchanged, rows kept), and the board resolves the occurrence to the
+        override's values with the count intact."""
         membership = seed["unlimited"]
         instructor2 = seed["instructor2"]
         if membership is None or instructor2 is None:
@@ -889,8 +893,8 @@ class TestOverrideMaterializedSync:
                 "Need an unlimited membership + a second instructor in seed"
             )
         class_id = _create_class(api, created, seed)
-        history_id = _run_async(
-            _materialize_with_attendance(
+        _run_async(
+            _insert_attendance(
                 class_id,
                 seed["timezone"],
                 _ATTEND_DATE,
@@ -914,45 +918,14 @@ class TestOverrideMaterializedSync:
         )
         assert resp.status_code == 200, resp.text
 
-        expected_occurred_at = datetime.combine(
-            _ATTEND_DATE, new_time, tzinfo=ZoneInfo(seed["timezone"])
-        ).astimezone(UTC)
-        assert (
-            _db_scalar(
-                "SELECT occurred_at FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == expected_occurred_at
-        )
-        assert (
-            _db_scalar(
-                "SELECT duration_minutes FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == new_duration
-        )
-        assert (
-            _db_scalar(
-                "SELECT instructor_id FROM class_history "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == UUID(new_instructor_id)
-        )
-        # Attendance untouched — same history row, no rewrite.
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM member_attendance "
-                "WHERE class_history_id = $1",
-                UUID(history_id),
-            )
-            == 1
-        )
+        # Attendance kept under its key, occurred_at re-synced to the
+        # override's effective instant.
+        assert _attendance_count(class_id, _ATTEND_DATE) == 1
+        assert _attendance_occurred_at(
+            class_id, _ATTEND_DATE
+        ) == _occurred_at(_ATTEND_DATE, seed["timezone"], new_time)
 
-        # The past board renders straight from class_history — it reflects
-        # the synced snapshot, not the pre-edit values.
+        # The board resolves the occurrence from the exception at read time.
         board = api.get(
             f"{CLASSES_BASE}/instances",
             params={
@@ -966,17 +939,17 @@ class TestOverrideMaterializedSync:
             row for row in board.json()["items"] if row["class_id"] == class_id
         ]
         assert len(rows) == 1
+        assert rows[0]["original_date"] == _ATTEND_DATE.isoformat()
         assert rows[0]["resolved_instructor_id"] == new_instructor_id
         assert rows[0]["resolved_duration_minutes"] == new_duration
         assert rows[0]["attendance_count"] == 1
 
-    def test_override_on_unmaterialized_occurrence_writes_only_exception(
+    def test_override_on_unattended_occurrence_writes_only_exception(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
-        """A same-date override on a NEVER-materialized occurrence is a plain
-        exception write — no class_history row is created as a side effect;
-        materialize-on-read applies the override once the occurrence is first
-        attended / the board opens."""
+        """A same-date override on an occurrence with NO attendance is a
+        plain exception write — no attendance rows exist or appear; the
+        override resolves at read time."""
         class_id = _create_class(api, created, seed)
 
         resp = api.post(
@@ -997,10 +970,4 @@ class TestOverrideMaterializedSync:
             )
             == time(11, 30)
         )
-        assert (
-            _db_scalar(
-                "SELECT COUNT(*) FROM class_history WHERE class_id = $1",
-                UUID(class_id),
-            )
-            == 0
-        )
+        assert _attendance_count(class_id, _ATTEND_DATE) == 0

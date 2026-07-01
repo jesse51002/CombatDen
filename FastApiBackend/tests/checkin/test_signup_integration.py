@@ -10,11 +10,12 @@ Endpoints under test:
 These run against the live backend + the seeded DB, the same way
 test_checkin_integration.py / test_classes_crud_integration.py do.
 
-IMPORTANT: ``class_signups`` is a NEW table (Database/supabase/schemas/
-class_signups.sql) that does not exist on the shared local DB until the user
-runs the hand-written migration for it. Until then, every test in this file
-fails with an ``UndefinedTableError`` / 500 — that is a migration-not-applied
-gap, not a code defect (mirrors the ``uq_class_history_occurrence`` note in
+IMPORTANT: this file needs the versioned-schedule migration applied to the
+shared local DB (``gym_class_schedules`` + the re-keyed ``class_signups`` /
+``member_attendance`` with ``original_date`` / ``original_time`` columns).
+Until the user runs the hand-written migration, every test in this file
+fails with an ``UndefinedTableError`` / ``UndefinedColumnError`` / 500 —
+that is a migration-not-applied gap, not a code defect (mirrors the note in
 test_checkin_integration.py).
 
 A dedicated class (max_capacity=1, daily recurring, spanning yesterday) is
@@ -135,15 +136,13 @@ def _cleanup_classes(class_ids: list[str]) -> None:
             for class_id in class_ids:
                 cid = UUID(class_id)
                 await conn.execute(
-                    "DELETE FROM member_attendance WHERE class_history_id IN "
-                    "(SELECT class_history_id FROM class_history WHERE class_id = $1)",
-                    cid,
-                )
-                await conn.execute(
-                    "DELETE FROM class_history WHERE class_id = $1", cid
+                    "DELETE FROM member_attendance WHERE class_id = $1", cid
                 )
                 await conn.execute(
                     "DELETE FROM class_signups WHERE class_id = $1", cid
+                )
+                await conn.execute(
+                    "DELETE FROM gym_class_schedules WHERE class_id = $1", cid
                 )
                 await conn.execute(
                     "DELETE FROM gym_classes WHERE class_id = $1", cid
@@ -169,7 +168,7 @@ def _signup_count(class_id: str, occurrence_date: date) -> int:
         try:
             return await conn.fetchval(
                 "SELECT COUNT(*) FROM class_signups "
-                "WHERE class_id = $1 AND occurrence_date = $2",
+                "WHERE class_id = $1 AND original_date = $2",
                 UUID(class_id),
                 occurrence_date,
             )

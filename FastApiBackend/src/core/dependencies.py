@@ -20,11 +20,16 @@ from src.classes.service.classes_exceptions_service import (
     ClassesExceptionsService,
 )
 from src.classes.service.classes_expander import ClassesExpander
-from src.classes.service.classes_materializer import ClassesMaterializer
 from src.classes.service.classes_schedule_reader_service import (
     ClassesScheduleReaderService,
 )
 from src.classes.service.classes_undo_service import ClassesUndoService
+from src.classes.service.classes_version_expander import (
+    ClassesVersionExpander,
+)
+from src.classes.service.classes_versions_service import (
+    ClassesVersionsService,
+)
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
 from src.gyms.service.gyms_service import GymsService
@@ -89,9 +94,6 @@ from src.plans.service.plans_service import (
 from src.presets.service.presets_service import PresetsService
 from src.presets.service.presets_template_service import PresetsTemplateService
 from src.ranks.service.ranks_service import RanksService
-from src.reconciler.service.reconciler.reconciler_class_history_sweep import (
-    ClassHistorySweep,
-)
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
 )
@@ -206,23 +208,17 @@ class DependencyInjector(containers.DeclarativeContainer):
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
 
-    # The canonical recurrence + exception expander is pure (no I/O), so a
-    # single shared instance is reused by the check-in resolve seam, the
-    # exception reschedule-conflict check, the schedule reader, the presets
-    # importer, and the class materializer below.
+    # The canonical single-shape recurrence + exception engine is pure (no
+    # I/O); a single shared instance is reused everywhere.
     classes_expander = providers.Singleton(ClassesExpander)
-    # THE single range-parameterized materialize entry point (+ the
-    # single-occurrence find_or_create_history primitive it's built on),
-    # shared by the check-in resolve seam, the schedule reader, and the
-    # reconciler's class-history sweep. future_hours / lookback_days are
-    # injected from Settings here (not imported as `settings` inside the
-    # service) so the materializer stays testable via plain constructor args.
-    classes_materializer = providers.Factory(
-        ClassesMaterializer,
-        db_pool=db_pool,
+    # The versioned expander (also pure): windows a class's schedule versions
+    # by effective_from (ownership), dedups boundary days, and expands each
+    # version with its own frozen timezone. Every occurrence resolution —
+    # the board, check-in validation, sign-up validation, reschedule checks,
+    # the mint wipe — goes through it.
+    classes_version_expander = providers.Singleton(
+        ClassesVersionExpander,
         expander=classes_expander,
-        future_hours=settings.materialize_future_hours,
-        lookback_days=settings.class_history_lookback_days,
     )
 
     # ── Checkin domain (the class consumer side) ─────────────────
@@ -230,14 +226,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     # streak, and per-cycle class usage (also feeds member billing detail).
     cycle_counts_service = providers.Factory(CycleCountsService, db_pool=db_pool)
     streak_service = providers.Factory(StreakService, db_pool=db_pool)
-    # Resolve + lazily materialize a single occurrence. Injects the pure
-    # expander + the materializer (both stay in classes) — the one-way
-    # checkin → classes dependency.
+    # Resolve a single occurrence against the class's schedule versions +
+    # exceptions (no materialization — occurrences are computed, never
+    # stored). Injects the pure version expander (stays in classes) — the
+    # one-way checkin → classes dependency.
     checkin_class_resolver = providers.Factory(
         CheckinClassResolver,
         db_pool=db_pool,
-        expander=classes_expander,
-        materializer=classes_materializer,
+        version_expander=classes_version_expander,
     )
     # Per-member gate + write (eligibility, capacity, plan selection, auto-end).
     checkin_member_gate = providers.Factory(
@@ -260,14 +256,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
     )
     # Create / remove a member's sign-up (reservation) for an occurrence.
-    # create() validates the occurrence via the same classes_expander used by
-    # checkin_class_resolver (WITHOUT materializing), then its capacity check
-    # reads the same signed-up-or-attended union the check-in capacity gate
-    # reads (both go through CheckinQueries).
+    # create() validates the occurrence via the same version expander used by
+    # checkin_class_resolver, then its capacity check reads the same
+    # signed-up-or-attended union the check-in capacity gate reads (both go
+    # through CheckinQueries).
     signup_service = providers.Factory(
         SignupService,
         db_pool=db_pool,
-        expander=classes_expander,
+        version_expander=classes_version_expander,
     )
     # Shared per-member check-in reverser: delete attendance, claw back points,
     # drop a feed activity, reverse the pack auto-end — on a KNOWN occurrence, in
@@ -283,23 +279,39 @@ class DependencyInjector(containers.DeclarativeContainer):
         reverser=checkin_reverser,
     )
 
-    # Class CRUD + exceptions + the schedule board.
+    # The schedule-version MINT engine: the one writer of
+    # gym_class_schedules. Minting runs the version-change wipe in the same
+    # transaction (future sign-ups deleted / early check-ins reversed /
+    # future exceptions dropped unless the new shape produces the exact same
+    # slot) — it loops the shared checkin_reverser, the same sanctioned
+    # classes -> checkin dependency the undo service uses. Also owns the
+    # soft-delete wipe and the gym timezone-change re-mint.
+    classes_versions_service = providers.Factory(
+        ClassesVersionsService,
+        db_pool=db_pool,
+        version_expander=classes_version_expander,
+        reverser=checkin_reverser,
+    )
+    # Class CRUD: identity in place; the schedule half mints versions via the
+    # versions service; soft delete runs the future-keyed wipe.
     classes_crud_service = providers.Factory(
         ClassesCrudService,
         db_pool=db_pool,
+        versions_service=classes_versions_service,
     )
     # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
     # (deletes member_attendance, claws back points, may clear an auto-end
-    # end_date), so each op runs in one transaction. Its wipe loops the shared
-    # checkin_reverser (defined above) over every attendee — a deliberate
-    # classes -> checkin dependency that avoids duplicating the reversal. Also
-    # HOSTS the shared reschedule engine (time-aware conflict check + attendance
-    # wipe / re-date) that ClassesExceptionsService delegates to — hence defined
-    # before it.
+    # end_date), so each op runs in one transaction. Its teardown loops the
+    # shared checkin_reverser (defined above) over every attendee — a
+    # deliberate classes -> checkin dependency that avoids duplicating the
+    # reversal. Also HOSTS the shared reschedule engine (time-aware conflict
+    # check + attendance wipe / occurred_at re-sync) that
+    # ClassesExceptionsService delegates to — hence defined before it.
     classes_undo_service = providers.Factory(
         ClassesUndoService,
         db_pool=db_pool,
         expander=classes_expander,
+        version_expander=classes_version_expander,
         reverser=checkin_reverser,
     )
     # A reschedule (new_date) on an instance-exception upsert delegates the
@@ -313,8 +325,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     classes_schedule_reader_service = providers.Factory(
         ClassesScheduleReaderService,
         db_pool=db_pool,
-        expander=classes_expander,
-        materializer=classes_materializer,
+        version_expander=classes_version_expander,
     )
 
     rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
@@ -411,7 +422,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Presets: transactional import of a video_gym template into a real gym's
     # production tables. Owner-gated + email allowlist. No Stripe. Reuses the
     # canonical classes_expander to seed each imported class's past month of
-    # class_history + attendance (so the demo gym shows realistic counts).
+    # attendance + sign-ups (so the demo gym shows realistic counts).
     presets_service = providers.Factory(
         PresetsService, db_pool=db_pool, expander=classes_expander
     )
@@ -676,11 +687,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         GymsStripeConnectService,
         stripe_client=stripe_client,
     )
+    # classes_versions_service is the documented gyms -> classes edge: a gym
+    # TIMEZONE change re-mints every live class's schedule version with the
+    # new zone (wall-clock match keeps all future sign-ups / check-ins).
     gyms_service = providers.Factory(
         GymsService,
         db_pool=db_pool,
         stripe_connect_service=gyms_stripe_connect_service,
         waivers_service=waivers_service,
+        classes_versions_service=classes_versions_service,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────
@@ -742,14 +757,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
-    # NON-billing class-history materialize sweep: a thin per-gym loop that
-    # calls the shared ClassesMaterializer.materialize_current for each gym.
-    # Independent of every billing step.
-    reconciler_class_history_sweep = providers.Factory(
-        ClassHistorySweep,
-        db_pool=db_pool,
-        materializer=classes_materializer,
-    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
@@ -757,5 +764,4 @@ class DependencyInjector(containers.DeclarativeContainer):
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
         stale_task_sweep=reconciler_stale_task_sweep,
         subscription_orphan_sweep=reconciler_subscription_orphan_sweep,
-        class_history_sweep=reconciler_class_history_sweep,
     )

@@ -1,7 +1,8 @@
 -- Per-membership (item) class usage within the current billing cycle.
 -- Counts member_attendance rows (attributed to a specific membership via
--- item_id) whose class_history.occurred_at falls inside that membership's
--- billing window [last_paid_date | start_date, next_due_date | today+1).
+-- item_id) whose own occurred_at (the denormalized EFFECTIVE start instant)
+-- falls inside that membership's billing window [last_paid_date | start_date,
+-- next_due_date | today+1) -- read directly off the attendance row, no join.
 -- The allowance is plan.class_count * the membership's quantity: a stacked
 -- one_time / trial pack bought N at once is ONE row (quantity = N) granting one
 -- combined bucket of class_count * N. NULL class_count (unlimited) stays NULL
@@ -40,8 +41,6 @@ LEFT JOIN (
         ma.item_id,
         COUNT(*) AS classes_used
     FROM member_attendance ma
-    JOIN class_history ch
-        ON  ch.class_history_id = ma.class_history_id
     -- A no-membership staff check-in carries NULL item_id; that row never
     -- matches an mm.item_id here, so it is naturally excluded from every
     -- membership's cycle count (it draws down no pack).
@@ -50,8 +49,8 @@ LEFT JOIN (
     JOIN gyms g2 ON g2.gym_id = ma.gym_id
     WHERE ma.gym_id = :gym_id
       AND ma.member_id = ANY(CAST(:member_ids AS uuid[]))
-      AND ch.occurred_at >= COALESCE(mm.last_paid_date, mm.start_date)
-      AND ch.occurred_at <  COALESCE(
+      AND ma.occurred_at >= COALESCE(mm.last_paid_date, mm.start_date)
+      AND ma.occurred_at <  COALESCE(
               mm.next_due_date,
               (now() AT TIME ZONE g2.timezone)::date + INTERVAL '1 day'
           )

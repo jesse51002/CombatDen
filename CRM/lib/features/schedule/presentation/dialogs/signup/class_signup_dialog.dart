@@ -26,6 +26,9 @@ class ClassSignupDialog extends StatefulWidget {
   final String classId;
   final String gymId;
   final String className;
+
+  /// The occurrence's IDENTITY date (never its effective/display date) —
+  /// this addresses the reservation.
   final DateTime occurrenceDate;
 
   const ClassSignupDialog({

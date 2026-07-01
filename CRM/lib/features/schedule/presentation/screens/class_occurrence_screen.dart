@@ -154,7 +154,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     return ClassAttendeeRoster(
       gymId: gymId,
       classId: widget.entry.classId,
-      occurrenceDate: widget.entry.classDate,
+      occurrenceDate: widget.entry.originalDate,
     );
   }
 
@@ -195,7 +195,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     _beginMutation(bloc);
     bloc.add(ScheduleInstanceOverridden(
       classId: widget.entry.classId,
-      date: widget.entry.classDate,
+      originalDate: widget.entry.originalDate,
       newClassTime: formatTimeOfDayHms(time),
       newDurationMinutes: widget.entry.resolvedDurationMinutes,
       newMaxCapacity: _capacityOrNull(),
@@ -212,7 +212,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       classId: widget.entry.classId,
       gymId: gymId,
       className: widget.entry.name,
-      occurrenceDate: widget.entry.classDate,
+      occurrenceDate: widget.entry.originalDate,
     );
   }
 
@@ -224,7 +224,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       classId: widget.entry.classId,
       gymId: gymId,
       className: widget.entry.name,
-      occurrenceDate: widget.entry.classDate,
+      occurrenceDate: widget.entry.originalDate,
     );
   }
 
@@ -242,7 +242,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     _beginMutation(bloc);
     bloc.add(ScheduleInstanceCancelled(
       classId: widget.entry.classId,
-      date: widget.entry.classDate,
+      originalDate: widget.entry.originalDate,
     ));
   }
 

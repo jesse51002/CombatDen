@@ -6,8 +6,11 @@
 // identity + billing live together on the unified `members` table (billing columns
 // are service-role-written, NULL for engagement-only members); `member_billing_profile`
 // is a filtered view of it (stripe_customer_id IS NOT NULL). Class scheduling is
-// embedded in gym_classes; exceptions split into instance vs range; class_history
-// records past occurrences and member_attendance points at them.
+// identity (gym_classes) + append-only versioned schedule shape
+// (gym_class_schedules, frozen timezone per version); exceptions split into
+// instance vs range; occurrences are computed, never stored — attendance and
+// sign-ups key an occurrence by its ORIGINAL slot (class_id + original_date +
+// original_time, the owning version's slot before exceptions).
 
 Table auth_users {
   id uuid [primary key]
@@ -124,11 +127,20 @@ Table gym_classes {
   class_name varchar [not null]
   class_description varchar
   allowed_plan_ids jsonb [note: 'plan_id strings allowed; NULL = all plans (check-in eligibility gate)']
-  max_capacity integer
+  max_capacity integer [note: 'room capacity; gated at check-in/sign-up time, per-occurrence override on class_instance_exceptions']
   image_url varchar
   points_worth integer [not null, default: 50]
   is_active boolean [not null, default: true]
   is_deleted boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table gym_class_schedules {
+  schedule_id uuid [primary key, default: `uuid_generate_v4()`]
+  class_id uuid [not null]
+  gym_id uuid [not null]
+  effective_from timestamptz [not null, note: 'version boundary, server now() at mint; coverage = [effective_from, next version)']
+  timezone text [not null, note: 'IANA zone frozen at mint; the version expands with its OWN zone forever']
   class_time time [not null]
   duration_minutes integer [not null]
   recurring_unit varchar [not null, note: 'enum: daily, weekly, monthly']
@@ -147,9 +159,12 @@ Table gym_classes {
   thu_instructor_id uuid
   fri_instructor_id uuid
   sat_instructor_id uuid
-  start_date date [not null]
+  start_date date [not null, note: 'recurrence range start (shape), NOT the version boundary']
   end_date date
-  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (class_id, effective_from) [unique]
+  }
 }
 
 Table class_instance_exceptions {
@@ -181,33 +196,22 @@ Table class_range_exceptions {
   created_at timestamptz [not null, default: `now()`]
 }
 
-Table class_history {
-  class_history_id uuid [primary key, default: `uuid_generate_v4()`]
-  class_id uuid [not null]
-  gym_id uuid [not null]
-  instructor_id uuid
-  occurred_at timestamptz [not null]
-  duration_minutes integer [not null]
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (class_history_id, gym_id) [unique]
-    (class_id, occurred_at) [unique]
-  }
-}
-
 Table member_attendance {
   log_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
   gym_id uuid [not null]
-  class_history_id uuid [not null]
+  class_id uuid [not null]
+  original_date date [not null, note: 'occurrence identity: the owning schedule version original slot']
+  original_time time [not null, note: 'occurrence identity; stored for the version-change exact-slot match']
+  occurred_at timestamptz [not null, note: 'denormalized EFFECTIVE start; consumed only by streak/cycle/last_class window SQL']
   plan_id uuid [note: 'FK (plan_id, gym_id) -> membership_plans_unfiltered; billing attribution. NULL together with item_id for a no-membership admin check-in']
   item_id uuid [note: 'FK (item_id, member_id) -> member_memberships_unfiltered; covering membership. NULL together with plan_id for a no-membership admin check-in']
 
   indexes {
-    (member_id, class_history_id) [unique]
+    (member_id, class_id, original_date) [unique]
     (member_id, gym_id)
-    (class_history_id)
+    (class_id, original_date)
+    (member_id, occurred_at)
   }
 }
 
@@ -216,12 +220,13 @@ Table class_signups {
   gym_id uuid [not null]
   class_id uuid [not null]
   member_id uuid [not null]
-  occurrence_date date [not null, note: 'gym-local calendar date of the reserved occurrence -- NOT attendance']
+  original_date date [not null, note: 'occurrence identity: the owning schedule version original slot -- NOT attendance']
+  original_time time [not null, note: 'occurrence identity; stored for the version-change exact-slot match']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (class_id, member_id, occurrence_date) [unique]
-    (class_id, occurrence_date)
+    (class_id, member_id, original_date) [unique]
+    (class_id, original_date)
     (member_id, gym_id)
   }
 }
@@ -341,13 +346,16 @@ Ref: members.current_rank_id > gym_ranks.rank_id
 Ref: gym_ranks.gym_id > gyms.gym_id
 
 Ref: gym_classes.gym_id > gyms.gym_id
-Ref: gym_classes.sun_instructor_id > gym_employees.employee_id
-Ref: gym_classes.mon_instructor_id > gym_employees.employee_id
-Ref: gym_classes.tue_instructor_id > gym_employees.employee_id
-Ref: gym_classes.wed_instructor_id > gym_employees.employee_id
-Ref: gym_classes.thu_instructor_id > gym_employees.employee_id
-Ref: gym_classes.fri_instructor_id > gym_employees.employee_id
-Ref: gym_classes.sat_instructor_id > gym_employees.employee_id
+
+Ref: gym_class_schedules.class_id > gym_classes.class_id
+Ref: gym_class_schedules.gym_id > gyms.gym_id
+Ref: gym_class_schedules.sun_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.mon_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.tue_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.wed_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.thu_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.fri_instructor_id > gym_employees.employee_id
+Ref: gym_class_schedules.sat_instructor_id > gym_employees.employee_id
 
 Ref: class_instance_exceptions.class_id > gym_classes.class_id
 Ref: class_instance_exceptions.gym_id > gyms.gym_id
@@ -357,13 +365,9 @@ Ref: class_range_exceptions.class_id > gym_classes.class_id
 Ref: class_range_exceptions.gym_id > gyms.gym_id
 Ref: class_range_exceptions.new_instructor_id > gym_employees.employee_id
 
-Ref: class_history.class_id > gym_classes.class_id
-Ref: class_history.gym_id > gyms.gym_id
-Ref: class_history.instructor_id > gym_employees.employee_id
-
 Ref: member_attendance.member_id > members.member_id
 Ref: member_attendance.gym_id > gyms.gym_id
-Ref: member_attendance.class_history_id > class_history.class_history_id
+Ref: member_attendance.class_id > gym_classes.class_id
 Ref: member_attendance.plan_id > membership_plans_unfiltered.plan_id
 Ref: member_attendance.item_id > member_memberships_unfiltered.item_id
 

@@ -1,25 +1,30 @@
 """Pure mappers: DB rows -> the expander's input contracts.
 
 A class-less concern module (like ``payments_stripe_mappers.py``): these are
-pure row->Pydantic projections shared by the exceptions service (reschedule
-conflict check) and the schedule reader, so the ``gym_classes`` /
-``class_instance_exceptions`` / ``class_range_exceptions`` row shapes map to the
-expander in exactly one place.
+pure row->Pydantic projections shared by every expander caller (the schedule
+reader, the exceptions/undo services, the check-in resolver, the sign-up
+validator, the mint engine), so the ``gym_class_schedules`` /
+``class_instance_exceptions`` / ``class_range_exceptions`` row shapes map to
+the expander in exactly one place.
 """
 
 from collections.abc import Mapping
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_expander_schema import (
-    ExpanderClass,
     ExpanderInstanceException,
     ExpanderRangeException,
+    ExpanderScheduleVersion,
 )
 
-# Per-weekday columns the expander reads off a class row.
-_EXPANDER_CLASS_KEYS: tuple[str, ...] = (
+# The columns the expander reads off a gym_class_schedules version row: the
+# version identity plus the flat schedule shape (per-weekday flags + slots).
+_EXPANDER_SCHEDULE_KEYS: tuple[str, ...] = (
+    "schedule_id",
     "class_id",
     "gym_id",
+    "effective_from",
+    "timezone",
     "class_time",
     "duration_minutes",
     "recurring_unit",
@@ -43,9 +48,11 @@ _EXPANDER_CLASS_KEYS: tuple[str, ...] = (
 )
 
 
-def to_expander_class(row: Mapping) -> ExpanderClass:
-    """Project a ``gym_classes`` row onto the expander's class contract."""
-    return ExpanderClass(**{key: row[key] for key in _EXPANDER_CLASS_KEYS})
+def to_expander_schedule(row: Mapping) -> ExpanderScheduleVersion:
+    """Project a ``gym_class_schedules`` row onto the expander contract."""
+    return ExpanderScheduleVersion(
+        **{key: row[key] for key in _EXPANDER_SCHEDULE_KEYS}
+    )
 
 
 def to_expander_instance(row: Mapping) -> ExpanderInstanceException:

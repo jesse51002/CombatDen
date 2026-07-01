@@ -48,9 +48,8 @@ class Attendee extends Equatable {
 /// Response for `GET /api/v1/checkin/attendees` — the combined roster.
 ///
 /// Mirrors the backend `AttendeeListResponse`: everyone who signed up OR
-/// attended the occurrence, each flagged. [classHistoryId] is null when the
-/// occurrence was never materialized (no check-ins yet) — a signed-up-only
-/// member can still appear in [attendees] in that case.
+/// attended the occurrence, each flagged. A signed-up-only member can still
+/// appear in [attendees] even when nobody has attended yet.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -58,16 +57,15 @@ class Attendee extends Equatable {
 class AttendeeListResponse extends Equatable {
   final String classId;
 
-  /// The gym-local calendar date queried, echoed back as a bare `YYYY-MM-DD`.
+  /// The occurrence's IDENTITY date queried, echoed back as a bare
+  /// `YYYY-MM-DD`.
   final String occurrenceDate;
-  final String? classHistoryId;
   @JsonKey(defaultValue: [])
   final List<Attendee> attendees;
 
   const AttendeeListResponse({
     required this.classId,
     required this.occurrenceDate,
-    this.classHistoryId,
     this.attendees = const [],
   });
 
@@ -75,6 +73,5 @@ class AttendeeListResponse extends Equatable {
       _$AttendeeListResponseFromJson(json);
 
   @override
-  List<Object?> get props =>
-      [classId, occurrenceDate, classHistoryId, attendees];
+  List<Object?> get props => [classId, occurrenceDate, attendees];
 }

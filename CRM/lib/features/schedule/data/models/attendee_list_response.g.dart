@@ -21,7 +21,6 @@ AttendeeListResponse _$AttendeeListResponseFromJson(
 ) => AttendeeListResponse(
   classId: json['class_id'] as String,
   occurrenceDate: json['occurrence_date'] as String,
-  classHistoryId: json['class_history_id'] as String?,
   attendees:
       (json['attendees'] as List<dynamic>?)
           ?.map((e) => Attendee.fromJson(e as Map<String, dynamic>))

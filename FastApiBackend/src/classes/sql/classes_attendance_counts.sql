@@ -1,16 +1,13 @@
--- Recorded attendance per materialized occurrence, keyed by (class_id,
--- occurred_at) -- the same idempotency anchor the expander's occurred_at lands
--- on. occurred_at is bounded to a UTC range (computed in the service with a day
--- of slack on each side) so the scan stays cheap; the reader maps rows back to
--- occurrences by exact (class_id, occurred_at) match.
+-- Recorded attendance per occurrence for the schedule board, keyed by
+-- (class_id, original_date) -- the occurrence's identity key. A plain
+-- window-bounded GROUP BY over member_attendance; no join (attendance rows
+-- carry the occurrence key directly).
 SELECT
-    ch.class_id,
-    ch.occurred_at,
-    COUNT(ma.log_id) AS attendance_count
-FROM class_history ch
-LEFT JOIN member_attendance ma
-    ON ma.class_history_id = ch.class_history_id
-WHERE ch.gym_id = :gym_id
-  AND ch.occurred_at >= :lower
-  AND ch.occurred_at <= :upper
-GROUP BY ch.class_id, ch.occurred_at
+    class_id,
+    original_date,
+    COUNT(*) AS attendance_count
+FROM member_attendance
+WHERE gym_id = CAST(:gym_id AS UUID)
+  AND original_date >= CAST(:start_date AS DATE)
+  AND original_date <= CAST(:end_date AS DATE)
+GROUP BY class_id, original_date

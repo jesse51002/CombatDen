@@ -6,10 +6,10 @@ exceptions, over a date window, into the effective dated occurrences
 dropped; passing ``include_cancelled=True`` instead EMITS them with
 ``is_cancelled=True`` (carrying the class's default time / instructor for
 display) so a schedule board can show a struck-through cancelled day. Every
-later phase — CRUD reads, check-in validation, the reconciler sweep, reschedule
-checks — imports THIS, so its semantics must stay exact. The materialize /
-check-in callers leave ``include_cancelled`` at its default ``False`` so their
-behavior is unchanged; only the display read path opts in.
+consumer — the versioned expander, check-in validation, reschedule checks —
+imports THIS, so its semantics must stay exact. The check-in / validation
+callers leave ``include_cancelled`` at its default ``False``; only the display
+read path opts in.
 
 It is PURE: no DB, no I/O, no clock. Everything is derived from the arguments,
 which makes it fully unit-testable.
@@ -91,7 +91,7 @@ class ClassesExpander:
             gym_tz: IANA timezone name of the gym (e.g. ``America/Chicago``)
                 used to convert each local start time to UTC.
             include_cancelled: When False (default), cancelled occurrences are
-                dropped (the materialize / check-in behavior). When True, a
+                dropped (the check-in / validation behavior). When True, a
                 cancelled occurrence is instead EMITTED with
                 ``is_cancelled=True`` on its ``original_date`` using the class's
                 default time / duration / instructor (for a display board).
@@ -271,6 +271,7 @@ class ClassesExpander:
             )
             return self._build(
                 original_date,
+                gym_class.class_time,
                 original_date,
                 gym_class.class_time,
                 gym_class.duration_minutes,
@@ -281,6 +282,7 @@ class ClassesExpander:
 
         return self._build(
             original_date,
+            gym_class.class_time,
             original_date,
             gym_class.class_time,
             gym_class.duration_minutes,
@@ -307,6 +309,7 @@ class ClassesExpander:
             return None
         return self._build(
             original_date,
+            gym_class.class_time,
             original_date,
             gym_class.class_time,
             gym_class.duration_minutes,
@@ -371,6 +374,7 @@ class ClassesExpander:
         )
         return self._build(
             original_date,
+            gym_class.class_time,
             effective_date,
             class_time,
             duration,
@@ -399,6 +403,7 @@ class ClassesExpander:
     @staticmethod
     def _build(
         original_date: date,
+        original_time: time,
         effective_date: date,
         class_time: time,
         duration_minutes: int,
@@ -411,12 +416,16 @@ class ClassesExpander:
 
         The effective local date + time is interpreted in the gym's timezone
         and converted to UTC. See the module docstring for the DST policy.
+        ``original_time`` is the schedule's pre-exception default start time —
+        the occurrence's identity time, distinct from the effective
+        ``class_time``.
         """
         occurred_at = datetime.combine(
             effective_date, class_time, tzinfo=ZoneInfo(gym_tz)
         ).astimezone(UTC)
         return EffectiveOccurrence(
             original_date=original_date,
+            original_time=original_time,
             effective_date=effective_date,
             occurred_at=occurred_at,
             class_time=class_time,

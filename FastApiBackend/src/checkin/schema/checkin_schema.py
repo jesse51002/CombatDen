@@ -1,6 +1,6 @@
 """Pydantic models for the checkin domain."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import StrEnum
 from uuid import UUID
 
@@ -86,9 +86,11 @@ class GateEvaluation(BaseModel):
 class CheckinRequest(BaseModel):
     """Body for POST /api/v1/checkin.
 
-    The occurrence is addressed by ``class_id`` + ``occurrence_date`` (the local
-    calendar date the class runs); the backend resolves / lazily materializes
-    the ``class_history`` row.
+    The occurrence is addressed by ``class_id`` + ``occurrence_date`` — always
+    the occurrence's ORIGINAL date (the owning schedule version's
+    pre-exception slot), never its effective/rescheduled date; the backend
+    resolves the occurrence against the class's schedule versions + exceptions.
+    Occurrences are computed, never stored — there is no materialization step.
 
     ``is_member`` selects the gate:
 
@@ -117,20 +119,27 @@ class CheckinRequest(BaseModel):
 
 
 class ResolvedClass(BaseModel):
-    """A resolved, materialized class occurrence — the input to a per-member
-    check-in.
+    """A resolved class occurrence — the input to a per-member check-in.
 
-    Produced by ``CheckinClassResolver.resolve`` once per
-    occurrence, then reused to check in one or many members (batch).
+    Produced by ``CheckinClassResolver.resolve`` once per occurrence, then
+    reused to check in one or many members (batch). Purely a read: resolving
+    an occurrence never writes anything — occurrences are always computed
+    from the class's schedule versions + exceptions, never stored.
 
     Attributes:
-        class_history_id: The materialized occurrence row (find-or-create).
         class_id: The owning class.
         gym_id: The owning gym.
-        occurrence_date: The gym-local calendar date of the occurrence (the
-            same date the caller addressed it by) — used by the capacity gate
-            to read the signed-up-or-attended union for this occurrence.
-        occurred_at: UTC, timezone-aware start instant of the occurrence.
+        occurrence_date: The occurrence's ORIGINAL date (the owning schedule
+            version's pre-exception slot) — the same date the caller
+            addressed it by. Used by the capacity gate to read the
+            signed-up-or-attended union for this occurrence, and stored on
+            ``member_attendance`` as part of the occurrence's identity key.
+        original_time: The owning schedule version's pre-exception slot
+            time — the other half of the occurrence's identity key, stored
+            alongside ``occurrence_date`` on the attendance row.
+        occurred_at: UTC, timezone-aware EFFECTIVE start instant of the
+            occurrence (exceptions applied) — denormalized onto the
+            attendance row for streak / cycle-count / last-class window SQL.
         points_worth: Points awarded for attending this class.
         class_name: The class's display name (snapshotted into the activity).
         max_capacity: Effective room capacity (the instance exception's
@@ -142,10 +151,10 @@ class ResolvedClass(BaseModel):
         duration_minutes: Effective length of the occurrence in minutes.
     """
 
-    class_history_id: UUID
     class_id: UUID
     gym_id: UUID
     occurrence_date: date
+    original_time: time
     occurred_at: datetime
     points_worth: int
     class_name: str
@@ -204,7 +213,6 @@ class CheckinResponse(BaseModel):
     Attributes:
         log_id: The attendance row. None when a kiosk check-in was rejected.
         member_id: The member who checked in.
-        class_history_id: The resolved/materialized class instance attended.
         class_id: The class the occurrence belongs to.
         already_checked_in: True when an attendance row already existed
             for this (member, class instance) — the check-in was
@@ -239,7 +247,6 @@ class CheckinResponse(BaseModel):
 
     log_id: UUID | None
     member_id: UUID
-    class_history_id: UUID
     class_id: UUID
     already_checked_in: bool
     chosen_plan_id: UUID | None = None
@@ -303,21 +310,18 @@ class AttendeeListResponse(BaseModel):
     """Response for GET /api/v1/checkin/attendees — the combined roster.
 
     Everyone who signed up OR attended the occurrence, each flagged. A
-    signed-up-only member can appear even when the occurrence was never
-    materialized (a future occurrence can carry sign-ups with no
-    ``class_history`` row yet).
+    signed-up-only member can appear even when nobody has checked in yet (a
+    future occurrence can carry sign-ups with no attendance at all).
 
     Attributes:
         class_id: The class the occurrence belongs to.
-        occurrence_date: The gym-local calendar date queried.
-        class_history_id: The materialized occurrence row, or None when the
-            occurrence was never materialized (no check-ins yet).
+        occurrence_date: The occurrence's ORIGINAL date (the identity key
+            queried).
         attendees: Everyone signed up or attended, ordered by name.
     """
 
     class_id: UUID
     occurrence_date: date
-    class_history_id: UUID | None
     attendees: list[Attendee]
 
 

@@ -23,6 +23,9 @@ final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 /// caller also passes a [roster] (the Reserved/Attended tabs), rendered
 /// beneath the actions in the same block.
 class ClassOccurrenceActions extends StatelessWidget {
+  /// DISPLAY only (the effective/resolved date shown in [_note]) — the
+  /// dialogs opened from this block address the occurrence by its own
+  /// original date, passed separately by the caller.
   final DateTime occurrenceDate;
   final bool isCancelled;
 

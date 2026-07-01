@@ -16,12 +16,17 @@ isn't reachable. Everything created is tracked and deleted in FK-safe order on
 teardown (the ``created`` fixture below), mirroring the conftest ``created``
 pattern; seed data is never touched.
 
-NOTE: the Phase-1 migration (``class_instance_exceptions.new_date`` +
-``uq_class_history_occurrence``) may not be applied to the shared local DB yet.
-Until it is, every endpoint that reads/writes ``new_date`` — the instance
-exception upsert/list and the schedule board (which loads instance exceptions) —
-fails at runtime with an undefined-column error. The plain class CRUD and the
-range-exception create do not depend on the migration and pass regardless.
+NOTE (versioned-schedule migration pending): the class system moved from a
+materialized ``class_history`` + live ``gym_classes`` recurrence to APPEND-ONLY
+``gym_class_schedules`` versions (``class_history`` dropped; ``gym_classes`` is
+identity-only; ``member_attendance`` re-keyed to ``(class_id, original_date,
+original_time)`` + a denormalized ``occurred_at``). The migration
+(``Database/supabase/migrations/20260701020000_versioned_class_schedules.sql``)
+may not be applied to the shared local DB yet — until it is, every endpoint in
+this file 500s (``class_history`` / ``gym_class_schedules`` undefined) or the
+create/update schema rejects the request. These tests assert the CORRECT
+post-migration behavior and are EXPECTED to fail at runtime until the user runs
+the migration — that is a missing migration, not a code defect.
 """
 
 from __future__ import annotations
@@ -121,13 +126,14 @@ class _Created:
             try:
                 for class_id in self.class_ids:
                     cid = UUID(class_id)
+                    # FK-safe order: rows keyed by class_id, then the
+                    # versioned schedule history, then the identity row.
                     await conn.execute(
-                        "DELETE FROM member_attendance WHERE class_history_id IN "
-                        "(SELECT class_history_id FROM class_history WHERE class_id = $1)",
+                        "DELETE FROM member_attendance WHERE class_id = $1",
                         cid,
                     )
                     await conn.execute(
-                        "DELETE FROM class_history WHERE class_id = $1", cid
+                        "DELETE FROM class_signups WHERE class_id = $1", cid
                     )
                     await conn.execute(
                         "DELETE FROM class_instance_exceptions WHERE class_id = $1",
@@ -135,6 +141,10 @@ class _Created:
                     )
                     await conn.execute(
                         "DELETE FROM class_range_exceptions WHERE class_id = $1",
+                        cid,
+                    )
+                    await conn.execute(
+                        "DELETE FROM gym_class_schedules WHERE class_id = $1",
                         cid,
                     )
                     await conn.execute(
@@ -211,15 +221,42 @@ class TestClassCrud:
         assert got.status_code == 200, got.text
         assert got.json()["class_id"] == class_id
 
-        # PUT updates mutable fields (a provided value changes; absent unchanged).
+        # PUT splits by destination: `identity` (partial) updates gym_classes
+        # in place; a provided value changes, an absent one is untouched, and
+        # the untouched `schedule` (no mint) leaves duration_minutes alone.
         upd = api.put(
             f"{CLASSES_BASE}/{class_id}",
-            json={"data": {"class_name": "ZZ Renamed", "points_worth": 75}},
+            json={
+                "identity": {"class_name": "ZZ Renamed", "points_worth": 75}
+            },
         )
         assert upd.status_code == 200, upd.text
         assert upd.json()["class_name"] == "ZZ Renamed"
         assert upd.json()["points_worth"] == 75
-        assert upd.json()["duration_minutes"] == 60  # untouched
+        assert upd.json()["duration_minutes"] == 60  # untouched (no schedule mint)
+
+        # PUT with the `schedule` half (a COMPLETE shape) mints a new
+        # version; the flattened read reflects the new current version.
+        payload = _make_class_payload(seed)
+        schedule = {
+            key: value
+            for key, value in payload.items()
+            if key
+            not in (
+                "gym_id",
+                "class_name",
+                "class_description",
+                "max_capacity",
+                "points_worth",
+            )
+        }
+        schedule["duration_minutes"] = 90
+        upd2 = api.put(
+            f"{CLASSES_BASE}/{class_id}", json={"schedule": schedule}
+        )
+        assert upd2.status_code == 200, upd2.text
+        assert upd2.json()["duration_minutes"] == 90
+        assert upd2.json()["class_name"] == "ZZ Renamed"  # identity untouched
 
         # DELETE soft-deletes.
         deleted = api.delete(f"{CLASSES_BASE}/{class_id}")
@@ -247,7 +284,7 @@ class TestClassCrud:
 
 
 # ---------------------------------------------------------------------------
-# Range exceptions  (no migration dependency)
+# Range exceptions
 # ---------------------------------------------------------------------------
 
 
@@ -283,7 +320,7 @@ class TestRangeExceptions:
 
 
 # ---------------------------------------------------------------------------
-# Instance exceptions  (depends on the new_date migration)
+# Instance exceptions
 # ---------------------------------------------------------------------------
 
 
@@ -325,15 +362,20 @@ class TestInstanceExceptions:
 
 
 # ---------------------------------------------------------------------------
-# Schedule board  (depends on the new_date migration)
+# Schedule board
 # ---------------------------------------------------------------------------
 
 
 class TestScheduleBoard:
-    def _insert_history_and_attendance(
+    def _insert_attendance(
         self, class_id: str, gym_tz: str, membership: asyncpg.Record
     ) -> None:
-        """Materialize a class_history row for _ATTEND_DATE + one attendance."""
+        """Record one attendance keyed by the _ATTEND_DATE original slot.
+
+        Attendance is keyed by the occurrence's identity ``(class_id,
+        original_date, original_time)`` with a denormalized ``occurred_at``
+        (no class_history row exists anymore).
+        """
         occurred_at = datetime.combine(
             _ATTEND_DATE, _CLASS_TIME, tzinfo=ZoneInfo(gym_tz)
         ).astimezone(UTC)
@@ -341,22 +383,17 @@ class TestScheduleBoard:
         async def _run() -> None:
             conn = await asyncpg.connect(_get_db_url())
             try:
-                history_id = await conn.fetchval(
-                    "INSERT INTO class_history "
-                    "(class_id, gym_id, occurred_at, duration_minutes) "
-                    "VALUES ($1, $2, $3, $4) RETURNING class_history_id",
-                    UUID(class_id),
-                    UUID(GYM_ID),
-                    occurred_at,
-                    60,
-                )
                 await conn.execute(
                     "INSERT INTO member_attendance "
-                    "(member_id, gym_id, class_history_id, plan_id, item_id) "
-                    "VALUES ($1, $2, $3, $4, $5)",
+                    "(member_id, gym_id, class_id, original_date, "
+                    " original_time, occurred_at, plan_id, item_id) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                     membership["member_id"],
                     UUID(GYM_ID),
-                    history_id,
+                    UUID(class_id),
+                    _ATTEND_DATE,
+                    _CLASS_TIME,
+                    occurred_at,
                     membership["plan_id"],
                     membership["item_id"],
                 )
@@ -380,9 +417,7 @@ class TestScheduleBoard:
         assert cancel.status_code == 200, cancel.text
 
         # Record attendance against the _ATTEND_DATE occurrence.
-        self._insert_history_and_attendance(
-            class_id, seed["timezone"], seed["membership"]
-        )
+        self._insert_attendance(class_id, seed["timezone"], seed["membership"])
 
         board = api.get(
             f"{CLASSES_BASE}/instances",
@@ -393,14 +428,18 @@ class TestScheduleBoard:
             },
         )
         assert board.status_code == 200, board.text
+        # Board rows carry the occurrence's IDENTITY date (original_date) —
+        # what every occurrence-addressed call passes — alongside the
+        # displayed class_date.
         by_date = {
-            (row["class_id"], row["class_date"]): row
+            (row["class_id"], row["original_date"]): row
             for row in board.json()["items"]
         }
 
         cancelled_row = by_date[(class_id, _CANCEL_DATE.isoformat())]
         assert cancelled_row["is_cancelled"] is True
         assert cancelled_row["has_instance_exception"] is True
+        assert cancelled_row["class_date"] == _CANCEL_DATE.isoformat()
 
         attended_row = by_date[(class_id, _ATTEND_DATE.isoformat())]
         assert attended_row["is_cancelled"] is False

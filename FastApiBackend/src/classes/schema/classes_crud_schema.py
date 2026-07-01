@@ -1,17 +1,20 @@
 """Pydantic models for the class + exception CRUD and schedule-board reads.
 
-These cover Phase 3 of the class system:
-
-* ``gym_classes`` create / update / response (recurrence embedded; the seven
-  per-weekday instructor slots resolve to display names joined from
-  ``gym_employees``).
+* ``gym_classes`` create / update / response. A class is IDENTITY
+  (``gym_classes``) plus an append-only versioned SCHEDULE shape
+  (``gym_class_schedules``): the create request carries both halves flat; the
+  update request splits them by destination (identity = UPDATE in place,
+  schedule = mint a NEW version) — the discounts identity/values precedent.
+  Responses stay flat (identity + the CURRENT version), so the CRM form shape
+  is unchanged. The seven per-weekday instructor slots resolve to display
+  names joined from ``gym_employees``.
 * ``class_instance_exceptions`` upsert / response (single-date overrides, keyed
   unique per ``(class_id, original_date)``).
 * ``class_range_exceptions`` create / response (cancel-or-substitute over a
   continuous range).
 * ``EffectiveClassInstanceResponse`` — the schedule-board shape, one row per
-  effective dated occurrence after the expander applies recurrence + exceptions
-  (cancelled occurrences included, flagged).
+  effective dated occurrence after the version expander applies ownership +
+  recurrence + exceptions (cancelled occurrences included, flagged).
 
 The recurring-unit enum is reused from the Database package
 (``schema.gym_class.RecurringUnit``) — never redefined here.
@@ -27,18 +30,25 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.shared.partial_model import partial_model
 
 
-class GymClassFields(BaseModel):
-    """The writable ``gym_classes`` columns — defined ONCE, shared by create
-    and update so the long field list can't drift between them.
-
-    ``GymClassCreateRequest`` inherits this (fields keep their declared
-    required-ness); ``GymClassUpdateData`` is the all-optional partial derived
-    from it via :func:`partial_model`. The recurrence is embedded, and the seven
-    per-weekday instructor slots are nullable.
-    """
+class GymClassIdentityFields(BaseModel):
+    """The writable ``gym_classes`` IDENTITY columns — what the class is, who
+    may attend, what it's worth. Identity applies across all schedule
+    versions (a rename renames the past too)."""
 
     class_name: str = Field(min_length=1)
     class_description: str | None = None
+    max_capacity: int | None = Field(default=None, gt=0)
+    allowed_plan_ids: list[UUID] | None = None
+    image_url: str | None = None
+    points_worth: int = Field(default=50, gt=0)
+
+
+class GymClassScheduleFields(BaseModel):
+    """The schedule SHAPE — one complete ``gym_class_schedules`` version body
+    (minus the backend-stamped ``effective_from`` / ``timezone``). Always
+    submitted whole: a schedule edit mints a new version, never patches one.
+    """
+
     class_time: time
     duration_minutes: int = Field(gt=0)
     recurring_unit: RecurringUnit
@@ -59,43 +69,50 @@ class GymClassFields(BaseModel):
     sat_instructor_id: UUID | None = None
     start_date: date
     end_date: date | None = None
-    max_capacity: int | None = Field(default=None, gt=0)
-    allowed_plan_ids: list[UUID] | None = None
-    image_url: str | None = None
-    points_worth: int = Field(default=50, gt=0)
 
 
-class GymClassCreateRequest(GymClassFields):
+class GymClassCreateRequest(GymClassIdentityFields, GymClassScheduleFields):
     """Body for POST /api/v1/classes — create a gym class.
 
-    The writable columns are inherited from ``GymClassFields``. ``is_active`` /
+    Flat: both the identity columns and the full schedule shape, exactly the
+    old single-table payload. The service writes the identity row and mints
+    the FIRST schedule version in one transaction. ``is_active`` /
     ``is_deleted`` are not accepted (they default TRUE / FALSE and are managed
-    by the soft-delete path).
+    by the soft-delete path). A future ``start_date`` is the supported way to
+    launch a class ahead of time — nothing renders before it.
     """
 
     gym_id: UUID
 
 
-# Update body: every ``GymClassFields`` column made optional (the service writes
-# only the keys in ``model_fields_set``, so a provided ``None`` clears a column
-# and an absent field is untouched; the change keys are validated against the
-# ``GYM_CLASSES`` immutable frozenset before any write), plus the two status
-# flags only an update may set. Derived from the one field definition above, so
-# it can never drift from ``GymClassCreateRequest``.
-GymClassUpdateData = partial_model(
-    "GymClassUpdateData",
-    GymClassFields,
+# Identity update body: every identity column made optional (the service
+# writes only the keys in ``model_fields_set``, so a provided ``None`` clears
+# a column and an absent field is untouched; the change keys are validated
+# against the ``GYM_CLASSES`` immutable frozenset before any write), plus
+# ``is_active``. ``is_deleted`` is deliberately NOT accepted here — deletion
+# goes through DELETE /classes/{id}, which also runs the future-keyed wipe.
+GymClassIdentityUpdateData = partial_model(
+    "GymClassIdentityUpdateData",
+    GymClassIdentityFields,
     extra={
         "is_active": (bool | None, None),
-        "is_deleted": (bool | None, None),
     },
 )
 
 
 class GymClassUpdateRequest(BaseModel):
-    """Body for PUT /api/v1/classes/{class_id}."""
+    """Body for PUT /api/v1/classes/{class_id} — split by destination.
 
-    data: GymClassUpdateData
+    ``identity`` (partial) updates ``gym_classes`` in place; ``schedule`` (a
+    COMPLETE shape) mints a new ``gym_class_schedules`` version effective now
+    — running the version-change wipe over future-keyed rows whose original
+    slot the new version no longer produces. Either half may be omitted; a
+    ``schedule`` deep-equal to the current version is a no-op (no mint, no
+    wipe). Mirrors the discounts identity/values update split.
+    """
+
+    identity: GymClassIdentityUpdateData | None = None
+    schedule: GymClassScheduleFields | None = None
 
 
 class GymClassResponse(BaseModel):
@@ -229,15 +246,19 @@ class ClassRangeExceptionListResponse(BaseModel):
 class EffectiveClassInstanceResponse(BaseModel):
     """One effective dated class occurrence for the schedule board.
 
-    Produced by the expander (recurrence + exceptions applied,
-    ``include_cancelled=True``) and enriched from the class row, the gym's
-    employees, and the attendance log.
+    Produced by the version expander (ownership + recurrence + exceptions
+    applied, ``include_cancelled=True``) and enriched from the class identity
+    row, the gym's employees, and the attendance/sign-up counts.
 
     Attributes:
         class_id: The owning class.
         gym_id: The owning gym.
         class_name: The class's display name.
         class_date: The effective (post-reschedule) local date.
+        original_date: The occurrence's IDENTITY date — the owning schedule
+            version's pre-exception slot date. Every occurrence-addressed
+            call (check-in, sign-up, exception, cancel, reschedule) passes
+            THIS date, never ``class_date``.
         occurred_at: UTC, timezone-aware start instant.
         resolved_class_time: Effective local start time (override or default).
         resolved_duration_minutes: Effective length (override or default).
@@ -253,9 +274,8 @@ class EffectiveClassInstanceResponse(BaseModel):
             occurrence's original date.
         has_range_exception: True when a range exception covers this
             occurrence's original date.
-        attendance_count: Recorded attendance for this occurrence when a
-            ``class_history`` row exists for it; None when no history row has
-            been materialized yet.
+        attendance_count: Recorded attendance for this occurrence (0 when
+            none).
         signup_count: Members signed up (reserved) for this occurrence — 0
             when none. Shown for both future AND past occurrences (a sign-up
             can be created ahead of a class that hasn't run yet, and the past
@@ -266,6 +286,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     gym_id: UUID
     class_name: str
     class_date: date
+    original_date: date
     occurred_at: datetime
     resolved_class_time: time
     resolved_duration_minutes: int
@@ -277,7 +298,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     is_cancelled: bool
     has_instance_exception: bool
     has_range_exception: bool
-    attendance_count: int | None
+    attendance_count: int = 0
     signup_count: int = 0
 
 

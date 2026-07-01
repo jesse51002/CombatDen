@@ -69,9 +69,11 @@ schema_paths = [
     "./schemas/gym_discount_values.sql",
     "./schemas/members.sql",
     "./schemas/gym_classes.sql",
+    # Append-only versioned schedule shape; FKs gym_classes + gym_employees
+    # (inside gyms.sql), both already loaded above. Owns the recurring_unit enum.
+    "./schemas/gym_class_schedules.sql",
     "./schemas/class_instance_exceptions.sql",
     "./schemas/class_range_exceptions.sql",
-    "./schemas/class_history.sql",
     # A member's reservation for an occurrence; FKs gyms + gym_classes + members,
     # all already loaded above.
     "./schemas/class_signups.sql",

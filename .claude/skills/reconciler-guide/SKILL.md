@@ -5,8 +5,7 @@ description: >-
   router-less `reconciler` domain in FastApiBackend/src/reconciler/ that runs the
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
-  orchestrator running the five billing step-services in order, then one
-  independent NON-billing class-history materialize sweep; the generic
+  orchestrator running the five billing step-services in order; the generic
   ResourceLock the orphan cleanup uses), the five modular billing step-services
   run in order — InvoiceFetchSweep (missed-webhook backstop: a thin gym-iteration
   caller that delegates per gym to MemberMembershipsInvoiceFetch.sweep_account in
@@ -20,27 +19,23 @@ description: >-
   membership row, item-id linkage + an age guard) — how a gone sub is
   cancelled inside the sync (PaymentSyncCancel, owned by sync-guide), the
   customer.subscription.deleted webhook as a thin bulk_payment_sync trigger, the
-  synthetic per-attempt failed-charge key, the conflict-resolution rule
+  synthetic per-attempt failed-charge key, and the conflict-resolution rule
   (config drift → CRM wins / push; lifecycle/dunning drift → Stripe wins / the
-  sync cancels a gone sub, never re-bill), and the independent NON-billing
-  ClassHistorySweep (a thin per-gym loop calling the class system's own
-  ClassesMaterializer.materialize_current — no Stripe, no membership, no
-  payment state). Load this whenever you touch the reconciler sweep, the
-  scheduler, the subscription-deleted webhook, the invoice fetch sweep, the
-  class-history materialize sweep, the synthetic failed-charge key, or ask
-  how/when the reconciler runs. Trigger on "reconciler", "scheduled sweep",
+  sync cancels a gone sub, never re-bill). Load this whenever you touch the
+  reconciler sweep, the scheduler, the subscription-deleted webhook, the
+  invoice fetch sweep, the synthetic failed-charge key, or ask how/when the
+  reconciler runs. Trigger on "reconciler", "scheduled sweep",
   "twice daily", "APScheduler", "ResourceLock", "OrphanCleanupSweep",
   "PaymentPushSweep", "InvoiceFetchSweep", "StaleTaskSweep", "stale-task
   recovery", "SubscriptionOrphanSweep", "orphan subscription", "cancel unlinked
   sub", "customer.subscription.deleted", "record seam", "synthetic charge key",
-  "self-heal a gone sub", "dunning", "skip-if-equal", "ClassHistorySweep",
-  "class-history materialize", "class history backfill", or any change to
+  "self-heal a gone sub", "dunning", "skip-if-equal", or any change to
   src/reconciler/. The payment-sync ENGINE the push step calls — including the
   gone-sub cancel (PaymentSyncCancel) — lives in `sync-guide`; the on-demand
   post-op fetch engine + webhook record() seams live in `memberships-guide` +
-  `payments-guide`; the range materialize entry point + expander the
-  class-history sweep calls live in the class system (`src/classes/`), not this
-  skill.
+  `payments-guide`. The reconciler is billing-only: the class system needs no
+  sweep (occurrences are computed from versioned schedules, never stored —
+  see `class-system-guide`).
 ---
 
 # Scheduled Reconciler — the on-a-clock billing safety net
@@ -86,13 +81,9 @@ the first time a sync runs on/after its cutoff; an idle member triggers no sync,
 so the push sweep is what runs it on schedule.
 
 It is a **safety net**: simple, idempotent, no manual controls. It invents no
-billing logic — every step reuses existing services.
-
-The reconciler also runs one **non-billing** step on the same clock:
-`ClassHistorySweep` (§9) — a thin per-gym loop that calls the class system's own
-`ClassesMaterializer.materialize_current` for every gym. It shares nothing with
-the billing engine — no Stripe, no membership, no payment state — and is
-appended **last** so the billing sequence is undisturbed.
+billing logic — every step reuses existing services. It is billing-ONLY: the
+class system needs no reconciler step (occurrences are computed from
+versioned schedules, never stored).
 
 ---
 
@@ -105,8 +96,7 @@ appended **last** so the billing sequence is undisturbed.
   and `shutdown(wait=False)` on stop. The root test conftest sets
   `reconciler_enabled=False` so booting the app in a test never starts it.
 - **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` runs the
-  five billing steps in order, then the one independent **non-billing**
-  class-history materialize sweep (§9), and returns each one's `SweepResult`
+  five billing steps in order and returns each one's `SweepResult`
   (`processed / changed / skipped / errors`).
 - **No reconciler-wide lock.** Safety is the per-paying-family `PayingMemberLock`
   that **every payment op already holds** (and that the orphan cleanup checks
@@ -127,7 +117,7 @@ appended **last** so the billing sequence is undisturbed.
 
 ---
 
-## 3. The step-services — run order (five billing + one non-billing)
+## 3. The step-services — run order (five billing steps)
 
 Each step is its **own service**; the orchestrator is thin. The order is
 deliberate:
@@ -140,14 +130,8 @@ deliberate:
 4. **`PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set;
    this is also what cancels a gone sub (§4).
 5. **`SubscriptionOrphanSweep`** — the reverse cleanup: cancel live Stripe subs
-   with no live DB link. Runs **last of the billing steps** so the push has
-   re-linked any real sub (re-stamped its `stripe_item_id`) before we judge
-   what's an orphan.
-6. **`ClassHistorySweep`** (§9, **NON-billing**) — a thin per-gym loop over the
-   class system's `ClassesMaterializer.materialize_current`. Fully independent
-   of steps 1–5 (no Stripe / membership / payment state) and idempotent, so its
-   order doesn't matter; appended **last** purely so the five-step billing
-   sequence above stays pristine.
+   with no live DB link. Runs **last** so the push has re-linked any real sub
+   (re-stamped its `stripe_item_id`) before we judge what's an orphan.
 
 - **`StaleTaskSweep`** (`reconciler_stale_task_sweep.py`) — tracked-task crash
   recovery, **moved out of `src/tasks/` into the reconciler** (the tasks domain
@@ -194,8 +178,6 @@ deliberate:
   `cancel_subscription` primitive (immediate, fresh idempotency key; idempotent — a
   no-op for an already-cancelled sub). Each cancel is isolated in its own `try` so
   one failure can't abort the sweep.
-- **`ClassHistorySweep`** (`reconciler_class_history_sweep.py`, **NON-billing**) —
-  a thin per-gym loop; full details in §9.
 
 Cancelling a gone sub (a sub Stripe itself ended) is **not** a separate reconciler
 step — it happens **inside the sync** (§4), so the push sweep handles it as part of
@@ -359,62 +341,18 @@ write-reduction.
 
 ---
 
-## 9. The class-history materialize sweep (NON-billing)
-
-`ClassHistorySweep` (`reconciler_class_history_sweep.py`) is the one reconciler
-step that is **not** billing: it touches no Stripe, no membership, and no payment
-state. It exists so recorded class history is **complete** — the check-in path
-only materializes the occurrence(s) a check-in resolves, leaving other past,
-zero-attendee occurrences with no `class_history` row. This sweep backfills them.
-
-**It is a THIN per-gym loop, nothing more.** `run()` lists every gym
-(`reconciler_all_gyms.sql` — `SELECT gym_id FROM gyms`, **not** scoped to Stripe
-Connect: a gym with no billing set up still has classes / check-in) and calls
-`ClassesMaterializer.materialize_current(gym_id)` for each, isolated in its own
-`try`/`except` so one gym's failure (logged) never aborts the rest. All of the
-load + expand + per-occurrence write logic — the canonical `ClassesExpander`, the
-idempotent `find_or_create_history` (`uq_class_history_occurrence` ON CONFLICT),
-the shared forward cutoff, cancelled-occurrence exclusion — lives in
-`ClassesMaterializer` (`src/classes/service/classes_materializer.py`), owned by
-the **class system**, not this skill. `ClassesMaterializer` is the SAME range
-entry point the check-in resolve seam and the schedule board also call — see the
-class system's own docs (`FastApiBackend/CLAUDE.md`) for its internals.
-
-`materialize_current(gym_id)` = `materialize(gym_id, today -
-settings.class_history_lookback_days, today + settings.materialize_future_hours)`.
-Both settings are injected into `ClassesMaterializer`'s constructor via the DI
-container (`src/core/dependencies.py`), never imported as `settings` inside the
-service. `class_history_lookback_days` (default 14) — a value **<= 0 makes
-`materialize_current` a no-op** (logged warning, no read, no write) for that gym.
-`materialize_future_hours` (default 2, matching the check-in-open window) caps
-how far ahead of "now" an occurrence may be written, so a not-yet-started
-occurrence's editable fields (time / instructor) aren't frozen into
-`class_history` too early.
-
-**Result semantics changed with the per-gym-loop refactor**: `SweepResult` here
-is now gym-granular, not occurrence-granular — `processed` = gyms attempted,
-`changed` = the sum of occurrences `materialize_current` reports as newly
-created across all gyms, `errors` = gyms whose call raised (`skipped` is unused —
-the per-occurrence created-vs-already-existing split is an internal
-`ClassesMaterializer` detail this sweep no longer surfaces). Returns
-`SweepResult(name="class_history_materialize")`.
-
----
-
 ## Key files (where the reconciler actually lives)
 
 - **Orchestrator:** `src/reconciler/service/reconciler/reconciler_service.py`
 - **Sweeps:** `reconciler_invoice_fetch_sweep.py` (thin gym-iteration caller; delegates to memberships engine),
   `reconciler_orphan_cleanup_sweep.py`, `reconciler_payment_push_sweep.py`,
-  `reconciler_subscription_orphan_sweep.py`,
-  `reconciler_class_history_sweep.py` (the non-billing class-history materialize, §9) — same folder
+  `reconciler_subscription_orphan_sweep.py` — same folder (+ `reconciler_stale_task_sweep.py`)
 - **Result models:** `reconciler_result.py`; **`SweepResult`:** `src/shared/sweep_result.py`
   (shared by reconciler + memberships engine; lives in `shared` to avoid a `memberships → reconciler` import edge)
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
 - **SQL:** `src/reconciler/sql/` (`reconciler_orphan_memberships.sql`,
   `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`,
-  `reconciler_linked_item_ids.sql` — the subscription-orphan linkage read;
-  `reconciler_all_gyms.sql` — the class-history sweep's gym list, §9)
+  `reconciler_linked_item_ids.sql` — the subscription-orphan linkage read)
 - **Shared lock:** `src/shared/resource_lock.py`
 - **The fetch+apply engine (in memberships, owned by `memberships-guide`):**
   `src/memberships/service/memberships_invoice_fetch.py` (`MemberMembershipsInvoiceFetch`) —
@@ -428,21 +366,10 @@ the per-occurrence created-vs-already-existing split is an internal
 - **The record seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
   `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
-  `reconciler_orphan_min_age_seconds`, `class_history_lookback_days`,
-  `materialize_future_hours` — all `Settings` fields, injected into
-  `ClassesMaterializer` via the container; on-demand fetch config lives in
-  `memberships-guide`)
-- **The range materialize entry point the class-history sweep calls (owned by
-  the class system, not this skill):** `src/classes/service/classes_materializer.py`
-  (`ClassesMaterializer.materialize` / `materialize_current`) +
-  `src/classes/service/classes_expander.py` (`ClassesExpander`, injected into
-  the materializer). Dependency direction: `reconciler → classes` (never the
-  reverse)
+  `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch
+  config lives in `memberships-guide`)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
-  (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`,
-  the class-history sweep's own gym-loop logic in
-  `tests/reconciler/test_class_history_sweep.py`, and `ClassesMaterializer`
-  itself in `tests/classes/service/test_classes_materializer.py`)
+  (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
 ## Diagram
 

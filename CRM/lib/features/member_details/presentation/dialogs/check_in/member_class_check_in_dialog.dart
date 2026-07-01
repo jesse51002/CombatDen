@@ -99,7 +99,7 @@ class _MemberClassCheckInDialogState
       bloc.add(
         MemberReserveRequested(
           classId: selected.instance.classId,
-          occurrenceDate: selected.instance.classDate,
+          occurrenceDate: selected.instance.originalDate,
         ),
       );
       return;
@@ -108,7 +108,7 @@ class _MemberClassCheckInDialogState
     bloc.add(
       MemberCheckInRequested(
         classId: selected.instance.classId,
-        occurrenceDate: selected.instance.classDate,
+        occurrenceDate: selected.instance.originalDate,
         ignoreWarnings: ignoreWarnings,
       ),
     );

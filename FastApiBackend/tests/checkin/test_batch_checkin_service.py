@@ -11,7 +11,7 @@ CheckinResponse -> BatchCheckinItemResult status mapping (checked_in /
 already_checked_in / skipped).
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -31,10 +31,10 @@ _OCCURRENCE_DATE = date(2026, 6, 1)
 def _resolved_class() -> ResolvedClass:
     """A resolved occurrence the mocked resolver hands back."""
     return ResolvedClass(
-        class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
         occurrence_date=_OCCURRENCE_DATE,
+        original_time=time(17, 0),
         occurred_at=datetime(2026, 6, 1, 17, 0, tzinfo=UTC),
         points_worth=50,
         class_name="Evening BJJ",
@@ -67,7 +67,6 @@ def _recorded(resolved_class: ResolvedClass, member_id: UUID) -> CheckinResponse
     return CheckinResponse(
         log_id=uuid4(),
         member_id=member_id,
-        class_history_id=resolved_class.class_history_id,
         class_id=resolved_class.class_id,
         already_checked_in=False,
         chosen_plan_id=uuid4(),
@@ -96,7 +95,6 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     )
 
     assert all_failed is False
-    assert response.class_history_id == resolved_class.class_history_id
     assert len(response.results) == 3
     by_member = {r.member_id: r for r in response.results}
     assert by_member[m1].status == BatchCheckinItemStatus.checked_in
@@ -105,7 +103,7 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     assert by_member[m3].status == BatchCheckinItemStatus.checked_in
     # All three members were attempted despite m2 blowing up.
     assert member_gate.checkin_member.await_count == 3
-    # The occurrence is materialized exactly once for the whole batch.
+    # The occurrence is resolved exactly once for the whole batch.
     resolver.resolve.assert_awaited_once()
 
 
@@ -164,7 +162,6 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
         return CheckinResponse(
             log_id=uuid4(),
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=True,
             chosen_plan_id=uuid4(),
@@ -178,7 +175,6 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
@@ -238,7 +234,6 @@ async def test_warnings_propagate_to_batch_item() -> None:
         return CheckinResponse(
             log_id=uuid4(),
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
@@ -272,7 +267,6 @@ async def test_needs_confirmation_maps_to_needs_confirmation() -> None:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=resolved_class.class_history_id,
             class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,

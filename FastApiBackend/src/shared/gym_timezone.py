@@ -30,9 +30,9 @@ def gym_local_day_bounds_utc(
 ) -> tuple[datetime, datetime]:
     """The gym-local calendar day ``[00:00, next 00:00)`` as UTC bounds.
 
-    Used to match a UTC instant (e.g. ``class_history.occurred_at``) against a
-    gym-local calendar date regardless of a per-occurrence time override or the
-    gym's UTC offset / DST.
+    Used to match a UTC instant (e.g. ``member_attendance.occurred_at``)
+    against a gym-local calendar date regardless of a per-occurrence time
+    override or the gym's UTC offset / DST.
 
     Args:
         day: The gym-local calendar date.

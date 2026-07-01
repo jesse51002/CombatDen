@@ -247,6 +247,7 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
     ScheduleClassEntry(
       classId: i.classId,
       classDate: i.classDate,
+      originalDate: i.originalDate,
       name: i.className,
       timeLabel:
           classTimeRangeLabel(i.resolvedClassTime, i.resolvedDurationMinutes),

@@ -1,21 +1,24 @@
 """Reverse ONE member's recorded check-in on a KNOWN occurrence.
 
-The reusable core of a check-in reversal, scoped to a single member on an
-already-resolved ``class_history_id``: delete that member's attendance row,
-claw back the class's ``points_worth`` (floored at 0), drop one
-``class_attended`` activity, and reverse the auto-end on the charged
-trial / one_time pack when the delete drops it back below capacity. Every step
-runs in the caller's OPEN transaction (no commit here), so a bulk caller can
-reverse many members atomically.
+The reusable core of a check-in reversal, scoped to a single member on one
+occurrence — identified by ``(class_id, original_date)``, its identity key:
+delete that member's attendance row, claw back the class's ``points_worth``
+(floored at 0), drop one ``class_attended`` activity, and reverse the
+auto-end on the charged trial / one_time pack when the delete drops it back
+below capacity. Every step runs in the caller's OPEN transaction (no commit
+here), so a bulk caller can reverse many members atomically.
 
-This unit does NOT resolve or materialize the occurrence — the caller passes the
-``class_history_id`` and the class's ``points_worth`` (a bulk caller loads those
-once and reuses them across the loop). It imports NOTHING from ``src.classes``:
-both the single-member remover (``CheckinRemover``) and the whole-occurrence undo
-(``ClassesUndoService``, which lives in ``src.classes``) call this, and a
-``src.classes`` import here would create a Python import cycle.
+This unit does NOT resolve the occurrence beyond its identity key — the
+caller passes ``class_id`` + ``original_date`` and the class's
+``points_worth`` (a bulk caller loads those once and reuses them across the
+loop). It imports NOTHING from ``src.classes``: the single-member remover
+(``CheckinRemover``), the whole-occurrence undo (``ClassesUndoService``), and
+the schedule-version mint engine (``ClassesVersionsService``) — both of which
+live in ``src.classes`` — all call this, and a ``src.classes`` import here
+would create a Python import cycle.
 """
 
+from datetime import date
 from uuid import UUID
 
 from schema.membership_plan import PlanType
@@ -35,22 +38,25 @@ class CheckinReverser:
     """Reverses one member's check-in on a known occurrence.
 
     Stateless: every step takes the caller's ``AsyncSession`` and runs in that
-    open transaction (no commit). Shared by ``CheckinRemover`` (one member) and
-    ``ClassesUndoService`` (every attendee, looped) so the reversal — attendance
-    delete + points claw-back + activity drop + pack auto-end reversal — has a
-    single implementation.
+    open transaction (no commit). Shared by ``CheckinRemover`` (one member),
+    ``ClassesUndoService`` (every attendee, looped, on cancel / future
+    reschedule), and ``ClassesVersionsService`` (every attendee, looped, on
+    the version-change wipe) so the reversal — attendance delete + points
+    claw-back + activity drop + pack auto-end reversal — has a single
+    implementation.
     """
 
     async def reverse(
         self,
         session: AsyncSession,
-        class_history_id: UUID,
         member_id: UUID,
         gym_id: UUID,
         class_id: UUID,
+        original_date: date,
         points_worth: int,
     ) -> CheckinRemoveResponse:
-        """Reverse ``member_id``'s check-in on ``class_history_id``.
+        """Reverse ``member_id``'s check-in on the occurrence identified by
+        ``(class_id, original_date)``.
 
         Deletes the member's attendance row, claws back ``points_worth`` (floored
         at 0 by the balance CHECK), drops one ``class_attended`` activity, and
@@ -62,7 +68,7 @@ class CheckinReverser:
         attendance on this occurrence.
         """
         deleted = await self._delete_attendance(
-            session, member_id, class_history_id
+            session, member_id, class_id, original_date
         )
         if deleted is None:
             return CheckinRemoveResponse(removed=False)
@@ -82,13 +88,21 @@ class CheckinReverser:
     # -- steps -----------------------------------------------------------
 
     async def _delete_attendance(
-        self, session: AsyncSession, member_id: UUID, history_id: UUID
+        self,
+        session: AsyncSession,
+        member_id: UUID,
+        class_id: UUID,
+        original_date: date,
     ) -> dict | None:
         """Delete the member's attendance row; return its (item_id, plan_id)."""
         return await self._fetchone(
             session,
             load_sql(SQL_DIR / "checkin_delete_member_attendance.sql"),
-            {"member_id": str(member_id), "class_history_id": str(history_id)},
+            {
+                "member_id": str(member_id),
+                "class_id": str(class_id),
+                "original_date": original_date,
+            },
         )
 
     async def _revert_points(
