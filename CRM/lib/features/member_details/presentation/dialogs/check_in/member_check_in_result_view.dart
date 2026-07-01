@@ -44,19 +44,24 @@ class MemberCheckInResultView extends StatelessWidget {
             'anyway" to override the gate (front-desk coverage).',
       );
     }
+    // The member's post-check-in weekly streak, appended to a recorded/repeat
+    // outcome when they have one.
+    final streakSuffix = r.classStreakWeeks > 0
+        ? ' · ${r.classStreakWeeks}-week streak'
+        : '';
     if (r.alreadyCheckedIn) {
       return _Outcome(
         icon: Symbols.check_circle_sharp,
         color: DesignConstants.goodGreen,
         title: 'Already checked into $instanceName',
-        detail: 'No change — attendance was already recorded.',
+        detail: 'No change — attendance was already recorded$streakSuffix.',
       );
     }
     return _Outcome(
       icon: Symbols.check_circle_sharp,
       color: DesignConstants.goodGreen,
       title: 'Checked into $instanceName',
-      detail: '+${r.pointsAwarded} points awarded.',
+      detail: '+${r.pointsAwarded} points awarded$streakSuffix.',
       note: r.hasWarnings ? CheckInWarning.summarize(r.warnings) : null,
     );
   }

@@ -15,8 +15,10 @@ part 'check_in_response.g.dart';
 /// [requiresConfirmation] is true, [logId] is null, and [warnings] say why;
 /// resend the identical request with `ignore_warnings: true` to record it. An
 /// idempotent repeat returns the existing [logId] with [alreadyCheckedIn] true
-/// and no points. [skipReason] is the kiosk-only rejection reason — always null
-/// for the CRM (`is_member: false`); parsed for contract completeness.
+/// and no points. [classStreakWeeks] is the member's weekly attendance streak
+/// after this check-in (0 when not recorded). [skipReason] is the kiosk-only
+/// rejection reason — always null for the CRM (`is_member: false`); parsed for
+/// contract completeness.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -37,6 +39,8 @@ class CheckInResponse extends Equatable {
   final List<CheckInWarning> warnings;
   @JsonKey(defaultValue: false)
   final bool requiresConfirmation;
+  @JsonKey(defaultValue: 0)
+  final int classStreakWeeks;
 
   const CheckInResponse({
     this.logId,
@@ -50,6 +54,7 @@ class CheckInResponse extends Equatable {
     this.skipReason,
     this.warnings = const [],
     this.requiresConfirmation = false,
+    this.classStreakWeeks = 0,
   });
 
   factory CheckInResponse.fromJson(Map<String, dynamic> json) =>
@@ -75,5 +80,6 @@ class CheckInResponse extends Equatable {
         skipReason,
         warnings,
         requiresConfirmation,
+        classStreakWeeks,
       ];
 }

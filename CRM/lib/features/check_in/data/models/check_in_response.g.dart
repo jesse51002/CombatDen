@@ -21,4 +21,5 @@ CheckInResponse _$CheckInResponseFromJson(Map<String, dynamic> json) =>
           ? const []
           : checkInWarningsFromJson(json['warnings'] as List?),
       requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
+      classStreakWeeks: (json['class_streak_weeks'] as num?)?.toInt() ?? 0,
     );
