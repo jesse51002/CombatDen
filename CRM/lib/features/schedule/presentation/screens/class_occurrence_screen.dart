@@ -69,6 +69,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   late String? _instructorId;
   late TimeOfDay? _classTime;
   late DateTime _selectedDate;
+  late bool _capacityEnabled;
   final _capacityController = TextEditingController();
 
   _Step _step = _Step.idle;
@@ -96,6 +97,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   void _resetFields() {
     _instructorId = widget.entry.resolvedInstructorId;
     _classTime = parseHmsTime(widget.entry.resolvedClassTime);
+    _capacityEnabled = widget.entry.maxCapacity != null;
     _capacityController.text = widget.entry.maxCapacity?.toString() ?? '';
     _selectedDate = widget.entry.classDate;
   }
@@ -144,6 +146,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   }
 
   int? _capacityOrNull() {
+    if (!_capacityEnabled) return null;
     final t = _capacityController.text.trim();
     return t.isEmpty ? null : int.tryParse(t);
   }
@@ -331,6 +334,9 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           classTime: _classTime,
           onTimeChanged: (t) => setState(() => _classTime = t),
           capacityController: _capacityController,
+          capacityEnabled: _capacityEnabled,
+          onCapacityEnabledChanged: (v) =>
+              setState(() => _capacityEnabled = v),
           selectedDate: _selectedDate,
           onDateChanged: (d) => setState(() => _selectedDate = d),
           onSave: _save,

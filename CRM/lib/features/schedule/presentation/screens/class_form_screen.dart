@@ -78,6 +78,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   Set<int> _selectedDays = {};
   Map<int, String?> _instructorByDay = {};
   String? _imageUrl;
+  bool _capacityEnabled = false;
 
   /// Carried through unchanged — the form has no allowed-plans UI yet.
   List<String>? _allowedPlanIds;
@@ -107,6 +108,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     _nameController.text = c.className;
     _descriptionController.text = c.classDescription ?? '';
     _pointsController.text = c.pointsWorth.toString();
+    _capacityEnabled = c.maxCapacity != null;
     _capacityController.text = c.maxCapacity?.toString() ?? '';
     _durationController.text = c.durationMinutes.toString();
     _intervalController.text = c.recurringInterval.toString();
@@ -178,6 +180,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   }
 
   int? _capacityOrNull() {
+    if (!_capacityEnabled) return null;
     final t = _capacityController.text.trim();
     return t.isEmpty ? null : int.tryParse(t);
   }
@@ -417,6 +420,9 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
           ClassRewardsSection(
             pointsController: _pointsController,
             capacityController: _capacityController,
+            capacityEnabled: _capacityEnabled,
+            onCapacityEnabledChanged: (v) =>
+                setState(() => _capacityEnabled = v),
           ),
           ClassScheduleSection(
             classTime: _classTime,

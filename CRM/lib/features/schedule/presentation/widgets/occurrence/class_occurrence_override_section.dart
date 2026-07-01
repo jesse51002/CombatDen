@@ -8,15 +8,20 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/app_date_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
+import 'package:crm/shared/widgets/form/app_switch_field.dart';
 import 'package:crm/shared/widgets/form/app_time_field.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// "This day's details" — the occurrence screen's editable overrides:
-/// instructor, start time, max capacity, and date for just this occurrence.
-/// Pre-filled by the caller with the occurrence's current effective values;
-/// Save dispatches a single-date instance-exception override (see [onSave]);
-/// Cancel discards the in-progress edits and returns to the read-only view
-/// (see [onCancel]).
+/// instructor, start time, an opt-in max capacity, and date for just this
+/// occurrence. Pre-filled by the caller with the occurrence's current
+/// effective values; Save dispatches a single-date instance-exception
+/// override (see [onSave]); Cancel discards the in-progress edits and
+/// returns to the read-only view (see [onCancel]).
+///
+/// [capacityEnabled] gates whether a limit applies at all — the number field
+/// only renders when it's on, so there's never a fake placeholder number
+/// implying a default cap; off means truly unlimited for this occurrence.
 ///
 /// The **date** field reschedules the occurrence to another day: it defaults
 /// to the occurrence's current date (no move) and accepts ANY date. Moving to
@@ -30,6 +35,8 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
   final TimeOfDay? classTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
   final TextEditingController capacityController;
+  final bool capacityEnabled;
+  final ValueChanged<bool> onCapacityEnabledChanged;
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateChanged;
   final VoidCallback onSave;
@@ -43,6 +50,8 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
     required this.classTime,
     required this.onTimeChanged,
     required this.capacityController,
+    required this.capacityEnabled,
+    required this.onCapacityEnabledChanged,
     required this.selectedDate,
     required this.onDateChanged,
     required this.onSave,
@@ -67,28 +76,25 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
                 DropdownMenuItem(value: i.id, child: Text(i.name)),
             ],
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              Expanded(
-                child: AppTimeField(
-                  label: 'Start time',
-                  value: classTime,
-                  onChanged: onTimeChanged,
-                ),
-              ),
-              Expanded(
-                child: CustomTextField(
-                  controller: capacityController,
-                  label: 'Max capacity',
-                  hintText: '24',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
-            ],
+          AppTimeField(
+            label: 'Start time',
+            value: classTime,
+            onChanged: onTimeChanged,
           ),
+          AppSwitchField(
+            label: 'Limit capacity',
+            subtitle: 'Off = unlimited spots',
+            value: capacityEnabled,
+            onChanged: onCapacityEnabledChanged,
+          ),
+          if (capacityEnabled)
+            CustomTextField(
+              controller: capacityController,
+              label: 'Max capacity',
+              hintText: 'Number of spots',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: DesignConstants.spacingSmall,
