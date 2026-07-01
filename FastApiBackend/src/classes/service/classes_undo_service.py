@@ -12,9 +12,11 @@ Two operations:
   trial / one_time pack that drops back below its capacity, delete the history
   row, and write the cancelled instance exception so the day never
   re-materializes. When the occurrence was never materialized (no check-ins),
-  only the cancelled exception is written. **Points are NEVER clawed back** —
-  ``members.points_balance`` and ``member_activities`` are left untouched (a
-  claw-back would also trip the ``points_balance >= 0`` CHECK).
+  only the cancelled exception is written. **Points ARE clawed back** — each
+  attendee's ``points_worth`` for the class is subtracted (best-effort:
+  ``GREATEST(balance - points, 0)`` floors the balance at 0, so points already
+  spent on rewards are never un-bought) and one ``member_activities``
+  class_attended row per attendee is dropped.
 
 * ``reschedule_occurrence`` — move a future occurrence to a later date by
   upserting the instance exception's ``new_date`` (no history / attendance
@@ -112,10 +114,17 @@ class ClassesUndoService:
             unended: list[UUID] = []
             if history_id is not None:
                 attendees = await self._find_attendees(session, history_id)
+                members = await self._find_all_attendee_members(
+                    session, history_id
+                )
+                points_worth = await self._load_points(session, class_id)
                 attendance_deleted = await self._delete_attendance(
                     session, history_id
                 )
                 unended = await self._reverse_auto_ends(session, attendees)
+                await self._reverse_points_and_activities(
+                    session, members, gym_id, class_id, points_worth
+                )
                 await self._delete_history(session, history_id)
 
             await self._upsert_cancelled_exception(
@@ -207,6 +216,59 @@ class ClassesUndoService:
             {"class_history_id": str(history_id)},
         )
         return len(rows)
+
+    async def _find_all_attendee_members(
+        self, session: AsyncSession, history_id: UUID
+    ) -> list[UUID]:
+        """Every member with attendance on the occurrence (incl. a no-membership
+        attendee), for the points / activity claw-back — a superset of the
+        membership-joined ``_find_attendees``."""
+        rows = await self._fetchall(
+            session,
+            load_sql(SQL_DIR / "classes_undo_all_attendee_members.sql"),
+            {"class_history_id": str(history_id)},
+        )
+        return [row["member_id"] for row in rows]
+
+    async def _load_points(self, session: AsyncSession, class_id: UUID) -> int:
+        """The class's ``points_worth`` — the per-check-in award to claw back."""
+        row = await self._fetchone(
+            session,
+            load_sql(SQL_DIR / "classes_undo_load_points.sql"),
+            {"class_id": str(class_id)},
+        )
+        return int(row["points_worth"]) if row else 0
+
+    async def _reverse_points_and_activities(
+        self,
+        session: AsyncSession,
+        members: list[UUID],
+        gym_id: UUID,
+        class_id: UUID,
+        points_worth: int,
+    ) -> None:
+        """Claw back each attendee's points (floored at 0 by the SQL) + drop one
+        class_attended activity. Best-effort: points already spent on rewards are
+        never un-bought."""
+        revert_sql = load_sql(SQL_DIR / "classes_undo_revert_points.sql")
+        activity_sql = load_sql(SQL_DIR / "classes_undo_delete_activity.sql")
+        for member_id in members:
+            await session.execute(
+                text(revert_sql),
+                {
+                    "points": points_worth,
+                    "m": str(member_id),
+                    "g": str(gym_id),
+                },
+            )
+            await session.execute(
+                text(activity_sql),
+                {
+                    "m": str(member_id),
+                    "g": str(gym_id),
+                    "class_id": str(class_id),
+                },
+            )
 
     async def _reverse_auto_ends(
         self,

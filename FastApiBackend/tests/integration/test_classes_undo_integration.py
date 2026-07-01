@@ -289,12 +289,12 @@ def _db_scalar(query: str, *args):
 
 
 class TestCancelOccurrence:
-    def test_cancel_with_attendance_deletes_rows_and_keeps_points(
+    def test_cancel_with_attendance_deletes_rows_and_reverts_points(
         self, api: httpx.Client, created: _Created, seed: dict
     ) -> None:
         """Cancelling an occurrence with attendance removes the attendance + the
-        class_history row, writes the cancelled exception, and NEVER claws back
-        points (balance unchanged, the class_attended activity survives)."""
+        class_history row, writes the cancelled exception, and claws back each
+        attendee's points (floored at 0) + drops a class_attended activity."""
         membership = seed["unlimited"]
         if membership is None:
             pytest.skip("No unlimited membership in seed to attribute attendance")
@@ -312,7 +312,7 @@ class TestCancelOccurrence:
             )
         )
 
-        # A probe class_attended activity that the cancel must NOT delete.
+        # A probe class_attended activity for the class — the cancel claws it back.
         activity_id = _db_scalar(
             "INSERT INTO member_activities "
             "(member_id, gym_id, activity_type, activity_info) "
@@ -363,20 +363,26 @@ class TestCancelOccurrence:
             )
             is True
         )
-        # Points never clawed back; the activity row survives.
+        # Points clawed back (the class's points_worth, floored at 0) and the
+        # class_attended activity dropped — best-effort: the only one for this
+        # freshly-created class is our probe.
+        points_worth = _db_scalar(
+            "SELECT points_worth FROM gym_classes WHERE class_id = $1",
+            UUID(class_id),
+        )
         assert (
             _db_scalar(
                 "SELECT points_balance FROM members WHERE member_id = $1",
                 member_id,
             )
-            == before_points
+            == max(before_points - points_worth, 0)
         )
         assert (
             _db_scalar(
                 "SELECT COUNT(*) FROM member_activities WHERE activity_id = $1",
                 activity_id,
             )
-            == 1
+            == 0
         )
 
     def test_cancel_unmaterialized_writes_only_the_exception(
