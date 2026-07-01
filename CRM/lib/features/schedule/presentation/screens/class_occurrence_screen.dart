@@ -143,15 +143,12 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     );
   }
 
-  bool get _pastOrToday {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return !widget.entry.classDate.isAfter(today);
-  }
-
   Widget? _rosterFor() {
     final gymId = selectedGym.gymId;
-    if (gymId == null || widget.entry.isCancelled || !_pastOrToday) {
+    // Shown for any non-cancelled occurrence — a FUTURE occurrence has no
+    // attendance yet but can have reservations, so the roster (Reserved-only
+    // until someone attends) must render for it too, not just past/today.
+    if (gymId == null || widget.entry.isCancelled) {
       return null;
     }
     return ClassAttendeeRoster(
