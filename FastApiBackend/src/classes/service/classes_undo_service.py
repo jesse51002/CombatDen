@@ -32,16 +32,35 @@ Two operations:
   bound) by upserting the instance exception's ``new_date``. Attendance follows
   the move: a FUTURE target wipes the moved occurrence's check-ins (the same
   teardown as ``cancel_occurrence``, points clawed back); a today / PAST target
-  keeps them, re-dated onto the new day (the class_history row's ``occurred_at``
-  is updated so the unchanged attendance rows render on the new date's roster).
-  The move is rejected only when the exact target instant (new_date + start
-  time) is already taken by a non-cancelled occurrence — landing on a busy day
-  at a different time is allowed. The whole move (attendance handling + the
-  exception write) runs in ONE transaction. The same
-  ``assert_no_reschedule_conflict`` + ``apply_reschedule_attendance`` engine
-  backs the CRM's ``POST /exceptions/instance`` reschedule
+  keeps them, with the class_history row's snapshot (``occurred_at`` +
+  ``duration_minutes`` + ``instructor_id``) synced to the move's effective
+  values via ``sync_history_snapshot`` so the unchanged attendance rows render
+  correctly on the new date's roster. The move is rejected only when the exact
+  target instant (new_date + start time) is already taken by a non-cancelled
+  occurrence — landing on a busy day at a different time is allowed. The whole
+  move (attendance handling + the exception write) runs in ONE transaction. The
+  same ``assert_no_reschedule_conflict`` + ``apply_reschedule_attendance``
+  engine backs the CRM's ``POST /exceptions/instance`` reschedule
   (``ClassesExceptionsService`` delegates to it), so the two entry points can
   never diverge.
+
+Editing a MATERIALIZED occurrence (past or today, a ``class_history`` row
+already exists) always keeps its history snapshot in sync with the edit —
+not just on a date move. ``sync_history_snapshot`` (backing SQL:
+``classes_history_snapshot_sync.sql``) is the one generalized write for this:
+it sets ``occurred_at`` + ``duration_minutes`` + ``instructor_id`` together, so
+the past schedule board (which renders straight from ``class_history``, never
+by re-expanding — see ``classes_board_past_history.sql``) reflects a retime /
+re-instructor / re-duration edit exactly like it already reflected a
+reschedule's date move. Both the reschedule keep-path
+(``apply_reschedule_attendance``) and ``ClassesExceptionsService``'s same-date
+override branch (``upsert_instance_exception`` with ``new_date`` unset) call
+it — the exceptions service reuses this service's ``find_history_id`` (is the
+occurrence materialized?) and ``resolve_default_instructor`` (the weekday
+fallback when an override omits ``new_instructor_id``) to do so in the SAME
+transaction as its exception write. A non-materialized occurrence is
+unaffected by any of this — the edit is just an exception row; materialize-on-
+read applies it when the occurrence is first attended.
 
 Auto-end reversal — IMPORTANT, inexact by necessity: there is no stored link
 recording that a membership's ``end_date`` came from an auto-end-on-depletion
@@ -146,7 +165,7 @@ class ClassesUndoService:
         async with self._db_pool.session() as session:
             await self._verify_class_in_gym(session, class_id, gym_id)
             gym_tz = await get_gym_timezone(session, gym_id)
-            history_id = await self._find_history_id(
+            history_id = await self.find_history_id(
                 session, class_id, occurrence_date, gym_tz
             )
 
@@ -220,24 +239,53 @@ class ClassesUndoService:
         await self._delete_history(session, history_id)
         return attendance_deleted, unended
 
-    async def _redate_history(
+    async def sync_history_snapshot(
         self,
         session: AsyncSession,
         history_id: UUID,
-        new_occurred_at: datetime,
-        new_duration_minutes: int,
+        occurred_at: datetime,
+        duration_minutes: int,
+        instructor_id: UUID | None,
     ) -> None:
-        """Re-date a KEPT (today / past) rescheduled occurrence's history onto
-        the new instant + duration; its attendance rows (unchanged
-        class_history_id) then render on the new date's roster."""
+        """Sync a MATERIALIZED occurrence's history snapshot onto its current
+        effective values (``occurred_at`` + ``duration_minutes`` +
+        ``instructor_id``) — the one generalized write both a today/past
+        reschedule's keep-path and a same-date override on an already
+        materialized occurrence use, so the past board always renders what
+        was actually edited. Its attendance rows (unchanged
+        ``class_history_id``) then render on/with the synced values with no
+        attendance rewrite. Public: ``ClassesExceptionsService`` calls this
+        directly (via its injected ``undo_service``) for the same-date
+        override branch, in the SAME transaction as its exception write.
+        """
         await session.execute(
-            text(load_sql(SQL_DIR / "classes_reschedule_redate_history.sql")),
+            text(load_sql(SQL_DIR / "classes_history_snapshot_sync.sql")),
             {
                 "class_history_id": str(history_id),
-                "occurred_at": new_occurred_at,
-                "duration_minutes": new_duration_minutes,
+                "occurred_at": occurred_at,
+                "duration_minutes": duration_minutes,
+                "instructor_id": (
+                    str(instructor_id) if instructor_id is not None else None
+                ),
             },
         )
+
+    def resolve_default_instructor(
+        self, class_row: dict, when: date
+    ) -> UUID | None:
+        """The class's weekday-default instructor for ``when``, ignoring any
+        existing per-occurrence override.
+
+        Pure (no I/O) — the fallback a full-replace override upsert or
+        reschedule uses when the request omits ``new_instructor_id``, so an
+        omitted instructor override falls back to the class's weekday slot,
+        never to any prior override (mirroring the ``class_time`` /
+        ``duration_minutes`` fallback already used for those same paths).
+        Delegates to the expander's own weekday-default resolution
+        (``ClassesExpander.instructor_for``) so this can never drift from the
+        expander's read-path semantics.
+        """
+        return self._expander.instructor_for(to_expander_class(class_row), when)
 
     async def _verify_class_in_gym(
         self,
@@ -260,7 +308,7 @@ class ClassesUndoService:
         if row is None or str(row["gym_id"]) != str(gym_id):
             raise ValueError(_CLASS_NOT_FOUND_MSG)
 
-    async def _find_history_id(
+    async def find_history_id(
         self,
         session: AsyncSession,
         class_id: UUID,
@@ -270,7 +318,10 @@ class ClassesUndoService:
         """Find the materialized history row for the gym-local day, if any.
 
         Matches the whole local day [00:00, next-00:00) in UTC so a per-occurrence
-        time override still resolves to the same row.
+        time override still resolves to the same row. Public: this is the
+        "is this occurrence materialized?" check ``ClassesExceptionsService``
+        reuses (via its injected ``undo_service``) to decide whether a
+        same-date override must also sync the history snapshot.
         """
         zone = ZoneInfo(gym_tz)
         day_start = datetime.combine(
@@ -352,9 +403,10 @@ class ClassesUndoService:
     ) -> OccurrenceRescheduleResponse:
         """Move an occurrence to ``new_date`` (any date), attendance following.
 
-        The occurrence keeps its currently-effective start time / duration (a
-        bare move carries no override); a FUTURE target wipes its check-ins, a
-        today / PAST target keeps them re-dated — all in one transaction with the
+        The occurrence keeps its currently-effective start time / duration /
+        instructor (a bare move carries no override); a FUTURE target wipes
+        its check-ins, a today / PAST target keeps them with the history
+        snapshot synced onto the new instant — all in one transaction with the
         exception write. See the module docstring.
 
         Raises:
@@ -398,6 +450,7 @@ class ClassesUndoService:
                     occurrence_date,
                     new_occurred_at,
                     source.duration_minutes,
+                    source.instructor_id,
                     is_future,
                     gym_tz,
                 )
@@ -494,6 +547,7 @@ class ClassesUndoService:
         original_date: date,
         new_occurred_at: datetime,
         new_duration_minutes: int,
+        instructor_id: UUID | None,
         is_future: bool,
         gym_tz: str,
     ) -> UUID | None:
@@ -504,13 +558,15 @@ class ClassesUndoService:
         * ``is_future`` (new_date after today, gym-local): WIPE the occurrence's
           check-ins via the shared ``_wipe_occurrence`` teardown — the moved
           occurrence re-materializes fresh when the class is next attended.
-        * today / past: KEEP the check-ins, re-dated onto ``new_occurred_at``.
+        * today / past: KEEP the check-ins, its history snapshot synced onto
+          ``new_occurred_at`` / ``new_duration_minutes`` / ``instructor_id`` via
+          ``sync_history_snapshot``.
 
         A never-materialized occurrence (no ``class_history`` on
         ``original_date``) is a no-op. Returns the moved ``class_history_id`` (or
         None when nothing was materialized).
         """
-        history_id = await self._find_history_id(
+        history_id = await self.find_history_id(
             session, class_id, original_date, gym_tz
         )
         if history_id is None:
@@ -518,8 +574,12 @@ class ClassesUndoService:
         if is_future:
             await self._wipe_occurrence(session, history_id, gym_id, class_id)
         else:
-            await self._redate_history(
-                session, history_id, new_occurred_at, new_duration_minutes
+            await self.sync_history_snapshot(
+                session,
+                history_id,
+                new_occurred_at,
+                new_duration_minutes,
+                instructor_id,
             )
         return history_id
 

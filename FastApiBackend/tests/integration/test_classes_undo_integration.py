@@ -1,12 +1,14 @@
 """Live integration tests for the occurrence undo (cancel) + reschedule
-endpoints — Phase 6.
+endpoints — Phase 6 — plus the same-date override's materialized history sync.
 
 Endpoints under test (admin/owner gated, hit on the live backend):
   DELETE /api/v1/classes/{class_id}/occurrences/{occurrence_date}            (cancel)
   POST   /api/v1/classes/{class_id}/occurrences/{occurrence_date}/reschedule (move)
+  POST   /api/v1/classes/{class_id}/exceptions/instance   (reschedule + same-date override)
 
 Run against the live backend + the seeded DB. The suite DISCOVERS a real
-instructor, an unlimited membership (for the cancel-with-attendance case), and a
+instructor (plus a SECOND, distinct instructor for the re-instructor / sync
+cases), an unlimited membership (for the cancel-with-attendance case), and a
 single-class pack plan (for the auto-end-reversal case), and skips gracefully
 when the DB / required seed rows aren't available. Everything created — classes,
 their lazily-materialized history + attendance + exceptions, the test pack
@@ -88,7 +90,17 @@ def _run_async(coro):
 
 
 _INSTRUCTOR_SQL = """
-SELECT employee_id FROM gym_employees WHERE gym_id = $1 LIMIT 1
+SELECT employee_id FROM gym_employees WHERE gym_id = $1
+ORDER BY employee_id LIMIT 1
+"""
+
+# A SECOND, distinct instructor (same deterministic ORDER BY as
+# ``_INSTRUCTOR_SQL`` so the two never collide) — needed to prove a
+# re-instructor override actually changed the effective instructor, not just
+# re-wrote the same id.
+_INSTRUCTOR2_SQL = """
+SELECT employee_id FROM gym_employees WHERE gym_id = $1
+ORDER BY employee_id OFFSET 1 LIMIT 1
 """
 
 # An unlimited (recurring, class_count NULL) membership: attendance against it is
@@ -130,6 +142,7 @@ def seed() -> dict:
             gym = UUID(GYM_ID)
             return {
                 "instructor": await conn.fetchrow(_INSTRUCTOR_SQL, gym),
+                "instructor2": await conn.fetchrow(_INSTRUCTOR2_SQL, gym),
                 "unlimited": await conn.fetchrow(_UNLIMITED_MEMBERSHIP_SQL, gym),
                 "pack_plan": await conn.fetchrow(_PACK_PLAN_SQL, gym),
                 "member": await conn.fetchrow(_ANY_MEMBER_SQL, gym),
@@ -632,13 +645,17 @@ class TestRescheduleAttendance:
         class_id: str,
         original_date: date,
         new_date: date,
+        new_instructor_id: str | None = None,
     ) -> httpx.Response:
+        payload = {
+            "original_date": original_date.isoformat(),
+            "new_date": new_date.isoformat(),
+        }
+        if new_instructor_id is not None:
+            payload["new_instructor_id"] = new_instructor_id
         return api.post(
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
-            json={
-                "original_date": original_date.isoformat(),
-                "new_date": new_date.isoformat(),
-            },
+            json=payload,
         )
 
     def test_move_to_past_keeps_and_redates_attendance(
@@ -681,6 +698,68 @@ class TestRescheduleAttendance:
                 UUID(history_id),
             )
             == _occurred_at(_KEEP_TO, seed["timezone"])
+        )
+
+    def test_move_to_past_with_instructor_change_syncs_history(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """A today/PAST reschedule that ALSO changes the instructor syncs the
+        materialized history row's instructor_id, not just occurred_at — the
+        generalized ``sync_history_snapshot`` keep-path now threads the
+        effective instructor through ``apply_reschedule_attendance``."""
+        membership = seed["unlimited"]
+        instructor2 = seed["instructor2"]
+        if membership is None or instructor2 is None:
+            pytest.skip(
+                "Need an unlimited membership + a second instructor in seed"
+            )
+        class_id = _create_class(api, created, seed)
+        history_id = _run_async(
+            _materialize_with_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                membership["member_id"],
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+        new_instructor_id = str(instructor2["employee_id"])
+
+        resp = self._move(
+            api,
+            class_id,
+            _ATTEND_DATE,
+            _KEEP_TO,
+            new_instructor_id=new_instructor_id,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["new_date"] == _KEEP_TO.isoformat()
+
+        # Same history row, attendance kept, re-dated AND re-instructor-ed.
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_attendance "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 1
+        )
+        assert (
+            _db_scalar(
+                "SELECT occurred_at FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == _occurred_at(_KEEP_TO, seed["timezone"])
+        )
+        assert (
+            _db_scalar(
+                "SELECT instructor_id FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == UUID(new_instructor_id)
         )
 
     def test_move_to_future_wipes_and_reverts_points(
@@ -777,4 +856,151 @@ class TestRescheduleAttendance:
                 _ATTEND_DATE,
             )
             == _EARLIER_TO
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST /exceptions/instance — same-date override (new_date unset) syncs a
+# MATERIALIZED occurrence's class_history snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestOverrideMaterializedSync:
+    """A same-date override (``new_date`` unset — retime / re-instructor /
+    re-duration) on an already-materialized occurrence syncs the
+    ``class_history`` snapshot (occurred_at + duration_minutes +
+    instructor_id) to the override's effective values, in the SAME
+    transaction as the exception write. A non-materialized occurrence is
+    unaffected: just the exception row."""
+
+    def test_override_on_materialized_occurrence_syncs_history_snapshot(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """Retime + re-duration + re-instructor a PAST materialized occurrence
+        via the plain override (no ``new_date``): the class_history row's
+        occurred_at / duration_minutes / instructor_id all sync to the
+        override's effective values, attendance is untouched, and the past
+        schedule board (which renders straight from class_history) reflects
+        the change."""
+        membership = seed["unlimited"]
+        instructor2 = seed["instructor2"]
+        if membership is None or instructor2 is None:
+            pytest.skip(
+                "Need an unlimited membership + a second instructor in seed"
+            )
+        class_id = _create_class(api, created, seed)
+        history_id = _run_async(
+            _materialize_with_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                membership["member_id"],
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+        new_time = time(11, 30)
+        new_duration = 90
+        new_instructor_id = str(instructor2["employee_id"])
+
+        resp = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": _ATTEND_DATE.isoformat(),
+                "new_class_time": new_time.isoformat(),
+                "new_duration_minutes": new_duration,
+                "new_instructor_id": new_instructor_id,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        expected_occurred_at = datetime.combine(
+            _ATTEND_DATE, new_time, tzinfo=ZoneInfo(seed["timezone"])
+        ).astimezone(UTC)
+        assert (
+            _db_scalar(
+                "SELECT occurred_at FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == expected_occurred_at
+        )
+        assert (
+            _db_scalar(
+                "SELECT duration_minutes FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == new_duration
+        )
+        assert (
+            _db_scalar(
+                "SELECT instructor_id FROM class_history "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == UUID(new_instructor_id)
+        )
+        # Attendance untouched — same history row, no rewrite.
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM member_attendance "
+                "WHERE class_history_id = $1",
+                UUID(history_id),
+            )
+            == 1
+        )
+
+        # The past board renders straight from class_history — it reflects
+        # the synced snapshot, not the pre-edit values.
+        board = api.get(
+            f"{CLASSES_BASE}/instances",
+            params={
+                "gym_id": GYM_ID,
+                "start_date": _ATTEND_DATE.isoformat(),
+                "end_date": _ATTEND_DATE.isoformat(),
+            },
+        )
+        assert board.status_code == 200, board.text
+        rows = [
+            row for row in board.json()["items"] if row["class_id"] == class_id
+        ]
+        assert len(rows) == 1
+        assert rows[0]["resolved_instructor_id"] == new_instructor_id
+        assert rows[0]["resolved_duration_minutes"] == new_duration
+        assert rows[0]["attendance_count"] == 1
+
+    def test_override_on_unmaterialized_occurrence_writes_only_exception(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """A same-date override on a NEVER-materialized occurrence is a plain
+        exception write — no class_history row is created as a side effect;
+        materialize-on-read applies the override once the occurrence is first
+        attended / the board opens."""
+        class_id = _create_class(api, created, seed)
+
+        resp = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": _ATTEND_DATE.isoformat(),
+                "new_class_time": "11:30:00",
+                "new_duration_minutes": 90,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert (
+            _db_scalar(
+                "SELECT new_class_time FROM class_instance_exceptions "
+                "WHERE class_id = $1 AND original_date = $2",
+                UUID(class_id),
+                _ATTEND_DATE,
+            )
+            == time(11, 30)
+        )
+        assert (
+            _db_scalar(
+                "SELECT COUNT(*) FROM class_history WHERE class_id = $1",
+                UUID(class_id),
+            )
+            == 0
         )

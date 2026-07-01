@@ -240,7 +240,7 @@ class ClassesExpander:
         exceptions ignored for that date); otherwise the earliest-created
         covering range applies; otherwise the class defaults.
         """
-        default_instructor = self._instructor_for(gym_class, original_date)
+        default_instructor = self.instructor_for(gym_class, original_date)
 
         if instance is not None:
             return self._resolve_instance(
@@ -437,12 +437,20 @@ class ClassesExpander:
         """Whether the class's flag for ``when``'s weekday is set."""
         return bool(getattr(gym_class, self._day_short(when)))
 
-    def _instructor_for(
+    def instructor_for(
         self,
         gym_class: ExpanderClass,
         when: date,
     ) -> UUID | None:
-        """The class's default instructor for ``when``'s weekday slot."""
+        """The class's default instructor for ``when``'s weekday slot.
+
+        Public (not just an internal recurrence-resolution step): the class
+        edit paths (``ClassesUndoService.resolve_default_instructor``) reuse
+        this directly to compute the weekday-default fallback for an override
+        upsert / reschedule that omits an instructor override, so that
+        fallback can never drift from the expander's own weekday-default
+        semantics (see ``_resolve_instance``).
+        """
         return getattr(
             gym_class, f"{self._day_short(when)}{_INSTRUCTOR_SUFFIX}"
         )

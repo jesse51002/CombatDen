@@ -29,7 +29,7 @@ flowchart TB
     classes_schedule_reader_service["ClassesScheduleReaderService<br/>src/classes/ · the schedule board: expand classes + exceptions over a window"]
     classes_undo_service["ClassesUndoService<br/>src/classes/ · un-occur (cancel) + reschedule a single occurrence (one txn)"]
     classes_expander["ClassesExpander<br/>src/classes/ · PURE recurrence + exception engine (no I/O · shared singleton)"]
-    classes_materializer["ClassesMaterializer<br/>src/classes/ · lazy idempotent find-or-create of a class_history occurrence"]
+    classes_materializer["ClassesMaterializer<br/>src/classes/ · THE range-parameterized materialize entry point<br/>(materialize(gym,start,end) + materialize_current) + the single-occurrence<br/>find_or_create_history primitive it's built on — owns its own load+expand<br/>(injects ClassesExpander)"]
     crm_members_list_service["CrmMembersListService"]
     crm_total_counts_service["CrmTotalCountsService"]
     discounts_service["DiscountsService<br/>(plain gym config · db only)"]
@@ -194,8 +194,7 @@ flowchart TB
     reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
     reconciler_service -->|"sub-orphans: list + cancel unlinked subs"| Payments
     reconciler_service --> payer_resolver
-    reconciler_service -->|"class-history sweep (non-billing): expand past occurrences"| classes_expander
-    reconciler_service -->|"class-history sweep: find-or-create class_history"| classes_materializer
+    reconciler_service -->|"class-history sweep (non-billing): per-gym materialize_current"| classes_materializer
     stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(applied-discount rows · sync writes back stripe_coupon_id + status)"]

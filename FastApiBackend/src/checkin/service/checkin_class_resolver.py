@@ -4,8 +4,11 @@
 ``ResolvedClass``: it loads the class, validates that the date is a real,
 non-cancelled occurrence by running the canonical ``ClassesExpander`` over that
 single day (so exception-applied time / instructor / duration and the gym-tz UTC
-``occurred_at`` are exact), then lazily find-or-creates the ``class_history`` row
-via ``ClassesMaterializer`` (idempotent + race-safe).
+``occurred_at`` are exact), then routes through ``ClassesMaterializer``'s single
+range entry point (``materialize``, scoped to that one day) followed by
+``find_or_create_history`` for this exact occurrence — idempotent + race-safe,
+and still works for a retroactive any-date check-in since the range is
+caller-supplied, not a fixed window.
 
 This is the one-way ``checkin -> classes`` dependency: the resolver imports the
 pure ``ClassesExpander`` + the ``ClassesMaterializer`` + the expander row
@@ -106,6 +109,18 @@ class CheckinClassResolver:
             else class_row["max_capacity"]
         )
 
+        # Route through the ONE shared range materialize entry point (also
+        # used by the schedule board + the reconciler sweep): it's
+        # range-parameterized on a single day here, not a fixed window, so a
+        # retroactive any-date check-in still works exactly as before. As a
+        # side effect it opportunistically backfills the gym's OTHER classes
+        # that day too. find_or_create_history below is then guaranteed to
+        # hit the found-existing branch for THIS occurrence — it stays
+        # unconditional (no forward-window cutoff) so check-in never depends
+        # on materialize()'s cutoff matching the check-in-open window above.
+        await self._materializer.materialize(
+            gym_id, occurrence_date, occurrence_date
+        )
         class_history_id, _ = await self._materializer.find_or_create_history(
             class_id,
             gym_id,

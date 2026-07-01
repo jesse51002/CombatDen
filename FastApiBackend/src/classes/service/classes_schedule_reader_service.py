@@ -109,22 +109,13 @@ class ClassesScheduleReaderService:
         past_rows = await self._read_all(
             "classes_board_past_history.sql", past_params
         )
-        # Opening the board "starts" any past, non-cancelled occurrence that has
-        # run but was never materialized (nobody checked in + the reconciler
-        # hasn't swept it): it gets a class_history row so it renders from the
-        # immutable record like everything else. A re-read after that picks the
-        # new rows up.
-        if await self._materialize_started_occurrences(
-            gym_id,
-            classes,
-            instances_by_class,
-            ranges_by_class,
-            start_date,
-            end_date,
-            gym_tz,
-            now,
-            past_rows,
-        ):
+        # Opening the board "starts" any occurrence that has already begun
+        # (or, through the materializer's shared forward window, is about to)
+        # but was never recorded (nobody checked in + the reconciler hasn't
+        # swept it): the ONE shared range materialize entry point backfills
+        # it, so it renders from the immutable record like everything else. A
+        # re-read after that picks the new rows up.
+        if await self._materializer.materialize(gym_id, start_date, end_date):
             past_rows = await self._read_all(
                 "classes_board_past_history.sql", past_params
             )
@@ -155,113 +146,6 @@ class ClassesScheduleReaderService:
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
-
-    # -- materialize started-but-unrecorded occurrences ------------------
-
-    async def _materialize_started_occurrences(
-        self,
-        gym_id: UUID,
-        classes: list[dict],
-        instances_by_class: dict[object, list[dict]],
-        ranges_by_class: dict[object, list[dict]],
-        start_date: date,
-        end_date: date,
-        gym_tz: str,
-        now: datetime,
-        existing_past: list[dict],
-    ) -> bool:
-        """Find-or-create class_history for every past, non-cancelled occurrence
-        in the window whose DAY isn't materialized yet.
-
-        Opening the board "starts" a class that has already run but was never
-        recorded (nobody checked in + the reconciler hasn't swept it). Dedup is by
-        ``(class_id, local date)`` — NOT the exact instant — so re-timing a class
-        never adds a second history row for a day that already has one. Mirrors
-        the reconciler ``ClassHistorySweep``; the materializer's ON CONFLICT keeps
-        each insert idempotent and race-safe. Returns whether any row was created.
-        """
-        zone = ZoneInfo(gym_tz)
-        materialized_days = {
-            (str(row["class_id"]), row["occurred_at"].astimezone(zone).date())
-            for row in existing_past
-        }
-        created = False
-        for class_row in classes:
-            if await self._materialize_class_past(
-                class_row,
-                gym_id,
-                instances_by_class.get(class_row["class_id"], []),
-                ranges_by_class.get(class_row["class_id"], []),
-                start_date,
-                end_date,
-                gym_tz,
-                now,
-                materialized_days,
-            ):
-                created = True
-        return created
-
-    async def _materialize_class_past(
-        self,
-        class_row: dict,
-        gym_id: UUID,
-        instance_rows: list[dict],
-        range_rows: list[dict],
-        start_date: date,
-        end_date: date,
-        gym_tz: str,
-        now: datetime,
-        materialized_days: set[tuple[str, date]],
-    ) -> bool:
-        """Materialize one class's past, not-yet-recorded occurrences (by day)."""
-        cid = class_row["class_id"]
-        try:
-            occurrences = self._expander.expand(
-                to_expander_class(class_row),
-                [to_expander_instance(r) for r in instance_rows],
-                [to_expander_range(r) for r in range_rows],
-                start_date,
-                end_date,
-                gym_tz,
-            )  # cancelled dropped (default) — a cancelled day is never started
-        except Exception:
-            logger.warning(
-                "Board materialize: expand failed for class %s",
-                cid,
-                exc_info=True,
-            )
-            return False
-        created = False
-        for occ in occurrences:
-            if not self._has_ended(occ, now):
-                continue  # still in session or upcoming — not finished yet
-            if (str(cid), occ.effective_date) in materialized_days:
-                continue
-            if await self._materialize_one(class_row, gym_id, occ):
-                created = True
-        return created
-
-    async def _materialize_one(
-        self, class_row: dict, gym_id: UUID, occ: EffectiveOccurrence
-    ) -> bool:
-        """Find-or-create one occurrence's history row; True if newly created."""
-        try:
-            _, was_created = await self._materializer.find_or_create_history(
-                class_row["class_id"],
-                gym_id,
-                occ.occurred_at,
-                occ.instructor_id,
-                occ.duration_minutes,
-            )
-        except Exception:
-            logger.warning(
-                "Board materialize: insert failed for class %s @ %s",
-                class_row["class_id"],
-                occ.occurred_at,
-                exc_info=True,
-            )
-            return False
-        return was_created
 
     # -- per-class expansion + enrichment --------------------------------
 

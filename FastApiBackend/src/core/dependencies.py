@@ -208,13 +208,20 @@ class DependencyInjector(containers.DeclarativeContainer):
     # The canonical recurrence + exception expander is pure (no I/O), so a
     # single shared instance is reused by the check-in resolve seam, the
     # exception reschedule-conflict check, the schedule reader, the presets
-    # importer, and the reconciler's class-history sweep.
+    # importer, and the class materializer below.
     classes_expander = providers.Singleton(ClassesExpander)
-    # Lazy find-or-create of the class_history occurrence (idempotent +
-    # race-safe via uq_class_history_occurrence).
+    # THE single range-parameterized materialize entry point (+ the
+    # single-occurrence find_or_create_history primitive it's built on),
+    # shared by the check-in resolve seam, the schedule reader, and the
+    # reconciler's class-history sweep. future_hours / lookback_days are
+    # injected from Settings here (not imported as `settings` inside the
+    # service) so the materializer stays testable via plain constructor args.
     classes_materializer = providers.Factory(
         ClassesMaterializer,
         db_pool=db_pool,
+        expander=classes_expander,
+        future_hours=settings.materialize_future_hours,
+        lookback_days=settings.class_history_lookback_days,
     )
 
     # ── Checkin domain (the class consumer side) ─────────────────
@@ -724,13 +731,12 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
-    # NON-billing class-history materialize sweep: backfills class_history rows
-    # for past, non-cancelled class occurrences via the existing idempotent
-    # expander + materializer. Independent of every billing step.
+    # NON-billing class-history materialize sweep: a thin per-gym loop that
+    # calls the shared ClassesMaterializer.materialize_current for each gym.
+    # Independent of every billing step.
     reconciler_class_history_sweep = providers.Factory(
         ClassHistorySweep,
         db_pool=db_pool,
-        expander=classes_expander,
         materializer=classes_materializer,
     )
     reconciler_service = providers.Factory(
