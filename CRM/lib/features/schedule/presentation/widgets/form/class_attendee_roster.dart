@@ -268,24 +268,25 @@ class _TabbedRosterState extends State<_TabbedRoster> {
       spacing: DesignConstants.spacingMedium,
       children: [
         Text('Attendees', style: DesignConstants.pSemibold),
-        if (widget.hasAttended)
-          ViewSwitcher(
-            labels: [
-              'Attended (${widget.attended.length})',
-              'Reserved (${widget.reserved.length})',
-            ],
-            selectedIndex: widget.tab == _RosterTab.attended ? 0 : 1,
-            onSelected: (i) => widget.onTabChanged(
-              i == 0 ? _RosterTab.attended : _RosterTab.reserved,
-            ),
-          )
-        else
-          // No one has attended yet — nothing to switch between, so this
-          // stands in for the switcher with just the Reserved count.
-          Text(
-            'Reserved (${widget.reserved.length})',
-            style: DesignConstants.pSmall.copyWith(color: DesignConstants.text2nd),
+        // Always the same switcher chrome — two tabs (Attended first) once
+        // anyone has attended, otherwise just the single "Reserved" tab so a
+        // future / no-attendance occurrence still reads as the same selector.
+        ViewSwitcher(
+          labels: widget.hasAttended
+              ? [
+                  'Attended (${widget.attended.length})',
+                  'Reserved (${widget.reserved.length})',
+                ]
+              : ['Reserved (${widget.reserved.length})'],
+          selectedIndex: widget.hasAttended
+              ? (widget.tab == _RosterTab.attended ? 0 : 1)
+              : 0,
+          onSelected: (i) => widget.onTabChanged(
+            widget.hasAttended && i == 0
+                ? _RosterTab.attended
+                : _RosterTab.reserved,
           ),
+        ),
         AppSearchBox(
           hintText: 'Search participants…',
           onChanged: (value) => setState(() => _query = value),
