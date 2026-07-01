@@ -130,11 +130,20 @@ one renders from the **live expander**. Opening the board (and the dashboard's
 Upcoming Classes, whose window reaches ~7d into the recent past) MATERIALIZES
 ended-but-unrecorded occurrences via `materialize`. `materialize` is idempotent by
 the **EXACT instant** (`uq_class_history_occurrence` = `class_id` + `occurred_at`),
-and the past/live split is the END-time check (`_has_ended`), so a **fixed-time**
-occurrence renders from exactly ONE source. Re-timing an occurrence THROUGH an
-instance override or reschedule reuses the SAME history row —
-`ClassesUndoService.find_history_id` matches by `class_id` + gym-local day, then
-`sync_history_snapshot` UPDATEs it in place — so it never doubles that day.
+and the past/live split is the END-time check (`_has_ended`). Re-timing an
+occurrence THROUGH an instance override or reschedule reuses the SAME history
+row — `ClassesUndoService.find_history_id` matches by `class_id` + gym-local
+day, then `sync_history_snapshot` UPDATEs it in place — so that day never
+doubles. A plain default-time/duration edit to `gym_classes` (`PUT
+/classes/{id}`), though, does **not** sync back onto an already-materialized
+`class_history` row, so re-expanding the edited live definition for a day that
+already ran would otherwise emit a SECOND row at the new time. The board guards
+that with a **gym-local-day dedup**: `_materialized_days_by_class` collects the
+days already covered by a past history row, and `_board_rows_for_class` drops
+any live-expanded occurrence whose `effective_date` is in that set
+(`occ.effective_date not in materialized_days`). So every day renders from
+exactly ONE source — the stored history row when it's already covered, the live
+expander otherwise.
 
 ## 4. Reschedule — any date, attendance follows
 A move writes an instance exception with `new_date` — via either the dedicated
