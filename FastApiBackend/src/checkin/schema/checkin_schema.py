@@ -216,9 +216,10 @@ class CheckinResponse(BaseModel):
         points_awarded: The class's ``points_worth`` this check-in is worth —
             actually added to the balance on a newly-recorded check-in (membership
             or not), or merely REPORTED (balance untouched) on an idempotent
-            repeat so it can still be shown; 0 only on a rejection (nothing
-            written). Use ``already_checked_in`` to tell a fresh award apart from
-            a repeat's echo.
+            repeat so it can still be shown; 0 on a rejection (kiosk skip) and
+            also 0 on a staff check-in held for ``requires_confirmation`` — in
+            both cases nothing was written. Use ``already_checked_in`` to tell a
+            fresh award apart from a repeat's echo.
         skip_reason: Why a kiosk check-in was rejected (no attendance written);
             None when recorded or an idempotent repeat.
         warnings: Gate conditions surfaced to staff — the reasons this check-in

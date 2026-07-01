@@ -353,6 +353,47 @@ async def test_kiosk_over_capacity_blocks_even_when_covered() -> None:
     writer.assert_not_awaited()
 
 
+async def test_unlimited_capacity_never_queries_the_union() -> None:
+    """max_capacity=None (unlimited) -> the capacity gate short-circuits
+    before even querying the signed-up-or-attended union -- always admitted,
+    kiosk or staff."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(
+        _resolved_class(max_capacity=None), uuid4(), is_member=True
+    )
+
+    assert res.log_id is not None
+    assert res.skip_reason is None
+    gate._queries.get_signup_or_attended_members.assert_not_awaited()
+
+
+async def test_staff_admits_when_already_in_the_signed_up_or_attended_union() -> None:
+    """The same union-membership capacity skip applies to a staff check-in:
+    a member already counted (a prior sign-up, or an idempotent repeat) is
+    recorded cleanly with no warnings even when the room is nominally full --
+    ``_is_over_capacity`` is evaluated once, shared by both modes."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    member_id = uuid4()
+    gate, writer = _gate(memberships=[m], eligible={plan})
+    # The room is at capacity (3/3) but this member is already one of the 3.
+    gate._queries.get_signup_or_attended_members = AsyncMock(
+        return_value={member_id, uuid4(), uuid4()}
+    )
+
+    res = await gate.checkin_member(
+        _resolved_class(max_capacity=3), member_id, is_member=False
+    )
+
+    assert res.log_id is not None
+    assert res.requires_confirmation is False
+    assert res.warnings == []
+    writer.assert_awaited_once()
+
+
 async def test_kiosk_admits_when_already_in_the_signed_up_or_attended_union() -> None:
     """A member already counted in the union (e.g. a prior sign-up) is
     admitted even when the room is nominally full -- the capacity gate skips

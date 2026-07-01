@@ -94,12 +94,14 @@ class ClassesScheduleReaderService:
         )
         signups = await self._signup_counts(gym_id, start_date, end_date)
 
-        # The past/future split point is NOW — the occurrence's own start instant.
-        # An occurrence whose start time has already passed (including earlier
-        # today) renders from the immutable class_history table; one still upcoming
-        # renders by expanding the current definition. So editing a class's
-        # recurring rules never rewrites or hides an occurrence that has already
-        # started / run.
+        # The past/future split point is NOW — the occurrence's own END instant
+        # (occurred_at + duration; see _has_ended, mirrored in
+        # classes_board_past_history.sql). An occurrence that has already
+        # finished (including earlier today) renders from the immutable
+        # class_history table; one still in session or upcoming renders by
+        # expanding the current definition. So editing a class's recurring
+        # rules never rewrites or hides an occurrence that has already run,
+        # and a class still in progress isn't prematurely frozen into history.
         now = datetime.now(UTC)
         past_params = {
             "gym_id": str(gym_id),
@@ -121,6 +123,13 @@ class ClassesScheduleReaderService:
                 "classes_board_past_history.sql", past_params
             )
         past_by_class = self._group_by_class(past_rows)
+        # (class_id, gym-local day) -> already covered by a materialized past
+        # row. A default-time/duration edit to gym_classes isn't synced back
+        # onto already-materialized class_history rows, so re-expanding the
+        # (now edited) live definition for a day that already ran would
+        # otherwise duplicate the board row for that class+day (see
+        # _board_rows_for_class).
+        materialized_days = self._materialized_days_by_class(past_rows, gym_tz)
 
         items: list[EffectiveClassInstanceResponse] = []
         # Now + upcoming: expand the current (editable) definition.
@@ -137,6 +146,7 @@ class ClassesScheduleReaderService:
                     attendance,
                     signups,
                     now,
+                    materialized_days.get(class_row["class_id"], set()),
                 )
             )
         # Strictly past: the immutable history (every gym class, deleted ones
@@ -163,6 +173,7 @@ class ClassesScheduleReaderService:
         attendance: dict[tuple[str, datetime], int],
         signups: dict[tuple[str, date], int],
         now: datetime,
+        materialized_days: set[date],
     ) -> list[EffectiveClassInstanceResponse]:
         """Expand one class into its in-session + upcoming rows + cancelled days.
 
@@ -173,6 +184,14 @@ class ClassesScheduleReaderService:
         from the live expansion of the current definition. A *cancelled* day is
         kept even when past: it leaves no class_history row, so the expander is the
         only source that knows it was a scheduled-then-cancelled day.
+
+        ``materialized_days`` is this class's set of gym-local days already
+        covered by a ``class_history`` row (past-history dedup). One occurrence
+        per class per gym-local day is ever materialized, so a live-expanded
+        row for a day that's already in this set is dropped too — it can only
+        arise when a default-field edit (e.g. the class's time) landed after
+        that day was already materialized under the old definition; the
+        materialized record is authoritative for a day that already ran.
         """
         occurrences = self._expander.expand(
             to_expander_class(class_row),
@@ -186,7 +205,8 @@ class ClassesScheduleReaderService:
         occurrences = [
             occ
             for occ in occurrences
-            if not self._has_ended(occ, now) or occ.is_cancelled
+            if (not self._has_ended(occ, now) or occ.is_cancelled)
+            and occ.effective_date not in materialized_days
         ]
         instance_dates = {row["original_date"] for row in instance_rows}
         # Effective per-day capacity: an instance exception's new_max_capacity
@@ -407,6 +427,20 @@ class ClassesScheduleReaderService:
         for row in rows:
             grouped[row["class_id"]].append(row)
         return grouped
+
+    @staticmethod
+    def _materialized_days_by_class(
+        past_rows: list[dict], gym_tz: str
+    ) -> dict[object, set[date]]:
+        """Map ``class_id`` -> the gym-local days already covered by a
+        materialized (ended) ``class_history`` row, for the board's
+        past/live dedup (see ``_board_rows_for_class``)."""
+        zone = ZoneInfo(gym_tz)
+        days_by_class: dict[object, set[date]] = defaultdict(set)
+        for row in past_rows:
+            local_day = row["occurred_at"].astimezone(zone).date()
+            days_by_class[row["class_id"]].add(local_day)
+        return days_by_class
 
     async def _read_all(self, sql_file: str, params: dict) -> list[dict]:
         sql = load_sql(SQL_DIR / sql_file)
