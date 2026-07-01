@@ -3,16 +3,28 @@ import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
+import 'package:crm/shared/widgets/form/app_date_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
 import 'package:crm/shared/widgets/form/app_time_field.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// "This day's details" — the occurrence screen's editable overrides:
-/// instructor, start time, and max capacity for just this date. Pre-filled by
-/// the caller with the occurrence's current effective values; Save dispatches
-/// a single-date instance-exception override (see [onSave]).
+/// instructor, start time, max capacity, and date for just this occurrence.
+/// Pre-filled by the caller with the occurrence's current effective values;
+/// Save dispatches a single-date instance-exception override (see [onSave]);
+/// Cancel discards the in-progress edits and returns to the read-only view
+/// (see [onCancel]).
+///
+/// The **date** field reschedules the occurrence to another day: it defaults
+/// to [originalDate] (no move) and its picker floors at `originalDate + 1
+/// day` — the backend's reschedule is **forward-only** (a DB CHECK) and also
+/// rejects a collision with an existing occurrence. Scope note: this assumes
+/// [originalDate] is the occurrence's original, not-yet-moved date;
+/// rescheduling an already-rescheduled occurrence a second time is out of
+/// scope.
 class ClassOccurrenceOverrideSection extends StatelessWidget {
   final String? instructorId;
   final ValueChanged<String?> onInstructorChanged;
@@ -20,7 +32,11 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
   final TimeOfDay? classTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
   final TextEditingController capacityController;
+  final DateTime originalDate;
+  final DateTime selectedDate;
+  final ValueChanged<DateTime> onDateChanged;
   final VoidCallback onSave;
+  final VoidCallback onCancel;
 
   const ClassOccurrenceOverrideSection({
     super.key,
@@ -30,7 +46,11 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
     required this.classTime,
     required this.onTimeChanged,
     required this.capacityController,
+    required this.originalDate,
+    required this.selectedDate,
+    required this.onDateChanged,
     required this.onSave,
+    required this.onCancel,
   });
 
   @override
@@ -73,12 +93,30 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
               ),
             ],
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: AppPrimaryButton(
-              text: 'Save changes',
-              onPressed: onSave,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              AppDateField(
+                label: 'Date',
+                value: selectedDate,
+                firstDate: originalDate.add(const Duration(days: 1)),
+                onChanged: onDateChanged,
+              ),
+              Text(
+                'A class can only be moved to a later date.',
+                style: DesignConstants.pSmall
+                    .copyWith(color: DesignConstants.text2nd),
+              ),
+            ],
+          ),
+          Row(
+            spacing: DesignConstants.spacingLarge,
+            children: [
+              const Spacer(),
+              AppOutlineButton(text: 'Cancel', onPressed: onCancel),
+              AppPrimaryButton(text: 'Save changes', onPressed: onSave),
+            ],
           ),
         ],
       ),

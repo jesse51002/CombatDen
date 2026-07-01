@@ -170,9 +170,11 @@ class ScheduleRepository {
 
   /// `POST /api/v1/classes/{class_id}/exceptions/instance` with
   /// `is_cancelled: false` and the override fields set — upsert this single
-  /// occurrence's effective instructor / start time / max capacity / duration.
-  /// The response body is ignored (the board reloads from `/instances`
-  /// instead).
+  /// occurrence's effective instructor / start time / max capacity / duration,
+  /// and optionally reschedule it to [newDate] (must be strictly after
+  /// [originalDate]; the backend rejects a bad date or a collision with a
+  /// 400/409, whose `detail` message is thrown as a `ServerException`). The
+  /// response body is ignored (the board reloads from `/instances` instead).
   Future<void> overrideInstance(
     String classId,
     DateTime originalDate, {
@@ -180,6 +182,7 @@ class ScheduleRepository {
     required int newDurationMinutes,
     int? newMaxCapacity,
     String? newInstructorId,
+    DateTime? newDate,
   }) async {
     await _apiClient.post(
       '/api/v1/classes/$classId/exceptions/instance',
@@ -190,6 +193,7 @@ class ScheduleRepository {
         newDurationMinutes: newDurationMinutes,
         newMaxCapacity: newMaxCapacity,
         newInstructorId: newInstructorId,
+        newDate: newDate != null ? _dateParam.format(newDate) : null,
       ).toJson(),
     );
   }

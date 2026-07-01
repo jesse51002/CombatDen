@@ -6,8 +6,11 @@ import 'package:crm/core/constants/design_constants.dart';
 
 final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 
-/// Height of the class-image banner atop the occurrence screen.
-const double _kBannerHeight = 180;
+/// Aspect ratio of the class-image banner atop the occurrence screen — the
+/// same 16:9 the board's `ClassCard` uses (`_kCardImageAspect` in
+/// `lib/shared/widgets/class_row/class_card.dart`), so a class's image reads
+/// consistently between the board card and this screen.
+const double _kBannerAspect = 16 / 9;
 
 /// The occurrence screen's header: the class image (when the class has one) as
 /// a banner on top, then a back arrow, the class name, and the tapped
@@ -79,7 +82,8 @@ class ClassOccurrenceHeader extends StatelessWidget {
   }
 }
 
-/// Full-width rounded class-image banner; a placeholder shows if it fails.
+/// Full-width rounded class-image banner at a fixed [_kBannerAspect]; a
+/// placeholder shows if it fails.
 class _Banner extends StatelessWidget {
   final String imageUrl;
 
@@ -89,12 +93,16 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      child: Image.network(
-        imageUrl,
-        height: _kBannerHeight,
+      child: SizedBox(
         width: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => const _BannerPlaceholder(),
+        child: AspectRatio(
+          aspectRatio: _kBannerAspect,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const _BannerPlaceholder(),
+          ),
+        ),
       ),
     );
   }
@@ -106,7 +114,6 @@ class _BannerPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: _kBannerHeight,
       color: DesignConstants.card,
       child: Center(
         child: Icon(

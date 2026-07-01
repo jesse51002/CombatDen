@@ -18,20 +18,37 @@ class AppDateField extends StatelessWidget {
   final ValueChanged<DateTime>? onChanged;
   final String hintText;
 
+  /// Picker bounds. Default to the existing `2020`/`2030` span when omitted
+  /// (unchanged for existing callers); pass [firstDate] to floor the picker —
+  /// e.g. a forward-only reschedule field.
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+
   const AppDateField({
     super.key,
     required this.label,
     this.value,
     this.onChanged,
     this.hintText = 'Select date',
+    this.firstDate,
+    this.lastDate,
   });
 
   Future<void> _pick(BuildContext context) async {
+    final first = firstDate ?? DateTime(2020);
+    final last = lastDate ?? DateTime(2030);
+    // [value] may sit before a caller-supplied [firstDate] (e.g. a reschedule
+    // field defaults to the occurrence's original date, which is before the
+    // forward-only floor) — clamp so `showDatePicker`'s initialDate-in-range
+    // assertion never fires.
+    var initial = value ?? (firstDate != null ? first : DateTime(2026, 2, 1));
+    if (initial.isBefore(first)) initial = first;
+    if (initial.isAfter(last)) initial = last;
     final picked = await showDatePicker(
       context: context,
-      initialDate: value ?? DateTime(2026, 2, 1),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
     );
     if (picked != null) onChanged?.call(picked);
   }

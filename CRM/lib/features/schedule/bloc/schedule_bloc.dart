@@ -104,6 +104,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
           newDurationMinutes: event.newDurationMinutes,
           newMaxCapacity: event.newMaxCapacity,
           newInstructorId: event.newInstructorId,
+          newDate: event.newDate,
         ),
       );
 

@@ -103,7 +103,13 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
 /// `is_cancelled: false` and the override fields populated. [newClassTime] is
 /// `HH:MM:SS`; [newDurationMinutes] is carried through unedited (the
 /// occurrence-edit screen has no duration field) so the upsert doesn't blank a
-/// previously-set duration override.
+/// previously-set duration override. [newDate] (`YYYY-MM-DD`) is a
+/// **reschedule** — moving this occurrence to another day — and is only set
+/// when the user actually picked a later date; the backend requires it be
+/// strictly after [date] (forward-only) and rejects a collision with an
+/// existing occurrence. Scope: [date] is assumed to be the occurrence's
+/// original (not-yet-moved) date — rescheduling an already-rescheduled
+/// occurrence a second time is out of scope.
 class ScheduleInstanceOverridden extends ScheduleEvent {
   final String classId;
   final DateTime date;
@@ -111,6 +117,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
   final int newDurationMinutes;
   final int? newMaxCapacity;
   final String? newInstructorId;
+  final DateTime? newDate;
 
   const ScheduleInstanceOverridden({
     required this.classId,
@@ -119,6 +126,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
     required this.newDurationMinutes,
     this.newMaxCapacity,
     this.newInstructorId,
+    this.newDate,
   });
 
   @override
@@ -129,6 +137,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
         newDurationMinutes,
         newMaxCapacity,
         newInstructorId,
+        newDate,
       ];
 }
 
