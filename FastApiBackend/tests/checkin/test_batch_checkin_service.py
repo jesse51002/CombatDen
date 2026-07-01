@@ -1,7 +1,7 @@
 """Unit tests for BatchCheckinService (no DB / no Stripe).
 
 The batch service is driven against a mocked resolver + member gate: the
-resolver's ``resolve_occurrence`` returns a fixed ``OccurrenceContext`` and the
+resolver's ``resolve`` returns a fixed ``ResolvedClass`` and the
 gate's ``checkin_member`` is a side-effect that returns a ``CheckinResponse``
 (or raises) per member. Covers: the occurrence is resolved exactly once; one
 member
@@ -21,16 +21,16 @@ from src.checkin.schema.batch_checkin_schema import (
 from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     CheckinWarning,
-    OccurrenceContext,
+    ResolvedClass,
 )
 from src.checkin.service.batch_checkin_service import BatchCheckinService
 
 _OCCURRENCE_DATE = date(2026, 6, 1)
 
 
-def _ctx() -> OccurrenceContext:
+def _resolved_class() -> ResolvedClass:
     """A resolved occurrence the mocked resolver hands back."""
-    return OccurrenceContext(
+    return ResolvedClass(
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
@@ -44,34 +44,34 @@ def _ctx() -> OccurrenceContext:
     )
 
 
-def _service(ctx: OccurrenceContext, side_effect) -> tuple[
+def _service(resolved_class: ResolvedClass, side_effect) -> tuple[
     BatchCheckinService, MagicMock, MagicMock
 ]:
     """A batch service over a mocked resolver + member gate.
 
-    The resolver's ``resolve_occurrence`` returns ``ctx``; the gate's
+    The resolver's ``resolve`` returns ``resolved_class``; the gate's
     ``checkin_member`` runs ``side_effect`` (a sync callable returning a
     CheckinResponse or raising), called positionally as
-    ``checkin_member(ctx, member_id, is_member, ignore_warnings)``.
+    ``checkin_member(resolved_class, member_id, is_member, ignore_warnings)``.
     """
     resolver = MagicMock()
-    resolver.resolve_occurrence = AsyncMock(return_value=ctx)
+    resolver.resolve = AsyncMock(return_value=resolved_class)
     member_gate = MagicMock()
     member_gate.checkin_member = AsyncMock(side_effect=side_effect)
     return BatchCheckinService(resolver, member_gate), resolver, member_gate
 
 
-def _recorded(ctx: OccurrenceContext, member_id: UUID) -> CheckinResponse:
+def _recorded(resolved_class: ResolvedClass, member_id: UUID) -> CheckinResponse:
     """A fresh-record CheckinResponse (log_id set, points awarded)."""
     return CheckinResponse(
         log_id=uuid4(),
         member_id=member_id,
-        class_history_id=ctx.class_history_id,
-        class_id=ctx.class_id,
+        class_history_id=resolved_class.class_history_id,
+        class_id=resolved_class.class_id,
         already_checked_in=False,
         chosen_plan_id=uuid4(),
         chosen_item_id=uuid4(),
-        points_awarded=ctx.points_worth,
+        points_awarded=resolved_class.points_worth,
         skip_reason=None,
         memberships=[],
     )
@@ -80,22 +80,22 @@ def _recorded(ctx: OccurrenceContext, member_id: UUID) -> CheckinResponse:
 async def test_one_member_raising_does_not_sink_the_batch() -> None:
     """A member whose check-in raises becomes a ``failed`` item; the other
     members are still processed and the occurrence is resolved once."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     m1, m2, m3 = uuid4(), uuid4(), uuid4()
 
-    def side_effect(_ctx, member_id, _is_member, _ignore):
+    def side_effect(_resolved_class, member_id, _is_member, _ignore):
         if member_id == m2:
             raise RuntimeError("boom")
-        return _recorded(ctx, member_id)
+        return _recorded(resolved_class, member_id)
 
-    service, resolver, member_gate = _service(ctx, side_effect)
+    service, resolver, member_gate = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m2, m3], False
+        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m2, m3], False
     )
 
     assert all_failed is False
-    assert response.class_history_id == ctx.class_history_id
+    assert response.class_history_id == resolved_class.class_history_id
     assert len(response.results) == 3
     by_member = {r.member_id: r for r in response.results}
     assert by_member[m1].status == BatchCheckinItemStatus.checked_in
@@ -105,22 +105,22 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     # All three members were attempted despite m2 blowing up.
     assert member_gate.checkin_member.await_count == 3
     # The occurrence is materialized exactly once for the whole batch.
-    resolver.resolve_occurrence.assert_awaited_once()
+    resolver.resolve.assert_awaited_once()
 
 
 async def test_all_members_failing_sets_all_failed() -> None:
     """When every member's check-in raises, all_failed is True and every item
     is a ``failed`` carrying the error message."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     m1, m2 = uuid4(), uuid4()
 
-    def side_effect(_ctx, _member_id, _is_member, _ignore):
+    def side_effect(_resolved_class, _member_id, _is_member, _ignore):
         raise RuntimeError("db down")
 
-    service, _, _ = _service(ctx, side_effect)
+    service, _, _ = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m2], False
+        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m2], False
     )
 
     assert all_failed is True
@@ -133,16 +133,16 @@ async def test_all_members_failing_sets_all_failed() -> None:
 
 async def test_duplicate_member_ids_are_deduped() -> None:
     """A member listed multiple times yields one result and one check-in."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     m1 = uuid4()
 
-    def side_effect(_ctx, member_id, _is_member, _ignore):
-        return _recorded(ctx, member_id)
+    def side_effect(_resolved_class, member_id, _is_member, _ignore):
+        return _recorded(resolved_class, member_id)
 
-    service, _, member_gate = _service(ctx, side_effect)
+    service, _, member_gate = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [m1, m1, m1], False
+        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m1, m1], False
     )
 
     assert all_failed is False
@@ -156,15 +156,15 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
     """CheckinResponse -> BatchCheckinItemResult: recorded -> checked_in (points
     + ids carried), repeat -> already_checked_in (ids carried, 0 points), no
     log_id -> skipped (reason = skip reason)."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     recorded_m, already_m, skipped_m = uuid4(), uuid4(), uuid4()
 
     def already(member_id: UUID) -> CheckinResponse:
         return CheckinResponse(
             log_id=uuid4(),
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=True,
             chosen_plan_id=uuid4(),
             chosen_item_id=uuid4(),
@@ -177,8 +177,8 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
             chosen_item_id=None,
@@ -187,18 +187,18 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
             memberships=[],
         )
 
-    def side_effect(_ctx, member_id, _is_member, _ignore):
+    def side_effect(_resolved_class, member_id, _is_member, _ignore):
         if member_id == already_m:
             return already(member_id)
         if member_id == skipped_m:
             return skipped(member_id)
-        return _recorded(ctx, member_id)
+        return _recorded(resolved_class, member_id)
 
-    service, _, _ = _service(ctx, side_effect)
+    service, _, _ = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id,
-        ctx.gym_id,
+        resolved_class.class_id,
+        resolved_class.gym_id,
         _OCCURRENCE_DATE,
         [recorded_m, already_m, skipped_m],
         False,
@@ -209,7 +209,7 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
 
     checked_in = by_member[recorded_m]
     assert checked_in.status == BatchCheckinItemStatus.checked_in
-    assert checked_in.points_awarded == ctx.points_worth
+    assert checked_in.points_awarded == resolved_class.points_worth
     assert checked_in.log_id is not None
     assert checked_in.chosen_plan_id is not None
     assert checked_in.reason is None
@@ -229,29 +229,29 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
 
 async def test_warnings_propagate_to_batch_item() -> None:
     """A staff (warned) check-in carries its warnings onto the batch item."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     member = uuid4()
 
-    def warned(_ctx, member_id, _is_member, _ignore):
+    def warned(_resolved_class, member_id, _is_member, _ignore):
         # An OVERRIDDEN staff check-in: recorded (log_id set) with warnings.
         return CheckinResponse(
             log_id=uuid4(),
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
             chosen_item_id=None,
-            points_awarded=ctx.points_worth,
+            points_awarded=resolved_class.points_worth,
             skip_reason=None,
             warnings=[CheckinWarning.no_membership],
             memberships=[],
         )
 
-    service, _, _ = _service(ctx, warned)
+    service, _, _ = _service(resolved_class, warned)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [member], False
+        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [member], False
     )
 
     assert all_failed is False
@@ -264,15 +264,15 @@ async def test_needs_confirmation_maps_to_needs_confirmation() -> None:
     """A staff check-in held for confirmation (requires_confirmation, not
     recorded) -> a needs_confirmation item carrying the warnings + primary
     reason, nothing written."""
-    ctx = _ctx()
+    resolved_class = _resolved_class()
     member = uuid4()
 
-    def needs_confirm(_ctx, member_id, _is_member, _ignore):
+    def needs_confirm(_resolved_class, member_id, _is_member, _ignore):
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
             chosen_item_id=None,
@@ -283,10 +283,10 @@ async def test_needs_confirmation_maps_to_needs_confirmation() -> None:
             memberships=[],
         )
 
-    service, _, _ = _service(ctx, needs_confirm)
+    service, _, _ = _service(resolved_class, needs_confirm)
 
     response, all_failed = await service.batch_checkin(
-        ctx.class_id, ctx.gym_id, _OCCURRENCE_DATE, [member], False
+        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [member], False
     )
 
     assert all_failed is False

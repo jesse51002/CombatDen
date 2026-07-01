@@ -30,10 +30,10 @@ from src.checkin.service.batch_checkin_service import BatchCheckinService
 from src.checkin.service.checkin_attendees_service import (
     CheckinAttendeesService,
 )
-from src.checkin.service.checkin_member_gate import CheckinMemberGate
-from src.checkin.service.checkin_occurrence_resolver import (
-    CheckinOccurrenceResolver,
+from src.checkin.service.checkin_class_resolver import (
+    CheckinClassResolver,
 )
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
@@ -60,13 +60,14 @@ checkin_router = APIRouter(
         "membership with remaining capacity (trial -> one_time -> recurring) "
         "and, if none covers / the room is full, returns ``log_id = null`` "
         "with a ``skip_reason`` and writes nothing. ``is_member = false`` "
-        "(default — staff / admin) ALWAYS records: it attributes to the "
-        "member's best available membership (eligibility + remaining count "
-        "ignored; NULL plan/item when the member has none) and returns any gate "
-        "conditions in ``warnings``. Idempotent — a repeat for the same "
-        "(member, occurrence) returns the existing log_id with "
-        "``already_checked_in = True``, consumes no capacity, and awards no "
-        "points."
+        "(default — staff / admin) records a clean check-in but, when the gate "
+        "warns (no membership / out of classes / ineligible / over capacity), "
+        "returns ``requires_confirmation = true`` with the ``warnings`` and "
+        "writes nothing — resend with ``ignore_warnings = true`` to record it "
+        "(best available / NULL attribution, warnings surfaced). Idempotent — a "
+        "repeat for the same (member, occurrence) returns the existing log_id "
+        "with ``already_checked_in = True``, consumes no capacity, and re-awards "
+        "no points (``points_awarded`` echoes the original award)."
     ),
     responses={
         200: {"description": "Check-in result returned (recorded or skipped)"},
@@ -81,8 +82,8 @@ async def checkin(
     request: CheckinRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    resolver: CheckinOccurrenceResolver = Depends(
-        Provide[DependencyInjector.checkin_occurrence_resolver]
+    resolver: CheckinClassResolver = Depends(
+        Provide[DependencyInjector.checkin_class_resolver]
     ),
     member_gate: CheckinMemberGate = Depends(
         Provide[DependencyInjector.checkin_member_gate]
@@ -93,11 +94,14 @@ async def checkin(
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        ctx = await resolver.resolve_occurrence(
+        resolved_class = await resolver.resolve(
             request.class_id, request.gym_id, request.occurrence_date
         )
         return await member_gate.checkin_member(
-            ctx, request.member_id, request.is_member, request.ignore_warnings
+            resolved_class,
+            request.member_id,
+            request.is_member,
+            request.ignore_warnings,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -195,19 +199,21 @@ async def remove_checkin(
         "the per-member check-in gate over each (de-duped) member. One bad "
         "member never sinks the batch — its result is a ``failed`` item. "
         "Returns **207 Multi-Status** with a per-member split (``checked_in`` / "
-        "``already_checked_in`` / ``skipped`` / ``failed``). A total failure "
-        "(every member failed) is **500**; an invalid occurrence is **400 / "
-        "404** before any member is processed. ``is_member`` applies to every "
-        "member: ``false`` (default — a staff batch) records each member with "
-        "``warnings``; ``true`` runs the strict kiosk gate per member, skipping "
-        "the uncovered / over-capacity. Admin/owner only."
+        "``already_checked_in`` / ``skipped`` / ``needs_confirmation`` / "
+        "``failed``). A total failure (every member failed) is **500**; an "
+        "invalid occurrence is **400 / 404** before any member is processed. "
+        "``is_member`` applies to every member: ``false`` (default — a staff "
+        "batch) records a clean member and holds a warned one as "
+        "``needs_confirmation`` (not recorded) unless ``ignore_warnings = true`` "
+        "overrides; ``true`` runs the strict kiosk gate per member, skipping the "
+        "uncovered / over-capacity. Admin/owner only."
     ),
     responses={
         207: {
             "model": BatchCheckinResponse,
             "description": (
                 "Per-member results returned (any mix of checked_in / "
-                "already_checked_in / skipped / failed)"
+                "already_checked_in / skipped / needs_confirmation / failed)"
             ),
         },
         400: {"description": "Not a valid occurrence on that date"},

@@ -1,7 +1,7 @@
 """Per-member gate + write against a resolved class occurrence.
 
 ``checkin_member`` runs the per-member gate + write against a resolved
-``OccurrenceContext``, so a batch can resolve once then loop over members.
+``ResolvedClass``, so a batch can resolve once then loop over members.
 
 ``is_member`` selects how the gate behaves:
 
@@ -37,7 +37,7 @@ from src.checkin.schema.checkin_schema import (
     CheckinResponse,
     CheckinWarning,
     GateEvaluation,
-    OccurrenceContext,
+    ResolvedClass,
 )
 from src.checkin.schema.cycle_counts_schema import (
     CheckinCycleCountsRequest,
@@ -80,7 +80,7 @@ class CheckinMemberGate:
 
     async def checkin_member(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         is_member: bool = False,
         ignore_warnings: bool = False,
@@ -88,7 +88,7 @@ class CheckinMemberGate:
         """Gate + write one member against a resolved occurrence.
 
         Args:
-            ctx: The resolved occurrence (from the occurrence resolver).
+            resolved_class: The resolved class (from the class resolver).
             member_id: The member checking in.
             is_member: ``True`` for a kiosk / member self-check-in (strict gate
                 — reject when uncovered / full); ``False`` (default) for a staff
@@ -104,41 +104,41 @@ class CheckinMemberGate:
             (``requires_confirmation``).
         """
         existing = await self._queries.get_existing_attendance(
-            member_id, ctx.class_history_id
+            member_id, resolved_class.class_history_id
         )
         if existing is not None:
             return self._already_checked_in(
-                ctx,
+                resolved_class,
                 member_id,
                 existing["log_id"],
                 existing["plan_id"],
                 existing["item_id"],
             )
 
-        active = await self._active_memberships(member_id, ctx.gym_id)
+        active = await self._active_memberships(member_id, resolved_class.gym_id)
         eligible = (
             await self._queries.get_eligible_plans(
-                ctx.gym_id, ctx.class_id, [m.plan_id for m in active]
+                resolved_class.gym_id, resolved_class.class_id, [m.plan_id for m in active]
             )
             if active
             else set()
         )
-        over_capacity = await self._is_over_capacity(ctx)
+        over_capacity = await self._is_over_capacity(resolved_class)
         evaluation = self._evaluate(active, eligible, over_capacity)
 
         if is_member:
             return await self._checkin_kiosk(
-                ctx, member_id, active, eligible, evaluation
+                resolved_class, member_id, active, eligible, evaluation
             )
         return await self._checkin_staff(
-            ctx, member_id, active, eligible, evaluation, ignore_warnings
+            resolved_class, member_id, active, eligible, evaluation, ignore_warnings
         )
 
     # -- mode handlers ---------------------------------------------------
 
     async def _checkin_kiosk(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
@@ -147,18 +147,18 @@ class CheckinMemberGate:
         """Strict gate: reject when blocked, else record against ``strict``."""
         if evaluation.blocked:
             return self._skipped(
-                ctx,
+                resolved_class,
                 member_id,
                 self._primary_reason(evaluation.reasons),
                 self._plan_selector.build_breakdown(active, eligible, None),
             )
         return await self._record(
-            ctx, member_id, active, eligible, evaluation.strict, warnings=[]
+            resolved_class, member_id, active, eligible, evaluation.strict, warnings=[]
         )
 
     async def _checkin_staff(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
@@ -173,15 +173,15 @@ class CheckinMemberGate:
         )
         if warnings and not ignore_warnings:
             return self._needs_confirmation(
-                ctx, member_id, active, eligible, warnings
+                resolved_class, member_id, active, eligible, warnings
             )
         return await self._record(
-            ctx, member_id, active, eligible, evaluation.forced, warnings
+            resolved_class, member_id, active, eligible, evaluation.forced, warnings
         )
 
     def _needs_confirmation(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
@@ -193,8 +193,8 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
             chosen_item_id=None,
@@ -209,7 +209,7 @@ class CheckinMemberGate:
 
     async def _record(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         active: list[MembershipUsage],
         eligible: set[UUID],
@@ -227,18 +227,18 @@ class CheckinMemberGate:
         )
 
         log_id, already, points = await self._writer.write_checkin(
-            ctx, member_id, plan_id, item_id, should_end
+            resolved_class, member_id, plan_id, item_id, should_end
         )
         if already:
             return self._already_checked_in(
-                ctx, member_id, log_id, plan_id, item_id
+                resolved_class, member_id, log_id, plan_id, item_id
             )
 
         return CheckinResponse(
             log_id=log_id,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=plan_id,
             chosen_item_id=item_id,
@@ -306,12 +306,12 @@ class CheckinMemberGate:
         """Pick the single ``skip_reason`` for a rejected kiosk check-in."""
         return min(reasons, key=_REASON_PRIORITY.index)
 
-    async def _is_over_capacity(self, ctx: OccurrenceContext) -> bool:
+    async def _is_over_capacity(self, resolved_class: ResolvedClass) -> bool:
         """Whether the room is at / over ``max_capacity`` for this occurrence."""
-        if ctx.max_capacity is None:
+        if resolved_class.max_capacity is None:
             return False
-        count = await self._queries.count_attendance(ctx.class_history_id)
-        return count >= ctx.max_capacity
+        count = await self._queries.count_attendance(resolved_class.class_history_id)
+        return count >= resolved_class.max_capacity
 
     # -- helpers ---------------------------------------------------------
 
@@ -336,7 +336,7 @@ class CheckinMemberGate:
 
     def _already_checked_in(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         log_id: UUID,
         plan_id: UUID | None,
@@ -352,12 +352,12 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=log_id,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=True,
             chosen_plan_id=plan_id,
             chosen_item_id=item_id,
-            points_awarded=ctx.points_worth,
+            points_awarded=resolved_class.points_worth,
             skip_reason=None,
             warnings=[],
             memberships=[],
@@ -365,7 +365,7 @@ class CheckinMemberGate:
 
     def _skipped(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         reason: CheckinWarning,
         memberships: list[CheckinMembershipBreakdown],
@@ -374,8 +374,8 @@ class CheckinMemberGate:
         return CheckinResponse(
             log_id=None,
             member_id=member_id,
-            class_history_id=ctx.class_history_id,
-            class_id=ctx.class_id,
+            class_history_id=resolved_class.class_history_id,
+            class_id=resolved_class.class_id,
             already_checked_in=False,
             chosen_plan_id=None,
             chosen_item_id=None,

@@ -108,11 +108,11 @@ class CheckinRequest(BaseModel):
     ignore_warnings: bool = False
 
 
-class OccurrenceContext(BaseModel):
+class ResolvedClass(BaseModel):
     """A resolved, materialized class occurrence — the input to a per-member
     check-in.
 
-    Produced by ``CheckinOccurrenceResolver.resolve_occurrence`` once per
+    Produced by ``CheckinClassResolver.resolve`` once per
     occurrence, then reused to check in one or many members (batch).
 
     Attributes:

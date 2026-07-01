@@ -1,7 +1,7 @@
 """Resolve + lazily materialize a single class occurrence for check-in.
 
-``resolve_occurrence`` turns ``(class_id, gym_id, occurrence_date)`` into an
-``OccurrenceContext``: it loads the class, validates that the date is a real,
+``resolve`` turns ``(class_id, gym_id, occurrence_date)`` into a
+``ResolvedClass``: it loads the class, validates that the date is a real,
 non-cancelled occurrence by running the canonical ``ClassesExpander`` over that
 single day (so exception-applied time / instructor / duration and the gym-tz UTC
 ``occurred_at`` are exact), then lazily find-or-creates the ``class_history`` row
@@ -16,7 +16,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
-from src.checkin.schema.checkin_schema import OccurrenceContext
+from src.checkin.schema.checkin_schema import ResolvedClass
 from src.checkin.service.checkin_queries import CheckinQueries
 from src.classes.schema.classes_expander_schema import EffectiveOccurrence
 from src.classes.service.classes_expander import ClassesExpander
@@ -30,7 +30,7 @@ from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 
 
-class CheckinOccurrenceResolver:
+class CheckinClassResolver:
     """Resolves + materializes the ``class_history`` occurrence for a check-in.
 
     Args:
@@ -49,12 +49,12 @@ class CheckinOccurrenceResolver:
         self._expander = expander
         self._materializer = materializer
 
-    async def resolve_occurrence(
+    async def resolve(
         self,
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
-    ) -> OccurrenceContext:
+    ) -> ResolvedClass:
         """Resolve + materialize a single class occurrence.
 
         Raises:
@@ -114,7 +114,7 @@ class CheckinOccurrenceResolver:
             occurrence.duration_minutes,
         )
 
-        return OccurrenceContext(
+        return ResolvedClass(
             class_history_id=class_history_id,
             class_id=class_id,
             gym_id=gym_id,

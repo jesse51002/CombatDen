@@ -6,10 +6,10 @@ from src.checkin.service.batch_checkin_service import BatchCheckinService
 from src.checkin.service.checkin_attendees_service import (
     CheckinAttendeesService,
 )
-from src.checkin.service.checkin_member_gate import CheckinMemberGate
-from src.checkin.service.checkin_occurrence_resolver import (
-    CheckinOccurrenceResolver,
+from src.checkin.service.checkin_class_resolver import (
+    CheckinClassResolver,
 )
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
@@ -224,8 +224,8 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Resolve + lazily materialize a single occurrence. Injects the pure
     # expander + the materializer (both stay in classes) — the one-way
     # checkin → classes dependency.
-    checkin_occurrence_resolver = providers.Factory(
-        CheckinOccurrenceResolver,
+    checkin_class_resolver = providers.Factory(
+        CheckinClassResolver,
         db_pool=db_pool,
         expander=classes_expander,
         materializer=classes_materializer,
@@ -241,7 +241,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     # single-check-in router injects directly.
     batch_checkin_service = providers.Factory(
         BatchCheckinService,
-        resolver=checkin_occurrence_resolver,
+        resolver=checkin_class_resolver,
         member_gate=checkin_member_gate,
     )
     # Read-only: the members who attended one occurrence (gym-local day-bounds

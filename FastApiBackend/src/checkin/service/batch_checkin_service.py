@@ -1,7 +1,7 @@
 """Batch staff check-in against a single resolved class occurrence.
 
 Injects the two check-in seams directly (no facade): the
-``CheckinOccurrenceResolver`` loads + validates + materializes the
+``CheckinClassResolver`` loads + validates + materializes the
 ``class_history`` row ONCE (so a 50-member batch creates exactly one occurrence
 row), then the ``CheckinMemberGate`` runs the per-member gate + write for each
 member. The batch resolves once, then loops a de-duped, order-preserving member
@@ -9,7 +9,7 @@ list.
 
 One bad member never sinks the batch: each member is checked in inside its own
 ``try``, and any exception becomes a ``failed`` item carrying the error message
-instead of aborting the loop. ``resolve_occurrence`` raising (class missing /
+instead of aborting the loop. ``resolve`` raising (class missing /
 deleted / inactive, or not a real occurrence) is the one case that fails the
 whole request — it propagates before any per-member work, and the router maps
 it to 404 / 400.
@@ -25,12 +25,12 @@ from src.checkin.schema.batch_checkin_schema import (
 )
 from src.checkin.schema.checkin_schema import (
     CheckinResponse,
-    OccurrenceContext,
+    ResolvedClass,
+)
+from src.checkin.service.checkin_class_resolver import (
+    CheckinClassResolver,
 )
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
-from src.checkin.service.checkin_occurrence_resolver import (
-    CheckinOccurrenceResolver,
-)
 
 
 class BatchCheckinService:
@@ -43,7 +43,7 @@ class BatchCheckinService:
 
     def __init__(
         self,
-        resolver: CheckinOccurrenceResolver,
+        resolver: CheckinClassResolver,
         member_gate: CheckinMemberGate,
     ) -> None:
         self._resolver = resolver
@@ -83,7 +83,7 @@ class BatchCheckinService:
                 occurrence on that date). Raised before any per-member work, so
                 the whole request fails (router -> 404 / 400).
         """
-        ctx = await self._resolver.resolve_occurrence(
+        resolved_class = await self._resolver.resolve(
             class_id, gym_id, occurrence_date
         )
 
@@ -91,7 +91,7 @@ class BatchCheckinService:
         for member_id in self._dedupe(member_ids):
             results.append(
                 await self._checkin_one(
-                    ctx, member_id, is_member, ignore_warnings
+                    resolved_class, member_id, is_member, ignore_warnings
                 )
             )
 
@@ -102,14 +102,14 @@ class BatchCheckinService:
         response = BatchCheckinResponse(
             class_id=class_id,
             occurrence_date=occurrence_date,
-            class_history_id=ctx.class_history_id,
+            class_history_id=resolved_class.class_history_id,
             results=results,
         )
         return response, all_failed
 
     async def _checkin_one(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         is_member: bool,
         ignore_warnings: bool,
@@ -119,7 +119,7 @@ class BatchCheckinService:
         single bad member never aborts the batch."""
         try:
             res = await self._member_gate.checkin_member(
-                ctx, member_id, is_member, ignore_warnings
+                resolved_class, member_id, is_member, ignore_warnings
             )
         except Exception as exc:  # noqa: BLE001 — isolate one member's failure
             return BatchCheckinItemResult(

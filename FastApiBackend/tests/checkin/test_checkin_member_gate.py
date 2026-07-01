@@ -24,7 +24,7 @@ from schema.membership_plan import PlanType
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin.schema.checkin_schema import (
     CheckinWarning,
-    OccurrenceContext,
+    ResolvedClass,
 )
 from src.checkin.schema.cycle_counts_schema import (
     CheckinCycleCountsResponse,
@@ -34,8 +34,8 @@ from src.checkin.schema.cycle_counts_schema import (
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 
 
-def _ctx(*, points_worth: int = 50, max_capacity: int | None = None) -> OccurrenceContext:
-    return OccurrenceContext(
+def _resolved_class(*, points_worth: int = 50, max_capacity: int | None = None) -> ResolvedClass:
+    return ResolvedClass(
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
@@ -83,8 +83,8 @@ def _gate(
 ) -> tuple[CheckinMemberGate, AsyncMock]:
     """A gate with mocked queries / writer / cycle-counts; pure selector kept.
 
-    ``write_checkin`` returns ``(log_id, already=False, points=ctx.points_worth)``
-    — but the caller passes ``ctx.points_worth`` when it asserts points, so the
+    ``write_checkin`` returns ``(log_id, already=False, points=resolved_class.points_worth)``
+    — but the caller passes ``resolved_class.points_worth`` when it asserts points, so the
     mock just echoes a fixed points value via side effect below.
     """
     member_id = uuid4()
@@ -121,7 +121,7 @@ async def test_staff_clean_covered_records_no_warnings() -> None:
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=3)
     gate, writer = _gate(memberships=[m], eligible={plan})
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
 
     assert res.log_id is not None
     assert res.chosen_plan_id == plan
@@ -138,7 +138,7 @@ async def test_staff_no_membership_needs_confirmation() -> None:
     warning, nothing written."""
     gate, writer = _gate(memberships=[], eligible=set())
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
 
     assert res.requires_confirmation is True
     assert res.log_id is None
@@ -156,7 +156,7 @@ async def test_staff_no_membership_override_records_null_attribution() -> None:
     gate, writer = _gate(memberships=[], eligible=set())
 
     res = await gate.checkin_member(
-        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
     )
 
     assert res.log_id is not None
@@ -175,7 +175,7 @@ async def test_staff_out_of_classes_needs_confirmation() -> None:
     pack = _usage(plan, PlanType.one_time, class_count=5, classes_used=5)
     gate, writer = _gate(memberships=[pack], eligible={plan})
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
 
     assert res.requires_confirmation is True
     assert res.log_id is None
@@ -190,7 +190,7 @@ async def test_staff_out_of_classes_override_overdraws() -> None:
     gate, writer = _gate(memberships=[pack], eligible={plan})
 
     res = await gate.checkin_member(
-        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
     )
 
     assert res.chosen_item_id == pack.item_id
@@ -205,7 +205,7 @@ async def test_staff_ineligible_plan_needs_confirmation() -> None:
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
     gate, writer = _gate(memberships=[m], eligible=set())  # plan not eligible
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
 
     assert res.requires_confirmation is True
     assert res.log_id is None
@@ -220,7 +220,7 @@ async def test_staff_ineligible_plan_override_records() -> None:
     gate, _ = _gate(memberships=[m], eligible=set())
 
     res = await gate.checkin_member(
-        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
     )
 
     assert res.chosen_plan_id == plan
@@ -236,7 +236,7 @@ async def test_staff_over_capacity_needs_confirmation() -> None:
     )
 
     res = await gate.checkin_member(
-        _ctx(max_capacity=5), uuid4(), is_member=False
+        _resolved_class(max_capacity=5), uuid4(), is_member=False
     )
 
     assert res.requires_confirmation is True
@@ -254,7 +254,7 @@ async def test_staff_over_capacity_override_records() -> None:
     )
 
     res = await gate.checkin_member(
-        _ctx(max_capacity=5), uuid4(), is_member=False, ignore_warnings=True
+        _resolved_class(max_capacity=5), uuid4(), is_member=False, ignore_warnings=True
     )
 
     assert res.log_id is not None
@@ -269,7 +269,7 @@ async def test_staff_combined_warnings_sorted_by_priority() -> None:
     pack = _usage(plan, PlanType.one_time, class_count=3, classes_used=3)
     gate, _ = _gate(memberships=[pack], eligible=set())  # ineligible + depleted
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=False)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
 
     assert res.requires_confirmation is True
     assert res.warnings == [
@@ -286,7 +286,7 @@ async def test_kiosk_clean_covered_records() -> None:
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
     gate, writer = _gate(memberships=[m], eligible={plan})
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=True)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
     assert res.log_id is not None
     assert res.chosen_plan_id == plan
@@ -298,7 +298,7 @@ async def test_kiosk_clean_covered_records() -> None:
 async def test_kiosk_no_membership_is_rejected() -> None:
     gate, writer = _gate(memberships=[], eligible=set())
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=True)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
     assert res.log_id is None
     assert res.skip_reason == CheckinWarning.no_membership
@@ -311,7 +311,7 @@ async def test_kiosk_out_of_classes_is_rejected() -> None:
     pack = _usage(plan, PlanType.one_time, class_count=5, classes_used=5)
     gate, writer = _gate(memberships=[pack], eligible={plan})
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=True)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
     assert res.log_id is None
     assert res.skip_reason == CheckinWarning.out_of_classes
@@ -323,7 +323,7 @@ async def test_kiosk_ineligible_plan_is_rejected() -> None:
     m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
     gate, writer = _gate(memberships=[m], eligible=set())
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=True)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
     assert res.log_id is None
     assert res.skip_reason == CheckinWarning.ineligible_plan
@@ -338,7 +338,7 @@ async def test_kiosk_over_capacity_blocks_even_when_covered() -> None:
     )
 
     res = await gate.checkin_member(
-        _ctx(max_capacity=5), uuid4(), is_member=True
+        _resolved_class(max_capacity=5), uuid4(), is_member=True
     )
 
     assert res.log_id is None
@@ -357,7 +357,7 @@ async def test_kiosk_admits_when_a_clean_membership_covers_despite_depleted_pack
         memberships=[depleted, covering], eligible={pack_plan, rec_plan}
     )
 
-    res = await gate.checkin_member(_ctx(), uuid4(), is_member=True)
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
     assert res.log_id is not None
     assert res.skip_reason is None
@@ -377,7 +377,7 @@ async def test_staff_override_overdraws_depleted_pack_over_clean_membership() ->
     )
 
     res = await gate.checkin_member(
-        _ctx(), uuid4(), is_member=False, ignore_warnings=True
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
     )
 
     assert res.chosen_plan_id == pack_plan
@@ -397,12 +397,12 @@ async def test_existing_attendance_is_idempotent_repeat() -> None:
         existing={"log_id": log_id, "plan_id": plan, "item_id": item},
     )
 
-    ctx = _ctx()
-    res = await gate.checkin_member(ctx, uuid4(), is_member=False)
+    resolved_class = _resolved_class()
+    res = await gate.checkin_member(resolved_class, uuid4(), is_member=False)
 
     assert res.already_checked_in is True
     assert res.log_id == log_id
     assert res.chosen_plan_id == plan
     # The repeat echoes the class's points (already in the balance), not 0.
-    assert res.points_awarded == ctx.points_worth
+    assert res.points_awarded == resolved_class.points_worth
     writer.assert_not_awaited()

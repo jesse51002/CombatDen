@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
-from src.checkin.schema.checkin_schema import OccurrenceContext
+from src.checkin.schema.checkin_schema import ResolvedClass
 from src.classes import SQL_DIR as CLASSES_SQL_DIR
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
@@ -39,7 +39,7 @@ class CheckinWriter:
 
     async def write_checkin(
         self,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         plan_id: UUID | None,
         item_id: UUID | None,
@@ -70,8 +70,8 @@ class CheckinWriter:
                         text(insert_sql),
                         {
                             "member_id": str(member_id),
-                            "gym_id": str(ctx.gym_id),
-                            "class_history_id": str(ctx.class_history_id),
+                            "gym_id": str(resolved_class.gym_id),
+                            "class_history_id": str(resolved_class.class_history_id),
                             "plan_id": str(plan_id)
                             if plan_id is not None
                             else None,
@@ -92,7 +92,7 @@ class CheckinWriter:
                             text(existing_sql),
                             {
                                 "member_id": str(member_id),
-                                "class_history_id": str(ctx.class_history_id),
+                                "class_history_id": str(resolved_class.class_history_id),
                             },
                         )
                     )
@@ -112,22 +112,22 @@ class CheckinWriter:
                 text(last_class_sql),
                 {
                     "member_id": str(member_id),
-                    "class_history_id": str(ctx.class_history_id),
+                    "class_history_id": str(resolved_class.class_history_id),
                 },
             )
 
-            await self._award_points(session, ctx, member_id)
+            await self._award_points(session, resolved_class, member_id)
 
             if should_end:
-                await self._end_membership(session, ctx, member_id, item_id)
+                await self._end_membership(session, resolved_class, member_id, item_id)
 
             await session.commit()
-            return log_id, False, ctx.points_worth
+            return log_id, False, resolved_class.points_worth
 
     async def _award_points(
         self,
         session: AsyncSession,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
     ) -> None:
         """Add the class's points to the member and log a class_attended row."""
@@ -137,23 +137,23 @@ class CheckinWriter:
         await session.execute(
             text(points_sql),
             {
-                "points": ctx.points_worth,
+                "points": resolved_class.points_worth,
                 "m": str(member_id),
-                "g": str(ctx.gym_id),
+                "g": str(resolved_class.gym_id),
             },
         )
         info = json.dumps(
             {
-                "class_id": str(ctx.class_id),
-                "class_name": ctx.class_name,
-                "points": ctx.points_worth,
+                "class_id": str(resolved_class.class_id),
+                "class_name": resolved_class.class_name,
+                "points": resolved_class.points_worth,
             }
         )
         await session.execute(
             text(activity_sql),
             {
                 "m": str(member_id),
-                "g": str(ctx.gym_id),
+                "g": str(resolved_class.gym_id),
                 "activity_type": CLASS_ATTENDED_ACTIVITY_TYPE,
                 "info": info,
             },
@@ -162,7 +162,7 @@ class CheckinWriter:
     async def _end_membership(
         self,
         session: AsyncSession,
-        ctx: OccurrenceContext,
+        resolved_class: ResolvedClass,
         member_id: UUID,
         item_id: UUID,
     ) -> None:
@@ -174,7 +174,7 @@ class CheckinWriter:
             (
                 await session.execute(
                     text(tz_sql),
-                    {"gym_id": str(ctx.gym_id)},
+                    {"gym_id": str(resolved_class.gym_id)},
                 )
             )
             .mappings()

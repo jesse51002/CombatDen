@@ -30,16 +30,16 @@ def _override_checkin(response: CheckinResponse) -> None:
     ``response`` without touching the DB. Caller resets via ``_reset_checkin``.
     """
     resolver = MagicMock()
-    resolver.resolve_occurrence = AsyncMock(return_value=MagicMock())
+    resolver.resolve = AsyncMock(return_value=MagicMock())
     gate = MagicMock()
     gate.checkin_member = AsyncMock(return_value=response)
-    app.container.checkin_occurrence_resolver.override(resolver)
+    app.container.checkin_class_resolver.override(resolver)
     app.container.checkin_member_gate.override(gate)
 
 
 def _reset_checkin() -> None:
     """Undo the ``_override_checkin`` provider overrides."""
-    app.container.checkin_occurrence_resolver.reset_override()
+    app.container.checkin_class_resolver.reset_override()
     app.container.checkin_member_gate.reset_override()
 
 

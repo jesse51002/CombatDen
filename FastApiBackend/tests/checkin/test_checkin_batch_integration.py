@@ -13,7 +13,7 @@ points_balance.
 
 NOTE: the lazy materialize needs the ``uq_class_history_occurrence`` UNIQUE
 constraint (``INSERT ... ON CONFLICT ON CONSTRAINT uq_class_history_occurrence``)
-for ``resolve_occurrence``. When that constraint is absent the first POST raises
+for ``resolve``. When that constraint is absent the first POST raises
 a Postgres ``42704 undefined_object`` BEFORE any per-member work and the router
 maps it to **500** ("Failed to record batch check-in"); these tests then fail at
 the first POST (expecting 207, getting 500) — a migration block, not a code

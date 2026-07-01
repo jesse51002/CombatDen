@@ -16,16 +16,18 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from src.checkin.schema.checkin_schema import OccurrenceContext
+from src.checkin.schema.checkin_schema import ResolvedClass
 from src.checkin.service.checkin_writer import (
     CLASS_ATTENDED_ACTIVITY_TYPE,
     CheckinWriter,
 )
 
 
-def _ctx(*, points_worth: int = 50, max_capacity: int | None = None) -> OccurrenceContext:
-    """An OccurrenceContext with the fields the writer needs."""
-    return OccurrenceContext(
+def _resolved_class(
+    *, points_worth: int = 50, max_capacity: int | None = None
+) -> ResolvedClass:
+    """A ResolvedClass with the fields the writer needs."""
+    return ResolvedClass(
         class_history_id=uuid4(),
         class_id=uuid4(),
         gym_id=uuid4(),
@@ -65,7 +67,7 @@ def _writer_with_results(results: list[MagicMock]) -> tuple[CheckinWriter, Async
 async def test_award_points_once_on_new_row() -> None:
     """A newly-inserted attendance row awards exactly points_worth, runs the
     points UPDATE + the class_attended activity INSERT, returns it."""
-    ctx = _ctx(points_worth=75)
+    resolved_class = _resolved_class(points_worth=75)
     member_id = uuid4()
     log_id = uuid4()
     # insert -> row, then last_class, award_points, insert_activity (no reads).
@@ -74,7 +76,7 @@ async def test_award_points_once_on_new_row() -> None:
     )
 
     result_log_id, already, points = await writer.write_checkin(
-        ctx, member_id, uuid4(), uuid4(), should_end=False
+        resolved_class, member_id, uuid4(), uuid4(), should_end=False
     )
 
     assert result_log_id == log_id
@@ -86,27 +88,27 @@ async def test_award_points_once_on_new_row() -> None:
     award_params = session.execute.call_args_list[2].args[1]
     assert award_params["points"] == 75
     assert award_params["m"] == str(member_id)
-    assert award_params["g"] == str(ctx.gym_id)
+    assert award_params["g"] == str(resolved_class.gym_id)
 
 
 async def test_activity_info_shape_on_new_row() -> None:
     """The class_attended activity carries {class_id, class_name, points}."""
-    ctx = _ctx(points_worth=40)
+    resolved_class = _resolved_class(points_worth=40)
     member_id = uuid4()
     writer, session = _writer_with_results(
         [_result({"log_id": uuid4()}), _result(None), _result(None), _result(None)]
     )
 
-    await writer.write_checkin(ctx, member_id, uuid4(), uuid4(), should_end=False)
+    await writer.write_checkin(resolved_class, member_id, uuid4(), uuid4(), should_end=False)
 
     activity_params = session.execute.call_args_list[3].args[1]
     assert activity_params["activity_type"] == CLASS_ATTENDED_ACTIVITY_TYPE
     assert activity_params["m"] == str(member_id)
-    assert activity_params["g"] == str(ctx.gym_id)
+    assert activity_params["g"] == str(resolved_class.gym_id)
     info = json.loads(activity_params["info"])
     assert info == {
-        "class_id": str(ctx.class_id),
-        "class_name": ctx.class_name,
+        "class_id": str(resolved_class.class_id),
+        "class_name": resolved_class.class_name,
         "points": 40,
     }
 
@@ -114,14 +116,14 @@ async def test_activity_info_shape_on_new_row() -> None:
 async def test_null_attribution_binds_null_and_still_awards_points() -> None:
     """A no-membership staff check-in (plan_id/item_id None) binds them as SQL
     NULL on the INSERT and still awards the class's points on the new row."""
-    ctx = _ctx(points_worth=60)
+    resolved_class = _resolved_class(points_worth=60)
     member_id = uuid4()
     writer, session = _writer_with_results(
         [_result({"log_id": uuid4()}), _result(None), _result(None), _result(None)]
     )
 
     _, already, points = await writer.write_checkin(
-        ctx, member_id, None, None, should_end=False
+        resolved_class, member_id, None, None, should_end=False
     )
 
     assert already is False
@@ -139,7 +141,7 @@ async def test_null_attribution_binds_null_and_still_awards_points() -> None:
 async def test_no_points_on_conflict() -> None:
     """An ON CONFLICT (no inserted row) awards nothing and runs no points /
     activity writes — only the insert + the existing-row read."""
-    ctx = _ctx(points_worth=50)
+    resolved_class = _resolved_class(points_worth=50)
     existing_log_id = uuid4()
     # insert -> None (conflict), then existing -> the stored row.
     writer, session = _writer_with_results(
@@ -156,7 +158,7 @@ async def test_no_points_on_conflict() -> None:
     )
 
     result_log_id, already, points = await writer.write_checkin(
-        ctx, uuid4(), uuid4(), uuid4(), should_end=False
+        resolved_class, uuid4(), uuid4(), uuid4(), should_end=False
     )
 
     assert result_log_id == existing_log_id
