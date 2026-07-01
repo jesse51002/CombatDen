@@ -254,6 +254,7 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       imageUrl: i.imageUrl,
       pointsWorth: i.pointsWorth,
       attendeeCount: i.attendanceCount,
+      signupCount: i.signupCount,
       occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
       isCancelled: i.isCancelled,
       resolvedClassTime: i.resolvedClassTime,

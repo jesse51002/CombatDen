@@ -14,17 +14,25 @@ import 'package:crm/shared/widgets/member_row_tile.dart';
 /// internally — the parent form scrolls too, so the inner list stays bounded.
 const double _kMaxRosterHeight = 280;
 
-/// Searchable, scrollable roster of the members on this occurrence. Shown inside
-/// the class form's "This session" block for a past / materialized occurrence
-/// (today or earlier). A self-contained side fetch (a [FutureBuilder] over its
-/// own [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
-/// own-repository pattern. An unmaterialized occurrence (no check-ins yet) and
-/// an empty roster both read "No attendees yet."
+/// Searchable, scrollable **combined roster** — everyone signed up OR
+/// attended this occurrence — shown inside the class form's "This session"
+/// block for a past / materialized occurrence (today or earlier). A
+/// self-contained side fetch (a [FutureBuilder] over its own
+/// [ScheduleRepository]) — no schedule bloc — mirroring the batch picker's
+/// own-repository pattern. An unmaterialized occurrence with no sign-ups
+/// either and an empty roster both read "No attendees yet."
 ///
-/// Each row also carries a remove (×) action — a staff correction that
-/// reverses the member's check-in (`DELETE /api/v1/checkin`). Tapping it
-/// confirms, then on success refetches the roster and surfaces a SnackBar;
-/// on failure surfaces an error SnackBar. Never a silent dismiss.
+/// An attended member shows a green ✓ + a small "attended" caption under
+/// their name (via [MemberRowTile.subtitle]); a signed-up-not-attended
+/// member (a no-show, once the class has passed) shows without it.
+///
+/// Each row also carries a remove (×) action — a staff correction — that
+/// branches on the member's [Attendee.attended]: an attended member's
+/// removal reverses their check-in (`DELETE /api/v1/checkin`); a
+/// signed-up-only member's removal cancels their reservation
+/// (`DELETE /api/v1/signup`). Tapping it confirms, then on success refetches
+/// the roster and surfaces a SnackBar; on failure surfaces an error SnackBar.
+/// Never a silent dismiss.
 class ClassAttendeeRoster extends StatefulWidget {
   final String gymId;
   final String classId;
@@ -58,28 +66,47 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         widget.occurrenceDate,
       );
 
+  /// Removes [attendee] from the roster — branches on [Attendee.attended]:
+  /// an attended member's removal reverses their check-in; a
+  /// signed-up-only member's removal cancels their sign-up instead.
   Future<void> _removeAttendee(Attendee attendee) async {
+    final attended = attendee.attended;
     final confirmed = await ConfirmationModal.show(
       context: context,
-      title: 'Remove attendee?',
-      message: 'Remove ${attendee.fullName} from this class?',
-      confirmLabel: 'Remove',
+      title: attended ? 'Remove attendee?' : 'Cancel sign-up?',
+      message: attended
+          ? 'Remove ${attendee.fullName} from this class?'
+          : 'Cancel ${attendee.fullName}’s sign-up for this class?',
+      confirmLabel: attended ? 'Remove' : 'Cancel sign-up',
       confirmColor: DesignConstants.badRed,
     );
     if (!confirmed || !mounted) return;
     try {
-      await _repository.removeAttendee(
-        widget.gymId,
-        widget.classId,
-        widget.occurrenceDate,
-        attendee.memberId,
-      );
+      if (attended) {
+        await _repository.removeAttendee(
+          widget.gymId,
+          widget.classId,
+          widget.occurrenceDate,
+          attendee.memberId,
+        );
+      } else {
+        await _repository.cancelSignup(
+          widget.gymId,
+          widget.classId,
+          widget.occurrenceDate,
+          attendee.memberId,
+        );
+      }
       if (!mounted) return;
       setState(() => _future = _fetch());
-      _toast('Removed from class');
+      _toast(attended ? 'Removed from class' : 'Sign-up cancelled');
     } catch (_) {
       if (!mounted) return;
-      _toast('Couldn’t remove ${attendee.fullName}. Try again.');
+      _toast(
+        attended
+            ? 'Couldn’t remove ${attendee.fullName}. Try again.'
+            : 'Couldn’t cancel ${attendee.fullName}’s sign-up. Try again.',
+      );
     }
   }
 
@@ -195,8 +222,10 @@ class _AttendeeListState extends State<_AttendeeList> {
                 final attendee = filtered[i];
                 return MemberRowTile(
                   name: attendee.fullName,
+                  subtitle: attendee.attended ? const _AttendedBadge() : null,
                   trailing: _RemoveAttendeeButton(
                     name: attendee.fullName,
+                    attended: attendee.attended,
                     onPressed: () => widget.onRemove(attendee),
                   ),
                 );
@@ -208,19 +237,26 @@ class _AttendeeListState extends State<_AttendeeList> {
   }
 }
 
-/// Remove (×) action on one attendee row — a staff correction that reverses
-/// the member's check-in.
+/// Remove (×) action on one roster row — a staff correction that reverses
+/// the member's check-in ([attended]) or cancels their sign-up (otherwise).
 class _RemoveAttendeeButton extends StatelessWidget {
   final String name;
+  final bool attended;
   final VoidCallback onPressed;
 
-  const _RemoveAttendeeButton({required this.name, required this.onPressed});
+  const _RemoveAttendeeButton({
+    required this.name,
+    required this.attended,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      tooltip: 'Remove $name from this class',
+      tooltip: attended
+          ? 'Remove $name from this class'
+          : 'Cancel $name’s sign-up',
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -230,6 +266,35 @@ class _RemoveAttendeeButton extends StatelessWidget {
         weight: DesignConstants.iconWeight,
         color: DesignConstants.badRed,
       ),
+    );
+  }
+}
+
+/// Small "attended" status badge shown under an attended member's name on
+/// the combined roster — a check icon + label distinguishing them from a
+/// signed-up-not-yet-attended member.
+class _AttendedBadge extends StatelessWidget {
+  const _AttendedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingTiny,
+      children: [
+        Icon(
+          Symbols.check_circle_sharp,
+          size: DesignConstants.iconSizeTiny,
+          weight: DesignConstants.iconWeight,
+          color: DesignConstants.goodGreen,
+        ),
+        Text(
+          'attended',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.goodGreen,
+          ),
+        ),
+      ],
     );
   }
 }

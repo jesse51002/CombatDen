@@ -68,5 +68,6 @@ ScheduledClass _entry(EffectiveClassInstance i) => ScheduledClass(
           classTimeRangeLabel(i.resolvedClassTime, i.resolvedDurationMinutes),
       instructorName: i.resolvedInstructorName,
       attendeeCount: i.attendanceCount,
+      signupCount: i.signupCount,
       imageUrl: (i.imageUrl?.isEmpty ?? true) ? null : i.imageUrl,
     );

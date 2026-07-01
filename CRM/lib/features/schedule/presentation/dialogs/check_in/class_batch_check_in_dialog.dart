@@ -161,7 +161,8 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
             title: 'Update attendees',
             body: BatchCheckInPicker(
               gymId: widget.gymId,
-              className: widget.className,
+              description: 'Pick the members who attended this '
+                  '${widget.className}, then check them in together.',
               selectedIds: _selectedIds,
               inlineError: _inlineError,
               onToggle: _toggle,

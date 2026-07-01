@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_request.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
+import 'package:crm/features/check_in/data/models/signup_request.dart';
+import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/models/class_instance_exception_request.dart';
 import 'package:crm/features/schedule/data/models/class_range_exception_request.dart';
@@ -145,6 +147,53 @@ class ScheduleRepository {
   ) async {
     await _apiClient.delete(
       '/api/v1/checkin',
+      queryParameters: {
+        'member_id': memberId,
+        'gym_id': gymId,
+        'class_id': classId,
+        'occurrence_date': _dateParam.format(occurrenceDate),
+      },
+    );
+  }
+
+  /// `POST /api/v1/signup` — reserve [memberId] a spot on the occurrence of
+  /// [classId] on [occurrenceDate] (a reservation, NOT attendance).
+  /// Idempotent (`already_signed_up: true` on a repeat, no extra capacity
+  /// consumed); rejected with a 400 `"Class is full"` when the occurrence's
+  /// effective capacity (the distinct signed-up-or-attended count) is
+  /// already reached — unlimited capacity never blocks. Both staff and the
+  /// member themselves may call this; the CRM always calls as staff.
+  Future<SignupResponse> signUp(
+    String gymId,
+    String classId,
+    DateTime occurrenceDate,
+    String memberId,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/signup',
+      data: SignupRequest(
+        memberId: memberId,
+        gymId: gymId,
+        classId: classId,
+        occurrenceDate: _dateParam.format(occurrenceDate),
+      ).toJson(),
+    );
+    return SignupResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// `DELETE /api/v1/signup?member_id=&gym_id=&class_id=&occurrence_date=` —
+  /// cancel [memberId]'s sign-up (reservation) for this occurrence, a staff
+  /// correction. The response's `removed` flag is `false` (still 200) when
+  /// the member had no sign-up — this method only signals success/failure
+  /// via throw, mirroring [removeAttendee].
+  Future<void> cancelSignup(
+    String gymId,
+    String classId,
+    DateTime occurrenceDate,
+    String memberId,
+  ) async {
+    await _apiClient.delete(
+      '/api/v1/signup',
       queryParameters: {
         'member_id': memberId,
         'gym_id': gymId,

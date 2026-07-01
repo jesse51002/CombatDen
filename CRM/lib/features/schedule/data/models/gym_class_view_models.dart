@@ -25,10 +25,20 @@ class ScheduleClassEntry {
   final String? instructorName;
   final String? imageUrl;
   final int? pointsWorth;
+
+  /// Recorded attendance for this occurrence; null when no `class_history`
+  /// row has been materialized yet. Only shown (as "M attended") once
+  /// [occurrenceInPast] — see [signupCount] for the always-shown headcount.
   final int? attendeeCount;
 
-  /// True when this occurrence has already happened — the card's attendee chip
-  /// then reads "attended" (past) rather than "signed up" (upcoming).
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences (0 when none; never null). Mirrors
+  /// `EffectiveClassInstance.signupCount`.
+  final int signupCount;
+
+  /// True when this occurrence has already happened — the card's headcount
+  /// chip then also shows [attendeeCount] ("M attended") alongside
+  /// [signupCount].
   final bool occurrenceInPast;
 
   /// True when this occurrence is cancelled — the card shows a badge.
@@ -69,6 +79,7 @@ class ScheduleClassEntry {
     this.imageUrl,
     this.pointsWorth,
     this.attendeeCount,
+    this.signupCount = 0,
     this.occurrenceInPast = false,
     this.isCancelled = false,
     this.maxCapacity,

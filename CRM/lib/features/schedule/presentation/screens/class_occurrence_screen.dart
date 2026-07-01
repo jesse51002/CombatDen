@@ -13,6 +13,7 @@ import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
+import 'package:crm/features/schedule/presentation/dialogs/signup/class_signup_dialog.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_attendee_roster.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_occurrence_actions.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_header.dart';
@@ -109,6 +110,19 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     return !widget.entry.classDate.isBefore(today);
   }
 
+  /// Whether members can still be signed up for this occurrence — the
+  /// FUTURE-side counterpart of [_checkInOpen]: available while the
+  /// occurrence hasn't already passed (today or later), mirroring
+  /// [_cancellable]'s window (the sign-up endpoint itself imposes no time
+  /// gate, but offering to reserve a spot in an already-passed session
+  /// wouldn't make sense).
+  bool get _canSignUp {
+    if (widget.entry.isCancelled) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return !widget.entry.classDate.isBefore(today);
+  }
+
   /// Whether check-in is open for this occurrence: its start is within the
   /// early window (or already started / passed). The backend enforces the
   /// same rule.
@@ -195,6 +209,18 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     final gymId = selectedGym.gymId;
     if (gymId == null) return;
     ClassBatchCheckInDialog.show(
+      context: context,
+      classId: widget.entry.classId,
+      gymId: gymId,
+      className: widget.entry.name,
+      occurrenceDate: widget.entry.classDate,
+    );
+  }
+
+  void _signUpMembers() {
+    final gymId = selectedGym.gymId;
+    if (gymId == null) return;
+    ClassSignupDialog.show(
       context: context,
       classId: widget.entry.classId,
       gymId: gymId,
@@ -311,6 +337,8 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
             occurrenceDate: widget.entry.classDate,
             cancellable: _cancellable,
             isCancelled: widget.entry.isCancelled,
+            canSignUp: _canSignUp,
+            onSignUpMembers: _signUpMembers,
             canCheckIn: _checkInOpen,
             onUpdateAttendees: _updateAttendees,
             onCancelInstance: _cancelThisClass,

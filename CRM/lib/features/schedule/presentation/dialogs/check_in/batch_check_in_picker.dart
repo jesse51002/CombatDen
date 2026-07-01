@@ -10,12 +10,16 @@ import 'package:crm/features/schedule/presentation/dialogs/check_in/batch_check_
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
-/// Select body for the batch check-in: a searchable, paginated multi-select
-/// roster (checkbox tiles driven by the parent's [selectedIds]). Owns its own
-/// gym-scoped member-list page source; the parent owns the [Set] of picked ids.
+/// Select body for a class-occurrence member batch: a searchable, paginated
+/// multi-select roster (checkbox tiles driven by the parent's [selectedIds]).
+/// Owns its own gym-scoped member-list page source; the parent owns the
+/// [Set] of picked ids. Shared by the batch staff check-in ("Update
+/// attendees") and the "Sign up members" dialog — [description] carries each
+/// caller's own copy (the two flows read differently: "attended" vs. "to
+/// reserve a spot").
 class BatchCheckInPicker extends StatefulWidget {
   final String gymId;
-  final String className;
+  final String description;
   final Set<String> selectedIds;
   final String? inlineError;
   final ValueChanged<MemberPickerEntry> onToggle;
@@ -23,7 +27,7 @@ class BatchCheckInPicker extends StatefulWidget {
   const BatchCheckInPicker({
     super.key,
     required this.gymId,
-    required this.className,
+    required this.description,
     required this.selectedIds,
     required this.onToggle,
     this.inlineError,
@@ -69,8 +73,7 @@ class _BatchCheckInPickerState extends State<BatchCheckInPicker> {
       spacing: DesignConstants.spacingLarge,
       children: [
         Text(
-          'Pick the members who attended this ${widget.className}, then '
-          'check them in together.',
+          widget.description,
           style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
         ),
         SizedBox(

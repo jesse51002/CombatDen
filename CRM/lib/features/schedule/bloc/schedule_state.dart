@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
+import 'package:crm/features/schedule/data/models/signup_batch_result.dart';
 
 sealed class ScheduleState extends Equatable {
   const ScheduleState();
@@ -58,6 +59,18 @@ class ScheduleLoaded extends ScheduleState {
   /// while the check-in dialog is open.
   final String? checkInError;
 
+  /// True while a "Sign up members" batch is in flight — its own channel,
+  /// mirroring [isCheckingIn], so it doesn't collide with class-CRUD
+  /// [isMutating] or the check-in channel (both dialogs can, in principle,
+  /// be opened from the same occurrence screen at different times).
+  final bool isSigningUp;
+
+  /// The last "Sign up members" batch's per-member breakdown. There is no
+  /// backend batch sign-up endpoint — [ScheduleBloc] loops `POST
+  /// /api/v1/signup` and assembles this itself. Rendered by the sign-up
+  /// dialog's results step; cleared via [ScheduleSignUpCleared].
+  final SignupBatchResponse? signupResult;
+
   const ScheduleLoaded({
     required this.weekStart,
     required this.instances,
@@ -68,6 +81,8 @@ class ScheduleLoaded extends ScheduleState {
     this.isCheckingIn = false,
     this.batchCheckInResult,
     this.checkInError,
+    this.isSigningUp = false,
+    this.signupResult,
   });
 
   /// Toggle only the lifecycle fields on the same loaded data.
@@ -75,7 +90,8 @@ class ScheduleLoaded extends ScheduleState {
   /// starting a mutation (`copyWith(isMutating: true)`) wipes a stale error.
   /// The check-in channel is preserved across class-CRUD copyWiths; pass
   /// [clearCheckIn] to reset its result + error (e.g. when the check-in dialog
-  /// opens or closes).
+  /// opens or closes). The sign-up channel works the same way via
+  /// [clearSignUp].
   ScheduleLoaded copyWith({
     bool? isMutating,
     String? actionError,
@@ -83,6 +99,9 @@ class ScheduleLoaded extends ScheduleState {
     BatchCheckInResponse? batchCheckInResult,
     String? checkInError,
     bool clearCheckIn = false,
+    bool? isSigningUp,
+    SignupBatchResponse? signupResult,
+    bool clearSignUp = false,
   }) {
     return ScheduleLoaded(
       weekStart: weekStart,
@@ -97,6 +116,9 @@ class ScheduleLoaded extends ScheduleState {
           : (batchCheckInResult ?? this.batchCheckInResult),
       checkInError:
           clearCheckIn ? null : (checkInError ?? this.checkInError),
+      isSigningUp: isSigningUp ?? this.isSigningUp,
+      signupResult:
+          clearSignUp ? null : (signupResult ?? this.signupResult),
     );
   }
 
@@ -111,6 +133,8 @@ class ScheduleLoaded extends ScheduleState {
         isCheckingIn,
         batchCheckInResult,
         checkInError,
+        isSigningUp,
+        signupResult,
       ];
 }
 

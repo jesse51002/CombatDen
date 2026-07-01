@@ -8,6 +8,7 @@ import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
+import 'package:crm/features/schedule/data/models/signup_batch_result.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// Drives the Schedule week board: loads the effective class occurrences for
@@ -40,6 +41,8 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     on<ScheduleRangeCancelled>(_onRangeCancelled);
     on<ScheduleBatchCheckInRequested>(_onBatchCheckIn);
     on<ScheduleBatchCheckInCleared>(_onBatchCheckInCleared);
+    on<ScheduleSignUpRequested>(_onSignUp);
+    on<ScheduleSignUpCleared>(_onSignUpCleared);
   }
 
   Future<void> _onInitRequested(
@@ -211,6 +214,98 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     final current = state;
     if (current is! ScheduleLoaded) return;
     emit(current.copyWith(clearCheckIn: true));
+  }
+
+  /// "Sign up members". There is no batch sign-up endpoint, so this LOOPS
+  /// `POST /api/v1/signup` once per member on its own DEDICATED channel
+  /// (`isSigningUp` / `signupResult` on [ScheduleLoaded]) — mirrors
+  /// [_onBatchCheckIn]'s shape. Each member's request is isolated in its own
+  /// try/catch so one failure (e.g. "Class is full") never stops the rest
+  /// from being attempted; the full breakdown is committed BEFORE the
+  /// best-effort board reload below, so a reload failure can't make a real
+  /// sign-up look failed.
+  Future<void> _onSignUp(
+    ScheduleSignUpRequested event,
+    Emitter<ScheduleState> emit,
+  ) async {
+    final current = state;
+    if (current is! ScheduleLoaded) return;
+    emit(current.copyWith(isSigningUp: true, clearSignUp: true));
+
+    final results = <SignupBatchResultItem>[];
+    for (final memberId in event.memberIds) {
+      try {
+        final response = await _repository.signUp(
+          _gymId,
+          event.classId,
+          event.occurrenceDate,
+          memberId,
+        );
+        results.add(SignupBatchResultItem(
+          memberId: memberId,
+          status: response.alreadySignedUp
+              ? SignupBatchStatus.alreadySignedUp
+              : SignupBatchStatus.signedUp,
+        ));
+      } catch (e, stackTrace) {
+        log(
+          'Sign-up failed for one member (continuing the rest)',
+          error: e,
+          stackTrace: stackTrace,
+        );
+        results.add(SignupBatchResultItem(
+          memberId: memberId,
+          status: SignupBatchStatus.failed,
+          reason: e.toString(),
+        ));
+      }
+    }
+
+    // Every member was attempted — commit the result NOW so a failure of the
+    // best-effort board reload below can't make a real sign-up look failed.
+    final committed = state;
+    if (committed is! ScheduleLoaded) return;
+    emit(committed.copyWith(
+      isSigningUp: false,
+      signupResult: SignupBatchResponse(results: results),
+    ));
+
+    // Best-effort: reload the visible week so the board's signup count
+    // updates behind the still-open results step. Keep the committed result.
+    try {
+      final weekEnd = _weekStart.add(const Duration(days: 6));
+      final instances = await _repository.listEffectiveInstances(
+        _gymId,
+        _weekStart,
+        weekEnd,
+      );
+      final classes = await _repository.listClasses(_gymId);
+      final latest = state;
+      if (latest is! ScheduleLoaded) return;
+      emit(ScheduleLoaded(
+        weekStart: _weekStart,
+        instances: instances,
+        classes: classes,
+        actionSuccessCount: latest.actionSuccessCount,
+        batchCheckInResult: latest.batchCheckInResult,
+        signupResult: latest.signupResult,
+      ));
+    } catch (e, stackTrace) {
+      log(
+        'Sign-up succeeded but board reload failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onSignUpCleared(
+    ScheduleSignUpCleared event,
+    Emitter<ScheduleState> emit,
+  ) {
+    final current = state;
+    if (current is! ScheduleLoaded) return;
+    emit(current.copyWith(clearSignUp: true));
   }
 
   /// Fetch the week's instances (and the class catalog when not already known)

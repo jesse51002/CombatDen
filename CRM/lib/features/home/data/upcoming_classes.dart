@@ -12,9 +12,14 @@ class ScheduledClass {
   final String timeLabel;
   final String? instructorName;
 
-  /// Sign-ups once a `class_history` row exists; null otherwise. These are
-  /// always upcoming occurrences, so the row labels them "signed up".
+  /// Recorded attendance once a `class_history` row exists; null otherwise.
+  /// The dashboard's Upcoming Classes list is always upcoming, so [ClassRow]
+  /// never shows this here — see [signupCount] for the label it does show.
   final int? attendeeCount;
+
+  /// Members signed up (reserved) for this occurrence — shown as "N signed
+  /// up" (0 when none).
+  final int signupCount;
   final String? imageUrl;
 
   const ScheduledClass({
@@ -23,6 +28,7 @@ class ScheduledClass {
     required this.timeLabel,
     this.instructorName,
     this.attendeeCount,
+    this.signupCount = 0,
     this.imageUrl,
   });
 }

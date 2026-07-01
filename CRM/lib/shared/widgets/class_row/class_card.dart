@@ -27,10 +27,18 @@ class ClassCard extends StatelessWidget {
   final String? imageUrl;
   final String? imageAsset;
   final int? pointsWorth;
+
+  /// Recorded attendance for this occurrence; only shown (as "M attended")
+  /// once [occurrenceInPast] — see [signupCount] for the always-shown
+  /// headcount.
   final int? attendeeCount;
 
-  /// True when this occurrence has already happened — the attendee chip then
-  /// reads "N attended" (past) rather than "N signed up" (upcoming).
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences.
+  final int? signupCount;
+
+  /// True when this occurrence has already happened — the headcount chip
+  /// then also shows [attendeeCount] ("M attended") alongside [signupCount].
   final bool occurrenceInPast;
 
   /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
@@ -48,6 +56,7 @@ class ClassCard extends StatelessWidget {
     this.imageAsset,
     this.pointsWorth,
     this.attendeeCount,
+    this.signupCount,
     this.occurrenceInPast = false,
     this.isCancelled = false,
     this.onTap,
@@ -153,7 +162,7 @@ class _CardDetails extends StatelessWidget {
             color: DesignConstants.badRed,
           ),
         if (card.instructorName != null) _InstructorLine(card: card),
-        if (card.pointsWorth != null || card.attendeeCount != null)
+        if (card.pointsWorth != null || card.signupCount != null)
           _MetaRow(card: card),
       ],
     );
@@ -205,11 +214,13 @@ class _MetaRow extends StatelessWidget {
             text: '${card.pointsWorth} pts',
             color: DesignConstants.primaryColor,
           ),
-        if (card.attendeeCount != null)
+        if (card.signupCount != null)
           ClassMetaChip(
             icon: Symbols.group_sharp,
-            text: '${card.attendeeCount} '
-                '${card.occurrenceInPast ? 'attended' : 'signed up'}',
+            text: card.occurrenceInPast
+                ? '${card.signupCount} signed up · '
+                    '${card.attendeeCount ?? 0} attended'
+                : '${card.signupCount} signed up',
             color: DesignConstants.text2nd,
           ),
       ],

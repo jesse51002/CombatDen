@@ -46,6 +46,11 @@ class EffectiveClassInstance extends Equatable {
   /// Recorded attendance when a `class_history` row exists; null otherwise.
   final int? attendanceCount;
 
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences (0 when none; never null).
+  @JsonKey(defaultValue: 0)
+  final int signupCount;
+
   const EffectiveClassInstance({
     required this.classId,
     required this.gymId,
@@ -63,6 +68,7 @@ class EffectiveClassInstance extends Equatable {
     required this.hasInstanceException,
     required this.hasRangeException,
     this.attendanceCount,
+    this.signupCount = 0,
   });
 
   factory EffectiveClassInstance.fromJson(Map<String, dynamic> json) =>
@@ -86,5 +92,6 @@ class EffectiveClassInstance extends Equatable {
         hasInstanceException,
         hasRangeException,
         attendanceCount,
+        signupCount,
       ];
 }

@@ -17,12 +17,20 @@ class ClassRow extends StatelessWidget {
   /// resolves.
   final String? imageUrl;
   final String? imageAsset;
+
+  /// Recorded attendance for this occurrence; only shown (as "M attended")
+  /// once [occurrenceInPast] — see [signupCount] for the always-shown
+  /// headcount.
   final int? attendeeCount;
 
-  /// True when this occurrence has already happened — the attendee chip then
-  /// reads "N attended" (past) rather than "N signed up" (upcoming). The
-  /// dashboard Upcoming Classes list is always upcoming, so it leaves this
-  /// false.
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences.
+  final int? signupCount;
+
+  /// True when this occurrence has already happened — the headcount chip
+  /// then also shows [attendeeCount] ("M attended") alongside [signupCount].
+  /// The dashboard Upcoming Classes list is always upcoming, so it leaves
+  /// this false.
   final bool occurrenceInPast;
   final int? checkedInCount;
   final bool inSession;
@@ -36,6 +44,7 @@ class ClassRow extends StatelessWidget {
     this.imageUrl,
     this.imageAsset,
     this.attendeeCount,
+    this.signupCount,
     this.occurrenceInPast = false,
     this.checkedInCount,
     this.inSession = false,
@@ -97,11 +106,13 @@ class _ClassDetails extends StatelessWidget {
             text: '${row.checkedInCount} checked in',
             color: DesignConstants.primaryColor,
           )
-        else if (row.attendeeCount != null)
+        else if (row.signupCount != null)
           ClassMetaChip(
             icon: Symbols.person_sharp,
-            text: '${row.attendeeCount} '
-                '${row.occurrenceInPast ? 'attended' : 'signed up'}',
+            text: row.occurrenceInPast
+                ? '${row.signupCount} signed up · '
+                    '${row.attendeeCount ?? 0} attended'
+                : '${row.signupCount} signed up',
             color: DesignConstants.text2nd,
           ),
       ],

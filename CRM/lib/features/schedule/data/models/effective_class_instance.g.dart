@@ -25,4 +25,5 @@ EffectiveClassInstance _$EffectiveClassInstanceFromJson(
   hasInstanceException: json['has_instance_exception'] as bool,
   hasRangeException: json['has_range_exception'] as bool,
   attendanceCount: (json['attendance_count'] as num?)?.toInt(),
+  signupCount: (json['signup_count'] as num?)?.toInt() ?? 0,
 );

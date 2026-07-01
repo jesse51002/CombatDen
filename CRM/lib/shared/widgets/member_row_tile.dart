@@ -15,6 +15,11 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 class MemberRowTile extends StatelessWidget {
   final String name;
   final String? avatarUrl;
+
+  /// Optional small content rendered under the name (e.g. an "attended"
+  /// status badge on the attendee roster) — null renders the name alone,
+  /// the original single-line row.
+  final Widget? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -22,6 +27,7 @@ class MemberRowTile extends StatelessWidget {
     super.key,
     required this.name,
     this.avatarUrl,
+    this.subtitle,
     this.trailing,
     this.onTap,
   });
@@ -37,11 +43,19 @@ class MemberRowTile extends StatelessWidget {
         children: [
           InstructorAvatar(photoUrl: avatarUrl, name: name, diameter: 28),
           Expanded(
-            child: Text(
-              name,
-              style: DesignConstants.p,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Text(
+                  name,
+                  style: DesignConstants.p,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                ?subtitle,
+              ],
             ),
           ),
           ?trailing,

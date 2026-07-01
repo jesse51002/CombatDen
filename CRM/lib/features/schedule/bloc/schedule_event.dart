@@ -103,6 +103,33 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
   const ScheduleBatchCheckInCleared();
 }
 
+/// "Sign up members": reserve [memberIds] a spot on the occurrence of
+/// [classId] on [occurrenceDate], then reload the board so the board's
+/// sign-up count updates. There is no batch sign-up endpoint — the
+/// repository loops `POST /api/v1/signup` once per member; one member's
+/// failure (e.g. "Class is full", a transport error) never sinks the rest.
+/// The per-member breakdown lands on `signupResult`.
+class ScheduleSignUpRequested extends ScheduleEvent {
+  final String classId;
+  final DateTime occurrenceDate;
+  final List<String> memberIds;
+
+  const ScheduleSignUpRequested({
+    required this.classId,
+    required this.occurrenceDate,
+    required this.memberIds,
+  });
+
+  @override
+  List<Object?> get props => [classId, occurrenceDate, memberIds];
+}
+
+/// Clears the sign-up outcome when the "Sign up members" dialog opens or
+/// closes, so a later run opens clean.
+class ScheduleSignUpCleared extends ScheduleEvent {
+  const ScheduleSignUpCleared();
+}
+
 /// Override the single occurrence of [classId] on [date] (a one-day
 /// exception): set its effective instructor / start time / max capacity, then
 /// reload the board. Mirrors [ScheduleInstanceCancelled] but with
