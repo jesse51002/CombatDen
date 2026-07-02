@@ -12,7 +12,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverUpdateData,
     WaiverUpdateRequest,
 )
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 async def _delete_waiver_rows(db_pool, waiver_id) -> None:
@@ -76,8 +76,10 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
                 text(
                     "INSERT INTO member_waiver_signatures "
                     "(gym_id, member_id, waiver_id, waiver_version_id, "
-                    " signer_name, consent_acknowledged, content_hash) "
-                    "VALUES (:g, :m, :w, :v, :n, true, :h)",
+                    " signer_name, consent_acknowledged, content_hash, "
+                    " ip_address, user_agent) "
+                    "VALUES (:g, :m, :w, :v, :n, true, :h, "
+                    " CAST('0.0.0.0' AS INET), 'test')",
                 ),
                 {
                     "g": str(gym_id),

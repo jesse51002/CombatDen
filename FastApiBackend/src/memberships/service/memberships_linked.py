@@ -1,12 +1,16 @@
 """Authorize / de-authorize a payer for a member (the authorization layer).
 
-Adding an authorized payer is **gated by a signed waiver**: the payer signs the
-gym's default authorized-payer waiver, and that signature + the
-``member_authorized_payers`` row are written in ONE transaction (no orphan
-signatures). A member may have MANY authorized payers, and a member may be an
-authorized payer for others — the relationship is many-to-many. This is the
-AUTHORIZATION layer only (who is *allowed* to pay for whom); billing is per
-payer via ``member_memberships.paid_by_member_id``.
+Adding an authorized payer is **gated by a signed waiver** and happens in ONE
+op: it calls the shared signing service (``WaiversService.sign_waiver`` — the one
+signing path) to sign the gym's default authorized-payer waiver, rendering the
+payer's name and the member-being-paid-for's name into it, then records the
+``member_authorized_payers`` row referencing the new signature. Signing commits
+its own txn and the authorization insert is separate (NOT atomic) — a retry after
+a failed insert leaves a harmless extra append-only signature. A member may have
+MANY authorized payers, and a member may be an authorized payer for others — the
+relationship is many-to-many. This is the AUTHORIZATION layer only (who is
+*allowed* to pay for whom); billing is per payer via
+``member_memberships.paid_by_member_id``.
 
 These are **pure DB changes — no Stripe sync** and **no billing-state guard**:
 the authorization row never contributes a membership line or discount, and the
@@ -36,7 +40,7 @@ from src.shared.sql_loader import load_sql
 if TYPE_CHECKING:
     from src.shared.database import DirectDatabasePool
     from src.shared.paying_member_lock import PayingMemberLock
-    from src.waivers.service.waivers.waivers_service import WaiversService
+    from src.waivers.service.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 
@@ -70,27 +74,36 @@ class MemberMembershipsLinked:
         member_id: UUID,
         payer_member_id: UUID,
         *,
+        waiver_version_id: UUID,
         signer_name: str,
         consent_acknowledged: bool,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
+        ip_address: str,
+        user_agent: str,
+        operator_employee_id: UUID,
     ) -> None:
-        """Authorize ``payer_member_id`` to pay for ``member_id``.
+        """Authorize ``payer_member_id`` to pay for ``member_id`` (sign + record).
 
-        The payer signs the gym's default authorized-payer waiver; the signature
-        and the ``member_authorized_payers`` row are written in one transaction.
+        Calls the shared signing service to sign the gym's default
+        authorized-payer waiver as the payer (rendering ``{{member_name}}`` = the
+        payer's account name and ``{{payee_name}}`` = the member being paid for),
+        then records the ``member_authorized_payers`` row referencing the new
+        signature.
 
         Args:
             member_id: The member being paid for.
             payer_member_id: The payer to authorize (the signer).
+            waiver_version_id: The default-waiver version the client displayed
+                (version-locked by the signing service before signing).
             signer_name: The payer's typed legal name at signing.
             consent_acknowledged: Must be True (a valid e-signature).
-            ip_address / user_agent: Optional signing-context audit fields.
+            ip_address / user_agent: Signing-context audit fields.
+            operator_employee_id: The staff member capturing the signature.
 
         Raises:
-            ValueError: If the member is not found, the gym has no default
-                waiver, the payer is missing / in a different gym, the payer is
-                the member, the pair is already authorized, or consent is False.
+            ValueError: If the member is not found, the payer is missing / in a
+                different gym, the payer is the member, the displayed version is
+                stale (reload), consent is False, or the pair is already
+                authorized.
         """
         if member_id == payer_member_id:
             raise ValueError(
@@ -107,39 +120,44 @@ class MemberMembershipsLinked:
             if blocked is not None:
                 raise ValueError(blocked)
 
-            # TEMPORARY (TOCTOU): the waiver version is resolved here and signed
-            # below; if the gym published a new version in between, the signature
-            # records the server-resolved version, not necessarily the one the
-            # CRM showed the signer. Acceptable for now — this in-line sign is
-            # slated to move to a dedicated signing endpoint where the client
-            # echoes the version_id it displayed and the backend version-locks on
-            # it before signing, closing the window.
-            default = await self._waivers.get_default_waiver_for_member(member_id)
+            gym_id = row["candidate_gym_id"]
+            payee_name = (
+                f"{row['candidate_first_name']} {row['candidate_last_name']}"
+            )
+            default = await self._waivers.get_default_waiver_for_member(
+                member_id,
+            )
+
+            # Sign via the ONE signing service: it renders the payer's name as
+            # {{member_name}} and the member-being-paid-for as {{payee_name}},
+            # version-locks on the echoed version, and commits its own txn. The
+            # authorization insert below is separate — a retry after a failed
+            # insert leaves a harmless extra append-only signature.
+            signature = await self._waivers.sign_waiver(
+                gym_id=gym_id,
+                member_id=payer_member_id,
+                waiver_id=default.waiver_id,
+                waiver_version_id=waiver_version_id,
+                signer_name=signer_name,
+                consent_acknowledged=consent_acknowledged,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                operator_employee_id=operator_employee_id,
+                waiver_args={"payee_name": payee_name},
+            )
 
             insert_sql = load_sql(
                 SQL_DIR / "member_authorized_payers_insert.sql",
             )
             try:
                 async with self._db_pool.session() as session:
-                    signature_id = await self._waivers.record_signature(
-                        session,
-                        gym_id=default.gym_id,
-                        signer_member_id=payer_member_id,
-                        waiver_id=default.waiver_id,
-                        waiver_version_id=default.version_id,
-                        signer_name=signer_name,
-                        consent_acknowledged=consent_acknowledged,
-                        content_hash=default.content_hash,
-                        ip_address=ip_address,
-                        user_agent=user_agent,
-                    )
                     await session.execute(
                         text(insert_sql),
                         {
                             "member_id": str(member_id),
                             "payer_member_id": str(payer_member_id),
-                            "gym_id": str(default.gym_id),
-                            "signature_id": str(signature_id),
+                            "gym_id": str(gym_id),
+                            "signature_id": str(signature.signature_id),
                         },
                     )
                     await session.commit()
@@ -149,8 +167,7 @@ class MemberMembershipsLinked:
                 # two ever race past it, the second INSERT trips the
                 # member_authorized_payers PK — translate that to the same
                 # user-facing "already authorized" error (a 400) instead of an
-                # unhandled 500. The signature INSERT in the same txn rolls back
-                # with it, so no orphan signature is left.
+                # unhandled 500.
                 raise ValueError(
                     f"Payer {payer_member_id} is already an authorized payer "
                     f"for member {member_id}",

@@ -7,20 +7,24 @@ part 'members_management_link_request.g.dart';
 ///
 /// Mirrors the backend `MembersBillingLinkRequest`: authorizes [payerMemberId]
 /// to pay for the path member. The payer signs the gym's default
-/// authorized-payer waiver in the same call — [signerName] is the typed
-/// signature and [consentAcknowledged] must be true. The signature + the
-/// authorization are recorded atomically server-side.
+/// authorized-payer waiver in the same call — [waiverVersionId] is the version
+/// the UI displayed (echoed back so the backend can version-lock and reject a
+/// stale version on 409), [signerName] is the typed signature, and
+/// [consentAcknowledged] must be true. The signature + the authorization are
+/// recorded atomically server-side.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createFactory: false,
 )
 class MembersManagementLinkRequest extends Equatable {
   final String payerMemberId;
+  final String waiverVersionId;
   final String signerName;
   final bool consentAcknowledged;
 
   const MembersManagementLinkRequest({
     required this.payerMemberId,
+    required this.waiverVersionId,
     required this.signerName,
     required this.consentAcknowledged,
   });
@@ -31,7 +35,7 @@ class MembersManagementLinkRequest extends Equatable {
   @override
   @JsonKey(includeToJson: false)
   List<Object?> get props =>
-      [payerMemberId, signerName, consentAcknowledged];
+      [payerMemberId, waiverVersionId, signerName, consentAcknowledged];
 
   @override
   @JsonKey(includeToJson: false)

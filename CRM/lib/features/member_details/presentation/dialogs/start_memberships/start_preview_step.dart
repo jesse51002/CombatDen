@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
@@ -59,6 +62,13 @@ class StartPreviewStep extends StatefulWidget {
   final ValueChanged<MemberMembershipsStartPreview>
       onLoaded;
 
+  /// Surfaces a 422 waiver gate raised by the preview so the wizard
+  /// routes to the sign-waivers step BEFORE payment, rather than
+  /// showing a generic "could not load the preview" error. The
+  /// preview is the first forward-path call to hit the gate (the PAY
+  /// call is the backstop), so blocking here is the proactive gate.
+  final ValueChanged<WaiverGateException> onWaiverGate;
+
   /// The payer this request bills — shown once as an avatar+name
   /// attribution header above the preview cards, so it's clear whose
   /// card/subscription these charges land on.
@@ -70,6 +80,7 @@ class StartPreviewStep extends StatefulWidget {
     required this.repository,
     required this.request,
     required this.onLoaded,
+    required this.onWaiverGate,
     required this.prorationBehavior,
     required this.onProrationChanged,
     required this.hasRecurring,
@@ -95,8 +106,19 @@ class _StartPreviewStepState
   }
 
   Future<_PreviewData> _load() async {
-    final preview = await widget.repository
-        .previewStartMemberships(widget.request);
+    final MemberMembershipsStartPreview preview;
+    try {
+      preview = await widget.repository
+          .previewStartMemberships(widget.request);
+    } on WaiverGateException catch (e) {
+      // Required waivers are unsigned — hand the gate up so the
+      // wizard switches to the sign-waivers step. The parent
+      // setState swaps this step out of the tree; keep the spinner
+      // (a never-completing future) until that rebuild lands so no
+      // red error panel flashes in the meantime.
+      widget.onWaiverGate(e);
+      return Completer<_PreviewData>().future;
+    }
     widget.onLoaded(preview);
     // Only a payer with a live subscription has a "before"
     // recurring invoice to compare against; a fresh payer is

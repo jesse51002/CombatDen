@@ -12,8 +12,11 @@ import 'package:crm/features/memberships/data/models/member_memberships_reprice_
 import 'package:crm/features/memberships/data/models/membership_plan_price_request.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_price_with_count.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/memberships/data/models/waiver_create_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
+import 'package:crm/features/memberships/data/models/waiver_sign_request.dart';
+import 'package:crm/features/memberships/data/models/waiver_signature_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signatory_row.dart';
 import 'package:crm/features/memberships/data/models/waiver_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
@@ -268,5 +271,36 @@ class MembershipsRepository {
     return (response.data as List<dynamic>)
         .map((e) => MemberWaiverStatus.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// `POST /api/v1/waivers/{waiver_id}/signatures` — record one member's
+  /// e-signature on the current version of a waiver.
+  ///
+  /// Throws [WaiverStaleVersionException] on 409 (the gym published a newer
+  /// version since the UI loaded the body — caller must prompt re-open).
+  Future<WaiverSignatureResponse> recordWaiverSignature({
+    required String waiverId,
+    required String gymId,
+    required String memberId,
+    required String waiverVersionId,
+    required String signerName,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/waivers/$waiverId/signatures',
+        data: WaiverSignRequest(
+          gymId: gymId,
+          memberId: memberId,
+          waiverVersionId: waiverVersionId,
+          signerName: signerName,
+        ).toJson(),
+      );
+      return WaiverSignatureResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) throw const WaiverStaleVersionException();
+      rethrow;
+    }
   }
 }

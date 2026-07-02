@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
@@ -97,6 +98,10 @@ class _StartMembershipsWizardState
   int _memberIndex = 0;
   final Set<String> _selectedMemberIds = {};
   final Map<String, List<MembershipDraft>> _drafts = {};
+
+  /// Non-null while on the [StartMembershipsStep.signWaivers] step.
+  WaiverGateException? _waiverGate;
+  bool _waiversAllSigned = false;
 
   /// Full member details keyed by member id, best-effort,
   /// so plan-tile rules resolve per configured member.
@@ -289,6 +294,11 @@ class _StartMembershipsWizardState
           }
         case StartMembershipsStep.review:
           _enterPreview();
+        case StartMembershipsStep.signWaivers:
+          // Waivers signed — re-enter the preview so the now-ungated
+          // charge breakdown loads before payment (the gate is caught
+          // at the preview call, so the preview was never shown).
+          _enterPreview();
         case StartMembershipsStep.preview:
           // Confirm = navigation only; PAY fires the one
           // mutation on the payment step.
@@ -325,6 +335,12 @@ class _StartMembershipsWizardState
         case StartMembershipsStep.review:
           _memberIndex = _configMembers.length - 1;
           _step = StartMembershipsStep.discounts;
+        case StartMembershipsStep.signWaivers:
+          // Back from waiver gate — return to review to change
+          // the selection. Clear gate so re-entering next is clean.
+          _waiverGate = null;
+          _waiversAllSigned = false;
+          _step = StartMembershipsStep.review;
         case StartMembershipsStep.preview:
           _step = StartMembershipsStep.review;
         case StartMembershipsStep.payment:
@@ -348,6 +364,18 @@ class _StartMembershipsWizardState
     );
     _preview = null;
     _step = StartMembershipsStep.preview;
+  }
+
+  /// Routes the wizard to the sign-waivers step for a 422 waiver
+  /// gate. Shared by the PAY-path bloc listener (the backstop) and
+  /// the preview step's direct-call gate (the proactive block before
+  /// payment).
+  void _routeToSignWaivers(WaiverGateException gate) {
+    setState(() {
+      _waiverGate = gate;
+      _waiversAllSigned = false;
+      _step = StartMembershipsStep.signWaivers;
+    });
   }
 
   void _onPay() {
@@ -606,6 +634,8 @@ class _StartMembershipsWizardState
           (m) =>
               (_drafts[m.memberId] ?? const []).isNotEmpty,
         );
+      case StartMembershipsStep.signWaivers:
+        return _waiversAllSigned;
       case StartMembershipsStep.preview:
         return _previewRequest != null;
       case StartMembershipsStep.payment:
@@ -627,11 +657,28 @@ class _StartMembershipsWizardState
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild the footer while the start POST is in
-    // flight / lands (the results step body listens on
-    // its own).
-    return BlocBuilder<MemberDetailBloc,
+    // Listen for the 422 waiver gate (waiverGate transitioning
+    // from null → non-null on the bloc state). The start POST
+    // fires from _onPay() and immediately sets _step = results
+    // so the results step shows a spinner; if the bloc comes
+    // back with a gate instead of a result, we redirect here.
+    // buildWhen only triggers on results so the footer stays
+    // in sync during the start POST — setState() in the listener
+    // always rebuilds the widget tree regardless.
+    return BlocConsumer<MemberDetailBloc,
         MemberDetailState>(
+      listenWhen: (prev, curr) {
+        if (curr is! MemberDetailLoaded) return false;
+        if (prev is! MemberDetailLoaded) return false;
+        return prev.waiverGate == null &&
+            curr.waiverGate != null;
+      },
+      listener: (context, state) {
+        if (state is! MemberDetailLoaded) return;
+        final gate = state.waiverGate;
+        if (gate == null) return;
+        _routeToSignWaivers(gate);
+      },
       buildWhen: (prev, curr) =>
           _step == StartMembershipsStep.results,
       builder: (context, _) {
@@ -677,6 +724,10 @@ class _StartMembershipsWizardState
             payerCardOnFile: _payerDetail?.cardOnFile,
             memberNames: memberNamesOf(_configMembers),
             planNames: planNamesOf(_drafts),
+            unsignedWaivers: _waiverGate?.unsigned,
+            onWaiversSigned: () =>
+                setState(() => _waiversAllSigned = true),
+            onWaiverGate: _routeToSignWaivers,
             onPayerSelected: _onPayerSelected,
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,

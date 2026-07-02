@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
@@ -12,21 +11,23 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/section_card.dart';
+import 'package:crm/shared/widgets/sign_waiver_dialog.dart';
 
 /// Read-only Waivers section on the member-detail page: only the
 /// waivers this member must sign for the memberships they
 /// currently hold, with their sign status for each. Fetches
-/// directly (read-only) via [MembershipsRepository]. The actual
-/// front-desk signing capture is not built yet, so the per-row
-/// Sign action opens a placeholder.
+/// directly (read-only) via [MembershipsRepository]. Refreshes
+/// automatically after each successful signature.
 class MemberWaiversSection extends StatefulWidget {
   final String memberId;
   final String gymId;
+  final String memberName;
 
   const MemberWaiversSection({
     super.key,
     required this.memberId,
     required this.gymId,
+    required this.memberName,
   });
 
   @override
@@ -34,15 +35,26 @@ class MemberWaiversSection extends StatefulWidget {
       _MemberWaiversSectionState();
 }
 
-class _MemberWaiversSectionState extends State<MemberWaiversSection> {
-  late final Future<List<MemberWaiverStatus>> _future;
+class _MemberWaiversSectionState
+    extends State<MemberWaiversSection> {
+  late Future<List<MemberWaiverStatus>> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = MembershipsRepository(apiClient: ApiClient())
-        .listMemberWaiverStatus(widget.memberId, widget.gymId);
+    _load();
   }
+
+  void _load() {
+    _future =
+        MembershipsRepository(apiClient: ApiClient())
+            .listMemberWaiverStatus(
+      widget.memberId,
+      widget.gymId,
+    );
+  }
+
+  void _refresh() => setState(_load);
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +67,8 @@ class _MemberWaiversSectionState extends State<MemberWaiversSection> {
           FutureBuilder<List<MemberWaiverStatus>>(
             future: _future,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState ==
+                  ConnectionState.waiting) {
                 return const Center(child: AppSpinner());
               }
               if (snapshot.hasError) {
@@ -75,10 +88,22 @@ class _MemberWaiversSectionState extends State<MemberWaiversSection> {
               return AppDataTable(
                 shrinkWrap: true,
                 columns: const [
-                  AppDataTableColumn(label: 'Waiver', fill: true),
-                  AppDataTableColumn(label: 'Status', minWidth: 150),
-                  AppDataTableColumn(label: 'Signed', minWidth: 120),
-                  AppDataTableColumn(label: '', minWidth: 80),
+                  AppDataTableColumn(
+                    label: 'Waiver',
+                    fill: true,
+                  ),
+                  AppDataTableColumn(
+                    label: 'Status',
+                    minWidth: 150,
+                  ),
+                  AppDataTableColumn(
+                    label: 'Signed',
+                    minWidth: 120,
+                  ),
+                  AppDataTableColumn(
+                    label: '',
+                    minWidth: 80,
+                  ),
                 ],
                 rows: [
                   for (final w in waivers)
@@ -92,12 +117,19 @@ class _MemberWaiversSectionState extends State<MemberWaiversSection> {
                         Text(
                           w.signedAt == null
                               ? '—'
-                              : DateFormat('MMM d, y').format(w.signedAt!),
+                              : DateFormat('MMM d, y')
+                                  .format(w.signedAt!),
                           style: DesignConstants.p,
                         ),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: _SignButton(status: w),
+                          child: _SignButton(
+                            status: w,
+                            memberId: widget.memberId,
+                            gymId: widget.gymId,
+                            memberName: widget.memberName,
+                            onSigned: _refresh,
+                          ),
                         ),
                       ],
                     ),
@@ -130,17 +162,30 @@ class _StatusChip extends StatelessWidget {
         tone: InvoiceChipTone.warning,
       );
     }
-    return const InvoiceChip(label: 'Signed', tone: InvoiceChipTone.good);
+    return const InvoiceChip(
+      label: 'Signed',
+      tone: InvoiceChipTone.good,
+    );
   }
 }
 
 /// Per-row "Sign" action. Shown when the member still needs to
-/// sign (never signed, or the current version changed). Opens a
-/// placeholder until the front-desk signing flow is built.
+/// sign (never signed, or the current version changed). Opens
+/// [SignWaiverDialog] and triggers [onSigned] on success.
 class _SignButton extends StatelessWidget {
   final MemberWaiverStatus status;
+  final String memberId;
+  final String gymId;
+  final String memberName;
+  final VoidCallback onSigned;
 
-  const _SignButton({required this.status});
+  const _SignButton({
+    required this.status,
+    required this.memberId,
+    required this.gymId,
+    required this.memberName,
+    required this.onSigned,
+  });
 
   bool get _needsSignature =>
       !status.signed || !status.signedCurrentVersion;
@@ -156,12 +201,13 @@ class _SignButton extends StatelessWidget {
         horizontal: DesignConstants.spacingSmall,
         vertical: DesignConstants.spacingTiny,
       ),
-      onPressed: () => ComingSoonDialog.show(
+      onPressed: () => SignWaiverDialog.show(
         context: context,
-        title: 'Sign waiver',
-        message:
-            'The front-desk waiver signing flow is coming '
-            'soon.',
+        waiverId: status.waiverId,
+        gymId: gymId,
+        memberId: memberId,
+        memberName: memberName,
+        onSigned: onSigned,
       ),
     );
   }

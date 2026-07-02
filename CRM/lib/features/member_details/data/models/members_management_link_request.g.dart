@@ -10,6 +10,7 @@ Map<String, dynamic> _$MembersManagementLinkRequestToJson(
   MembersManagementLinkRequest instance,
 ) => <String, dynamic>{
   'payer_member_id': instance.payerMemberId,
+  'waiver_version_id': instance.waiverVersionId,
   'signer_name': instance.signerName,
   'consent_acknowledged': instance.consentAcknowledged,
 };

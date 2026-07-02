@@ -12,6 +12,7 @@ from src.core.dependencies import DependencyInjector
 from src.memberships.memberships_exceptions import (
     MembershipStartReplayError,
     PartialCancelError,
+    WaiverGateError,
 )
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
@@ -341,6 +342,14 @@ async def start_membership(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        ) from None
+    except WaiverGateError as exc:
+        # A member hasn't signed a required waiver — blocked before any Stripe
+        # call (nothing written/charged). 422 with the structured unsigned list
+        # so the CRM routes the member straight to signing.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "unsigned": exc.unsigned},
         ) from None
     except ValueError as exc:
         error_msg = str(exc)
@@ -758,6 +767,13 @@ async def preview_start_membership(
 
     try:
         return await memberships_service.preview_start(request)
+    except WaiverGateError as exc:
+        # Same gate as the real start (shared validation): surface the unsigned
+        # waivers so the CRM blocks the preview/purchase until they're signed.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "unsigned": exc.unsigned},
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

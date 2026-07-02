@@ -19,6 +19,7 @@ request" rule is enforced here, where plan types are known.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -29,6 +30,7 @@ from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
+from src.memberships.memberships_exceptions import WaiverGateError
 from src.memberships.memberships_schema import (
     MemberMembershipsStartRequest,
 )
@@ -105,8 +107,56 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                 member_id, request.gym_id, plan_ids,
             )
 
+        await self._check_waivers(plans_by_member, request.gym_id)
         await self._check_discounts(request)
         return payer, plan_prices
+
+    async def _check_waivers(
+        self,
+        plans_by_member: dict[UUID, list[UUID]],
+        gym_id: UUID,
+    ) -> None:
+        """Every member has signed each of their plans' required waivers.
+
+        For each ``(member, plan)`` the member must have signed every waiver in
+        the plan's ``waiver_ids`` at a version >= that waiver's re-sign floor
+        (the highest version with ``requires_resign`` true). Applies to ALL plan
+        types. This runs BEFORE any Stripe call, so a rejection writes nothing
+        and charges nothing.
+
+        Raises:
+            WaiverGateError: With the list of unsigned ``{member_id, waiver_id,
+                name}`` (→ HTTP 422), so the CRM can route to signing.
+        """
+        pairs = [
+            {"member_id": str(member_id), "plan_id": str(plan_id)}
+            for member_id, plan_ids in plans_by_member.items()
+            for plan_id in set(plan_ids)
+        ]
+        if not pairs:
+            return
+
+        sql = load_sql(
+            SQL_DIR / "member_memberships_start_waivers_check.sql",
+        )
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"pairs": json.dumps(pairs), "gym_id": str(gym_id)},
+            )
+            rows = result.mappings().fetchall()
+
+        if rows:
+            raise WaiverGateError(
+                [
+                    {
+                        "member_id": str(r["member_id"]),
+                        "waiver_id": str(r["waiver_id"]),
+                        "name": r["name"],
+                    }
+                    for r in rows
+                ]
+            )
 
     def _check_no_recurring_duplicates(
         self,

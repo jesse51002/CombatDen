@@ -6,14 +6,16 @@ new immutable row in gym_waiver_versions, and a member signs a SPECIFIC version
 pointer to the current version; the wording lives on the versions table so the
 exact signed text is preserved for the legal record.
 
-This exposes catalog CRUD + version history + read-only signature tracking; the
-signing-capture INSERT (`WaiversSignatures.record_signature`) is recorded
-atomically by the authorized-payer link flow (memberships).
+This exposes catalog CRUD + version history + signature tracking + the signing
+request/response (`WaiverSignRequest` / `WaiverSignatureResponse`) for the
+standalone signing endpoint — the one path that records a signature
+(`WaiversSignatures.sign_waiver`).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
@@ -49,10 +51,15 @@ class WaiverUpdateData(BaseModel):
 
     Supplying `body` publishes a NEW version (the existing versions are
     immutable); supplying `name` renames the catalog row in place.
+    `requires_resign` (only meaningful when a `body` edit forks a new version
+    over a signed one) marks whether prior signers must re-sign before their
+    next purchase — set it False for a minor edit (typo) that should NOT
+    re-block them. Defaults True (a material change).
     """
 
     name: str | None = None
     body: str | None = None
+    requires_resign: bool = True
 
     @field_validator("name")
     @classmethod
@@ -158,6 +165,44 @@ class AuthorizedPayerWaiverResponse(BaseModel):
     body: str
 
 
+class WaiverSignRequest(BaseModel):
+    """Record one member's signature on a waiver (standalone signing endpoint).
+
+    The ``waiver_id`` is the path parameter; this body carries the rest. The
+    client ECHOES the ``waiver_version_id`` it displayed so the backend can
+    version-lock on it (reject if the gym published a newer version meanwhile),
+    closing the read-then-sign race. The audit fields (ip / user-agent /
+    operator / esign disclosure version) are captured server-side, never sent by
+    the client.
+    """
+
+    gym_id: UUID
+    member_id: UUID
+    waiver_version_id: UUID
+    signer_name: str
+    consent_acknowledged: Literal[True]
+
+    @field_validator("signer_name")
+    @classmethod
+    def _check_signer_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("signer_name cannot be empty")
+        return v
+
+
+class WaiverSignatureResponse(BaseModel):
+    """A recorded e-signature row (the standalone signing endpoint's result)."""
+
+    signature_id: UUID
+    waiver_id: UUID
+    waiver_version_id: UUID
+    member_id: UUID
+    gym_id: UUID
+    signed_at: datetime
+    signer_name: str
+    signature_type: WaiverSignatureType
+
+
 # Re-exported so the signing-capture (link flow) and any consumer can reference
 # the capture-method enum from this module.
 __all__ = [
@@ -166,7 +211,9 @@ __all__ = [
     "WaiverCreateRequest",
     "WaiverDefaultInfo",
     "WaiverResponse",
+    "WaiverSignRequest",
     "WaiverSignatoryRow",
+    "WaiverSignatureResponse",
     "WaiverSignatureType",
     "WaiverUpdateData",
     "WaiverUpdateRequest",

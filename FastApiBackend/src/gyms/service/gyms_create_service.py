@@ -16,7 +16,7 @@ from src.payments.payments_exceptions import (
 from src.payments.schema.payments_enums import StripeResourceType
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 

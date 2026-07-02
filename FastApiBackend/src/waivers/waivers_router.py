@@ -4,10 +4,12 @@ Waiver catalog CRUD, version history, and read-only signature tracking
 (per-waiver roster + per-member status). Editing a waiver's body publishes a new
 immutable version; signatures bind to the exact version signed.
 
-Signature CAPTURE has no endpoint of its own: the authorized-payer waiver is
-signed as part of creating an authorized-payer link, so the signature row is
-recorded atomically by that link flow (memberships) via
-``WaiversService.record_signature``, not here.
+Signature CAPTURE has ONE path: the standalone, staff-authenticated
+``POST /{waiver_id}/signatures`` endpoint here (any member signs any waiver,
+version-locked on the echoed version). The authorized-payer link flow
+(memberships) does NOT sign — the payer signs the gym's default waiver through
+THIS endpoint first, then the link references that signature_id (signing and
+authorizing are decoupled).
 """
 
 import logging
@@ -15,20 +17,23 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
+from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     MemberWaiverStatusRow,
     WaiverCreateRequest,
     WaiverResponse,
     WaiverSignatoryRow,
+    WaiverSignatureResponse,
+    WaiverSignRequest,
     WaiverUpdateRequest,
     WaiverVersionResponse,
 )
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +369,87 @@ async def list_waiver_signatories(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list waiver signatories",
+        ) from None
+
+
+@waivers_router.post(
+    "/{waiver_id}/signatures",
+    response_model=WaiverSignatureResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record a waiver signature",
+    description=(
+        "Records one member's e-signature on a waiver (staff-driven). The client "
+        "echoes the waiver_version_id it displayed; the backend version-locks on "
+        "the waiver's current version (409 if it changed) and captures the "
+        "signer's IP, user-agent, and the staff operator server-side."
+    ),
+    responses={
+        201: {"description": "Signature recorded successfully"},
+        400: {"description": "Invalid request data"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Waiver or member not found"},
+        409: {"description": "Waiver was updated — reload and re-sign"},
+    },
+)
+@inject
+async def sign_waiver(
+    waiver_id: UUID,
+    request: WaiverSignRequest,
+    http_request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    waivers_service: WaiversService = Depends(Provide[DependencyInjector.waivers_service]),
+) -> WaiverSignatureResponse:
+    """Record a member's signature on a waiver.
+
+    Raises:
+        HTTPException: 400/401/403/404/409/500 on respective errors.
+    """
+    user_payload = auth.get_current_user(credentials)
+    # get_employee_id both authorizes (403 if not staff of the gym) and resolves
+    # the operator/witness to stamp on the signature.
+    operator_employee_id = await auth.get_employee_id(
+        request.gym_id, user_payload
+    )
+
+    try:
+        return await waivers_service.sign_waiver(
+            gym_id=request.gym_id,
+            member_id=request.member_id,
+            waiver_id=waiver_id,
+            waiver_version_id=request.waiver_version_id,
+            signer_name=request.signer_name,
+            consent_acknowledged=request.consent_acknowledged,
+            ip_address=capture_ip_address(http_request),
+            user_agent=capture_user_agent(http_request),
+            operator_employee_id=operator_employee_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "reload" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_msg,
+            ) from None
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to record signature for waiver %s",
+            waiver_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record waiver signature",
         ) from None
 
 

@@ -13,7 +13,6 @@ ORDER-INDEPENDENT (it never trusts ``RETURNING`` to stream in insert order, a
 PostgreSQL implementation detail, not a contract) and it fails loud rather than
 silently collapse if two rows ever share the key. Faked session — no real DB.
 """
-
 from __future__ import annotations
 
 from uuid import uuid4

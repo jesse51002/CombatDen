@@ -7,6 +7,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
@@ -14,8 +15,9 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
+import 'package:crm/shared/widgets/sign_waiver_panel.dart';
 
-enum _LinkStep { select, sign }
+enum _LinkStep { select, sign, success, error }
 
 /// Authorizes a payer for a member in two steps: (1) pick the payer
 /// and run the backend eligibility check (`/link/check`), then
@@ -84,13 +86,17 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
 
   // ── Sign step ────────────────────────────────────────────
   QuillController? _waiverController;
-  final TextEditingController _signerName = TextEditingController();
+  String? _waiverVersionId;
+  String _signerName = '';
   bool _consent = false;
   bool _submitting = false;
 
+  /// Snapshot of the bloc's refreshToken before dispatching,
+  /// so we can detect a successful commit.
+  int _tokenBefore = 0;
+
   @override
   void dispose() {
-    _signerName.dispose();
     _waiverController?.dispose();
     super.dispose();
   }
@@ -143,13 +149,12 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
       if (!mounted) return;
       setState(() {
         _checking = false;
+        _waiverVersionId = waiver.versionId;
         _waiverController =
             WaiverMarkdownEditor.controllerFromMarkdown(
           waiver.body,
           readOnly: true,
         );
-        // Never pre-fill the signature — the payer must type their
-        // own name; a pre-filled field is not a signature.
         _step = _LinkStep.sign;
       });
     } catch (_) {
@@ -164,54 +169,79 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
 
   bool get _canSign =>
       _consent &&
-      _signerName.text.trim().isNotEmpty &&
+      _signerName.isNotEmpty &&
+      _waiverVersionId != null &&
       !_submitting;
 
   void _confirmSign() {
     final payer = _selected;
-    if (payer == null || !_canSign) return;
+    final versionId = _waiverVersionId;
+    if (payer == null || versionId == null || !_canSign) return;
+    final bloc = context.read<MemberDetailBloc>();
+    final s = bloc.state;
+    if (s is MemberDetailLoaded) _tokenBefore = s.refreshToken;
     setState(() => _submitting = true);
-    context.read<MemberDetailBloc>().add(
-          LinkParentRequested(
-            memberId: widget.subjectMemberId,
-            payerMemberId: payer.memberId,
-            signerName: _signerName.text.trim(),
-            consentAcknowledged: true,
-          ),
-        );
-    Navigator.of(context).pop();
+    bloc.add(
+      LinkParentRequested(
+        memberId: widget.subjectMemberId,
+        payerMemberId: payer.memberId,
+        waiverVersionId: versionId,
+        signerName: _signerName,
+        consentAcknowledged: true,
+      ),
+    );
+    // Do NOT pop here — BlocConsumer below detects success/failure
+    // and transitions to the terminal step.
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSign = _step == _LinkStep.sign;
-    return AppDialog(
-      title: isSign
-          ? 'Sign authorized-payer waiver'
-          : 'Add an authorized payer',
-      body: isSign ? _signBody() : _selectBody(),
-      actions: isSign
-          ? AppDialogActions(
-              primaryLabel: 'Authorize payer',
-              isLoading: _submitting,
-              primaryOnPressed: _canSign ? _confirmSign : null,
-              secondaryLabel: 'Back',
-              secondaryOnPressed: _submitting
-                  ? null
-                  : () => setState(() => _step = _LinkStep.select),
-            )
-          : AppDialogActions(
-              primaryLabel: 'Continue',
-              isLoading: _checking,
-              primaryOnPressed: _selected != null && !_checking
-                  ? _continueToSign
-                  : null,
-              secondaryLabel: 'Cancel',
-              secondaryOnPressed: _checking
-                  ? null
-                  : () => Navigator.of(context).pop(),
-            ),
+    return BlocConsumer<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (_, s) =>
+          _submitting && s is MemberDetailLoaded,
+      listener: (context, state) {
+        if (state is! MemberDetailLoaded) return;
+        if (!_submitting) return;
+        if (state.refreshToken > _tokenBefore &&
+            !state.isMutating) {
+          // Mutation committed — show success terminal step.
+          setState(() {
+            _submitting = false;
+            _step = _LinkStep.success;
+          });
+        } else if (state.actionError != null) {
+          setState(() {
+            _submitting = false;
+            _step = _LinkStep.error;
+          });
+        }
+      },
+      builder: (context, state) {
+        final isSign = _step == _LinkStep.sign;
+        return AppDialog(
+          title: _title,
+          body: isSign
+              ? _signBody()
+              : _step == _LinkStep.select
+                  ? _selectBody()
+                  : _terminalBody(state),
+          actions: _actions(context, state),
+        );
+      },
     );
+  }
+
+  String get _title {
+    switch (_step) {
+      case _LinkStep.sign:
+        return 'Sign authorized-payer waiver';
+      case _LinkStep.success:
+        return 'Payer authorized';
+      case _LinkStep.error:
+        return 'Authorization failed';
+      case _LinkStep.select:
+        return 'Add an authorized payer';
+    }
   }
 
   Widget _selectBody() {
@@ -262,52 +292,98 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
             color: DesignConstants.text,
           ),
         ),
-        SizedBox(
-          height: DesignConstants.dialogWaiverEditorHeight,
-          child: WaiverMarkdownEditor(
-            controller: _waiverController!,
-          ),
+        SignWaiverPanel(
+          controller: _waiverController!,
+          enabled: !_submitting,
+          onChanged: (name, consent) => setState(() {
+            _signerName = name;
+            _consent = consent;
+          }),
         ),
-        TextField(
-          controller: _signerName,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'Type full name to sign',
+      ],
+    );
+  }
+
+  Widget _terminalBody(MemberDetailState state) {
+    if (_step == _LinkStep.success) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Icon(
+            Symbols.check_circle_sharp,
+            size: DesignConstants.iconSizeBig,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.goodGreen,
           ),
+          Text(
+            '${_selected?.fullName ?? 'Payer'} is now authorized '
+            'to pay for ${widget.subjectName}.',
+            style: DesignConstants.p.copyWith(
+              color: DesignConstants.text,
+            ),
+          ),
+        ],
+      );
+    }
+    // error step
+    final msg = state is MemberDetailLoaded
+        ? (state.actionError ?? 'An unexpected error occurred.')
+        : 'An unexpected error occurred.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingLarge,
+      children: [
+        Icon(
+          Symbols.error_sharp,
+          size: DesignConstants.iconSizeBig,
+          weight: DesignConstants.iconWeight,
+          color: DesignConstants.badRed,
         ),
-        InkWell(
-          onTap: () => setState(() => _consent = !_consent),
-          borderRadius: BorderRadius.circular(
-            DesignConstants.radiusSmall,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingSmall,
-            children: [
-              Checkbox(
-                value: _consent,
-                onChanged: (v) =>
-                    setState(() => _consent = v ?? false),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    top: DesignConstants.spacingMedium,
-                  ),
-                  child: Text(
-                    'I, the payer, have read and agree to the '
-                    'waiver above.',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        Text(
+          msg,
+          style: DesignConstants.p.copyWith(
+            color: DesignConstants.badRed,
           ),
         ),
       ],
     );
+  }
+
+  Widget? _actions(
+    BuildContext context,
+    MemberDetailState state,
+  ) {
+    switch (_step) {
+      case _LinkStep.select:
+        return AppDialogActions(
+          primaryLabel: 'Continue',
+          isLoading: _checking,
+          primaryOnPressed: _selected != null && !_checking
+              ? _continueToSign
+              : null,
+          secondaryLabel: 'Cancel',
+          secondaryOnPressed: _checking
+              ? null
+              : () => Navigator.of(context).pop(),
+        );
+      case _LinkStep.sign:
+        return AppDialogActions(
+          primaryLabel: 'Authorize payer',
+          isLoading: _submitting,
+          primaryOnPressed: _canSign ? _confirmSign : null,
+          secondaryLabel: 'Back',
+          secondaryOnPressed: _submitting
+              ? null
+              : () => setState(() => _step = _LinkStep.select),
+        );
+      case _LinkStep.success:
+      case _LinkStep.error:
+        return AppDialogActions(
+          primaryLabel: 'Close',
+          primaryOnPressed: () => Navigator.of(context).pop(),
+        );
+    }
   }
 }
 

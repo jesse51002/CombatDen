@@ -183,6 +183,7 @@ GYM_WAIVER_VERSIONS: frozenset[str] = frozenset(
         "version_number",  # set by the publish flow
         "body",  # the immutable signed text
         "content_hash",  # backend-computed sha256 of body
+        "requires_resign",  # set by the publish flow (material vs minor edit)
         "created_at",  # auto-generated timestamp
     }
 )
@@ -201,7 +202,10 @@ MEMBER_WAIVER_SIGNATURES: frozenset[str] = frozenset(
         "consent_acknowledged",  # captured at sign time
         "ip_address",  # audit trail, captured at sign time
         "user_agent",  # audit trail, captured at sign time
-        "content_hash",  # frozen copy of the signed version's hash
+        "rendered_body",  # the exact rendered (placeholder-filled) agreed text
+        "content_hash",  # sha256 of the rendered_body (the agreed text)
+        "esign_disclosure_version",  # which ESIGN disclosure was agreed to
+        "operator_employee_id",  # staff witness who captured the signature
     }
 )
 

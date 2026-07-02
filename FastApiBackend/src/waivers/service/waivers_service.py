@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.shared.database import DirectDatabasePool
 from src.waivers.schema.waivers_schema import (
     AuthorizedPayerWaiverResponse,
@@ -21,15 +19,16 @@ from src.waivers.schema.waivers_schema import (
     WaiverDefaultInfo,
     WaiverResponse,
     WaiverSignatoryRow,
+    WaiverSignatureResponse,
     WaiverUpdateRequest,
     WaiverVersionResponse,
 )
-from src.waivers.service.waivers.waivers_create import WaiversCreate
-from src.waivers.service.waivers.waivers_delete import WaiversDelete
-from src.waivers.service.waivers.waivers_list import WaiversList
-from src.waivers.service.waivers.waivers_signatures import WaiversSignatures
-from src.waivers.service.waivers.waivers_update import WaiversUpdate
-from src.waivers.service.waivers.waivers_versions import WaiversVersions
+from src.waivers.service.waivers_create import WaiversCreate
+from src.waivers.service.waivers_delete import WaiversDelete
+from src.waivers.service.waivers_list import WaiversList
+from src.waivers.service.waivers_signatures import WaiversSignatures
+from src.waivers.service.waivers_update import WaiversUpdate
+from src.waivers.service.waivers_versions import WaiversVersions
 
 
 class WaiversService:
@@ -126,7 +125,7 @@ class WaiversService:
         """List every gym waiver and a member's sign status for each."""
         return await self._signatures.list_member_status(member_id, gym_id)
 
-    # ── Signing capture (used by the authorized-payer link flow) ──
+    # ── Signing + default-waiver resolution ───────────────────────
 
     async def get_default_waiver_for_member(
         self,
@@ -157,30 +156,36 @@ class WaiversService:
             body=waiver.current_version.body,
         )
 
-    async def record_signature(
+    async def sign_waiver(
         self,
-        session: AsyncSession,
         *,
         gym_id: UUID,
-        signer_member_id: UUID,
+        member_id: UUID,
         waiver_id: UUID,
         waiver_version_id: UUID,
         signer_name: str,
         consent_acknowledged: bool,
-        content_hash: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> UUID:
-        """Record an e-signature in the caller's transaction; return its id."""
-        return await self._signatures.record_signature(
-            session,
+        ip_address: str,
+        user_agent: str,
+        operator_employee_id: UUID,
+        waiver_args: dict[str, str] | None = None,
+    ) -> WaiverSignatureResponse:
+        """Record a member's signature on a waiver in its own committed txn.
+
+        The ONE signing path: version-locks on the echoed ``waiver_version_id``,
+        renders the template body with the auto-filled placeholders + the
+        caller's ``waiver_args`` (e.g. the link flow's ``payee_name``), and
+        freezes the rendered text on the row.
+        """
+        return await self._signatures.sign_waiver(
             gym_id=gym_id,
-            signer_member_id=signer_member_id,
+            member_id=member_id,
             waiver_id=waiver_id,
             waiver_version_id=waiver_version_id,
             signer_name=signer_name,
             consent_acknowledged=consent_acknowledged,
-            content_hash=content_hash,
             ip_address=ip_address,
             user_agent=user_agent,
+            operator_employee_id=operator_employee_id,
+            waiver_args=waiver_args,
         )

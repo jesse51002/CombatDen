@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from src.shared.sql_loader import load_sql
 from src.waivers import SQL_DIR
-from src.waivers.service.waivers.waivers_base import WaiversBase
+from src.waivers.service.waivers_base import WaiversBase
 
 logger = logging.getLogger(__name__)
 

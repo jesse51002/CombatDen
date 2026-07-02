@@ -24,7 +24,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverResponse,
     WaiverUpdateRequest,
 )
-from src.waivers.service.waivers.waivers_base import WaiversBase
+from src.waivers.service.waivers_base import WaiversBase
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ class WaiversUpdate(WaiversBase):
                 request.gym_id,
                 existing.get("current_version_id"),
                 request.data.body,
+                request.data.requires_resign,
             )
 
         return await self._load_full_waiver(request.waiver_id, request.gym_id)
@@ -96,12 +97,16 @@ class WaiversUpdate(WaiversBase):
         gym_id: UUID,
         current_version_id: UUID | None,
         body: str,
+        requires_resign: bool,
     ) -> None:
         """Persist a body edit (in place if unsigned, else a new version).
 
         No-op if the body is unchanged. If the current version has 0
         signatures it is edited in place; once it has been signed the signed
-        version is frozen and a fresh version is published.
+        version is frozen and a fresh version is published, stamped with
+        ``requires_resign`` (whether prior signers must re-sign). The in-place
+        edit ignores ``requires_resign`` — an unsigned version has no prior
+        signers to invalidate.
         """
         content_hash = self._compute_content_hash(body)
         current = (
@@ -121,7 +126,9 @@ class WaiversUpdate(WaiversBase):
             )
             return
 
-        await self._publish_new_version(waiver_id, gym_id, body, content_hash)
+        await self._publish_new_version(
+            waiver_id, gym_id, body, content_hash, requires_resign,
+        )
 
     async def _edit_version_in_place(
         self,
@@ -152,6 +159,7 @@ class WaiversUpdate(WaiversBase):
         gym_id: UUID,
         body: str,
         content_hash: str,
+        requires_resign: bool,
     ) -> None:
         """Insert a fresh version and re-point current_version_id to it."""
         next_number_sql = load_sql(SQL_DIR / "waiver_versions_next_number.sql")
@@ -173,6 +181,7 @@ class WaiversUpdate(WaiversBase):
                     "version_number": next_number,
                     "body": body,
                     "content_hash": content_hash,
+                    "requires_resign": requires_resign,
                 },
             )
             version = dict(version_result.mappings().one())

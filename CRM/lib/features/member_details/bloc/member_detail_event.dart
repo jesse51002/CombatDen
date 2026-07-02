@@ -90,11 +90,13 @@ class UnlinkPaymentRequested extends MemberDetailEvent {
 class LinkParentRequested extends MemberDetailEvent {
   final String memberId;
   final String payerMemberId;
+  final String waiverVersionId;
   final String signerName;
   final bool consentAcknowledged;
   const LinkParentRequested({
     required this.memberId,
     required this.payerMemberId,
+    required this.waiverVersionId,
     required this.signerName,
     required this.consentAcknowledged,
   });
@@ -103,6 +105,7 @@ class LinkParentRequested extends MemberDetailEvent {
   List<Object?> get props => [
         memberId,
         payerMemberId,
+        waiverVersionId,
         signerName,
         consentAcknowledged,
       ];

@@ -7,7 +7,11 @@ part of 'waiver_update_request.dart';
 // **************************************************************************
 
 Map<String, dynamic> _$WaiverUpdateDataToJson(WaiverUpdateData instance) =>
-    <String, dynamic>{'name': ?instance.name, 'body': ?instance.body};
+    <String, dynamic>{
+      'name': ?instance.name,
+      'body': ?instance.body,
+      'requires_resign': instance.requiresResign,
+    };
 
 Map<String, dynamic> _$WaiverUpdateRequestToJson(
   WaiverUpdateRequest instance,

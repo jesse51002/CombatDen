@@ -6,6 +6,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
@@ -24,6 +25,7 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/hairline.dart';
+import 'package:crm/shared/widgets/sign_waiver_dialog.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
 /// Full-screen waiver editor: a rich-text (Markdown) body on the left, the
@@ -79,6 +81,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   bool _loading = true;
   bool _saving = false;
   bool _dirty = false;
+  bool _minorEdit = false;
   String? _selectedVersionId; // null = editing the current version
 
   WaiverResponse? _waiver; // mutable: refreshed after each save
@@ -206,15 +209,14 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     }
 
     // Editing a signed version mints a new one — confirm first.
-    if (_isEdit && _currentSigned > 0) {
+    if (_isEdit && _currentSigned > 0 && !_minorEdit) {
       final go = await ConfirmationModal.show(
         context: context,
-        title: 'Saving creates a new version',
-        message: '$_currentSigned member(s) have already signed this version, '
-            'so saving creates a new one. If this change is legally meaningful, '
-            'email those members the update or have them re-sign — for a minor '
-            'wording fix that is usually not needed.',
-        confirmLabel: 'Save new version',
+        title: 'Saving requires members to re-sign',
+        message: '$_currentSigned member(s) have signed this version. '
+            'Saving will publish a new version and ask them to re-sign. '
+            'To skip that, check "Minor edit — don\'t require re-sign" below.',
+        confirmLabel: 'Save and require re-sign',
       );
       if (!go) return;
     }
@@ -225,7 +227,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
         await widget.repository.updateWaiver(WaiverUpdateRequest(
           waiverId: _waiver!.waiverId,
           gymId: widget.gymId,
-          data: WaiverUpdateData(name: name, body: body),
+          data: WaiverUpdateData(
+            name: name,
+            body: body,
+            requiresResign: !_minorEdit,
+          ),
         ));
       } else {
         _waiver = await widget.repository.createWaiver(WaiverCreateRequest(
@@ -243,6 +249,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
         setState(() {
           _saving = false;
           _dirty = false;
+          _minorEdit = false;
         });
         _snack('Saved.');
       }
@@ -384,7 +391,13 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
 
   Widget _editorPane() {
     if (_selectedVersionId == null || _view == null) {
-      return WaiverMarkdownEditor(controller: _edit!);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: WaiverMarkdownEditor(controller: _edit!)),
+          const _PlaceholderLegend(),
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,17 +535,50 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     return s.signedCurrentVersion ? 'Signed' : 'Signed (older version)';
   }
 
-  // The member sign screen (front-desk capture) is not built yet — the button
-  // is present but inert for now.
   void _openSignScreen(WaiverSignatoryRow s) {
-    _snack('Member signing screen is coming soon.');
+    final waiverId = _waiver?.waiverId;
+    if (waiverId == null) return;
+    SignWaiverDialog.show(
+      context: context,
+      waiverId: waiverId,
+      gymId: widget.gymId,
+      memberId: s.memberId,
+      memberName: s.fullName,
+      onSigned: _refresh,
+    );
   }
 
   Widget _footer() {
+    final showMinorEdit = _isEdit && _currentSigned > 0 && _dirty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
+        if (showMinorEdit)
+          InkWell(
+            onTap: () => setState(() => _minorEdit = !_minorEdit),
+            borderRadius: BorderRadius.circular(
+              DesignConstants.radiusSmall,
+            ),
+            child: Row(
+              spacing: DesignConstants.spacingSmall,
+              children: [
+                Checkbox(
+                  value: _minorEdit,
+                  onChanged: (v) =>
+                      setState(() => _minorEdit = v ?? false),
+                ),
+                Expanded(
+                  child: Text(
+                    'Minor edit — don\'t require re-sign',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         AppPrimaryButton(
           text: _isEdit ? 'Save' : 'Create',
           onPressed: _saving ? null : _save,
@@ -548,6 +594,84 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
             textColor: DesignConstants.badRed,
             borderRadius: DesignConstants.radiusSmall,
           ),
+      ],
+    );
+  }
+}
+
+/// Collapsible legend showing every {{placeholder}} the waiver body supports.
+class _PlaceholderLegend extends StatefulWidget {
+  const _PlaceholderLegend();
+
+  @override
+  State<_PlaceholderLegend> createState() => _PlaceholderLegendState();
+}
+
+class _PlaceholderLegendState extends State<_PlaceholderLegend> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(
+            DesignConstants.radiusSmall,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: DesignConstants.spacingSmall,
+            ),
+            child: Row(
+              spacing: DesignConstants.spacingSmall,
+              children: [
+                Icon(
+                  _expanded
+                      ? Symbols.expand_less_sharp
+                      : Symbols.expand_more_sharp,
+                  size: DesignConstants.iconSizeSmall,
+                  weight: DesignConstants.iconWeight,
+                  color: DesignConstants.text2nd,
+                ),
+                Text(
+                  'Placeholder reference — use {{name}} in your text',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          for (final e in kWaiverParameters.entries)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: DesignConstants.spacingLarge,
+              ),
+              child: Row(
+                spacing: DesignConstants.spacingSmall,
+                children: [
+                  Text(
+                    '{{${e.key}}}',
+                    style: DesignConstants.pSmall
+                        .merge(DesignConstants.monoFont)
+                        .copyWith(
+                          color: DesignConstants.primaryColor,
+                        ),
+                  ),
+                  Text(
+                    '— ${e.value}',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+                ],
+              ),
+            ),
       ],
     );
   }

@@ -265,6 +265,7 @@ Table gym_waiver_versions {
   version_number integer [not null]
   body text [not null]
   content_hash varchar [not null]
+  requires_resign boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -283,10 +284,15 @@ Table member_waiver_signatures {
   signer_name varchar [not null]
   signature_type waiver_signature_type [not null, default: 'typed']
   consent_acknowledged boolean [not null]
-  ip_address inet
-  user_agent varchar
+  ip_address inet [not null]
+  user_agent varchar [not null]
+  rendered_body text [not null]
   content_hash varchar [not null]
+  esign_disclosure_version varchar [not null, default: 'esign-v1']
+  operator_employee_id uuid
 }
+
+Ref: member_waiver_signatures.operator_employee_id > gym_employees.employee_id
 
 Table member_authorized_payers {
   member_id uuid [not null]

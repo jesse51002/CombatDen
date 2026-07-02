@@ -28,7 +28,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverCreateRequest,
     WaiverResponse,
 )
-from src.waivers.service.waivers.waivers_base import WaiversBase
+from src.waivers.service.waivers_base import WaiversBase
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,8 @@ class WaiversCreate(WaiversBase):
                     "version_number": _FIRST_VERSION_NUMBER,
                     "body": body,
                     "content_hash": content_hash,
+                    # Version 1: everyone signs it (no prior signers to spare).
+                    "requires_resign": True,
                 },
             )
             version = dict(version_result.mappings().one())

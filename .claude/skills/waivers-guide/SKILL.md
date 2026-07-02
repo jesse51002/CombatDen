@@ -1,0 +1,190 @@
+---
+name: waivers-guide
+description: >-
+  The single source of truth for the CombatDen waiver e-signature system — the
+  three-table model (gym_waivers catalog identity + the gym's undeletable
+  is_default authorized-payer waiver, gym_waiver_versions conditionally-immutable
+  TEMPLATE bodies with a per-version requires_resign flag, member_waiver_signatures
+  the append-only e-sign audit that freezes the rendered body), the ONE signing
+  service WaiversSignatures.sign_waiver (version-lock on the echoed version +
+  {{placeholder}} rendering + full-rendered-body snapshot, its own committed txn),
+  the standalone signing endpoint POST /api/v1/waivers/{waiver_id}/signatures, the
+  authorize-payer LINK as one request that REUSES sign_waiver (rendering payer +
+  payee names, not atomic), the membership-START waiver gate (_check_waivers + the
+  requires_resign re-sign FLOOR, all plan types, 422 with the unsigned list,
+  surfaces in preview), parametrization (the {{placeholders}} catalog
+  waiver_parameters.py, backend auto-fill + caller waiver_args), and the legal
+  evidence columns (signer_name, forced-true consent_acknowledged, version pin,
+  rendered_body, content_hash, NOT-NULL ip/user_agent, esign_disclosure_version,
+  operator_employee_id witness). Load this whenever you touch anything
+  waiver-shaped: gym_waivers / gym_waiver_versions / member_waiver_signatures, the
+  default authorized-payer waiver, signing a waiver, rendering {{placeholders}},
+  requires_resign / the re-sign floor, the membership-start waiver gate
+  (membership_plans.waiver_ids), the authorize-payer link, the ESIGN disclosure,
+  or "why was this member blocked from buying a membership / what did they sign".
+---
+
+# Waivers Guide
+
+The waiver system is **plain gym config + an append-only legal e-sign log** (no
+Stripe). A waiver is a named, versioned document; members sign a SPECIFIC version;
+the signed text is preserved for the legal record. Three tables.
+
+## Data model (three tables)
+
+`Database/supabase/schemas/` — schemas are source of truth; the hardening
+migration is `migrations/20260702040000_waiver_signature_legal_hardening.sql`.
+
+- **`gym_waivers`** — catalog IDENTITY: `waiver_id`, `gym_id`, `name`,
+  `current_version_id` (forward FK to versions, declared via `ALTER TABLE` at the
+  bottom of the versions schema — circular), `is_deleted` (soft delete),
+  **`is_default`** (the gym's one undeletable authorized-payer waiver),
+  timestamps. `idx_gym_waivers_one_default` = ≤1 default/gym;
+  `trg_prevent_default_waiver_removal` blocks clients archiving/deleting the
+  default and makes `is_default` immutable for ALL roles (service_role MAY
+  hard-delete during gym-create teardown only).
+- **`gym_waiver_versions`** — conditionally-immutable **TEMPLATE** bodies:
+  `version_id`, `waiver_id`, `gym_id`, `version_number` (UNIQUE per waiver),
+  `body` (the template — may hold `{{placeholders}}`), `content_hash` (sha256 of
+  the template), **`requires_resign`** (BOOLEAN default true), `created_at`.
+  `REVOKE UPDATE, DELETE` for clients.
+- **`member_waiver_signatures`** — append-only e-sign audit (`REVOKE UPDATE,
+  DELETE`): `signature_id`, `gym_id`, `member_id` (the SIGNER), `waiver_id`,
+  `waiver_version_id` (the template signed), `signed_at`, `signer_name` (typed),
+  `signature_type` enum (`typed` only), `consent_acknowledged` (CHECK = true),
+  **`rendered_body`** (NOT NULL — the EXACT agreed text, template with
+  `{{placeholders}}` filled in), `content_hash` (sha256 of the **rendered** text),
+  `ip_address` INET + `user_agent` VARCHAR (**NOT NULL**),
+  **`esign_disclosure_version`** (which ESIGN/UETA disclosure was shown),
+  **`operator_employee_id`** (NULLABLE composite FK → `gym_employees` — the staff
+  witness who captured an in-person signature). Member sees own; staff see gym's;
+  gym staff have an INSERT policy; the backend writes at service_role.
+
+The version is the immutable **template**; the signature freezes the **rendered**
+text. `member_authorized_payers.signature_id` FKs a signature as the
+authorization's proof (see the authorize-payer link below).
+
+## Versions: edit-in-place vs fork, and the re-sign FLOOR
+
+`WaiversUpdate._maybe_publish_version` (`src/waivers/service/waivers_update.py`):
+- A body edit whose hash matches the current version → **no-op**.
+- Current version has **0 signatures** → **edit in place** (same `version_number`;
+  `requires_resign` is irrelevant — no prior signers).
+- Current version is **signed** → **publish a NEW version** (bump number,
+  re-point `current_version_id`), stamped with `requires_resign` from
+  `WaiverUpdateData.requires_resign` (default true). Set it **false** for a minor
+  edit (typo) that should NOT re-block prior signers.
+
+The **re-sign floor** for a waiver = the highest `version_number` among its
+versions with `requires_resign = true`. A member is compliant iff they signed a
+version `>= floor`. So a `requires_resign=false` minor version does not raise the
+floor (prior signatures still count); a `requires_resign=true` material version
+raises it (prior signers must re-sign). Version 1 is always `requires_resign=true`
+(no one to spare). **Caution:** to fork a NEW version you must sign the current
+one first — editing an unsigned current version edits in place (no new row).
+
+## Parametrization ({{placeholders}})
+
+Catalog: `Database/python_data/schema/waiver_parameters.py` (`WAIVER_PARAMETERS`).
+A version `body` may contain `{{key}}` tokens; `WaiversSignatures._render`
+substitutes them at sign time. **Backend auto-fills** (in `sign_waiver`):
+`{{member_name}}` (the signing member's account name), `{{signer_name}}` (the
+typed name), `{{gym_name}}`, `{{date}}`. **Callers add extras via `waiver_args`**
+— the link flow passes `{{payee_name}}` (the member being paid for). Unknown
+tokens render literally. The CRM waiver editor MUST surface the available tokens
+to the author (no invisible constants — a required UX affordance). Jesse chose to
+store the **full `rendered_body`**, not a params jsonb.
+
+## The ONE signing path: `sign_waiver`
+
+`WaiversSignatures.sign_waiver` (`src/waivers/service/waivers_signatures.py`),
+exposed via the facade `WaiversService.sign_waiver`. It:
+1. Resolves the waiver's current version + template body + gym name + the signing
+   member's name (`sql/waiver_current_version_for_sign.sql`).
+2. **Version-locks**: the client echoes the `waiver_version_id` it displayed; if
+   it ≠ the current version → `ValueError("...reload...")` (→ **409**). Archived /
+   missing / no-current-version / member-not-in-gym → `"...not found..."` (→ 404).
+3. Renders the template with auto args + `waiver_args`; `content_hash` =
+   sha256(rendered); inserts via `sql/member_waiver_signatures_insert.sql`.
+4. Owns its **own committed transaction**; returns `WaiverSignatureResponse`.
+
+**Standalone endpoint** `POST /api/v1/waivers/{waiver_id}/signatures`
+(`waivers_router.py`, staff-only) — request `WaiverSignRequest{gym_id, member_id,
+waiver_version_id, signer_name, consent_acknowledged: Literal[True]}`; ip /
+user-agent (`src/shared/request_audit.py` sentinels) + operator
+(`Auth.get_employee_id`) + esign version are captured **server-side**, never in
+the body. This is the general path (e.g. plan liability waivers for the gate).
+
+The 7 other waiver routes are read/admin-CRUD (list, create, update, archive,
+versions, roster, by-member status, single get). `get_default_waiver_for_member`
++ `GET /api/v1/members/{id}/authorized-payer-waiver` resolve the default waiver
+for display.
+
+## Authorize-payer LINK = one request that REUSES sign_waiver
+
+`PUT /api/v1/members/{member_id}/link` (members_router) → `MemberMembershipsLinked.link_account`
+(`src/memberships/service/memberships_linked.py`). Request now
+`{payer_member_id, waiver_version_id, signer_name, consent_acknowledged}`. It
+calls the **shared `sign_waiver`** to sign the gym's default waiver as the payer
+— rendering the payer's name (`{{member_name}}`) and the member-being-paid-for
+(`{{payee_name}}`, from `member_authorized_payers_link_check.sql`'s candidate
+name) — then inserts the `member_authorized_payers` row referencing the new
+`signature.signature_id`. **NOT atomic** (signing commits its own txn; the
+authz insert is separate) — a retry after a failed insert leaves a harmless
+extra append-only signature (by design — Jesse: "complete fine and harmless").
+The earlier "needless duplication" was link re-implementing signing; the fix is
+link REUSES `sign_waiver`. Operator + ip/ua come from the router
+(`Auth.get_employee_id_for_member` + `request_audit`). De-authorization stays the
+cascade `remove_authorization` (see `memberships-guide`).
+
+## Membership-START waiver gate
+
+`MemberMembershipsStartValidation._check_waivers`
+(`src/memberships/service/memberships_start_validation.py`) +
+`sql/member_memberships_start_waivers_check.sql`. For every `(member, plan)` in a
+start request, the member must have signed each waiver in `membership_plans.waiver_ids`
+at a version `>= the re-sign floor`. **ALL plan types** (one_time/trial/recurring).
+Unsigned → `WaiverGateError` (`memberships_exceptions.py`) carrying
+`[{member_id, waiver_id, name}]` → the router maps it to **HTTP 422** with
+`detail = {message, unsigned}` so the CRM routes the member straight to signing.
+Runs in Phase-A validation **before any Stripe call** (nothing written/charged)
+and — because validation is shared — also surfaces in the **start preview**. A
+no-op for plans with empty `waiver_ids` (the seed assigns none, so it's inert
+until a gym opts in).
+
+## Legal evidence (what a signature proves)
+
+ESIGN/UETA-shaped: intent (`signer_name` + forced-true `consent_acknowledged`),
+the exact agreed text (`rendered_body` + its `content_hash`, with
+`waiver_version_id` pinning the immutable template), electronic-records consent
+(`esign_disclosure_version` → `schema/esign_disclosure.py` /`.md`, placeholder
+copy pending legal review), audit trail (`signed_at` UTC, NOT-NULL `ip_address` +
+`user_agent`, `operator_employee_id` witness), tamper-evidence (append-only).
+Residual: `signer_name` is free-text (no identity verification — standard gym
+clickwrap); only `typed` signatures (enum is extensible).
+
+## CRM surface
+
+Reusable `SignWaiverPanel` / `SignWaiverDialog` in `CRM/lib/shared/widgets/`
+(renders the body read-only via `WaiverMarkdownEditor`, shows the ESIGN
+disclosure, captures typed name + consent) — used by the authorize-payer dialogs,
+the member-detail + editor "Sign" actions, and the purchase wizard. The
+membership-purchase wizard (`features/member_details/.../start_memberships/`) has
+a `signWaivers` step (after `review`, before `payment`) that blocks until every
+required waiver is signed; the backend 422 is the backstop. The waiver editor
+surfaces the available `{{placeholders}}` + a "minor edit (don't require re-sign)"
+toggle (`requires_resign=false`).
+
+## Conventions / gotchas
+
+- SQL in `.sql` files; **never `:param::type`** — use `CAST(:p AS TYPE)` (the
+  bind-hygiene test scans even comments).
+- `requires_resign` / `rendered_body` / `esign_disclosure_version` /
+  `operator_employee_id` are listed user-immutable in
+  `python_data/schema/immutable_columns.py`; keep schema + model + diagram +
+  `Database/CLAUDE.md` in sync (living docs).
+- The migration backfills legacy rows (NULL ip/ua → sentinels; `rendered_body` ←
+  the version body) before the NOT NULLs; the user runs migrations, never you.
+- DB-backed waiver tests live in `tests/waivers/` (`test_waiver_sign.py`,
+  `test_waivers_versioning.py`) + `tests/memberships/test_start_waiver_gate.py`
+  (the floor logic); the `db_writes.authorize_payer` helper drives the real link.

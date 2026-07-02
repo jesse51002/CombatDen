@@ -60,10 +60,11 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import Auth, security
+from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     AuthorizedPayerWaiverResponse,
 )
-from src.waivers.service.waivers.waivers_service import (
+from src.waivers.service.waivers_service import (
     WaiversService,
 )
 
@@ -490,19 +491,23 @@ async def unlink_member_payment(
     "/{member_id}/link",
     summary="Authorize a payer for a member",
     description=(
-        "Authorizes a payer (payer_member_id) to pay for this member. The payer "
-        "signs the gym's default authorized-payer waiver (signer_name + "
-        "consent_acknowledged), and the signature + the authorization are "
-        "recorded atomically. A member may have many authorized payers. This is "
-        "the authorization layer (who may pay for whom; billing is per payer via "
-        "paid_by_member_id) — no subscription is re-billed and no charges issue."
+        "Authorizes a payer (payer_member_id) to pay for this member in ONE "
+        "request: the payer signs the gym's default authorized-payer waiver "
+        "(signer_name + consent_acknowledged, version-locked on waiver_version_id "
+        "which the client echoes from GET /authorized-payer-waiver), the payer's "
+        "and member's names are rendered into the waiver, and the authorization "
+        "is recorded against the new signature. A member may have many authorized "
+        "payers. This is the authorization layer (who may pay for whom; billing "
+        "is per payer via paid_by_member_id) — no subscription is re-billed and "
+        "no charges issue."
     ),
     responses={
         200: {"description": "Payer authorized successfully"},
-        400: {"description": "Payer invalid / different gym / already authorized / no consent"},
+        400: {"description": "Payer invalid / wrong gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
+        409: {"description": "Waiver was updated — reload and re-sign"},
     },
 )
 @inject
@@ -518,22 +523,31 @@ async def link_member_account(
 ) -> None:
     """Link a member to a paying parent account (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(member_id, user_payload)
+    # get_employee_id_for_member both authorizes (staff of the member's gym) and
+    # resolves the operator/witness to stamp on the waiver signature.
+    operator_employee_id = await auth.get_employee_id_for_member(
+        member_id, user_payload
+    )
 
-    # Capture the signer's IP + user-agent for the waiver signature audit.
-    ip_address = http_request.client.host if http_request.client else None
-    user_agent = http_request.headers.get("user-agent")
     try:
         await memberships_service.link_account(
             member_id,
             request.payer_member_id,
+            waiver_version_id=request.waiver_version_id,
             signer_name=request.signer_name,
             consent_acknowledged=request.consent_acknowledged,
-            ip_address=ip_address,
-            user_agent=user_agent,
+            # Capture the signer's IP + user-agent for the audit (NOT NULL).
+            ip_address=capture_ip_address(http_request),
+            user_agent=capture_user_agent(http_request),
+            operator_employee_id=operator_employee_id,
         )
     except ValueError as exc:
         error_msg = str(exc)
+        if "reload" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_msg,
+            ) from None
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
