@@ -8,15 +8,21 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 /// One pickable class occurrence in the member check-in dialog: the class name
 /// over its resolved start time + date, highlighted when [selected]. Dates and
 /// times are already gym-local — rendered as given, no timezone math.
+///
+/// [showClassName] is off in the class-scoped occurrence steps (the class was
+/// just picked, so every tile is the same class) — the date/time becomes the
+/// tile's primary line. It stays on in the mixed current-classes list.
 class CheckInInstanceTile extends StatelessWidget {
   final EffectiveClassInstance instance;
   final bool selected;
+  final bool showClassName;
   final VoidCallback onTap;
 
   const CheckInInstanceTile({
     super.key,
     required this.instance,
     required this.selected,
+    this.showClassName = true,
     required this.onTap,
   });
 
@@ -46,20 +52,23 @@ class CheckInInstanceTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: DesignConstants.spacingTiny,
                 children: [
-                  Text(
-                    instance.className,
-                    style: DesignConstants.h2,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  if (showClassName)
+                    Text(
+                      instance.className,
+                      style: DesignConstants.h2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   Text(
                     classDateTimeLabel(
                       instance.classDate,
                       instance.resolvedClassTime,
                     ),
-                    style: DesignConstants.h3Regular.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
+                    style: showClassName
+                        ? DesignConstants.h3Regular.copyWith(
+                            color: DesignConstants.text2nd,
+                          )
+                        : DesignConstants.h2Regular,
                   ),
                 ],
               ),

@@ -19,6 +19,10 @@ class CheckInSection extends StatelessWidget {
   final ValueChanged<CheckInReserveSelection> onSelect;
   final String? emptyLabel;
 
+  /// Off in the class-scoped occurrence steps — the section title already
+  /// names the class, so tiles show only their date/time.
+  final bool showClassName;
+
   const CheckInSection({
     super.key,
     required this.title,
@@ -27,6 +31,7 @@ class CheckInSection extends StatelessWidget {
     required this.onSelect,
     this.selectedKey,
     this.emptyLabel,
+    this.showClassName = true,
   });
 
   @override
@@ -52,6 +57,7 @@ class CheckInSection extends StatelessWidget {
                   (i) => CheckInInstanceTile(
                     instance: i,
                     selected: keyFor(action, i) == selectedKey,
+                    showClassName: showClassName,
                     onTap: () => onSelect(
                       CheckInReserveSelection(instance: i, action: action),
                     ),

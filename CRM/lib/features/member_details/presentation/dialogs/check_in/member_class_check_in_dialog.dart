@@ -290,6 +290,7 @@ class _MemberClassCheckInDialogState extends State<MemberClassCheckInDialog> {
           action: CheckInReserveAction.checkIn,
           instances: occurrences,
           selectedKey: _checkInSelectedKey,
+          showClassName: false,
           onSelect: (sel) => setState(() => _checkInSelected = sel.instance),
         );
     }
@@ -317,6 +318,7 @@ class _MemberClassCheckInDialogState extends State<MemberClassCheckInDialog> {
           action: CheckInReserveAction.reserve,
           instances: occurrences,
           selectedKey: _reserveSelectedKey,
+          showClassName: false,
           onSelect: (sel) => setState(() => _reserveSelected = sel.instance),
         );
     }
