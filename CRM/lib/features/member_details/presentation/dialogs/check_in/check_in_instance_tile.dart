@@ -48,7 +48,7 @@ class CheckInInstanceTile extends StatelessWidget {
                 children: [
                   Text(
                     instance.className,
-                    style: DesignConstants.pSemibold,
+                    style: DesignConstants.h2,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -57,7 +57,7 @@ class CheckInInstanceTile extends StatelessWidget {
                       instance.classDate,
                       instance.resolvedClassTime,
                     ),
-                    style: DesignConstants.pSmall.copyWith(
+                    style: DesignConstants.h3Regular.copyWith(
                       color: DesignConstants.text2nd,
                     ),
                   ),

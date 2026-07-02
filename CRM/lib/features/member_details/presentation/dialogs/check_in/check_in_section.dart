@@ -35,11 +35,11 @@ class CheckInSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(title, style: DesignConstants.h3),
+        Text(title, style: DesignConstants.h2),
         if (instances.isEmpty && emptyLabel != null)
           Text(
             emptyLabel!,
-            style: DesignConstants.pSmall.copyWith(
+            style: DesignConstants.h3Regular.copyWith(
               color: DesignConstants.text2nd,
             ),
           )

@@ -43,6 +43,11 @@ class ClassCard extends StatelessWidget {
 
   /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
   final bool isCancelled;
+
+  /// Roomy type scale (name 16, caption 13) for spacious surfaces like the
+  /// member check-in/reserve picker; the default keeps the schedule board's
+  /// dense day-column sizes.
+  final bool large;
   final VoidCallback? onTap;
 
   const ClassCard({
@@ -59,6 +64,7 @@ class ClassCard extends StatelessWidget {
     this.signupCount,
     this.occurrenceInPast = false,
     this.isCancelled = false,
+    this.large = false,
     this.onTap,
   });
 
@@ -150,10 +156,14 @@ class _CardDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text(card.name, style: DesignConstants.h3),
+        Text(
+          card.name,
+          style: card.large ? DesignConstants.h2 : DesignConstants.h3,
+        ),
         Text(
           card.timeLabel,
-          style: DesignConstants.p.copyWith(color: DesignConstants.text),
+          style: (card.large ? DesignConstants.h3Regular : DesignConstants.p)
+              .copyWith(color: DesignConstants.text),
         ),
         if (card.isCancelled)
           ClassMetaChip(

@@ -36,7 +36,8 @@ class CheckInClassPicker extends StatelessWidget {
     if (groups.isEmpty) {
       return Text(
         emptyLabel,
-        style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+        style:
+            DesignConstants.h3Regular.copyWith(color: DesignConstants.text2nd),
       );
     }
     return FillGrid(
@@ -53,6 +54,7 @@ class CheckInClassPicker extends StatelessWidget {
                 )}',
             imageUrl: group.imageUrl,
             pointsWorth: group.representative.pointsWorth,
+            large: true,
             onTap: () => onSelect(group.classId),
           ),
       ],
