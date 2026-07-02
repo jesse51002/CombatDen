@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
@@ -135,11 +136,11 @@ class _DaySlotList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final slotColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        if (title != null) Text(title!, style: DesignConstants.h3),
+        if (slots.isNotEmpty) const ClassSlotHeaderRow(),
         for (var i = 0; i < slots.length; i++)
           ClassSlotRow(
             time: slots[i].time,
@@ -154,11 +155,35 @@ class _DaySlotList extends StatelessWidget {
           child: AppOutlineButton(
             text: 'Add time',
             onPressed: onAdd,
+            icon: Icon(
+              Symbols.add_sharp,
+              size: DesignConstants.iconSizeSmall,
+              weight: DesignConstants.iconWeight,
+              color: DesignConstants.text,
+            ),
             padding: const EdgeInsets.symmetric(
               horizontal: DesignConstants.spacingLarge,
               vertical: DesignConstants.spacingSmall,
             ),
           ),
+        ),
+      ],
+    );
+
+    // Daily/monthly "Times": the section title already leads this single
+    // list, so render it flush with no sub-heading.
+    if (title == null) return slotColumn;
+
+    // Weekly: the day name is the group leader; its slots sit indented beneath
+    // it so each day reads as one deliberate block.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Text(title!, style: DesignConstants.h3),
+        Padding(
+          padding: const EdgeInsets.only(left: DesignConstants.spacingLarge),
+          child: slotColumn,
         ),
       ],
     );
