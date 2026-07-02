@@ -185,28 +185,40 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       setState(() => _inlineError = 'Pick a start time.');
       return;
     }
-    // Warn before a move that wipes attendance: the picked date differs from
-    // the occurrence's current EFFECTIVE date (so a preserve-the-move re-save
-    // never warns), lands after today, and the occurrence has recorded
-    // check-ins — the backend clears those check-ins and reverses their
-    // points on a future-dated reschedule (reservations carry over).
+    // Warn before a save the backend treats as an attendance-wiping move.
+    // Mirrors the backend exactly, which decides by the new effective start
+    // INSTANT, never the day: the save must actually SEND `new_date`
+    // (picked != originalDate — a move-home omits it and never wipes), the
+    // landing instant must have changed (re-sending the current effective
+    // date+time is a backend no-op — the preserve-the-move re-save never
+    // warns), the occurrence must have recorded check-ins, and the target
+    // instant (picked date + the edited start time, local) must still be
+    // ahead of now — so moving tonight's already-moved class to later
+    // tonight warns too, while a landing already in the past keeps its
+    // check-ins (re-dated) and stays silent.
     final checkIns = widget.entry.attendeeCount ?? 0;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final movedFromEffective =
-        !_isSameDate(_selectedDate, widget.entry.classDate);
-    final targetInFuture = DateTime(
+    final sendsNewDate =
+        !_isSameDate(_selectedDate, widget.entry.originalDate);
+    final landingChanged =
+        !_isSameDate(_selectedDate, widget.entry.classDate) ||
+            time != parseHmsTime(widget.entry.resolvedClassTime);
+    final targetStart = DateTime(
       _selectedDate.year,
       _selectedDate.month,
       _selectedDate.day,
-    ).isAfter(today);
-    if (movedFromEffective && targetInFuture && checkIns > 0) {
+      time.hour,
+      time.minute,
+    );
+    if (sendsNewDate &&
+        landingChanged &&
+        checkIns > 0 &&
+        targetStart.isAfter(DateTime.now())) {
       final confirmed = await ConfirmationModal.show(
         context: context,
         title: 'Move this class?',
-        message: 'Moving it to a future date clears its $checkIns '
-            'check-in${checkIns == 1 ? '' : 's'} and reverses their points. '
-            'Reservations move with the class.',
+        message: 'Moving it to a time that hasn\'t happened yet clears its '
+            '$checkIns check-in${checkIns == 1 ? '' : 's'} and reverses '
+            'their points. Reservations move with the class.',
         confirmLabel: 'Move class',
         confirmColor: DesignConstants.badRed,
       );

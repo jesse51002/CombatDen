@@ -1,50 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/settings/bloc/settings_bloc.dart';
 import 'package:crm/features/settings/bloc/settings_event.dart';
 import 'package:crm/features/settings/bloc/settings_state.dart';
+import 'package:crm/features/settings/presentation/dialogs/timezone_picker_dialog.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
-import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
+import 'package:crm/shared/widgets/form/tappable_field.dart';
 
-/// Max width of the timezone selector — a settings control shouldn't stretch
+/// Max width of the timezone field — a settings control shouldn't stretch
 /// the whole page (matches the login form's field cap).
 const double _kSelectorMaxWidth = 480;
 
-/// One curated timezone choice: a friendly label + its IANA zone id.
-class _Zone {
-  final String label;
-  final String id;
-
-  const _Zone(this.label, this.id);
-
-  /// How the zone reads in the dropdown and the confirm copy.
-  String get displayLabel => '$label ($id)';
-}
-
-/// The curated US zones offered by default. If the gym's current zone isn't
-/// one of these, it's appended as its own entry so the saved value always
-/// displays.
-const List<_Zone> _kZones = [
-  _Zone('Eastern', 'America/New_York'),
-  _Zone('Central', 'America/Chicago'),
-  _Zone('Mountain', 'America/Denver'),
-  _Zone('Arizona', 'America/Phoenix'),
-  _Zone('Pacific', 'America/Los_Angeles'),
-  _Zone('Alaska', 'America/Anchorage'),
-  _Zone('Hawaii', 'Pacific/Honolulu'),
-];
-
 /// Settings section for the gym's IANA timezone.
 ///
-/// Selecting a different zone confirms via [ConfirmationModal], then
-/// dispatches [SettingsTimezoneChanged]. The save is NOT optimistic: the
-/// selector keeps showing the current zone (from [selectedGym]) until the
-/// backend commits — success flips the value and surfaces a SnackBar; failure
-/// surfaces through the screen's shared error listener.
+/// The field shows the current zone with its live UTC offset; tapping it
+/// opens [TimezonePickerDialog] — a searchable picker over the FULL IANA
+/// database (offsets shown, sorted by offset then name). A pick confirms
+/// via [ConfirmationModal], then dispatches [SettingsTimezoneChanged]. The
+/// save is NOT optimistic: the field keeps showing the current zone (from
+/// [selectedGym]) until the backend commits — success flips the value and
+/// surfaces a SnackBar; failure surfaces through the screen's shared error
+/// listener.
 class GymTimezoneSection extends StatelessWidget {
   const GymTimezoneSection({super.key});
 
@@ -78,46 +59,27 @@ class GymTimezoneSection extends StatelessWidget {
   }
 }
 
-/// The confirm-then-save selector. Stateful only for [_resetTick], which
-/// re-keys the dropdown after a cancelled or dispatched pick so its internal
-/// selection snaps back to the real (not-yet-changed) value — the dropdown
-/// otherwise keeps showing the picked option even though the save is
-/// non-optimistic.
-class _TimezoneSelector extends StatefulWidget {
+/// The pick → confirm → save flow around the read-only field. Stateless: the
+/// displayed value always comes from [selectedGym], so the non-optimistic
+/// save needs no local reset bookkeeping.
+class _TimezoneSelector extends StatelessWidget {
   const _TimezoneSelector();
 
-  @override
-  State<_TimezoneSelector> createState() => _TimezoneSelectorState();
-}
-
-class _TimezoneSelectorState extends State<_TimezoneSelector> {
-  int _resetTick = 0;
-
-  /// The offered zones: the curated list, plus the gym's current zone as its
-  /// own entry when it isn't curated (so the saved value always displays).
-  List<_Zone> _zonesFor(String? current) {
-    if (current == null || _kZones.any((z) => z.id == current)) {
-      return _kZones;
-    }
-    return [..._kZones, _Zone(current, current)];
-  }
-
-  Future<void> _onPicked(String? zoneId, String? current) async {
-    if (zoneId == null || zoneId == current) return;
-    final zone = _zonesFor(current).firstWhere((z) => z.id == zoneId);
+  Future<void> _pick(BuildContext context, String? current) async {
+    final picked = await TimezonePickerDialog.show(
+      context: context,
+      current: current,
+    );
+    if (picked == null || picked == current || !context.mounted) return;
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Change gym timezone?',
-      message: 'Change gym timezone to ${zone.displayLabel}? The schedule '
-          'will show times in this zone from now on.',
+      message: 'Change gym timezone to ${zoneDisplayLabel(picked)}? '
+          'The schedule will show times in this zone from now on.',
       confirmLabel: 'Change timezone',
     );
-    if (!mounted) return;
-    // Re-key the dropdown either way: the save isn't optimistic, so until
-    // the backend commits the selector must show the CURRENT zone again.
-    setState(() => _resetTick++);
-    if (!confirmed) return;
-    context.read<SettingsBloc>().add(SettingsTimezoneChanged(zoneId));
+    if (!confirmed || !context.mounted) return;
+    context.read<SettingsBloc>().add(SettingsTimezoneChanged(picked));
   }
 
   @override
@@ -137,26 +99,49 @@ class _TimezoneSelectorState extends State<_TimezoneSelector> {
                   constraints: const BoxConstraints(
                     maxWidth: _kSelectorMaxWidth,
                   ),
-                  child: AppDropdownField<String>(
-                    key: ValueKey('$current-$_resetTick'),
-                    value: current,
-                    hintText: 'Select a timezone',
-                    items: [
-                      for (final zone in _zonesFor(current))
-                        DropdownMenuItem<String>(
-                          value: zone.id,
-                          child: Text(zone.displayLabel),
-                        ),
-                    ],
-                    onChanged: state.savingTimezone
-                        ? null
-                        : (zoneId) => _onPicked(zoneId, current),
+                  child: _TimezoneField(
+                    current: current,
+                    enabled: !state.savingTimezone,
+                    onTap: () => _pick(context, current),
                   ),
                 ),
                 if (state.savingTimezone) const AppSpinner(),
               ],
             );
           },
+        );
+      },
+    );
+  }
+}
+
+/// The read-only field showing the current zone + its live UTC offset. The
+/// offset needs the tz database, whose lazy load is kicked here (memoized —
+/// never at app startup); until it's ready the bare zone id shows.
+class _TimezoneField extends StatelessWidget {
+  final String? current;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _TimezoneField({
+    required this.current,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: ensureTimezonesInitialized(),
+      builder: (context, snapshot) {
+        final ready = snapshot.connectionState == ConnectionState.done;
+        final zone = current;
+        return TappableField(
+          valueText:
+              zone == null ? null : (ready ? zoneDisplayLabel(zone) : zone),
+          hintText: 'Select a timezone',
+          icon: Symbols.public_sharp,
+          onTap: enabled ? onTap : () {},
         );
       },
     );
