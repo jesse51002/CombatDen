@@ -273,8 +273,8 @@ class CheckinRemoveResponse(BaseModel):
     occurrence itself is kept.
 
     Attributes:
-        removed: True when an attendance row was deleted; False when the member
-            was not checked in, or the occurrence was never materialized.
+        removed: True when an attendance row was deleted; False when the
+            member was not checked in to that occurrence.
         points_reverted: The class's ``points_worth`` reversed off the member's
             balance (floored at 0 by the balance CHECK); 0 when nothing removed.
         membership_unended: The pack whose auto-end was reversed (its ``end_date``

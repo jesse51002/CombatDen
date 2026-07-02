@@ -257,6 +257,7 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       pointsWorth: i.pointsWorth,
       attendeeCount: i.attendanceCount,
       signupCount: i.signupCount,
+      occurredAt: i.occurredAt,
       occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
       isCancelled: i.isCancelled,
       cancellingRangeId: i.cancellingRangeId,

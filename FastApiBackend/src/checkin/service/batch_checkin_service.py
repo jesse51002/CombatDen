@@ -36,7 +36,8 @@ class BatchCheckinService:
     """Checks many members into one class occurrence.
 
     Args:
-        resolver: Resolves + materializes the occurrence once for the batch.
+        resolver: Resolves the occurrence once for the batch (a pure
+            read — occurrences are computed, never stored).
         member_gate: Runs the per-member gate + write for each member.
     """
 

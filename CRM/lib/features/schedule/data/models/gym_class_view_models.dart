@@ -71,11 +71,17 @@ class ScheduleClassEntry {
   /// Null when the occurrence has no instructor.
   final String? resolvedInstructorId;
 
-  /// Effective duration in minutes. The occurrence-edit screen doesn't expose
-  /// a duration field, so this is carried through unedited on an override save
-  /// — the instance-exception upsert replaces every override field at once, so
-  /// omitting it would blank out a previously-set duration override.
+  /// Effective duration in minutes — pre-fills the occurrence-edit screen's
+  /// "Duration (minutes)" field and sizes the time-range labels.
   final int resolvedDurationMinutes;
+
+  /// The occurrence's effective start INSTANT (UTC, backend-computed —
+  /// `EffectiveClassInstance.occurredAt`). Any is-it-started / check-in-window
+  /// gate compares THIS against `DateTime.now()` (epoch comparison, exact) —
+  /// never an instant rebuilt from [classDate] + [resolvedClassTime], which
+  /// are GYM-local wall-clock display fields and skew when the admin's
+  /// browser timezone differs from the gym's.
+  final DateTime occurredAt;
 
   /// Effective max capacity (null = uncapped) — pre-fills the occurrence-edit
   /// screen's capacity field. The backend `/classes/instances` read resolves a
@@ -93,6 +99,7 @@ class ScheduleClassEntry {
     required this.timeLabel,
     required this.resolvedClassTime,
     required this.resolvedDurationMinutes,
+    required this.occurredAt,
     this.resolvedInstructorId,
     this.instructorName,
     this.imageUrl,

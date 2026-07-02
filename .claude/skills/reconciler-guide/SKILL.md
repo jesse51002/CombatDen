@@ -63,10 +63,10 @@ mechanics**. It does **not** own:
   `InvoiceFetchSweep` calls into memberships; the reconciler does **not** own
   the fetch loop.
 - **The membership lifecycle / cancel path** → `memberships-guide`.
-- **The range materialize entry point + the expander** the class-history sweep
-  calls (`ClassesMaterializer.materialize` / `materialize_current`,
-  `ClassesExpander`) → owned by the **class system** (`src/classes/`), not this
-  skill. The class-history sweep (§9) is a thin caller.
+- **The class system** (`src/classes/` — the version expander and computed
+  occurrences) → the `class-system-guide` skill. The reconciler runs NO class
+  sweep: occurrences are computed on read, never stored, so there is nothing
+  to heal.
 
 ---
 
@@ -385,8 +385,8 @@ push step calls — including the gone-sub cancel — is in `payment_sync.mermai
 ## This skill is a living document
 
 When the reconciler changes — a new/removed step, a different order, a changed
-lock or schedule, the seam, the synthetic key, the class-history sweep's call
-shape, or the deferred skip-if-equal guard landing — **update this skill and
+lock or schedule, the seam, the synthetic key, or the deferred skip-if-equal
+guard landing — **update this skill and
 `reconciler.mermaid` in the same change**, and the cross-references in
 `sync-guide` (the gone-sub cancel + §10) / `PaymentRefactor.md` §1 if they
 drift. Never leave it stale: a stale rule produces false "violation" findings

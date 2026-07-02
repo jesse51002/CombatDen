@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -31,9 +30,9 @@ typedef CheckInPickBuilder = Widget Function(
 /// The check-in/reserve dialog's data loader: loads every effective
 /// occurrence in one `[today - 30d, today + 14d]` window via
 /// `ScheduleRepository.listEffectiveInstances`, drops cancelled days, then
-/// splits it CLIENT-SIDE by each occurrence's computed start (`classDate` +
-/// `resolvedClassTime`) / end (`+ resolvedDurationMinutes`) against
-/// `DateTime.now()`:
+/// splits it CLIENT-SIDE by each occurrence's UTC start instant
+/// (`occurredAt`, see [_startOf]) / end (`+ resolvedDurationMinutes`)
+/// against `DateTime.now()`:
 ///
 /// - **Check in**: in session OR starting within the next 2h
 ///   (`_kCheckInOpensHours`, mirroring the backend
@@ -77,20 +76,15 @@ class _MemberCheckInPickBodyState extends State<MemberCheckInPickBody> {
     _load();
   }
 
-  /// The occurrence's effective local start instant (`classDate` +
-  /// `resolvedClassTime`) — arbitrary-timezone-free, matching how the rest
-  /// of the schedule feature renders these fields (as given, no tz math).
-  DateTime _startOf(EffectiveClassInstance i) {
-    final time = parseHmsTime(i.resolvedClassTime) ??
-        const TimeOfDay(hour: 0, minute: 0);
-    return DateTime(
-      i.classDate.year,
-      i.classDate.month,
-      i.classDate.day,
-      time.hour,
-      time.minute,
-    );
-  }
+  /// The occurrence's effective start INSTANT — the backend-computed UTC
+  /// `occurredAt`, the same instant the check-in gate enforces. Never
+  /// rebuilt from `classDate` + `resolvedClassTime` in the browser's
+  /// timezone: those are GYM-local wall-clock fields (display only), so a
+  /// staff member whose browser tz differs from the gym's would bucket an
+  /// in-session class as not-yet-started (or offer a check-in the backend
+  /// rejects). Dart compares instants by epoch, so `occurredAt` (UTC) vs
+  /// `DateTime.now()` (local) is exact.
+  DateTime _startOf(EffectiveClassInstance i) => i.occurredAt;
 
   Future<void> _load() async {
     final repo = context.read<ScheduleRepository>();

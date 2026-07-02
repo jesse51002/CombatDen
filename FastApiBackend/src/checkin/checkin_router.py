@@ -161,8 +161,8 @@ async def checkin(
         "activity, and — when the removal drops a trial / punch-card pack back "
         "below capacity — reverses the auto-end (clears the pack's "
         "``end_date``). The occurrence itself is kept (the class still "
-        "happened). A member who was not checked in (or an occurrence never "
-        "materialized) returns ``removed = false`` with a 200. Admin / owner "
+        "happened). A member who was not checked in returns "
+        "``removed = false`` with a 200. Admin / owner "
         "only."
     ),
     responses={
@@ -468,7 +468,7 @@ async def list_attendees(
         Provide[DependencyInjector.checkin_attendees_service]
     ),
 ) -> AttendeeListResponse:
-    """The members who attended one occurrence (empty when unmaterialized)."""
+    """Everyone signed up or attended for one occurrence (may be empty)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 

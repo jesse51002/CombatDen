@@ -215,6 +215,9 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
 
     // Best-effort: reload the visible week so the board's attendance count
     // updates behind the still-open results step. Keep the committed result.
+    // Only the instances refetch — a check-in never mutates the class
+    // catalog, so the in-hand `classes` carries over (same as a week
+    // change's `knownClasses`).
     try {
       final weekEnd = _weekStart.add(const Duration(days: 6));
       final instances = await _repository.listEffectiveInstances(
@@ -222,13 +225,12 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         _weekStart,
         weekEnd,
       );
-      final classes = await _repository.listClasses(_gymId);
       final latest = state;
       if (latest is! ScheduleLoaded) return;
       emit(ScheduleLoaded(
         weekStart: _weekStart,
         instances: instances,
-        classes: classes,
+        classes: latest.classes,
         actionSuccessCount: latest.actionSuccessCount,
         batchCheckInResult: latest.batchCheckInResult,
       ));
@@ -307,6 +309,9 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
 
     // Best-effort: reload the visible week so the board's signup count
     // updates behind the still-open results step. Keep the committed result.
+    // Only the instances refetch — a sign-up never mutates the class
+    // catalog, so the in-hand `classes` carries over (same as a week
+    // change's `knownClasses`).
     try {
       final weekEnd = _weekStart.add(const Duration(days: 6));
       final instances = await _repository.listEffectiveInstances(
@@ -314,13 +319,12 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         _weekStart,
         weekEnd,
       );
-      final classes = await _repository.listClasses(_gymId);
       final latest = state;
       if (latest is! ScheduleLoaded) return;
       emit(ScheduleLoaded(
         weekStart: _weekStart,
         instances: instances,
-        classes: classes,
+        classes: latest.classes,
         actionSuccessCount: latest.actionSuccessCount,
         batchCheckInResult: latest.batchCheckInResult,
         signupResult: latest.signupResult,

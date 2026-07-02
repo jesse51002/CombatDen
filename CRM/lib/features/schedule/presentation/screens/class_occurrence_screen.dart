@@ -126,35 +126,20 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   /// occurrence's start INSTANT is still ahead (never day-based — a class
   /// that already ran earlier today isn't reservable). The sign-up endpoint
   /// itself imposes no time gate, but offering to reserve a spot in an
-  /// already-passed session wouldn't make sense. Without a resolvable time
-  /// it falls back to today-or-later.
+  /// already-passed session wouldn't make sense. Gates on the
+  /// backend-computed UTC [ScheduleClassEntry.occurredAt] — never a
+  /// browser-local rebuild of the gym-local date + time fields, which skews
+  /// when the admin's timezone differs from the gym's.
   bool get _canSignUp {
     if (widget.entry.isCancelled) return false;
-    final date = widget.entry.classDate;
-    final time = _classTime;
-    if (time == null) {
-      final now = DateTime.now();
-      return !date.isBefore(DateTime(now.year, now.month, now.day));
-    }
-    final start =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    return start.isAfter(DateTime.now());
+    return widget.entry.occurredAt.isAfter(DateTime.now());
   }
 
   /// Whether check-in is open for this occurrence: its start is within the
   /// early window (or already started / passed). The backend enforces the
-  /// same rule.
+  /// same rule against the same [ScheduleClassEntry.occurredAt] instant.
   bool get _checkInOpen {
-    final time = _classTime;
-    if (time == null) return true;
-    final start = DateTime(
-      widget.entry.classDate.year,
-      widget.entry.classDate.month,
-      widget.entry.classDate.day,
-      time.hour,
-      time.minute,
-    );
-    return !start.isAfter(
+    return !widget.entry.occurredAt.isAfter(
       DateTime.now().add(const Duration(hours: _kCheckInOpensHours)),
     );
   }
