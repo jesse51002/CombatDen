@@ -21,13 +21,28 @@ from src.ranks.schema.ranks_schema import (
     FromPresetRequest,
     RankCreateRequest,
     RankEnabledRequest,
+    RankPromoteMemberRequest,
+    RankReorderItem,
+    RankReorderRequest,
+    RankSetMemberRequest,
     RankUpdateData,
 )
 from src.ranks.service.ranks_service import RanksService
+from tests.conftest import make_rank_row
 
 
 def _load(name: str) -> str:
     return (SQL_DIR / name).read_text()
+
+
+def _result(value: object, *, many: bool = False) -> MagicMock:
+    """A session.execute() result whose mappings() yields `value`."""
+    result = MagicMock()
+    if many:
+        result.mappings.return_value.all.return_value = value
+    else:
+        result.mappings.return_value.fetchone.return_value = value
+    return result
 
 
 def _make_session_mock(execute_side_effect: list[MagicMock]) -> MagicMock:
@@ -545,3 +560,288 @@ async def test_get_all_presets_grouped_handles_boundaries():
     mma = response.presets[GymType.mma]
     assert len(mma) == 1
     assert mma[0].main_name == "Beginner"
+
+
+# ---------- promote_member ----------
+
+
+def _two_rank_ladder(gym_id) -> tuple[str, str, list[dict]]:
+    """A two-rung ladder (lowest, highest) and its rank ids."""
+    low_id = str(uuid4())
+    high_id = str(uuid4())
+    ladder = [
+        make_rank_row(rank_id=low_id, gym_id=str(gym_id), main_name="White"),
+        make_rank_row(
+            rank_id=high_id,
+            gym_id=str(gym_id),
+            main_rank_num_order=1,
+            main_name="Blue",
+        ),
+    ]
+    return low_id, high_id, ladder
+
+
+@pytest.mark.asyncio
+async def test_promote_member_null_rank_assigns_lowest():
+    """A rank-less member is promoted to the lowest rank."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    low_id, _high_id, ladder = _two_rank_ladder(gym_id)
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": None, "gym_id": gym_id}),
+            _result(ladder, many=True),
+            _result({"member_id": member_id, "current_rank_id": low_id}),
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    response = await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    assert str(response.new_rank.rank_id) == low_id
+    set_params = session.execute.await_args_list[2].args[1]
+    assert set_params["new_rank_id"] == low_id
+
+
+@pytest.mark.asyncio
+async def test_promote_member_advances_one_step():
+    """A member on the lowest rank advances to the next rank up."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    low_id, high_id, ladder = _two_rank_ladder(gym_id)
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": low_id, "gym_id": gym_id}),
+            _result(ladder, many=True),
+            _result({"member_id": member_id, "current_rank_id": high_id}),
+            _result(None),
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    response = await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    assert str(response.new_rank.rank_id) == high_id
+
+
+@pytest.mark.asyncio
+async def test_promote_member_raises_at_top_rank():
+    """Promoting a member already at the highest rank raises (→409)."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    _low_id, high_id, ladder = _two_rank_ladder(gym_id)
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": high_id, "gym_id": gym_id}),
+            _result(ladder, many=True),
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="highest rank"):
+        await service.promote_member(
+            RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_promote_member_404_when_member_missing():
+    """No member row → ValueError (router maps to 404)."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    session = _make_session_mock([_result(None)])
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="Member not found"):
+        await service.promote_member(
+            RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_promote_member_404_when_wrong_gym():
+    """A member belonging to another gym is not found here."""
+    gym_id = uuid4()
+    other_gym = uuid4()
+    member_id = uuid4()
+    session = _make_session_mock(
+        [_result({"current_rank_id": None, "gym_id": other_gym})],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="not found"):
+        await service.promote_member(
+            RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_promote_member_logs_activity_in_same_session():
+    """The rank UPDATE and the audit activity share one committed
+    session — both run before commit, update before activity."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    low_id, high_id, ladder = _two_rank_ladder(gym_id)
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": low_id, "gym_id": gym_id}),
+            _result(ladder, many=True),
+            _result({"member_id": member_id, "current_rank_id": high_id}),
+            _result(None),
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    sqls = _executed_sql_strings(session)
+    assert sqls.index(_load("set_member_rank.sql")) < sqls.index(
+        _load("insert_rank_activity.sql"),
+    )
+    session.commit.assert_awaited_once()
+
+
+# ---------- set_member_rank ----------
+
+
+@pytest.mark.asyncio
+async def test_set_member_rank_to_explicit_rank_logs_change():
+    """Setting an explicit rank validates the target and logs it."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    old_id = str(uuid4())
+    target_id = str(uuid4())
+    target_row = make_rank_row(rank_id=target_id, gym_id=str(gym_id))
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": old_id, "gym_id": gym_id}),
+            _result(target_row),  # _read_rank_in_gym (get_rank.sql)
+            _result({"member_id": member_id, "current_rank_id": target_id}),
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    response = await service.set_member_rank(
+        RankSetMemberRequest(
+            gym_id=gym_id,
+            member_id=member_id,
+            rank_id=target_id,
+        ),
+    )
+
+    assert str(response.new_rank.rank_id) == target_id
+    sqls = _executed_sql_strings(session)
+    assert _load("insert_rank_activity.sql") in sqls
+
+
+@pytest.mark.asyncio
+async def test_set_member_rank_unassign_writes_null_and_no_target_read():
+    """Unassigning (rank_id=None) skips the target read and writes NULL."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    old_id = str(uuid4())
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": old_id, "gym_id": gym_id}),
+            _result({"member_id": member_id, "current_rank_id": None}),
+            _result(None),  # insert_rank_activity (rank changed → logged)
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    response = await service.set_member_rank(
+        RankSetMemberRequest(gym_id=gym_id, member_id=member_id, rank_id=None),
+    )
+
+    assert response.new_rank is None
+    sqls = _executed_sql_strings(session)
+    assert _load("get_rank.sql") not in sqls  # no target lookup
+    set_params = session.execute.await_args_list[1].args[1]
+    assert set_params["new_rank_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_member_rank_404_when_target_in_other_gym():
+    """A target rank in another gym is rejected as not found."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    target_id = str(uuid4())
+    target_row = make_rank_row(rank_id=target_id, gym_id=str(uuid4()))
+
+    session = _make_session_mock(
+        [
+            _result({"current_rank_id": None, "gym_id": gym_id}),
+            _result(target_row),
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="Rank not found"):
+        await service.set_member_rank(
+            RankSetMemberRequest(
+                gym_id=gym_id,
+                member_id=member_id,
+                rank_id=target_id,
+            ),
+        )
+
+
+# ---------- reorder_ranks ----------
+
+
+@pytest.mark.asyncio
+async def test_reorder_ranks_shifts_before_finalizing():
+    """Reorder shifts every row out of the target space first, then
+    finalizes, then re-lists — all in one committed session."""
+    gym_id = uuid4()
+    rank_a = uuid4()
+    rank_b = uuid4()
+
+    session = _make_session_mock(
+        [
+            _result(None),  # shift
+            _result(None),  # finalize
+            _result([], many=True),  # list
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.reorder_ranks(
+        RankReorderRequest(
+            gym_id=gym_id,
+            ranks=[
+                RankReorderItem(
+                    rank_id=rank_a,
+                    main_rank_num_order=1,
+                    sub_rank_num_order=0,
+                ),
+                RankReorderItem(
+                    rank_id=rank_b,
+                    main_rank_num_order=0,
+                    sub_rank_num_order=0,
+                ),
+            ],
+        ),
+    )
+
+    sqls = _executed_sql_strings(session)
+    assert (
+        sqls.index(_load("reorder_ranks_shift.sql"))
+        < sqls.index(_load("reorder_ranks_finalize.sql"))
+        < sqls.index(_load("list_ranks.sql"))
+    )
+    session.commit.assert_awaited_once()

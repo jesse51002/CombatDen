@@ -60,6 +60,20 @@ class EditMemberRequested extends MemberDetailEvent {
   List<Object?> get props => [request];
 }
 
+/// Change the member's rank through the ranks domain: [promote] to the
+/// next rank, or set/assign/unassign an explicit [rankId] (null
+/// unassigns). Reloads member detail in place so the rank + real
+/// progress refresh.
+class MemberRankChangeRequested extends MemberDetailEvent {
+  final bool promote;
+  final String? rankId;
+
+  const MemberRankChangeRequested({required this.promote, this.rankId});
+
+  @override
+  List<Object?> get props => [promote, rankId];
+}
+
 class UpdateCardRequested extends MemberDetailEvent {
   final String paymentMethodId;
 

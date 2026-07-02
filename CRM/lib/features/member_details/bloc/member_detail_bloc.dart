@@ -20,12 +20,14 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
 class MemberDetailBloc
     extends Bloc<MemberDetailEvent, MemberDetailState> {
   final MemberRepository _repository;
+  final RanksRepository _ranksRepository;
 
   /// Reserve (sign-up) is a cross-feature reuse of the schedule feature's
   /// wiring (`ScheduleRepository.signUp`) for this one member/occurrence —
@@ -47,9 +49,11 @@ class MemberDetailBloc
   MemberDetailBloc({
     required MemberRepository repository,
     required ScheduleRepository scheduleRepository,
+    required RanksRepository ranksRepository,
     InvoicePoller? poller,
   })  : _repository = repository,
         _scheduleRepository = scheduleRepository,
+        _ranksRepository = ranksRepository,
         _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
@@ -58,6 +62,7 @@ class MemberDetailBloc
     on<MemberActionErrorCleared>(_onActionErrorCleared);
 
     on<EditMemberRequested>(_onEditMember);
+    on<MemberRankChangeRequested>(_onRankChange);
     on<UpdateCardRequested>(_onUpdateCard);
     on<UnlinkPaymentRequested>(_onUnlinkPayment);
     on<LinkParentRequested>(_onLinkParent);
@@ -1106,6 +1111,45 @@ class MemberDetailBloc
       if (current is MemberDetailLoaded) {
         emit(current.copyWith(
           refreshToken: current.refreshToken + 1,
+        ));
+      }
+    }
+  }
+
+  /// Apply a rank change (promote / set / unassign) via the ranks
+  /// domain, then reload member detail in place — new rank + real
+  /// progress, bumping refreshToken, same shape as a mutation.
+  Future<void> _onRankChange(
+    MemberRankChangeRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final current = state;
+    if (current is! MemberDetailLoaded) return;
+    emit(current.copyWith(isMutating: true));
+    final gymId = current.member.gymId;
+    final memberId = current.member.memberId;
+    try {
+      if (event.promote) {
+        await _ranksRepository.promoteMember(gymId, memberId);
+      } else {
+        await _ranksRepository.setMemberRank(gymId, memberId, event.rankId);
+      }
+      final refreshed = await _repository.getMemberDetail(memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(
+          member: refreshed,
+          isMutating: false,
+          refreshToken: latest.refreshToken + 1,
+        ));
+      }
+    } catch (e, stackTrace) {
+      log('Rank change failed', error: e, stackTrace: stackTrace);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(
+          isMutating: false,
+          actionError: e.toString(),
         ));
       }
     }

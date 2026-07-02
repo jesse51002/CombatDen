@@ -106,6 +106,28 @@ SELECT
     gr.image_url            AS rank_image_url,
     gr.color                AS rank_color,
     gr.classes_till_rankup  AS rank_classes_till_rankup,
+    -- Real progress toward the next rank: classes the member has attended
+    -- since their last logged promotion (member_activities 'rank_promoted'),
+    -- falling back to the member's join date when never promoted. Pairs with
+    -- rank_classes_till_rankup (the gym-set threshold) for an honest "X / N".
+    (
+        SELECT COUNT(ma.log_id)
+        FROM member_attendance ma
+        JOIN class_history ch
+            ON ch.class_history_id = ma.class_history_id
+        WHERE ma.member_id = m.member_id
+          AND ma.gym_id = m.gym_id
+          AND ch.occurred_at > COALESCE(
+              (
+                  SELECT MAX(act.time)
+                  FROM member_activities act
+                  WHERE act.member_id = m.member_id
+                    AND act.gym_id = m.gym_id
+                    AND act.activity_type = 'rank_promoted'
+              ),
+              m.created_at
+          )
+    ) AS rank_classes_since,
     (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM member_billing_profile mbp
 JOIN members m ON m.member_id = mbp.member_id

@@ -33,6 +33,7 @@ const Set<String> kAddressableRoutes = {
   AppRoutes.memberships,
   AppRoutes.membershipsDiscounts,
   AppRoutes.membershipsWaivers,
+  AppRoutes.membershipsRanks,
   AppRoutes.schedule,
   AppRoutes.growth,
   AppRoutes.employees,

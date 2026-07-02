@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
@@ -70,6 +71,7 @@ class MemberDetailScreen extends StatelessWidget {
             create: (ctx) => MemberDetailBloc(
               repository: ctx.read<MemberRepository>(),
               scheduleRepository: ctx.read<ScheduleRepository>(),
+              ranksRepository: RanksRepository(apiClient: ApiClient()),
             )..add(
                 MemberDetailRequested(memberId, gymId: _gymId),
               ),

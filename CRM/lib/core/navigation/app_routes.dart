@@ -18,10 +18,12 @@ class AppRoutes {
   // The single-occurrence edit screen, opened from the chooser dialog's
   // "This occurrence" option.
   static const String scheduleOccurrence = '/schedule/class/occurrence';
-  // The Memberships screen's three tabs are each addressable.
+  // The Gym screen's four tabs are each addressable. (The route path
+  // stays /memberships — the nav section is labelled "Gym".)
   static const String memberships = '/memberships';
   static const String membershipsDiscounts = '/memberships/discounts';
   static const String membershipsWaivers = '/memberships/waivers';
+  static const String membershipsRanks = '/memberships/ranks';
   // Create / edit a membership plan. Reads the plan (or null for
   // create) off route arguments, so it is not deep-linkable.
   static const String membershipDetails = '/memberships/detail';

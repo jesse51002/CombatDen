@@ -369,6 +369,40 @@ When you add a similar derived field, prefer extending an existing
 `*_status` view or adding a new view — never duplicate the
 derivation across SQL files.
 
+## Ranks domain
+
+`src/ranks/` owns the per-gym rank ladder (`gym_ranks`) and per-member
+rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
+
+- **Two member-rank endpoints, both atomic + audit-logged.**
+  `POST /api/v1/ranks/promote-member` advances a member one rung up the
+  ordered ladder (a rank-less member → the lowest rank; already at the top
+  → **409**). `POST /api/v1/ranks/set-member-rank` sets an explicit rank
+  (correction / demotion / assign), or `null` to unassign. Both run the
+  member UPDATE **and** a `member_activities` `rank_promoted` row in one
+  transaction (`set_member_rank.sql` + `insert_rank_activity.sql`). These
+  are the **canonical** rank-change paths — the CRM uses only these.
+- **The activity is the progress anchor, not just audit.** A member's
+  real progress toward the next rank is attendance since their last
+  promotion: `member_details.sql` counts `member_attendance` JOIN
+  `class_history` where `occurred_at > COALESCE(MAX(rank_promoted
+  activity.time), members.created_at)`, surfaced as
+  `BillingRank.classes_since_rank`. So logging a promotion is load-bearing.
+  `classes_till_rankup` is the gym-set **threshold** (the denominator), a
+  rank-row property — never a per-member counter.
+- **Reorder is two-phase.** `POST /api/v1/ranks/reorder` takes the full new
+  ordering and applies it in one transaction: shift every listed row's main
+  order out of range (`reorder_ranks_shift.sql`, +100000), then set finals
+  (`reorder_ranks_finalize.sql`). This is required because
+  `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
+  non-deferrable (checked per row); no migration needed.
+- **The CRM only ever changes a member's rank through the two endpoints
+  above.** `members.current_rank_id` is still a writable column on
+  `PUT /api/v1/members/{id}` (the composite FK `(current_rank_id, gym_id) →
+  gym_ranks` guards it at the DB), but that generic path is not how the UI
+  changes rank and gets no special-case handling — a wrong-gym id there
+  surfaces like any other constraint violation on that endpoint.
+
 ## Security
 
 **Authentication & Authorization**

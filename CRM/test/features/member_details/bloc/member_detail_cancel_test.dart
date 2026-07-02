@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -15,6 +16,8 @@ import 'package:mocktail/mocktail.dart';
 class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
+
+class MockRanksRepository extends Mock implements RanksRepository {}
 
 void main() {
   const memberId = 'member-1';
@@ -78,7 +81,7 @@ void main() {
           failedItemIds: [],
         ),
       );
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: buildSeed,
     act: (bloc) => bloc.add(
@@ -134,7 +137,7 @@ void main() {
           failedItemIds: [itemId2],
         ),
       );
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: buildSeed,
     act: (bloc) => bloc.add(
@@ -186,7 +189,7 @@ void main() {
           failedItemIds: [itemId1, itemId2],
         ),
       );
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: buildSeed,
     act: (bloc) => bloc.add(
@@ -237,7 +240,7 @@ void main() {
           'Membership is inside an unfinished task.',
         ),
       );
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: buildSeed,
     act: (bloc) => bloc.add(
@@ -283,7 +286,7 @@ void main() {
           failedItemIds: [],
         ),
       );
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: buildSeed,
     act: (bloc) => bloc.add(
@@ -301,7 +304,7 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'CancelMembershipOutcomeCleared wipes cancelOutcome from state',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],

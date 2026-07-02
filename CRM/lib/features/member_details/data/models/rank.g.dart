@@ -13,4 +13,5 @@ Rank _$RankFromJson(Map<String, dynamic> json) => Rank(
   imageUrl: json['image_url'] as String?,
   color: json['color'] as String?,
   classesTillRankup: (json['classes_till_rankup'] as num).toInt(),
+  classesSinceRank: (json['classes_since_rank'] as num?)?.toInt() ?? 0,
 );

@@ -190,12 +190,13 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: RouteSettings(name: settings.name, arguments: memberId),
     );
   }
-  // The Memberships screen's three tabs are each addressable by URL,
+  // The Gym screen's four tabs are each addressable by URL,
   // mapped to the tab the screen opens on.
   const membershipsTabIndex = {
     AppRoutes.memberships: 0,
     AppRoutes.membershipsDiscounts: 1,
     AppRoutes.membershipsWaivers: 2,
+    AppRoutes.membershipsRanks: 3,
   };
   final membershipsTab = membershipsTabIndex[path];
   if (membershipsTab != null) {

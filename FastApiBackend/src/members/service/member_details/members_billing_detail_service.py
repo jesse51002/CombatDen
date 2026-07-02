@@ -461,6 +461,7 @@ class MembersBillingDetailService:
             image_url=target_row["rank_image_url"],
             color=target_row["rank_color"],
             classes_till_rankup=target_row["rank_classes_till_rankup"],
+            classes_since_rank=target_row["rank_classes_since"],
         )
 
     def _derive_account_status(

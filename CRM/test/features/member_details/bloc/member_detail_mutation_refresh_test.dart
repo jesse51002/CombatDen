@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -16,6 +17,8 @@ import 'package:mocktail/mocktail.dart';
 class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
+
+class MockRanksRepository extends Mock implements RanksRepository {}
 
 class MockMembersManagementResponse extends Mock
     implements MembersManagementResponse {}
@@ -68,7 +71,7 @@ void main() {
       });
       Future<void>.delayed(const Duration(milliseconds: 20))
           .then((_) => gate.complete());
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),

@@ -181,6 +181,9 @@ class BillingRank(BaseModel):
     image_url: str | None = None
     color: str | None = None
     classes_till_rankup: int
+    # Classes attended since the member's last promotion — the real
+    # numerator for "classes_since_rank / classes_till_rankup" progress.
+    classes_since_rank: int = 0
 
 
 class BillingRewardCard(BaseModel):

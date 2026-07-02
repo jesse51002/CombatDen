@@ -10,24 +10,32 @@ import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_bloc.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_event.dart';
+import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
+import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
+import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
+import 'package:crm/features/memberships/data/models/rank_full_response.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
+import 'package:crm/features/memberships/presentation/dialogs/edit_rank_dialog.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
+import 'package:crm/features/memberships/presentation/tabs/ranks_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/waivers_tab.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
-/// Memberships screen — gym-level catalog admin with three
-/// tabs: membership plans, discount presets, and waivers.
+/// Gym screen — gym-level catalog admin (the "Gym" nav section)
+/// with four tabs: membership plans, discount presets, waivers, and
+/// the rank ladder.
 class MembershipsScreen extends StatelessWidget {
-  /// Tab to open on (0 Memberships, 1 Discounts, 2 Waivers).
+  /// Tab to open on (0 Plans, 1 Discounts, 2 Waivers, 3 Ranks).
   final int initialTab;
 
   const MembershipsScreen({super.key, this.initialTab = 0});
@@ -42,6 +50,9 @@ class MembershipsScreen extends StatelessWidget {
         ),
         RepositoryProvider<TasksRepository>(
           create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<RanksRepository>(
+          create: (_) => RanksRepository(apiClient: ApiClient()),
         ),
       ],
       child: MultiBlocProvider(
@@ -66,6 +77,11 @@ class MembershipsScreen extends StatelessWidget {
               repository: ctx.read<TasksRepository>(),
             )..add(TasksOngoingRequested(gymId)),
           ),
+          BlocProvider<RanksBloc>(
+            create: (ctx) => RanksBloc(
+              repository: ctx.read<RanksRepository>(),
+            )..add(RanksInitRequested(gymId)),
+          ),
         ],
         child: AppShell(
           activeRoute: AppRoutes.memberships,
@@ -87,16 +103,18 @@ class _MembershipsBody extends StatefulWidget {
 }
 
 class _MembershipsBodyState extends State<_MembershipsBody> {
-  static const _tabs = ['Memberships', 'Discounts', 'Waivers'];
+  static const _tabs = ['Plans', 'Discounts', 'Waivers', 'Ranks'];
   static const _addLabels = [
     'Add New Membership',
     'Add New Discount',
     'Add New Waiver',
+    'Add New Rank',
   ];
   static const _tabRoutes = [
     AppRoutes.memberships,
     AppRoutes.membershipsDiscounts,
     AppRoutes.membershipsWaivers,
+    AppRoutes.membershipsRanks,
   ];
 
   late int _tabIndex;
@@ -132,7 +150,21 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
         await Navigator.of(context)
             .pushNamed(AppRoutes.membershipsWaiverEditor);
         waiversBloc.add(WaiversInitRequested(widget.gymId));
+      case 3:
+        EditRankDialog.showCreateGroup(
+          context: context,
+          bloc: context.read<RanksBloc>(),
+          gymId: widget.gymId,
+          existingRanks: _currentRanks(context),
+        );
     }
+  }
+
+  /// The ladder as currently loaded — lets the create dialog default a
+  /// new rank's position above the existing ones.
+  List<RankFullResponse> _currentRanks(BuildContext context) {
+    final state = context.read<RanksBloc>().state;
+    return state is RanksLoaded ? state.ranks : const [];
   }
 
   @override
@@ -176,6 +208,7 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
               PlansTab(),
               DiscountsTab(),
               WaiversTab(),
+              RanksTab(),
             ],
           ),
         ),

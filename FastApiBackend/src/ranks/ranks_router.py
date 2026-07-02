@@ -17,8 +17,12 @@ from src.ranks.schema.ranks_schema import (
     RankEnabledRequest,
     RankEnabledResponse,
     RankListResponse,
+    RankMemberResponse,
     RankPresetListResponse,
+    RankPromoteMemberRequest,
+    RankReorderRequest,
     RankResponse,
+    RankSetMemberRequest,
     RankUpdateRequest,
 )
 from src.ranks.service.ranks_service import RanksService
@@ -30,6 +34,23 @@ ranks_router = APIRouter(
     prefix="/api/v1/ranks",
     tags=["ranks"],
 )
+
+
+def _member_rank_http_error(exc: ValueError) -> HTTPException:
+    """Map a member-rank ValueError to its HTTP status.
+
+    "highest rank" → 409 (state conflict), "not found" → 404,
+    anything else → 400.
+    """
+    message = str(exc)
+    lowered = message.lower()
+    if "highest rank" in lowered:
+        code = status.HTTP_409_CONFLICT
+    elif "not found" in lowered:
+        code = status.HTTP_404_NOT_FOUND
+    else:
+        code = status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=code, detail=message)
 
 
 # ---------- list / create (collection) ----------
@@ -316,6 +337,143 @@ async def set_rank_enabled(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to set rank-enabled",
+        ) from None
+
+
+# ---------- member rank changes + reorder (before /{rank_id}) ----------
+
+
+@ranks_router.post(
+    "/promote-member",
+    response_model=RankMemberResponse,
+    summary="Promote a member to the next rank",
+    description=(
+        "Advances the member one step up the gym's ordered ladder. "
+        "A rank-less member is assigned the lowest rank. Logs a "
+        "``rank_promoted`` activity. Fails with 409 if the member is "
+        "already at the highest rank."
+    ),
+    responses={
+        200: {"description": "Member promoted"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Member not found"},
+        409: {"description": "Member already at the highest rank"},
+    },
+)
+@inject
+async def promote_member(
+    request: RankPromoteMemberRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> RankMemberResponse:
+    """Promote a member one step up the ladder."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        return await ranks_service.promote_member(request)
+    except ValueError as exc:
+        raise _member_rank_http_error(exc) from None
+    except Exception:
+        logger.error(
+            "Failed to promote member: gym_id=%s, member_id=%s",
+            request.gym_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to promote member",
+        ) from None
+
+
+@ranks_router.post(
+    "/set-member-rank",
+    response_model=RankMemberResponse,
+    summary="Set a member's rank explicitly",
+    description=(
+        "Sets the member to an explicit rank (correction / demotion "
+        "/ assignment), or to no rank when ``rank_id`` is null. The "
+        "target rank must belong to the member's gym. Logs a "
+        "``rank_promoted`` activity when the rank changes."
+    ),
+    responses={
+        200: {"description": "Member rank set"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Member or rank not found"},
+    },
+)
+@inject
+async def set_member_rank(
+    request: RankSetMemberRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> RankMemberResponse:
+    """Set a member's rank explicitly."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        return await ranks_service.set_member_rank(request)
+    except ValueError as exc:
+        raise _member_rank_http_error(exc) from None
+    except Exception:
+        logger.error(
+            "Failed to set member rank: gym_id=%s, member_id=%s",
+            request.gym_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to set member rank",
+        ) from None
+
+
+@ranks_router.post(
+    "/reorder",
+    response_model=RankListResponse,
+    summary="Reorder a gym's rank ladder",
+    description=(
+        "Applies a full new ordering for the listed ranks in one "
+        "atomic two-phase update, so the unique-order constraint is "
+        "never transiently violated. Returns the reordered ladder."
+    ),
+    responses={
+        200: {"description": "Ranks reordered; list returned"},
+        400: {"description": "Invalid ordering"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def reorder_ranks(
+    request: RankReorderRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> RankListResponse:
+    """Reorder a gym's rank ladder atomically."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        return await ranks_service.reorder_ranks(request)
+    except Exception:
+        logger.error(
+            "Failed to reorder ranks: gym_id=%s",
+            request.gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reorder ranks",
         ) from None
 
 

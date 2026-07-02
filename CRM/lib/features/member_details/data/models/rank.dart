@@ -20,6 +20,11 @@ class Rank extends Equatable {
   final String? color;
   final int classesTillRankup;
 
+  /// Classes the member has attended since their last promotion —
+  /// the real progress numerator toward [classesTillRankup].
+  @JsonKey(defaultValue: 0)
+  final int classesSinceRank;
+
   const Rank({
     required this.rankId,
     required this.mainName,
@@ -27,6 +32,7 @@ class Rank extends Equatable {
     this.imageUrl,
     this.color,
     required this.classesTillRankup,
+    this.classesSinceRank = 0,
   });
 
   factory Rank.fromJson(
@@ -45,5 +51,6 @@ class Rank extends Equatable {
         imageUrl,
         color,
         classesTillRankup,
+        classesSinceRank,
       ];
 }

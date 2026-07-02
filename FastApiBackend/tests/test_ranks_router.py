@@ -484,3 +484,192 @@ def test_create_rank_empty_name_rejected(client, auth_headers, fake_gym_id):
         headers=auth_headers,
     )
     assert response.status_code == 422
+
+
+# ---------- promote-member ----------
+
+
+def test_promote_member_200_with_new_rank(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id
+):
+    """POST /api/v1/ranks/promote-member advances a rank-less member
+    to the lowest rank and returns the new rank."""
+    low_id = str(uuid4())
+    ladder = [
+        make_rank_row(rank_id=low_id, gym_id=fake_gym_id, main_name="White"),
+        make_rank_row(
+            rank_id=str(uuid4()),
+            gym_id=fake_gym_id,
+            main_rank_num_order=1,
+            main_name="Blue",
+        ),
+    ]
+
+    current_result = MagicMock()
+    current_result.mappings.return_value.fetchone.return_value = {
+        "current_rank_id": None,
+        "gym_id": fake_gym_id,
+    }
+    list_result = MagicMock()
+    list_result.mappings.return_value.all.return_value = ladder
+    set_result = MagicMock()
+    set_result.mappings.return_value.fetchone.return_value = {
+        "member_id": fake_member_id,
+        "current_rank_id": low_id,
+    }
+    activity_result = MagicMock()
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(
+        side_effect=[current_result, list_result, set_result, activity_result],
+    )
+    session.commit = AsyncMock()
+
+    response = client.post(
+        "/api/v1/ranks/promote-member",
+        json={"gym_id": fake_gym_id, "member_id": fake_member_id},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["member_id"] == fake_member_id
+    assert body["new_rank"]["rank_id"] == low_id
+
+
+def test_promote_member_409_when_at_top(client, auth_headers, fake_gym_id, fake_member_id):
+    """The router maps the 'highest rank' ValueError to 409."""
+    from src.main import app  # noqa: PLC0415 — local import to avoid cycle
+
+    app.container.ranks_service.override(
+        MagicMock(
+            promote_member=AsyncMock(
+                side_effect=ValueError("Member is already at the highest rank"),
+            ),
+        )
+    )
+    try:
+        response = client.post(
+            "/api/v1/ranks/promote-member",
+            json={"gym_id": fake_gym_id, "member_id": fake_member_id},
+            headers=auth_headers,
+        )
+        assert response.status_code == 409
+    finally:
+        app.container.ranks_service.reset_override()
+
+
+def test_promote_member_404_when_member_missing(
+    client, auth_headers, fake_gym_id, fake_member_id
+):
+    """The router maps a 'Member not found' ValueError to 404."""
+    from src.main import app  # noqa: PLC0415
+
+    app.container.ranks_service.override(
+        MagicMock(
+            promote_member=AsyncMock(side_effect=ValueError("Member not found")),
+        )
+    )
+    try:
+        response = client.post(
+            "/api/v1/ranks/promote-member",
+            json={"gym_id": fake_gym_id, "member_id": fake_member_id},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+    finally:
+        app.container.ranks_service.reset_override()
+
+
+# ---------- set-member-rank ----------
+
+
+def test_set_member_rank_200(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id
+):
+    """POST /api/v1/ranks/set-member-rank sets an explicit rank."""
+    target_id = str(uuid4())
+    target_row = make_rank_row(rank_id=target_id, gym_id=fake_gym_id)
+
+    current_result = MagicMock()
+    current_result.mappings.return_value.fetchone.return_value = {
+        "current_rank_id": None,
+        "gym_id": fake_gym_id,
+    }
+    target_result = MagicMock()
+    target_result.mappings.return_value.fetchone.return_value = target_row
+    set_result = MagicMock()
+    set_result.mappings.return_value.fetchone.return_value = {
+        "member_id": fake_member_id,
+        "current_rank_id": target_id,
+    }
+    activity_result = MagicMock()
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(
+        side_effect=[current_result, target_result, set_result, activity_result],
+    )
+    session.commit = AsyncMock()
+
+    response = client.post(
+        "/api/v1/ranks/set-member-rank",
+        json={
+            "gym_id": fake_gym_id,
+            "member_id": fake_member_id,
+            "rank_id": target_id,
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["new_rank"]["rank_id"] == target_id
+
+
+# ---------- reorder ----------
+
+
+def test_reorder_ranks_200_returns_list(client, db_pool_mock, auth_headers, fake_gym_id):
+    """POST /api/v1/ranks/reorder applies the new ordering and returns
+    the reordered ladder."""
+    rank_a = str(uuid4())
+    rank_b = str(uuid4())
+    reordered = [
+        make_rank_row(rank_id=rank_b, gym_id=fake_gym_id, main_name="White"),
+        make_rank_row(
+            rank_id=rank_a,
+            gym_id=fake_gym_id,
+            main_rank_num_order=1,
+            main_name="Blue",
+        ),
+    ]
+
+    shift_result = MagicMock()
+    finalize_result = MagicMock()
+    list_result = MagicMock()
+    list_result.mappings.return_value.all.return_value = reordered
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(
+        side_effect=[shift_result, finalize_result, list_result],
+    )
+    session.commit = AsyncMock()
+
+    response = client.post(
+        "/api/v1/ranks/reorder",
+        json={
+            "gym_id": fake_gym_id,
+            "ranks": [
+                {
+                    "rank_id": rank_a,
+                    "main_rank_num_order": 1,
+                    "sub_rank_num_order": 0,
+                },
+                {
+                    "rank_id": rank_b,
+                    "main_rank_num_order": 0,
+                    "sub_rank_num_order": 0,
+                },
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 2
