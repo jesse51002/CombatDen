@@ -113,6 +113,46 @@ def test_checkin_records_when_a_plan_covers_the_class(
     assert body["memberships"][0]["is_eligible"] is True
 
 
+def test_checkin_idempotent_repeat_also_folds_in_the_streak(
+    client, auth_headers, fake_member_id, fake_gym_id
+):
+    """An already-checked-in repeat is a real attendance too: the gate's
+    repeat builder leaves ``class_streak_weeks`` at 0, and it is the ROUTER
+    that folds the streak into the response — for repeats exactly like fresh
+    check-ins (the fold condition is ``log_id is not None OR
+    already_checked_in``)."""
+    class_id = str(uuid4())
+    response = CheckinResponse(
+        log_id=str(uuid4()),
+        member_id=fake_member_id,
+        class_id=class_id,
+        already_checked_in=True,
+        chosen_plan_id=None,
+        chosen_item_id=None,
+        points_awarded=50,
+        memberships=[],
+    )
+    _override_checkin(response)
+    try:
+        resp = client.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": fake_member_id,
+                "gym_id": fake_gym_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        _reset_checkin()
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["already_checked_in"] is True
+    assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
+
+
 def test_checkin_rejected_when_no_plan_covers(
     client, auth_headers, fake_member_id, fake_gym_id
 ):

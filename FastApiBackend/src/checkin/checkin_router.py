@@ -89,15 +89,9 @@ async def checkin(
     request: CheckinRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    resolver: CheckinClassResolver = Depends(
-        Provide[DependencyInjector.checkin_class_resolver]
-    ),
-    member_gate: CheckinMemberGate = Depends(
-        Provide[DependencyInjector.checkin_member_gate]
-    ),
-    streak_service: StreakService = Depends(
-        Provide[DependencyInjector.streak_service]
-    ),
+    resolver: CheckinClassResolver = Depends(Provide[DependencyInjector.checkin_class_resolver]),
+    member_gate: CheckinMemberGate = Depends(Provide[DependencyInjector.checkin_member_gate]),
+    streak_service: StreakService = Depends(Provide[DependencyInjector.streak_service]),
 ) -> CheckinResponse:
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
@@ -114,10 +108,8 @@ async def checkin(
             request.ignore_warnings,
         )
         # Fold in the member's streak (after this check-in) so the caller needn't
-        # make a second GET /streak call. Only meaningful when the check-in was
-        # actually recorded (or an idempotent repeat) — a rejection /
-        # needs-confirmation leaves it at 0.
-        if result.log_id is not None or result.already_checked_in:
+        # make a second GET /streak call.
+        if result.log_id is not None:
             result.class_streak_weeks = await streak_service.get_streak(
                 request.member_id, request.gym_id
             )
@@ -177,18 +169,14 @@ async def remove_checkin(
     occurrence_date: date,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    remover: CheckinRemover = Depends(
-        Provide[DependencyInjector.checkin_remover]
-    ),
+    remover: CheckinRemover = Depends(Provide[DependencyInjector.checkin_remover]),
 ) -> CheckinRemoveResponse:
     """Reverse one member's check-in (staff)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
-        return await remover.remove(
-            class_id, gym_id, occurrence_date, member_id
-        )
+        return await remover.remove(class_id, gym_id, occurrence_date, member_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -196,8 +184,7 @@ async def remove_checkin(
         ) from None
     except Exception:
         logger.error(
-            "Remove check-in failed: member_id=%s, class_id=%s, "
-            "occurrence_date=%s",
+            "Remove check-in failed: member_id=%s, class_id=%s, occurrence_date=%s",
             member_id,
             class_id,
             occurrence_date,
@@ -249,9 +236,7 @@ async def signup(
     request: SignupRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    signup_service: SignupService = Depends(
-        Provide[DependencyInjector.signup_service]
-    ),
+    signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
 ) -> SignupResponse:
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
@@ -307,22 +292,17 @@ async def remove_signup(
     occurrence_date: date,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    signup_service: SignupService = Depends(
-        Provide[DependencyInjector.signup_service]
-    ),
+    signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
 ) -> SignupRemoveResponse:
     """Cancel a member's sign-up (staff or the member themselves)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await signup_service.remove(
-            member_id, gym_id, class_id, occurrence_date
-        )
+        return await signup_service.remove(member_id, gym_id, class_id, occurrence_date)
     except Exception:
         logger.error(
-            "Remove sign-up failed: member_id=%s, class_id=%s, "
-            "occurrence_date=%s",
+            "Remove sign-up failed: member_id=%s, class_id=%s, occurrence_date=%s",
             member_id,
             class_id,
             occurrence_date,
@@ -417,8 +397,7 @@ async def checkin_batch(
         # Total failure — 500 (never 207); the per-item reasons are logged but a
         # whole-batch failure must not look like a success to the caller.
         logger.error(
-            "Batch check-in failed for every member: gym_id=%s, class_id=%s, "
-            "occurrence_date=%s",
+            "Batch check-in failed for every member: gym_id=%s, class_id=%s, occurrence_date=%s",
             request.gym_id,
             request.class_id,
             request.occurrence_date,
@@ -471,9 +450,7 @@ async def list_attendees(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        return await attendees_service.list_attendees(
-            gym_id, class_id, occurrence_date
-        )
+        return await attendees_service.list_attendees(gym_id, class_id, occurrence_date)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -509,9 +486,7 @@ async def get_streak(
     gym_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    streak_service: StreakService = Depends(
-        Provide[DependencyInjector.streak_service]
-    ),
+    streak_service: StreakService = Depends(Provide[DependencyInjector.streak_service]),
 ) -> StreakResponse:
     """Weeks of consecutive class attendance."""
     user_payload = auth.get_current_user(credentials)

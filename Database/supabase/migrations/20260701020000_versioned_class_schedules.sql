@@ -72,6 +72,11 @@ CREATE TABLE gym_classes (
 );
 
 -- Access rules for gym_classes (mirrors access_rules/gym_classes.sql)
+-- DROP TABLE destroyed the original role grants; restore the standard
+-- Supabase posture before the policies/REVOKEs below pare authenticated
+-- back down (same pattern as prior recreate migrations).
+GRANT ALL ON TABLE gym_classes TO anon, authenticated, service_role;
+
 ALTER TABLE gym_classes ENABLE ROW LEVEL SECURITY;
 
 -- All employees can view classes for their gym
@@ -195,6 +200,9 @@ FROM gym_class_schedules
 ORDER BY class_id, effective_from DESC, schedule_id DESC;
 
 -- Access rules for gym_class_schedules (mirrors access_rules/gym_class_schedules.sql)
+GRANT ALL ON TABLE gym_class_schedules TO anon, authenticated, service_role;
+GRANT SELECT ON gym_class_schedules_current TO anon, authenticated, service_role;
+
 ALTER TABLE gym_class_schedules ENABLE ROW LEVEL SECURITY;
 
 -- Read posture mirrors gym_classes: staff see their gym's schedule versions,
@@ -258,6 +266,8 @@ CREATE TABLE class_instance_exceptions (
 
 -- Access rules for class_instance_exceptions (mirrors
 -- access_rules/class_instance_exceptions.sql)
+GRANT ALL ON TABLE class_instance_exceptions TO anon, authenticated, service_role;
+
 ALTER TABLE class_instance_exceptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Gym employees can view instance exceptions"
@@ -318,6 +328,8 @@ CREATE TABLE class_range_exceptions (
 
 -- Access rules for class_range_exceptions (mirrors
 -- access_rules/class_range_exceptions.sql)
+GRANT ALL ON TABLE class_range_exceptions TO anon, authenticated, service_role;
+
 ALTER TABLE class_range_exceptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Gym employees can view range exceptions"
@@ -389,6 +401,8 @@ CREATE INDEX idx_class_signups_member_gym
     ON class_signups (member_id, gym_id);
 
 -- Access rules for class_signups (mirrors access_rules/class_signups.sql)
+GRANT ALL ON TABLE class_signups TO anon, authenticated, service_role;
+
 ALTER TABLE class_signups ENABLE ROW LEVEL SECURITY;
 
 -- Members can read their own sign-ups; gym staff can read everything at their
@@ -470,6 +484,8 @@ CREATE INDEX idx_member_attendance_member_occurred
     ON member_attendance (member_id, occurred_at DESC);
 
 -- Access rules for member_attendance (mirrors access_rules/member_attendance.sql)
+GRANT ALL ON TABLE member_attendance TO anon, authenticated, service_role;
+
 ALTER TABLE member_attendance ENABLE ROW LEVEL SECURITY;
 
 -- Members can read their own attendance; gym staff can read everything at their gym
