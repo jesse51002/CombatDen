@@ -138,11 +138,14 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> OccurrenceCancelResponse:
         """Un-occur one occurrence: reverse its attendance, delete its
         sign-ups, and write the cancelled exception — all in one transaction.
 
-        ``occurrence_date`` is the occurrence's ORIGINAL date.
+        ``(occurrence_date, occurrence_time)`` is the occurrence's ORIGINAL
+        slot — with several slots per day legal, the pair names exactly one
+        occurrence; a sibling slot on the same date is untouched.
 
         Raises:
             ValueError: If the class does not exist for this gym (mapped to
@@ -153,11 +156,12 @@ class ClassesUndoService:
         async with self._db_pool.session() as session:
             attendance_deleted, signups_deleted, unended = (
                 await self.teardown_occurrence(
-                    session, class_id, gym_id, occurrence_date
+                    session, class_id, gym_id, occurrence_date,
+                    occurrence_time,
                 )
             )
             await self._upsert_cancelled_exception(
-                session, class_id, gym_id, occurrence_date
+                session, class_id, gym_id, occurrence_date, occurrence_time
             )
             await session.commit()
 
@@ -165,6 +169,7 @@ class ClassesUndoService:
             class_id=class_id,
             gym_id=gym_id,
             occurrence_date=occurrence_date,
+            occurrence_time=occurrence_time,
             attendance_rows_deleted=attendance_deleted,
             signups_deleted=signups_deleted,
             memberships_unended=unended,
@@ -176,22 +181,25 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> tuple[int, int, list[UUID]]:
         """The shared cancel teardown: reverse the occurrence's attendance
         (points clawed back) + delete its sign-ups, in the caller's OPEN
-        transaction. Public because BOTH cancel entry points run it — this
-        service's ``cancel_occurrence`` endpoint AND the exceptions service's
-        ``is_cancelled=True`` override upsert (the path the CRM uses) — so a
-        cancel behaves identically no matter which route it arrives by.
+        transaction — scoped to the exact ``(original_date, original_time)``
+        slot, never a whole day. Public because BOTH cancel entry points run
+        it — this service's ``cancel_occurrence`` endpoint AND the exceptions
+        service's ``is_cancelled=True`` override upsert (the path the CRM
+        uses) — so a cancel behaves identically no matter which route it
+        arrives by.
 
         Returns ``(attendance_rows_deleted, signups_deleted,
         memberships_unended)``.
         """
         attendance_deleted, unended = await self._reverse_attendance(
-            session, class_id, gym_id, original_date
+            session, class_id, gym_id, original_date, original_time
         )
         signups_deleted = await self._delete_signups(
-            session, class_id, original_date
+            session, class_id, original_date, original_time
         )
         return attendance_deleted, signups_deleted, unended
 
@@ -201,6 +209,7 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> tuple[int, list[UUID]]:
         """Reverse one occurrence's attendance — the shared, billing-adjacent
         teardown used by cancel AND a FUTURE reschedule.
@@ -219,7 +228,7 @@ class ClassesUndoService:
         """
         points_worth = await self._load_points(session, class_id)
         members = await self._attendee_members(
-            session, class_id, original_date
+            session, class_id, original_date, original_time
         )
         attendance_deleted = 0
         unended: list[UUID] = []
@@ -230,6 +239,7 @@ class ClassesUndoService:
                 gym_id,
                 class_id,
                 original_date,
+                original_time,
                 points_worth,
             )
             if result.removed:
@@ -245,17 +255,19 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
         new_date: date,
     ) -> OccurrenceRescheduleResponse:
         """Move an occurrence to ``new_date`` (any date), attendance following
         and sign-ups carrying (the identity key never changes).
 
-        The occurrence keeps its currently-effective start time / duration
-        (a bare move carries no override). See the module docstring.
+        ``(occurrence_date, occurrence_time)`` is the ORIGINAL slot being
+        moved. The occurrence keeps its currently-effective start time /
+        duration (a bare move carries no override). See the module docstring.
 
         Raises:
-            ValueError: no real occurrence on ``occurrence_date`` (400); class
-                missing (404, "not found").
+            ValueError: no real occurrence at that slot (400); class missing
+                (404, "not found").
             RescheduleConflictError: the exact target instant (new_date +
                 start time) is already taken by a non-cancelled occurrence
                 (409).
@@ -263,15 +275,18 @@ class ClassesUndoService:
         await self._load_class_in_gym(class_id, gym_id)
         versions = await self.load_versions(class_id)
         resolution = await self._resolve_occurrence(
-            class_id, versions, occurrence_date
+            class_id, versions, occurrence_date, occurrence_time
         )
         if resolution is None:
             raise ValueError(
-                f"No class occurrence on {occurrence_date} to reschedule"
+                f"No class occurrence on {occurrence_date} at "
+                f"{occurrence_time} to reschedule"
             )
         owning, exception_row = resolution
 
-        effective_time = self._effective_time(owning, exception_row)
+        effective_time = self._effective_time(
+            occurrence_time, exception_row
+        )
         new_occurred_at = datetime.combine(
             new_date, effective_time, tzinfo=ZoneInfo(owning.timezone)
         ).astimezone(UTC)
@@ -279,13 +294,19 @@ class ClassesUndoService:
             class_id,
             versions,
             occurrence_date,
+            occurrence_time,
             new_date,
             effective_time,
             new_occurred_at,
         )
 
         landing_unchanged = self.is_landing_unchanged(
-            owning, exception_row, occurrence_date, new_date, new_occurred_at
+            owning,
+            exception_row,
+            occurrence_date,
+            occurrence_time,
+            new_date,
+            new_occurred_at,
         )
         # INSTANT-based, never day-based: a move to later TODAY is still a
         # move to a class that hasn't happened — its check-ins must wipe.
@@ -298,6 +319,7 @@ class ClassesUndoService:
                         class_id,
                         gym_id,
                         occurrence_date,
+                        occurrence_time,
                         new_occurred_at,
                         is_future,
                     )
@@ -314,6 +336,7 @@ class ClassesUndoService:
                                 "class_id": str(class_id),
                                 "gym_id": str(gym_id),
                                 "original_date": occurrence_date,
+                                "original_time": occurrence_time,
                                 "new_date": new_date,
                             },
                         )
@@ -330,6 +353,7 @@ class ClassesUndoService:
             exception_id=row["exception_id"],
             class_id=row["class_id"],
             original_date=row["original_date"],
+            original_time=row["original_time"],
             new_date=row["new_date"],
         )
 
@@ -338,6 +362,7 @@ class ClassesUndoService:
         class_id: UUID,
         versions: list[ExpanderScheduleVersion],
         original_date: date,
+        original_time: time,
         new_date: date,
         effective_time: time,
         new_occurred_at: datetime,
@@ -349,12 +374,13 @@ class ClassesUndoService:
         effective start time), so landing on a busy day at a DIFFERENT time
         is allowed. Two independent checks:
 
-        1. Another reschedule (a different ``original_date``) already
-           targeting ``new_date`` — the collision the single-day expansion
-           can't see (its original date is elsewhere). Each candidate's
-           effective time is resolved in Python against ITS OWN owning
-           version (``new_class_time`` when set, else that version's
-           ``class_time``); it collides only when the times match.
+        1. Another reschedule (a different ORIGINAL SLOT — the SQL excludes
+           the moved slot by its full ``(original_date, original_time)``
+           pair, so a sibling same-date slot is a genuine candidate) already
+           targeting ``new_date``. Each candidate's effective time is its own
+           ``new_class_time`` when set, else its own ``original_time`` (the
+           slot the exception is bound to); it collides only when the times
+           match.
         2. The version expansion over ``[new_date, new_date]``: a recurrence /
            override occurrence whose ``occurred_at`` equals the target
            instant.
@@ -369,17 +395,14 @@ class ClassesUndoService:
                 "class_id": str(class_id),
                 "new_date": new_date,
                 "original_date": original_date,
+                "original_time": original_time,
             },
         )
         for row in candidates:
-            slot = self.owning_slot(versions, row["original_date"])
-            default_time = (
-                slot[0].class_time if slot is not None else None
-            )
             candidate_time = (
                 row["new_class_time"]
                 if row["new_class_time"] is not None
-                else default_time
+                else row["original_time"]
             )
             if candidate_time == effective_time:
                 raise RescheduleConflictError(
@@ -400,6 +423,7 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         original_date: date,
+        original_time: time,
         new_occurred_at: datetime,
         is_future: bool,
     ) -> None:
@@ -417,11 +441,12 @@ class ClassesUndoService:
         """
         if is_future:
             await self._reverse_attendance(
-                session, class_id, gym_id, original_date
+                session, class_id, gym_id, original_date, original_time
             )
         else:
             await self.sync_attendance_occurred_at(
-                session, class_id, original_date, new_occurred_at
+                session, class_id, original_date, original_time,
+                new_occurred_at,
             )
 
     async def sync_attendance_occurred_at(
@@ -429,13 +454,16 @@ class ClassesUndoService:
         session: AsyncSession,
         class_id: UUID,
         original_date: date,
+        original_time: time,
         occurred_at: datetime,
     ) -> None:
         """Re-sync the denormalized effective start instant on a KEPT
-        occurrence's attendance rows (identity key unchanged). Public:
-        ``ClassesExceptionsService`` calls this for a same-date override on an
-        attended occurrence, in the SAME transaction as its exception write.
-        A no-op when the occurrence has no attendance."""
+        occurrence's attendance rows (identity key unchanged) — scoped to the
+        exact slot, so a same-day sibling occurrence's rows are never
+        touched. Public: ``ClassesExceptionsService`` calls this for a
+        same-slot override on an attended occurrence, in the SAME transaction
+        as its exception write. A no-op when the occurrence has no
+        attendance."""
         await session.execute(
             text(
                 load_sql(SQL_DIR / "classes_attendance_occurred_at_sync.sql")
@@ -443,6 +471,7 @@ class ClassesUndoService:
             {
                 "class_id": str(class_id),
                 "original_date": original_date,
+                "original_time": original_time,
                 "occurred_at": occurred_at,
             },
         )
@@ -459,39 +488,60 @@ class ClassesUndoService:
         )
         return [to_expander_schedule(row) for row in rows]
 
+    def owning_slots(
+        self,
+        versions: list[ExpanderScheduleVersion],
+        when: date,
+    ) -> list[tuple[ExpanderScheduleVersion, EffectiveOccurrence]]:
+        """ALL of ``when``'s owned bare slots (+ their owning versions),
+        exceptions NOT applied — pure ownership. A multi-slot day returns one
+        entry per slot. Public: the range-cancel teardown iterates every slot
+        of a covered date, using each bare occurrence's ``occurred_at`` as
+        that slot's effective start instant (with no instance exception in
+        play, a range never changes the time, so the pure owning slot IS the
+        effective instant)."""
+        occurrences = self._version_expander.expand(
+            versions, [], [], when, when
+        )
+        return [
+            (
+                next(
+                    v for v in versions if v.schedule_id == occ.schedule_id
+                ),
+                occ,
+            )
+            for occ in occurrences
+            if occ.original_date == when
+        ]
+
     def owning_slot(
         self,
         versions: list[ExpanderScheduleVersion],
         when: date,
+        slot_time: time,
     ) -> tuple[ExpanderScheduleVersion, EffectiveOccurrence] | None:
-        """The version whose recurrence owns ``when``'s slot (+ the bare
-        occurrence), exceptions NOT applied — pure ownership. Public: the
-        range-cancel teardown uses the bare occurrence's ``occurred_at`` as
-        a torn-down date's effective start instant (with no instance
-        exception in play, a range never changes the time, so the pure
-        owning slot IS the effective instant)."""
-        occurrences = self._version_expander.expand(
-            versions, [], [], when, when
+        """The exact ``(when, slot_time)`` owned bare slot (+ its owning
+        version), or None when no version's recurrence emits it."""
+        return next(
+            (
+                (version, occ)
+                for version, occ in self.owning_slots(versions, when)
+                if occ.original_time == slot_time
+            ),
+            None,
         )
-        for occ in occurrences:
-            if occ.original_date == when:
-                version = next(
-                    v for v in versions if v.schedule_id == occ.schedule_id
-                )
-                return version, occ
-        return None
 
     async def owning_version(
-        self, class_id: UUID, when: date
+        self, class_id: UUID, when: date, slot_time: time
     ) -> ExpanderScheduleVersion | None:
-        """The schedule version owning ``when``'s slot for this class, or
-        None when the recurrence doesn't emit that date. Public: the
-        exceptions service resolves override fallbacks (time / duration /
-        weekday instructor) against the OWNING version — a retro edit on an
-        old-version date falls back to THAT version's defaults, never the
+        """The schedule version owning the ``(when, slot_time)`` slot for
+        this class, or None when the recurrence doesn't emit it. Public: the
+        exceptions service resolves override fallbacks (duration / slot
+        instructor) against the OWNING version — a retro edit on an
+        old-version slot falls back to THAT version's defaults, never the
         current one's."""
         versions = await self.load_versions(class_id)
-        slot = self.owning_slot(versions, when)
+        slot = self.owning_slot(versions, when, slot_time)
         return slot[0] if slot is not None else None
 
     async def _resolve_occurrence(
@@ -499,44 +549,51 @@ class ClassesUndoService:
         class_id: UUID,
         versions: list[ExpanderScheduleVersion],
         original_date: date,
+        original_time: time,
     ) -> tuple[ExpanderScheduleVersion, dict | None] | None:
-        """The owning version + any existing exception row for the date, or
-        None when the recurrence doesn't emit the date / the occurrence is
+        """The owning version + any existing exception row for the exact
+        slot, or None when the recurrence doesn't emit it / the occurrence is
         cancelled."""
-        slot = self.owning_slot(versions, original_date)
+        slot = self.owning_slot(versions, original_date, original_time)
         if slot is None:
             return None
-        exception_row = await self.exception_on(class_id, original_date)
+        exception_row = await self.exception_on(
+            class_id, original_date, original_time
+        )
         if exception_row is not None and exception_row["is_cancelled"]:
             return None
         return slot[0], exception_row
 
     def resolve_default_instructor(
-        self, version: ExpanderScheduleVersion, when: date
+        self,
+        version: ExpanderScheduleVersion,
+        when: date,
+        slot_time: time,
     ) -> UUID | None:
-        """The owning version's weekday-default instructor for ``when``,
-        ignoring any per-occurrence override.
+        """The owning version's default instructor for the ``(when,
+        slot_time)`` slot, ignoring any per-occurrence override.
 
         Pure (no I/O) — the fallback a full-replace override upsert or
         reschedule uses when the request omits ``new_instructor_id``.
-        Delegates to the expander's own weekday-default resolution
+        Delegates to the expander's own slot-default resolution
         (``ClassesExpander.instructor_for``) so this can never drift from the
         expander's read-path semantics.
         """
-        return self._expander.instructor_for(version, when)
+        return self._expander.instructor_for(version, when, slot_time)
 
     @staticmethod
     def _effective_time(
-        owning: ExpanderScheduleVersion, exception_row: dict | None
+        original_time: time, exception_row: dict | None
     ) -> time:
         """The occurrence's currently-effective start time — the override
-        when set, else the owning version's slot time."""
+        when set, else the occurrence's own original slot time (the caller
+        supplies it; the exception row it came from stores the same value)."""
         if (
             exception_row is not None
             and exception_row["new_class_time"] is not None
         ):
             return exception_row["new_class_time"]
-        return owning.class_time
+        return original_time
 
     async def _expand_day(
         self,
@@ -589,13 +646,16 @@ class ClassesUndoService:
         self,
         class_id: UUID,
         when: date,
+        slot_time: time,
         session: AsyncSession | None = None,
     ) -> dict | None:
-        """The instance-exception row keyed to ``when``, if any. Public: the
-        exceptions service reads it to detect a no-op re-send of an existing
-        reschedule (the CRM preserves a move by re-sending its target), and
-        the range-cancel teardown reads it (on the caller's open session) to
-        confirm no instance exception governs a candidate date instead of
+        """The instance-exception row bound to the exact ``(when,
+        slot_time)`` slot, if any — several exception rows per date are legal
+        now, so the read filters on the full slot key. Public: the exceptions
+        service reads it to detect a no-op re-send of an existing reschedule
+        (the CRM preserves a move by re-sending its target), and the
+        range-cancel teardown reads it (on the caller's open session) to
+        confirm no instance exception governs a candidate slot instead of
         the range. ``session``, when given, runs on the CALLER's open
         transaction."""
         rows = await self._read_all(
@@ -603,13 +663,17 @@ class ClassesUndoService:
             {"class_id": str(class_id), "start_date": when, "end_date": when},
             session=session,
         )
-        return rows[0] if rows else None
+        return next(
+            (row for row in rows if row["original_time"] == slot_time),
+            None,
+        )
 
     def is_landing_unchanged(
         self,
         owning: ExpanderScheduleVersion,
         exception_row: dict | None,
         original_date: date,
+        original_time: time,
         new_date: date,
         new_occurred_at: datetime,
     ) -> bool:
@@ -626,7 +690,7 @@ class ClassesUndoService:
         )
         current_instant = datetime.combine(
             current_date,
-            self._effective_time(owning, exception_row),
+            self._effective_time(original_time, exception_row),
             tzinfo=ZoneInfo(owning.timezone),
         ).astimezone(UTC)
         return new_date == current_date and new_occurred_at == current_instant
@@ -656,8 +720,9 @@ class ClassesUndoService:
         session: AsyncSession,
         class_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> list[UUID]:
-        """Every member with attendance on the occurrence (incl. a
+        """Every member with attendance on the exact occurrence slot (incl. a
         no-membership attendee, who still earned points)."""
         rows = (
             (
@@ -670,6 +735,7 @@ class ClassesUndoService:
                     {
                         "class_id": str(class_id),
                         "original_date": original_date,
+                        "original_time": original_time,
                     },
                 )
             )
@@ -700,15 +766,21 @@ class ClassesUndoService:
         session: AsyncSession,
         class_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> int:
-        """Delete the occurrence's sign-ups; returns how many were removed."""
+        """Delete the exact occurrence slot's sign-ups; returns how many
+        were removed."""
         result = await session.execute(
             text(
                 load_sql(
                     SQL_DIR / "classes_signups_delete_for_occurrence.sql"
                 )
             ),
-            {"class_id": str(class_id), "original_date": original_date},
+            {
+                "class_id": str(class_id),
+                "original_date": original_date,
+                "original_time": original_time,
+            },
         )
         return result.rowcount or 0
 
@@ -718,14 +790,16 @@ class ClassesUndoService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> None:
-        """Write (or flip) the instance exception to cancelled for the date."""
+        """Write (or flip) the slot's instance exception to cancelled."""
         await session.execute(
             text(load_sql(SQL_DIR / "classes_undo_upsert_exception.sql")),
             {
                 "class_id": str(class_id),
                 "gym_id": str(gym_id),
                 "original_date": occurrence_date,
+                "original_time": occurrence_time,
             },
         )
 

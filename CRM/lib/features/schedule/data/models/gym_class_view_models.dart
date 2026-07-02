@@ -25,6 +25,12 @@ class ScheduleClassEntry {
   /// pre-exception slot date. Every occurrence-addressed call passes this,
   /// never [classDate].
   final DateTime originalDate;
+
+  /// This occurrence's IDENTITY time — the owning version's pre-exception
+  /// slot time (`HH:MM:SS`). With several slots per day legal, [originalDate]
+  /// + [originalTime] together are the occurrence's full identity key; every
+  /// occurrence-addressed call passes BOTH, never [resolvedClassTime].
+  final String originalTime;
   final String name;
   final String timeLabel;
   final String? instructorName;
@@ -82,6 +88,7 @@ class ScheduleClassEntry {
     required this.classId,
     required this.classDate,
     required this.originalDate,
+    required this.originalTime,
     required this.name,
     required this.timeLabel,
     required this.resolvedClassTime,

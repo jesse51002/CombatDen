@@ -8,10 +8,11 @@ occurrence resolution itself goes through a REAL ``CheckinOccurrenceResolution``
 injects — with ITS internal ``CheckinQueries`` mocked (the pattern the old
 tests used before the resolution logic moved out to the shared service), so
 the occurrence validation tests (cancelled day vs. non-recurrence date vs. a
-real occurrence, incl. a rescheduled one) exercise the real expander/window-
-widening behavior via real production wiring instead of a hand-rolled
-stand-in. The canonical coverage of the shared resolution algorithm itself
-lives in ``test_checkin_occurrence_resolution.py``. This is the capacity +
+real occurrence, incl. a rescheduled one and same-day multi-slot classes)
+exercise the real expander/window-widening behavior via real production
+wiring instead of a hand-rolled stand-in. The canonical coverage of the
+shared resolution algorithm itself lives in
+``test_checkin_occurrence_resolution.py``. This is the capacity +
 occurrence-validation coverage that doesn't need the live ``class_signups``
 table — see ``test_signup_integration.py`` for the live-DB behavior (which
 needs the migration to be applied first).
@@ -28,10 +29,12 @@ from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
 )
 from src.checkin.service.signup_service import SignupService
+from src.classes.schema.classes_expander_schema import ClassSlot
 from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_version_expander import ClassesVersionExpander
 
 _OCCURRENCE_DATE = date(2026, 6, 1)
+_OCCURRENCE_TIME = time(10, 0)
 _EFFECTIVE_FROM = datetime(2025, 1, 1)
 _CREATED_AT = datetime(2025, 1, 1)
 
@@ -66,32 +69,35 @@ def _version_row(
     end_date: date | None = None,
     recurring_unit: RecurringUnit = RecurringUnit.daily,
     recurring_interval: int = 1,
+    slot_times: tuple[time, ...] = (_OCCURRENCE_TIME,),
 ) -> dict:
     """A daily-recurring class covering ``_OCCURRENCE_DATE`` — a real,
     non-cancelled occurrence — so tests only need to override the field(s)
-    they care about."""
-    row = {
+    they care about. ``slot_times`` may hold several times so a single day
+    can carry multiple occurrences of the class."""
+    return {
         "schedule_id": uuid4(),
         "class_id": class_id,
         "gym_id": gym_id,
         "effective_from": _EFFECTIVE_FROM,
         "timezone": "UTC",
-        "class_time": time(10, 0),
         "duration_minutes": 30,
         "recurring_unit": recurring_unit,
         "recurring_interval": recurring_interval,
+        "weekday_slots": {
+            "all": [
+                ClassSlot(time=t, instructor_id=None) for t in slot_times
+            ]
+        },
         "start_date": start_date,
         "end_date": end_date,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        row[day] = True
-        row[f"{day}_instructor_id"] = None
-    return row
 
 
 def _instance_exception_row(
     *,
     original_date: date = _OCCURRENCE_DATE,
+    original_time: time = _OCCURRENCE_TIME,
     is_cancelled: bool = True,
     new_class_time: time | None = None,
     new_duration_minutes: int | None = None,
@@ -101,6 +107,7 @@ def _instance_exception_row(
     """A class_instance_exceptions-shaped row."""
     return {
         "original_date": original_date,
+        "original_time": original_time,
         "is_cancelled": is_cancelled,
         "new_class_time": new_class_time,
         "new_duration_minutes": new_duration_minutes,
@@ -182,7 +189,9 @@ async def test_valid_occurrence_proceeds_to_insert() -> None:
     )
     service._queries.get_signup_or_attended_members = AsyncMock()
 
-    resp = await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.already_signed_up is False
 
@@ -198,7 +207,9 @@ async def test_cancelled_day_is_rejected() -> None:
     )
 
     with pytest.raises(ValueError, match="cancelled"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
     session.execute.assert_not_called()
 
@@ -218,7 +229,26 @@ async def test_non_recurrence_date_is_rejected() -> None:
     )
 
     with pytest.raises(ValueError, match="Not a class occurrence"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
+
+    session.execute.assert_not_called()
+
+
+async def test_wrong_slot_time_is_rejected() -> None:
+    """A time that isn't one of the day's slots -> rejected, even though the
+    date itself is a recurrence date."""
+    class_row = _class_row()
+    service, session = _service(
+        class_row,
+        versions=[_version_row(class_row["class_id"], class_row["gym_id"])],
+    )
+
+    with pytest.raises(ValueError, match="Not a class occurrence"):
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, time(18, 30)
+        )
 
     session.execute.assert_not_called()
 
@@ -229,7 +259,9 @@ async def test_no_versions_is_rejected() -> None:
     service, session = _service(class_row, versions=[])
 
     with pytest.raises(ValueError, match="Not a class occurrence"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
     session.execute.assert_not_called()
 
@@ -238,7 +270,9 @@ async def test_deleted_class_is_rejected() -> None:
     service, session = _service(_class_row(is_deleted=True))
 
     with pytest.raises(ValueError, match="deleted"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
     session.execute.assert_not_called()
 
@@ -247,7 +281,9 @@ async def test_inactive_class_is_rejected() -> None:
     service, session = _service(_class_row(is_active=False))
 
     with pytest.raises(ValueError, match="not active"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
     session.execute.assert_not_called()
 
@@ -257,7 +293,9 @@ async def test_unknown_class_raises_not_found() -> None:
     service._queries.get_signup_or_attended_members = AsyncMock()
 
     with pytest.raises(ValueError, match="Class not found"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
 
 async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
@@ -280,11 +318,76 @@ async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
     )
     service._queries.get_signup_or_attended_members = AsyncMock()
 
-    resp = await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.already_signed_up is False
     insert_params = session.execute.call_args_list[0].args[1]
     assert insert_params["original_date"] == _OCCURRENCE_DATE
+
+
+async def test_two_same_day_slots_signup_independently() -> None:
+    """A class with two slots on one day: each slot resolves and can be
+    signed up for independently — one slot's cancellation never blocks the
+    sibling slot's sign-up."""
+    class_row = _class_row(max_capacity=None)
+    morning, evening = time(6, 0), time(18, 30)
+    service, session = _service(
+        class_row,
+        versions=[
+            _version_row(
+                class_row["class_id"],
+                class_row["gym_id"],
+                slot_times=(morning, evening),
+            )
+        ],
+        instances=[
+            _instance_exception_row(
+                original_date=_OCCURRENCE_DATE,
+                original_time=morning,
+                is_cancelled=True,
+            )
+        ],
+        write_results=[_result({"signup_id": uuid4()})],
+    )
+    service._queries.get_signup_or_attended_members = AsyncMock()
+
+    # The evening slot (untouched) still signs up cleanly.
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, evening
+    )
+
+    assert resp.already_signed_up is False
+    insert_params = session.execute.call_args_list[0].args[1]
+    assert insert_params["original_time"] == evening
+
+
+async def test_two_same_day_slots_cancelled_morning_rejected() -> None:
+    class_row = _class_row(max_capacity=None)
+    morning, evening = time(6, 0), time(18, 30)
+    service, session = _service(
+        class_row,
+        versions=[
+            _version_row(
+                class_row["class_id"],
+                class_row["gym_id"],
+                slot_times=(morning, evening),
+            )
+        ],
+        instances=[
+            _instance_exception_row(
+                original_date=_OCCURRENCE_DATE,
+                original_time=morning,
+                is_cancelled=True,
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="cancelled"):
+        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, morning)
+
+    session.execute.assert_not_called()
 
 
 # ── capacity ──────────────────────────────────────────────────────────
@@ -301,7 +404,9 @@ async def test_unlimited_capacity_always_inserts() -> None:
     )
     service._queries.get_signup_or_attended_members = AsyncMock()
 
-    resp = await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.already_signed_up is False
     service._queries.get_signup_or_attended_members.assert_not_awaited()
@@ -320,7 +425,9 @@ async def test_room_creates_when_under_capacity() -> None:
         return_value={uuid4(), uuid4()}
     )
 
-    resp = await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.already_signed_up is False
 
@@ -338,7 +445,9 @@ async def test_full_room_rejects_a_new_member() -> None:
     )
 
     with pytest.raises(ValueError, match="Class is full"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
 
     session.execute.assert_not_called()  # never reached the insert
 
@@ -358,7 +467,9 @@ async def test_already_counted_member_bypasses_full_room() -> None:
         return_value={member_id, uuid4()}
     )
 
-    resp = await service.create(member_id, uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        member_id, uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.already_signed_up is False
 
@@ -375,7 +486,42 @@ async def test_exception_max_capacity_overrides_class_default() -> None:
     )
 
     with pytest.raises(ValueError, match="Class is full"):
-        await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+        await service.create(
+            uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+        )
+
+
+async def test_capacity_pools_are_independent_per_slot() -> None:
+    """Two same-day slots: a full morning slot never blocks a sign-up on the
+    untouched evening slot — the union query is asked with THIS slot's own
+    time."""
+    class_row = _class_row(max_capacity=1)
+    morning, evening = time(6, 0), time(18, 30)
+    service, session = _service(
+        class_row,
+        versions=[
+            _version_row(
+                class_row["class_id"],
+                class_row["gym_id"],
+                slot_times=(morning, evening),
+            )
+        ],
+        write_results=[_result({"signup_id": uuid4()})],
+    )
+    # The union mock ignores which slot it's asked about (a real DB query
+    # would scope by original_time) -- here we assert the SERVICE passes the
+    # correct occurrence_time through, not that the fake union filters.
+    union_mock = AsyncMock(return_value=set())
+    service._queries.get_signup_or_attended_members = union_mock
+
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, evening
+    )
+
+    assert resp.already_signed_up is False
+    union_mock.assert_awaited_once()
+    call_args = union_mock.await_args.args
+    assert call_args[-1] == evening
 
 
 # ── idempotent create ─────────────────────────────────────────────────
@@ -396,7 +542,9 @@ async def test_idempotent_repeat_returns_existing_signup_id() -> None:
     )
     service._queries.get_signup_or_attended_members = AsyncMock()
 
-    resp = await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.create(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.signup_id == existing_id
     assert resp.already_signed_up is True
@@ -410,7 +558,9 @@ async def test_remove_returns_removed_true_when_row_deleted() -> None:
         None, write_results=[_result({"signup_id": uuid4()})]
     )
 
-    resp = await service.remove(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.remove(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.removed is True
 
@@ -418,6 +568,8 @@ async def test_remove_returns_removed_true_when_row_deleted() -> None:
 async def test_remove_returns_removed_false_when_no_row() -> None:
     service, session = _service(None, write_results=[_result(None)])
 
-    resp = await service.remove(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE)
+    resp = await service.remove(
+        uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resp.removed is False

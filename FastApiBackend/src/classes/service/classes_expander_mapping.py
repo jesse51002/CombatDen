@@ -18,31 +18,20 @@ from src.classes.schema.classes_expander_schema import (
 )
 
 # The columns the expander reads off a gym_class_schedules version row: the
-# version identity plus the flat schedule shape (per-weekday flags + slots).
+# version identity plus the schedule shape (weekday_slots JSONB included —
+# Pydantic parses the decoded JSONB dict through the shared canonicalizer on
+# ExpanderClass construction, so a stored shape validates exactly like an API
+# submission).
 _EXPANDER_SCHEDULE_KEYS: tuple[str, ...] = (
     "schedule_id",
     "class_id",
     "gym_id",
     "effective_from",
     "timezone",
-    "class_time",
     "duration_minutes",
     "recurring_unit",
     "recurring_interval",
-    "sun",
-    "mon",
-    "tue",
-    "wed",
-    "thu",
-    "fri",
-    "sat",
-    "sun_instructor_id",
-    "mon_instructor_id",
-    "tue_instructor_id",
-    "wed_instructor_id",
-    "thu_instructor_id",
-    "fri_instructor_id",
-    "sat_instructor_id",
+    "weekday_slots",
     "start_date",
     "end_date",
 )
@@ -59,6 +48,7 @@ def to_expander_instance(row: Mapping) -> ExpanderInstanceException:
     """Project a ``class_instance_exceptions`` row onto the expander contract."""
     return ExpanderInstanceException(
         original_date=row["original_date"],
+        original_time=row["original_time"],
         is_cancelled=row["is_cancelled"],
         new_class_time=row["new_class_time"],
         new_duration_minutes=row["new_duration_minutes"],

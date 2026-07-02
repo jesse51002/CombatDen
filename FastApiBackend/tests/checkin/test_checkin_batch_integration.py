@@ -27,7 +27,7 @@ It is intentionally NOT asserted here.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -102,7 +102,7 @@ def _multi_covered_target(
 
     Returns the first non-cancelled board occurrence whose class has two or more
     covering members, as
-    ``{class_id, occurrence_date, points_worth, members: [id, id]}``.
+    ``{class_id, occurrence_date, occurrence_time, points_worth, members: [id, id]}``.
     """
     today = date.today()
     resp = api.get(
@@ -129,8 +129,10 @@ def _multi_covered_target(
             continue
         return {
             "class_id": occ["class_id"],
-            # Always the ORIGINAL date -- never class_date.
+            # Always the ORIGINAL slot -- never class_date. A class may occur
+            # several times per day, so the time is part of the identity.
             "occurrence_date": occ["original_date"],
+            "occurrence_time": occ["original_time"],
             "points_worth": members[0]["points_worth"],
             "members": [members[0]["member_id"], members[1]["member_id"]],
         }
@@ -207,12 +209,14 @@ def _teardown_batch(
     member_ids: list[str],
     class_id: str,
     occurrence_date: str,
+    occurrence_time: str,
     new_activity_ids: set[UUID],
     points_by_member: dict[str, int],
 ) -> None:
     """Undo a test batch: delete each member's attendance for the occurrence
-    (keyed by its identity — class_id + original_date), the new
-    class_attended activities, and restore every member's points_balance."""
+    (keyed by its full identity — class_id + original_date + original_time),
+    the new class_attended activities, and restore every member's
+    points_balance."""
 
     async def _run() -> None:
         conn = await asyncpg.connect(_get_db_url())
@@ -220,9 +224,10 @@ def _teardown_batch(
             await conn.execute(
                 "DELETE FROM member_attendance "
                 "WHERE class_id = $1 AND original_date = $2 "
-                "AND member_id = ANY($3)",
+                "AND original_time = $3 AND member_id = ANY($4)",
                 UUID(class_id),
                 date.fromisoformat(occurrence_date),
+                time.fromisoformat(occurrence_time),
                 [UUID(m) for m in member_ids],
             )
             if new_activity_ids:
@@ -252,8 +257,8 @@ _BATCH_URL = "/api/v1/checkin/batch"
 
 
 class TestBatchCheckinValidation:
-    """422 validation for the batch body shape (class_id + occurrence_date now
-    ride in the body, not the path)."""
+    """422 validation for the batch body shape (class_id + occurrence_date +
+    occurrence_time now ride in the body, not the path)."""
 
     def test_missing_body_returns_422(self, api: httpx.Client) -> None:
         resp = api.post(_BATCH_URL)
@@ -266,6 +271,7 @@ class TestBatchCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
                 "member_ids": [],
             },
         )
@@ -277,6 +283,7 @@ class TestBatchCheckinValidation:
             json={
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
                 "member_ids": [str(uuid4())],
             },
         )
@@ -288,6 +295,7 @@ class TestBatchCheckinValidation:
             json={
                 "gym_id": GYM_ID,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
                 "member_ids": [str(uuid4())],
             },
         )
@@ -300,6 +308,7 @@ class TestBatchCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
                 "member_ids": ["not-a-uuid"],
             },
         )
@@ -314,6 +323,7 @@ class TestBatchCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "not-a-date",
+                "occurrence_time": "17:00:00",
                 "member_ids": [str(uuid4())],
             },
         )
@@ -342,6 +352,7 @@ class TestBatchCheckin:
         no_mem = str(no_membership["member_id"])
         class_id = target["class_id"]
         occurrence_date = target["occurrence_date"]
+        occurrence_time = target["occurrence_time"]
         points_worth = target["points_worth"]
 
         before_points = {
@@ -359,6 +370,7 @@ class TestBatchCheckin:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
                 "member_ids": [member_a],
             },
         )
@@ -372,6 +384,7 @@ class TestBatchCheckin:
                     "gym_id": GYM_ID,
                     "class_id": class_id,
                     "occurrence_date": occurrence_date,
+                    "occurrence_time": occurrence_time,
                     "member_ids": [member_a, member_b, no_mem],
                     "is_member": True,
                 },
@@ -404,6 +417,7 @@ class TestBatchCheckin:
                 [member_a, member_b],
                 class_id,
                 occurrence_date,
+                occurrence_time,
                 new_acts,
                 before_points,
             )
@@ -419,10 +433,12 @@ class TestBatchCheckin:
         member_a, member_b = target["members"]
         class_id = target["class_id"]
         occurrence_date = target["occurrence_date"]
+        occurrence_time = target["occurrence_time"]
         payload = {
             "gym_id": GYM_ID,
             "class_id": class_id,
             "occurrence_date": occurrence_date,
+            "occurrence_time": occurrence_time,
             "member_ids": [member_a, member_b],
         }
 
@@ -459,6 +475,7 @@ class TestBatchCheckin:
                 [member_a, member_b],
                 class_id,
                 occurrence_date,
+                occurrence_time,
                 new_acts,
                 before_points,
             )
@@ -480,6 +497,7 @@ class TestBatchCheckin:
         no_mem = str(no_membership["member_id"])
         class_id = target["class_id"]
         occurrence_date = target["occurrence_date"]
+        occurrence_time = target["occurrence_time"]
 
         before_points = {m: _member_points(m) for m in (member_a, no_mem)}
         before_acts = {
@@ -493,6 +511,7 @@ class TestBatchCheckin:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
                 "member_ids": [member_a, no_mem],
                 # is_member omitted -> staff (False) by default.
             },
@@ -518,6 +537,7 @@ class TestBatchCheckin:
                     "gym_id": GYM_ID,
                     "class_id": class_id,
                     "occurrence_date": occurrence_date,
+                    "occurrence_time": occurrence_time,
                     "member_ids": [no_mem],
                     "ignore_warnings": True,
                 },
@@ -539,6 +559,7 @@ class TestBatchCheckin:
                 [member_a, no_mem],
                 class_id,
                 occurrence_date,
+                occurrence_time,
                 new_acts,
                 before_points,
             )

@@ -29,11 +29,11 @@ CREATE TABLE class_signups (
     PRIMARY KEY (signup_id),
     -- One sign-up per member per original occurrence; the idempotent create
     -- path relies on this exact constraint (ON CONFLICT (class_id, member_id,
-    -- original_date)). Date alone disambiguates because a class has at most
-    -- ONE original occurrence per gym-local date (the one-per-day invariant);
-    -- original_time is stored for the version-change exact-slot match.
+    -- original_date, original_time)). A class may occur SEVERAL times on one
+    -- gym-local date (weekday_slots holds a slot list per day), so the key is
+    -- the full original slot — date AND time.
     CONSTRAINT uq_class_signup_member_occurrence
-        UNIQUE (class_id, member_id, original_date),
+        UNIQUE (class_id, member_id, original_date, original_time),
     CONSTRAINT fk_class_signup_class
         FOREIGN KEY (class_id, gym_id)
         REFERENCES gym_classes (class_id, gym_id),
@@ -43,7 +43,7 @@ CREATE TABLE class_signups (
 );
 
 CREATE INDEX idx_class_signups_class_occurrence
-    ON class_signups (class_id, original_date);
+    ON class_signups (class_id, original_date, original_time);
 
 CREATE INDEX idx_class_signups_member_gym
     ON class_signups (member_id, gym_id);

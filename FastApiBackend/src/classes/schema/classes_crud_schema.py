@@ -5,11 +5,12 @@
   (``gym_class_schedules``): the create request carries both halves flat; the
   update request splits them by destination (identity = UPDATE in place,
   schedule = mint a NEW version) — the discounts identity/values precedent.
-  Responses stay flat (identity + the CURRENT version), so the CRM form shape
-  is unchanged. The seven per-weekday instructor slots resolve to display
-  names joined from ``gym_employees``.
-* ``class_instance_exceptions`` upsert / response (single-date overrides, keyed
-  unique per ``(class_id, original_date)``).
+  Responses stay flat (identity + the CURRENT version). The schedule's WHEN
+  is ``weekday_slots`` — day -> ordered slot list, several times per day
+  allowed, each slot with its own optional instructor (resolved to a display
+  name in responses via one gym-employees lookup).
+* ``class_instance_exceptions`` upsert / response (single-slot overrides,
+  keyed unique per ``(class_id, original_date, original_time)``).
 * ``class_range_exceptions`` create / response (cancel-or-substitute over a
   continuous range).
 * ``EffectiveClassInstanceResponse`` — the schedule-board shape, one row per
@@ -23,10 +24,14 @@ The recurring-unit enum is reused from the Database package
 from datetime import date, datetime, time
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.classes.schema.classes_expander_schema import (
+    ClassSlot,
+    canonicalize_weekday_slots,
+)
 from src.shared.partial_model import partial_model
 
 
@@ -47,28 +52,28 @@ class GymClassScheduleFields(BaseModel):
     """The schedule SHAPE — one complete ``gym_class_schedules`` version body
     (minus the backend-stamped ``effective_from`` / ``timezone``). Always
     submitted whole: a schedule edit mints a new version, never patches one.
+
+    ``weekday_slots`` runs through the SAME canonicalizer as the expander's
+    DB-row contract (``classes_expander_schema.canonicalize_weekday_slots``),
+    so an API submission and a stored shape can never disagree on validity or
+    ordering: weekly -> sun..sat keys only (>=1); daily/monthly -> exactly
+    the reserved ``"all"`` key; no empty lists, no duplicate times; lists
+    sorted ascending by time.
     """
 
-    class_time: time
     duration_minutes: int = Field(gt=0)
     recurring_unit: RecurringUnit
     recurring_interval: int = Field(default=1, gt=0)
-    sun: bool = False
-    mon: bool = False
-    tue: bool = False
-    wed: bool = False
-    thu: bool = False
-    fri: bool = False
-    sat: bool = False
-    sun_instructor_id: UUID | None = None
-    mon_instructor_id: UUID | None = None
-    tue_instructor_id: UUID | None = None
-    wed_instructor_id: UUID | None = None
-    thu_instructor_id: UUID | None = None
-    fri_instructor_id: UUID | None = None
-    sat_instructor_id: UUID | None = None
+    weekday_slots: dict[str, list[ClassSlot]]
     start_date: date
     end_date: date | None = None
+
+    @model_validator(mode="after")
+    def _canonicalize_slots(self) -> "GymClassScheduleFields":
+        self.weekday_slots = canonicalize_weekday_slots(
+            self.weekday_slots, self.recurring_unit
+        )
+        return self
 
 
 class GymClassCreateRequest(GymClassIdentityFields, GymClassScheduleFields):
@@ -115,43 +120,31 @@ class GymClassUpdateRequest(BaseModel):
     schedule: GymClassScheduleFields | None = None
 
 
-class GymClassResponse(BaseModel):
-    """A single ``gym_classes`` row with resolved per-weekday instructor names.
+class ClassSlotResponse(BaseModel):
+    """One ``weekday_slots`` slot with its instructor resolved for display.
 
-    The seven ``*_instructor_name`` fields are the joined
-    ``first_name || ' ' || last_name`` from ``gym_employees`` for each weekday's
-    instructor slot (``None`` when that slot has no instructor).
+    ``instructor_name`` is ``first_name last_name`` from ``gym_employees``
+    (None when the slot has no instructor or the employee is gone).
     """
+
+    time: time
+    instructor_id: UUID | None
+    instructor_name: str | None
+
+
+class GymClassResponse(BaseModel):
+    """A single ``gym_classes`` row flattened with its CURRENT schedule
+    version — ``weekday_slots`` carries the per-slot instructor resolved to a
+    display name (one gym-employees lookup, merged in the service)."""
 
     class_id: UUID
     gym_id: UUID
     class_name: str
     class_description: str | None
-    class_time: time
     duration_minutes: int
     recurring_unit: RecurringUnit
     recurring_interval: int
-    sun: bool
-    mon: bool
-    tue: bool
-    wed: bool
-    thu: bool
-    fri: bool
-    sat: bool
-    sun_instructor_id: UUID | None
-    mon_instructor_id: UUID | None
-    tue_instructor_id: UUID | None
-    wed_instructor_id: UUID | None
-    thu_instructor_id: UUID | None
-    fri_instructor_id: UUID | None
-    sat_instructor_id: UUID | None
-    sun_instructor_name: str | None
-    mon_instructor_name: str | None
-    tue_instructor_name: str | None
-    wed_instructor_name: str | None
-    thu_instructor_name: str | None
-    fri_instructor_name: str | None
-    sat_instructor_name: str | None
+    weekday_slots: dict[str, list[ClassSlotResponse]]
     start_date: date
     end_date: date | None
     max_capacity: int | None
@@ -172,14 +165,17 @@ class GymClassListResponse(BaseModel):
 class ClassInstanceExceptionUpsertRequest(BaseModel):
     """Body for POST /api/v1/classes/{class_id}/exceptions/instance.
 
-    Upserts the single-date override keyed unique per ``(class_id,
-    original_date)``. ``new_date`` (reschedule target) may be any date — past,
-    today, or future — and may not collide with an existing non-cancelled
-    occurrence at the exact target instant (new_date + start time; enforced by
-    the service, which also moves the occurrence's attendance).
+    Upserts the single-SLOT override keyed unique per ``(class_id,
+    original_date, original_time)`` — with several slots per day legal, the
+    pair names exactly one occurrence. ``new_date`` (reschedule target) may
+    be any date — past, today, or future — and may not collide with an
+    existing non-cancelled occurrence at the exact target instant (new_date +
+    start time; enforced by the service, which also moves the occurrence's
+    attendance).
     """
 
     original_date: date
+    original_time: time
     is_cancelled: bool = False
     new_class_time: time | None = None
     new_duration_minutes: int | None = Field(default=None, gt=0)
@@ -195,6 +191,7 @@ class ClassInstanceExceptionResponse(BaseModel):
     class_id: UUID
     gym_id: UUID
     original_date: date
+    original_time: time
     is_cancelled: bool
     new_class_time: time | None
     new_duration_minutes: int | None
@@ -275,6 +272,11 @@ class EffectiveClassInstanceResponse(BaseModel):
             version's pre-exception slot date. Every occurrence-addressed
             call (check-in, sign-up, exception, cancel, reschedule) passes
             THIS date, never ``class_date``.
+        original_time: The occurrence's IDENTITY time — the owning version's
+            pre-exception slot time. With several slots per day legal,
+            ``(original_date, original_time)`` is the full occurrence key;
+            occurrence-addressed calls pass BOTH, never the effective
+            ``resolved_class_time``.
         occurred_at: UTC, timezone-aware start instant.
         resolved_class_time: Effective local start time (override or default).
         resolved_duration_minutes: Effective length (override or default).
@@ -287,7 +289,7 @@ class EffectiveClassInstanceResponse(BaseModel):
         max_capacity: Class capacity (None = unlimited).
         is_cancelled: True when this occurrence is cancelled (still shown).
         has_instance_exception: True when an instance exception exists on this
-            occurrence's original date.
+            occurrence's exact original slot.
         has_range_exception: True when a range exception covers this
             occurrence's original date.
         cancelling_range_id: The range exception (``class_range_exceptions
@@ -310,6 +312,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     class_name: str
     class_date: date
     original_date: date
+    original_time: time
     occurred_at: datetime
     resolved_class_time: time
     resolved_duration_minutes: int

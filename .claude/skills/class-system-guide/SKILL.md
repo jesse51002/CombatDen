@@ -8,9 +8,12 @@ description: >-
   immutable versions, each freezing its timezone) and every occurrence is
   COMPUTED, never stored; an occurrence's permanent identity is its ORIGINAL
   slot (class_id + original_date + original_time — the owning version's
-  pre-exception slot), which is what attendance and sign-ups key. Covers the
-  version-ownership model (effective_from windows, first-version-owns-the-past,
-  no-day-doubling dedup, the ONE pure ClassesExpander wrapped by
+  pre-exception slot), which is what attendance, sign-ups, and instance
+  exceptions key. The schedule shape is weekday_slots JSONB (day -> ordered
+  slot list, several times per day legal, per-slot instructor; daily/monthly
+  use the reserved "all" key). Covers the version-ownership model
+  (effective_from windows, first-version-owns-the-past, SLOT-level dedup,
+  the ONE pure ClassesExpander wrapped by
   ClassesVersionExpander), the MINT engine (ClassesVersionsService — schedule
   edits mint a version effective NOW and wipe future-keyed rows unless the
   exact wall-clock slot survives; soft-delete wipes everything future; a gym
@@ -41,14 +44,24 @@ roster, streak, cycle usage, and **sign-ups/reservations**). Routes:
 - **`gym_classes`** (identity): name, description, `allowed_plan_ids`,
   `max_capacity`, `image_url`, `points_worth`, `is_active`, `is_deleted`.
   Identity applies across all time — a rename renames the past too.
-- **`gym_class_schedules`** (versions): the schedule shape — `class_time`,
-  `duration_minutes`, recurrence (`recurring_unit`/`interval`, the 7 weekday
-  flags + 7 per-weekday instructor slots), `start_date`/`end_date` (the
-  recurrence range) — plus `effective_from` (the version boundary, a
-  timestamptz: many edits can land in one day) and `timezone` (the gym's
-  IANA zone FROZEN at mint). Rows are write-once; there is no
-  `effective_until` — a version's coverage window is
-  `[effective_from, next version's effective_from)`, derived. The
+- **`gym_class_schedules`** (versions): the schedule shape —
+  `duration_minutes`, recurrence (`recurring_unit`/`interval`),
+  `start_date`/`end_date` (the recurrence range), and **`weekday_slots`
+  (JSONB)** — the WHEN: day → ordered slot list, so a class may occur
+  SEVERAL times on one day, each slot with its own optional instructor.
+  Weekly uses `sun`..`sat` keys (`{"mon": [{"time": "06:00",
+  "instructor_id": "<uuid|null>"}, {"time": "18:30", ...}]}` — a day occurs
+  iff its key holds a non-empty list); daily/monthly use exactly the
+  reserved `"all"` key. Times are "HH:MM", unique per day, stored sorted.
+  Deep validation lives in ONE shared canonicalizer
+  (`classes_expander_schema.canonicalize_weekday_slots`) run by both the API
+  schema and the DB-row contract; SQL only guards coarse structure. Slot
+  `instructor_id`s can't be FK-enforced inside JSONB — the mint validates
+  them against `gym_employees` instead (`_assert_instructors_in_gym`).
+  Plus `effective_from` (the version boundary, a timestamptz: many edits can
+  land in one day) and `timezone` (the gym's IANA zone FROZEN at mint). Rows
+  are write-once; there is no `effective_until` — a version's coverage
+  window is `[effective_from, next version's effective_from)`, derived. The
   `gym_class_schedules_current` view surfaces the latest version per class
   (used by class CRUD reads; window reads always load ALL versions).
 
@@ -58,36 +71,44 @@ versions never change: re-expanding them is deterministic (each version
 expands in its OWN frozen timezone, so nothing can re-derive differently).
 
 **Occurrence identity = the ORIGINAL slot**: `(class_id, original_date,
-original_time)` — the date + the owning version's `class_time`, BEFORE
-exceptions, gym-local wall clock. `member_attendance` and `class_signups`
-store this key verbatim; an exception (retime / reschedule / cancel) NEVER
-re-keys anything, so sign-ups and attendance follow the occurrence wherever
-it moves. **Every API call addresses an occurrence by `class_id +
-occurrence_date` where the date is the ORIGINAL date** (the board row carries
-`original_date` for exactly this; `class_date` is the effective display
-date).
+original_time)` — the date + the owning version's slot time, BEFORE
+exceptions, gym-local wall clock. `member_attendance`, `class_signups`, AND
+`class_instance_exceptions` key on the full slot (their UNIQUEs include
+`original_time` — with several slots per day legal, date alone is
+ambiguous); an exception (retime / reschedule / cancel) NEVER re-keys
+anything, so sign-ups and attendance follow the occurrence wherever it
+moves. **Every API call addresses an occurrence by `class_id +
+occurrence_date + occurrence_time` — the ORIGINAL date AND time** (the board
+row carries `original_date` + `original_time` for exactly this; `class_date`
+/ `resolved_class_time` are the effective display values).
 
 **Version ownership rule** (the pure `ClassesVersionExpander`):
-a version owns candidate `(D, class_time)` iff its original instant —
-`combine(D, class_time, ZoneInfo(version.timezone))` — falls in the
-version's window. Three refinements:
+a version owns candidate slot `(D, T)` iff its original instant —
+`combine(D, T, ZoneInfo(version.timezone))` — falls in the version's window
+(T ranges over the day's slot list). Three refinements:
 1. The FIRST version owns back to −∞ (its `effective_from` is just its mint
    stamp), so a class created with a backdated `start_date` renders its past.
 2. The LAST version owns to +∞ — there is exactly one present/future owner
    (a mint is always effective NOW; future-dated takeovers don't exist).
-3. **No day doubling**: when two adjacent versions both produce a candidate
-   on the same gym-local date (the old one already started before the mint),
-   the EARLIER version wins the date. ≤1 ORIGINAL occurrence per class per
-   gym-local date is a formal invariant — it's what makes date-only API
-   addressing and the `UNIQUE(..., original_date)` keys unambiguous.
-   (Effective-date doubling via reschedule — two occurrences *displayed* on
-   one day with different original dates — remains allowed.)
+3. **Slot-level dedup, NOT day-level**: when two versions both produce a
+   candidate at the same exact `(original_date, original_time)`, the EARLIER
+   version wins. ≤1 ORIGINAL occurrence per class per exact SLOT is the
+   invariant — what makes date+time API addressing and the
+   `UNIQUE(..., original_date, original_time)` keys unambiguous. A version
+   BOUNDARY day can legitimately show occurrences from BOTH versions at
+   different times (old 06:00 already ran before a mid-day mint + new 18:30
+   upcoming) — with multi-slot days legal that is honest rendering, not
+   doubling. (Effective-date doubling via reschedule remains allowed too.)
 
 **`ClassesExpander` is still the ONE pure recurrence+exception engine** (no
-I/O; instance-wins-over-range precedence, monthly last-day clamp, DST via
-`ZoneInfo`, cancelled dropped or emitted flagged; `instructor_for` public).
+I/O; each candidate date FANS OUT over its slot list — the weekday key for
+weekly, `"all"` for daily/monthly — and each slot resolves independently
+against ITS OWN instance exception; instance-wins-over-range precedence, a
+range covers EVERY slot of its covered dates, monthly last-day clamp, DST
+via `ZoneInfo`, cancelled dropped or emitted flagged;
+`instructor_for(gym_class, when, slot_time)` public — per-slot).
 `ClassesVersionExpander` wraps it per version and adds ownership windowing +
-the date dedup, tagging each `EffectiveOccurrence` with `original_time`, the
+the slot dedup, tagging each `EffectiveOccurrence` with `original_time`, the
 owning `schedule_id`, and `original_start_at`. The demo seed MIRRORS both —
 never re-derive recurrence anywhere else.
 
@@ -97,22 +118,27 @@ never re-derive recurrence anywhere else.
 is the only writer of `gym_class_schedules`.** A mint runs in ONE transaction:
 
 1. **Deep-equal no-op**: a submission equal to the current version (all shape
-   fields AND the timezone) mints nothing, wipes nothing.
+   fields AND the timezone) mints nothing, wipes nothing. `weekday_slots`
+   compares on the canonicalized parsed form, so key/list reordering can
+   never fake a change.
 2. Insert the version, `effective_from` = server now, `timezone` = the gym's
-   current zone.
-3. **The WIPE decides per occurrence DATE.** A date is a candidate when its
-   ORIGINAL slot instant is at/after the mint (a slot that already started
-   is never touched; the old version owns it forever). A candidate is then
-   LEFT ALONE when any of these hold:
-   - its exception is a **CANCELLATION** — date-keyed intent ("this date is
-     off") that survives any shape change; deleting it would silently
-     revive the cancelled occurrence;
+   current zone (slot instructors validated against `gym_employees` first —
+   the JSONB replacement for the old per-weekday FKs).
+3. **The WIPE decides per occurrence SLOT** — `(original_date,
+   original_time)`; two same-day occurrences are decided independently. A
+   slot is a candidate when its ORIGINAL instant is at/after the mint (a
+   slot that already started is never touched; the old version owns it
+   forever). A candidate is then LEFT ALONE when any of these hold:
+   - its exception is a **CANCELLATION** — slot-keyed intent ("this
+     occurrence is off") that survives any shape change; deleting it would
+     silently revive the cancelled occurrence;
    - its **EFFECTIVE start** (the reschedule/retime target) is before the
      mint — the occurrence already RAN (rescheduled into the past); its
      attendance is real and the exception row anchors it;
-   - the new version still emits the date at the exact same wall-clock
-     `original_time` (the exact-slot match).
-   Otherwise the date is torn down via the undo service's shared
+   - the new version still emits the date with a slot at the exact same
+     wall-clock `original_time` (the exact-slot match — dropping a day's
+     18:00 slot wipes only ITS rows; the surviving 06:00 keeps everything).
+   Otherwise the slot is torn down via the undo service's shared
    `teardown_occurrence` — attendance reversed per member through the one
    `CheckinReverser` implementation (billing-adjacent: points clawback
    floored at 0 + activity drop + pack auto-end reversal), sign-ups deleted
@@ -145,17 +171,19 @@ Consumers of the engine:
 
 ## 2. Exceptions — per-occurrence changes on top of versions
 
-`class_instance_exceptions` (keyed `UNIQUE(class_id, original_date)`)
-overrides or cancels ONE original slot (incl. `new_date` = reschedule target
-— any date, `new_max_capacity`, `new_class_time`, `new_instructor_id`,
-`new_duration_minutes`); `class_range_exceptions` cancels/substitutes a
-continuous range — a CANCEL range additionally tears down the dates it
-actually cancels, in the same transaction as the range insert (§4). An
-exception binds to whatever slot the owning version
-defines on its `original_date`; override fallbacks (time / duration / the
-weekday instructor) resolve against the OWNING version — a retro edit on an
-old-version date falls back to THAT version's defaults
-(`ClassesUndoService.owning_version` / `resolve_default_instructor`).
+`class_instance_exceptions` (keyed `UNIQUE(class_id, original_date,
+original_time)` — one row per exact SLOT, so two same-day occurrences are
+overridden independently) overrides or cancels ONE original slot (incl.
+`new_date` = reschedule target — any date, `new_max_capacity`,
+`new_class_time`, `new_instructor_id`, `new_duration_minutes`);
+`class_range_exceptions` cancels/substitutes a continuous range — a range
+covers EVERY slot of its covered dates, and a CANCEL range additionally
+tears down the slots it actually cancels, per-slot, in the same transaction
+as the range insert (§4). Override fallbacks (duration / the slot
+instructor) resolve against the OWNING version — a retro edit on an
+old-version slot falls back to THAT version's defaults
+(`ClassesUndoService.owning_version` / `resolve_default_instructor`, both
+slot-time-aware).
 
 **Range exceptions have a full CRUD surface**: `POST` create,
 `GET /{class_id}/exceptions/range` (every range ever created for the class,
@@ -184,9 +212,10 @@ all supported — the exception layer is how the past gets corrected.
 `ClassesScheduleReaderService` (`GET /api/v1/classes/instances`): load every
 class (deleted included) + ALL versions + the window's exceptions
 (concurrently, via `asyncio.gather`), expand via `ClassesVersionExpander`
-with `include_cancelled=True`, enrich with instructor names, per-date
-capacity overrides, and the attendance / sign-up counts (both keyed
-`(class_id, original_date)` — plain GROUP BYs, no joins). No
+with `include_cancelled=True`, enrich with instructor names, per-SLOT
+capacity overrides / instance-exception flags, and the attendance / sign-up
+counts (everything keyed `(class_id, original_date, original_time)` — plain
+GROUP BYs, no joins; two same-day slots enrich independently). No
 stored-occurrence side, no past/live split, no dedup pass.
 **Cross-window reschedules render via WIDENING**: the exception load also
 returns rows whose `new_date` falls in the window; each class expands over
@@ -195,8 +224,9 @@ filtered back to the view window by EFFECTIVE date — a moved-in occurrence
 renders here (counts still load, keyed by its out-of-window original date),
 a moved-out one renders only in its target window. The one time-dependent
 rule: a soft-deleted class emits only occurrences whose END (`occurred_at`
-+ duration) is at/before now. Board rows carry `original_date` (addressing)
-alongside `class_date` (display).
++ duration) is at/before now. Board rows carry `original_date` +
+`original_time` (addressing) alongside `class_date` / `resolved_class_time`
+(display).
 
 ## 4. Cancel / reschedule — any date, keys never change
 
@@ -205,22 +235,25 @@ delegates its `new_date` upserts to it, so the two entry points can't
 diverge):
 
 - **Cancel** — TWO entry points, ONE teardown: the dedicated
-  `DELETE /{class_id}/occurrences/{original_date}` endpoint AND an exception
-  upsert with `is_cancelled=true` (the CRM's "Cancel this class") both run
-  `ClassesUndoService.teardown_occurrence` — reverse the occurrence's
-  attendance (points clawed back), DELETE its sign-ups (a cancelled
-  occurrence can't be attended — dead rows otherwise) — then write the
-  cancelled exception, all in one transaction.
+  `DELETE /{class_id}/occurrences/{original_date}?occurrence_time=` endpoint
+  AND an exception upsert with `is_cancelled=true` (the CRM's "Cancel this
+  class") both run `ClassesUndoService.teardown_occurrence` — reverse the
+  exact SLOT's attendance (points clawed back), DELETE its sign-ups (a
+  cancelled occurrence can't be attended — dead rows otherwise; a same-day
+  sibling slot is untouched) — then write the cancelled exception, all in
+  one transaction.
 - **Range cancel** (`POST .../exceptions/range` with `is_cancelled=true`) —
   a THIRD `teardown_occurrence` consumer (`ClassesExceptionsService
   ._teardown_covered_occurrences`): in the SAME transaction as the range
-  insert, every date in `[start_date, end_date]` still carrying a
+  insert, every SLOT in `[start_date, end_date]` still carrying a
   reservation or attendance row is re-resolved THROUGH the just-inserted
   range (a same-session read) and left alone when an instance exception
-  governs that date instead (override or moved elsewhere — an instance
-  exception always wins over any range) or an earlier-created covering
-  range still renders it; otherwise it tears down ONLY when its original
-  slot instant is still at/after now. An already-run occurrence covered by
+  governs that exact slot instead (override or moved elsewhere — an
+  instance exception always wins over any range) or an earlier-created
+  covering range still renders it; otherwise it tears down ONLY when its
+  original slot instant is still at/after now — so a covered multi-slot day
+  can split (the already-run 06:00 keeps its attendance; the upcoming 18:30
+  is torn down). An already-run occurrence covered by
   a retroactive range cancel KEEPS its attendance — deliberately asymmetric
   with the single-occurrence cancel above, which tears down regardless of
   instant (mass-clawing-back historical points from one bulk range action
@@ -247,15 +280,16 @@ diverge):
 
 ## 5. The check-in gate — warn-first, no writes on resolve
 
-`CheckinClassResolver.resolve(class_id, gym_id, occurrence_date)` loads the
-class identity, resolves the occurrence through the shared
-**`CheckinOccurrenceResolution.resolve_original`** — the ONE original-date
-resolution algorithm (versions + exceptions → the version expander, with
-the reschedule window-widening) that the sign-up service also injects, so
-check-in and sign-up can never disagree about whether an occurrence exists —
-and returns a `ResolvedClass` (`occurrence_date` = original date,
-`original_time`, effective `occurred_at`, effective capacity, points, plan
-gate inputs). Purely a read — nothing is written until the gate records.
+`CheckinClassResolver.resolve(class_id, gym_id, occurrence_date,
+occurrence_time)` loads the class identity, resolves the occurrence through
+the shared **`CheckinOccurrenceResolution.resolve_original`** — the ONE
+original-SLOT resolution algorithm (versions + exceptions → the version
+expander, with the reschedule window-widening; the match is the exact
+`(original_date, original_time)` pair) that the sign-up service also
+injects, so check-in and sign-up can never disagree about whether an
+occurrence exists — and returns a `ResolvedClass` (`occurrence_date` +
+`original_time` = the original slot, effective `occurred_at`, effective
+capacity, points, plan gate inputs). Purely a read — nothing is written until the gate records.
 The **2h early-check-in window** (`settings.checkin_opens_hours_before_start`)
 rejects an occurrence starting >2h out. Retroactive any-date check-ins work
 (the resolver validates against whichever version owned that date).
@@ -291,8 +325,8 @@ keep-paths (same-date override; reschedule-to-past).
 ## 6. Sign-ups (reservations) — in the checkin domain
 
 `class_signups(gym_id, class_id, member_id, original_date, original_time)`,
-`UNIQUE(class_id, member_id, original_date)`. **A reservation is NOT
-attendance** — `member_attendance` is only written by a check-in; a
+`UNIQUE(class_id, member_id, original_date, original_time)`. **A reservation
+is NOT attendance** — `member_attendance` is only written by a check-in; a
 signed-up member who never checks in is a no-show. `POST`/`DELETE
 /api/v1/signup` (`SignupService`), auth `verify_can_view_member`
 (staff-for-any-gym-member OR member-for-self; RLS has NO authenticated write
@@ -313,12 +347,13 @@ The per-member reversal (delete the attendance row by key + claw back points
 `GREATEST(bal−p,0)` + drop the `class_attended` activity + reverse a
 trial/one_time pack's auto-end) lives ONCE in **`CheckinReverser`**
 (`src/checkin/`, signature `reverse(session, member_id, gym_id, class_id,
-original_date, points_worth)`, imports nothing from `src.classes`).
-Consumers: `CheckinRemover` (`DELETE /api/v1/checkin`, the thin single-member
-wrapper) and `ClassesUndoService`, whose `teardown_occurrence` (reverse
-attendance + delete sign-ups for one date) is itself the single teardown the
-cancel entry points, the future-reschedule path, AND the versions service's
-wipe all route through. **This is a deliberate, documented
+original_date, original_time, points_worth)` — the full slot key, so a
+same-day sibling occurrence's row is never touched; imports nothing from
+`src.classes`). Consumers: `CheckinRemover` (`DELETE /api/v1/checkin`, the
+thin single-member wrapper) and `ClassesUndoService`, whose
+`teardown_occurrence` (reverse attendance + delete sign-ups for one exact
+slot) is itself the single teardown the cancel entry points, the
+future-reschedule path, AND the versions service's wipe all route through. **This is a deliberate, documented
 `classes → checkin` dependency** — the OPPOSITE of the otherwise one-way
 `checkin → classes` seam — chosen so the reversal isn't duplicated. DI
 builds `checkin_reverser` before all consumers; no import cycle.
@@ -327,8 +362,9 @@ builds `checkin_reverser` before all consumers; no import cycle.
 
 - **Schedule board** (`features/schedule`): week grid of `ClassCard`s; chip
   stacks "N reserved" / (past) "M attended"; tap → chooser (This occurrence
-  vs All future occurrences). Rows carry `originalDate` (addressing) +
-  `classDate` (display) — every mutation call sends `originalDate`.
+  vs All future occurrences). Rows carry `originalDate` + `originalTime`
+  (addressing) + `classDate`/`resolvedClassTime` (display) — every mutation
+  call sends the full original slot.
 - **Occurrence screen** (`class_occurrence_screen.dart`): view-first /
   edit (override section incl. a **date** field = reschedule); a two-tab
   **Reserved | Attended** roster; Reserve members (future) + Update

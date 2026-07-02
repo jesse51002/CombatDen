@@ -4,15 +4,17 @@
 There is no materializer and no past/live day-dedup in the versioned model:
 the board is pure version expansion (``ClassesVersionExpander``,
 ``include_cancelled=True``) enriched with instructor names and attendance /
-sign-up counts. These tests cover:
+sign-up counts, all keyed by the occurrence's FULL identity ``(class_id,
+original_date, original_time)`` — with several slots per day legal, a
+date-only key would conflate two same-day occurrences. These tests cover:
 
 * a multi-version class renders its pre-mint days from the OLD version and
   its post-mint days from the NEW version, in the same window;
 * a soft-deleted class renders only occurrences that have already ENDED
   (no in-session/future rows);
 * attendance / sign-up counts are keyed by the occurrence's IDENTITY
-  ``(class_id, original_date)`` — a rescheduled occurrence's counts follow
-  its ORIGINAL date, not its displayed ``class_date``;
+  ``(class_id, original_date, original_time)`` — a rescheduled occurrence's
+  counts follow its ORIGINAL slot, not its displayed ``class_date``;
 * every row carries ``original_date`` (distinct from ``class_date`` once
   rescheduled);
 * a cancelled occurrence is still emitted, flagged;
@@ -21,7 +23,11 @@ sign-up counts. These tests cover:
   via the widened expand bounds;
 * an occurrence rescheduled OUT of the window (its original date inside, its
   new_date outside) does not render in the source window — only its
-  unaffected sibling days do.
+  unaffected sibling days do;
+* a class with TWO slots on one date renders TWO independent board rows,
+  each with its own ``original_time`` and independently-keyed counts;
+* an instance exception bound to ONE slot (e.g. cancelling the 06:00
+  occurrence) leaves a same-day SIBLING slot (18:00) completely untouched.
 
 The DB reads (``_read_all``) are stubbed by sql-file name; the real
 ``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``) does the
@@ -36,6 +42,7 @@ from uuid import UUID, uuid4
 from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.classes.schema.classes_expander_schema import ALL_DAYS_KEY
 from src.classes.service import (
     classes_schedule_reader_service as reader_module,
 )
@@ -79,29 +86,42 @@ def _version_row(
     class_id: UUID,
     gym_id: UUID,
     effective_from: datetime,
-    class_time: time,
+    weekday_slots: dict[str, list[dict]],
     timezone: str = _UTC_TZ,
+    recurring_unit: RecurringUnit = RecurringUnit.daily,
     start_date: date = date(2020, 1, 1),
     end_date: date | None = None,
+    duration_minutes: int = 60,
 ) -> dict:
-    """A ``classes_schedules_for_gym.sql``-shaped daily version row."""
-    row = {
+    """A ``classes_schedules_for_gym.sql``-shaped version row."""
+    return {
         "schedule_id": uuid4(),
         "class_id": class_id,
         "gym_id": gym_id,
         "effective_from": effective_from,
         "timezone": timezone,
-        "class_time": class_time,
-        "duration_minutes": 60,
-        "recurring_unit": RecurringUnit.daily,
+        "duration_minutes": duration_minutes,
+        "recurring_unit": recurring_unit,
         "recurring_interval": 1,
+        "weekday_slots": weekday_slots,
         "start_date": start_date,
         "end_date": end_date,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        row[day] = True
-        row[f"{day}_instructor_id"] = None
-    return row
+
+
+def _daily_version_row(
+    *, class_id: UUID, gym_id: UUID, effective_from: datetime,
+    class_time: time, **kwargs: object,
+) -> dict:
+    """A single-slot-per-day daily version row."""
+    return _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=effective_from,
+        weekday_slots={ALL_DAYS_KEY: [{"time": class_time, "instructor_id": None}]},
+        recurring_unit=RecurringUnit.daily,
+        **kwargs,
+    )
 
 
 def _instance_row(
@@ -109,6 +129,7 @@ def _instance_row(
     class_id: UUID,
     gym_id: UUID,
     original_date: date,
+    original_time: time = time(9, 0),
     is_cancelled: bool = False,
     new_date: date | None = None,
 ) -> dict:
@@ -117,6 +138,7 @@ def _instance_row(
         "class_id": class_id,
         "gym_id": gym_id,
         "original_date": original_date,
+        "original_time": original_time,
         "is_cancelled": is_cancelled,
         "new_class_time": None,
         "new_duration_minutes": None,
@@ -200,13 +222,13 @@ async def test_multi_version_class_renders_old_past_new_future(
         reader_module, "datetime", _fixed_datetime(mint.replace(hour=12))
     )
 
-    v1 = _version_row(
+    v1 = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
         class_time=time(9, 0),
     )
-    v2 = _version_row(
+    v2 = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=mint,
@@ -240,7 +262,7 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
-    version = _version_row(
+    version = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
@@ -265,9 +287,9 @@ async def test_counts_keyed_by_original_date_and_cancelled_included(
     monkeypatch,
 ) -> None:
     """Attendance/sign-up counts key on the occurrence's identity
-    ``(class_id, original_date)``, not the displayed date — a rescheduled
-    occurrence's counts follow it from its original slot. A cancelled
-    occurrence is still emitted (flagged), and every row carries
+    ``(class_id, original_date, original_time)``, not the displayed date —
+    a rescheduled occurrence's counts follow it from its original slot. A
+    cancelled occurrence is still emitted (flagged), and every row carries
     ``original_date``."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
@@ -275,7 +297,7 @@ async def test_counts_keyed_by_original_date_and_cancelled_included(
     # has "ended" yet, so the deleted-class filter is moot (class is live).
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
-    version = _version_row(
+    version = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
@@ -294,10 +316,20 @@ async def test_counts_keyed_by_original_date_and_cancelled_included(
         ),
     ]
     attendance = [
-        {"class_id": class_id, "original_date": day1, "attendance_count": 2},
+        {
+            "class_id": class_id,
+            "original_date": day1,
+            "original_time": time(9, 0),
+            "attendance_count": 2,
+        },
     ]
     signups = [
-        {"class_id": class_id, "original_date": day3, "signup_count": 1},
+        {
+            "class_id": class_id,
+            "original_date": day3,
+            "original_time": time(9, 0),
+            "signup_count": 1,
+        },
     ]
     service = _service(
         classes=[_class_row(class_id=class_id, gym_id=gym_id)],
@@ -351,7 +383,7 @@ async def test_reschedule_into_window_from_outside_original_renders(
     outside_original = date(2026, 6, 1)  # before window_start
     moved_into_window = date(2026, 6, 6)  # inside the window
 
-    version = _version_row(
+    version = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
@@ -369,6 +401,7 @@ async def test_reschedule_into_window_from_outside_original_renders(
         {
             "class_id": class_id,
             "original_date": outside_original,
+            "original_time": time(9, 0),
             "attendance_count": 4,
         }
     ]
@@ -412,7 +445,7 @@ async def test_reschedule_out_of_window_does_not_render_in_source_window(
     day1, day2, day3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
     moved_out_of_window = date(2026, 6, 20)
 
-    version = _version_row(
+    version = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
@@ -453,7 +486,7 @@ async def test_cancelling_range_id_distinguishes_range_from_instance_cancel(
     instance_cancelled_day = date(2026, 6, 3)
     plain_day = date(2026, 6, 1)
 
-    version = _version_row(
+    version = _daily_version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=datetime(2020, 1, 1, tzinfo=UTC),
@@ -491,3 +524,109 @@ async def test_cancelling_range_id_distinguishes_range_from_instance_cancel(
     assert by_date[instance_cancelled_day].cancelling_range_id is None
     assert by_date[plain_day].is_cancelled is False
     assert by_date[plain_day].cancelling_range_id is None
+
+
+# -- multi-slot-per-day board rows -----------------------------------------
+
+
+async def test_two_slot_day_renders_two_independent_board_rows(
+    monkeypatch,
+) -> None:
+    """A class with two slots on the same date renders TWO board rows, each
+    carrying its own ``original_time`` and independently-keyed
+    attendance/sign-up counts."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+    day = date(2026, 6, 1)
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        weekday_slots={
+            ALL_DAYS_KEY: [
+                {"time": time(6, 0), "instructor_id": None},
+                {"time": time(18, 0), "instructor_id": None},
+            ]
+        },
+    )
+    attendance = [
+        {
+            "class_id": class_id,
+            "original_date": day,
+            "original_time": time(6, 0),
+            "attendance_count": 3,
+        },
+    ]
+    signups = [
+        {
+            "class_id": class_id,
+            "original_date": day,
+            "original_time": time(18, 0),
+            "signup_count": 2,
+        },
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        attendance=attendance,
+        signups=signups,
+    )
+
+    resp = await service.list_effective_instances(gym_id, day, day)
+
+    rows = [row for row in resp.items if row.original_date == day]
+    assert len(rows) == 2
+    by_time = {row.original_time: row for row in rows}
+    assert by_time[time(6, 0)].attendance_count == 3
+    assert by_time[time(6, 0)].signup_count == 0
+    assert by_time[time(18, 0)].signup_count == 2
+    assert by_time[time(18, 0)].attendance_count == 0
+
+
+async def test_instance_exception_on_one_slot_leaves_sibling_untouched(
+    monkeypatch,
+) -> None:
+    """Cancelling the 06:00 occurrence of a 2-slot day leaves the 18:00
+    sibling occurrence fully unflagged on the board."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+    day = date(2026, 6, 1)
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        weekday_slots={
+            ALL_DAYS_KEY: [
+                {"time": time(6, 0), "instructor_id": None},
+                {"time": time(18, 0), "instructor_id": None},
+            ]
+        },
+    )
+    instances = [
+        _instance_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            original_date=day,
+            original_time=time(6, 0),
+            is_cancelled=True,
+        ),
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+    )
+
+    resp = await service.list_effective_instances(gym_id, day, day)
+
+    rows = {
+        row.original_time: row for row in resp.items if row.original_date == day
+    }
+    assert rows[time(6, 0)].is_cancelled is True
+    assert rows[time(6, 0)].has_instance_exception is True
+    assert rows[time(18, 0)].is_cancelled is False
+    assert rows[time(18, 0)].has_instance_exception is False

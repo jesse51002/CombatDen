@@ -104,7 +104,10 @@ class CheckinMemberGate:
             (``requires_confirmation``).
         """
         existing = await self._queries.get_existing_attendance(
-            member_id, resolved_class.class_id, resolved_class.occurrence_date
+            member_id,
+            resolved_class.class_id,
+            resolved_class.occurrence_date,
+            resolved_class.original_time,
         )
         if existing is not None:
             return self._already_checked_in(
@@ -310,10 +313,11 @@ class CheckinMemberGate:
         """Whether checking THIS member in would exceed ``max_capacity``.
 
         Capacity is reserving: counts the DISTINCT signed-up-or-attended union
-        (``class_signups`` ∪ ``member_attendance``), not raw attendance — so a
-        member already counted (a prior sign-up, or an idempotent repeat
-        check-in) never blocks on their own presence, while a fresh walk-in
-        is blocked once the union fills the room.
+        (``class_signups`` ∪ ``member_attendance``) for THIS exact slot, not
+        raw attendance — so a member already counted (a prior sign-up, or an
+        idempotent repeat check-in) never blocks on their own presence, a
+        same-day sibling occurrence's headcount never bleeds into this one's,
+        and a fresh walk-in is blocked once the union fills the room.
         """
         if resolved_class.max_capacity is None:
             return False
@@ -321,6 +325,7 @@ class CheckinMemberGate:
             resolved_class.class_id,
             resolved_class.gym_id,
             resolved_class.occurrence_date,
+            resolved_class.original_time,
         )
         if member_id in members:
             return False

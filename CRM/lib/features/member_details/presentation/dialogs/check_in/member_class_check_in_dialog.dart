@@ -158,6 +158,7 @@ class _MemberClassCheckInDialogState extends State<MemberClassCheckInDialog> {
         MemberReserveRequested(
           classId: selected.instance.classId,
           occurrenceDate: selected.instance.originalDate,
+          occurrenceTime: selected.instance.originalTime,
         ),
       );
       return;
@@ -167,6 +168,7 @@ class _MemberClassCheckInDialogState extends State<MemberClassCheckInDialog> {
       MemberCheckInRequested(
         classId: selected.instance.classId,
         occurrenceDate: selected.instance.originalDate,
+        occurrenceTime: selected.instance.originalTime,
         ignoreWarnings: ignoreWarnings,
       ),
     );

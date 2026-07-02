@@ -2,17 +2,19 @@
 
 POST /api/v1/checkin/batch
 
-The occurrence is addressed by the ``class_id`` + ``occurrence_date`` BODY
-fields (``occurrence_date`` is always the occurrence's ORIGINAL date); the
-body also carries the gym (for the admin/owner auth gate) and the members to
-check in. The endpoint resolves the occurrence ONCE (a pure read — no
-materialization), then runs the per-member gate over each (de-duped) member.
-One bad member never sinks the batch — its result is a ``failed`` item — so
-the whole call returns 207 Multi-Status with a per-member split (a total
-failure is 500; see the FastApiBackend billing-error rule).
+The occurrence is addressed by the ``class_id`` + ``occurrence_date`` +
+``occurrence_time`` BODY fields (always the occurrence's ORIGINAL slot — a
+class may occur several times on one day, so the date alone never identifies
+an occurrence); the body also carries the gym (for the admin/owner auth gate)
+and the members to check in. The endpoint resolves the occurrence ONCE (a
+pure read — no materialization), then runs the per-member gate over each
+(de-duped) member. One bad member never sinks the batch — its result is a
+``failed`` item — so the whole call returns 207 Multi-Status with a
+per-member split (a total failure is 500; see the FastApiBackend
+billing-error rule).
 """
 
-from datetime import date
+from datetime import date, time
 from enum import StrEnum
 from uuid import UUID
 
@@ -28,6 +30,8 @@ class BatchCheckinRequest(BaseModel):
         gym_id: The owning gym — the admin/owner auth gate is scoped to it.
         class_id: The class to check into.
         occurrence_date: The local calendar date of the occurrence.
+        occurrence_time: The occurrence's ORIGINAL slot time — together with
+            ``occurrence_date`` the full occurrence identity.
         member_ids: The members to check in (at least one; de-duped, order
             preserved).
         is_member: Applies to every member in the batch. ``False`` (the default
@@ -44,6 +48,7 @@ class BatchCheckinRequest(BaseModel):
     gym_id: UUID
     class_id: UUID
     occurrence_date: date
+    occurrence_time: time
     member_ids: list[UUID] = Field(min_length=1)
     is_member: bool = False
     ignore_warnings: bool = False

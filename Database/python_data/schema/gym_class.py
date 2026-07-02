@@ -30,12 +30,25 @@ class GymClassCreate(SeedModel):
     is_deleted: bool = False
 
 
+class ScheduleSlot(SeedModel):
+    """One (time, instructor) slot inside a version's weekday_slots JSONB."""
+
+    time: time
+    instructor_id: UUID | None = None
+
+
 class GymClassScheduleCreate(SeedModel):
     """One append-only schedule VERSION of a class (gym_class_schedules).
 
     A version owns the occurrences whose original instant (original_date +
-    class_time in the version's own frozen timezone) falls inside
+    the slot's time in the version's own frozen timezone) falls inside
     [effective_from, next version's effective_from).
+
+    weekday_slots is the WHEN of the shape — day -> ordered slot list, so a
+    class may occur several times on one day. Weekly versions use only
+    sun..sat keys (a day occurs iff its key holds a non-empty list);
+    daily/monthly versions use exactly the reserved "all" key. Times are
+    unique per day and sorted ascending.
     """
 
     schedule_id: UUID
@@ -44,35 +57,24 @@ class GymClassScheduleCreate(SeedModel):
     effective_from: datetime
     # IANA zone frozen at mint (copied from gyms.timezone).
     timezone: str
-    class_time: time
     duration_minutes: int
     recurring_unit: RecurringUnit
     recurring_interval: int = 1
-    sun: bool = False
-    mon: bool = False
-    tue: bool = False
-    wed: bool = False
-    thu: bool = False
-    fri: bool = False
-    sat: bool = False
-    sun_instructor_id: UUID | None = None
-    mon_instructor_id: UUID | None = None
-    tue_instructor_id: UUID | None = None
-    wed_instructor_id: UUID | None = None
-    thu_instructor_id: UUID | None = None
-    fri_instructor_id: UUID | None = None
-    sat_instructor_id: UUID | None = None
+    weekday_slots: dict[str, list[ScheduleSlot]]
     start_date: date
     end_date: date | None = None
 
 
 class ClassInstanceExceptionCreate(SeedModel):
-    """Override for a single occurrence on a specific date."""
+    """Override for a single occurrence — bound to one original slot
+    (original_date + original_time), so two same-day occurrences of one class
+    are overridden independently."""
 
     exception_id: UUID
     class_id: UUID
     gym_id: UUID
     original_date: date
+    original_time: time
     is_cancelled: bool = False
     new_class_time: time | None = None
     new_duration_minutes: int | None = None

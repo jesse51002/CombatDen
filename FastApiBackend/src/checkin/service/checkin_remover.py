@@ -12,7 +12,7 @@ addressed the occurrence by. The occurrence itself is left intact: the
 class still happened, this one member just didn't attend.
 """
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from sqlalchemy import text
@@ -47,11 +47,13 @@ class CheckinRemover:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
         member_id: UUID,
     ) -> CheckinRemoveResponse:
         """Delete the member's attendance + reverse its points / pack / activity.
 
-        ``occurrence_date`` is the occurrence's ORIGINAL date.
+        ``(occurrence_date, occurrence_time)`` is the occurrence's full
+        ORIGINAL slot.
 
         Returns a ``removed=False`` result (no error) when the member was not
         checked in.
@@ -69,6 +71,7 @@ class CheckinRemover:
                 gym_id,
                 class_id,
                 occurrence_date,
+                occurrence_time,
                 points_worth,
             )
             await session.commit()

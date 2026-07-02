@@ -1,24 +1,26 @@
 """Reverse ONE member's recorded check-in on a KNOWN occurrence.
 
 The reusable core of a check-in reversal, scoped to a single member on one
-occurrence — identified by ``(class_id, original_date)``, its identity key:
-delete that member's attendance row, claw back the class's ``points_worth``
-(floored at 0), drop one ``class_attended`` activity, and reverse the
-auto-end on the charged trial / one_time pack when the delete drops it back
-below capacity. Every step runs in the caller's OPEN transaction (no commit
-here), so a bulk caller can reverse many members atomically.
+occurrence — identified by ``(class_id, original_date, original_time)``, its
+full identity key (a class may occur several times per day; the time picks
+the exact slot): delete that member's attendance row, claw back the class's
+``points_worth`` (floored at 0), drop one ``class_attended`` activity, and
+reverse the auto-end on the charged trial / one_time pack when the delete
+drops it back below capacity. Every step runs in the caller's OPEN
+transaction (no commit here), so a bulk caller can reverse many members
+atomically.
 
 This unit does NOT resolve the occurrence beyond its identity key — the
-caller passes ``class_id`` + ``original_date`` and the class's
-``points_worth`` (a bulk caller loads those once and reuses them across the
-loop). It imports NOTHING from ``src.classes``: the single-member remover
+caller passes the slot key and the class's ``points_worth`` (a bulk caller
+loads those once and reuses them across the loop). It imports NOTHING from
+``src.classes``: the single-member remover
 (``CheckinRemover``), the whole-occurrence undo (``ClassesUndoService``), and
 the schedule-version mint engine (``ClassesVersionsService``) — both of which
 live in ``src.classes`` — all call this, and a ``src.classes`` import here
 would create a Python import cycle.
 """
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from schema.membership_plan import PlanType
@@ -53,10 +55,11 @@ class CheckinReverser:
         gym_id: UUID,
         class_id: UUID,
         original_date: date,
+        original_time: time,
         points_worth: int,
     ) -> CheckinRemoveResponse:
         """Reverse ``member_id``'s check-in on the occurrence identified by
-        ``(class_id, original_date)``.
+        ``(class_id, original_date, original_time)``.
 
         Deletes the member's attendance row, claws back ``points_worth`` (floored
         at 0 by the balance CHECK), drops one ``class_attended`` activity, and
@@ -68,7 +71,7 @@ class CheckinReverser:
         attendance on this occurrence.
         """
         deleted = await self._delete_attendance(
-            session, member_id, class_id, original_date
+            session, member_id, class_id, original_date, original_time
         )
         if deleted is None:
             return CheckinRemoveResponse(removed=False)
@@ -93,6 +96,7 @@ class CheckinReverser:
         member_id: UUID,
         class_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> dict | None:
         """Delete the member's attendance row; return its (item_id, plan_id)."""
         return await self._fetchone(
@@ -102,6 +106,7 @@ class CheckinReverser:
                 "member_id": str(member_id),
                 "class_id": str(class_id),
                 "original_date": original_date,
+                "original_time": original_time,
             },
         )
 

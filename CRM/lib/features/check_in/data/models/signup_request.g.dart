@@ -14,5 +14,6 @@ Map<String, dynamic> _$SignupRequestToJson(SignupRequest instance) =>
       'gym_id': instance.gymId,
       'class_id': instance.classId,
       'occurrence_date': instance.occurrenceDate,
+      'occurrence_time': instance.occurrenceTime,
       'props': instance.props,
     };

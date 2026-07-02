@@ -14,6 +14,7 @@ Map<String, dynamic> _$BatchCheckInRequestToJson(
   'gym_id': instance.gymId,
   'class_id': instance.classId,
   'occurrence_date': instance.occurrenceDate,
+  'occurrence_time': instance.occurrenceTime,
   'member_ids': instance.memberIds,
   'is_member': instance.isMember,
   'ignore_warnings': instance.ignoreWarnings,

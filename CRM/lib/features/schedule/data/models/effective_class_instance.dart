@@ -33,6 +33,12 @@ class EffectiveClassInstance extends Equatable {
   /// passes THIS date, never [classDate].
   final DateTime originalDate;
 
+  /// The occurrence's IDENTITY time — the owning version's pre-exception slot
+  /// time (`HH:MM:SS`). With several slots per day legal, [originalDate] +
+  /// [originalTime] together are the occurrence's full identity key; every
+  /// occurrence-addressed call passes BOTH, never [resolvedClassTime].
+  final String originalTime;
+
   /// UTC, timezone-aware start instant.
   final DateTime occurredAt;
 
@@ -73,6 +79,7 @@ class EffectiveClassInstance extends Equatable {
     required this.className,
     required this.classDate,
     required this.originalDate,
+    required this.originalTime,
     required this.occurredAt,
     required this.resolvedClassTime,
     required this.resolvedDurationMinutes,
@@ -99,6 +106,7 @@ class EffectiveClassInstance extends Equatable {
         className,
         classDate,
         originalDate,
+        originalTime,
         occurredAt,
         resolvedClassTime,
         resolvedDurationMinutes,

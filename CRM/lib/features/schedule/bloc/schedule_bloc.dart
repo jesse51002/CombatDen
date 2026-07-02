@@ -96,6 +96,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         () => _repository.cancelInstance(
           event.classId,
           event.originalDate,
+          event.originalTime,
         ),
       );
 
@@ -108,6 +109,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         () => _repository.overrideInstance(
           event.classId,
           event.originalDate,
+          event.originalTime,
           newClassTime: event.newClassTime,
           newDurationMinutes: event.newDurationMinutes,
           newMaxCapacity: event.newMaxCapacity,
@@ -181,6 +183,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
           gymId: _gymId,
           classId: event.classId,
           occurrenceDate: _dateParam.format(event.occurrenceDate),
+          occurrenceTime: event.occurrenceTime,
           memberIds: event.memberIds,
           ignoreWarnings: event.ignoreWarnings,
         ),
@@ -270,6 +273,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
           _gymId,
           event.classId,
           event.occurrenceDate,
+          event.occurrenceTime,
           memberId,
         );
         results.add(SignupBatchResultItem(

@@ -59,48 +59,54 @@ class ScheduleClassDeleted extends ScheduleEvent {
   List<Object?> get props => [classId];
 }
 
-/// Cancel the single occurrence of [classId] on [originalDate] (the
-/// occurrence's IDENTITY date — a one-day exception), then reload the board
-/// so the cancelled day shows its badge.
+/// Cancel the single occurrence of [classId] on [originalDate] +
+/// [originalTime] (the occurrence's IDENTITY slot — a one-slot exception;
+/// several slots per day are legal, so a same-day sibling is untouched), then
+/// reload the board so the cancelled day shows its badge.
 class ScheduleInstanceCancelled extends ScheduleEvent {
   final String classId;
   final DateTime originalDate;
+  final String originalTime;
 
   const ScheduleInstanceCancelled({
     required this.classId,
     required this.originalDate,
+    required this.originalTime,
   });
 
   @override
-  List<Object?> get props => [classId, originalDate];
+  List<Object?> get props => [classId, originalDate, originalTime];
 }
 
 /// Staff batch check-in ("Update attendees"): check [memberIds] into the
-/// occurrence of [classId] on [occurrenceDate] (the occurrence's IDENTITY
-/// date, never its display date), then reload the board so the attendance
-/// count updates. The CRM is the staff surface (`is_member: false`):
-/// a clean member is recorded, and one the gate warns on comes back as
-/// `needs_confirmation` (nothing written) unless [ignoreWarnings] is set — the
-/// results dialog resubmits just the `needs_confirmation` subset with it true
-/// ("Check in anyway"), merging the confirmation response back into the full
-/// breakdown. The outcome lands on `batchCheckInResult` (the per-member 207
-/// breakdown, each row carrying any non-blocking warnings) or `checkInError`.
+/// occurrence of [classId] on [occurrenceDate] + [occurrenceTime] (the
+/// occurrence's IDENTITY key, never its display date/time), then reload the
+/// board so the attendance count updates. The CRM is the staff surface
+/// (`is_member: false`): a clean member is recorded, and one the gate warns
+/// on comes back as `needs_confirmation` (nothing written) unless
+/// [ignoreWarnings] is set — the results dialog resubmits just the
+/// `needs_confirmation` subset with it true ("Check in anyway"), merging the
+/// confirmation response back into the full breakdown. The outcome lands on
+/// `batchCheckInResult` (the per-member 207 breakdown, each row carrying any
+/// non-blocking warnings) or `checkInError`.
 class ScheduleBatchCheckInRequested extends ScheduleEvent {
   final String classId;
   final DateTime occurrenceDate;
+  final String occurrenceTime;
   final List<String> memberIds;
   final bool ignoreWarnings;
 
   const ScheduleBatchCheckInRequested({
     required this.classId,
     required this.occurrenceDate,
+    required this.occurrenceTime,
     required this.memberIds,
     this.ignoreWarnings = false,
   });
 
   @override
   List<Object?> get props =>
-      [classId, occurrenceDate, memberIds, ignoreWarnings];
+      [classId, occurrenceDate, occurrenceTime, memberIds, ignoreWarnings];
 }
 
 /// Clears the batch check-in outcome (result + error) when the check-in dialog
@@ -110,25 +116,28 @@ class ScheduleBatchCheckInCleared extends ScheduleEvent {
 }
 
 /// "Reserve members": reserve [memberIds] a spot on the occurrence of
-/// [classId] on [occurrenceDate] (the occurrence's IDENTITY date), then
-/// reload the board so the board's reserved count updates. There is no
-/// batch sign-up endpoint — the
-/// repository loops `POST /api/v1/signup` once per member; one member's
-/// failure (e.g. "Class is full", a transport error) never sinks the rest.
-/// The per-member breakdown lands on `signupResult`.
+/// [classId] on [occurrenceDate] + [occurrenceTime] (the occurrence's
+/// IDENTITY key), then reload the board so the board's reserved count
+/// updates. There is no batch sign-up endpoint — the repository loops
+/// `POST /api/v1/signup` once per member; one member's failure (e.g. "Class
+/// is full", a transport error) never sinks the rest. The per-member
+/// breakdown lands on `signupResult`.
 class ScheduleSignUpRequested extends ScheduleEvent {
   final String classId;
   final DateTime occurrenceDate;
+  final String occurrenceTime;
   final List<String> memberIds;
 
   const ScheduleSignUpRequested({
     required this.classId,
     required this.occurrenceDate,
+    required this.occurrenceTime,
     required this.memberIds,
   });
 
   @override
-  List<Object?> get props => [classId, occurrenceDate, memberIds];
+  List<Object?> get props =>
+      [classId, occurrenceDate, occurrenceTime, memberIds];
 }
 
 /// Clears the sign-up outcome when the "Reserve members" dialog opens or
@@ -137,9 +146,10 @@ class ScheduleSignUpCleared extends ScheduleEvent {
   const ScheduleSignUpCleared();
 }
 
-/// Override the single occurrence of [classId] on [originalDate] (the
-/// occurrence's IDENTITY date — a one-day exception): set its effective
-/// instructor / start time / max capacity, then reload the board. Mirrors
+/// Override the single occurrence of [classId] on [originalDate] +
+/// [originalTime] (the occurrence's IDENTITY slot — a one-slot exception; a
+/// same-day sibling slot is untouched): set its effective instructor / start
+/// time / max capacity, then reload the board. Mirrors
 /// [ScheduleInstanceCancelled] but with `is_cancelled: false` and the
 /// override fields populated. [newClassTime] is `HH:MM:SS`;
 /// [newDurationMinutes] is carried through unedited (the occurrence-edit
@@ -149,12 +159,13 @@ class ScheduleSignUpCleared extends ScheduleEvent {
 /// today, or future) — and is only set when the user actually picked a
 /// different date; the backend rejects only a collision with an existing
 /// non-cancelled occurrence at the exact target instant. Scope:
-/// [originalDate] is assumed to be the occurrence's original (not-yet-moved)
-/// date — rescheduling an already-rescheduled occurrence a second time is
-/// out of scope.
+/// [originalDate] / [originalTime] are assumed to be the occurrence's
+/// original (not-yet-moved) slot — rescheduling an already-rescheduled
+/// occurrence a second time is out of scope.
 class ScheduleInstanceOverridden extends ScheduleEvent {
   final String classId;
   final DateTime originalDate;
+  final String originalTime;
   final String newClassTime;
   final int newDurationMinutes;
   final int? newMaxCapacity;
@@ -164,6 +175,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
   const ScheduleInstanceOverridden({
     required this.classId,
     required this.originalDate,
+    required this.originalTime,
     required this.newClassTime,
     required this.newDurationMinutes,
     this.newMaxCapacity,
@@ -175,6 +187,7 @@ class ScheduleInstanceOverridden extends ScheduleEvent {
   List<Object?> get props => [
         classId,
         originalDate,
+        originalTime,
         newClassTime,
         newDurationMinutes,
         newMaxCapacity,

@@ -94,6 +94,7 @@ class CheckinWriter:
                                 "member_id": str(member_id),
                                 "class_id": str(resolved_class.class_id),
                                 "original_date": resolved_class.occurrence_date,
+                                "original_time": resolved_class.original_time,
                             },
                         )
                     )

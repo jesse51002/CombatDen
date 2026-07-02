@@ -176,9 +176,12 @@ def _pick_target(
             "member_id": cover["member_id"],
             "class_id": occ["class_id"],
             "points_worth": cover["points_worth"],
-            # occurrence_date is always the ORIGINAL date -- never class_date
-            # (the effective/display date), per the class-system-guide skill.
+            # occurrence_date/time are always the ORIGINAL slot -- never
+            # class_date (the effective/display date), per the
+            # class-system-guide skill. A class may occur several times per
+            # day, so the time is part of the occurrence's identity.
             "occurrence_date": occ["original_date"],
+            "occurrence_time": occ["original_time"],
         }
     return None
 
@@ -259,17 +262,19 @@ def _class_attended_activity_ids(member_id: str, class_id: str) -> set[UUID]:
 
 
 def _attendance_exists(
-    member_id: str, class_id: str, occurrence_date: str
+    member_id: str, class_id: str, occurrence_date: str, occurrence_time: str
 ) -> bool:
     async def _run() -> bool:
         conn = await asyncpg.connect(_get_db_url())
         try:
             return await conn.fetchval(
                 "SELECT EXISTS (SELECT 1 FROM member_attendance "
-                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3)",
+                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3 "
+                "AND original_time = $4)",
                 UUID(member_id),
                 UUID(class_id),
                 date.fromisoformat(occurrence_date),
+                time.fromisoformat(occurrence_time),
             )
         finally:
             await conn.close()
@@ -331,22 +336,25 @@ def _teardown_checkin(
     member_id: str,
     class_id: str,
     occurrence_date: str,
+    occurrence_time: str,
     new_activity_ids: set[UUID],
     restore_points: int,
 ) -> None:
-    """Undo a test check-in: delete the attendance row (keyed by identity —
-    class_id + original_date) + the new class_attended activities, restore
-    points."""
+    """Undo a test check-in: delete the attendance row (keyed by its full
+    identity — class_id + original_date + original_time) + the new
+    class_attended activities, restore points."""
 
     async def _run() -> None:
         conn = await asyncpg.connect(_get_db_url())
         try:
             await conn.execute(
                 "DELETE FROM member_attendance "
-                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3",
+                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3 "
+                "AND original_time = $4",
                 UUID(member_id),
                 UUID(class_id),
                 date.fromisoformat(occurrence_date),
+                time.fromisoformat(occurrence_time),
             )
             if new_activity_ids:
                 await conn.execute(
@@ -370,7 +378,8 @@ def _teardown_checkin(
 
 
 class TestCheckinValidation:
-    """422 validation for the (class_id + occurrence_date) body shape."""
+    """422 validation for the (class_id + occurrence_date + occurrence_time)
+    body shape."""
 
     def test_missing_body_returns_422(self, api: httpx.Client) -> None:
         resp = api.post("/api/v1/checkin")
@@ -383,6 +392,7 @@ class TestCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
         )
         assert resp.status_code == 422
@@ -394,6 +404,7 @@ class TestCheckinValidation:
                 "member_id": str(uuid4()),
                 "gym_id": GYM_ID,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
         )
         assert resp.status_code == 422
@@ -405,6 +416,19 @@ class TestCheckinValidation:
                 "member_id": str(uuid4()),
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
+                "occurrence_time": "17:00:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_missing_occurrence_time_returns_422(self, api: httpx.Client) -> None:
+        resp = api.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": str(uuid4()),
+                "gym_id": GYM_ID,
+                "class_id": str(uuid4()),
+                "occurrence_date": "2026-06-01",
             },
         )
         assert resp.status_code == 422
@@ -417,6 +441,7 @@ class TestCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
         )
         assert resp.status_code == 422
@@ -429,6 +454,7 @@ class TestCheckinValidation:
                 "gym_id": GYM_ID,
                 "class_id": str(uuid4()),
                 "occurrence_date": "not-a-date",
+                "occurrence_time": "17:00:00",
             },
         )
         assert resp.status_code == 422
@@ -454,6 +480,7 @@ class TestGatedCheckin:
         class_id = row["class_id"]
         points_worth = row["points_worth"]
         occurrence_date = row["occurrence_date"]
+        occurrence_time = row["occurrence_time"]
 
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
@@ -465,6 +492,7 @@ class TestGatedCheckin:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
             },
         )
         body = resp.json()
@@ -482,7 +510,12 @@ class TestGatedCheckin:
             assert len(new_activity_ids) == 1
         finally:
             _teardown_checkin(
-                member_id, class_id, occurrence_date, new_activity_ids, before_points
+                member_id,
+                class_id,
+                occurrence_date,
+                occurrence_time,
+                new_activity_ids,
+                before_points,
             )
 
     def test_checkin_rejected_too_far_in_the_future(
@@ -500,6 +533,7 @@ class TestGatedCheckin:
                 "gym_id": GYM_ID,
                 "class_id": row["class_id"],
                 "occurrence_date": row["occurrence_date"],
+                "occurrence_time": row["occurrence_time"],
             },
         )
         assert resp.status_code == 400, resp.text
@@ -518,11 +552,13 @@ class TestGatedCheckin:
         class_id = row["class_id"]
         points_worth = row["points_worth"]
         occurrence_date = row["occurrence_date"]
+        occurrence_time = row["occurrence_time"]
         params = {
             "member_id": member_id,
             "gym_id": GYM_ID,
             "class_id": class_id,
             "occurrence_date": occurrence_date,
+            "occurrence_time": occurrence_time,
         }
 
         before_points = _member_points(member_id)
@@ -542,7 +578,8 @@ class TestGatedCheckin:
             assert body["points_reverted"] == points_worth
             # Attendance + points + activity reverted to the pre-check-in state.
             assert (
-                _attendance_exists(member_id, class_id, occurrence_date) is False
+                _attendance_exists(member_id, class_id, occurrence_date, occurrence_time)
+                is False
             )
             assert _member_points(member_id) == before_points
             assert (
@@ -555,7 +592,9 @@ class TestGatedCheckin:
             assert again.status_code == 200, again.text
             assert again.json()["removed"] is False
         finally:
-            _teardown_checkin(member_id, class_id, occurrence_date, set(), before_points)
+            _teardown_checkin(
+                member_id, class_id, occurrence_date, occurrence_time, set(), before_points
+            )
 
     def test_duplicate_checkin_is_idempotent_and_awards_no_extra_points(
         self, api: httpx.Client, seed_ids: dict
@@ -569,11 +608,13 @@ class TestGatedCheckin:
         member_id = row["member_id"]
         class_id = row["class_id"]
         occurrence_date = row["occurrence_date"]
+        occurrence_time = row["occurrence_time"]
         payload = {
             "member_id": member_id,
             "gym_id": GYM_ID,
             "class_id": class_id,
             "occurrence_date": occurrence_date,
+            "occurrence_time": occurrence_time,
         }
 
         before_points = _member_points(member_id)
@@ -599,6 +640,7 @@ class TestGatedCheckin:
                 member_id,
                 class_id,
                 occurrence_date,
+                occurrence_time,
                 after_activities - before_activities,
                 before_points,
             )
@@ -616,6 +658,7 @@ class TestGatedCheckin:
         member_id = str(member_row["member_id"])
         class_id = covered["class_id"]
         occurrence_date = covered["occurrence_date"]
+        occurrence_time = covered["occurrence_time"]
 
         resp = api.post(
             "/api/v1/checkin",
@@ -624,6 +667,7 @@ class TestGatedCheckin:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
                 "is_member": True,
             },
         )
@@ -650,6 +694,7 @@ class TestGatedCheckin:
         class_id = covered["class_id"]
         points_worth = covered["points_worth"]
         occurrence_date = covered["occurrence_date"]
+        occurrence_time = covered["occurrence_time"]
 
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
@@ -658,6 +703,7 @@ class TestGatedCheckin:
             "gym_id": GYM_ID,
             "class_id": class_id,
             "occurrence_date": occurrence_date,
+            "occurrence_time": occurrence_time,
         }
 
         # Default: held for confirmation — nothing written, no points.
@@ -691,7 +737,12 @@ class TestGatedCheckin:
             assert len(new_activity_ids) == 1
         finally:
             _teardown_checkin(
-                member_id, class_id, occurrence_date, new_activity_ids, before_points
+                member_id,
+                class_id,
+                occurrence_date,
+                occurrence_time,
+                new_activity_ids,
+                before_points,
             )
 
 
@@ -714,6 +765,7 @@ class TestAttendees:
         member_id = str(member_row["member_id"])
         class_id = covered["class_id"]
         occurrence_date = covered["occurrence_date"]
+        occurrence_time = covered["occurrence_time"]
 
         before_points = _member_points(member_id)
         before_activities = _class_attended_activity_ids(member_id, class_id)
@@ -728,6 +780,7 @@ class TestAttendees:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
                 "ignore_warnings": True,
             },
         )
@@ -740,6 +793,7 @@ class TestAttendees:
                     "gym_id": GYM_ID,
                     "class_id": class_id,
                     "occurrence_date": occurrence_date,
+                    "occurrence_time": occurrence_time,
                 },
             )
             assert resp.status_code == 200, resp.text
@@ -756,7 +810,12 @@ class TestAttendees:
                 - before_activities
             )
             _teardown_checkin(
-                member_id, class_id, occurrence_date, new_activity_ids, before_points
+                member_id,
+                class_id,
+                occurrence_date,
+                occurrence_time,
+                new_activity_ids,
+                before_points,
             )
 
     def test_attendees_empty_when_no_signups_or_attendance(
@@ -775,6 +834,7 @@ class TestAttendees:
                 "class_id": covered["class_id"],
                 # A date nobody has signed up for or attended.
                 "occurrence_date": "2999-12-31",
+                "occurrence_time": "00:00:00",
             },
         )
         assert resp.status_code == 200, resp.text
@@ -787,14 +847,15 @@ class TestAttendees:
         """An unknown gym_id is rejected — employee auth
         (``verify_gym_employee``) runs before the service, so an unknown gym
         403s (the service itself no longer checks gym existence directly:
-        occurrence resolution is keyed by (class_id, original_date), with no
-        separate gym-timezone read)."""
+        occurrence resolution is keyed by (class_id, original_date,
+        original_time), with no separate gym-timezone read)."""
         resp = api.get(
             "/api/v1/checkin/attendees",
             params={
                 "gym_id": str(uuid4()),
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "00:00:00",
             },
         )
         # 403 (not an employee of the unknown gym) or 404 are both valid

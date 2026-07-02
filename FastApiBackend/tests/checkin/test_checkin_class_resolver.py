@@ -10,13 +10,14 @@ gate's actual input; the ``ValueError`` mapping around a ``None`` resolution
 early-check-in window gate.
 
 Occurrence resolution itself (the shared ``CheckinOccurrenceResolution`` —
-window-widening for a rescheduled occurrence, cancelled-day handling, etc.)
-is the canonical coverage of ``test_checkin_occurrence_resolution.py``; this
-file builds a REAL ``CheckinOccurrenceResolution`` (with its own internal
-``CheckinQueries`` mocked, the same pattern the old tests used) so the
-resolver is exercised against real production wiring rather than a stubbed
-seam, and keeps a couple of the reschedule cases here too since they're the
-resolver's actual input shape.
+window-widening for a rescheduled occurrence, cancelled-day handling,
+exact-slot matching, etc.) is the canonical coverage of
+``test_checkin_occurrence_resolution.py``; this file builds a REAL
+``CheckinOccurrenceResolution`` (with its own internal ``CheckinQueries``
+mocked, the same pattern the old tests used) so the resolver is exercised
+against real production wiring rather than a stubbed seam, and keeps a
+couple of the reschedule cases here too since they're the resolver's actual
+input shape.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -30,6 +31,7 @@ from src.checkin.service.checkin_class_resolver import CheckinClassResolver
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
 )
+from src.classes.schema.classes_expander_schema import ClassSlot
 from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_version_expander import ClassesVersionExpander
 
@@ -37,6 +39,7 @@ from src.classes.service.classes_version_expander import ClassesVersionExpander
 # regardless of when the test actually runs; still inside the daily
 # recurrence (start_date = this date - 1 day).
 _OCCURRENCE_DATE = date(2020, 1, 2)
+_OCCURRENCE_TIME = time(10, 0)
 _EFFECTIVE_FROM = datetime(2019, 1, 1, tzinfo=UTC)
 
 
@@ -69,33 +72,35 @@ def _version_row(
     gym_id: UUID,
     start_date: date = _OCCURRENCE_DATE - timedelta(days=1),
     end_date: date | None = None,
-    class_time: time = time(10, 0),
+    slot_times: tuple[time, ...] = (_OCCURRENCE_TIME,),
     duration_minutes: int = 30,
 ) -> dict:
     """A checkin_load_schedules.sql-shaped row: a daily-recurring class
-    covering ``_OCCURRENCE_DATE``."""
-    row = {
+    covering ``_OCCURRENCE_DATE``. ``slot_times`` may hold several times so a
+    single day can carry multiple occurrences of the class."""
+    return {
         "schedule_id": uuid4(),
         "class_id": class_id,
         "gym_id": gym_id,
         "effective_from": _EFFECTIVE_FROM,
         "timezone": "UTC",
-        "class_time": class_time,
         "duration_minutes": duration_minutes,
         "recurring_unit": RecurringUnit.daily,
         "recurring_interval": 1,
+        "weekday_slots": {
+            "all": [
+                ClassSlot(time=t, instructor_id=None) for t in slot_times
+            ]
+        },
         "start_date": start_date,
         "end_date": end_date,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        row[day] = True
-        row[f"{day}_instructor_id"] = None
-    return row
 
 
 def _instance_exception_row(
     *,
     original_date: date,
+    original_time: time = _OCCURRENCE_TIME,
     is_cancelled: bool = False,
     new_class_time: time | None = None,
     new_duration_minutes: int | None = None,
@@ -105,6 +110,7 @@ def _instance_exception_row(
     """A class_instance_exceptions-shaped row."""
     return {
         "original_date": original_date,
+        "original_time": original_time,
         "is_cancelled": is_cancelled,
         "new_class_time": new_class_time,
         "new_duration_minutes": new_duration_minutes,
@@ -179,7 +185,9 @@ async def test_exception_max_capacity_overrides_class_default() -> None:
         versions=[_version_row(class_id=class_id, gym_id=gym_id)],
     )
 
-    resolved = await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+    resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resolved.max_capacity == 3
 
@@ -197,7 +205,9 @@ async def test_class_default_capacity_used_when_no_override() -> None:
         versions=[_version_row(class_id=class_id, gym_id=gym_id)],
     )
 
-    resolved = await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+    resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resolved.max_capacity == 20
 
@@ -215,7 +225,9 @@ async def test_unlimited_capacity_when_both_none() -> None:
         versions=[_version_row(class_id=class_id, gym_id=gym_id)],
     )
 
-    resolved = await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+    resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resolved.max_capacity is None
 
@@ -228,7 +240,7 @@ async def test_class_not_found_raises() -> None:
     resolver = _resolver(None)
 
     with pytest.raises(ValueError, match="Class not found"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
 async def test_deleted_class_raises() -> None:
@@ -238,7 +250,7 @@ async def test_deleted_class_raises() -> None:
     )
 
     with pytest.raises(ValueError, match="deleted"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
 async def test_inactive_class_raises() -> None:
@@ -248,7 +260,7 @@ async def test_inactive_class_raises() -> None:
     )
 
     with pytest.raises(ValueError, match="not active"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
 async def test_no_versions_raises_no_occurrence() -> None:
@@ -259,7 +271,7 @@ async def test_no_versions_raises_no_occurrence() -> None:
     )
 
     with pytest.raises(ValueError, match="No class occurrence"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
 async def test_non_recurrence_date_raises_no_occurrence() -> None:
@@ -276,7 +288,22 @@ async def test_non_recurrence_date_raises_no_occurrence() -> None:
     )
 
     with pytest.raises(ValueError, match="No class occurrence"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
+
+
+async def test_wrong_slot_time_raises_no_occurrence() -> None:
+    """A time that isn't one of the day's slots doesn't resolve, even though
+    the date itself is a recurrence date."""
+    class_id, gym_id = uuid4(), uuid4()
+    resolver = _resolver(
+        _class_row(class_id=class_id, gym_id=gym_id),
+        versions=[_version_row(class_id=class_id, gym_id=gym_id)],
+    )
+
+    with pytest.raises(ValueError, match="No class occurrence"):
+        await resolver.resolve(
+            class_id, gym_id, _OCCURRENCE_DATE, time(18, 30)
+        )
 
 
 async def test_cancelled_occurrence_raises_no_occurrence() -> None:
@@ -294,7 +321,34 @@ async def test_cancelled_occurrence_raises_no_occurrence() -> None:
     )
 
     with pytest.raises(ValueError, match="No class occurrence"):
-        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+        await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
+
+
+async def test_two_same_day_slots_resolve_and_check_in_independently() -> None:
+    """A class with two slots on one day: each resolves to its OWN
+    ResolvedClass, keyed by its own exact original_time — checking into one
+    slot is fully independent of the other."""
+    class_id, gym_id = uuid4(), uuid4()
+    morning, evening = time(6, 0), time(18, 30)
+    resolver = _resolver(
+        _class_row(class_id=class_id, gym_id=gym_id, max_capacity=5),
+        versions=[
+            _version_row(
+                class_id=class_id, gym_id=gym_id, slot_times=(morning, evening)
+            )
+        ],
+    )
+
+    morning_resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, morning
+    )
+    evening_resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, evening
+    )
+
+    assert morning_resolved.original_time == morning
+    assert evening_resolved.original_time == evening
+    assert morning_resolved.occurrence_date == evening_resolved.occurrence_date
 
 
 async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
@@ -314,7 +368,9 @@ async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
         ],
     )
 
-    resolved = await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+    resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resolved.occurrence_date == _OCCURRENCE_DATE
     assert resolved.occurred_at.date() == new_date
@@ -340,7 +396,9 @@ async def test_rescheduled_to_the_past_resolves_by_original_date() -> None:
         ],
     )
 
-    resolved = await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE)
+    resolved = await resolver.resolve(
+        class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME
+    )
 
     assert resolved.occurrence_date == _OCCURRENCE_DATE
     assert resolved.occurred_at.date() == new_date
@@ -361,4 +419,4 @@ async def test_checkin_too_far_in_future_is_rejected() -> None:
     )
 
     with pytest.raises(ValueError, match="not open yet"):
-        await resolver.resolve(class_id, gym_id, far_future)
+        await resolver.resolve(class_id, gym_id, far_future, _OCCURRENCE_TIME)

@@ -169,24 +169,28 @@ def created() -> _Created:
 
 
 def _make_class_payload(seed: dict) -> dict:
-    """A daily-recurring class with one instructor on every weekday slot."""
+    """A daily-recurring class with one instructor on its single "all" slot."""
     instructor_id = str(seed["instructor"]["employee_id"])
-    payload = {
+    return {
         "gym_id": GYM_ID,
         "class_name": f"ZZ CRUD Test {uuid4().hex[:8]}",
         "class_description": "integration test class",
-        "class_time": _CLASS_TIME.isoformat(),
         "duration_minutes": 60,
         "recurring_unit": "daily",
         "recurring_interval": 1,
+        "weekday_slots": {
+            "all": [
+                {
+                    "time": _CLASS_TIME.isoformat(),
+                    "instructor_id": instructor_id,
+                }
+            ]
+        },
         "start_date": _START.isoformat(),
         "end_date": _END.isoformat(),
         "max_capacity": 20,
         "points_worth": 50,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        payload[f"{day}_instructor_id"] = instructor_id
-    return payload
 
 
 def _create_class(api: httpx.Client, created: _Created, seed: dict) -> dict:
@@ -217,7 +221,7 @@ class TestClassCrud:
             f"{seed['instructor']['first_name']} "
             f"{seed['instructor']['last_name']}"
         )
-        assert body["mon_instructor_name"] == expected_name
+        assert body["weekday_slots"]["all"][0]["instructor_name"] == expected_name
 
         # GET round-trips the same row.
         got = api.get(f"{CLASSES_BASE}/{class_id}")
@@ -273,13 +277,17 @@ class TestClassCrud:
         ids = {item["class_id"] for item in listed.json()["items"]}
         assert class_id not in ids
 
-    def test_create_weekly_without_a_day_returns_400(
+    def test_create_weekly_without_a_day_returns_422(
         self, api: httpx.Client, seed: dict
     ) -> None:
+        """The weekday_slots canonicalizer (a Pydantic model_validator) 422s
+        a weekly shape with no weekday key set — validated before the
+        service ever runs (no more ``_validate_weekly`` service-layer check)."""
         payload = _make_class_payload(seed)
-        payload["recurring_unit"] = "weekly"  # no day flags set
+        payload["recurring_unit"] = "weekly"
+        payload["weekday_slots"] = {}  # no weekday key set
         resp = api.post(CLASSES_BASE, json=payload)
-        assert resp.status_code == 400, resp.text
+        assert resp.status_code == 422, resp.text
 
     def test_get_unknown_class_returns_404(self, api: httpx.Client) -> None:
         resp = api.get(f"{CLASSES_BASE}/{uuid4()}")
@@ -471,6 +479,7 @@ class TestRangeExceptions:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": _CANCEL_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "is_cancelled": True,
             },
         )
@@ -489,6 +498,7 @@ class TestRangeExceptions:
             for r in board.json()["items"]
             if r["class_id"] == class_id
             and r["original_date"] == _CANCEL_DATE.isoformat()
+            and r["original_time"] == _CLASS_TIME.isoformat()
         )
         assert row["is_cancelled"] is True
         assert row["cancelling_range_id"] is None
@@ -508,7 +518,12 @@ class TestInstanceExceptions:
 
         # Cancel one occurrence.
         cancel = api.post(
-            base, json={"original_date": _CANCEL_DATE.isoformat(), "is_cancelled": True}
+            base,
+            json={
+                "original_date": _CANCEL_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
+                "is_cancelled": True,
+            },
         )
         assert cancel.status_code == 200, cancel.text
         assert cancel.json()["is_cancelled"] is True
@@ -518,6 +533,7 @@ class TestInstanceExceptions:
             base,
             json={
                 "original_date": _RESCHEDULE_FROM.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_date": _RESCHEDULE_TO.isoformat(),
             },
         )
@@ -530,6 +546,7 @@ class TestInstanceExceptions:
             base,
             json={
                 "original_date": _START.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_date": _ATTEND_DATE.isoformat(),
             },
         )
@@ -587,7 +604,11 @@ class TestScheduleBoard:
         # Cancel _CANCEL_DATE.
         cancel = api.post(
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
-            json={"original_date": _CANCEL_DATE.isoformat(), "is_cancelled": True},
+            json={
+                "original_date": _CANCEL_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
+                "is_cancelled": True,
+            },
         )
         assert cancel.status_code == 200, cancel.text
 
@@ -603,11 +624,12 @@ class TestScheduleBoard:
             },
         )
         assert board.status_code == 200, board.text
-        # Board rows carry the occurrence's IDENTITY date (original_date) —
-        # what every occurrence-addressed call passes — alongside the
-        # displayed class_date.
+        # Board rows carry the occurrence's IDENTITY slot (original_date +
+        # original_time — several slots per day are legal) — what every
+        # occurrence-addressed call passes — alongside the displayed
+        # class_date.
         by_date = {
-            (row["class_id"], row["original_date"]): row
+            (row["class_id"], row["original_date"], row["original_time"]): row
             for row in board.json()["items"]
         }
 

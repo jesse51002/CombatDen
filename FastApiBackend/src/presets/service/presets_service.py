@@ -27,6 +27,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.classes.schema.classes_expander_schema import (
+    ClassSlot,
     EffectiveOccurrence,
     ExpanderClass,
 )
@@ -41,8 +42,9 @@ from src.shared.sql_loader import load_sql
 # realistic schedule. Class times cycle through _CLASS_TIME_SLOTS by index so an
 # imported lineup spreads across the day (early-morning → evening) instead of all
 # landing at one hour; duration/points stay fixed defaults the owner edits later.
-# Each slot MUST be a datetime.time (not a "HH:MM" string): the SQL binds it to a
-# Postgres TIME parameter, and asyncpg's TIME codec requires a time object.
+# Each slot MUST be a datetime.time (not a "HH:MM" string): _build_weekday_slots
+# feeds it straight into a ClassSlot (a Pydantic time field) and formats it with
+# .strftime("%H:%M") only when the schedule row is serialized to JSONB.
 _CLASS_TIME_SLOTS = [
     time(6, 0),
     time(7, 30),
@@ -54,6 +56,15 @@ _CLASS_TIME_SLOTS = [
 ]
 _DEFAULT_DURATION_MINUTES = 60
 _DEFAULT_POINTS_WORTH = 50
+
+# The weekly weekday keys a preset schedule occupies (always Mon-Fri).
+_WEEKDAY_KEYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri")
+# The FIRST imported class of every gym gets a genuine second same-day slot
+# (e.g. 06:00 AND 18:00 on Monday), so every import exercises the
+# multi-time-per-day feature rather than only ever one slot per day.
+_MULTI_SLOT_CLASS_INDEX = 0
+_MULTI_SLOT_DAY = "mon"
+_MULTI_SLOT_EXTRA_TIME = time(18, 0)
 
 # The schedule shape's recurrence anchor (gym_class_schedules.start_date):
 # backdated so the weekly recurrence already covers the seeded past month AND
@@ -338,8 +349,10 @@ class PresetsService:
                     bio=c["instructor_bio"],
                     cache=trainer_cache,
                 )
-                # Spread class start times across the day by index.
-                class_time = _CLASS_TIME_SLOTS[i % len(_CLASS_TIME_SLOTS)]
+                # Spread class start times across the day by index; the first
+                # imported class additionally gets a genuine second same-day
+                # slot (see _MULTI_SLOT_CLASS_INDEX).
+                weekday_slots = self._build_weekday_slots(i, emp_id)
                 inserted = (
                     await session.execute(
                         text(insert_class_sql),
@@ -360,9 +373,10 @@ class PresetsService:
                         "gym_id": gym_id_str,
                         "effective_from": schedule_effective_from,
                         "timezone": gym_tz,
-                        "class_time": class_time,
                         "duration_minutes": _DEFAULT_DURATION_MINUTES,
-                        "instructor_id": emp_id,
+                        "weekday_slots": self._serialize_weekday_slots(
+                            weekday_slots
+                        ),
                         "start_date": recurrence_start_date,
                     },
                 )
@@ -370,8 +384,7 @@ class PresetsService:
                     self._to_expander_class(
                         class_id=class_id,
                         gym_id=gym_id,
-                        class_time=class_time,
-                        instructor_id=emp_id,
+                        weekday_slots=weekday_slots,
                         start_date=recurrence_start_date,
                     )
                 )
@@ -416,39 +429,87 @@ class PresetsService:
 
     # ── Attendance + sign-up seeding ─────────────────────────────────────────
 
+    def _build_weekday_slots(
+        self, index: int, instructor_id: str
+    ) -> dict[str, list[ClassSlot]]:
+        """One weekly Mon-Fri ``weekday_slots`` shape for the ``index``-th
+        imported class of this import.
+
+        Start times spread across the day by index (see
+        ``_CLASS_TIME_SLOTS``) — one slot per weekday, the same instructor
+        every day. The FIRST imported class (``_MULTI_SLOT_CLASS_INDEX``)
+        additionally gets a second slot on ``_MULTI_SLOT_DAY`` at
+        ``_MULTI_SLOT_EXTRA_TIME``, so every import exercises a genuine
+        multi-time-per-day schedule rather than only ever one slot per day.
+        """
+        primary_time = _CLASS_TIME_SLOTS[index % len(_CLASS_TIME_SLOTS)]
+        instructor_uuid = UUID(instructor_id)
+        slots: dict[str, list[ClassSlot]] = {
+            day: [ClassSlot(time=primary_time, instructor_id=instructor_uuid)]
+            for day in _WEEKDAY_KEYS
+        }
+        if index == _MULTI_SLOT_CLASS_INDEX:
+            slots[_MULTI_SLOT_DAY].append(
+                ClassSlot(
+                    time=_MULTI_SLOT_EXTRA_TIME,
+                    instructor_id=instructor_uuid,
+                )
+            )
+        return slots
+
+    @staticmethod
+    def _serialize_weekday_slots(
+        weekday_slots: dict[str, list[ClassSlot]],
+    ) -> str:
+        """JSON-string encoding for the ``weekday_slots`` bind param — times
+        as "HH:MM", instructor uuids as str-or-null.
+
+        Mirrors ``ClassesVersionsService._insert_version``'s serialization
+        exactly (the caller casts with ``CAST(:weekday_slots AS JSONB)``,
+        never ``:param::jsonb`` — the house rule), so a preset-imported row
+        and a live-minted row are byte-shape compatible.
+        """
+        return json.dumps(
+            {
+                day: [
+                    {
+                        "time": slot.time.strftime("%H:%M"),
+                        "instructor_id": (
+                            str(slot.instructor_id)
+                            if slot.instructor_id is not None
+                            else None
+                        ),
+                    }
+                    for slot in slots
+                ]
+                for day, slots in weekday_slots.items()
+            }
+        )
+
     def _to_expander_class(
         self,
         class_id: UUID,
         gym_id: UUID,
-        class_time: time,
-        instructor_id: str,
+        weekday_slots: dict[str, list[ClassSlot]],
         start_date: date,
     ) -> ExpanderClass:
         """Project a just-inserted preset class onto the expander contract.
 
-        Preset classes are always weekly Mon–Fri (the insert SQL hard-codes the
-        flags) with one instructor across every weekday and no end date, so the
-        expander reproduces exactly the occurrences the live board would show.
+        Preset classes are always weekly with no end date, so the expander
+        reproduces exactly the occurrences the live board would show for the
+        imported schedule. ``weekday_slots`` is the very shape
+        ``_build_weekday_slots`` built and ``_serialize_weekday_slots``
+        wrote to the DB row, passed through unchanged so the seeded
+        attendance/sign-up window can never disagree with what was actually
+        persisted.
         """
         return ExpanderClass(
             class_id=class_id,
             gym_id=gym_id,
-            class_time=class_time,
             duration_minutes=_DEFAULT_DURATION_MINUTES,
             recurring_unit=RecurringUnit.weekly,
             recurring_interval=1,
-            mon=True,
-            tue=True,
-            wed=True,
-            thu=True,
-            fri=True,
-            sat=False,
-            sun=False,
-            mon_instructor_id=instructor_id,
-            tue_instructor_id=instructor_id,
-            wed_instructor_id=instructor_id,
-            thu_instructor_id=instructor_id,
-            fri_instructor_id=instructor_id,
+            weekday_slots=weekday_slots,
             start_date=start_date,
             end_date=None,
         )
@@ -542,8 +603,8 @@ class PresetsService:
         ``member_attendance`` — mirroring the live sign-up path, which
         deliberately never records attendance for a not-yet-started occurrence
         (see ``SignupService``'s module docstring). This import never writes
-        exceptions, so every occurrence's ``original_time`` equals the class's
-        schedule ``class_time`` and ``effective_date`` equals ``original_date``.
+        exceptions, so every occurrence's ``original_time`` equals its slot's
+        scheduled time and ``effective_date`` equals ``original_date``.
         """
         occurrences = self._expander.expand(
             gym_class, [], [], window_start, window_end, gym_tz

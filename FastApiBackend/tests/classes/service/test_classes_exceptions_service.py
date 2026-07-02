@@ -1,7 +1,7 @@
 """Unit tests for ``ClassesExceptionsService`` — the range-cancel teardown.
 
 ``ClassesUndoService`` is mocked (the DB boundary the whole file targets); the
-branching logic that decides whether a range-covered date is torn down is
+branching logic that decides whether a range-covered SLOT is torn down is
 under test. Mirrors the mock style of ``test_classes_undo_service.py``.
 
 Coverage:
@@ -16,24 +16,28 @@ Coverage:
 * ``delete_range_exception`` — 404s on a zero-row delete, else returns the
   deleted row;
 * ``list_range_exceptions`` — reads the "all, newest-first" SQL (no window);
-* ``_teardown_if_still_cancelled`` — the per-candidate-date decision: an
-  instance exception on the date short-circuits (the range never applies to
-  a date any instance exception governs — same-date override or moved
-  elsewhere); an earlier-created covering range still rendering the date
-  short-circuits too; a date that isn't a recurrence date under the current
-  versions is a no-op; a genuinely-cancelled date tears down ONLY when its
-  original slot instant is still at/after now (never day-based) — the
-  founder-approved asymmetry keeps an already-run occurrence's attendance
-  untouched;
+* ``_teardown_if_still_cancelled`` — the per-candidate-SLOT decision: an
+  instance exception on the slot's date short-circuits (the range never
+  applies to a date any instance exception governs — same-date override or
+  moved elsewhere); an earlier-created covering range still rendering the
+  slot's time short-circuits too; a slot that isn't a recurrence slot under
+  the current versions is a no-op; a genuinely-cancelled slot tears down
+  ONLY when its original slot instant is still at/after now (never
+  day-based) — the founder-approved asymmetry keeps an already-run
+  occurrence's attendance untouched;
 * ``_teardown_covered_occurrences`` — a no-op when there are no candidate
-  dates (skips loading versions), else iterates every candidate;
-* ``_range_cancel_candidates`` — the raw SQL read, sorted/deduped.
+  slots (skips loading versions), else iterates every candidate SLOT — and a
+  2-SLOT day fully covered by the range decides EACH slot independently: the
+  past-instant slot is kept, the future sibling slot on the SAME date is
+  torn down;
+* ``_range_cancel_candidates`` — the raw SQL read, sorted/deduped SLOTS
+  (``(original_date, original_time)`` pairs).
 """
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, date, datetime, time
+from unittest.mock import ANY, AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -51,11 +55,16 @@ _PAST_INSTANT = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
 _FUTURE_INSTANT = datetime(2026, 8, 1, 9, 0, tzinfo=UTC)
 
 
-def _bare_occurrence(occurred_at: datetime) -> MagicMock:
+def _bare_occurrence(
+    occurred_at: datetime, original_time: time | None = None
+) -> MagicMock:
     """A stand-in for the pure-ownership ``EffectiveOccurrence`` — only
-    ``occurred_at`` is read by the code under test."""
+    ``occurred_at`` (the past/future instant check) and ``original_time``
+    (the earlier-covering-range render check) are read by the code under
+    test."""
     occ = MagicMock()
     occ.occurred_at = occurred_at
+    occ.original_time = original_time
     return occ
 
 
@@ -306,11 +315,11 @@ class TestWriteRangeAndTeardown:
 
 
 class TestTeardownIfStillCancelled:
-    async def test_skips_when_an_instance_exception_governs_the_date(
+    async def test_skips_when_an_instance_exception_governs_the_slot(
         self,
     ) -> None:
-        """A same-date override OR a move elsewhere — either way the range
-        never applies to a date with ANY instance exception on it."""
+        """A same-slot override OR a move elsewhere — either way the range
+        never applies to a slot with ANY instance exception on it."""
         undo = MagicMock()
         undo.exception_on = AsyncMock(return_value={"is_cancelled": False})
         undo.expand_day = AsyncMock()
@@ -319,30 +328,33 @@ class TestTeardownIfStillCancelled:
         svc = _service(undo)
 
         await svc._teardown_if_still_cancelled(
-            object(), uuid4(), uuid4(), [], date(2026, 7, 10), _NOW
+            object(), uuid4(), uuid4(), [], date(2026, 7, 10), time(6, 0), _NOW
         )
 
         undo.teardown_occurrence.assert_not_awaited()
         undo.expand_day.assert_not_awaited()  # short-circuits before the range check
 
-    async def test_skips_when_an_earlier_range_still_renders_it(self) -> None:
+    async def test_skips_when_an_earlier_range_still_renders_the_slot(
+        self,
+    ) -> None:
         undo = MagicMock()
         undo.exception_on = AsyncMock(return_value=None)
+        slot_time = time(6, 0)
         undo.expand_day = AsyncMock(
-            return_value=[_bare_occurrence(_FUTURE_INSTANT)]
+            return_value=[_bare_occurrence(_FUTURE_INSTANT, slot_time)]
         )
         undo.owning_slot = MagicMock()
         undo.teardown_occurrence = AsyncMock()
         svc = _service(undo)
 
         await svc._teardown_if_still_cancelled(
-            object(), uuid4(), uuid4(), [], date(2026, 7, 10), _NOW
+            object(), uuid4(), uuid4(), [], date(2026, 7, 10), slot_time, _NOW
         )
 
         undo.teardown_occurrence.assert_not_awaited()
         undo.owning_slot.assert_not_called()
 
-    async def test_skips_when_not_a_recurrence_date(self) -> None:
+    async def test_skips_when_not_a_recurrence_slot(self) -> None:
         undo = MagicMock()
         undo.exception_on = AsyncMock(return_value=None)
         undo.expand_day = AsyncMock(return_value=[])
@@ -351,12 +363,12 @@ class TestTeardownIfStillCancelled:
         svc = _service(undo)
 
         await svc._teardown_if_still_cancelled(
-            object(), uuid4(), uuid4(), [], date(2026, 7, 10), _NOW
+            object(), uuid4(), uuid4(), [], date(2026, 7, 10), time(6, 0), _NOW
         )
 
         undo.teardown_occurrence.assert_not_awaited()
 
-    async def test_tears_down_a_future_instant_cancelled_date(self) -> None:
+    async def test_tears_down_a_future_instant_cancelled_slot(self) -> None:
         undo = MagicMock()
         undo.exception_on = AsyncMock(return_value=None)
         undo.expand_day = AsyncMock(return_value=[])
@@ -365,18 +377,23 @@ class TestTeardownIfStillCancelled:
         )
         undo.teardown_occurrence = AsyncMock()
         svc = _service(undo)
-        class_id, gym_id, day = uuid4(), uuid4(), date(2026, 7, 10)
+        class_id, gym_id, day, slot_time = (
+            uuid4(),
+            uuid4(),
+            date(2026, 7, 10),
+            time(6, 0),
+        )
         session = object()
 
         await svc._teardown_if_still_cancelled(
-            session, class_id, gym_id, [], day, _NOW
+            session, class_id, gym_id, [], day, slot_time, _NOW
         )
 
         undo.teardown_occurrence.assert_awaited_once_with(
-            session, class_id, gym_id, day
+            session, class_id, gym_id, day, slot_time
         )
 
-    async def test_keeps_an_already_run_cancelled_date(self) -> None:
+    async def test_keeps_an_already_run_cancelled_slot(self) -> None:
         """The founder-approved asymmetry: a past-instant occurrence covered
         by a retroactive range cancel keeps its attendance — never torn
         down. A gym wanting that cancels the single occurrence instead."""
@@ -390,7 +407,7 @@ class TestTeardownIfStillCancelled:
         svc = _service(undo)
 
         await svc._teardown_if_still_cancelled(
-            object(), uuid4(), uuid4(), [], date(2026, 6, 5), _NOW
+            object(), uuid4(), uuid4(), [], date(2026, 6, 5), time(18, 0), _NOW
         )
 
         undo.teardown_occurrence.assert_not_awaited()
@@ -400,7 +417,7 @@ class TestTeardownIfStillCancelled:
 
 
 class TestTeardownCoveredOccurrences:
-    async def test_noop_when_no_candidate_dates(self) -> None:
+    async def test_noop_when_no_candidate_slots(self) -> None:
         undo = MagicMock()
         undo.load_versions = AsyncMock()
         svc = _service(undo)
@@ -412,12 +429,15 @@ class TestTeardownCoveredOccurrences:
 
         undo.load_versions.assert_not_awaited()
 
-    async def test_iterates_every_candidate_date(self) -> None:
+    async def test_iterates_every_candidate_slot(self) -> None:
         undo = MagicMock()
         undo.load_versions = AsyncMock(return_value=["v1"])
         svc = _service(undo)
-        days = [date(2026, 7, 3), date(2026, 7, 5)]
-        svc._range_cancel_candidates = AsyncMock(return_value=days)
+        slots = [
+            (date(2026, 7, 3), time(6, 0)),
+            (date(2026, 7, 5), time(18, 0)),
+        ]
+        svc._range_cancel_candidates = AsyncMock(return_value=slots)
         svc._teardown_if_still_cancelled = AsyncMock()
 
         await svc._teardown_covered_occurrences(
@@ -425,29 +445,69 @@ class TestTeardownCoveredOccurrences:
         )
 
         assert svc._teardown_if_still_cancelled.await_count == 2
-        called_days = {
-            call.args[4]
+        called_slots = {
+            (call.args[4], call.args[5])
             for call in svc._teardown_if_still_cancelled.await_args_list
         }
-        assert called_days == set(days)
+        assert called_slots == set(slots)
+
+    async def test_two_slot_day_past_instant_kept_future_sibling_torn_down(
+        self,
+    ) -> None:
+        """A range covers a day with TWO slots: the slot whose original
+        instant already ran keeps its attendance; the future sibling slot on
+        the SAME date is torn down — decided per-slot, not per-day."""
+        undo = MagicMock()
+        undo.exception_on = AsyncMock(return_value=None)
+        undo.expand_day = AsyncMock(return_value=[])
+        day = date(2026, 7, 10)
+        past_time, future_time = time(6, 0), time(18, 0)
+
+        def _owning_slot(versions, when, slot_time):
+            occurred_at = (
+                _PAST_INSTANT if slot_time == past_time else _FUTURE_INSTANT
+            )
+            return (MagicMock(), _bare_occurrence(occurred_at))
+
+        undo.owning_slot = MagicMock(side_effect=_owning_slot)
+        undo.teardown_occurrence = AsyncMock()
+        undo.load_versions = AsyncMock(return_value=["v1"])
+        svc = _service(undo)
+        svc._range_cancel_candidates = AsyncMock(
+            return_value=[(day, past_time), (day, future_time)]
+        )
+        class_id, gym_id = uuid4(), uuid4()
+
+        await svc._teardown_covered_occurrences(
+            object(), class_id, gym_id, day, day
+        )
+
+        undo.teardown_occurrence.assert_awaited_once_with(
+            ANY, class_id, gym_id, day, future_time
+        )
 
 
 # -- _range_cancel_candidates --------------------------------------------------
 
 
 class TestRangeCancelCandidates:
-    async def test_returns_sorted_distinct_dates(self) -> None:
+    async def test_returns_sorted_distinct_slots(self) -> None:
         session = AsyncMock()
         result = MagicMock()
         result.mappings.return_value.all.return_value = [
-            {"original_date": date(2026, 7, 5)},
-            {"original_date": date(2026, 7, 1)},
+            {"original_date": date(2026, 7, 5), "original_time": time(18, 0)},
+            {"original_date": date(2026, 7, 1), "original_time": time(6, 0)},
+            {"original_date": date(2026, 7, 1), "original_time": time(18, 0)},
         ]
         session.execute = AsyncMock(return_value=result)
         svc = _service(MagicMock())
 
-        dates = await svc._range_cancel_candidates(
+        slots = await svc._range_cancel_candidates(
             session, uuid4(), date(2026, 7, 1), date(2026, 7, 31)
         )
 
-        assert dates == [date(2026, 7, 1), date(2026, 7, 5)]
+        assert slots == [
+            (date(2026, 7, 1), time(6, 0)),
+            (date(2026, 7, 1), time(18, 0)),
+            (date(2026, 7, 5), time(18, 0)),
+        ]

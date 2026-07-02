@@ -167,6 +167,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       gymId: gymId,
       classId: widget.entry.classId,
       occurrenceDate: widget.entry.originalDate,
+      occurrenceTime: widget.entry.originalTime,
     );
   }
 
@@ -252,6 +253,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     bloc.add(ScheduleInstanceOverridden(
       classId: widget.entry.classId,
       originalDate: widget.entry.originalDate,
+      originalTime: widget.entry.originalTime,
       newClassTime: formatTimeOfDayHms(time),
       newDurationMinutes: widget.entry.resolvedDurationMinutes,
       newMaxCapacity: _capacityOrNull(),
@@ -269,6 +271,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       gymId: gymId,
       className: widget.entry.name,
       occurrenceDate: widget.entry.originalDate,
+      occurrenceTime: widget.entry.originalTime,
     );
   }
 
@@ -281,6 +284,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       gymId: gymId,
       className: widget.entry.name,
       occurrenceDate: widget.entry.originalDate,
+      occurrenceTime: widget.entry.originalTime,
     );
   }
 
@@ -317,6 +321,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     bloc.add(ScheduleInstanceCancelled(
       classId: widget.entry.classId,
       originalDate: widget.entry.originalDate,
+      originalTime: widget.entry.originalTime,
     ));
   }
 

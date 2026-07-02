@@ -15,6 +15,7 @@ EffectiveClassInstance _instance({
     className: className,
     classDate: classDate,
     originalDate: classDate,
+    originalTime: '18:00:00',
     occurredAt: classDate,
     resolvedClassTime: '18:00:00',
     resolvedDurationMinutes: 60,

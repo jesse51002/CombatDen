@@ -1,16 +1,16 @@
 """Resolve a single class occurrence for check-in.
 
-``resolve`` turns ``(class_id, gym_id, occurrence_date)`` into a
-``ResolvedClass``: it loads the class identity, resolves the occurrence by
-its ORIGINAL date through the shared ``CheckinOccurrenceResolution`` (the
-one resolution algorithm sign-up also uses, so the two can never disagree
-about whether an occurrence exists), then applies the early-check-in gate.
-Purely a read — occurrences are always computed, never stored, so there is
-no materialization step.
+``resolve`` turns ``(class_id, gym_id, occurrence_date, occurrence_time)``
+into a ``ResolvedClass``: it loads the class identity, resolves the
+occurrence by its ORIGINAL slot through the shared
+``CheckinOccurrenceResolution`` (the one resolution algorithm sign-up also
+uses, so the two can never disagree about whether an occurrence exists),
+then applies the early-check-in gate. Purely a read — occurrences are always
+computed, never stored, so there is no materialization step.
 """
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from src.checkin.schema.checkin_schema import ResolvedClass
@@ -44,19 +44,20 @@ class CheckinClassResolver:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> ResolvedClass:
         """Resolve a single class occurrence.
 
         Raises:
             ValueError: If the class does not exist / is deleted / is
-                inactive, no real non-cancelled occurrence lands on
-                ``occurrence_date`` (its ORIGINAL date), or the occurrence
-                starts further than
+                inactive, no real non-cancelled occurrence lands on the exact
+                ``(occurrence_date, occurrence_time)`` slot (its ORIGINAL
+                slot), or the occurrence starts further than
                 ``settings.checkin_opens_hours_before_start`` in the future
                 (check-in isn't open yet).
         """
         class_row = await self._queries.get_class_for_checkin(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
         if class_row is None:
             raise ValueError("Class not found")
@@ -66,11 +67,12 @@ class CheckinClassResolver:
             raise ValueError("Class is not active")
 
         occurrence = await self._occurrence_resolution.resolve_original(
-            class_id, occurrence_date
+            class_id, occurrence_date, occurrence_time
         )
         if occurrence is None:
             raise ValueError(
-                f"No class occurrence on {occurrence_date} for this class"
+                f"No class occurrence on {occurrence_date} at "
+                f"{occurrence_time} for this class"
             )
 
         # Check-in opens a fixed window before the class starts (2h by default,

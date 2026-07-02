@@ -1,7 +1,7 @@
 """API routes for the classes domain."""
 
 import logging
-from datetime import date
+from datetime import date, time
 from typing import Annotated, NoReturn
 from uuid import UUID
 
@@ -80,12 +80,14 @@ def _raise_for_undo_value_error(msg: str) -> NoReturn:
     response_model=OccurrenceCancelResponse,
     summary="Cancel (un-occur) a single class occurrence",
     description=(
-        "Un-occurs the occurrence on ``occurrence_date`` (its ORIGINAL "
-        "date): reverses its ``member_attendance`` (points clawed back, "
-        "floored at 0), reverses the auto-end on trial / one_time packs "
-        "that drop back below capacity, deletes the occurrence's sign-ups "
-        "(a cancelled occurrence can't be attended), and writes the "
-        "cancelled instance exception. Admin/owner only."
+        "Un-occurs the occurrence at ``occurrence_date`` + "
+        "``occurrence_time`` (its ORIGINAL slot — a class may occur several "
+        "times per day, so both name the occurrence): reverses its "
+        "``member_attendance`` (points clawed back, floored at 0), reverses "
+        "the auto-end on trial / one_time packs that drop back below "
+        "capacity, deletes the occurrence's sign-ups (a cancelled occurrence "
+        "can't be attended), and writes the cancelled instance exception. A "
+        "same-day sibling occurrence is untouched. Admin/owner only."
     ),
     responses={
         200: {"description": "Occurrence cancelled"},
@@ -99,6 +101,7 @@ def _raise_for_undo_value_error(msg: str) -> NoReturn:
 async def cancel_occurrence(
     class_id: UUID,
     occurrence_date: date,
+    occurrence_time: time,
     gym_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
@@ -112,7 +115,7 @@ async def cancel_occurrence(
 
     try:
         return await undo_service.cancel_occurrence(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
     except ValueError as exc:
         _raise_for_undo_value_error(str(exc))
@@ -135,9 +138,10 @@ async def cancel_occurrence(
     response_model=OccurrenceRescheduleResponse,
     summary="Reschedule a single class occurrence to any date",
     description=(
-        "Moves the occurrence on ``occurrence_date`` to ``new_date`` (any date — "
-        "past, today, or future) by upserting the instance exception's "
-        "``new_date``. Attendance follows the move: a FUTURE target wipes the "
+        "Moves the occurrence at ``occurrence_date`` + ``occurrence_time`` "
+        "(its ORIGINAL slot) to ``new_date`` (any date — past, today, or "
+        "future) by upserting the instance exception's ``new_date``. "
+        "Attendance follows the move: a FUTURE target wipes the "
         "occurrence's check-ins (points clawed back); a today / PAST target "
         "keeps them, re-dated onto the new day — all in one transaction. "
         "Rejected with 409 only when the exact target instant (new_date + start "
@@ -157,6 +161,7 @@ async def cancel_occurrence(
 async def reschedule_occurrence(
     class_id: UUID,
     occurrence_date: date,
+    occurrence_time: time,
     request: OccurrenceRescheduleRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
@@ -170,7 +175,11 @@ async def reschedule_occurrence(
 
     try:
         return await undo_service.reschedule_occurrence(
-            class_id, request.gym_id, occurrence_date, request.new_date
+            class_id,
+            request.gym_id,
+            occurrence_date,
+            occurrence_time,
+            request.new_date,
         )
     except RescheduleConflictError as exc:
         raise HTTPException(
@@ -334,10 +343,12 @@ async def list_effective_instances(
 @classes_router.post(
     "/{class_id}/exceptions/instance",
     response_model=ClassInstanceExceptionResponse,
-    summary="Upsert a single-date class exception",
+    summary="Upsert a single-slot class exception",
     description=(
         "Inserts or replaces the override for one occurrence (unique per "
-        "class + original_date). A reschedule (``new_date``, any date) moves the "
+        "class + original_date + original_time — the exact slot; a same-day "
+        "sibling occurrence holds its own row). A reschedule (``new_date``, "
+        "any date) moves the "
         "occurrence and its attendance atomically — a FUTURE target wipes the "
         "check-ins (points clawed back), a today / PAST target keeps them "
         "re-dated — and is rejected with 409 only when the exact target instant "

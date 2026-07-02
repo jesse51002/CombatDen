@@ -11,7 +11,7 @@ This is a read-only sibling of the check-in write path: no expander, no
 occurrence resolution. It reuses ``CheckinQueries`` for the roster join.
 """
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from src.checkin.schema.checkin_schema import (
@@ -37,10 +37,14 @@ class CheckinAttendeesService:
         gym_id: UUID,
         class_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> AttendeeListResponse:
-        """Return everyone signed up or attended on ``occurrence_date`` (the
-        occurrence's ORIGINAL date)."""
-        rows = await self._queries.get_roster(class_id, gym_id, occurrence_date)
+        """Return everyone signed up or attended on the exact
+        ``(occurrence_date, occurrence_time)`` slot (the occurrence's full
+        ORIGINAL identity)."""
+        rows = await self._queries.get_roster(
+            class_id, gym_id, occurrence_date, occurrence_time
+        )
         return AttendeeListResponse(
             class_id=class_id,
             occurrence_date=occurrence_date,

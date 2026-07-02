@@ -1,5 +1,26 @@
 """Generators for gym_classes (identity), gym_class_schedules (append-only
-schedule versions), exceptions, member_attendance, and class_signups."""
+schedule versions), exceptions, member_attendance, and class_signups.
+
+This is the MIRROR of the runtime recurrence+exception engine
+(FastApiBackend/src/classes/service/classes_expander.py, wrapped by
+classes_version_expander.py) -- byte-for-byte in the recurrence, exception,
+and version-ownership semantics, so seeded history and the live board can
+never disagree. The one shape difference is deliberate: this module walks
+GymClassScheduleCreate rows directly (a raw dict-shaped mirror of
+ExpanderClass/ExpanderScheduleVersion) rather than importing the FastAPI
+backend's Pydantic contracts, and stamps occurred_at as naive UTC (see
+_original_start_at / generate_attendance) rather than doing a real
+gym-timezone conversion the way the backend's ClassesExpander._build does.
+
+weekday_slots (day -> ordered slot list; "all" for daily/monthly) is the
+WHEN of a schedule shape, fanned out per-slot exactly like the runtime
+expander's _slots_for / _resolve_date / _resolve_slot: a candidate date
+carries every slot of its weekday key (weekly) or the "all" key
+(daily/monthly), and each slot resolves independently against its OWN
+instance exception, keyed (original_date, original_time) -- the occurrence's
+permanent identity slot, exactly what member_attendance / class_signups /
+class_instance_exceptions key.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +43,7 @@ from schema.gym_class import (
     GymClassScheduleCreate,
     MemberAttendanceCreate,
     RecurringUnit,
+    ScheduleSlot,
 )
 from schema.gym_employee import GymEmployeeCreate
 from schema.member import MemberCreate
@@ -37,6 +59,18 @@ VERSIONED_PAST_CHANCE = 0.3
 # How recently (in weeks, inclusive range) the second version took effect,
 # when a class gets one.
 VERSION_RECENT_EFFECTIVE_FROM_WEEKS = (1, 6)
+
+# The reserved weekday_slots key daily/monthly schedules use -- mirrors
+# ClassesExpander's ALL_DAYS_KEY.
+ALL_SLOTS_KEY = "all"
+# Chance a class gets a genuine multi-time day: two distinct-time slots on
+# the same weekday ("all" for daily/monthly) instead of just one, so seeded
+# data exercises the multi-time-per-day feature (a meaningful minority, not
+# the majority).
+MULTI_SLOT_CLASS_CHANCE = 0.25
+# The hour/minute pool a synthesized slot time is drawn from.
+_SLOT_HOUR_RANGE = (6, 20)
+_SLOT_MINUTES = (0, 15, 30, 45)
 
 CLASS_TEMPLATES = [
     {"class_name": "Morning BJJ", "class_description": "Fundamentals and sparring for all levels.", "duration_minutes": 60},
@@ -69,12 +103,15 @@ def generate_classes(
     exceptions per gym.
 
     ~VERSIONED_PAST_CHANCE of classes get TWO schedule versions (a prior
-    shape with a different class_time or weekday set, then the current
-    shape taking over 1-6 weeks ago); the rest get one version effective
-    from around when the class's recurrence started. Both versions of a
-    class always freeze the same `gym_timezone` and share the same
-    recurrence `start_date` -- only the shape (and when it took effect)
-    differs.
+    weekday_slots shape -- a shifted slot time, an added/removed slot, or
+    (weekly only) a different weekday set -- then the current shape taking
+    over 1-6 weeks ago); the rest get one version effective from around when
+    the class's recurrence started. Both versions of a class always freeze
+    the same `gym_timezone` and share the same recurrence `start_date` --
+    only the shape (and when it took effect) differs. A meaningful minority
+    of classes (~MULTI_SLOT_CLASS_CHANCE) get a genuine multi-time day (two
+    distinct-time slots on one weekday/"all" key) so seeded data exercises
+    the multi-time-per-day feature.
     """
     templates = random.sample(CLASS_TEMPLATES, min(count, len(CLASS_TEMPLATES)))
     trainer_ids = [e.employee_id for e in employees]
@@ -88,25 +125,11 @@ def generate_classes(
     for tmpl in templates:
         class_id = uuid.uuid4()
 
-        hour = random.randint(6, 20)
-        minute = random.choice([0, 15, 30, 45])
         recurring_unit = random.choices(
             [RecurringUnit.weekly, RecurringUnit.daily, RecurringUnit.monthly],
             weights=[80, 10, 10],
         )[0]
-
-        day_flags = {d: False for d in DAYS}
-        if recurring_unit == RecurringUnit.daily:
-            day_flags = {d: True for d in DAYS}
-        elif recurring_unit == RecurringUnit.weekly:
-            num_days = random.randint(2, 5)
-            for d in random.sample(DAYS, num_days):
-                day_flags[d] = True
-
-        instructor_kwargs: dict = {}
-        for d in DAYS:
-            if day_flags[d] and trainer_ids and random.random() < 0.8:
-                instructor_kwargs[f"{d}_instructor_id"] = random.choice(trainer_ids)
+        weekday_slots = _build_weekday_slots(recurring_unit, trainer_ids)
 
         max_capacity = random.choice([10, 15, 20, 25, 30]) if random.random() < 0.7 else None
         start_date = today - timedelta(days=random.randint(60, 200))
@@ -125,37 +148,35 @@ def generate_classes(
         )
 
         current_shape = {
-            "class_time": time(hour, minute),
             "duration_minutes": tmpl["duration_minutes"],
             "recurring_unit": recurring_unit,
             "recurring_interval": 1,
             "start_date": start_date,
             "end_date": None,
-            **day_flags,
-            **instructor_kwargs,
+            "weekday_slots": weekday_slots,
         }
         class_versions = _build_schedule_versions(
-            class_id, gym_id, gym_timezone, current_shape, start_date
+            class_id, gym_id, gym_timezone, current_shape, start_date, trainer_ids
         )
         schedules.extend(class_versions)
 
         # ~30% of classes get 1-2 single-instance exceptions, targeting a
-        # real owned occurrence date (whichever version owns it) so the
+        # real owned occurrence SLOT (whichever version owns it) so the
         # exception is never inert.
         if random.random() < 0.3:
             window_end = today + timedelta(days=FUTURE_SIGNUP_HORIZON_DAYS)
-            owned_dates = [
-                d
-                for d in _owned_candidate_dates(class_versions, window_end)
-                if d <= start_date + timedelta(days=60)
+            owned_slots = [
+                slot
+                for slot in _owned_candidate_dates(class_versions, window_end)
+                if slot[0] <= start_date + timedelta(days=60)
             ]
-            used_dates: set[date] = set()
+            used_slots: set[tuple[date, time]] = set()
             for _ in range(random.randint(1, 2)):
-                available = [d for d in owned_dates if d not in used_dates]
+                available = [s for s in owned_slots if s not in used_slots]
                 if not available:
                     break
-                exc_date = random.choice(available)
-                used_dates.add(exc_date)
+                exc_date, exc_time = random.choice(available)
+                used_slots.add((exc_date, exc_time))
 
                 cancelled = random.random() < 0.5
                 instance_exceptions.append(
@@ -164,6 +185,7 @@ def generate_classes(
                         class_id=class_id,
                         gym_id=gym_id,
                         original_date=exc_date,
+                        original_time=exc_time,
                         is_cancelled=cancelled,
                         new_class_time=(
                             time(random.randint(6, 20), random.choice([0, 30]))
@@ -214,6 +236,77 @@ def select_attendance_eligible_classes(
     return [cls for cls in classes if cls.is_active or random.random() >= 0.5]
 
 
+# -- Slot construction (weekday_slots shapes) -------------------------------
+
+
+def _random_slot_time() -> time:
+    return time(random.randint(*_SLOT_HOUR_RANGE), random.choice(_SLOT_MINUTES))
+
+
+def _random_distinct_slot_time(existing: set[time]) -> time:
+    """A slot time not already in `existing` -- weekday_slots requires
+    unique times per day (the shared canonicalizer + the live DB CHECK)."""
+    candidate = _random_slot_time()
+    while candidate in existing:
+        candidate = _random_slot_time()
+    return candidate
+
+
+def _build_day_slots(
+    trainer_ids: list[uuid.UUID], num_slots: int
+) -> list[ScheduleSlot]:
+    """`num_slots` distinct-time slots for one weekday_slots day (or the
+    "all" key), each carrying an 80% chance of a random instructor. Times
+    are forced distinct and returned sorted ascending, matching the stored
+    shape canonicalize_weekday_slots produces.
+    """
+    times: set[time] = set()
+    while len(times) < num_slots:
+        times.add(_random_slot_time())
+    return [
+        ScheduleSlot(
+            time=slot_time,
+            instructor_id=(
+                random.choice(trainer_ids)
+                if trainer_ids and random.random() < 0.8
+                else None
+            ),
+        )
+        for slot_time in sorted(times)
+    ]
+
+
+def _build_weekday_slots(
+    recurring_unit: RecurringUnit, trainer_ids: list[uuid.UUID]
+) -> dict[str, list[ScheduleSlot]]:
+    """The WHEN shape for a schedule version.
+
+    Weekly picks 2-5 sampled weekdays, each with one slot; daily/monthly get
+    exactly the reserved "all" key with one slot. A meaningful minority of
+    classes (~MULTI_SLOT_CLASS_CHANCE) additionally get a genuine second
+    slot -- a distinct time, independently possibly a distinct instructor --
+    on ONE of their days (weekly: a random one of the sampled weekdays;
+    daily/monthly: the single "all" day), so seeded data exercises the
+    multi-time-per-day feature the runtime expander supports.
+    """
+    if recurring_unit == RecurringUnit.weekly:
+        num_days = random.randint(2, 5)
+        days = random.sample(DAYS, num_days)
+        multi_slot_day = (
+            random.choice(days)
+            if random.random() < MULTI_SLOT_CLASS_CHANCE
+            else None
+        )
+        return {
+            d: _build_day_slots(trainer_ids, 2 if d == multi_slot_day else 1)
+            for d in days
+        }
+
+    # daily / monthly -- every candidate date gets the "all" slot list.
+    num_slots = 2 if random.random() < MULTI_SLOT_CLASS_CHANCE else 1
+    return {ALL_SLOTS_KEY: _build_day_slots(trainer_ids, num_slots)}
+
+
 # -- Schedule versioning ---------------------------------------------------
 
 
@@ -223,6 +316,7 @@ def _build_schedule_versions(
     gym_timezone: str,
     current_shape: dict,
     start_date: date,
+    trainer_ids: list[uuid.UUID],
 ) -> list[GymClassScheduleCreate]:
     """One (~70%) or two (~30%) append-only schedule versions for a class.
 
@@ -231,12 +325,13 @@ def _build_schedule_versions(
     occurrences back to negative infinity regardless -- see
     ClassesVersionExpander -- but a plausible value keeps the seeded row
     honest). A two-version class exercises the versioned past: v1 (a
-    different class_time or weekday set, everything else identical) is
-    effective from that same early instant; v2 (the class's "current" shape,
-    `current_shape`) takes over 1-6 weeks ago. Both freeze `gym_timezone`
-    and share `start_date` (the recurrence anchor never moves -- only the
-    shape, and when it took effect, differs). effective_from values are
-    timezone-aware UTC datetimes, strictly increasing per class.
+    weekday_slots shape mutated by ONE change -- a shifted slot time, an
+    added/removed slot, or a different weekday set -- everything else
+    identical) is effective from that same early instant; v2 (the class's
+    "current" shape, `current_shape`) takes over 1-6 weeks ago. Both freeze
+    `gym_timezone` and share `start_date` (the recurrence anchor never moves
+    -- only the shape, and when it took effect, differs). effective_from
+    values are timezone-aware UTC datetimes, strictly increasing per class.
     """
     early_effective_from = datetime.combine(
         start_date, time(0, 0), tzinfo=timezone.utc
@@ -253,7 +348,7 @@ def _build_schedule_versions(
             )
         ]
 
-    earlier_shape = _vary_shape(current_shape)
+    earlier_shape = _vary_shape(current_shape, trainer_ids)
     min_weeks, max_weeks = VERSION_RECENT_EFFECTIVE_FROM_WEEKS
     recent_effective_from = datetime.now(timezone.utc) - timedelta(
         weeks=random.uniform(min_weeks, max_weeks)
@@ -278,43 +373,126 @@ def _build_schedule_versions(
     ]
 
 
-def _vary_shape(shape: dict) -> dict:
-    """A prior version's shape: the current shape with EITHER its
-    class_time OR (weekly only) its weekday set changed, everything else
-    (duration, instructors, recurrence range) identical -- a real historical
-    schedule change without needing an independently-generated instructor
-    lineup.
+def _vary_shape(shape: dict, trainer_ids: list[uuid.UUID]) -> dict:
+    """A prior version's shape: the current shape with ONE of its
+    weekday_slots mutated -- a weekday toggled on/off (weekly only), one
+    slot's time shifted, or one slot added/removed on a day -- everything
+    else (duration, recurrence range) identical, a real historical schedule
+    change without needing an independently-generated instructor lineup.
+    Always leaves >=1 non-empty weekday_slots day (the live CHECK /
+    ClassesCrudService._validate_weekly floor) and >=1 slot on every
+    surviving day (a day key must never go empty -- omit it instead).
     """
     varied = dict(shape)
-    if varied["recurring_unit"] == RecurringUnit.weekly and random.random() < 0.5:
-        # Flip one weekday's flag: guarantees a different active-day set.
-        day_to_flip = random.choice(DAYS)
-        varied[day_to_flip] = not varied[day_to_flip]
-        if not any(varied[d] for d in DAYS):
-            # A weekly class must keep >=1 active day (the live CHECK /
-            # ClassesCrudService._validate_weekly) -- flipping the only
-            # active day off would violate it, so flip a second day on.
-            other_day = random.choice([d for d in DAYS if d != day_to_flip])
-            varied[other_day] = True
+    weekday_slots = {
+        day: list(slots) for day, slots in varied["weekday_slots"].items()
+    }
+    is_weekly = varied["recurring_unit"] == RecurringUnit.weekly
+    mutations = (
+        ["toggle_day", "shift_time", "add_remove_slot"]
+        if is_weekly
+        else ["shift_time", "add_remove_slot"]
+    )
+    mutation = random.choice(mutations)
+    if mutation == "toggle_day":
+        _toggle_weekday(weekday_slots, trainer_ids)
+    elif mutation == "shift_time":
+        _shift_one_slot_time(weekday_slots)
     else:
-        old_time: time = varied["class_time"]
-        offset = random.choice([-3, -2, -1, 1, 2, 3])
-        varied["class_time"] = time((old_time.hour + offset) % 24, old_time.minute)
+        _add_or_remove_one_slot(weekday_slots, trainer_ids)
+    varied["weekday_slots"] = weekday_slots
     return varied
+
+
+def _toggle_weekday(
+    weekday_slots: dict[str, list[ScheduleSlot]], trainer_ids: list[uuid.UUID]
+) -> None:
+    """Flip one weekday's presence (weekly only): drop a day that had slots,
+    or add one that didn't (a fresh single slot) -- guarantees a different
+    active-day set. Never leaves the shape with zero active days (the live
+    CHECK / ClassesCrudService._validate_weekly) -- flipping the only active
+    day off instead flips a DIFFERENT day on so >=1 always survives.
+    """
+    day_to_flip = random.choice(DAYS)
+    if day_to_flip in weekday_slots:
+        del weekday_slots[day_to_flip]
+    else:
+        weekday_slots[day_to_flip] = _build_day_slots(trainer_ids, 1)
+    if not weekday_slots:
+        other_day = random.choice([d for d in DAYS if d != day_to_flip])
+        weekday_slots[other_day] = _build_day_slots(trainer_ids, 1)
+
+
+def _shift_one_slot_time(weekday_slots: dict[str, list[ScheduleSlot]]) -> None:
+    """Shift one randomly-chosen existing slot's time by a random hour
+    offset. A no-op on the rare collision with a sibling slot's time on the
+    same day, rather than producing a duplicate-time day."""
+    day = random.choice(list(weekday_slots.keys()))
+    slots = weekday_slots[day]
+    index = random.randrange(len(slots))
+    old_time = slots[index].time
+    offset = random.choice([-3, -2, -1, 1, 2, 3])
+    new_time = time((old_time.hour + offset) % 24, old_time.minute)
+    other_times = {slot.time for i, slot in enumerate(slots) if i != index}
+    if new_time in other_times:
+        return
+    updated = list(slots)
+    updated[index] = ScheduleSlot(
+        time=new_time, instructor_id=slots[index].instructor_id
+    )
+    weekday_slots[day] = sorted(updated, key=lambda slot: slot.time)
+
+
+def _add_or_remove_one_slot(
+    weekday_slots: dict[str, list[ScheduleSlot]], trainer_ids: list[uuid.UUID]
+) -> None:
+    """Add a second slot to a single-slot day, or remove one slot from a
+    multi-slot day -- exercises both directions of a multi-time-per-day
+    change. Never empties a day (adds instead when it only has one slot)."""
+    day = random.choice(list(weekday_slots.keys()))
+    slots = weekday_slots[day]
+    if len(slots) == 1:
+        existing_times = {slot.time for slot in slots}
+        new_time = _random_distinct_slot_time(existing_times)
+        instructor_id = (
+            random.choice(trainer_ids)
+            if trainer_ids and random.random() < 0.8
+            else None
+        )
+        weekday_slots[day] = sorted(
+            [*slots, ScheduleSlot(time=new_time, instructor_id=instructor_id)],
+            key=lambda slot: slot.time,
+        )
+    else:
+        index = random.randrange(len(slots))
+        weekday_slots[day] = [
+            slot for i, slot in enumerate(slots) if i != index
+        ]
 
 
 # -- Pure recurrence enumeration (mirrors ClassesExpander) -----------------
 
 
-def _instructor_for_day(
-    schedule: GymClassScheduleCreate, day_short: str
-) -> uuid.UUID | None:
-    return getattr(schedule, f"{day_short}_instructor_id", None)
-
-
 def _weekday_short(d: date) -> str:
     """Map a date to its DAYS short name (Mon=0..Sun=6 -> "mon".."sun")."""
     return DAYS[(d.weekday() + 1) % 7]
+
+
+def _slots_for(schedule: GymClassScheduleCreate, when: date) -> list[ScheduleSlot]:
+    """`when`'s slot list -- the weekday key (weekly) or "all"
+    (daily/monthly) -- mirrors ClassesExpander._slots_for."""
+    key = (
+        _weekday_short(when)
+        if schedule.recurring_unit == RecurringUnit.weekly
+        else ALL_SLOTS_KEY
+    )
+    return schedule.weekday_slots.get(key, [])
+
+
+def _day_flag(schedule: GymClassScheduleCreate, when: date) -> bool:
+    """Whether `schedule` occurs on `when`'s weekday (non-empty key) --
+    mirrors ClassesExpander._day_flag."""
+    return bool(schedule.weekday_slots.get(_weekday_short(when)))
 
 
 def _enumerate_occurrences(
@@ -352,7 +530,7 @@ def _enumerate_occurrences(
         else:  # weekly
             week_index = days_from_start // 7
             should_emit = bool(
-                week_index % interval == 0 and getattr(schedule, _weekday_short(cursor))
+                week_index % interval == 0 and _day_flag(schedule, cursor)
             )
         if should_emit:
             out.append(cursor)
@@ -374,11 +552,16 @@ class _OccurrenceSnapshot(NamedTuple):
 
 def _instance_exceptions_by_class(
     exceptions: list[ClassInstanceExceptionCreate],
-) -> dict[UUID, dict[date, ClassInstanceExceptionCreate]]:
-    """Index instance exceptions by class_id, then by original_date (unique)."""
-    by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]] = defaultdict(dict)
+) -> dict[UUID, dict[tuple[date, time], ClassInstanceExceptionCreate]]:
+    """Index instance exceptions by class_id, then by (original_date,
+    original_time) -- the occurrence's permanent identity slot (unique per
+    the DB constraint), so two same-day occurrences of one class are
+    indexed independently."""
+    by_class: dict[
+        UUID, dict[tuple[date, time], ClassInstanceExceptionCreate]
+    ] = defaultdict(dict)
     for exc in exceptions:
-        by_class[exc.class_id][exc.original_date] = exc
+        by_class[exc.class_id][(exc.original_date, exc.original_time)] = exc
     return by_class
 
 
@@ -414,35 +597,61 @@ def _covering_range(
     return None
 
 
-def _resolve_occurrence(
+def _resolve_date(
     schedule: GymClassScheduleCreate,
     original_date: date,
-    instance_exceptions: dict[date, ClassInstanceExceptionCreate],
+    instance_exceptions: dict[tuple[date, time], ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+) -> list[_OccurrenceSnapshot]:
+    """Fan one candidate date out over its slots and resolve each --
+    mirrors ClassesExpander._resolve_date. A date carries every slot of its
+    weekday key (weekly) or the "all" key (daily/monthly); each slot
+    resolves independently against ITS OWN instance exception, keyed
+    (original_date, original_time), so overriding one slot never touches a
+    sibling slot on the same day.
+    """
+    snapshots: list[_OccurrenceSnapshot] = []
+    for slot in _slots_for(schedule, original_date):
+        snapshot = _resolve_slot(
+            schedule,
+            original_date,
+            slot,
+            instance_exceptions.get((original_date, slot.time)),
+            range_exceptions,
+        )
+        if snapshot is not None:
+            snapshots.append(snapshot)
+    return snapshots
+
+
+def _resolve_slot(
+    schedule: GymClassScheduleCreate,
+    original_date: date,
+    slot: ScheduleSlot,
+    instance: ClassInstanceExceptionCreate | None,
     range_exceptions: list[ClassRangeExceptionCreate],
 ) -> _OccurrenceSnapshot | None:
-    """Resolve one candidate date under `schedule`'s shape against the
-    class's seeded exceptions. Returns None ONLY when cancelled (an instance
-    exception's cancel, or a covering range exception's cancel) -- mirrors
-    ClassesExpander._resolve with include_cancelled=False: a cancelled date
-    never "claims" the date for cross-version dedup purposes. A reschedule
-    keeps `original_date` as the identity and moves `emit_date`; the caller
-    decides past-vs-future by `emit_date`, not `original_date`.
+    """Resolve one (date, slot) against the class's seeded exceptions.
+    Returns None ONLY when cancelled (an instance exception's cancel, or a
+    covering range exception's cancel) -- mirrors
+    ClassesExpander._resolve_slot with include_cancelled=False: a cancelled
+    slot never "claims" its slot for cross-version dedup purposes. A
+    reschedule keeps `original_date`/`original_time` as the identity and
+    moves `emit_date`; the caller decides past-vs-future by `emit_date`, not
+    `original_date`.
     """
-    default_instructor = _instructor_for_day(schedule, _weekday_short(original_date))
-
-    instance = instance_exceptions.get(original_date)
     if instance is not None:
         if instance.is_cancelled:
             return None
         emit_date = instance.new_date if instance.new_date is not None else original_date
         return _OccurrenceSnapshot(
             original_date=original_date,
-            original_time=schedule.class_time,
+            original_time=slot.time,
             emit_date=emit_date,
             class_time=(
                 instance.new_class_time
                 if instance.new_class_time is not None
-                else schedule.class_time
+                else slot.time
             ),
             duration_minutes=(
                 instance.new_duration_minutes
@@ -452,7 +661,9 @@ def _resolve_occurrence(
             instructor_id=(
                 instance.new_instructor_id
                 if instance.new_instructor_id is not None
-                else default_instructor
+                # No override -- the ORIGINAL slot's instructor (a moved
+                # occurrence keeps its slot's instructor).
+                else slot.instructor_id
             ),
         )
 
@@ -462,103 +673,131 @@ def _resolve_occurrence(
             return None
         return _OccurrenceSnapshot(
             original_date=original_date,
-            original_time=schedule.class_time,
+            original_time=slot.time,
             emit_date=original_date,
-            class_time=schedule.class_time,
+            class_time=slot.time,
             duration_minutes=schedule.duration_minutes,
             instructor_id=(
                 covering.new_instructor_id
                 if covering.new_instructor_id is not None
-                else default_instructor
+                else slot.instructor_id
             ),
         )
 
     return _OccurrenceSnapshot(
         original_date=original_date,
-        original_time=schedule.class_time,
+        original_time=slot.time,
         emit_date=original_date,
-        class_time=schedule.class_time,
+        class_time=slot.time,
         duration_minutes=schedule.duration_minutes,
-        instructor_id=default_instructor,
+        instructor_id=slot.instructor_id,
     )
+
+
+def _expand_schedule(
+    schedule: GymClassScheduleCreate,
+    instance_exceptions: dict[tuple[date, time], ClassInstanceExceptionCreate],
+    range_exceptions: list[ClassRangeExceptionCreate],
+    until: date,
+    max_count: int = 10_000,
+) -> list[_OccurrenceSnapshot]:
+    """One schedule version's full occurrence expansion (recurrence +
+    exceptions), unfiltered by version ownership -- mirrors
+    ClassesExpander.expand(). Callers apply the version-ownership window +
+    slot-level dedup on top (`_owned_occurrences` / `_owned_candidate_dates`),
+    exactly like ClassesVersionExpander wraps ClassesExpander.
+    """
+    snapshots: list[_OccurrenceSnapshot] = []
+    for original_date in _enumerate_occurrences(schedule, until, max_count):
+        snapshots.extend(
+            _resolve_date(schedule, original_date, instance_exceptions, range_exceptions)
+        )
+    return snapshots
 
 
 # -- Version ownership (mirrors ClassesVersionExpander) --------------------
 
 
-def _original_start_at(schedule: GymClassScheduleCreate, when: date) -> datetime:
-    """UTC instant of `when`'s slot under `schedule` -- mirrors
+def _original_start_at(
+    schedule: GymClassScheduleCreate, when: date, slot_time: time
+) -> datetime:
+    """UTC instant of the (when, slot_time) slot under `schedule` -- mirrors
     ClassesVersionExpander.original_start_at (the version's OWN frozen tz)."""
     return datetime.combine(
-        when, schedule.class_time, tzinfo=ZoneInfo(schedule.timezone)
+        when, slot_time, tzinfo=ZoneInfo(schedule.timezone)
     ).astimezone(timezone.utc)
 
 
 def _owned_candidate_dates(
     versions: list[GymClassScheduleCreate], window_end: date
-) -> list[date]:
-    """Raw per-version recurrence candidates, owned + deduped -- no
-    exceptions applied. Used to pick real occurrence dates for seeded
-    exceptions before any exceptions exist. Mirrors the ownership-window +
-    no-day-doubling rules of ClassesVersionExpander, minus exception
-    resolution.
+) -> list[tuple[date, time]]:
+    """Raw per-version recurrence (date, slot-time) candidates, owned +
+    SLOT-level deduped -- no exceptions applied. Used to pick real
+    occurrence slots for seeded exceptions before any exceptions exist.
+    Mirrors the ownership-window + no-slot-doubling rules of
+    ClassesVersionExpander, minus exception resolution.
     """
     ordered = sorted(versions, key=lambda v: v.effective_from)
-    claimed: set[date] = set()
-    dates: list[date] = []
+    claimed: set[tuple[date, time]] = set()
+    slots: list[tuple[date, time]] = []
     for i, version in enumerate(ordered):
         window_from = ordered[i].effective_from if i > 0 else None
         window_until = ordered[i + 1].effective_from if i + 1 < len(ordered) else None
         for original_date in _enumerate_occurrences(version, window_end, max_count=10_000):
-            if original_date in claimed:
-                continue
-            slot_instant = _original_start_at(version, original_date)
-            if window_from is not None and slot_instant < window_from:
-                continue
-            if window_until is not None and slot_instant >= window_until:
-                continue
-            claimed.add(original_date)
-            dates.append(original_date)
-    dates.sort()
-    return dates
+            for slot in _slots_for(version, original_date):
+                slot_key = (original_date, slot.time)
+                slot_instant = _original_start_at(version, original_date, slot.time)
+                if window_from is not None and slot_instant < window_from:
+                    continue
+                if window_until is not None and slot_instant >= window_until:
+                    continue
+                if slot_key in claimed:
+                    continue
+                claimed.add(slot_key)
+                slots.append(slot_key)
+    slots.sort()
+    return slots
 
 
 def _owned_occurrences(
     versions: list[GymClassScheduleCreate],
-    instance_exceptions: dict[date, ClassInstanceExceptionCreate],
+    instance_exceptions: dict[tuple[date, time], ClassInstanceExceptionCreate],
     range_exceptions: list[ClassRangeExceptionCreate],
     window_end: date,
 ) -> list[_OccurrenceSnapshot]:
     """All of a class's resolved occurrences across its schedule versions,
-    honoring ownership windows + earliest-version-wins dedup -- mirrors
-    ClassesVersionExpander.expand(). Bounded above by `window_end`
+    honoring ownership windows + earliest-version-wins SLOT-level dedup --
+    mirrors ClassesVersionExpander.expand(). Bounded above by `window_end`
     (today + the future sign-up horizon); each version's own `start_date`
-    bounds it below. A cancelled candidate never claims its date (matching
+    bounds it below. A cancelled candidate never claims its slot (matching
     the live expander's include_cancelled=False semantics), so a different
-    version may claim the same date instead.
+    version may claim the same slot instead. Dedup is deliberately
+    SLOT-level (not day-level): a boundary day may legitimately carry both
+    versions' different-time slots.
     """
     ordered = sorted(versions, key=lambda v: v.effective_from)
-    claimed: set[date] = set()
+    claimed: set[tuple[date, time]] = set()
     resolved: list[_OccurrenceSnapshot] = []
     for i, version in enumerate(ordered):
         window_from = ordered[i].effective_from if i > 0 else None
         window_until = ordered[i + 1].effective_from if i + 1 < len(ordered) else None
-        for original_date in _enumerate_occurrences(version, window_end, max_count=10_000):
-            if original_date in claimed:
-                continue
-            slot_instant = _original_start_at(version, original_date)
+        expanded = _expand_schedule(
+            version, instance_exceptions, range_exceptions, window_end
+        )
+        for snapshot in expanded:
+            slot_key = (snapshot.original_date, snapshot.original_time)
+            slot_instant = _original_start_at(
+                version, snapshot.original_date, snapshot.original_time
+            )
             if window_from is not None and slot_instant < window_from:
                 continue
             if window_until is not None and slot_instant >= window_until:
                 continue
-            snapshot = _resolve_occurrence(
-                version, original_date, instance_exceptions, range_exceptions
-            )
-            if snapshot is None:
-                continue  # cancelled -- doesn't claim the date
-            claimed.add(original_date)
+            if slot_key in claimed:
+                continue
+            claimed.add(slot_key)
             resolved.append(snapshot)
-    resolved.sort(key=lambda s: s.original_date)
+    resolved.sort(key=lambda s: (s.original_date, s.original_time))
     return resolved
 
 
@@ -702,17 +941,22 @@ def generate_attendance(
 
 def _effective_capacity(
     cls: GymClassCreate,
-    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    instances_by_class: dict[
+        UUID, dict[tuple[date, time], ClassInstanceExceptionCreate]
+    ],
     original_date: date,
+    original_time: time,
 ) -> int | None:
-    """The class's max_capacity, overridden per-occurrence by an instance
-    exception's new_max_capacity when one is set for that ORIGINAL date
-    (instance exceptions are keyed by original_date, not the effective/
-    post-reschedule date). None means unlimited -- never blocks. Mirrors
-    SignupService._effective_capacity's resolution (class default, exception
-    override wins) on the live path.
+    """The class's max_capacity, overridden per-occurrence SLOT by an
+    instance exception's new_max_capacity when one is set for that ORIGINAL
+    (date, time) slot (instance exceptions are keyed by the original slot,
+    not the effective/post-reschedule one). None means unlimited -- never
+    blocks. Mirrors SignupService._effective_capacity's resolution (class
+    default, exception override wins) on the live path.
     """
-    exc = instances_by_class.get(cls.class_id, {}).get(original_date)
+    exc = instances_by_class.get(cls.class_id, {}).get(
+        (original_date, original_time)
+    )
     if exc is not None and exc.new_max_capacity is not None:
         return exc.new_max_capacity
     return cls.max_capacity
@@ -723,7 +967,9 @@ def _past_signups_for_occurrence(
     cls: GymClassCreate,
     occ: _OccurrenceSnapshot,
     attended_ids: list[UUID],
-    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    instances_by_class: dict[
+        UUID, dict[tuple[date, time], ClassInstanceExceptionCreate]
+    ],
     member_ids: list[UUID],
 ) -> list[ClassSignupCreate]:
     """Sign-ups for one already-occurred occurrence: a realistic mix of
@@ -740,7 +986,7 @@ def _past_signups_for_occurrence(
         return []  # most attendance-less occurrences stay signup-less too
 
     effective_capacity = _effective_capacity(
-        cls, instances_by_class, occ.original_date
+        cls, instances_by_class, occ.original_date, occ.original_time
     )
 
     # Some attended members also get a mirrored sign-up row
@@ -778,7 +1024,9 @@ def _future_signups_for_occurrence(
     gym_id: uuid.UUID,
     cls: GymClassCreate,
     occ: _OccurrenceSnapshot,
-    instances_by_class: dict[UUID, dict[date, ClassInstanceExceptionCreate]],
+    instances_by_class: dict[
+        UUID, dict[tuple[date, time], ClassInstanceExceptionCreate]
+    ],
     member_ids: list[UUID],
 ) -> list[ClassSignupCreate]:
     """Sign-ups-only for a not-yet-occurred occurrence -- no attendance
@@ -788,7 +1036,7 @@ def _future_signups_for_occurrence(
     if not member_ids:
         return []
     effective_capacity = _effective_capacity(
-        cls, instances_by_class, occ.original_date
+        cls, instances_by_class, occ.original_date, occ.original_time
     )
     pool_size = (
         min(len(member_ids), 8)
@@ -850,9 +1098,13 @@ def generate_class_signups(
     member_ids = [m.member_id for m in members]
     eligible_ids = {cls.class_id for cls in eligible_classes}
 
-    attendance_by_occurrence: dict[tuple[UUID, date], list[UUID]] = defaultdict(list)
+    attendance_by_occurrence: dict[
+        tuple[UUID, date, time], list[UUID]
+    ] = defaultdict(list)
     for a in attendance:
-        attendance_by_occurrence[(a.class_id, a.original_date)].append(a.member_id)
+        attendance_by_occurrence[
+            (a.class_id, a.original_date, a.original_time)
+        ].append(a.member_id)
 
     signups: list[ClassSignupCreate] = []
     for cls in classes:
@@ -870,7 +1122,7 @@ def generate_class_signups(
             past = [o for o in occurrences if o.emit_date <= today][:instances_per_class]
             for occ in past:
                 attended_ids = attendance_by_occurrence.get(
-                    (cls.class_id, occ.original_date), []
+                    (cls.class_id, occ.original_date, occ.original_time), []
                 )
                 signups.extend(
                     _past_signups_for_occurrence(

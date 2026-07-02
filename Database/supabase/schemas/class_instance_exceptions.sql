@@ -1,10 +1,15 @@
--- One-off override for a single occurrence of a class on a specific date.
--- Use class_range_exceptions for continuous-period changes.
+-- One-off override for a single occurrence of a class. An exception binds to
+-- exactly ONE original slot — (class_id, original_date, original_time), the
+-- owning schedule version's pre-exception date + time — so two same-day
+-- occurrences of one class are overridden independently. Use
+-- class_range_exceptions for continuous-period changes (a range covers every
+-- slot on its covered dates).
 CREATE TABLE class_instance_exceptions (
     exception_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     class_id UUID NOT NULL CONSTRAINT fk_instance_exception_class_id REFERENCES gym_classes(class_id),
     gym_id UUID NOT NULL CONSTRAINT fk_instance_exception_gym REFERENCES gyms(gym_id),
     original_date DATE NOT NULL,
+    original_time TIME NOT NULL,
     is_cancelled BOOLEAN NOT NULL DEFAULT FALSE,
     new_class_time TIME,
     new_duration_minutes INTEGER CHECK (new_duration_minutes IS NULL OR new_duration_minutes > 0),
@@ -17,7 +22,7 @@ CREATE TABLE class_instance_exceptions (
     new_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (exception_id),
-    UNIQUE (class_id, original_date),
+    UNIQUE (class_id, original_date, original_time),
     CONSTRAINT fk_instance_exception_class
         FOREIGN KEY (class_id, gym_id)
         REFERENCES gym_classes (class_id, gym_id),

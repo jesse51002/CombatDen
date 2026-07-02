@@ -5,7 +5,7 @@ roster, and the attendance streak.
 """
 
 import logging
-from datetime import date
+from datetime import date, time
 from typing import Annotated
 from uuid import UUID
 
@@ -58,9 +58,10 @@ checkin_router = APIRouter(
     response_model=CheckinResponse,
     summary="Check a member into a class instance",
     description=(
-        "Addresses the occurrence by ``class_id`` + ``occurrence_date`` (the "
-        "occurrence's ORIGINAL date) and resolves it against the class's "
-        "schedule versions + exceptions, bumps ``last_class``, "
+        "Addresses the occurrence by ``class_id`` + ``occurrence_date`` + "
+        "``occurrence_time`` (the occurrence's ORIGINAL slot — date + time) "
+        "and resolves it against the class's schedule versions + exceptions, "
+        "bumps ``last_class``, "
         "awards the class's points, and auto-ends trial / punch-card "
         "memberships once depleted. ``is_member = true`` (kiosk / member "
         "self-check-in) runs the strict gate — selects the best eligible "
@@ -99,7 +100,10 @@ async def checkin(
 
     try:
         resolved_class = await resolver.resolve(
-            request.class_id, request.gym_id, request.occurrence_date
+            request.class_id,
+            request.gym_id,
+            request.occurrence_date,
+            request.occurrence_time,
         )
         result = await member_gate.checkin_member(
             resolved_class,
@@ -145,7 +149,8 @@ async def checkin(
     summary="Remove one member's check-in from a class occurrence",
     description=(
         "Reverses one member's check-in on the occurrence addressed by "
-        "``class_id`` + ``occurrence_date``: deletes their attendance row, claws "
+        "``class_id`` + ``occurrence_date`` + ``occurrence_time`` (the "
+        "original slot — date + time): deletes their attendance row, claws "
         "back the class's points (floored at 0), drops a ``class_attended`` "
         "activity, and — when the removal drops a trial / punch-card pack back "
         "below capacity — reverses the auto-end (clears the pack's "
@@ -167,6 +172,7 @@ async def remove_checkin(
     gym_id: UUID,
     class_id: UUID,
     occurrence_date: date,
+    occurrence_time: time,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     remover: CheckinRemover = Depends(Provide[DependencyInjector.checkin_remover]),
@@ -176,7 +182,9 @@ async def remove_checkin(
     await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
-        return await remover.remove(class_id, gym_id, occurrence_date, member_id)
+        return await remover.remove(
+            class_id, gym_id, occurrence_date, occurrence_time, member_id
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -202,7 +210,8 @@ async def remove_checkin(
     summary="Reserve a member a spot on a class occurrence",
     description=(
         "Reserves ``member_id`` a spot on the occurrence addressed by "
-        "``class_id`` + ``occurrence_date`` (the occurrence's ORIGINAL date). "
+        "``class_id`` + ``occurrence_date`` + ``occurrence_time`` (the "
+        "occurrence's ORIGINAL slot — date + time). "
         "A sign-up is a reservation, NOT attendance — ``member_attendance`` "
         "is still only written by a check-in. The occurrence is validated "
         "before capacity is checked: rejected with 'Class has been deleted' "
@@ -248,6 +257,7 @@ async def signup(
             request.gym_id,
             request.class_id,
             request.occurrence_date,
+            request.occurrence_time,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -290,6 +300,7 @@ async def remove_signup(
     gym_id: UUID,
     class_id: UUID,
     occurrence_date: date,
+    occurrence_time: time,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
@@ -299,7 +310,9 @@ async def remove_signup(
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await signup_service.remove(member_id, gym_id, class_id, occurrence_date)
+        return await signup_service.remove(
+            member_id, gym_id, class_id, occurrence_date, occurrence_time
+        )
     except Exception:
         logger.error(
             "Remove sign-up failed: member_id=%s, class_id=%s, occurrence_date=%s",
@@ -319,7 +332,8 @@ async def remove_signup(
     summary="Check many members into one class occurrence (staff batch)",
     description=(
         "Resolves the occurrence ONCE (by ``class_id`` + ``occurrence_date`` "
-        "— the ORIGINAL date — in the body; a pure read, nothing written), "
+        "+ ``occurrence_time`` — the ORIGINAL slot, date + time — in the "
+        "body; a pure read, nothing written), "
         "then runs the per-member check-in gate over each (de-duped) member. "
         "One bad member never sinks the batch — its result is a ``failed`` item. "
         "Returns **207 Multi-Status** with a per-member split (``checked_in`` / "
@@ -365,6 +379,7 @@ async def checkin_batch(
             request.class_id,
             request.gym_id,
             request.occurrence_date,
+            request.occurrence_time,
             request.member_ids,
             request.is_member,
             request.ignore_warnings,
@@ -419,8 +434,9 @@ async def checkin_batch(
     summary="List the combined roster (signed-up + attended) of an occurrence",
     description=(
         "Returns the combined roster for the occurrence addressed by "
-        "(``class_id``, ``occurrence_date`` — the occurrence's ORIGINAL "
-        "date): every member who signed up (``class_signups``) OR attended "
+        "(``class_id``, ``occurrence_date``, ``occurrence_time`` — the "
+        "occurrence's ORIGINAL slot, date + time): every member who signed "
+        "up (``class_signups``) OR attended "
         "(``member_attendance``), each flagged ``signed_up`` / ``attended`` "
         "— ``member_id`` + ``full_name`` + the attributed ``plan_id`` / "
         "``item_id`` (NULL when not attended). A signed-up-only member can "
@@ -439,6 +455,7 @@ async def list_attendees(
     gym_id: UUID,
     class_id: UUID,
     occurrence_date: date,
+    occurrence_time: time,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     attendees_service: CheckinAttendeesService = Depends(
@@ -450,7 +467,9 @@ async def list_attendees(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        return await attendees_service.list_attendees(gym_id, class_id, occurrence_date)
+        return await attendees_service.list_attendees(
+            gym_id, class_id, occurrence_date, occurrence_time
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

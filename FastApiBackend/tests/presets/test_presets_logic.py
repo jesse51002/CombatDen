@@ -25,19 +25,25 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from schema.gym_class import RecurringUnit
 from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
-from src.classes.schema.classes_expander_schema import EffectiveOccurrence
+from src.classes.schema.classes_expander_schema import (
+    ClassSlot,
+    EffectiveOccurrence,
+)
 from src.classes.service.classes_expander import ClassesExpander
 from src.presets.service.presets_service import (
     _CLASS_RECURRENCE_BACKDATE_DAYS,
     _CLASS_TIME_SLOTS,
+    _MULTI_SLOT_CLASS_INDEX,
+    _MULTI_SLOT_DAY,
     _PAST_HISTORY_DAYS,
     _SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS,
+    _WEEKDAY_KEYS,
     PresetsService,
 )
 from src.presets.service.presets_template_service import PresetsTemplateService
@@ -45,9 +51,10 @@ from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup
 
 
 def test_class_time_slots_are_times_not_strings():
-    # Regression: each synthesized class_time is bound to a Postgres TIME param,
-    # and asyncpg's TIME codec requires a datetime.time — a "HH:MM" string fails
-    # with "'str' object has no attribute 'hour'" and rolls back the import.
+    # Regression: each synthesized class_time feeds a ClassSlot.time field
+    # (a Pydantic time type) and is only turned into a "HH:MM" string at
+    # JSONB-serialization time (_serialize_weekday_slots) — a bare "HH:MM"
+    # string here would fail Pydantic validation on ClassSlot construction.
     assert _CLASS_TIME_SLOTS  # non-empty so the modulo cycle is well-defined
     assert all(isinstance(slot, time) for slot in _CLASS_TIME_SLOTS)
 
@@ -71,34 +78,72 @@ def _make_presets_service() -> PresetsService:
     return PresetsService(db_pool=MagicMock(), expander=ClassesExpander())
 
 
-def test_to_expander_class_is_always_weekly_mon_to_fri():
-    # Preset classes are always weekly Mon-Fri with one instructor across
-    # every weekday and no end date, so the expander reproduces exactly the
-    # occurrences the live board would show for the imported schedule.
+def test_build_weekday_slots_single_slot_mon_to_fri():
+    # A non-first-class index builds one slot per weekday (Mon-Fri), all at
+    # the same synthesized time, with no sat/sun keys at all.
+    svc = _make_presets_service()
+    instructor_id = str(uuid4())
+
+    slots = svc._build_weekday_slots(index=2, instructor_id=instructor_id)
+
+    primary_time = _CLASS_TIME_SLOTS[2 % len(_CLASS_TIME_SLOTS)]
+    for day in _WEEKDAY_KEYS:
+        assert slots[day] == [
+            ClassSlot(time=primary_time, instructor_id=UUID(instructor_id))
+        ]
+    assert "sat" not in slots
+    assert "sun" not in slots
+
+
+def test_build_weekday_slots_first_class_gets_genuine_multi_slot_day():
+    # Regression: the FIRST imported class of every import must carry a real
+    # multi-time day (two distinct times on the same weekday) so demo data
+    # actually exercises the multi-time-per-day feature.
+    svc = _make_presets_service()
+    instructor_id = str(uuid4())
+
+    slots = svc._build_weekday_slots(
+        index=_MULTI_SLOT_CLASS_INDEX, instructor_id=instructor_id
+    )
+
+    multi_day_slots = slots[_MULTI_SLOT_DAY]
+    assert len(multi_day_slots) == 2
+    times = {slot.time for slot in multi_day_slots}
+    assert len(times) == 2  # genuinely two distinct times, not a duplicate
+    for day in _WEEKDAY_KEYS:
+        if day != _MULTI_SLOT_DAY:
+            assert len(slots[day]) == 1
+
+
+def test_to_expander_class_is_always_weekly_with_no_end_date():
+    # Preset classes are always weekly with no end date, so the expander
+    # reproduces exactly the occurrences the live board would show for the
+    # imported schedule. weekday_slots is passed through unchanged.
     svc = _make_presets_service()
     class_id = uuid4()
     gym_id = uuid4()
     instructor_id = str(uuid4())
-    class_time = time(7, 30)
+    weekday_slots = svc._build_weekday_slots(index=1, instructor_id=instructor_id)
 
     result = svc._to_expander_class(
         class_id=class_id,
         gym_id=gym_id,
-        class_time=class_time,
-        instructor_id=instructor_id,
+        weekday_slots=weekday_slots,
         start_date=date(2026, 1, 1),
     )
 
     assert result.class_id == class_id
     assert result.gym_id == gym_id
-    assert result.class_time == class_time
     assert result.recurring_unit == RecurringUnit.weekly
     assert result.end_date is None
-    for day in ("mon", "tue", "wed", "thu", "fri"):
-        assert getattr(result, day) is True
-        assert str(getattr(result, f"{day}_instructor_id")) == instructor_id
+    primary_time = _CLASS_TIME_SLOTS[1 % len(_CLASS_TIME_SLOTS)]
+    for day in _WEEKDAY_KEYS:
+        assert result.weekday_slots[day][0].time == primary_time
+        assert result.weekday_slots[day][0].instructor_id == UUID(
+            instructor_id
+        )
     for day in ("sat", "sun"):
-        assert getattr(result, day) is False
+        assert day not in result.weekday_slots
 
 
 def _seed_occurrence(*, today: date, occurred_at: datetime) -> EffectiveOccurrence:
@@ -134,8 +179,9 @@ async def test_seed_one_class_splits_by_instant_not_calendar_date():
     gym_class = svc._to_expander_class(
         class_id=uuid4(),
         gym_id=uuid4(),
-        class_time=time(7, 30),
-        instructor_id=str(uuid4()),
+        weekday_slots=svc._build_weekday_slots(
+            index=1, instructor_id=str(uuid4())
+        ),
         start_date=today - timedelta(days=1),
     )
     already_started = _seed_occurrence(

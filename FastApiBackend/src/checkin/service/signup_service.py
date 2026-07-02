@@ -19,8 +19,10 @@ double-blocks. The create write is idempotent: ON CONFLICT DO NOTHING on the
 Occurrence resolution goes through the shared ``CheckinOccurrenceResolution``
 — the same algorithm ``CheckinClassResolver`` uses for check-in, so check-in
 and sign-up can never disagree about whether an occurrence exists — run with
-``include_cancelled=True`` so a cancelled day and a non-recurrence date can
-be told apart in the error message.
+``include_cancelled=True`` so a cancelled day and a non-recurrence slot can
+be told apart in the error message. A class may occur several times on one
+day, so every call is addressed by the full original slot
+(``occurrence_date``, ``occurrence_time``), never the date alone.
 """
 
 from datetime import date, time
@@ -73,23 +75,25 @@ class SignupService:
         gym_id: UUID,
         class_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> SignupResponse:
         """Reserve ``member_id`` a spot on the occurrence.
 
-        ``occurrence_date`` is the occurrence's ORIGINAL date.
+        ``(occurrence_date, occurrence_time)`` is the occurrence's full
+        ORIGINAL slot.
 
         Raises:
             ValueError: "Class not found" if the class doesn't exist for the
                 gym; "Class has been deleted" / "Class is not active" if the
                 class is soft-deleted / inactive; "Not a class occurrence on
-                that date" / "This class is cancelled that day" if
-                ``occurrence_date`` isn't a real, non-cancelled occurrence of
-                this class; "Class is full" if the occurrence is at its
-                effective ``max_capacity`` and this member isn't already
-                counted (signed up or attended).
+                that date" / "This class is cancelled that day" if the slot
+                isn't a real, non-cancelled occurrence of this class; "Class
+                is full" if the occurrence is at its effective
+                ``max_capacity`` and this member isn't already counted
+                (signed up or attended).
         """
         class_row, occurrence = await self._validate_occurrence(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
         effective_capacity = (
             class_row["exception_max_capacity"]
@@ -98,7 +102,12 @@ class SignupService:
         )
         if effective_capacity is not None:
             await self._enforce_capacity(
-                class_id, gym_id, occurrence_date, member_id, effective_capacity
+                class_id,
+                gym_id,
+                occurrence_date,
+                occurrence_time,
+                member_id,
+                effective_capacity,
             )
         return await self._insert(
             member_id, gym_id, class_id, occurrence_date, occurrence.original_time
@@ -110,6 +119,7 @@ class SignupService:
         gym_id: UUID,
         class_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> SignupRemoveResponse:
         """Delete the member's sign-up for the occurrence, if any."""
         sql = load_sql(SQL_DIR / "signup_delete.sql")
@@ -122,6 +132,7 @@ class SignupService:
                             "class_id": str(class_id),
                             "member_id": str(member_id),
                             "original_date": occurrence_date,
+                            "original_time": occurrence_time,
                         },
                     )
                 )
@@ -138,21 +149,23 @@ class SignupService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> tuple[dict, EffectiveOccurrence]:
         """Load + validate the sign-up target.
 
         Loads the class row (exists / active / not soft-deleted for this
         gym), then resolves the occurrence against the class's schedule
         versions + exceptions to confirm a real, non-cancelled occurrence
-        lands on ``occurrence_date``. Returns the class row (so the caller
-        can read ``max_capacity`` / ``exception_max_capacity`` without a
-        second read) and the resolved occurrence (for ``original_time``).
+        lands on the exact ``(occurrence_date, occurrence_time)`` slot.
+        Returns the class row (so the caller can read ``max_capacity`` /
+        ``exception_max_capacity`` without a second read) and the resolved
+        occurrence (for ``original_time``).
 
         Raises:
             ValueError: See ``create``'s docstring for the message set.
         """
         class_row = await self._queries.get_class_for_checkin(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
         if class_row is None:
             raise ValueError(_CLASS_NOT_FOUND_MSG)
@@ -162,7 +175,7 @@ class SignupService:
             raise ValueError(_CLASS_INACTIVE_MSG)
 
         occurrence = await self._occurrence_resolution.resolve_original(
-            class_id, occurrence_date, include_cancelled=True
+            class_id, occurrence_date, occurrence_time, include_cancelled=True
         )
         if occurrence is None:
             raise ValueError(_NOT_AN_OCCURRENCE_MSG)
@@ -190,10 +203,10 @@ class SignupService:
             "class_id": str(class_id),
             "member_id": str(member_id),
             "original_date": occurrence_date,
+            "original_time": original_time,
         }
         insert_params = {
             "gym_id": str(gym_id),
-            "original_time": original_time,
             **existing_params,
         }
 
@@ -230,6 +243,7 @@ class SignupService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
         member_id: UUID,
         effective_capacity: int,
     ) -> None:
@@ -238,12 +252,14 @@ class SignupService:
         A member already counted (a prior sign-up, or already attended via a
         walk-in check-in) never blocks on their own presence — this is what
         keeps the sign-up path and the check-in capacity gate consistent.
+        Capacity pools are per-slot, so a same-day sibling occurrence's
+        headcount is never pulled into this one's.
 
         Raises:
             ValueError: "Class is full".
         """
         members = await self._queries.get_signup_or_attended_members(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
         if member_id in members:
             return

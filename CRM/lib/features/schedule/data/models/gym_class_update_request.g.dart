@@ -21,24 +21,12 @@ Map<String, dynamic> _$GymClassIdentityUpdateDataToJson(
 Map<String, dynamic> _$GymClassScheduleFieldsToJson(
   GymClassScheduleFields instance,
 ) => <String, dynamic>{
-  'class_time': instance.classTime,
   'duration_minutes': instance.durationMinutes,
   'recurring_unit': _$RecurringUnitEnumMap[instance.recurringUnit]!,
   'recurring_interval': instance.recurringInterval,
-  'sun': instance.sun,
-  'mon': instance.mon,
-  'tue': instance.tue,
-  'wed': instance.wed,
-  'thu': instance.thu,
-  'fri': instance.fri,
-  'sat': instance.sat,
-  'sun_instructor_id': instance.sunInstructorId,
-  'mon_instructor_id': instance.monInstructorId,
-  'tue_instructor_id': instance.tueInstructorId,
-  'wed_instructor_id': instance.wedInstructorId,
-  'thu_instructor_id': instance.thuInstructorId,
-  'fri_instructor_id': instance.friInstructorId,
-  'sat_instructor_id': instance.satInstructorId,
+  'weekday_slots': instance.weekdaySlots.map(
+    (k, e) => MapEntry(k, e.map((e) => e.toJson()).toList()),
+  ),
   'start_date': instance.startDate,
   'end_date': instance.endDate,
 };

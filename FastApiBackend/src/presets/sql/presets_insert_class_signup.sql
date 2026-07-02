@@ -2,8 +2,8 @@
 -- a sign-up is NOT attendance, so this is written independently of
 -- presets_insert_attendance.sql. Occurrence identity = (class_id,
 -- original_date, original_time), exactly like attendance. Idempotent:
--- ON CONFLICT DO NOTHING on the (class_id, member_id, original_date) unique
--- constraint, mirroring the live sign-up create path
+-- ON CONFLICT DO NOTHING on the (class_id, member_id, original_date,
+-- original_time) unique constraint, mirroring the live sign-up create path
 -- (src/checkin/sql/signup_insert.sql). Executed once per occurrence with a
 -- list of param rows (one per member).
 INSERT INTO class_signups (
@@ -15,4 +15,4 @@ INSERT INTO class_signups (
     CAST(:original_date AS DATE),
     CAST(:original_time AS TIME)
 )
-ON CONFLICT (class_id, member_id, original_date) DO NOTHING
+ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING

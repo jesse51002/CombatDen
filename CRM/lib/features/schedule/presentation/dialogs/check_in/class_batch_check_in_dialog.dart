@@ -30,12 +30,17 @@ class ClassBatchCheckInDialog extends StatefulWidget {
   /// this addresses the batch check-in.
   final DateTime occurrenceDate;
 
+  /// The occurrence's IDENTITY time — the other half of its identity key
+  /// (several slots per day are legal).
+  final String occurrenceTime;
+
   const ClassBatchCheckInDialog({
     super.key,
     required this.classId,
     required this.gymId,
     required this.className,
     required this.occurrenceDate,
+    required this.occurrenceTime,
   });
 
   static Future<void> show({
@@ -44,6 +49,7 @@ class ClassBatchCheckInDialog extends StatefulWidget {
     required String gymId,
     required String className,
     required DateTime occurrenceDate,
+    required String occurrenceTime,
   }) {
     final bloc = context.read<ScheduleBloc>();
     return showDialog<void>(
@@ -55,6 +61,7 @@ class ClassBatchCheckInDialog extends StatefulWidget {
           gymId: gymId,
           className: className,
           occurrenceDate: occurrenceDate,
+          occurrenceTime: occurrenceTime,
         ),
       ),
     );
@@ -102,6 +109,7 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
     context.read<ScheduleBloc>().add(ScheduleBatchCheckInRequested(
           classId: widget.classId,
           occurrenceDate: widget.occurrenceDate,
+          occurrenceTime: widget.occurrenceTime,
           memberIds: ids,
         ));
   }
@@ -118,6 +126,7 @@ class _ClassBatchCheckInDialogState extends State<ClassBatchCheckInDialog> {
     context.read<ScheduleBloc>().add(ScheduleBatchCheckInRequested(
           classId: widget.classId,
           occurrenceDate: widget.occurrenceDate,
+          occurrenceTime: widget.occurrenceTime,
           memberIds: ids,
           ignoreWarnings: true,
         ));

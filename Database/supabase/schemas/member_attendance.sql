@@ -25,7 +25,7 @@ CREATE TABLE member_attendance (
     -- check-in and re-synced by the two paths that re-time a kept occurrence
     -- (same-date override on an attended occurrence; reschedule-to-today/past).
     -- Consumed ONLY by time-window SQL (streak / cycle counts / last_class);
-    -- identity joins always use (class_id, original_date).
+    -- identity joins always use (class_id, original_date, original_time).
     occurred_at TIMESTAMPTZ NOT NULL,
     -- The membership row + plan that covered this check-in (billing attribution);
     -- NULL together when an admin check-in had no covering membership to attribute to.
@@ -33,12 +33,11 @@ CREATE TABLE member_attendance (
     item_id UUID,
     PRIMARY KEY (log_id),
     -- Idempotency anchor: one attendance row per member per original
-    -- occurrence. A class has at most ONE original occurrence per gym-local
-    -- date (the one-per-day invariant), so date alone disambiguates;
-    -- original_time is stored for the version-change exact-slot match, not
-    -- for uniqueness.
+    -- occurrence. A class may occur SEVERAL times on one gym-local date
+    -- (weekday_slots holds a slot list per day), so the occurrence key is the
+    -- full original slot — date AND time.
     CONSTRAINT uq_attendance_member_occurrence
-        UNIQUE (member_id, class_id, original_date),
+        UNIQUE (member_id, class_id, original_date, original_time),
     CONSTRAINT chk_attendance_membership_pair
         CHECK ((plan_id IS NULL) = (item_id IS NULL)),
     CONSTRAINT fk_attendance_member_gym
@@ -59,7 +58,7 @@ CREATE INDEX idx_member_attendance_member_gym
     ON member_attendance (member_id, gym_id);
 
 CREATE INDEX idx_member_attendance_class_occurrence
-    ON member_attendance (class_id, original_date);
+    ON member_attendance (class_id, original_date, original_time);
 
 CREATE INDEX idx_member_attendance_member_occurred
     ON member_attendance (member_id, occurred_at DESC);

@@ -31,12 +31,17 @@ class ClassSignupDialog extends StatefulWidget {
   /// this addresses the reservation.
   final DateTime occurrenceDate;
 
+  /// The occurrence's IDENTITY time — the other half of its identity key
+  /// (several slots per day are legal).
+  final String occurrenceTime;
+
   const ClassSignupDialog({
     super.key,
     required this.classId,
     required this.gymId,
     required this.className,
     required this.occurrenceDate,
+    required this.occurrenceTime,
   });
 
   static Future<void> show({
@@ -45,6 +50,7 @@ class ClassSignupDialog extends StatefulWidget {
     required String gymId,
     required String className,
     required DateTime occurrenceDate,
+    required String occurrenceTime,
   }) {
     final bloc = context.read<ScheduleBloc>();
     return showDialog<void>(
@@ -56,6 +62,7 @@ class ClassSignupDialog extends StatefulWidget {
           gymId: gymId,
           className: className,
           occurrenceDate: occurrenceDate,
+          occurrenceTime: occurrenceTime,
         ),
       ),
     );
@@ -93,6 +100,7 @@ class _ClassSignupDialogState extends State<ClassSignupDialog> {
     context.read<ScheduleBloc>().add(ScheduleSignUpRequested(
           classId: widget.classId,
           occurrenceDate: widget.occurrenceDate,
+          occurrenceTime: widget.occurrenceTime,
           memberIds: ids,
         ));
   }

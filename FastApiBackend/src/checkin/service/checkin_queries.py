@@ -9,7 +9,7 @@ level. The check-in-only reads (class-for-checkin, attendance / roster /
 eligibility) live in this domain's own ``sql/`` dir too.
 """
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from uuid import UUID
 
@@ -35,14 +35,16 @@ class CheckinQueries:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> dict | None:
-        """Load the class (+ its capacity override for the date) for resolve.
+        """Load the class (+ its capacity override for the exact slot) for
+        resolve.
 
         Returns the IDENTITY columns (``max_capacity`` / ``allowed_plan_ids`` /
         ``points_worth`` / ``class_name``), the gate flags (``is_active`` /
         ``is_deleted``), and ``exception_max_capacity`` (the instance
-        exception's per-occurrence capacity override, if any). None when no
-        such class exists for the gym.
+        exception's per-occurrence capacity override, if any, keyed to the
+        exact original slot). None when no such class exists for the gym.
         """
         sql = load_sql(SQL_DIR / "classes_get_for_checkin.sql")
         async with self._db_pool.session() as session:
@@ -54,6 +56,7 @@ class CheckinQueries:
                             "class_id": str(class_id),
                             "gym_id": str(gym_id),
                             "occurrence_date": occurrence_date,
+                            "occurrence_time": occurrence_time,
                         },
                     )
                 )
@@ -108,12 +111,15 @@ class CheckinQueries:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> set[UUID]:
         """Distinct members signed-up OR attended for one occurrence.
 
         The capacity-reserving set (``signup_capacity_count.sql``), keyed
         directly by the occurrence's identity (``class_id``,
-        ``original_date``) — shared by ``SignupService``'s create-time
+        ``original_date``, ``original_time`` — capacity pools are per-slot,
+        so a same-day sibling occurrence's sign-ups/attendance never counts
+        against this one) — shared by ``SignupService``'s create-time
         capacity check and the check-in capacity gate, so a member already
         counted (a prior sign-up, or a prior/walk-in check-in) is never
         double-counted against the room.
@@ -128,6 +134,7 @@ class CheckinQueries:
                             "class_id": str(class_id),
                             "gym_id": str(gym_id),
                             "occurrence_date": occurrence_date,
+                            "occurrence_time": occurrence_time,
                         },
                     )
                 )
@@ -141,9 +148,11 @@ class CheckinQueries:
         member_id: UUID,
         class_id: UUID,
         original_date: date,
+        original_time: time,
     ) -> dict | None:
         """Return the existing attendance row, if any (idempotency), keyed
-        by the occurrence's identity (``class_id``, ``original_date``)."""
+        by the occurrence's full identity (``class_id``, ``original_date``,
+        ``original_time``)."""
         sql = load_sql(SQL_DIR / "get_existing_attendance.sql")
         async with self._db_pool.session() as session:
             row = (
@@ -154,6 +163,7 @@ class CheckinQueries:
                             "member_id": str(member_id),
                             "class_id": str(class_id),
                             "original_date": original_date,
+                            "original_time": original_time,
                         },
                     )
                 )
@@ -192,15 +202,16 @@ class CheckinQueries:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
     ) -> list[dict]:
         """List everyone who signed up OR attended one occurrence.
 
         Joins ``class_signups`` and ``member_attendance`` (both keyed
-        directly by the occurrence's identity, ``class_id`` +
-        ``original_date``) to ``members`` for ``full_name``, flagging each
-        with ``signed_up`` / ``attended`` and carrying the billing
-        attribution (``plan_id`` / ``item_id``, NULL when not attended).
-        Gym-scoped for the employee auth boundary.
+        directly by the occurrence's full identity, ``class_id`` +
+        ``original_date`` + ``original_time``) to ``members`` for
+        ``full_name``, flagging each with ``signed_up`` / ``attended`` and
+        carrying the billing attribution (``plan_id`` / ``item_id``, NULL
+        when not attended). Gym-scoped for the employee auth boundary.
         """
         return await self._read_all(
             SQL_DIR / "roster_for_occurrence.sql",
@@ -208,6 +219,7 @@ class CheckinQueries:
                 "class_id": str(class_id),
                 "gym_id": str(gym_id),
                 "occurrence_date": occurrence_date,
+                "occurrence_time": occurrence_time,
             },
         )
 

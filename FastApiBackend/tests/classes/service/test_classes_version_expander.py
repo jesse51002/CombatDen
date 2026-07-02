@@ -5,12 +5,13 @@ asserts the exact owned occurrences. Coverage: ownership windowing (first
 version owns back to -inf, last to +inf), the three mint-boundary cases
 (already-ran stays on the old version; a not-yet-started slot follows the new
 version; a new slot that already passed on mint day yields NO occurrence that
-day), cross-version date dedup (no day doubling — earliest version wins),
-per-version frozen timezones, exceptions binding to the owning version's slot,
-reschedule-from-a-past-original-slot surviving a later version, owning
-schedule_id / original_start_at / original_time tagging, past-render stability
-when new versions are appended, cancelled-display ownership, and degenerate
-inputs.
+day), cross-version SLOT-level dedup (a boundary day CAN legitimately carry
+BOTH versions' different-time occurrences — no day doubling; an exact-slot tie
+is won by the earlier version), per-version frozen timezones, exceptions
+binding to the owning version's slot, reschedule-from-a-past-original-slot
+surviving a later version, owning schedule_id / original_start_at /
+original_time tagging, past-render stability when new versions are appended,
+cancelled-display ownership, and degenerate inputs.
 """
 
 from collections.abc import Iterable, Mapping
@@ -21,6 +22,8 @@ from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_expander_schema import (
+    ALL_DAYS_KEY,
+    ClassSlot,
     ExpanderInstanceException,
     ExpanderScheduleVersion,
 )
@@ -45,6 +48,10 @@ JUL_TUESDAYS = (
 WINDOW = (date(2025, 6, 1), date(2025, 7, 31))
 
 
+def _slot(t: time, instructor_id: UUID | None = None) -> ClassSlot:
+    return ClassSlot(time=t, instructor_id=instructor_id)
+
+
 def _version(
     *,
     class_id: UUID | None = None,
@@ -59,39 +66,46 @@ def _version(
     days: Iterable[str] = ("tue",),
     instructors: Mapping[str, UUID] | None = None,
 ) -> ExpanderScheduleVersion:
-    """Build a schedule version with only the fields a case cares about."""
-    flags = {day: True for day in days}
-    instructor_kwargs = {
-        f"{short}_instructor_id": iid
-        for short, iid in (instructors or {}).items()
-    }
+    """Build a single-slot-per-day schedule version — a weekly version puts
+    ``class_time`` under each of ``days``; daily/monthly puts it under the
+    reserved ``"all"`` key."""
+    instructors = instructors or {}
+    if recurring_unit == RecurringUnit.weekly:
+        weekday_slots = {
+            day: [_slot(class_time, instructors.get(day))] for day in days
+        }
+    else:
+        weekday_slots = {
+            ALL_DAYS_KEY: [_slot(class_time, instructors.get(ALL_DAYS_KEY))]
+        }
     return ExpanderScheduleVersion(
         schedule_id=uuid4(),
         class_id=class_id or uuid4(),
         gym_id=uuid4(),
         effective_from=effective_from,
         timezone=timezone,
-        class_time=class_time,
         duration_minutes=duration_minutes,
         recurring_unit=recurring_unit,
         recurring_interval=recurring_interval,
+        weekday_slots=weekday_slots,
         start_date=start_date,
         end_date=end_date,
-        **flags,
-        **instructor_kwargs,
     )
 
 
 def _instance(
     original_date: date,
+    original_time: time = time(18, 0),
     *,
     is_cancelled: bool = False,
     new_class_time: time | None = None,
     new_date: date | None = None,
 ) -> ExpanderInstanceException:
-    """Build a single-date instance exception."""
+    """Build a single-slot instance exception — ``original_time`` defaults to
+    18:00, matching ``_version``'s default ``class_time``."""
     return ExpanderInstanceException(
         original_date=original_date,
+        original_time=original_time,
         is_cancelled=is_cancelled,
         new_class_time=new_class_time,
         new_duration_minutes=None,
@@ -199,10 +213,15 @@ class TestMintBoundary:
         assert date(2025, 7, 8) not in by_date
         assert by_date[date(2025, 7, 15)].original_time == time(12, 0)
 
-    def test_already_ran_stays_on_old_version_no_day_doubling(self) -> None:
-        """Boundaries (i) + (iii): a 09:00 class already ran before the 2pm
-        mint — v1 keeps it, and v2's same-day 20:00 candidate is suppressed
-        (earliest version wins the date)."""
+    def test_already_ran_stays_on_old_version_same_day_new_slot_also_renders(
+        self,
+    ) -> None:
+        """Boundary (i): a 09:00 class already ran before the 2pm mint — v1
+        keeps owning it. v2's same-day 20:00 candidate is a DIFFERENT SLOT
+        (not yet run) — dedup is slot-level, not day-level, so it
+        legitimately renders too (see TestSlotLevelDedup for the dedicated
+        boundary-day coverage; the old model's "no day doubling" rule no
+        longer applies once several slots per day are legal)."""
         class_id = uuid4()
         v1 = _version(
             class_id=class_id,
@@ -214,10 +233,18 @@ class TestMintBoundary:
             effective_from=self.MINT,
             class_time=time(20, 0),
         )
-        by_date = _by_original(_expander().expand([v1, v2], [], [], *WINDOW))
-        mint_day = by_date[date(2025, 7, 8)]
-        assert mint_day.schedule_id == v1.schedule_id
-        assert mint_day.original_time == time(9, 0)
+        occurrences = _expander().expand([v1, v2], [], [], *WINDOW)
+        mint_day_occs = [
+            occ for occ in occurrences if occ.original_date == date(2025, 7, 8)
+        ]
+        assert len(mint_day_occs) == 2
+        by_time = {occ.original_time: occ for occ in mint_day_occs}
+        assert by_time[time(9, 0)].schedule_id == v1.schedule_id
+        assert by_time[time(20, 0)].schedule_id == v2.schedule_id
+        by_date = _by_original(
+            [occ for occ in occurrences if occ.original_date != date(2025, 7, 8)]
+        )
+        assert by_date[date(2025, 7, 1)].schedule_id == v1.schedule_id
         assert by_date[date(2025, 7, 15)].schedule_id == v2.schedule_id
 
     def test_removed_weekday_drops_future_keeps_past(self) -> None:
@@ -250,6 +277,85 @@ class TestMintBoundary:
             [v1, v2, v3], [], [], date(2025, 6, 1), date(2025, 7, 8)
         )
         assert before == after
+
+
+# -- slot-level dedup (not day-level) --------------------------------------
+
+
+class TestSlotLevelDedup:
+    """Dedup is at ``(original_date, original_time)``, not the date alone —
+    a boundary day CAN legitimately show occurrences from both versions when
+    they land at DIFFERENT times."""
+
+    def test_boundary_day_shows_both_versions_at_different_times(
+        self,
+    ) -> None:
+        """v1's Monday 06:00 already ran before a mint at Monday noon; v2's
+        Monday 18:30 hasn't started yet — BOTH render on that same Monday,
+        owned by their respective versions."""
+        class_id = uuid4()
+        mint = datetime(2025, 6, 2, 12, 0, tzinfo=UTC)  # a Monday, noon UTC
+        v1 = _version(
+            class_id=class_id,
+            effective_from=datetime(2025, 1, 1, tzinfo=UTC),
+            timezone="UTC",
+            class_time=time(6, 0),
+            days=("mon",),
+            start_date=date(2025, 1, 1),
+        )
+        v2 = _version(
+            class_id=class_id,
+            effective_from=mint,
+            timezone="UTC",
+            class_time=time(18, 30),
+            days=("mon",),
+            start_date=date(2025, 1, 1),
+        )
+        boundary = date(2025, 6, 2)
+        occurrences = _expander().expand(
+            [v1, v2], [], [], boundary, boundary
+        )
+
+        assert len(occurrences) == 2
+        by_time = {occ.original_time: occ for occ in occurrences}
+        assert by_time[time(6, 0)].schedule_id == v1.schedule_id
+        assert by_time[time(18, 30)].schedule_id == v2.schedule_id
+
+    def test_earlier_version_wins_an_exact_slot_tie(self) -> None:
+        """A tz shift can make the SAME wall-clock (date, time) slot eligible
+        under BOTH versions' windowing at once (Chicago's 06:00 instant
+        precedes the mint; Denver's 06:00 instant on the same wall date
+        follows it, since Denver is an hour behind) — the claimed-slots
+        dedup then keeps only the earlier version's occurrence."""
+        class_id = uuid4()
+        boundary_monday = date(2025, 6, 2)
+        # Chicago 06:00 CDT -> 11:00 UTC; Denver 06:00 MDT -> 12:00 UTC.
+        mint = datetime(2025, 6, 2, 11, 30, tzinfo=UTC)
+        v1 = _version(
+            class_id=class_id,
+            effective_from=datetime(2025, 1, 1, tzinfo=UTC),
+            timezone=CHICAGO,
+            class_time=time(6, 0),
+            days=("mon",),
+            start_date=date(2025, 1, 1),
+        )
+        v2 = _version(
+            class_id=class_id,
+            effective_from=mint,
+            timezone=DENVER,
+            class_time=time(6, 0),
+            days=("mon",),
+            start_date=date(2025, 1, 1),
+        )
+        occurrences = _expander().expand(
+            [v1, v2], [], [], boundary_monday, boundary_monday
+        )
+
+        assert len(occurrences) == 1
+        assert occurrences[0].schedule_id == v1.schedule_id
+        assert occurrences[0].occurred_at == datetime(
+            2025, 6, 2, 11, 0, tzinfo=UTC
+        )
 
 
 # -- per-version frozen timezone ------------------------------------------
@@ -304,7 +410,7 @@ class TestExceptionsAcrossVersions:
         (original_time 19:00), the effective time is the override."""
         v1, v2 = self._pair()
         override = _instance(
-            date(2025, 7, 15), new_class_time=time(20, 0)
+            date(2025, 7, 15), time(19, 0), new_class_time=time(20, 0)
         )
         by_date = _by_original(
             _expander().expand([v1, v2], [override], [], *WINDOW)
@@ -326,7 +432,9 @@ class TestExceptionsAcrossVersions:
         own occurrence that day still renders (effective-date doubling via
         reschedule is allowed; original dates never double)."""
         v1, v2 = self._pair()
-        moved = _instance(date(2025, 7, 1), new_date=date(2025, 7, 22))
+        moved = _instance(
+            date(2025, 7, 1), time(18, 0), new_date=date(2025, 7, 22)
+        )
         occurrences = _expander().expand([v1, v2], [moved], [], *WINDOW)
         on_jul22 = [
             occ
@@ -343,7 +451,7 @@ class TestExceptionsAcrossVersions:
 
     def test_cancelled_display_occurrence_still_claims_its_date(self) -> None:
         v1, v2 = self._pair()
-        cancelled = _instance(date(2025, 7, 15), is_cancelled=True)
+        cancelled = _instance(date(2025, 7, 15), time(19, 0), is_cancelled=True)
         occurrences = _expander().expand(
             [v1, v2], [cancelled], [], *WINDOW, include_cancelled=True
         )
@@ -364,5 +472,5 @@ class TestExceptionsAcrossVersions:
 class TestOriginalStartAt:
     def test_matches_ownership_arithmetic(self) -> None:
         v1 = _version(effective_from=datetime(2025, 6, 1, tzinfo=UTC))
-        instant = _expander().original_start_at(v1, date(2025, 7, 1))
+        instant = _expander().original_start_at(v1, date(2025, 7, 1), time(18, 0))
         assert instant == datetime(2025, 7, 1, 23, 0, tzinfo=UTC)

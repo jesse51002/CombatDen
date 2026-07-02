@@ -86,11 +86,14 @@ class GateEvaluation(BaseModel):
 class CheckinRequest(BaseModel):
     """Body for POST /api/v1/checkin.
 
-    The occurrence is addressed by ``class_id`` + ``occurrence_date`` — always
-    the occurrence's ORIGINAL date (the owning schedule version's
-    pre-exception slot), never its effective/rescheduled date; the backend
-    resolves the occurrence against the class's schedule versions + exceptions.
-    Occurrences are computed, never stored — there is no materialization step.
+    The occurrence is addressed by ``class_id`` + ``occurrence_date`` +
+    ``occurrence_time`` — always the occurrence's ORIGINAL slot (the owning
+    schedule version's pre-exception date + time), never its
+    effective/rescheduled slot; the backend resolves the occurrence against
+    the class's schedule versions + exceptions. A class may occur several
+    times on one day, so the date alone never identifies an occurrence — the
+    time is required. Occurrences are computed, never stored — there is no
+    materialization step.
 
     ``is_member`` selects the gate:
 
@@ -114,6 +117,7 @@ class CheckinRequest(BaseModel):
     gym_id: UUID
     class_id: UUID
     occurrence_date: date
+    occurrence_time: time
     is_member: bool = False
     ignore_warnings: bool = False
 
@@ -130,12 +134,14 @@ class ResolvedClass(BaseModel):
         class_id: The owning class.
         gym_id: The owning gym.
         occurrence_date: The occurrence's ORIGINAL date (the owning schedule
-            version's pre-exception slot) — the same date the caller
-            addressed it by. Used by the capacity gate to read the
+            version's pre-exception slot) — the same date the caller passed
+            to ``resolve``. Used by the capacity gate to read the
             signed-up-or-attended union for this occurrence, and stored on
             ``member_attendance`` as part of the occurrence's identity key.
         original_time: The owning schedule version's pre-exception slot
-            time — the other half of the occurrence's identity key, stored
+            time — the other half of the occurrence's identity key, the same
+            time the caller passed to ``resolve`` (a class may occur several
+            times per day, so this is what disambiguates the slot), stored
             alongside ``occurrence_date`` on the attendance row.
         occurred_at: UTC, timezone-aware EFFECTIVE start instant of the
             occurrence (exceptions applied) — denormalized onto the
@@ -315,8 +321,9 @@ class AttendeeListResponse(BaseModel):
 
     Attributes:
         class_id: The class the occurrence belongs to.
-        occurrence_date: The occurrence's ORIGINAL date (the identity key
-            queried).
+        occurrence_date: The occurrence's ORIGINAL date — half of the
+            identity key queried (paired with the ``occurrence_time`` query
+            param; a class may occur several times per day).
         attendees: Everyone signed up or attended, ordered by name.
     """
 

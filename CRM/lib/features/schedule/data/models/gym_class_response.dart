@@ -1,17 +1,19 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/schedule/data/models/class_slot.dart';
 import 'package:crm/features/schedule/data/models/recurring_unit.dart';
 
 part 'gym_class_response.g.dart';
 
 /// A single `gym_classes` row, from `GET /api/v1/classes?gym_id=…`.
 ///
-/// Tracks the backend `GymClassResponse` field-for-field. The seven
-/// `*InstructorName` fields are the resolved `first_name last_name` joined
-/// from `gym_employees` for each weekday's instructor slot (null when that
-/// slot has no instructor). [classTime] is a bare local time string
-/// (`HH:MM:SS`) — render as given, no timezone math.
+/// Tracks the backend `GymClassResponse` field-for-field. [weekdaySlots] is
+/// day -> ordered slot list: weekly schedules use `sun`..`sat` keys (a day
+/// occurs iff its key holds a non-empty list, several times per day allowed);
+/// daily/monthly schedules use exactly the reserved `"all"` key. Each slot's
+/// `instructor_name` is the resolved `first_name last_name` joined from
+/// `gym_employees` (null when that slot has no instructor).
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -22,33 +24,11 @@ class GymClassResponse extends Equatable {
   final String className;
   final String? classDescription;
 
-  /// Local start time of day as `HH:MM:SS` (gym-local; render as given).
-  final String classTime;
   final int durationMinutes;
   @JsonKey(fromJson: RecurringUnit.fromJson)
   final RecurringUnit recurringUnit;
   final int recurringInterval;
-  final bool sun;
-  final bool mon;
-  final bool tue;
-  final bool wed;
-  final bool thu;
-  final bool fri;
-  final bool sat;
-  final String? sunInstructorId;
-  final String? monInstructorId;
-  final String? tueInstructorId;
-  final String? wedInstructorId;
-  final String? thuInstructorId;
-  final String? friInstructorId;
-  final String? satInstructorId;
-  final String? sunInstructorName;
-  final String? monInstructorName;
-  final String? tueInstructorName;
-  final String? wedInstructorName;
-  final String? thuInstructorName;
-  final String? friInstructorName;
-  final String? satInstructorName;
+  final Map<String, List<ClassSlot>> weekdaySlots;
   final DateTime startDate;
   final DateTime? endDate;
   final int? maxCapacity;
@@ -64,31 +44,10 @@ class GymClassResponse extends Equatable {
     required this.gymId,
     required this.className,
     this.classDescription,
-    required this.classTime,
     required this.durationMinutes,
     required this.recurringUnit,
     required this.recurringInterval,
-    required this.sun,
-    required this.mon,
-    required this.tue,
-    required this.wed,
-    required this.thu,
-    required this.fri,
-    required this.sat,
-    this.sunInstructorId,
-    this.monInstructorId,
-    this.tueInstructorId,
-    this.wedInstructorId,
-    this.thuInstructorId,
-    this.friInstructorId,
-    this.satInstructorId,
-    this.sunInstructorName,
-    this.monInstructorName,
-    this.tueInstructorName,
-    this.wedInstructorName,
-    this.thuInstructorName,
-    this.friInstructorName,
-    this.satInstructorName,
+    required this.weekdaySlots,
     required this.startDate,
     this.endDate,
     this.maxCapacity,
@@ -109,31 +68,10 @@ class GymClassResponse extends Equatable {
         gymId,
         className,
         classDescription,
-        classTime,
         durationMinutes,
         recurringUnit,
         recurringInterval,
-        sun,
-        mon,
-        tue,
-        wed,
-        thu,
-        fri,
-        sat,
-        sunInstructorId,
-        monInstructorId,
-        tueInstructorId,
-        wedInstructorId,
-        thuInstructorId,
-        friInstructorId,
-        satInstructorId,
-        sunInstructorName,
-        monInstructorName,
-        tueInstructorName,
-        wedInstructorName,
-        thuInstructorName,
-        friInstructorName,
-        satInstructorName,
+        weekdaySlots,
         startDate,
         endDate,
         maxCapacity,

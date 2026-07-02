@@ -44,6 +44,8 @@ from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_expander_schema import (
+    ALL_DAYS_KEY,
+    ClassSlot,
     EffectiveOccurrence,
     ExpanderClass,
     ExpanderInstanceException,
@@ -61,7 +63,6 @@ _DAY_SHORT: tuple[str, ...] = (
     "fri",
     "sat",
 )
-_INSTRUCTOR_SUFFIX = "_instructor_id"
 
 
 class ClassesExpander:
@@ -106,8 +107,9 @@ class ClassesExpander:
         if window_start > window_end:
             return []
 
-        instance_by_date = {
-            exc.original_date: exc for exc in instance_exceptions
+        instance_by_slot = {
+            (exc.original_date, exc.original_time): exc
+            for exc in instance_exceptions
         }
         ordered_ranges = sorted(
             range_exceptions, key=lambda exc: exc.created_at
@@ -117,18 +119,18 @@ class ClassesExpander:
         for original_date in self._candidate_dates(
             gym_class, window_start, window_end
         ):
-            occurrence = self._resolve(
-                gym_class,
-                original_date,
-                instance_by_date.get(original_date),
-                ordered_ranges,
-                window_start,
-                window_end,
-                gym_tz,
-                include_cancelled,
+            occurrences.extend(
+                self._resolve_date(
+                    gym_class,
+                    original_date,
+                    instance_by_slot,
+                    ordered_ranges,
+                    window_start,
+                    window_end,
+                    gym_tz,
+                    include_cancelled,
+                )
             )
-            if occurrence is not None:
-                occurrences.append(occurrence)
 
         occurrences.sort(key=lambda occ: occ.occurred_at)
         return occurrences
@@ -196,9 +198,10 @@ class ClassesExpander:
     ) -> list[date]:
         """Daily / weekly dates, walked one day at a time within the window.
 
-        Daily fires when ``(D - start_date).days % interval == 0`` (day flags
-        ignored). Weekly fires when the week index since ``start_date`` is a
-        multiple of ``interval`` AND D's weekday flag is set.
+        Daily fires when ``(D - start_date).days % interval == 0`` (weekday
+        keys ignored — daily uses the ``"all"`` slot list). Weekly fires when
+        the week index since ``start_date`` is a multiple of ``interval`` AND
+        D's weekday key holds a non-empty slot list.
         """
         interval = gym_class.recurring_interval
         start = gym_class.start_date
@@ -222,10 +225,50 @@ class ClassesExpander:
 
     # -- exception resolution --------------------------------------------
 
-    def _resolve(
+    def _resolve_date(
         self,
         gym_class: ExpanderClass,
         original_date: date,
+        instance_by_slot: dict[
+            tuple[date, time], ExpanderInstanceException
+        ],
+        ordered_ranges: list[ExpanderRangeException],
+        window_start: date,
+        window_end: date,
+        gym_tz: str,
+        include_cancelled: bool,
+    ) -> list[EffectiveOccurrence]:
+        """Fan one candidate date out over its slots and resolve each.
+
+        A date carries every slot of its weekday key (weekly) or of the
+        ``"all"`` key (daily/monthly); each slot resolves independently
+        against ITS OWN instance exception — keyed ``(original_date,
+        original_time)`` — so overriding the 06:00 occurrence never touches
+        the 18:30 one. Range exceptions are date-level and apply uniformly to
+        every slot on a covered date.
+        """
+        occurrences = []
+        for slot in self._slots_for(gym_class, original_date):
+            occurrence = self._resolve_slot(
+                gym_class,
+                original_date,
+                slot,
+                instance_by_slot.get((original_date, slot.time)),
+                ordered_ranges,
+                window_start,
+                window_end,
+                gym_tz,
+                include_cancelled,
+            )
+            if occurrence is not None:
+                occurrences.append(occurrence)
+        return occurrences
+
+    def _resolve_slot(
+        self,
+        gym_class: ExpanderClass,
+        original_date: date,
+        slot: ClassSlot,
         instance: ExpanderInstanceException | None,
         ordered_ranges: list[ExpanderRangeException],
         window_start: date,
@@ -233,21 +276,19 @@ class ClassesExpander:
         gym_tz: str,
         include_cancelled: bool,
     ) -> EffectiveOccurrence | None:
-        """Resolve one candidate date against its exceptions.
+        """Resolve one (date, slot) against its exceptions.
 
         Precedence mirrors the seed's ``_resolve_occurrence``:
-        an instance exception on the exact date is authoritative (range
-        exceptions ignored for that date); otherwise the earliest-created
-        covering range applies; otherwise the class defaults.
+        an instance exception on the exact slot is authoritative (range
+        exceptions ignored for that slot); otherwise the earliest-created
+        covering range applies; otherwise the slot defaults.
         """
-        default_instructor = self.instructor_for(gym_class, original_date)
-
         if instance is not None:
             return self._resolve_instance(
                 gym_class,
                 original_date,
+                slot,
                 instance,
-                default_instructor,
                 window_start,
                 window_end,
                 gym_tz,
@@ -260,7 +301,7 @@ class ClassesExpander:
                 return self._cancelled_display(
                     gym_class,
                     original_date,
-                    default_instructor,
+                    slot,
                     gym_tz,
                     include_cancelled,
                     cancelling_range_id=covering.exception_id,
@@ -268,13 +309,13 @@ class ClassesExpander:
             instructor = (
                 covering.new_instructor_id
                 if covering.new_instructor_id is not None
-                else default_instructor
+                else slot.instructor_id
             )
             return self._build(
                 original_date,
-                gym_class.class_time,
+                slot.time,
                 original_date,
-                gym_class.class_time,
+                slot.time,
                 gym_class.duration_minutes,
                 instructor,
                 False,
@@ -283,11 +324,11 @@ class ClassesExpander:
 
         return self._build(
             original_date,
-            gym_class.class_time,
+            slot.time,
             original_date,
-            gym_class.class_time,
+            slot.time,
             gym_class.duration_minutes,
-            default_instructor,
+            slot.instructor_id,
             False,
             gym_tz,
         )
@@ -296,7 +337,7 @@ class ClassesExpander:
         self,
         gym_class: ExpanderClass,
         original_date: date,
-        default_instructor: UUID | None,
+        slot: ClassSlot,
         gym_tz: str,
         include_cancelled: bool,
         cancelling_range_id: UUID | None = None,
@@ -305,7 +346,7 @@ class ClassesExpander:
 
         Returns None (the default drop) unless ``include_cancelled`` is set, in
         which case the occurrence is emitted on its ``original_date`` with the
-        class's default time / duration / instructor and ``is_cancelled=True``.
+        slot's default time / instructor and ``is_cancelled=True``.
         ``cancelling_range_id`` is set by the caller ONLY for a range cancel
         (never an instance cancel) and carried onto the emitted occurrence.
         """
@@ -313,11 +354,11 @@ class ClassesExpander:
             return None
         return self._build(
             original_date,
-            gym_class.class_time,
+            slot.time,
             original_date,
-            gym_class.class_time,
+            slot.time,
             gym_class.duration_minutes,
-            default_instructor,
+            slot.instructor_id,
             False,
             gym_tz,
             is_cancelled=True,
@@ -328,14 +369,14 @@ class ClassesExpander:
         self,
         gym_class: ExpanderClass,
         original_date: date,
+        slot: ClassSlot,
         instance: ExpanderInstanceException,
-        default_instructor: UUID | None,
         window_start: date,
         window_end: date,
         gym_tz: str,
         include_cancelled: bool,
     ) -> EffectiveOccurrence | None:
-        """Apply an authoritative single-date instance exception.
+        """Apply an authoritative single-slot instance exception.
 
         A cancellation drops the occurrence (or, when ``include_cancelled`` is
         set, emits it flagged on its original date for display). A reschedule
@@ -343,14 +384,14 @@ class ClassesExpander:
         original date stays suppressed regardless). Overrides use explicit
         ``is not None`` checks so ``time(0, 0)`` / ``0`` are never mistaken for
         "absent". When no instructor override is given, the default is the
-        ORIGINAL date's weekday instructor — a moved occurrence keeps its slot's
+        ORIGINAL slot's instructor — a moved occurrence keeps its slot's
         instructor (the seed's deliberate choice).
         """
         if instance.is_cancelled:
             return self._cancelled_display(
                 gym_class,
                 original_date,
-                default_instructor,
+                slot,
                 gym_tz,
                 include_cancelled,
             )
@@ -365,7 +406,7 @@ class ClassesExpander:
         class_time = (
             instance.new_class_time
             if instance.new_class_time is not None
-            else gym_class.class_time
+            else slot.time
         )
         duration = (
             instance.new_duration_minutes
@@ -375,11 +416,11 @@ class ClassesExpander:
         instructor = (
             instance.new_instructor_id
             if instance.new_instructor_id is not None
-            else default_instructor
+            else slot.instructor_id
         )
         return self._build(
             original_date,
-            gym_class.class_time,
+            slot.time,
             effective_date,
             class_time,
             duration,
@@ -443,31 +484,47 @@ class ClassesExpander:
             cancelling_range_id=cancelling_range_id,
         )
 
-    # -- weekday lookups (mirror the seed) -------------------------------
+    # -- slot lookups (mirror the seed) -----------------------------------
 
     @staticmethod
     def _day_short(when: date) -> str:
         """Map a date to its short weekday name (sun..sat), like the seed."""
         return _DAY_SHORT[(when.weekday() + 1) % 7]
 
+    def _slots_for(
+        self,
+        gym_class: ExpanderClass,
+        when: date,
+    ) -> list[ClassSlot]:
+        """``when``'s slot list — the weekday key (weekly) or ``"all"``."""
+        key = (
+            self._day_short(when)
+            if gym_class.recurring_unit == RecurringUnit.weekly
+            else ALL_DAYS_KEY
+        )
+        return gym_class.weekday_slots.get(key, [])
+
     def _day_flag(self, gym_class: ExpanderClass, when: date) -> bool:
-        """Whether the class's flag for ``when``'s weekday is set."""
-        return bool(getattr(gym_class, self._day_short(when)))
+        """Whether the class occurs on ``when``'s weekday (non-empty key)."""
+        return bool(gym_class.weekday_slots.get(self._day_short(when)))
 
     def instructor_for(
         self,
         gym_class: ExpanderClass,
         when: date,
+        slot_time: time,
     ) -> UUID | None:
-        """The class's default instructor for ``when``'s weekday slot.
+        """The default instructor of ``when``'s slot at ``slot_time``.
 
         Public (not just an internal recurrence-resolution step): the class
         edit paths (``ClassesUndoService.resolve_default_instructor``) reuse
-        this directly to compute the weekday-default fallback for an override
+        this directly to compute the slot-default fallback for an override
         upsert / reschedule that omits an instructor override, so that
-        fallback can never drift from the expander's own weekday-default
-        semantics (see ``_resolve_instance``).
+        fallback can never drift from the expander's own slot-default
+        semantics (see ``_resolve_instance``). Returns None both for an
+        unassigned slot and for a (date, time) that is not a slot at all.
         """
-        return getattr(
-            gym_class, f"{self._day_short(when)}{_INSTRUCTOR_SUFFIX}"
-        )
+        for slot in self._slots_for(gym_class, when):
+            if slot.time == slot_time:
+                return slot.instructor_id
+        return None

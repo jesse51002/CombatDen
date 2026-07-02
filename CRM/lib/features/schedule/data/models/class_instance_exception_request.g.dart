@@ -10,6 +10,7 @@ Map<String, dynamic> _$ClassInstanceExceptionRequestToJson(
   ClassInstanceExceptionRequest instance,
 ) => <String, dynamic>{
   'original_date': instance.originalDate,
+  'original_time': instance.originalTime,
   'is_cancelled': instance.isCancelled,
   'new_class_time': ?instance.newClassTime,
   'new_duration_minutes': ?instance.newDurationMinutes,

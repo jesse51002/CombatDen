@@ -1,12 +1,13 @@
 """CRUD over ``class_instance_exceptions`` and ``class_range_exceptions``.
 
-Instance exceptions upsert (unique per ``(class_id, original_date)``); range
-exceptions insert. An exception binds to the occurrence's ORIGINAL slot — the
-identity key attendance and sign-ups store — so overrides and reschedules
-never re-key anything. Override fallbacks (time / duration / weekday
-instructor) resolve against the version OWNING ``original_date``'s slot: a
-retro edit on a date from an older schedule version falls back to THAT
-version's defaults, never the current one's.
+Instance exceptions upsert (unique per ``(class_id, original_date,
+original_time)`` — one exception per exact SLOT, so two same-day occurrences
+of one class are overridden independently); range exceptions insert. An
+exception binds to the occurrence's ORIGINAL slot — the identity key
+attendance and sign-ups store — so overrides and reschedules never re-key
+anything. Override fallbacks (duration / slot instructor) resolve against the
+version OWNING the slot: a retro edit on a slot from an older schedule
+version falls back to THAT version's defaults, never the current one's.
 
 A reschedule (``new_date`` set) is the CRM's single ``POST
 /exceptions/instance`` move: it delegates the time-aware conflict check and
@@ -25,36 +26,39 @@ the right instant.
 
 A CANCEL range (``create_range_exception`` with ``is_cancelled=True``)
 additionally tears down the range's covered occurrences in the SAME
-transaction as the range insert (``_write_range_and_teardown``): a candidate
-date (one still carrying a live reservation or attendance row) is LEFT ALONE
-when a non-cancelled instance exception governs it instead — same-date
-override or moved elsewhere, either way the range never applies to a date
-with ANY instance exception on it — or when an earlier-created covering
-range already renders it; otherwise it is torn down
-(``ClassesUndoService.teardown_occurrence``) ONLY when its original slot
-instant is still at/after now. An already-run occurrence keeps its
-attendance even when covered by a retroactive range cancel — deliberately
-asymmetric with the future case: mass-clawing-back historical points from
-one bulk range action is a shock hazard, so a gym that wants that cancels
-the single occurrence instead (which tears down regardless of instant). An
-instructor-substitution range (``is_cancelled=False``) never tears anything
-down.
+transaction as the range insert (``_write_range_and_teardown``). The teardown
+runs per SLOT — a range covers every slot of its covered dates, and each
+candidate slot (one still carrying a live reservation or attendance row) is
+decided independently: it is LEFT ALONE when a non-cancelled instance
+exception governs that exact slot instead — same-slot override or moved
+elsewhere, either way the range never applies to a slot with ANY instance
+exception on it — or when an earlier-created covering range already renders
+it; otherwise it is torn down (``ClassesUndoService.teardown_occurrence``)
+ONLY when its original slot instant is still at/after now. An already-run
+occurrence keeps its attendance even when covered by a retroactive range
+cancel — deliberately asymmetric with the future case: mass-clawing-back
+historical points from one bulk range action is a shock hazard, so a gym
+that wants that cancels the single occurrence instead (which tears down
+regardless of instant). A multi-slot day under a covering cancel can thus
+split: the 06:00 that already ran keeps its attendance while the upcoming
+18:30 is torn down. An instructor-substitution range (``is_cancelled=False``)
+never tears anything down.
 
 ``update_range_exception`` moves an existing range's dates
 (``start_date``/``end_date`` only — ``is_cancelled``/``new_instructor_id``
 are fixed at creation). For a CANCEL range this re-runs the SAME teardown
 pass over the range's NEW coverage, atomically with the date UPDATE — since
-``_range_cancel_candidates`` only ever returns dates that still carry a live
+``_range_cancel_candidates`` only ever returns slots that still carry a live
 reservation/attendance row, re-running it over the full new window is
-naturally idempotent (an already-torn-down date has nothing left to find). A
-date that falls OUT of the new coverage is never explicitly restored — it
+naturally idempotent (an already-torn-down slot has nothing left to find). A
+slot that falls OUT of the new coverage is never explicitly restored — it
 simply stops being covered on the next expansion. An instructor-substitution
 range's dates just move, no teardown. ``delete_range_exception`` removes a
-range outright; its covered dates revive the same passive way.
+range outright; its covered slots revive the same passive way.
 """
 
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -139,24 +143,26 @@ class ClassesExceptionsService:
         gym_id: UUID,
         request: ClassInstanceExceptionUpsertRequest,
     ) -> ClassInstanceExceptionResponse:
-        """Write the plain (non-reschedule) override for ``original_date``.
+        """Write the plain (non-reschedule) override for the exact
+        ``(original_date, original_time)`` slot.
 
-        When the date's slot exists (the recurrence emits it) and the
-        override doesn't cancel it, the override's effective start instant —
-        ``new_class_time`` when set, else the OWNING version's slot time,
-        interpreted in that version's frozen timezone — is re-synced onto the
+        When the slot exists (the recurrence emits it) and the override
+        doesn't cancel it, the override's effective start instant —
+        ``new_class_time`` when set, else the slot's own time, interpreted in
+        the owning version's frozen timezone — is re-synced onto the
         occurrence's attendance rows in the SAME transaction as the exception
-        write (a no-op when nobody attended). A CANCEL (``is_cancelled=True``,
-        the path the CRM's "Cancel this class" uses) runs the SAME teardown
-        as the dedicated cancel endpoint — attendance reversed with points
-        clawed back + the occurrence's sign-ups deleted — via the undo
-        service's shared ``teardown_occurrence``, in the same transaction, so
-        the two cancel entry points can never diverge. An override on a date
-        the recurrence never emits is a plain, inert upsert.
+        write (a no-op when nobody attended; a same-day sibling slot's rows
+        are never touched). A CANCEL (``is_cancelled=True``, the path the
+        CRM's "Cancel this class" uses) runs the SAME teardown as the
+        dedicated cancel endpoint — attendance reversed with points clawed
+        back + the occurrence's sign-ups deleted — via the undo service's
+        shared ``teardown_occurrence``, in the same transaction, so the two
+        cancel entry points can never diverge. An override on a slot the
+        recurrence never emits is a plain, inert upsert.
         """
         await self._assert_class_exists(class_id)
         owning = await self._undo_service.owning_version(
-            class_id, request.original_date
+            class_id, request.original_date, request.original_time
         )
 
         sql = load_sql(SQL_DIR / "classes_instance_exception_upsert.sql")
@@ -165,13 +171,18 @@ class ClassesExceptionsService:
             async with self._db_pool.session() as session:
                 if request.is_cancelled:
                     await self._undo_service.teardown_occurrence(
-                        session, class_id, gym_id, request.original_date
+                        session,
+                        class_id,
+                        gym_id,
+                        request.original_date,
+                        request.original_time,
                     )
                 elif owning is not None:
                     await self._undo_service.sync_attendance_occurred_at(
                         session,
                         class_id,
                         request.original_date,
+                        request.original_time,
                         self._effective_start(owning, request),
                     )
                 row = (
@@ -350,20 +361,20 @@ class ClassesExceptionsService:
         start_date: date,
         end_date: date,
     ) -> None:
-        """Tear down every candidate date in ``[start_date, end_date]`` the
+        """Tear down every candidate SLOT in ``[start_date, end_date]`` the
         range actually cancels — see the module docstring for the
-        precedence + past-instant rules. A no-op when no candidate date
+        precedence + past-instant rules. A no-op when no candidate slot
         (one still carrying a live reservation or attendance row) exists."""
-        candidate_dates = await self._range_cancel_candidates(
+        candidate_slots = await self._range_cancel_candidates(
             session, class_id, start_date, end_date
         )
-        if not candidate_dates:
+        if not candidate_slots:
             return
         versions = await self._undo_service.load_versions(class_id)
         now = datetime.now(UTC)
-        for day in candidate_dates:
+        for day, slot_time in candidate_slots:
             await self._teardown_if_still_cancelled(
-                session, class_id, gym_id, versions, day, now
+                session, class_id, gym_id, versions, day, slot_time, now
             )
 
     async def _teardown_if_still_cancelled(
@@ -373,29 +384,30 @@ class ClassesExceptionsService:
         gym_id: UUID,
         versions: list[ExpanderScheduleVersion],
         day: date,
+        slot_time: time,
         now: datetime,
     ) -> None:
-        """Resolve one candidate date and tear it down only when the range
+        """Resolve one candidate slot and tear it down only when the range
         genuinely cancels it AND its original slot instant hasn't happened
         yet (INSTANT-based, never day-based — see the module docstring)."""
         exception_row = await self._undo_service.exception_on(
-            class_id, day, session=session
+            class_id, day, slot_time, session=session
         )
         if exception_row is not None:
-            return  # an instance exception governs this date, not the range
+            return  # an instance exception governs this slot, not the range
         occurrences = await self._undo_service.expand_day(
             session, class_id, versions, day
         )
-        if occurrences:
+        if any(occ.original_time == slot_time for occ in occurrences):
             return  # an earlier-created covering range still renders it
-        slot = self._undo_service.owning_slot(versions, day)
+        slot = self._undo_service.owning_slot(versions, day, slot_time)
         if slot is None:
-            return  # not a recurrence date under the current versions
+            return  # not a recurrence slot under the current versions
         _, bare_occurrence = slot
         if bare_occurrence.occurred_at < now:
             return  # already ran -- historical attendance is never wiped
         await self._undo_service.teardown_occurrence(
-            session, class_id, gym_id, day
+            session, class_id, gym_id, day, slot_time
         )
 
     async def _range_cancel_candidates(
@@ -404,10 +416,11 @@ class ClassesExceptionsService:
         class_id: UUID,
         start_date: date,
         end_date: date,
-    ) -> list[date]:
-        """Distinct ``original_date``s in ``[start_date, end_date]`` still
-        carrying a live reservation or attendance row for this class — the
-        only dates a range cancel could possibly need to tear down."""
+    ) -> list[tuple[date, time]]:
+        """Distinct ``(original_date, original_time)`` slots in
+        ``[start_date, end_date]`` still carrying a live reservation or
+        attendance row for this class — the only slots a range cancel could
+        possibly need to tear down."""
         rows = (
             (
                 await session.execute(
@@ -427,7 +440,9 @@ class ClassesExceptionsService:
             .mappings()
             .all()
         )
-        return sorted(row["original_date"] for row in rows)
+        return sorted(
+            (row["original_date"], row["original_time"]) for row in rows
+        )
 
     async def list_instance_exceptions(
         self,
@@ -486,22 +501,22 @@ class ClassesExceptionsService:
         await self._assert_class_exists(class_id)
         versions = await self._undo_service.load_versions(class_id)
         owning = await self._undo_service.owning_version(
-            class_id, request.original_date
+            class_id, request.original_date, request.original_time
         )
         if owning is None:
             raise ValueError(
-                f"No class occurrence on {request.original_date} to "
-                f"reschedule"
+                f"No class occurrence on {request.original_date} at "
+                f"{request.original_time} to reschedule"
             )
         existing = await self._undo_service.exception_on(
-            class_id, request.original_date
+            class_id, request.original_date, request.original_time
         )
 
         new_date = request.new_date
         effective_time = (
             request.new_class_time
             if request.new_class_time is not None
-            else owning.class_time
+            else request.original_time
         )
         new_occurred_at = datetime.combine(
             new_date, effective_time, tzinfo=ZoneInfo(owning.timezone)
@@ -511,6 +526,7 @@ class ClassesExceptionsService:
             class_id,
             versions,
             request.original_date,
+            request.original_time,
             new_date,
             effective_time,
             new_occurred_at,
@@ -521,7 +537,12 @@ class ClassesExceptionsService:
         # handling — a future-target wipe would reverse early check-ins over
         # a no-op.
         landing_unchanged = self._undo_service.is_landing_unchanged(
-            owning, existing, request.original_date, new_date, new_occurred_at
+            owning,
+            existing,
+            request.original_date,
+            request.original_time,
+            new_date,
+            new_occurred_at,
         )
         # INSTANT-based, never day-based: a move to later TODAY is still a
         # move to a class that hasn't happened — its check-ins must wipe.
@@ -559,6 +580,7 @@ class ClassesExceptionsService:
                         class_id,
                         gym_id,
                         request.original_date,
+                        request.original_time,
                         new_occurred_at,
                         is_future,
                     )
@@ -587,12 +609,12 @@ class ClassesExceptionsService:
         request: ClassInstanceExceptionUpsertRequest,
     ) -> datetime:
         """The override's effective start instant: ``new_class_time`` when
-        set, else the owning version's slot time — in the owning version's
+        set, else the slot's own ``original_time`` — in the owning version's
         frozen timezone."""
         effective_time = (
             request.new_class_time
             if request.new_class_time is not None
-            else owning.class_time
+            else request.original_time
         )
         return datetime.combine(
             request.original_date,
@@ -619,6 +641,7 @@ class ClassesExceptionsService:
             "class_id": str(class_id),
             "gym_id": str(gym_id),
             "original_date": request.original_date,
+            "original_time": request.original_time,
             "is_cancelled": request.is_cancelled,
             "new_class_time": request.new_class_time,
             "new_duration_minutes": request.new_duration_minutes,

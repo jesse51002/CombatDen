@@ -64,11 +64,16 @@ class ClassAttendeeRoster extends StatefulWidget {
   /// this is what addresses the roster read + the remove/cancel actions.
   final DateTime occurrenceDate;
 
+  /// The occurrence's IDENTITY time — the other half of its identity key
+  /// (several slots per day are legal).
+  final String occurrenceTime;
+
   const ClassAttendeeRoster({
     super.key,
     required this.gymId,
     required this.classId,
     required this.occurrenceDate,
+    required this.occurrenceTime,
   });
 
   @override
@@ -96,6 +101,7 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         widget.gymId,
         widget.classId,
         widget.occurrenceDate,
+        widget.occurrenceTime,
       );
 
   void _refetch() => setState(() => _future = _fetch());
@@ -116,6 +122,7 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         widget.gymId,
         widget.classId,
         widget.occurrenceDate,
+        widget.occurrenceTime,
         attendee.memberId,
       );
       if (!mounted) return;
@@ -144,6 +151,7 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
         widget.gymId,
         widget.classId,
         widget.occurrenceDate,
+        widget.occurrenceTime,
         attendee.memberId,
       );
       if (!mounted) return;

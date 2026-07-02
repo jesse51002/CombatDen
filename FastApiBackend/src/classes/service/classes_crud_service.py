@@ -8,25 +8,29 @@ mints a NEW version (running the version-change wipe) via
 ``ClassesVersionsService``, both halves in ONE transaction. Soft delete flips
 the flags AND runs the future-keyed wipe (a deleted class produces no future
 slots). Reads flatten identity + the CURRENT version
-(``gym_class_schedules_current``) with instructor names joined from
-``gym_employees``, so the response shape is the same flat class the CRM form
-edits. The JSONB / enum columns are cast functionally — always
-``CAST(:p AS …)``, never a ``::`` cast on a bind param, per the repo SQL
-rules.
+(``gym_class_schedules_current``); each ``weekday_slots`` slot's instructor
+resolves to a display name via ONE ``gym_employees`` lookup merged in Python
+(no per-slot joins), so the response shape is the same flat class the CRM
+form edits. Slot-shape validation (weekly needs a weekday, no dupe times,
+key-per-unit rules) lives in the shared Pydantic canonicalizer on
+``GymClassScheduleFields`` — a bad shape 422s before this service runs. The
+JSONB / enum columns are cast functionally — always ``CAST(:p AS …)``, never
+a ``::`` cast on a bind param, per the repo SQL rules.
 """
 
 import json
 import logging
 from uuid import UUID
 
-from schema.gym_class import RecurringUnit
 from schema.immutable_columns import GYM_CLASSES as GYM_CLASSES_IMMUTABLE
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
 from src.classes.schema.classes_crud_schema import (
+    ClassSlotResponse,
     GymClassCreateRequest,
     GymClassIdentityUpdateData,
     GymClassListResponse,
@@ -42,19 +46,15 @@ from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
 
-# Per-weekday flag column names, in week order.
-_DAY_FLAGS: tuple[str, ...] = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 # Identity columns whose UPDATE SET assignment needs a functional cast.
 _CAST_COLUMNS: dict[str, str] = {
     "allowed_plan_ids": "JSONB",
 }
 _BAD_SCHEDULE_MSG = (
-    "Invalid class schedule: a weekly class must select at least one "
-    "weekday, end_date must not precede start_date, and every instructor "
-    "must be an employee of this gym."
+    "Invalid class schedule: end_date must not precede start_date, and "
+    "every slot instructor must be an employee of this gym."
 )
 _BAD_IDENTITY_MSG = "Invalid class fields."
-_WEEKLY_NEEDS_DAY_MSG = "A weekly class must select at least one weekday"
 _CLASS_NOT_FOUND_MSG = "Class not found"
 
 
@@ -80,7 +80,6 @@ class ClassesCrudService:
                 include=set(GymClassScheduleFields.model_fields)
             )
         )
-        self._validate_weekly(shape)
 
         sql = load_sql(SQL_DIR / "classes_create.sql")
         params = self._identity_create_params(request)
@@ -123,8 +122,6 @@ class ClassesCrudService:
             validate_mutable_columns(
                 GYM_CLASSES_IMMUTABLE, set(identity_fields.keys())
             )
-        if schedule is not None:
-            self._validate_weekly(schedule)
 
         gym_id = await self._gym_id_of(class_id)
         try:
@@ -194,8 +191,11 @@ class ClassesCrudService:
                 .mappings()
                 .all()
             )
+            names = await self._instructor_names(
+                session, [dict(row) for row in rows]
+            )
         return GymClassListResponse(
-            items=[GymClassResponse(**dict(row)) for row in rows],
+            items=[self._to_response(dict(row), names) for row in rows],
         )
 
     # -- helpers ---------------------------------------------------------
@@ -214,9 +214,67 @@ class ClassesCrudService:
                 .mappings()
                 .fetchone()
             )
-        if not row:
-            raise ValueError(_CLASS_NOT_FOUND_MSG)
-        return GymClassResponse(**dict(row))
+            if not row:
+                raise ValueError(_CLASS_NOT_FOUND_MSG)
+            names = await self._instructor_names(session, [dict(row)])
+        return self._to_response(dict(row), names)
+
+    async def _instructor_names(
+        self,
+        session: AsyncSession,
+        rows: list[dict],
+    ) -> dict[str, str]:
+        """One employee-name lookup for every distinct instructor id across
+        the rows' ``weekday_slots`` — the merge replaces the old seven
+        per-weekday joins."""
+        ids = {
+            slot["instructor_id"]
+            for row in rows
+            for slots in row["weekday_slots"].values()
+            for slot in slots
+            if slot["instructor_id"] is not None
+        }
+        if not ids:
+            return {}
+        name_rows = (
+            (
+                await session.execute(
+                    text(
+                        load_sql(SQL_DIR / "classes_instructor_names.sql")
+                    ),
+                    {"employee_ids": [str(employee_id) for employee_id in ids]},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return {
+            str(name_row["employee_id"]): name_row["instructor_name"]
+            for name_row in name_rows
+        }
+
+    @staticmethod
+    def _to_response(row: dict, names: dict[str, str]) -> GymClassResponse:
+        """Assemble the response: the flat row plus ``weekday_slots`` with
+        each slot's instructor name merged in."""
+        weekday_slots = {
+            day: [
+                ClassSlotResponse(
+                    time=slot["time"],
+                    instructor_id=slot["instructor_id"],
+                    instructor_name=(
+                        names.get(str(slot["instructor_id"]))
+                        if slot["instructor_id"] is not None
+                        else None
+                    ),
+                )
+                for slot in slots
+            ]
+            for day, slots in row["weekday_slots"].items()
+        }
+        return GymClassResponse(
+            **{**row, "weekday_slots": weekday_slots}
+        )
 
     async def _gym_id_of(self, class_id: UUID) -> UUID:
         """The class's gym (a live class only) — 404 when absent/deleted."""
@@ -256,15 +314,6 @@ class ClassesCrudService:
         )
         if not row:
             raise ValueError(_CLASS_NOT_FOUND_MSG)
-
-    @staticmethod
-    def _validate_weekly(shape: GymClassScheduleFields) -> None:
-        """Raise if a weekly shape selects no weekday (the DB CHECK, up
-        front). The shape is always complete, so no merge is needed."""
-        if shape.recurring_unit == RecurringUnit.weekly and not any(
-            getattr(shape, flag) for flag in _DAY_FLAGS
-        ):
-            raise ValueError(_WEEKLY_NEEDS_DAY_MSG)
 
     @staticmethod
     def _assignment(column: str) -> str:

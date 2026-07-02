@@ -10,6 +10,7 @@ import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/data/class_time_format.dart';
+import 'package:crm/features/schedule/data/models/class_slot.dart';
 import 'package:crm/features/schedule/data/models/gym_class_create_request.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_update_request.dart';
@@ -23,11 +24,26 @@ import 'package:crm/features/schedule/presentation/widgets/form/class_details_se
 import 'package:crm/features/schedule/presentation/widgets/form/class_form_actions.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_rewards_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_schedule_section.dart';
+import 'package:crm/features/schedule/presentation/widgets/form/slot_draft.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/centered_processing_view.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
+
+/// Day-index (0=Sun..6=Sat) -> the `weekday_slots` key name the backend
+/// expects. Mirrors `WEEKDAY_SLOT_KEYS` in
+/// `../FastApiBackend/src/classes/schema/classes_expander_schema.py`.
+const List<String> _dayKeyNames = [
+  'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat',
+];
+
+/// Full weekday names for validation messages, index-aligned with
+/// [_dayKeyNames].
+const List<String> _dayFullNames = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday',
+  'Thursday', 'Friday', 'Saturday',
+];
 
 /// Which mutation the form is running (drives the success copy).
 enum _ClassAction { create, update, delete }
@@ -72,12 +88,15 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   final _durationController = TextEditingController(text: '60');
   final _intervalController = TextEditingController(text: '1');
 
-  TimeOfDay? _classTime;
   RecurringUnit _recurringUnit = RecurringUnit.weekly;
   DateTime? _startDate;
   DateTime? _endDate;
-  Set<int> _selectedDays = {};
-  Map<int, String?> _instructorByDay = {};
+
+  /// Day index (0=Sun..6=Sat) -> its slot drafts (weekly), PLUS the
+  /// [kAllDaysSlotKey] bucket (daily/monthly) — both may be populated at
+  /// once so switching [_recurringUnit] never loses the other mode's
+  /// already-entered slots; only the relevant half is validated/submitted.
+  Map<int, List<SlotDraft>> _daySlots = {};
   String? _imageUrl;
   bool _capacityEnabled = false;
 
@@ -113,32 +132,37 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     _capacityController.text = c.maxCapacity?.toString() ?? '';
     _durationController.text = c.durationMinutes.toString();
     _intervalController.text = c.recurringInterval.toString();
-    _classTime = parseHmsTime(c.classTime);
     _recurringUnit = c.recurringUnit == RecurringUnit.unknown
         ? RecurringUnit.weekly
         : c.recurringUnit;
     _startDate = _dateOnly(c.startDate);
     _endDate = c.endDate == null ? null : _dateOnly(c.endDate!);
-    _selectedDays = {
-      if (c.sun) 0,
-      if (c.mon) 1,
-      if (c.tue) 2,
-      if (c.wed) 3,
-      if (c.thu) 4,
-      if (c.fri) 5,
-      if (c.sat) 6,
-    };
-    _instructorByDay = {
-      0: c.sunInstructorId,
-      1: c.monInstructorId,
-      2: c.tueInstructorId,
-      3: c.wedInstructorId,
-      4: c.thuInstructorId,
-      5: c.friInstructorId,
-      6: c.satInstructorId,
-    };
+    _daySlots = _draftsFromWeekdaySlots(c.weekdaySlots);
     _imageUrl = c.imageUrl;
     _allowedPlanIds = c.allowedPlanIds;
+  }
+
+  /// Maps a backend `weekday_slots` response shape onto the form's draft map
+  /// — `"all"` -> [kAllDaysSlotKey], `sun`..`sat` -> 0..6.
+  static Map<int, List<SlotDraft>> _draftsFromWeekdaySlots(
+    Map<String, List<ClassSlot>> weekdaySlots,
+  ) {
+    final result = <int, List<SlotDraft>>{};
+    for (final entry in weekdaySlots.entries) {
+      final drafts = entry.value
+          .map((s) => SlotDraft(
+                time: parseHmsTime(s.time),
+                instructorId: s.instructorId,
+              ))
+          .toList();
+      if (entry.key == 'all') {
+        result[kAllDaysSlotKey] = drafts;
+        continue;
+      }
+      final idx = _dayKeyNames.indexOf(entry.key);
+      if (idx != -1) result[idx] = drafts;
+    }
+    return result;
   }
 
   @override
@@ -152,13 +176,48 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     super.dispose();
   }
 
+  /// Toggling a day ON adds it with one empty slot draft; OFF removes it
+  /// (and every slot it held).
   void _toggleDay(int day) {
     setState(() {
-      if (_selectedDays.contains(day)) {
-        _selectedDays.remove(day);
-        _instructorByDay.remove(day);
+      if (_daySlots.containsKey(day)) {
+        _daySlots.remove(day);
       } else {
-        _selectedDays.add(day);
+        _daySlots[day] = [SlotDraft()];
+      }
+    });
+  }
+
+  void _addSlot(int day) {
+    setState(() => _daySlots.putIfAbsent(day, () => []).add(SlotDraft()));
+  }
+
+  void _removeSlot(int day, int index) {
+    setState(() => _daySlots[day]?.removeAt(index));
+  }
+
+  void _onSlotTimeChanged(int day, int index, TimeOfDay time) {
+    setState(() => _daySlots[day]![index].time = time);
+  }
+
+  void _onSlotInstructorChanged(int day, int index, String? instructorId) {
+    setState(() => _daySlots[day]![index].instructorId = instructorId);
+  }
+
+  /// Switching recurrence unit doesn't clear the other mode's slots (see
+  /// [_daySlots]) — but the FIRST time a daily/monthly unit is selected and
+  /// its `"all"` bucket is still empty, seed one blank slot so the "Times"
+  /// section isn't just an empty "Add time" prompt (mirrors [_toggleDay]'s
+  /// convenience for a weekly day).
+  void _onUnitChanged(RecurringUnit? unit) {
+    if (unit == null) return;
+    setState(() {
+      _recurringUnit = unit;
+      if (unit != RecurringUnit.weekly) {
+        final all = _daySlots[kAllDaysSlotKey];
+        if (all == null || all.isEmpty) {
+          _daySlots[kAllDaysSlotKey] = [SlotDraft()];
+        }
       }
     });
   }
@@ -169,11 +228,33 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  bool _day(int i) => _selectedDays.contains(i);
+  /// The `weekday_slots` shape this form would currently submit — sun..sat
+  /// keys (weekly) or the reserved "all" key (daily/monthly), each list only
+  /// the slots with a picked time. Shared by [_buildCreate]/[_buildUpdate]
+  /// and [_scheduleChanged]'s diff.
+  Map<String, List<ClassSlot>> _weekdaySlotsForRequest() {
+    final result = <String, List<ClassSlot>>{};
+    if (_safeUnit == RecurringUnit.weekly) {
+      for (final entry in _daySlots.entries) {
+        if (entry.key < 0 || entry.key > 6) continue;
+        final slots = _slotsForRequest(entry.value);
+        if (slots.isNotEmpty) result[_dayKeyNames[entry.key]] = slots;
+      }
+    } else {
+      final slots = _slotsForRequest(_daySlots[kAllDaysSlotKey] ?? const []);
+      if (slots.isNotEmpty) result['all'] = slots;
+    }
+    return result;
+  }
 
-  /// The instructor for day [i] — only when that day is active.
-  String? _instructorFor(int i) =>
-      _selectedDays.contains(i) ? _instructorByDay[i] : null;
+  static List<ClassSlot> _slotsForRequest(List<SlotDraft> drafts) => [
+        for (final d in drafts)
+          if (d.time != null)
+            ClassSlot(
+              time: formatTimeOfDayHms(d.time!),
+              instructorId: d.instructorId,
+            ),
+      ];
 
   String? _descriptionOrNull() {
     final t = _descriptionController.text.trim();
@@ -194,15 +275,44 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   /// Required-field check; returns a message to show inline, or null if valid.
   String? _validate() {
     if (_nameController.text.trim().isEmpty) return 'Enter a class name.';
-    if (_classTime == null) return 'Pick a start time.';
     if (_startDate == null) return 'Pick a start date.';
-    if (_selectedDays.isEmpty) return 'Select at least one day.';
     final duration = int.tryParse(_durationController.text.trim());
     if (duration == null || duration <= 0) return 'Enter a duration above 0.';
     final interval = int.tryParse(_intervalController.text.trim());
     if (interval == null || interval <= 0) return 'Enter an interval above 0.';
     final points = int.tryParse(_pointsController.text.trim());
     if (points == null || points <= 0) return 'Enter points above 0.';
+    return _validateSchedule();
+  }
+
+  /// Every active day (weekly) or the single "all" bucket (daily/monthly)
+  /// needs >=1 slot with a picked time, and no two slots on the same day may
+  /// share a time — the backend 422s on either violation, but a clear inline
+  /// error beats waiting for that round trip.
+  String? _validateSchedule() {
+    if (_safeUnit != RecurringUnit.weekly) {
+      return _validateSlots(_daySlots[kAllDaysSlotKey] ?? const [], 'Times');
+    }
+    final activeDays = _daySlots.keys.where((k) => k >= 0 && k <= 6).toList()
+      ..sort();
+    if (activeDays.isEmpty) return 'Select at least one day.';
+    for (final day in activeDays) {
+      final err =
+          _validateSlots(_daySlots[day] ?? const [], _dayFullNames[day]);
+      if (err != null) return err;
+    }
+    return null;
+  }
+
+  static String? _validateSlots(List<SlotDraft> drafts, String label) {
+    final times = [
+      for (final d in drafts)
+        if (d.time != null) formatTimeOfDayHms(d.time!),
+    ];
+    if (times.isEmpty) return '$label needs at least one time.';
+    if (times.toSet().length != times.length) {
+      return '$label has two slots at the same time.';
+    }
     return null;
   }
 
@@ -210,24 +320,10 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         gymId: gymId,
         className: _nameController.text.trim(),
         classDescription: _descriptionOrNull(),
-        classTime: formatTimeOfDayHms(_classTime!),
         durationMinutes: int.parse(_durationController.text.trim()),
         recurringUnit: _safeUnit,
         recurringInterval: int.parse(_intervalController.text.trim()),
-        sun: _day(0),
-        mon: _day(1),
-        tue: _day(2),
-        wed: _day(3),
-        thu: _day(4),
-        fri: _day(5),
-        sat: _day(6),
-        sunInstructorId: _instructorFor(0),
-        monInstructorId: _instructorFor(1),
-        tueInstructorId: _instructorFor(2),
-        wedInstructorId: _instructorFor(3),
-        thuInstructorId: _instructorFor(4),
-        friInstructorId: _instructorFor(5),
-        satInstructorId: _instructorFor(6),
+        weekdaySlots: _weekdaySlotsForRequest(),
         startDate: _dateParam.format(_startDate!),
         endDate: _endDate == null ? null : _dateParam.format(_endDate!),
         maxCapacity: _capacityOrNull(),
@@ -250,39 +346,24 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
           pointsWorth: int.parse(_pointsController.text.trim()),
         ),
         schedule: GymClassScheduleFields(
-          classTime: formatTimeOfDayHms(_classTime!),
           durationMinutes: int.parse(_durationController.text.trim()),
           recurringUnit: _safeUnit,
           recurringInterval: int.parse(_intervalController.text.trim()),
-          sun: _day(0),
-          mon: _day(1),
-          tue: _day(2),
-          wed: _day(3),
-          thu: _day(4),
-          fri: _day(5),
-          sat: _day(6),
-          sunInstructorId: _instructorFor(0),
-          monInstructorId: _instructorFor(1),
-          tueInstructorId: _instructorFor(2),
-          wedInstructorId: _instructorFor(3),
-          thuInstructorId: _instructorFor(4),
-          friInstructorId: _instructorFor(5),
-          satInstructorId: _instructorFor(6),
+          weekdaySlots: _weekdaySlotsForRequest(),
           startDate: _dateParam.format(_startDate!),
           endDate: _endDate == null ? null : _dateParam.format(_endDate!),
         ),
       );
 
-  /// Whether any schedule-SHAPE field differs from the loaded class — time,
-  /// duration, recurrence unit/interval, weekday flags, per-day instructors,
-  /// start/end date. Identity-only edits (name, description, capacity,
-  /// points, image, plans) return false, so they submit without the
-  /// going-forward warning. Only meaningful after [_validate] passes (the
-  /// numeric parses assume valid fields).
+  /// Whether any schedule-SHAPE field differs from the loaded class —
+  /// duration, recurrence unit/interval, the weekday_slots map (day-set,
+  /// times, per-slot instructors), start/end date. Identity-only edits
+  /// (name, description, capacity, points, image, plans) return false, so
+  /// they submit without the going-forward warning. Only meaningful after
+  /// [_validate] passes (the numeric parses assume valid fields).
   bool _scheduleChanged() {
     final c = widget.existing;
     if (c == null) return false;
-    if (_classTime != parseHmsTime(c.classTime)) return true;
     if (int.parse(_durationController.text.trim()) != c.durationMinutes) {
       return true;
     }
@@ -293,29 +374,35 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     if (int.parse(_intervalController.text.trim()) != c.recurringInterval) {
       return true;
     }
-    final existingDays = [c.sun, c.mon, c.tue, c.wed, c.thu, c.fri, c.sat];
-    final existingInstructors = [
-      c.sunInstructorId,
-      c.monInstructorId,
-      c.tueInstructorId,
-      c.wedInstructorId,
-      c.thuInstructorId,
-      c.friInstructorId,
-      c.satInstructorId,
-    ];
-    for (var i = 0; i < 7; i++) {
-      if (_day(i) != existingDays[i]) return true;
-      // Compare what would be SENT (null for an inactive day) against the
-      // class's own value under the same normalization.
-      final existing = existingDays[i] ? existingInstructors[i] : null;
-      if (_instructorFor(i) != existing) return true;
-    }
     if (!_isSameDay(_startDate!, _dateOnly(c.startDate))) return true;
     final existingEnd = c.endDate == null ? null : _dateOnly(c.endDate!);
     final end = _endDate;
     if ((end == null) != (existingEnd == null)) return true;
     if (end != null && !_isSameDay(end, existingEnd!)) return true;
-    return false;
+    return !_weekdaySlotsEqual(_weekdaySlotsForRequest(), c.weekdaySlots);
+  }
+
+  /// Order-insensitive per-day comparison (the backend always returns
+  /// sorted-by-time lists; the form's own build may not be) — compares only
+  /// time + instructor, since a request slot never carries `instructorName`.
+  static bool _weekdaySlotsEqual(
+    Map<String, List<ClassSlot>> a,
+    Map<String, List<ClassSlot>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      final bSlots = b[entry.key];
+      if (bSlots == null) return false;
+      final aSorted = [...entry.value]
+        ..sort((x, y) => x.time.compareTo(y.time));
+      final bSorted = [...bSlots]..sort((x, y) => x.time.compareTo(y.time));
+      if (aSorted.length != bSorted.length) return false;
+      for (var i = 0; i < aSorted.length; i++) {
+        if (aSorted[i].time != bSorted[i].time) return false;
+        if (aSorted[i].instructorId != bSorted[i].instructorId) return false;
+      }
+    }
+    return true;
   }
 
   static bool _isSameDay(DateTime a, DateTime b) =>
@@ -498,12 +585,9 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
                 setState(() => _capacityEnabled = v),
           ),
           ClassScheduleSection(
-            classTime: _classTime,
-            onTimeChanged: (t) => setState(() => _classTime = t),
             durationController: _durationController,
             recurringUnit: _recurringUnit,
-            onUnitChanged: (u) =>
-                setState(() => _recurringUnit = u ?? _recurringUnit),
+            onUnitChanged: _onUnitChanged,
             intervalController: _intervalController,
             startDate: _startDate,
             onStartChanged: (d) => setState(() => _startDate = d),
@@ -511,11 +595,13 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             onEndChanged: (d) => setState(() => _endDate = d),
           ),
           ClassDaysSection(
-            selectedDays: _selectedDays,
+            recurringUnit: _safeUnit,
+            daySlots: _daySlots,
             onToggleDay: _toggleDay,
-            instructorByDay: _instructorByDay,
-            onInstructorChanged: (day, id) =>
-                setState(() => _instructorByDay[day] = id),
+            onAddSlot: _addSlot,
+            onRemoveSlot: _removeSlot,
+            onSlotTimeChanged: _onSlotTimeChanged,
+            onSlotInstructorChanged: _onSlotInstructorChanged,
             instructors: instructors,
           ),
           if (_isEdit)

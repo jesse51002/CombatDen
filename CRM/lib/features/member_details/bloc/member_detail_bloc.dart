@@ -943,6 +943,7 @@ class MemberDetailBloc
           gymId: s.member.gymId,
           classId: event.classId,
           occurrenceDate: _occurrenceDate.format(event.occurrenceDate),
+          occurrenceTime: event.occurrenceTime,
           ignoreWarnings: event.ignoreWarnings,
         ),
       );
@@ -1022,6 +1023,7 @@ class MemberDetailBloc
         s.member.gymId,
         event.classId,
         event.occurrenceDate,
+        event.occurrenceTime,
         s.member.memberId,
       );
     } catch (e, stackTrace) {

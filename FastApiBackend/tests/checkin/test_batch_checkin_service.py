@@ -26,6 +26,7 @@ from src.checkin.schema.checkin_schema import (
 from src.checkin.service.batch_checkin_service import BatchCheckinService
 
 _OCCURRENCE_DATE = date(2026, 6, 1)
+_OCCURRENCE_TIME = time(17, 0)
 
 
 def _resolved_class() -> ResolvedClass:
@@ -91,7 +92,12 @@ async def test_one_member_raising_does_not_sink_the_batch() -> None:
     service, resolver, member_gate = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m2, m3], False
+        resolved_class.class_id,
+        resolved_class.gym_id,
+        _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
+        [m1, m2, m3],
+        False,
     )
 
     assert all_failed is False
@@ -119,7 +125,12 @@ async def test_all_members_failing_sets_all_failed() -> None:
     service, _, _ = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m2], False
+        resolved_class.class_id,
+        resolved_class.gym_id,
+        _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
+        [m1, m2],
+        False,
     )
 
     assert all_failed is True
@@ -141,7 +152,12 @@ async def test_duplicate_member_ids_are_deduped() -> None:
     service, _, member_gate = _service(resolved_class, side_effect)
 
     response, all_failed = await service.batch_checkin(
-        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [m1, m1, m1], False
+        resolved_class.class_id,
+        resolved_class.gym_id,
+        _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
+        [m1, m1, m1],
+        False,
     )
 
     assert all_failed is False
@@ -197,6 +213,7 @@ async def test_status_mapping_covers_recorded_already_and_skipped() -> None:
         resolved_class.class_id,
         resolved_class.gym_id,
         _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
         [recorded_m, already_m, skipped_m],
         False,
     )
@@ -247,7 +264,12 @@ async def test_warnings_propagate_to_batch_item() -> None:
     service, _, _ = _service(resolved_class, warned)
 
     response, all_failed = await service.batch_checkin(
-        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [member], False
+        resolved_class.class_id,
+        resolved_class.gym_id,
+        _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
+        [member],
+        False,
     )
 
     assert all_failed is False
@@ -281,7 +303,12 @@ async def test_needs_confirmation_maps_to_needs_confirmation() -> None:
     service, _, _ = _service(resolved_class, needs_confirm)
 
     response, all_failed = await service.batch_checkin(
-        resolved_class.class_id, resolved_class.gym_id, _OCCURRENCE_DATE, [member], False
+        resolved_class.class_id,
+        resolved_class.gym_id,
+        _OCCURRENCE_DATE,
+        _OCCURRENCE_TIME,
+        [member],
+        False,
     )
 
     assert all_failed is False

@@ -95,6 +95,7 @@ def test_checkin_records_when_a_plan_covers_the_class(
                 "gym_id": fake_gym_id,
                 "class_id": class_id,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )
@@ -141,6 +142,7 @@ def test_checkin_idempotent_repeat_also_folds_in_the_streak(
                 "gym_id": fake_gym_id,
                 "class_id": class_id,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )
@@ -179,6 +181,7 @@ def test_checkin_rejected_when_no_plan_covers(
                 "gym_id": fake_gym_id,
                 "class_id": class_id,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
                 "is_member": True,
             },
             headers=auth_headers,
@@ -225,6 +228,7 @@ def test_checkin_staff_needs_confirmation(
                 "gym_id": fake_gym_id,
                 "class_id": class_id,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )
@@ -271,6 +275,7 @@ def test_checkin_idempotent_returns_already_checked_in(
                 "gym_id": fake_gym_id,
                 "class_id": class_id,
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )
@@ -298,15 +303,17 @@ def test_checkin_idempotent_returns_already_checked_in(
 
 _BATCH_CLASS_ID = uuid4()
 _BATCH_OCCURRENCE_DATE = "2026-06-01"
+_BATCH_OCCURRENCE_TIME = "17:00:00"
 _BATCH_URL = "/api/v1/checkin/batch"
 
 
 def _batch_body(gym_id, member_ids: list[str]) -> dict:
-    """A batch request body with class_id + occurrence_date in the body."""
+    """A batch request body with class_id + occurrence_date/time in the body."""
     return {
         "gym_id": gym_id,
         "class_id": str(_BATCH_CLASS_ID),
         "occurrence_date": _BATCH_OCCURRENCE_DATE,
+        "occurrence_time": _BATCH_OCCURRENCE_TIME,
         "member_ids": member_ids,
     }
 
@@ -464,6 +471,7 @@ def _signup_body(gym_id: str, member_id: str, class_id: str) -> dict:
         "gym_id": gym_id,
         "class_id": class_id,
         "occurrence_date": "2026-06-01",
+        "occurrence_time": "17:00:00",
     }
 
 
@@ -568,6 +576,7 @@ def test_remove_signup_returns_removed_true(client, auth_headers, fake_gym_id):
                 "gym_id": fake_gym_id,
                 "class_id": str(uuid4()),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )
@@ -624,6 +633,7 @@ def test_attendees_returns_list(client, auth_headers, fake_gym_id):
                 "gym_id": fake_gym_id,
                 "class_id": str(class_id),
                 "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
             },
             headers=auth_headers,
         )

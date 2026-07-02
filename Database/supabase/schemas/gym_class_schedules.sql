@@ -14,7 +14,7 @@
 --     future (no scheduled takeovers) and never edited, so the max-
 --     effective_from version always owns [its effective_from, infinity).
 --   * An occurrence belongs to the version whose window contains its
---     ORIGINAL instant (original_date + class_time in the version's own
+--     ORIGINAL instant (original_date + the slot's time in the version's own
 --     timezone). Past versions never change, so the past always re-renders
 --     identically.
 --   * timezone is an IANA zone FROZEN at mint (copied from gyms.timezone):
@@ -22,6 +22,23 @@
 --     timezone change can never move any existing version's occurrences.
 --     A gym timezone update mints a same-shape version (new tz) per live
 --     class instead.
+--
+-- weekday_slots (JSONB) is the WHEN of the shape — a class may occur several
+-- times on the same day, each slot with its own optional instructor:
+--   * weekly:        {"mon": [{"time": "06:00", "instructor_id": "<uuid>"},
+--                             {"time": "18:30", "instructor_id": null}],
+--                     "sat": [{"time": "09:00", "instructor_id": null}]}
+--     — only sun..sat keys; a day occurs iff its key is present with a
+--     non-empty list.
+--   * daily/monthly: {"all": [{"time": "07:00", "instructor_id": null}]}
+--     — exactly the reserved "all" key; every candidate date gets its slots.
+-- Times are 24h "HH:MM", unique per day, stored sorted ascending. Deep shape
+-- validation (keys-per-unit, time format, dupes, ordering) lives in ONE
+-- shared Pydantic canonicalizer (FastApiBackend classes_expander_schema.py)
+-- used by both API input and DB-row parsing; SQL only guards the coarse
+-- structure. instructor_id references gym_employees but CANNOT be FK-enforced
+-- inside JSONB — the mint path validates instructors against the gym's
+-- employees before writing.
 CREATE TYPE recurring_unit AS ENUM ('daily', 'weekly', 'monthly');
 
 CREATE TABLE gym_class_schedules (
@@ -37,24 +54,16 @@ CREATE TABLE gym_class_schedules (
         CHECK ((now() AT TIME ZONE timezone) IS NOT NULL),
 
     -- The schedule shape.
-    class_time TIME NOT NULL,
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
     recurring_unit recurring_unit NOT NULL,
     recurring_interval INTEGER NOT NULL DEFAULT 1 CHECK (recurring_interval > 0),
-    sun BOOLEAN NOT NULL DEFAULT FALSE,
-    mon BOOLEAN NOT NULL DEFAULT FALSE,
-    tue BOOLEAN NOT NULL DEFAULT FALSE,
-    wed BOOLEAN NOT NULL DEFAULT FALSE,
-    thu BOOLEAN NOT NULL DEFAULT FALSE,
-    fri BOOLEAN NOT NULL DEFAULT FALSE,
-    sat BOOLEAN NOT NULL DEFAULT FALSE,
-    sun_instructor_id UUID,
-    mon_instructor_id UUID,
-    tue_instructor_id UUID,
-    wed_instructor_id UUID,
-    thu_instructor_id UUID,
-    fri_instructor_id UUID,
-    sat_instructor_id UUID,
+    -- WHEN the class occurs: day -> ordered slot list (see header). Coarse
+    -- structure only here; the shared Pydantic canonicalizer owns the deep
+    -- validation.
+    weekday_slots JSONB NOT NULL
+        CONSTRAINT chk_class_schedule_slots_shape
+        CHECK (jsonb_typeof(weekday_slots) = 'object'
+               AND weekday_slots <> '{}'::jsonb),
     -- The recurrence range (which dates the class runs on) — part of the
     -- shape, NOT the version boundary (that's effective_from, a timestamptz,
     -- so several edits can land on one day).
@@ -64,32 +73,10 @@ CREATE TABLE gym_class_schedules (
     PRIMARY KEY (schedule_id),
     CONSTRAINT uq_class_schedule_version UNIQUE (class_id, effective_from),
     CHECK (end_date IS NULL OR end_date >= start_date),
-    CHECK (recurring_unit != 'weekly' OR sun OR mon OR tue OR wed OR thu OR fri OR sat),
 
     CONSTRAINT fk_class_schedule_class
         FOREIGN KEY (class_id, gym_id)
-        REFERENCES gym_classes (class_id, gym_id),
-    CONSTRAINT fk_class_schedule_sun_instructor
-        FOREIGN KEY (sun_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_mon_instructor
-        FOREIGN KEY (mon_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_tue_instructor
-        FOREIGN KEY (tue_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_wed_instructor
-        FOREIGN KEY (wed_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_thu_instructor
-        FOREIGN KEY (thu_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_fri_instructor
-        FOREIGN KEY (fri_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id),
-    CONSTRAINT fk_class_schedule_sat_instructor
-        FOREIGN KEY (sat_instructor_id, gym_id)
-        REFERENCES gym_employees (employee_id, gym_id)
+        REFERENCES gym_classes (class_id, gym_id)
 );
 
 CREATE INDEX idx_gym_class_schedules_class_from

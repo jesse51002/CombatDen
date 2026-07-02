@@ -72,24 +72,10 @@ GYM_CLASS_SCHEDULES: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "effective_from",  # version boundary, server-stamped at mint
         "timezone",  # IANA zone frozen at mint
-        "class_time",
         "duration_minutes",
         "recurring_unit",
         "recurring_interval",
-        "sun",
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun_instructor_id",
-        "mon_instructor_id",
-        "tue_instructor_id",
-        "wed_instructor_id",
-        "thu_instructor_id",
-        "fri_instructor_id",
-        "sat_instructor_id",
+        "weekday_slots",  # day -> slot-list JSONB (the WHEN of the shape)
         "start_date",
         "end_date",
     }
@@ -100,7 +86,8 @@ CLASS_INSTANCE_EXCEPTIONS: frozenset[str] = frozenset(
         "exception_id",  # PK, auto-generated UUID
         "class_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
-        "original_date",  # part of UNIQUE constraint
+        "original_date",  # occurrence identity (part of UNIQUE constraint)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
         "created_at",  # auto-generated timestamp
     }
 )
@@ -121,7 +108,7 @@ MEMBER_ATTENDANCE: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "class_id",  # identity FK
         "original_date",  # occurrence identity (part of UNIQUE constraint)
-        "original_time",  # occurrence identity (the owning version's slot)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
         "occurred_at",  # denormalized effective start, backend-synced only
         "plan_id",  # billing attribution, set once at check-in
         "item_id",  # membership row that covered the check-in
@@ -135,7 +122,7 @@ CLASS_SIGNUPS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "member_id",  # identity FK, part of UNIQUE constraint
         "original_date",  # occurrence identity (part of UNIQUE constraint)
-        "original_time",  # occurrence identity (the owning version's slot)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
         "created_at",  # auto-generated timestamp
     }
 )

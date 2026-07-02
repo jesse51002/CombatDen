@@ -14,7 +14,7 @@ whole request — it propagates before any per-member work, and the router maps
 it to 404 / 400.
 """
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from src.checkin.schema.batch_checkin_schema import (
@@ -53,6 +53,7 @@ class BatchCheckinService:
         class_id: UUID,
         gym_id: UUID,
         occurrence_date: date,
+        occurrence_time: time,
         member_ids: list[UUID],
         is_member: bool,
         ignore_warnings: bool = False,
@@ -63,6 +64,9 @@ class BatchCheckinService:
             class_id: The class to check into.
             gym_id: The owning gym (auth-scoped by the router).
             occurrence_date: The local calendar date of the occurrence.
+            occurrence_time: The occurrence's ORIGINAL slot time — together
+                with ``occurrence_date`` the full occurrence identity (a
+                class may occur several times per day).
             member_ids: The members to check in (at least one; de-duped,
                 order preserved).
             is_member: Applies to every member. ``False`` (a staff batch)
@@ -79,11 +83,11 @@ class BatchCheckinService:
         Raises:
             ValueError: If the occurrence cannot be resolved (class missing /
                 deleted / inactive, gym missing, or not a real, non-cancelled
-                occurrence on that date). Raised before any per-member work, so
-                the whole request fails (router -> 404 / 400).
+                occurrence on that exact slot). Raised before any per-member
+                work, so the whole request fails (router -> 404 / 400).
         """
         resolved_class = await self._resolver.resolve(
-            class_id, gym_id, occurrence_date
+            class_id, gym_id, occurrence_date, occurrence_time
         )
 
         results: list[BatchCheckinItemResult] = []

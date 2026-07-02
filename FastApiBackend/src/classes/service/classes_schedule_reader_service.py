@@ -9,8 +9,9 @@ version owning an occurrence's original slot is immutable, so the past always
 re-renders identically — there is no stored-occurrence side, no
 materialize-on-read, and no past/live dedup. Each occurrence is enriched with
 the resolved instructor name, the per-occurrence instance/range-exception
-flags, and the attendance / sign-up counts (both keyed by the occurrence's
-identity, ``(class_id, original_date)``).
+flags, and the attendance / sign-up counts (all keyed by the occurrence's
+full identity, ``(class_id, original_date, original_time)`` — two same-day
+slots enrich independently).
 
 The one time-dependent rule: a soft-DELETED class emits only occurrences that
 have already ENDED (``occurred_at`` + duration at/before now) — its past is a
@@ -21,7 +22,7 @@ occurrences.
 import asyncio
 import logging
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import text
@@ -150,8 +151,8 @@ class ClassesScheduleReaderService:
         start_date: date,
         end_date: date,
         instructors: dict[str, str],
-        attendance: dict[tuple[str, date], int],
-        signups: dict[tuple[str, date], int],
+        attendance: dict[tuple[str, date, time], int],
+        signups: dict[tuple[str, date, time], int],
         now: datetime,
     ) -> list[EffectiveClassInstanceResponse]:
         """Expand one class's version history into its board rows.
@@ -184,15 +185,24 @@ class ClassesScheduleReaderService:
             occurrences = [
                 occ for occ in occurrences if self._has_ended(occ, now)
             ]
-        instance_dates = {row["original_date"] for row in instance_rows}
-        # Effective per-day capacity: an instance exception's new_max_capacity
-        # wins over the class default for that date. The expander resolves the
-        # time / instructor / duration overrides but not capacity, and the
-        # check-in capacity gate resolves new_max_capacity on its own path — so
-        # the board read resolves it here too, keeping the displayed (and
-        # prefill) capacity consistent with what check-in enforces.
+        # All three per-occurrence enrichments key on the FULL slot identity
+        # (original_date, original_time): with several slots per day legal, a
+        # date-only key would flag/override/count BOTH same-day occurrences
+        # from one slot's exception or rows.
+        instance_slots = {
+            (row["original_date"], row["original_time"])
+            for row in instance_rows
+        }
+        # Effective per-slot capacity: an instance exception's
+        # new_max_capacity wins over the class default for its exact slot.
+        # The expander resolves the time / instructor / duration overrides
+        # but not capacity, and the check-in capacity gate resolves
+        # new_max_capacity on its own path — so the board read resolves it
+        # here too, keeping the displayed (and prefill) capacity consistent
+        # with what check-in enforces.
         capacity_overrides = {
-            row["original_date"]: row["new_max_capacity"]
+            (row["original_date"], row["original_time"]):
+                row["new_max_capacity"]
             for row in instance_rows
             if row["new_max_capacity"] is not None
         }
@@ -200,7 +210,7 @@ class ClassesScheduleReaderService:
             self._build_row(
                 occ,
                 class_row,
-                instance_dates,
+                instance_slots,
                 capacity_overrides,
                 range_rows,
                 instructors,
@@ -214,12 +224,12 @@ class ClassesScheduleReaderService:
     def _build_row(
         occ: EffectiveOccurrence,
         class_row: dict,
-        instance_dates: set[date],
-        capacity_overrides: dict[date, int],
+        instance_slots: set[tuple[date, time]],
+        capacity_overrides: dict[tuple[date, time], int],
         range_rows: list[dict],
         instructors: dict[str, str],
-        attendance: dict[tuple[str, date], int],
-        signups: dict[tuple[str, date], int],
+        attendance: dict[tuple[str, date, time], int],
+        signups: dict[tuple[str, date, time], int],
     ) -> EffectiveClassInstanceResponse:
         """Assemble one enriched board row from an effective occurrence."""
         instructor_name = (
@@ -231,13 +241,19 @@ class ClassesScheduleReaderService:
             row["start_date"] <= occ.original_date <= row["end_date"]
             for row in range_rows
         )
-        occurrence_key = (str(class_row["class_id"]), occ.original_date)
+        slot_key = (occ.original_date, occ.original_time)
+        occurrence_key = (
+            str(class_row["class_id"]),
+            occ.original_date,
+            occ.original_time,
+        )
         return EffectiveClassInstanceResponse(
             class_id=class_row["class_id"],
             gym_id=class_row["gym_id"],
             class_name=class_row["class_name"],
             class_date=occ.effective_date,
             original_date=occ.original_date,
+            original_time=occ.original_time,
             occurred_at=occ.occurred_at,
             resolved_class_time=occ.class_time,
             resolved_duration_minutes=occ.duration_minutes,
@@ -246,10 +262,10 @@ class ClassesScheduleReaderService:
             image_url=class_row["image_url"],
             points_worth=class_row["points_worth"],
             max_capacity=capacity_overrides.get(
-                occ.original_date, class_row["max_capacity"]
+                slot_key, class_row["max_capacity"]
             ),
             is_cancelled=occ.is_cancelled,
-            has_instance_exception=occ.original_date in instance_dates,
+            has_instance_exception=slot_key in instance_slots,
             has_range_exception=has_range,
             cancelling_range_id=occ.cancelling_range_id,
             attendance_count=attendance.get(occurrence_key, 0),
@@ -300,12 +316,17 @@ class ClassesScheduleReaderService:
         sql_file: str,
         count_column: str,
         window_params: dict,
-    ) -> dict[tuple[str, date], int]:
-        """Map ``(class_id, original_date)`` -> count, for the attendance and
-        sign-up count queries (both keyed by the occurrence identity)."""
+    ) -> dict[tuple[str, date, time], int]:
+        """Map ``(class_id, original_date, original_time)`` -> count, for the
+        attendance and sign-up count queries (both keyed by the occurrence's
+        full slot identity)."""
         rows = await self._read_all(sql_file, window_params)
         return {
-            (str(row["class_id"]), row["original_date"]): row[count_column]
+            (
+                str(row["class_id"]),
+                row["original_date"],
+                row["original_time"],
+            ): row[count_column]
             for row in rows
         }
 

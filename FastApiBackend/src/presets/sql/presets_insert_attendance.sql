@@ -2,12 +2,13 @@
 -- pinned membership plan_id/item_id. Occurrence identity = (class_id,
 -- original_date, original_time) -- the schedule version's slot before
 -- exceptions (this import never writes exceptions, so original_time always
--- equals the version's class_time). occurred_at is the denormalized
--- effective UTC start instant (the expander's output, unaffected by
--- exceptions here). UNIQUE(member_id, class_id, original_date) holds: each
--- occurrence draws a DISTINCT subset of the eligible members against a
--- freshly re-seeded window, so no duplicate (member, occurrence) pair is
--- ever produced. Executed once per occurrence with a list of param rows.
+-- equals the resolved slot's scheduled time). occurred_at is the
+-- denormalized effective UTC start instant (the expander's output,
+-- unaffected by exceptions here). UNIQUE(member_id, class_id, original_date,
+-- original_time) holds: each occurrence draws a DISTINCT subset of the
+-- eligible members against a freshly re-seeded window, so no duplicate
+-- (member, occurrence) pair is ever produced. Executed once per occurrence
+-- with a list of param rows.
 INSERT INTO member_attendance (
     member_id, gym_id, class_id, original_date, original_time, occurred_at,
     plan_id, item_id

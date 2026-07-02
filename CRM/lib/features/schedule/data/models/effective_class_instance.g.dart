@@ -14,6 +14,7 @@ EffectiveClassInstance _$EffectiveClassInstanceFromJson(
   className: json['class_name'] as String,
   classDate: DateTime.parse(json['class_date'] as String),
   originalDate: DateTime.parse(json['original_date'] as String),
+  originalTime: json['original_time'] as String,
   occurredAt: DateTime.parse(json['occurred_at'] as String),
   resolvedClassTime: json['resolved_class_time'] as String,
   resolvedDurationMinutes: (json['resolved_duration_minutes'] as num).toInt(),

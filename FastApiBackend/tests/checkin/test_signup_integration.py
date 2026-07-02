@@ -22,7 +22,10 @@ A dedicated class (max_capacity=1, daily recurring, spanning yesterday) is
 created for the capacity tests so they don't depend on seeded classes'
 capacities. ``occurrence_date`` is fixed to YESTERDAY (gym-local) so check-in
 is always open (past occurrences never hit the "not open yet" window) without
-racing the time-of-day the suite happens to run at.
+racing the time-of-day the suite happens to run at; ``occurrence_time`` is
+fixed to the class's single daily slot (``_OCCURRENCE_TIME``) — every
+occurrence-addressed call now takes both (a class may occur several times
+per day, so the date alone never identifies an occurrence).
 """
 
 from __future__ import annotations
@@ -43,6 +46,9 @@ GYM_ID = SEEDED_GYM_ID
 CLASSES_BASE = "/api/v1/classes"
 
 _ENV_PATH = "/var/home/jm/Documents/CombatDen/codebase/FastApiBackend/.env"
+# The single daily slot every test class in this file is minted with — its
+# ORIGINAL identity time, paired with occurrence_date on every request.
+_OCCURRENCE_TIME = time(10, 0)
 
 
 def _get_db_url() -> str:
@@ -99,24 +105,33 @@ def _yesterday(gym_tz: str) -> date:
 
 
 def _make_class_payload(seed: dict, *, max_capacity: int | None) -> dict:
-    """A daily-recurring class spanning yesterday, with a fixed capacity."""
+    """A daily-recurring class spanning yesterday, with a fixed capacity.
+
+    ``weekday_slots`` is the current (versioned-schedule) shape: for a
+    daily/monthly recurrence every slot lives under the reserved ``"all"``
+    key — see ``GymClassScheduleFields`` / the class-system-guide skill.
+    """
     occurrence_date = _yesterday(seed["timezone"])
     instructor_id = str(seed["instructor_id"])
-    payload = {
+    return {
         "gym_id": GYM_ID,
         "class_name": f"ZZ Signup Test {uuid4().hex[:8]}",
-        "class_time": time(10, 0).isoformat(),
         "duration_minutes": 30,
         "recurring_unit": "daily",
         "recurring_interval": 1,
+        "weekday_slots": {
+            "all": [
+                {
+                    "time": _OCCURRENCE_TIME.isoformat(),
+                    "instructor_id": instructor_id,
+                }
+            ]
+        },
         "start_date": (occurrence_date - timedelta(days=3)).isoformat(),
         "end_date": (occurrence_date + timedelta(days=3)).isoformat(),
         "max_capacity": max_capacity,
         "points_worth": 10,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        payload[f"{day}_instructor_id"] = instructor_id
-    return payload
 
 
 def _create_class(
@@ -162,15 +177,18 @@ def tracked_classes():
         _cleanup_classes(class_ids)
 
 
-def _signup_count(class_id: str, occurrence_date: date) -> int:
+def _signup_count(
+    class_id: str, occurrence_date: date, occurrence_time: time = _OCCURRENCE_TIME
+) -> int:
     async def _run() -> int:
         conn = await asyncpg.connect(_get_db_url())
         try:
             return await conn.fetchval(
                 "SELECT COUNT(*) FROM class_signups "
-                "WHERE class_id = $1 AND original_date = $2",
+                "WHERE class_id = $1 AND original_date = $2 AND original_time = $3",
                 UUID(class_id),
                 occurrence_date,
+                occurrence_time,
             )
         finally:
             await conn.close()
@@ -198,6 +216,7 @@ class TestSignupCreateRemove:
             "gym_id": GYM_ID,
             "class_id": class_id,
             "occurrence_date": occurrence_date.isoformat(),
+            "occurrence_time": _OCCURRENCE_TIME.isoformat(),
         }
 
         first = api.post("/api/v1/signup", json=params)
@@ -236,6 +255,7 @@ class TestSignupCreateRemove:
                     "gym_id": GYM_ID,
                     "class_id": class_id,
                     "occurrence_date": occurrence_date.isoformat(),
+                    "occurrence_time": _OCCURRENCE_TIME.isoformat(),
                 },
             )
             assert resp.status_code == 200, resp.text
@@ -258,6 +278,7 @@ class TestSignupCreateRemove:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert first.status_code == 200, first.text
@@ -269,6 +290,7 @@ class TestSignupCreateRemove:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert second.status_code == 400, second.text
@@ -299,6 +321,7 @@ class TestCombinedRoster:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert resp.status_code == 200, resp.text
@@ -312,6 +335,7 @@ class TestCombinedRoster:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert resp.status_code == 200, resp.text
@@ -322,6 +346,7 @@ class TestCombinedRoster:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
                 "ignore_warnings": True,
             },
         )
@@ -333,6 +358,7 @@ class TestCombinedRoster:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert roster.status_code == 200, roster.text
@@ -366,6 +392,7 @@ class TestBoardSignupCount:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert resp.status_code == 200, resp.text
@@ -409,6 +436,7 @@ class TestCheckinCapacityUnion:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
             },
         )
         assert signup.status_code == 200, signup.text
@@ -420,6 +448,7 @@ class TestCheckinCapacityUnion:
                 "gym_id": GYM_ID,
                 "class_id": class_id,
                 "occurrence_date": occurrence_date.isoformat(),
+                "occurrence_time": _OCCURRENCE_TIME.isoformat(),
                 "is_member": True,
             },
         )

@@ -7,27 +7,38 @@ interval 2), monthly last-day clamp, end_date clamp, instance cancel / reschedul
 (target in-window and out-of-window, original suppressed either way), range
 cancel / instructor override, instance-wins-over-range on the same date,
 earliest-created range tie-break, DST spring-forward for America/Chicago
-(boundary crossing + the nonexistent gap time), and degenerate / no-overlap
-windows.
+(boundary crossing + the nonexistent gap time), degenerate / no-overlap
+windows, MULTI-SLOT-PER-DAY fan-out (weekly two slots + daily/monthly "all"
+fan-out), per-slot exception binding (a same-day sibling slot is untouched),
+range cancel covering every slot of a date, ``instructor_for`` per slot, and
+the ``weekday_slots`` canonicalizer's validation rules.
 """
 
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, time
 from uuid import UUID, uuid4
 
+import pytest
 from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_expander_schema import (
+    ALL_DAYS_KEY,
+    ClassSlot,
     ExpanderClass,
     ExpanderInstanceException,
     ExpanderRangeException,
+    canonicalize_weekday_slots,
 )
 from src.classes.service.classes_expander import ClassesExpander
 
 UTC_TZ = "UTC"
 CHICAGO = "America/Chicago"
 _DEFAULT_CREATED = datetime(2025, 1, 1, tzinfo=UTC)
+
+
+def _slot(t: time, instructor_id: UUID | None = None) -> ClassSlot:
+    return ClassSlot(time=t, instructor_id=instructor_id)
 
 
 def _class(
@@ -41,28 +52,59 @@ def _class(
     days: Iterable[str] = (),
     instructors: Mapping[str, UUID] | None = None,
 ) -> ExpanderClass:
-    """Build an ExpanderClass with only the fields a case cares about."""
-    flags = {day: True for day in days}
-    instructor_kwargs = {
-        f"{short}_instructor_id": iid
-        for short, iid in (instructors or {}).items()
-    }
+    """Build a single-slot-per-day ExpanderClass — most cases here need only
+    one slot per day. A weekly class puts ``class_time`` under each of
+    ``days`` (``instructors[day]`` is that day's instructor); daily/monthly
+    puts the single slot under the reserved ``"all"`` key
+    (``instructors[ALL_DAYS_KEY]`` is its instructor)."""
+    instructors = instructors or {}
+    if recurring_unit == RecurringUnit.weekly:
+        weekday_slots = {
+            day: [_slot(class_time, instructors.get(day))] for day in days
+        }
+    else:
+        weekday_slots = {
+            ALL_DAYS_KEY: [_slot(class_time, instructors.get(ALL_DAYS_KEY))]
+        }
     return ExpanderClass(
         class_id=uuid4(),
         gym_id=uuid4(),
-        class_time=class_time,
         duration_minutes=duration_minutes,
         recurring_unit=recurring_unit,
         recurring_interval=recurring_interval,
+        weekday_slots=weekday_slots,
         start_date=start_date,
         end_date=end_date,
-        **flags,
-        **instructor_kwargs,
+    )
+
+
+def _class_with_slots(
+    *,
+    recurring_unit: RecurringUnit,
+    start_date: date,
+    weekday_slots: dict[str, list[ClassSlot]],
+    recurring_interval: int = 1,
+    end_date: date | None = None,
+    duration_minutes: int = 60,
+) -> ExpanderClass:
+    """Build an ExpanderClass from a caller-supplied full ``weekday_slots``
+    shape — for the multi-slot-per-day cases a single ``class_time`` can't
+    express."""
+    return ExpanderClass(
+        class_id=uuid4(),
+        gym_id=uuid4(),
+        duration_minutes=duration_minutes,
+        recurring_unit=recurring_unit,
+        recurring_interval=recurring_interval,
+        weekday_slots=weekday_slots,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
 def _instance(
     original_date: date,
+    original_time: time = time(9, 0),
     *,
     is_cancelled: bool = False,
     new_class_time: time | None = None,
@@ -71,9 +113,11 @@ def _instance(
     new_date: date | None = None,
     created_at: datetime = _DEFAULT_CREATED,
 ) -> ExpanderInstanceException:
-    """Build a single-date instance exception."""
+    """Build a single-slot instance exception — ``original_time`` defaults to
+    9:00, matching ``_class``'s default ``class_time``."""
     return ExpanderInstanceException(
         original_date=original_date,
+        original_time=original_time,
         is_cancelled=is_cancelled,
         new_class_time=new_class_time,
         new_duration_minutes=new_duration_minutes,
@@ -324,11 +368,10 @@ def test_range_instructor_override() -> None:
     exp = ClassesExpander()
     base_iid = uuid4()
     sub_iid = uuid4()
-    all_days = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
     cls = _class(
         recurring_unit=RecurringUnit.daily,
         start_date=date(2025, 1, 1),
-        instructors={day: base_iid for day in all_days},
+        instructors={ALL_DAYS_KEY: base_iid},
     )
     rng = _range(date(2025, 1, 4), date(2025, 1, 6), new_instructor_id=sub_iid)
 
@@ -391,13 +434,12 @@ def test_earliest_created_range_wins_on_overlap() -> None:
 def test_include_cancelled_shows_cancelled_instance() -> None:
     exp = ClassesExpander()
     sub_iid = uuid4()
-    all_days = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
     cls = _class(
         recurring_unit=RecurringUnit.daily,
         start_date=date(2025, 1, 1),
         class_time=time(9, 0),
         duration_minutes=60,
-        instructors={day: sub_iid for day in all_days},
+        instructors={ALL_DAYS_KEY: sub_iid},
     )
     # An instance cancel that also carries (now irrelevant) overrides.
     inst = _instance(
@@ -568,3 +610,204 @@ def test_no_overlap_returns_empty() -> None:
         end_date=date(2025, 1, 5),
     )
     assert exp.expand(ended, [], [], date(2025, 2, 1), date(2025, 2, 28), UTC_TZ) == []
+
+
+# -- multi-slot-per-day fan-out -------------------------------------------
+
+
+def test_weekly_two_slots_same_day_two_occurrences() -> None:
+    """A weekly day with two slots fans out to two occurrences on the SAME
+    date, each carrying its own distinct original_time / occurred_at."""
+    exp = ClassesExpander()
+    cls = _class_with_slots(
+        recurring_unit=RecurringUnit.weekly,
+        start_date=date(2025, 1, 6),  # a Monday
+        weekday_slots={"mon": [_slot(time(6, 0)), _slot(time(18, 0))]},
+    )
+
+    occ = exp.expand(cls, [], [], date(2025, 1, 6), date(2025, 1, 6), UTC_TZ)
+
+    assert len(occ) == 2
+    assert {o.effective_date for o in occ} == {date(2025, 1, 6)}
+    times = sorted(o.original_time for o in occ)
+    assert times == [time(6, 0), time(18, 0)]
+    occurred_ats = {o.occurred_at for o in occ}
+    assert len(occurred_ats) == 2  # distinct instants
+
+
+def test_daily_all_key_fans_out_three_slots_per_date() -> None:
+    """daily/monthly recurrence fans every candidate date out over the "all"
+    key's slot list — three slots means three occurrences per date."""
+    exp = ClassesExpander()
+    cls = _class_with_slots(
+        recurring_unit=RecurringUnit.daily,
+        start_date=date(2025, 1, 1),
+        weekday_slots={
+            ALL_DAYS_KEY: [_slot(time(6, 0)), _slot(time(12, 0)), _slot(time(18, 0))]
+        },
+    )
+
+    occ = exp.expand(cls, [], [], date(2025, 1, 1), date(2025, 1, 2), UTC_TZ)
+
+    assert len(occ) == 6  # 2 dates * 3 slots
+    for day in (date(2025, 1, 1), date(2025, 1, 2)):
+        day_times = sorted(
+            o.original_time for o in occ if o.effective_date == day
+        )
+        assert day_times == [time(6, 0), time(12, 0), time(18, 0)]
+
+
+def test_instance_exception_bound_to_one_slot_leaves_sibling_untouched() -> (
+    None
+):
+    """An exception bound to (date, 06:00) cancels/retimes ONLY that slot —
+    the sibling 18:00 slot on the same date is unaffected."""
+    exp = ClassesExpander()
+    cls = _class_with_slots(
+        recurring_unit=RecurringUnit.weekly,
+        start_date=date(2025, 1, 6),
+        weekday_slots={"mon": [_slot(time(6, 0)), _slot(time(18, 0))]},
+    )
+    # Cancel the 06:00 slot only.
+    cancel = _instance(date(2025, 1, 6), time(6, 0), is_cancelled=True)
+    cancelled_result = exp.expand(
+        cls, [cancel], [], date(2025, 1, 6), date(2025, 1, 6), UTC_TZ
+    )
+    assert len(cancelled_result) == 1
+    assert cancelled_result[0].original_time == time(18, 0)
+
+    # Retime the 06:00 slot only.
+    retime = _instance(date(2025, 1, 6), time(6, 0), new_class_time=time(7, 30))
+    retimed_result = exp.expand(
+        cls, [retime], [], date(2025, 1, 6), date(2025, 1, 6), UTC_TZ
+    )
+    assert len(retimed_result) == 2
+    by_original = {o.original_time: o for o in retimed_result}
+    assert by_original[time(6, 0)].class_time == time(7, 30)
+    assert by_original[time(18, 0)].class_time == time(18, 0)  # untouched
+
+
+def test_range_cancel_covers_all_slots_of_a_date() -> None:
+    """A range cancel drops EVERY slot of a covered date; include_cancelled
+    emits each one, flagged, independently."""
+    exp = ClassesExpander()
+    cls = _class_with_slots(
+        recurring_unit=RecurringUnit.daily,
+        start_date=date(2025, 1, 1),
+        weekday_slots={ALL_DAYS_KEY: [_slot(time(6, 0)), _slot(time(18, 0))]},
+    )
+    rng = _range(date(2025, 1, 2), date(2025, 1, 2), is_cancelled=True)
+
+    dropped = exp.expand(
+        cls, [], [rng], date(2025, 1, 1), date(2025, 1, 3), UTC_TZ
+    )
+    assert {o.effective_date for o in dropped} == {
+        date(2025, 1, 1),
+        date(2025, 1, 3),
+    }
+    assert len([o for o in dropped if o.effective_date == date(2025, 1, 1)]) == 2
+
+    shown = exp.expand(
+        cls,
+        [],
+        [rng],
+        date(2025, 1, 1),
+        date(2025, 1, 3),
+        UTC_TZ,
+        include_cancelled=True,
+    )
+    cancelled = [o for o in shown if o.effective_date == date(2025, 1, 2)]
+    assert len(cancelled) == 2
+    assert all(o.is_cancelled for o in cancelled)
+    assert {o.original_time for o in cancelled} == {time(6, 0), time(18, 0)}
+
+
+def test_instructor_for_per_slot() -> None:
+    """``instructor_for`` resolves the slot-default instructor of a specific
+    (date, time) — an unknown slot time returns None."""
+    exp = ClassesExpander()
+    iid = uuid4()
+    cls = _class_with_slots(
+        recurring_unit=RecurringUnit.weekly,
+        start_date=date(2025, 1, 6),
+        weekday_slots={
+            "mon": [_slot(time(6, 0), iid), _slot(time(18, 0))],
+        },
+    )
+
+    assert exp.instructor_for(cls, date(2025, 1, 6), time(6, 0)) == iid
+    assert exp.instructor_for(cls, date(2025, 1, 6), time(18, 0)) is None
+    # A time that isn't one of the day's slots -> None.
+    assert exp.instructor_for(cls, date(2025, 1, 6), time(9, 0)) is None
+    # A weekday with no slots at all -> None.
+    assert exp.instructor_for(cls, date(2025, 1, 7), time(6, 0)) is None
+
+
+# -- the weekday_slots canonicalizer ---------------------------------------
+
+
+class TestCanonicalizeWeekdaySlots:
+    def test_dupe_times_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate"):
+            canonicalize_weekday_slots(
+                {"mon": [_slot(time(6, 0)), _slot(time(6, 0))]},
+                RecurringUnit.weekly,
+            )
+
+    def test_all_key_on_weekly_rejected(self) -> None:
+        with pytest.raises(ValueError, match="invalid"):
+            canonicalize_weekday_slots(
+                {ALL_DAYS_KEY: [_slot(time(6, 0))]}, RecurringUnit.weekly
+            )
+
+    def test_weekday_key_on_daily_rejected(self) -> None:
+        with pytest.raises(ValueError, match="invalid"):
+            canonicalize_weekday_slots(
+                {"mon": [_slot(time(6, 0))]}, RecurringUnit.daily
+            )
+
+    def test_empty_list_rejected(self) -> None:
+        with pytest.raises(ValueError, match="must not be empty"):
+            canonicalize_weekday_slots({"mon": []}, RecurringUnit.weekly)
+
+    def test_weekly_with_no_days_rejected(self) -> None:
+        with pytest.raises(ValueError, match="at least one weekday"):
+            canonicalize_weekday_slots({}, RecurringUnit.weekly)
+
+    def test_daily_missing_the_all_key_rejected(self) -> None:
+        with pytest.raises(ValueError, match='"all"'):
+            canonicalize_weekday_slots({}, RecurringUnit.daily)
+
+    def test_lists_and_keys_are_returned_sorted(self) -> None:
+        result = canonicalize_weekday_slots(
+            {
+                "wed": [_slot(time(18, 0)), _slot(time(6, 0))],
+                "mon": [_slot(time(9, 0))],
+            },
+            RecurringUnit.weekly,
+        )
+        # Keys in canonical sun..sat order, and each list sorted by time.
+        assert list(result.keys()) == ["mon", "wed"]
+        assert [slot.time for slot in result["wed"]] == [time(6, 0), time(18, 0)]
+
+    def test_equal_shapes_compare_equal_regardless_of_submission_order(
+        self,
+    ) -> None:
+        """The canonicalizer's whole purpose: two submissions of the same
+        shape in different key/list order canonicalize to the SAME dict —
+        what the mint engine's deep-equal no-op check relies on."""
+        a = canonicalize_weekday_slots(
+            {
+                "mon": [_slot(time(6, 0)), _slot(time(18, 0))],
+                "wed": [_slot(time(9, 0))],
+            },
+            RecurringUnit.weekly,
+        )
+        b = canonicalize_weekday_slots(
+            {
+                "wed": [_slot(time(9, 0))],
+                "mon": [_slot(time(18, 0)), _slot(time(6, 0))],
+            },
+            RecurringUnit.weekly,
+        )
+        assert a == b
