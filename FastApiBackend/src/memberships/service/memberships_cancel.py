@@ -205,19 +205,28 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             preview=preview,
         )
 
-    async def end_one_time(
+    async def cancel_one_time(
         self,
         item_id: UUID,
         member_id: UUID,
     ) -> date:
-        """End a one-time/trial membership early (pure DB write). Returns the resolved end_date."""
-        row = await self._get_membership(item_id, member_id)
-        # One gym-local ``today`` for BOTH the guard and the end_date write, so
-        # they can't straddle midnight (validate on day N, end on day N+1).
-        today = gym_today(row["timezone"])
-        self._validate_end_one_time(row, item_id, member_id, today)
+        """Cancel a one-time/trial membership early (pure DB write).
+        Returns the resolved cancel_date.
 
-        sql = load_sql(SQL_DIR / "member_memberships_end.sql")
+        A HUMAN-initiated termination, so it writes ``cancel_date`` — never
+        ``end_date``, which is automatic-only by convention (the depletion
+        auto-end + the purchase-stamped duration expiry). The split keeps a
+        staff-ended pack safe from the check-in reversal's un-end, which
+        only ever touches ``end_date``.
+        """
+        row = await self._get_membership(item_id, member_id)
+        # One gym-local ``today`` for BOTH the guard and the cancel_date
+        # write, so they can't straddle midnight (validate on day N, end on
+        # day N+1).
+        today = gym_today(row["timezone"])
+        self._validate_cancel_one_time(row, item_id, member_id, today)
+
+        sql = load_sql(SQL_DIR / "member_memberships_cancel_one_time.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
@@ -228,9 +237,9 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                     "gym_today": today,
                 },
             )
-            end_date = result.scalar_one()
+            terminated_on = result.scalar_one()
             await session.commit()
-        return end_date
+        return terminated_on
 
     # ── Private ────────────────────────────────────────────────
 
@@ -295,23 +304,24 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         )
 
     @staticmethod
-    def _validate_end_one_time(
+    def _validate_cancel_one_time(
         row: dict,
         item_id: UUID,
         member_id: UUID,
         today: date,
     ) -> None:
-        """Validate a one-time / trial membership can be ended early."""
+        """Validate a one-time / trial membership can be cancelled early."""
         if row["plan_type"] == PlanType.recurring:
             raise ValueError(
-                f"Cannot end a recurring membership here — use cancel: "
+                f"Cannot cancel a recurring membership here — use the "
+                f"recurring cancel (DELETE /): "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        # Any cancel_date blocks ending — dual terminal dates corrupt status logic.
+        # Any cancel_date blocks the op — the pack was already manually
+        # terminated (this op's own write IS a cancel_date).
         if row["cancel_date"] is not None:
             raise ValueError(
-                f"Cannot end a membership with a pending cancellation "
-                f"— clear the cancellation first: "
+                f"Membership already cancelled: "
                 f"item_id={item_id}, member_id={member_id}"
             )
         if row["end_date"] is not None and row["end_date"] <= today:

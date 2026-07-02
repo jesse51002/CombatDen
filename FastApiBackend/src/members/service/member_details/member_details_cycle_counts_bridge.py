@@ -2,13 +2,11 @@
 
 from uuid import UUID
 
-from src.classes.schema.classes_cycle_counts_schema import (
-    ClassesCycleCountsRequest,
+from src.checkin.schema.cycle_counts_schema import (
+    CheckinCycleCountsRequest,
     MembershipUsage,
 )
-from src.classes.service.classes_cycle_counts_service import (
-    ClassesCycleCountsService,
-)
+from src.checkin.service.cycle_counts_service import CycleCountsService
 
 
 class MemberDetailsCycleCountsBridge:
@@ -20,7 +18,7 @@ class MemberDetailsCycleCountsBridge:
 
     def __init__(
         self,
-        cycle_counts_service: ClassesCycleCountsService,
+        cycle_counts_service: CycleCountsService,
     ) -> None:
         self._service = cycle_counts_service
 
@@ -43,7 +41,7 @@ class MemberDetailsCycleCountsBridge:
         Returns:
             Dict keyed by (member_id, item_id) to MembershipUsage.
         """
-        request = ClassesCycleCountsRequest(
+        request = CheckinCycleCountsRequest(
             gym_id=gym_id,
             member_ids=member_ids,
         )

@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
+import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
@@ -122,6 +124,36 @@ class MemberDetailLoaded extends MemberDetailState {
   /// is open (mirrors [upgradeError]).
   final String? endError;
 
+  /// True while the class check-in POST is in flight. Separate
+  /// from [isMutating] so the check-in dialog owns its own
+  /// loading + terminal treatment (mirrors [isChargingCard]).
+  final bool isCheckingIn;
+
+  /// The last check-in's result — a recorded attendance (with any
+  /// non-blocking warnings) or an idempotent repeat. Rendered by the
+  /// check-in dialog's terminal step; cleared via [MemberCheckInCleared].
+  final CheckInResponse? checkInResult;
+
+  /// The last check-in failure (an unexpected error). Kept off
+  /// [actionError] so the screen-level error dialog doesn't swallow it
+  /// while the check-in dialog is open (mirrors [chargeCardError]).
+  final String? checkInError;
+
+  /// True while the reserve (sign-up) POST is in flight. Separate from
+  /// [isCheckingIn] so the check-in/reserve dialog's terminal step can tell
+  /// which action it's watching.
+  final bool isReserving;
+
+  /// The last reserve's result — a new reservation or an idempotent repeat
+  /// (`SignupResponse.alreadySignedUp`). Rendered by the check-in/reserve
+  /// dialog's terminal step; cleared via [MemberReserveCleared].
+  final SignupResponse? reserveResult;
+
+  /// The last reserve failure (e.g. "Class is full"). Kept off
+  /// [actionError] so the screen-level error dialog doesn't swallow it
+  /// while the dialog is open (mirrors [checkInError]).
+  final String? reserveError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -153,6 +185,12 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isEnding = false,
     this.endSuccess = 0,
     this.endError,
+    this.isCheckingIn = false,
+    this.checkInResult,
+    this.checkInError,
+    this.isReserving = false,
+    this.reserveResult,
+    this.reserveError,
     this.refreshToken = 0,
   });
 
@@ -196,6 +234,14 @@ class MemberDetailLoaded extends MemberDetailState {
     int? endSuccess,
     String? endError,
     bool clearEndOutcome = false,
+    bool? isCheckingIn,
+    CheckInResponse? checkInResult,
+    String? checkInError,
+    bool clearCheckInOutcome = false,
+    bool? isReserving,
+    SignupResponse? reserveResult,
+    String? reserveError,
+    bool clearReserveOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -245,6 +291,20 @@ class MemberDetailLoaded extends MemberDetailState {
       endError: clearEndOutcome
           ? null
           : (endError ?? this.endError),
+      isCheckingIn: isCheckingIn ?? this.isCheckingIn,
+      checkInResult: clearCheckInOutcome
+          ? null
+          : (checkInResult ?? this.checkInResult),
+      checkInError: clearCheckInOutcome
+          ? null
+          : (checkInError ?? this.checkInError),
+      isReserving: isReserving ?? this.isReserving,
+      reserveResult: clearReserveOutcome
+          ? null
+          : (reserveResult ?? this.reserveResult),
+      reserveError: clearReserveOutcome
+          ? null
+          : (reserveError ?? this.reserveError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -274,6 +334,12 @@ class MemberDetailLoaded extends MemberDetailState {
         isEnding,
         endSuccess,
         endError,
+        isCheckingIn,
+        checkInResult,
+        checkInError,
+        isReserving,
+        reserveResult,
+        reserveError,
         refreshToken,
       ];
 }

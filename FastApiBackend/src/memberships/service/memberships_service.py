@@ -252,19 +252,21 @@ class MemberMembershipsService:
         async with self._paying_lock.lock(payer_ids):
             return await self._cancel.preview_cancel(item_ids, member_id)
 
-    async def end_one_time(
+    async def cancel_one_time(
         self,
         item_id: UUID,
         member_id: UUID,
     ) -> date:
-        """End a one-time / trial membership early (set ``end_date`` = today).
+        """Cancel a one-time / trial membership early (set ``cancel_date``
+        = today — the MANUAL terminal date; ``end_date`` stays
+        automatic-only).
 
         Delegated BARE — no payer lock: a one-time / trial membership is a
-        terminal invoice with no subscription line, so ending it is a pure DB
-        date write (no Stripe converge, nothing for a concurrent sync to race).
-        Recurring memberships use ``cancel`` instead.
+        terminal invoice with no subscription line, so cancelling it is a
+        pure DB date write (no Stripe converge, nothing for a concurrent
+        sync to race). Recurring memberships use ``cancel`` instead.
         """
-        return await self._cancel.end_one_time(item_id, member_id)
+        return await self._cancel.cancel_one_time(item_id, member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
 

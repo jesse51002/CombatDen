@@ -1,7 +1,7 @@
 """All view service for the CRM members list."""
 
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import date
 from uuid import UUID
 
 from schema.membership_plan import PlanType
@@ -180,19 +180,22 @@ class CrmAllViewService(CrmBaseViewService):
         )
 
     def _days_since_last_class(self, row: dict) -> int | None:
-        """Compute days since the member's last class.
+        """Days since the member's last class, GYM-LOCAL and never negative.
+
+        Computed by ``all_view.sql`` as a gym-local date diff (``(now AT TIME
+        ZONE g.timezone)::date - (last_class AT TIME ZONE g.timezone)::date``,
+        clamped at 0) — never re-derived here in Python. A bare UTC instant
+        diff would go negative for an evening gym-local class in a gym west
+        of UTC (already "tomorrow" in UTC) or during the 2h early-check-in
+        window; the SQL computation avoids both.
 
         Args:
             row: Database result row.
 
         Returns:
-            Number of days or None if no last_class.
+            Number of days, or None if the member has no last_class.
         """
-        last_class_dt = row.get("last_class")
-        if not last_class_dt:
-            return None
-        delta = datetime.now(UTC) - last_class_dt
-        return delta.days
+        return row.get("days_since_last_class")
 
     def _build_membership_text(self, row: dict) -> str:
         """Build the membership badge display text.

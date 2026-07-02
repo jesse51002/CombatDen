@@ -1,5 +1,7 @@
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/check_in/data/models/check_in_request.dart';
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
@@ -564,15 +566,18 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/member_memberships/end` — end a ONE-TIME / TRIAL
-  /// membership early (sets its end date to today → status 'ended').
-  /// No Stripe action, no money movement (refund is the separate flow).
-  Future<void> endMembership({
+  /// `POST /api/v1/member_memberships/end` — MANUALLY cancel a ONE-TIME /
+  /// TRIAL membership early. A human terminating it early sets `cancel_date`
+  /// to today → status 'cancelled' (vs an AUTOMATIC duration/depletion end →
+  /// 'ended'). Endpoint path + method name kept; the CRM surfaces it as
+  /// "Cancel membership". No Stripe action, no money movement (refund is the
+  /// separate flow).
+  Future<void> cancelOneTimeMembership({
     required String itemId,
     required String memberId,
   }) async {
     await _apiClient.post(
-      '/api/v1/member_memberships/end',
+      '/api/v1/member_memberships/cancel-one-time',
       data: {
         'item_id': itemId,
         'member_id': memberId,
@@ -627,6 +632,27 @@ class MemberRepository {
     await _apiClient.post(
       '/api/v1/member_memberships/mark-paid-cash',
       data: req.toJson(),
+    );
+  }
+
+  // ----- Class check-in -----
+
+  /// `POST /api/v1/checkin` — staff single check-in for [req]'s member into the
+  /// occurrence addressed by `class_id` + `occurrence_date` (the occurrence's
+  /// IDENTITY date, never its effective/display date). The CRM always
+  /// sends `is_member: false`: a clean check-in is recorded — the
+  /// [CheckInResponse] is a fresh attendance (points awarded) or an idempotent
+  /// repeat (`already_checked_in`), with any gate conditions as non-blocking
+  /// `warnings` — but one that hits a warning is NOT recorded
+  /// (`requires_confirmation` true, `log_id` null) unless [req] carries
+  /// `ignore_warnings: true`.
+  Future<CheckInResponse> checkInMember(CheckInRequest req) async {
+    final response = await _apiClient.post(
+      '/api/v1/checkin',
+      data: req.toJson(),
+    );
+    return CheckInResponse.fromJson(
+      response.data as Map<String, dynamic>,
     );
   }
 

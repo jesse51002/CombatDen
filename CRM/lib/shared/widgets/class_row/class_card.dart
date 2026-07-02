@@ -27,7 +27,35 @@ class ClassCard extends StatelessWidget {
   final String? imageUrl;
   final String? imageAsset;
   final int? pointsWorth;
-  final int? attendingCount;
+
+  /// Recorded attendance for this occurrence; only shown (as "M attended")
+  /// once [occurrenceInPast] — see [signupCount] for the always-shown
+  /// headcount.
+  final int? attendeeCount;
+
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences.
+  final int? signupCount;
+
+  /// True when this occurrence has already happened — the headcount chip
+  /// then also shows [attendeeCount] ("M attended") alongside [signupCount].
+  final bool occurrenceInPast;
+
+  /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
+  final bool isCancelled;
+
+  /// Roomy type scale (name 16, caption 13) for spacious surfaces like the
+  /// member check-in/reserve picker; the default keeps the schedule board's
+  /// dense day-column sizes.
+  final bool large;
+
+  /// Marks this card as the current pick on a selection surface (the member
+  /// check-in dialog's occurrence cards): a primary border + check badge
+  /// overlay and a `primaryColor10` wash — the same treatment
+  /// `CheckInInstanceTile` gives a selected occurrence tile. Off by default
+  /// (the schedule board and the class-identity pickers navigate on tap, no
+  /// selected state).
+  final bool selected;
   final VoidCallback? onTap;
 
   const ClassCard({
@@ -40,7 +68,12 @@ class ClassCard extends StatelessWidget {
     this.imageUrl,
     this.imageAsset,
     this.pointsWorth,
-    this.attendingCount,
+    this.attendeeCount,
+    this.signupCount,
+    this.occurrenceInPast = false,
+    this.isCancelled = false,
+    this.large = false,
+    this.selected = false,
     this.onTap,
   });
 
@@ -52,26 +85,83 @@ class ClassCard extends StatelessWidget {
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: DesignConstants.card,
+          color: selected
+              ? DesignConstants.primaryColor10
+              : DesignConstants.card,
           borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingMedium,
+        child: Stack(
           children: [
-            // Image bleeds to the full card width; the card clip handles the
-            // corners, so the image itself has no separate rounding.
-            _CardImage(asset: imageAsset, imageUrl: imageUrl),
-            Padding(
-              padding: const EdgeInsets.only(
-                left: DesignConstants.spacingMedium,
-                right: DesignConstants.spacingMedium,
-                bottom: DesignConstants.spacingMedium,
-              ),
-              child: _CardDetails(card: this),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                // Image bleeds to the full card width; the card clip handles
+                // the corners, so the image itself has no separate rounding.
+                _CardImage(asset: imageAsset, imageUrl: imageUrl),
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: DesignConstants.spacingMedium,
+                    right: DesignConstants.spacingMedium,
+                    bottom: DesignConstants.spacingMedium,
+                  ),
+                  child: _CardDetails(card: this),
+                ),
+              ],
             ),
+            // Overlaid (not part of the Column) so toggling selection never
+            // shifts the card's layout.
+            if (selected) ...[
+              const Positioned.fill(child: _SelectedBorder()),
+              const Positioned(
+                top: DesignConstants.spacingMedium,
+                right: DesignConstants.spacingMedium,
+                child: _SelectedBadge(),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The selected card's primary outline, painted over the content as a
+/// non-interactive overlay.
+class _SelectedBorder extends StatelessWidget {
+  const _SelectedBorder();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: DesignConstants.primaryColor),
+          borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+        ),
+      ),
+    );
+  }
+}
+
+/// The selected card's check mark, on a card-colored circle so it stays
+/// legible over the class photo.
+class _SelectedBadge extends StatelessWidget {
+  const _SelectedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(DesignConstants.spacingTiny),
+      decoration: BoxDecoration(
+        color: DesignConstants.card,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Symbols.check_circle_sharp,
+        size: DesignConstants.iconSizeMedium,
+        weight: DesignConstants.iconWeight,
+        color: DesignConstants.primaryColor,
       ),
     );
   }
@@ -132,13 +222,23 @@ class _CardDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text(card.name, style: DesignConstants.h3),
+        Text(
+          card.name,
+          style: card.large ? DesignConstants.h2 : DesignConstants.h3,
+        ),
         Text(
           card.timeLabel,
-          style: DesignConstants.p.copyWith(color: DesignConstants.text),
+          style: (card.large ? DesignConstants.h3Regular : DesignConstants.p)
+              .copyWith(color: DesignConstants.text),
         ),
+        if (card.isCancelled)
+          ClassMetaChip(
+            icon: Symbols.cancel_sharp,
+            text: 'Cancelled',
+            color: DesignConstants.badRed,
+          ),
         if (card.instructorName != null) _InstructorLine(card: card),
-        if (card.pointsWorth != null || card.attendingCount != null)
+        if (card.pointsWorth != null || card.signupCount != null)
           _MetaRow(card: card),
       ],
     );
@@ -180,9 +280,11 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: DesignConstants.spacingMedium,
-      runSpacing: DesignConstants.spacingSmall,
+    // Stacked, one chip per line — a narrow card can't fit
+    // "N reserved · M attended" on a single line without overflowing.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingSmall,
       children: [
         if (card.pointsWorth != null)
           ClassMetaChip(
@@ -190,10 +292,16 @@ class _MetaRow extends StatelessWidget {
             text: '${card.pointsWorth} pts',
             color: DesignConstants.primaryColor,
           ),
-        if (card.attendingCount != null)
+        if (card.signupCount != null)
           ClassMetaChip(
-            icon: Symbols.person_sharp,
-            text: '${card.attendingCount} attending',
+            icon: Symbols.group_sharp,
+            text: '${card.signupCount} reserved',
+            color: DesignConstants.text2nd,
+          ),
+        if (card.signupCount != null && card.occurrenceInPast)
+          ClassMetaChip(
+            icon: Symbols.check_circle_sharp,
+            text: '${card.attendeeCount ?? 0} attended',
             color: DesignConstants.text2nd,
           ),
       ],

@@ -106,7 +106,7 @@ async def create_discount(
         HTTPException: 400/401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await discounts_service.create_discount(request)
@@ -164,7 +164,7 @@ async def update_discount(
         HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await discounts_service.update_discount(request)
@@ -228,7 +228,7 @@ async def delete_discount(
         HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         await discounts_service.delete_discount(discount_id, gym_id)

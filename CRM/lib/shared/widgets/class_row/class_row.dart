@@ -17,7 +17,21 @@ class ClassRow extends StatelessWidget {
   /// resolves.
   final String? imageUrl;
   final String? imageAsset;
-  final int? attendingCount;
+
+  /// Recorded attendance for this occurrence; only shown (as "M attended")
+  /// once [occurrenceInPast] — see [signupCount] for the always-shown
+  /// headcount.
+  final int? attendeeCount;
+
+  /// Members signed up (reserved) for this occurrence — shown for both
+  /// future AND past occurrences.
+  final int? signupCount;
+
+  /// True when this occurrence has already happened — the headcount chip
+  /// then also shows [attendeeCount] ("M attended") alongside [signupCount].
+  /// The dashboard Upcoming Classes list is always upcoming, so it leaves
+  /// this false.
+  final bool occurrenceInPast;
   final int? checkedInCount;
   final bool inSession;
   final VoidCallback? onTap;
@@ -29,7 +43,9 @@ class ClassRow extends StatelessWidget {
     this.instructorName,
     this.imageUrl,
     this.imageAsset,
-    this.attendingCount,
+    this.attendeeCount,
+    this.signupCount,
+    this.occurrenceInPast = false,
     this.checkedInCount,
     this.inSession = false,
     this.onTap,
@@ -90,12 +106,22 @@ class _ClassDetails extends StatelessWidget {
             text: '${row.checkedInCount} checked in',
             color: DesignConstants.primaryColor,
           )
-        else if (row.attendingCount != null)
-          ClassMetaChip(
-            icon: Symbols.person_sharp,
-            text: '${row.attendingCount} attending',
-            color: DesignConstants.text2nd,
-          ),
+        // Stacked, one count per line — "N reserved · M attended" on one line
+        // overflows a narrow card.
+        else ...[
+          if (row.signupCount != null)
+            ClassMetaChip(
+              icon: Symbols.group_sharp,
+              text: '${row.signupCount} reserved',
+              color: DesignConstants.text2nd,
+            ),
+          if (row.signupCount != null && row.occurrenceInPast)
+            ClassMetaChip(
+              icon: Symbols.check_circle_sharp,
+              text: '${row.attendeeCount ?? 0} attended',
+              color: DesignConstants.text2nd,
+            ),
+        ],
       ],
     );
   }

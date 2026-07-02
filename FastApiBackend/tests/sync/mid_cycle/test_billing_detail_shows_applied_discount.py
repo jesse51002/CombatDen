@@ -17,10 +17,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.classes.service.classes_cycle_counts_service import (
-    ClassesCycleCountsService,
-)
-from src.classes.service.classes_streak_service import ClassesStreakService
+from src.checkin.service.cycle_counts_service import CycleCountsService
+from src.checkin.service.streak_service import StreakService
 from src.members.service.member_details.members_billing_detail_service import (
     MembersBillingDetailService,
 )
@@ -104,8 +102,8 @@ async def test_billing_detail_surfaces_active_applied_discount(
         # The read path that used to 500 on the dead discount_ids column.
         service = MembersBillingDetailService(
             db_pool,
-            ClassesStreakService(db_pool),
-            ClassesCycleCountsService(db_pool),
+            StreakService(db_pool),
+            CycleCountsService(db_pool),
         )
         detail = await service.get_member_billing_detail(member.member_id)
 

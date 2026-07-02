@@ -48,18 +48,18 @@ WHERE f.gym_id = CAST(:gym_id AS UUID)
         LIMIT 1))
   )
   AND (
-    :video_type IS NULL
-    OR v.tag::text = :video_type
+    CAST(:video_type AS text) IS NULL
+    OR v.tag::text = CAST(:video_type AS text)
   )
   AND (
-    :filter_big_group IS NULL
+    CAST(:filter_big_group AS text) IS NULL
     OR (
-      :filter_big_group = 'educational'
+      CAST(:filter_big_group AS text) = 'educational'
       AND v.tag IS NOT NULL
       AND v.tag::text = ANY(:educational_genres)
     )
     OR (
-      :filter_big_group = 'entertainment'
+      CAST(:filter_big_group AS text) = 'entertainment'
       AND v.tag IS NOT NULL
       AND NOT (v.tag::text = ANY(:educational_genres))
     )

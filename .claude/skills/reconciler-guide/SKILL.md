@@ -5,12 +5,12 @@ description: >-
   router-less `reconciler` domain in FastApiBackend/src/reconciler/ that runs the
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
-  orchestrator running the five step-services in order; the generic ResourceLock
-  the orphan cleanup uses), the five modular step-services run in order —
-  InvoiceFetchSweep (missed-webhook backstop: a thin gym-iteration caller that
-  delegates per gym to MemberMembershipsInvoiceFetch.sweep_account in memberships;
-  the fetch+apply engine lives in memberships — reconciler calls in, never the
-  reverse), StaleTaskSweep (re-runs unfinished tracked tasks whose
+  orchestrator running the five billing step-services in order; the generic
+  ResourceLock the orphan cleanup uses), the five modular billing step-services
+  run in order — InvoiceFetchSweep (missed-webhook backstop: a thin gym-iteration
+  caller that delegates per gym to MemberMembershipsInvoiceFetch.sweep_account in
+  memberships; the fetch+apply engine lives in memberships — reconciler calls in,
+  never the reverse), StaleTaskSweep (re-runs unfinished tracked tasks whose
   in-process run died — the tasks domain's crash recovery, moved here),
   OrphanCleanupSweep (lock-guarded delete of stranded not_added
   rows), PaymentPushSweep (CRM→Stripe converge via the existing bulk_payment_sync,
@@ -22,17 +22,20 @@ description: >-
   synthetic per-attempt failed-charge key, and the conflict-resolution rule
   (config drift → CRM wins / push; lifecycle/dunning drift → Stripe wins / the
   sync cancels a gone sub, never re-bill). Load this whenever you touch the
-  reconciler sweep, the scheduler, the subscription-deleted webhook, the invoice
-  fetch sweep, the synthetic failed-charge key, or ask how/when the reconciler
-  runs. Trigger on "reconciler", "scheduled sweep", "twice daily", "APScheduler",
-  "ResourceLock", "OrphanCleanupSweep", "PaymentPushSweep", "InvoiceFetchSweep",
-  "StaleTaskSweep", "stale-task recovery", "SubscriptionOrphanSweep", "orphan
-  subscription", "cancel unlinked sub", "customer.subscription.deleted",
-  "record seam", "synthetic charge key", "self-heal a gone sub", "dunning",
-  "skip-if-equal", or any change to src/reconciler/. The payment-sync ENGINE the
-  push step calls — including the gone-sub cancel (PaymentSyncCancel) — lives in
-  `sync-guide`; the on-demand post-op fetch engine + webhook record() seams live in
-  `memberships-guide` + `payments-guide`.
+  reconciler sweep, the scheduler, the subscription-deleted webhook, the
+  invoice fetch sweep, the synthetic failed-charge key, or ask how/when the
+  reconciler runs. Trigger on "reconciler", "scheduled sweep",
+  "twice daily", "APScheduler", "ResourceLock", "OrphanCleanupSweep",
+  "PaymentPushSweep", "InvoiceFetchSweep", "StaleTaskSweep", "stale-task
+  recovery", "SubscriptionOrphanSweep", "orphan subscription", "cancel unlinked
+  sub", "customer.subscription.deleted", "record seam", "synthetic charge key",
+  "self-heal a gone sub", "dunning", "skip-if-equal", or any change to
+  src/reconciler/. The payment-sync ENGINE the push step calls — including the
+  gone-sub cancel (PaymentSyncCancel) — lives in `sync-guide`; the on-demand
+  post-op fetch engine + webhook record() seams live in `memberships-guide` +
+  `payments-guide`. The reconciler is billing-only: the class system needs no
+  sweep (occurrences are computed from versioned schedules, never stored —
+  see `class-system-guide`).
 ---
 
 # Scheduled Reconciler — the on-a-clock billing safety net
@@ -60,6 +63,10 @@ mechanics**. It does **not** own:
   `InvoiceFetchSweep` calls into memberships; the reconciler does **not** own
   the fetch loop.
 - **The membership lifecycle / cancel path** → `memberships-guide`.
+- **The class system** (`src/classes/` — the version expander and computed
+  occurrences) → the `class-system-guide` skill. The reconciler runs NO class
+  sweep: occurrences are computed on read, never stored, so there is nothing
+  to heal.
 
 ---
 
@@ -74,7 +81,9 @@ the first time a sync runs on/after its cutoff; an idle member triggers no sync,
 so the push sweep is what runs it on schedule.
 
 It is a **safety net**: simple, idempotent, no manual controls. It invents no
-billing logic — every step reuses existing services.
+billing logic — every step reuses existing services. It is billing-ONLY: the
+class system needs no reconciler step (occurrences are computed from
+versioned schedules, never stored).
 
 ---
 
@@ -87,7 +96,7 @@ billing logic — every step reuses existing services.
   and `shutdown(wait=False)` on stop. The root test conftest sets
   `reconciler_enabled=False` so booting the app in a test never starts it.
 - **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` runs the
-  five steps in order and returns each one's `SweepResult`
+  five billing steps in order and returns each one's `SweepResult`
   (`processed / changed / skipped / errors`).
 - **No reconciler-wide lock.** Safety is the per-paying-family `PayingMemberLock`
   that **every payment op already holds** (and that the orphan cleanup checks
@@ -108,7 +117,7 @@ billing logic — every step reuses existing services.
 
 ---
 
-## 3. The five step-services — run order
+## 3. The step-services — run order (five billing steps)
 
 Each step is its **own service**; the orchestrator is thin. The order is
 deliberate:
@@ -337,7 +346,7 @@ write-reduction.
 - **Orchestrator:** `src/reconciler/service/reconciler/reconciler_service.py`
 - **Sweeps:** `reconciler_invoice_fetch_sweep.py` (thin gym-iteration caller; delegates to memberships engine),
   `reconciler_orphan_cleanup_sweep.py`, `reconciler_payment_push_sweep.py`,
-  `reconciler_subscription_orphan_sweep.py` — same folder
+  `reconciler_subscription_orphan_sweep.py` — same folder (+ `reconciler_stale_task_sweep.py`)
 - **Result models:** `reconciler_result.py`; **`SweepResult`:** `src/shared/sweep_result.py`
   (shared by reconciler + memberships engine; lives in `shared` to avoid a `memberships → reconciler` import edge)
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
@@ -357,8 +366,8 @@ write-reduction.
 - **The record seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
   `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
-  `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch config
-  lives in `memberships-guide`)
+  `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch
+  config lives in `memberships-guide`)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
   (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
@@ -376,8 +385,9 @@ push step calls — including the gone-sub cancel — is in `payment_sync.mermai
 ## This skill is a living document
 
 When the reconciler changes — a new/removed step, a different order, a changed
-lock or schedule, the seam, the synthetic key, or the deferred skip-if-equal guard
-landing — **update this skill and `reconciler.mermaid` in the same change**, and
-the cross-references in `sync-guide` (the gone-sub cancel + §10) /
-`PaymentRefactor.md` §1 if they drift. Never leave it stale: a stale rule produces
-false "violation" findings in review and misleads the next contributor.
+lock or schedule, the seam, the synthetic key, or the deferred skip-if-equal
+guard landing — **update this skill and
+`reconciler.mermaid` in the same change**, and the cross-references in
+`sync-guide` (the gone-sub cancel + §10) / `PaymentRefactor.md` §1 if they
+drift. Never leave it stale: a stale rule produces false "violation" findings
+in review and misleads the next contributor.

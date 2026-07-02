@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/image_upload_field.dart';
@@ -9,15 +10,20 @@ import 'package:crm/shared/widgets/subtitle_section.dart';
 class ClassDetailsSection extends StatelessWidget {
   final TextEditingController nameController;
   final TextEditingController descriptionController;
+
+  /// The class's current image URL (null on a new class with none yet — the
+  /// platform default is previewed instead).
   final String? imageUrl;
-  final String? imageAsset;
+
+  /// Called with a pasted image URL the owner confirms in the picker dialog.
+  final ValueChanged<String> onImageChanged;
 
   const ClassDetailsSection({
     super.key,
     required this.nameController,
     required this.descriptionController,
+    required this.onImageChanged,
     this.imageUrl,
-    this.imageAsset,
   });
 
   @override
@@ -31,8 +37,8 @@ class ClassDetailsSection extends StatelessWidget {
           ImageUploadField(
             label: 'Class image',
             imageUrl: imageUrl,
-            imageAsset: imageAsset,
-            onTap: () => debugPrint('TODO: pick class image'),
+            defaultImageUrl: AppConstants.defaultClassImageUrl,
+            onChanged: onImageChanged,
           ),
           CustomTextField(
             controller: nameController,

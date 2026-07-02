@@ -19,8 +19,10 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///   2. Total Members hero card (semicircular arc + active/inactive)
 ///   3. Two-column row (capped at one viewport height): left = Live
 ///      Attendance over Overdue Payments, each an equal-height half that
-///      scrolls on its own (Overdue is the one live, bloc-backed surface
-///      here; the rest is mock); right = Upcoming Classes.
+///      scrolls on its own; right = Upcoming Classes. Overdue Payments and
+///      Upcoming Classes are both live, bloc-backed surfaces (Upcoming reads
+///      the real `/classes/instances` schedule feed); only the hero + Live
+///      Attendance cards remain mock.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 

@@ -12,6 +12,9 @@ from schema.gym_employee import ThemeMode
 from schema.immutable_columns import GYMS as GYMS_IMMUTABLE
 from sqlalchemy import text
 
+from src.classes.service.classes_versions_service import (
+    ClassesVersionsService,
+)
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
     EmployeeThemeResponse,
@@ -46,6 +49,13 @@ class GymsService:
             ``GymsCreateService`` so the default authorized-payer waiver
             is seeded atomically (before the Stripe account) and torn
             down cleanly if creation fails.
+        classes_versions_service: Injected schedule-version mint engine —
+            the documented ``gyms -> classes`` edge: a gym TIMEZONE change
+            re-mints a same-shape schedule version (new tz) for every live
+            class, so the class system's frozen-per-version timezones track
+            the gym going forward while every existing version (the past)
+            stays untouched. The wall-clock exact-slot match keeps every
+            future sign-up / check-in — nothing is wiped.
     """
 
     def __init__(
@@ -53,8 +63,10 @@ class GymsService:
         db_pool: DirectDatabasePool,
         stripe_connect_service: GymsStripeConnectService,
         waivers_service: WaiversService,
+        classes_versions_service: ClassesVersionsService,
     ) -> None:
         self._db_pool = db_pool
+        self._classes_versions_service = classes_versions_service
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
@@ -147,13 +159,28 @@ class GymsService:
         gym_id: UUID,
         data: GymUpdateData,
     ) -> GymResponse:
-        """Update mutable fields on a gym row."""
+        """Update mutable fields on a gym row.
+
+        A save that carries a TIMEZONE additionally re-mints every live
+        class's schedule version with that zone (see the constructor note)
+        AFTER the gym row commits. The re-mint runs on EVERY
+        timezone-carrying save — deliberately not gated on "did the value
+        change": the gyms row commits first and the remint loop is one
+        transaction per class, so a partial remint failure leaves the row
+        already updated; a changed-value gate would then skip the retry
+        forever, stranding the remaining classes on the old zone. Because
+        the per-class mint is deep-equal-skipping (timezone included), a
+        re-save is cheap — already-reminted classes no-op, the rest catch
+        up — which is what makes the retry self-heal.
+        """
         update_fields = data.model_dump(exclude_unset=True, exclude_none=True)
 
         if not update_fields:
             raise ValueError("No fields provided to update")
 
         validate_mutable_columns(GYMS_IMMUTABLE, set(update_fields.keys()))
+
+        new_timezone = update_fields.get("timezone")
 
         set_clause = ", ".join(f"{col} = :{col}" for col in update_fields)
         sql = load_sql(
@@ -166,6 +193,11 @@ class GymsService:
 
         if not row:
             raise ValueError("Gym not found")
+
+        if new_timezone is not None:
+            await self._classes_versions_service.remint_timezone(
+                gym_id, new_timezone
+            )
 
         return GymResponse(**row)
 

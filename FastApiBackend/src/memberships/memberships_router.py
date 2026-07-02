@@ -17,12 +17,12 @@ from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
     MemberMembershipsBatchRepriceResponse,
+    MemberMembershipsCancelOneTimeRequest,
+    MemberMembershipsCancelOneTimeResponse,
     MemberMembershipsCancelPreviewRequest,
     MemberMembershipsCancelRequest,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
-    MemberMembershipsEndRequest,
-    MemberMembershipsEndResponse,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsRefundRequest,
@@ -601,15 +601,17 @@ async def preview_upgrade_membership(
 
 
 @member_memberships_router.post(
-    "/end",
-    response_model=MemberMembershipsEndResponse,
-    summary="End a one-time / trial membership early",
+    "/cancel-one-time",
+    response_model=MemberMembershipsCancelOneTimeResponse,
+    summary="Cancel a one-time / trial membership early",
     description=(
-        "Ends a one-time/trial membership now (pure DB write, no Stripe action). "
+        "Cancels a one-time/trial membership now — a MANUAL termination, so "
+        "it writes cancel_date (end_date stays automatic-only: duration "
+        "expiry + depletion auto-end). Pure DB write, no Stripe action. "
         "Recurring memberships are rejected — use DELETE / to cancel."
     ),
     responses={
-        200: {"description": "Ended; the resolved end_date"},
+        200: {"description": "Cancelled; the resolved cancel_date"},
         400: {"description": "Recurring / already ended / already cancelled"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
@@ -617,24 +619,26 @@ async def preview_upgrade_membership(
     },
 )
 @inject
-async def end_membership(
-    request: MemberMembershipsEndRequest,
+async def cancel_one_time_membership(
+    request: MemberMembershipsCancelOneTimeRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> MemberMembershipsEndResponse:
-    """End a one-time/trial membership early."""
+) -> MemberMembershipsCancelOneTimeResponse:
+    """Cancel a one-time/trial membership early (manual termination)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
-        end_date = await memberships_service.end_one_time(
+        cancel_date = await memberships_service.cancel_one_time(
             request.item_id,
             request.member_id,
         )
-        return MemberMembershipsEndResponse(end_date=end_date)
+        return MemberMembershipsCancelOneTimeResponse(
+            cancel_date=cancel_date
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -648,14 +652,14 @@ async def end_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to end membership: item_id=%s, member_id=%s",
+            "Failed to cancel one-time membership: item_id=%s, member_id=%s",
             request.item_id,
             request.member_id,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to end membership",
+            detail="Failed to cancel membership",
         ) from None
 
 

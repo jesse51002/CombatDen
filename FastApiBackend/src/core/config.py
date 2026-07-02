@@ -97,6 +97,22 @@ class Settings(BaseSettings):
     # must age past any in-flight op before it can be judged an orphan.
     reconciler_orphan_min_age_seconds: int = 3600
 
+    # Check-in early window: how many hours BEFORE a class's start time check-in
+    # opens. A check-in (single or batch "update attendees") for an occurrence
+    # whose start is further than this in the future is rejected. 2h (not the
+    # usual ~30m) so staff can check a member into several back-to-back classes
+    # at once. Past / in-session occurrences are always check-in-able.
+    checkin_opens_hours_before_start: int = 2
+
+    # Every class HAS an image (gym_classes.image_url is NOT NULL — the
+    # card/board/check-in UI leans on it): class create/update and the preset
+    # import fill this platform default (a generic people-in-a-gym photo,
+    # Pexels 1552242) whenever no image is provided.
+    default_class_image_url: str = (
+        "https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg"
+        "?auto=compress&cs=tinysrgb&w=1200"
+    )
+
     # On-demand post-op invoice fetch: right after an invoice-creating
     # membership op, pull that payer's new invoices straight from Stripe and
     # apply them (deterministic) instead of waiting on the invoice.paid /

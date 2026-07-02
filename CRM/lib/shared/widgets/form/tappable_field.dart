@@ -5,8 +5,10 @@ import 'package:crm/core/constants/design_constants.dart';
 /// A labeled, read-only field box that opens a picker on tap. Shared shell
 /// for [AppDateField] and [AppTimeField]; matches the [CustomTextField]
 /// box (card fill, 2px border, rounded corners) with a trailing icon.
+/// [label] is optional — omit it when the surrounding section already
+/// provides the heading.
 class TappableField extends StatelessWidget {
-  final String label;
+  final String? label;
   final String? valueText;
   final String hintText;
   final IconData icon;
@@ -14,11 +16,11 @@ class TappableField extends StatelessWidget {
 
   const TappableField({
     super.key,
-    required this.label,
     required this.valueText,
     required this.hintText,
     required this.icon,
     required this.onTap,
+    this.label,
   });
 
   @override
@@ -28,7 +30,7 @@ class TappableField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(label, style: DesignConstants.h2),
+        if (label != null) Text(label!, style: DesignConstants.h2),
         InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),

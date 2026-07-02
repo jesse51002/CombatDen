@@ -3,16 +3,17 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// Big month label (e.g. "February, 2026") followed by previous/next
-/// chevron buttons. Used at the top of the schedule above the grid.
+/// Big period label — the visible week's date range (e.g.
+/// "Jun 29, 2026 - Jul 5, 2026") — followed by previous/next chevron buttons
+/// that move the board a week at a time. Top-left of the schedule header.
 class MonthNavigator extends StatelessWidget {
-  final String monthLabel;
+  final String label;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
   const MonthNavigator({
     super.key,
-    required this.monthLabel,
+    required this.label,
     required this.onPrevious,
     required this.onNext,
   });
@@ -24,7 +25,7 @@ class MonthNavigator extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         Text(
-          monthLabel,
+          label,
           style: DesignConstants.big2,
         ),
         Row(

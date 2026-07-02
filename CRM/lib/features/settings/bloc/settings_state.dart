@@ -8,21 +8,39 @@ import 'package:equatable/equatable.dart';
 /// controller.
 class SettingsState extends Equatable {
   final bool saving;
+
+  /// True while a gym timezone save is in flight — its own channel so the
+  /// timezone selector can disable independently of the theme save.
+  final bool savingTimezone;
+
+  /// Bumps once per committed timezone save; a `BlocListener` watches it to
+  /// surface the success SnackBar (the save is not optimistic, so the
+  /// confirmation must be explicit).
+  final int timezoneSavedCount;
   final String? error;
 
-  const SettingsState({this.saving = false, this.error});
+  const SettingsState({
+    this.saving = false,
+    this.savingTimezone = false,
+    this.timezoneSavedCount = 0,
+    this.error,
+  });
 
   SettingsState copyWith({
     bool? saving,
+    bool? savingTimezone,
+    int? timezoneSavedCount,
     String? error,
     bool clearError = false,
   }) {
     return SettingsState(
       saving: saving ?? this.saving,
+      savingTimezone: savingTimezone ?? this.savingTimezone,
+      timezoneSavedCount: timezoneSavedCount ?? this.timezoneSavedCount,
       error: clearError ? null : (error ?? this.error),
     );
   }
 
   @override
-  List<Object?> get props => [saving, error];
+  List<Object?> get props => [saving, savingTimezone, timezoneSavedCount, error];
 }
