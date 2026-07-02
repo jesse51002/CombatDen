@@ -33,12 +33,14 @@ class AppRoutes {
   static const String growth = '/growth';
   static const String employees = '/employees';
   static const String employeeDetail = '/employees/detail';
-  // Settings hosts the appearance (theme) control and the printable
-  // sign-up / check-in QR codes.
+  // Settings hosts the appearance (theme) control, the gym timezone
+  // setting, and the printable sign-up / check-in QR codes.
   static const String settings = '/settings';
 
-  // Video-agent screen: reachable from the Settings page.
-  static const String videoAgent = '/settings/video-agent';
+  // Video-agent screen: reachable from the member-app preview's Videos
+  // tab (the Edit & Focus card). A sub-route of that section — not in
+  // kAddressableRoutes, so it keeps its parent section's URL.
+  static const String videoAgent = '/members/app-preview/video-agent';
 
   /// Deep-link path for a specific member's detail page —
   /// `/members/detail/<memberId>`. Opening a member writes this to the

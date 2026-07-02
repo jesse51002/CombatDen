@@ -272,9 +272,57 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
         ),
       );
 
+  /// Whether any schedule-SHAPE field differs from the loaded class — time,
+  /// duration, recurrence unit/interval, weekday flags, per-day instructors,
+  /// start/end date. Identity-only edits (name, description, capacity,
+  /// points, image, plans) return false, so they submit without the
+  /// going-forward warning. Only meaningful after [_validate] passes (the
+  /// numeric parses assume valid fields).
+  bool _scheduleChanged() {
+    final c = widget.existing;
+    if (c == null) return false;
+    if (_classTime != parseHmsTime(c.classTime)) return true;
+    if (int.parse(_durationController.text.trim()) != c.durationMinutes) {
+      return true;
+    }
+    final existingUnit = c.recurringUnit == RecurringUnit.unknown
+        ? RecurringUnit.weekly
+        : c.recurringUnit;
+    if (_safeUnit != existingUnit) return true;
+    if (int.parse(_intervalController.text.trim()) != c.recurringInterval) {
+      return true;
+    }
+    final existingDays = [c.sun, c.mon, c.tue, c.wed, c.thu, c.fri, c.sat];
+    final existingInstructors = [
+      c.sunInstructorId,
+      c.monInstructorId,
+      c.tueInstructorId,
+      c.wedInstructorId,
+      c.thuInstructorId,
+      c.friInstructorId,
+      c.satInstructorId,
+    ];
+    for (var i = 0; i < 7; i++) {
+      if (_day(i) != existingDays[i]) return true;
+      // Compare what would be SENT (null for an inactive day) against the
+      // class's own value under the same normalization.
+      final existing = existingDays[i] ? existingInstructors[i] : null;
+      if (_instructorFor(i) != existing) return true;
+    }
+    if (!_isSameDay(_startDate!, _dateOnly(c.startDate))) return true;
+    final existingEnd = c.endDate == null ? null : _dateOnly(c.endDate!);
+    final end = _endDate;
+    if ((end == null) != (existingEnd == null)) return true;
+    if (end != null && !_isSameDay(end, existingEnd!)) return true;
+    return false;
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   // ---- mutation lifecycle --------------------------------------------------
 
-  void _save() {
+  Future<void> _save() async {
     final err = _validate();
     if (err != null) {
       setState(() => _inlineError = err);
@@ -284,6 +332,20 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     if (gymId.isEmpty) {
       setState(() => _inlineError = 'No active gym selected.');
       return;
+    }
+    // A schedule-shape change (edit mode) clears reservations + early
+    // check-ins on upcoming dates whose slot no longer matches the new time
+    // exactly — confirm before submitting. Identity-only edits skip this.
+    if (_isEdit && _scheduleChanged()) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Change the schedule?',
+        message: 'Schedule changes apply going forward: upcoming dates that '
+            'no longer match the new time lose their reservations and early '
+            'check-ins (points reversed). Past classes are unaffected.',
+        confirmLabel: 'Save changes',
+      );
+      if (!confirmed || !mounted) return;
     }
     final bloc = context.read<ScheduleBloc>();
     _action = _isEdit ? _ClassAction.update : _ClassAction.create;
@@ -302,7 +364,9 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Delete this class?',
-      message: 'It is removed from the schedule. This cannot be undone here.',
+      message: 'Upcoming reservations and early check-ins are cleared '
+          '(points reversed). Past attendance history is kept. '
+          'This can\'t be undone.',
       confirmLabel: 'Delete',
       confirmColor: DesignConstants.badRed,
     );

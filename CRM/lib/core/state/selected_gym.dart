@@ -37,6 +37,7 @@ class SelectedGym extends ChangeNotifier {
   // ── Real admin gym (FastApiBackend UUID) ──
   String? _gymId;
   EmployeeRole? _role;
+  String? _timezone;
 
   // ── VideoService content selection ──
   String? _videoGymId;
@@ -54,6 +55,12 @@ class SelectedGym extends ChangeNotifier {
   /// The caller's role at the active gym; null until [setActiveGym].
   EmployeeRole? get role => _role;
 
+  /// The active gym's IANA timezone (e.g. `America/Chicago`); null until
+  /// [setActiveGym]. Class times, the schedule board, and check-in windows
+  /// follow this zone. Updated in place by [updateTimezone] when the Settings
+  /// timezone save commits.
+  String? get timezone => _timezone;
+
   /// The VideoService content gym id (the content key); null before first
   /// select. Drives the read-only member-app preview surfaces.
   String? get videoGymId => _videoGymId;
@@ -65,18 +72,27 @@ class SelectedGym extends ChangeNotifier {
   bool get isLoading => _isLoading;
   Object? get error => _error;
 
-  /// Record the active admin gym: the real gym UUID, its display name, and the
-  /// caller's [role]. Set once at sign-in / via the gym picker. Independent of
-  /// the VideoService content selection below — it does not touch [videoGymId]
-  /// or the theme.
+  /// Record the active admin gym: the real gym UUID, its display name, the
+  /// caller's [role], and the gym's IANA [timezone]. Set once at sign-in / via
+  /// the gym picker. Independent of the VideoService content selection below —
+  /// it does not touch [videoGymId] or the theme.
   void setActiveGym({
     required String gymId,
     required String displayName,
     required EmployeeRole role,
+    required String timezone,
   }) {
     _gymId = gymId;
     _displayName = displayName;
     _role = role;
+    _timezone = timezone;
+    notifyListeners();
+  }
+
+  /// Update the active gym's timezone after the backend save commits (the
+  /// Settings save is NOT optimistic — this is only called on success).
+  void updateTimezone(String timezone) {
+    _timezone = timezone;
     notifyListeners();
   }
 
@@ -111,6 +127,7 @@ class SelectedGym extends ChangeNotifier {
   void reset() {
     _gymId = null;
     _role = null;
+    _timezone = null;
     _videoGymId = null;
     _designId = null;
     _displayName = '';

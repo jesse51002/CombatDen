@@ -133,7 +133,8 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Remove attendee?',
-      message: 'Remove ${attendee.fullName} from this class?',
+      message: 'Remove ${attendee.fullName} from this class? Their check-in '
+          'is reversed and the awarded points are removed.',
       confirmLabel: 'Remove',
       confirmColor: DesignConstants.badRed,
     );

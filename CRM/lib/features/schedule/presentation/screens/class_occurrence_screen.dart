@@ -179,11 +179,38 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
     final time = _classTime;
     if (time == null) {
       setState(() => _inlineError = 'Pick a start time.');
       return;
+    }
+    // Warn before a move that wipes attendance: the picked date differs from
+    // the occurrence's current EFFECTIVE date (so a preserve-the-move re-save
+    // never warns), lands after today, and the occurrence has recorded
+    // check-ins — the backend clears those check-ins and reverses their
+    // points on a future-dated reschedule (reservations carry over).
+    final checkIns = widget.entry.attendeeCount ?? 0;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final movedFromEffective =
+        !_isSameDate(_selectedDate, widget.entry.classDate);
+    final targetInFuture = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    ).isAfter(today);
+    if (movedFromEffective && targetInFuture && checkIns > 0) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Move this class?',
+        message: 'Moving it to a future date clears its $checkIns '
+            'check-in${checkIns == 1 ? '' : 's'} and reverses their points. '
+            'Reservations move with the class.',
+        confirmLabel: 'Move class',
+        confirmColor: DesignConstants.badRed,
+      );
+      if (!confirmed || !mounted) return;
     }
     final bloc = context.read<ScheduleBloc>();
     _action = _Action.override;
@@ -233,11 +260,29 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     );
   }
 
+  /// The cancel confirm's copy — states the real stakes when the occurrence
+  /// has reservations / check-ins: cancelling deletes its reservations and
+  /// reverses its check-ins (their points are removed).
+  String get _cancelMessage {
+    const base = 'Only this date is cancelled — other dates are not affected.';
+    final signups = widget.entry.signupCount;
+    final checkIns = widget.entry.attendeeCount ?? 0;
+    final parts = <String>[
+      if (signups > 0)
+        'removes its $signups reservation${signups == 1 ? '' : 's'}',
+      if (checkIns > 0)
+        'reverses its $checkIns check-in${checkIns == 1 ? '' : 's'} '
+            'and their points',
+    ];
+    if (parts.isEmpty) return base;
+    return '$base Cancelling ${parts.join(' and ')}.';
+  }
+
   Future<void> _cancelThisClass() async {
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Cancel this class?',
-      message: 'Only this date is cancelled — other dates are not affected.',
+      message: _cancelMessage,
       confirmLabel: 'Cancel this class',
       confirmColor: DesignConstants.badRed,
     );
