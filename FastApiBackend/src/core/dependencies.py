@@ -10,6 +10,9 @@ from src.checkin.service.checkin_class_resolver import (
     CheckinClassResolver,
 )
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
+)
 from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.checkin_reverser import CheckinReverser
 from src.checkin.service.cycle_counts_service import CycleCountsService
@@ -226,14 +229,23 @@ class DependencyInjector(containers.DeclarativeContainer):
     # streak, and per-cycle class usage (also feeds member billing detail).
     cycle_counts_service = providers.Factory(CycleCountsService, db_pool=db_pool)
     streak_service = providers.Factory(StreakService, db_pool=db_pool)
-    # Resolve a single occurrence against the class's schedule versions +
-    # exceptions (no materialization — occurrences are computed, never
-    # stored). Injects the pure version expander (stays in classes) — the
-    # one-way checkin → classes dependency.
+    # The ONE original-date occurrence-resolution algorithm the checkin
+    # domain shares (versions + exceptions → the version expander, with the
+    # reschedule window-widening) — injected by BOTH the check-in resolver
+    # and the sign-up service so the two can never disagree about whether an
+    # occurrence exists. The one-way checkin → classes dependency lives here.
+    checkin_occurrence_resolution = providers.Factory(
+        CheckinOccurrenceResolution,
+        db_pool=db_pool,
+        version_expander=classes_version_expander,
+    )
+    # Resolve a single occurrence for check-in (identity gate + the shared
+    # resolution + the 2h early-check-in window). A pure read — occurrences
+    # are computed, never stored.
     checkin_class_resolver = providers.Factory(
         CheckinClassResolver,
         db_pool=db_pool,
-        version_expander=classes_version_expander,
+        occurrence_resolution=checkin_occurrence_resolution,
     )
     # Per-member gate + write (eligibility, capacity, plan selection, auto-end).
     checkin_member_gate = providers.Factory(
@@ -256,14 +268,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
     )
     # Create / remove a member's sign-up (reservation) for an occurrence.
-    # create() validates the occurrence via the same version expander used by
-    # checkin_class_resolver, then its capacity check reads the same
+    # create() validates the occurrence via the SAME shared resolution the
+    # check-in resolver injects, then its capacity check reads the same
     # signed-up-or-attended union the check-in capacity gate reads (both go
     # through CheckinQueries).
     signup_service = providers.Factory(
         SignupService,
         db_pool=db_pool,
-        version_expander=classes_version_expander,
+        occurrence_resolution=checkin_occurrence_resolution,
     )
     # Shared per-member check-in reverser: delete attendance, claw back points,
     # drop a feed activity, reverse the pack auto-end — on a KNOWN occurrence, in
@@ -279,18 +291,35 @@ class DependencyInjector(containers.DeclarativeContainer):
         reverser=checkin_reverser,
     )
 
+    # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
+    # (deletes member_attendance, claws back points, may clear an auto-end
+    # end_date), so each op runs in one transaction. Its teardown loops the
+    # shared checkin_reverser (defined above) over every attendee — a
+    # deliberate classes -> checkin dependency that avoids duplicating the
+    # reversal. Also HOSTS the shared reschedule engine (time-aware conflict
+    # check + attendance wipe / occurred_at re-sync) AND the shared cancel
+    # teardown (teardown_occurrence) that the exceptions service and the
+    # versions service's wipe reuse — hence defined before all of them.
+    classes_undo_service = providers.Factory(
+        ClassesUndoService,
+        db_pool=db_pool,
+        expander=classes_expander,
+        version_expander=classes_version_expander,
+        reverser=checkin_reverser,
+    )
     # The schedule-version MINT engine: the one writer of
     # gym_class_schedules. Minting runs the version-change wipe in the same
-    # transaction (future sign-ups deleted / early check-ins reversed /
-    # future exceptions dropped unless the new shape produces the exact same
-    # slot) — it loops the shared checkin_reverser, the same sanctioned
-    # classes -> checkin dependency the undo service uses. Also owns the
-    # soft-delete wipe and the gym timezone-change re-mint.
+    # transaction (per-date: cancellations and already-ran occurrences are
+    # untouched; non-surviving dates are torn down via the undo service's
+    # shared teardown — attendance reversed, sign-ups deleted, the exception
+    # dropped). Also owns the soft-delete wipe and the gym timezone-change
+    # re-mint (which never wipes — same shape, wall-clock survival by
+    # construction).
     classes_versions_service = providers.Factory(
         ClassesVersionsService,
         db_pool=db_pool,
         version_expander=classes_version_expander,
-        reverser=checkin_reverser,
+        undo_service=classes_undo_service,
     )
     # Class CRUD: identity in place; the schedule half mints versions via the
     # versions service; soft delete runs the future-keyed wipe.
@@ -298,21 +327,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesCrudService,
         db_pool=db_pool,
         versions_service=classes_versions_service,
-    )
-    # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
-    # (deletes member_attendance, claws back points, may clear an auto-end
-    # end_date), so each op runs in one transaction. Its teardown loops the
-    # shared checkin_reverser (defined above) over every attendee — a
-    # deliberate classes -> checkin dependency that avoids duplicating the
-    # reversal. Also HOSTS the shared reschedule engine (time-aware conflict
-    # check + attendance wipe / occurred_at re-sync) that
-    # ClassesExceptionsService delegates to — hence defined before it.
-    classes_undo_service = providers.Factory(
-        ClassesUndoService,
-        db_pool=db_pool,
-        expander=classes_expander,
-        version_expander=classes_version_expander,
-        reverser=checkin_reverser,
     )
     # A reschedule (new_date) on an instance-exception upsert delegates the
     # conflict check + attendance move to the undo service's engine, then writes

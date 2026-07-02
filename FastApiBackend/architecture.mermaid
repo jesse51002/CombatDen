@@ -122,7 +122,7 @@ flowchart TB
     classes_schedule_reader_service --> classes_version_expander
     classes_crud_service --> classes_versions_service
     classes_versions_service --> classes_version_expander
-    classes_versions_service --> checkin_reverser
+    classes_versions_service --> classes_undo_service
     classes_version_expander --> classes_expander
     classes_undo_service --> classes_expander
     classes_undo_service --> classes_version_expander

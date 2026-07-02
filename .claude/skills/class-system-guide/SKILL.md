@@ -100,18 +100,24 @@ is the only writer of `gym_class_schedules`.** A mint runs in ONE transaction:
    fields AND the timezone) mints nothing, wipes nothing.
 2. Insert the version, `effective_from` = server now, `timezone` = the gym's
    current zone.
-3. **The WIPE**: collect the class's future-keyed rows — sign-ups,
-   attendance (early check-ins), instance exceptions whose ORIGINAL slot
-   instant is at/after the mint (a slot that already started is never
-   touched; the old version owns it forever). A row **survives iff** the new
-   version's recurrence still emits its `original_date` (with the new slot
-   instant itself at/after the mint) **and** the new `class_time` equals the
-   row's `original_time` (exact wall-clock match). Non-survivors: sign-ups
-   DELETEd; attendance reversed per member via the shared `CheckinReverser`
-   (billing-adjacent: points clawback floored at 0 + activity drop + pack
-   auto-end reversal); instance exceptions DELETEd (a dangling exception
-   would zombie-apply if a later version reintroduced its date). **Range
-   exceptions are untouched** — date-range semantics survive any shape.
+3. **The WIPE decides per occurrence DATE.** A date is a candidate when its
+   ORIGINAL slot instant is at/after the mint (a slot that already started
+   is never touched; the old version owns it forever). A candidate is then
+   LEFT ALONE when any of these hold:
+   - its exception is a **CANCELLATION** — date-keyed intent ("this date is
+     off") that survives any shape change; deleting it would silently
+     revive the cancelled occurrence;
+   - its **EFFECTIVE start** (the reschedule/retime target) is before the
+     mint — the occurrence already RAN (rescheduled into the past); its
+     attendance is real and the exception row anchors it;
+   - the new version still emits the date at the exact same wall-clock
+     `original_time` (the exact-slot match).
+   Otherwise the date is torn down via the undo service's shared
+   `teardown_occurrence` — attendance reversed per member through the one
+   `CheckinReverser` implementation (billing-adjacent: points clawback
+   floored at 0 + activity drop + pack auto-end reversal), sign-ups deleted
+   — and its (non-cancelled) instance exception DELETEd. **Range exceptions
+   are untouched** — date-range semantics survive any shape.
 
 Consumers of the engine:
 - **Class create** → identity INSERT + the first version (no rows yet, no
@@ -128,9 +134,14 @@ Consumers of the engine:
   endpoint so the wipe runs.
 - **Gym timezone change** — `GymsService.update_gym` detects a `timezone`
   change and calls `remint_timezone(gym_id, new_tz)`: a same-shape mint (new
-  tz) per live class. Wall-clock matching keeps every future-keyed row;
-  existing versions keep their frozen zones so the past never moves. This is
-  the documented **gyms → classes** DI edge.
+  tz) per live class that **never wipes** (identical shape ⇒ every wall-clock
+  slot survives by construction; the instant-based wipe would only
+  false-positive inside the tz-delta window around the re-mint moment).
+  Existing versions keep their frozen zones so the past never moves. Known
+  narrow limitation: a slot whose instant falls between the new-tz and
+  old-tz reading of the re-mint moment sits in an ownership gap and may not
+  render for that ONE day — its rows are deliberately left untouched. This
+  is the documented **gyms → classes** DI edge.
 
 ## 2. Exceptions — per-occurrence changes on top of versions
 
@@ -151,14 +162,21 @@ all supported — the exception layer is how the past gets corrected.
 ## 3. The board — one computation for everything
 
 `ClassesScheduleReaderService` (`GET /api/v1/classes/instances`): load every
-class (deleted included) + ALL versions + in-window exceptions, expand via
-`ClassesVersionExpander` with `include_cancelled=True`, enrich with
-instructor names, per-date capacity overrides, and the attendance / sign-up
-counts (both keyed `(class_id, original_date)` — plain GROUP BYs, no joins).
-No stored-occurrence side, no past/live split, no dedup pass. The one
-time-dependent rule: a soft-deleted class emits only occurrences whose END
-(`occurred_at` + duration) is at/before now. Board rows carry
-`original_date` (addressing) alongside `class_date` (display).
+class (deleted included) + ALL versions + the window's exceptions
+(concurrently, via `asyncio.gather`), expand via `ClassesVersionExpander`
+with `include_cancelled=True`, enrich with instructor names, per-date
+capacity overrides, and the attendance / sign-up counts (both keyed
+`(class_id, original_date)` — plain GROUP BYs, no joins). No
+stored-occurrence side, no past/live split, no dedup pass.
+**Cross-window reschedules render via WIDENING**: the exception load also
+returns rows whose `new_date` falls in the window; each class expands over
+bounds stretched to its exceptions' original/target dates; the result is
+filtered back to the view window by EFFECTIVE date — a moved-in occurrence
+renders here (counts still load, keyed by its out-of-window original date),
+a moved-out one renders only in its target window. The one time-dependent
+rule: a soft-deleted class emits only occurrences whose END (`occurred_at`
++ duration) is at/before now. Board rows carry `original_date` (addressing)
+alongside `class_date` (display).
 
 ## 4. Cancel / reschedule — any date, keys never change
 
@@ -180,7 +198,11 @@ diverge):
   keeps them with their denormalized `occurred_at` re-synced onto the new
   effective instant (`sync_attendance_occurred_at` — also called by a plain
   same-date retime override on an attended occurrence). All instants compute
-  in the OWNING version's frozen timezone.
+  in the OWNING version's frozen timezone. **A re-sent unchanged landing is
+  a no-op move** (`is_landing_unchanged`) — attendance handling is skipped,
+  so the CRM's preserve-the-move re-send (its override save re-sends the
+  current effective date, judged against `originalDate`) never re-wipes
+  early check-ins.
 - **`assert_no_reschedule_conflict` is time-aware** — rejected only when the
   exact target instant (date + effective time) is already taken: other
   reschedules targeting the date are resolved per-candidate against each
@@ -189,7 +211,11 @@ diverge):
 ## 5. The check-in gate — warn-first, no writes on resolve
 
 `CheckinClassResolver.resolve(class_id, gym_id, occurrence_date)` loads the
-class identity + its versions + the day's exceptions, expands the single day,
+class identity, resolves the occurrence through the shared
+**`CheckinOccurrenceResolution.resolve_original`** — the ONE original-date
+resolution algorithm (versions + exceptions → the version expander, with
+the reschedule window-widening) that the sign-up service also injects, so
+check-in and sign-up can never disagree about whether an occurrence exists —
 and returns a `ResolvedClass` (`occurrence_date` = original date,
 `original_time`, effective `occurred_at`, effective capacity, points, plan
 gate inputs). Purely a read — nothing is written until the gate records.
@@ -247,11 +273,13 @@ trial/one_time pack's auto-end) lives ONCE in **`CheckinReverser`**
 (`src/checkin/`, signature `reverse(session, member_id, gym_id, class_id,
 original_date, points_worth)`, imports nothing from `src.classes`).
 Consumers: `CheckinRemover` (`DELETE /api/v1/checkin`, the thin single-member
-wrapper), `ClassesUndoService` (cancel + future-reschedule teardown), and
-`ClassesVersionsService` (the mint/soft-delete wipe). **This is a deliberate,
-documented `classes → checkin` dependency** — the OPPOSITE of the otherwise
-one-way `checkin → classes` seam — chosen so the reversal isn't duplicated.
-DI builds `checkin_reverser` before all consumers; no import cycle.
+wrapper) and `ClassesUndoService`, whose `teardown_occurrence` (reverse
+attendance + delete sign-ups for one date) is itself the single teardown the
+cancel entry points, the future-reschedule path, AND the versions service's
+wipe all route through. **This is a deliberate, documented
+`classes → checkin` dependency** — the OPPOSITE of the otherwise one-way
+`checkin → classes` seam — chosen so the reversal isn't duplicated. DI
+builds `checkin_reverser` before all consumers; no import cycle.
 
 ## 8. CRM surfaces
 

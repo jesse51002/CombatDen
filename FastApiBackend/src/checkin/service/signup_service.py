@@ -16,16 +16,11 @@ double-blocks. The create write is idempotent: ON CONFLICT DO NOTHING on the
 ``(class_id, member_id, original_date)`` unique constraint, stamping
 ``original_time`` from the resolved occurrence.
 
-Occurrence resolution reuses the same pure ``ClassesVersionExpander`` engine
-+ schedule-version / exception reads ``CheckinClassResolver`` uses for
-check-in (via ``CheckinQueries``), run with ``include_cancelled=True`` so a
-cancelled day and a non-recurrence date can be told apart in the error
-message. The resolution algorithm (including the reschedule-window-widening
-fix) is duplicated from ``CheckinClassResolver`` rather than shared through a
-facade — see that module's docstring for why a bare
-``[occurrence_date, occurrence_date]`` window isn't enough on its own; the
-checkin domain deliberately has no facade, so each occurrence-addressed
-caller resolves its own way.
+Occurrence resolution goes through the shared ``CheckinOccurrenceResolution``
+— the same algorithm ``CheckinClassResolver`` uses for check-in, so check-in
+and sign-up can never disagree about whether an occurrence exists — run with
+``include_cancelled=True`` so a cancelled day and a non-recurrence date can
+be told apart in the error message.
 """
 
 from datetime import date, time
@@ -38,14 +33,11 @@ from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
 )
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
+)
 from src.checkin.service.checkin_queries import CheckinQueries
 from src.classes.schema.classes_expander_schema import EffectiveOccurrence
-from src.classes.service.classes_expander_mapping import (
-    to_expander_instance,
-    to_expander_range,
-    to_expander_schedule,
-)
-from src.classes.service.classes_version_expander import ClassesVersionExpander
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
@@ -62,17 +54,18 @@ class SignupService:
 
     Args:
         db_pool: Injected database connection pool.
-        version_expander: The versioned recurrence + exception engine (pure),
-            the same engine ``CheckinClassResolver`` uses to resolve an
-            occurrence.
+        occurrence_resolution: The shared original-date occurrence resolver —
+            the same one ``CheckinClassResolver`` injects.
     """
 
     def __init__(
-        self, db_pool: DirectDatabasePool, version_expander: ClassesVersionExpander
+        self,
+        db_pool: DirectDatabasePool,
+        occurrence_resolution: CheckinOccurrenceResolution,
     ) -> None:
         self._db_pool = db_pool
         self._queries = CheckinQueries(db_pool)
-        self._version_expander = version_expander
+        self._occurrence_resolution = occurrence_resolution
 
     async def create(
         self,
@@ -168,72 +161,14 @@ class SignupService:
         if not class_row["is_active"]:
             raise ValueError(_CLASS_INACTIVE_MSG)
 
-        occurrence = await self._resolve_occurrence(class_id, occurrence_date)
+        occurrence = await self._occurrence_resolution.resolve_original(
+            class_id, occurrence_date, include_cancelled=True
+        )
         if occurrence is None:
             raise ValueError(_NOT_AN_OCCURRENCE_MSG)
         if occurrence.is_cancelled:
             raise ValueError(_CLASS_CANCELLED_MSG)
         return class_row, occurrence
-
-    async def _resolve_occurrence(
-        self,
-        class_id: UUID,
-        occurrence_date: date,
-    ) -> EffectiveOccurrence | None:
-        """The occurrence whose ORIGINAL date is ``occurrence_date``,
-        cancelled days INCLUDED (unlike ``CheckinClassResolver``'s default) so
-        ``_validate_occurrence`` can distinguish a cancelled occurrence from a
-        date that was never a recurrence at all and raise a more specific
-        message for each. See ``CheckinClassResolver``'s module docstring for
-        why the expand window is widened around a reschedule."""
-        versions = await self._queries.get_schedule_versions(class_id)
-        if not versions:
-            return None
-
-        window_start, window_end = await self._resolution_window(
-            class_id, occurrence_date
-        )
-        instances = await self._queries.get_instance_exceptions(
-            class_id, window_start, window_end
-        )
-        ranges = await self._queries.get_range_exceptions(
-            class_id, window_start, window_end
-        )
-        occurrences = self._version_expander.expand(
-            [to_expander_schedule(row) for row in versions],
-            [to_expander_instance(row) for row in instances],
-            [to_expander_range(row) for row in ranges],
-            window_start,
-            window_end,
-            include_cancelled=True,
-        )
-        return next(
-            (
-                occ
-                for occ in occurrences
-                if occ.original_date == occurrence_date
-            ),
-            None,
-        )
-
-    async def _resolution_window(
-        self, class_id: UUID, occurrence_date: date
-    ) -> tuple[date, date]:
-        """The window to expand: normally just ``occurrence_date``, widened
-        to also cover a reschedule's ``new_date`` so the moved occurrence
-        still resolves when addressed by its ORIGINAL date."""
-        same_day = await self._queries.get_instance_exceptions(
-            class_id, occurrence_date, occurrence_date
-        )
-        exception = same_day[0] if same_day else None
-        if (
-            exception is None
-            or exception["is_cancelled"]
-            or exception["new_date"] is None
-        ):
-            return occurrence_date, occurrence_date
-        new_date = exception["new_date"]
-        return min(occurrence_date, new_date), max(occurrence_date, new_date)
 
     # -- write -------------------------------------------------------------
 

@@ -254,6 +254,9 @@ class ClassesExceptionsService:
                 f"No class occurrence on {request.original_date} to "
                 f"reschedule"
             )
+        existing = await self._undo_service.exception_on(
+            class_id, request.original_date
+        )
 
         new_date = request.new_date
         effective_time = (
@@ -274,9 +277,21 @@ class ClassesExceptionsService:
             new_occurred_at,
         )
 
+        # A save that re-sends the occurrence's CURRENT landing (the CRM
+        # preserves an existing move this way) must not re-run the attendance
+        # handling — a future-target wipe would reverse early check-ins over
+        # a no-op.
+        landing_unchanged = self._undo_service.is_landing_unchanged(
+            owning, existing, request.original_date, new_date, new_occurred_at
+        )
         is_future = new_date > gym_today(owning.timezone)
         row = await self._write_reschedule(
-            class_id, gym_id, request, new_occurred_at, is_future
+            class_id,
+            gym_id,
+            request,
+            new_occurred_at,
+            is_future,
+            apply_attendance=not landing_unchanged,
         )
         return ClassInstanceExceptionResponse(**row)
 
@@ -287,6 +302,7 @@ class ClassesExceptionsService:
         request: ClassInstanceExceptionUpsertRequest,
         new_occurred_at: datetime,
         is_future: bool,
+        apply_attendance: bool = True,
     ) -> dict:
         """Attendance handling + the full override upsert in ONE transaction.
 
@@ -296,14 +312,15 @@ class ClassesExceptionsService:
         sql = load_sql(SQL_DIR / "classes_instance_exception_upsert.sql")
         try:
             async with self._db_pool.session() as session:
-                await self._undo_service.apply_reschedule_attendance(
-                    session,
-                    class_id,
-                    gym_id,
-                    request.original_date,
-                    new_occurred_at,
-                    is_future,
-                )
+                if apply_attendance:
+                    await self._undo_service.apply_reschedule_attendance(
+                        session,
+                        class_id,
+                        gym_id,
+                        request.original_date,
+                        new_occurred_at,
+                        is_future,
+                    )
                 row = (
                     (
                         await session.execute(

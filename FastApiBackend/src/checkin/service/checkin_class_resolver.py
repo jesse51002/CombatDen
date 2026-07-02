@@ -1,33 +1,12 @@
 """Resolve a single class occurrence for check-in.
 
 ``resolve`` turns ``(class_id, gym_id, occurrence_date)`` into a
-``ResolvedClass``: it loads the class identity, resolves the occurrence
-against the class's schedule versions + exceptions via the injected
-``ClassesVersionExpander``, then applies the early-check-in gate. Purely a
-read — occurrences are always computed, never stored, so there is no
-materialization step.
-
-This is the one-way ``checkin -> classes`` dependency: the resolver imports
-the pure ``ClassesVersionExpander`` + the expander row mappings, both of
-which stay in the ``classes`` domain.
-
-Occurrence resolution note (why a naive single-day expand isn't enough): an
-occurrence is addressed by its ORIGINAL date, never its effective
-(post-reschedule) date — see the class-system-guide skill. Expanding a bare
-window of exactly ``[occurrence_date, occurrence_date]`` would silently miss
-an occurrence that's been rescheduled to a DIFFERENT date: the inner
-``ClassesExpander`` drops a reschedule instance exception whose
-``new_date`` falls outside the expand window (it filters on the EFFECTIVE
-date landing in-window). ``_resolution_window`` widens the window to also
-cover the exception's ``new_date`` when one exists (and the occurrence isn't
-cancelled) before expanding once and filtering by ``original_date`` — the
-same problem ``ClassesUndoService`` (the classes-domain reschedule engine)
-solves with a separate ownership + raw-exception-row lookup; this is a
-functionally equivalent, single-query-shape alternative reusing the same
-``ClassesVersionExpander.expand`` call every other resolution path already
-uses. ``SignupService`` duplicates this same resolution (see its module
-docstring) — the checkin domain deliberately has no facade, so each
-occurrence-addressed caller resolves its own way.
+``ResolvedClass``: it loads the class identity, resolves the occurrence by
+its ORIGINAL date through the shared ``CheckinOccurrenceResolution`` (the
+one resolution algorithm sign-up also uses, so the two can never disagree
+about whether an occurrence exists), then applies the early-check-in gate.
+Purely a read — occurrences are always computed, never stored, so there is
+no materialization step.
 """
 
 import json
@@ -35,14 +14,10 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 from src.checkin.schema.checkin_schema import ResolvedClass
-from src.checkin.service.checkin_queries import CheckinQueries
-from src.classes.schema.classes_expander_schema import EffectiveOccurrence
-from src.classes.service.classes_expander_mapping import (
-    to_expander_instance,
-    to_expander_range,
-    to_expander_schedule,
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
 )
-from src.classes.service.classes_version_expander import ClassesVersionExpander
+from src.checkin.service.checkin_queries import CheckinQueries
 from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 
@@ -52,16 +27,17 @@ class CheckinClassResolver:
 
     Args:
         db_pool: Injected database connection pool.
-        version_expander: The versioned recurrence + exception engine (pure).
+        occurrence_resolution: The shared original-date occurrence resolver
+            (the one-way ``checkin -> classes`` seam lives inside it).
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        version_expander: ClassesVersionExpander,
+        occurrence_resolution: CheckinOccurrenceResolution,
     ) -> None:
         self._queries = CheckinQueries(db_pool)
-        self._version_expander = version_expander
+        self._occurrence_resolution = occurrence_resolution
 
     async def resolve(
         self,
@@ -89,7 +65,9 @@ class CheckinClassResolver:
         if not class_row["is_active"]:
             raise ValueError("Class is not active")
 
-        occurrence = await self._resolve_occurrence(class_id, occurrence_date)
+        occurrence = await self._occurrence_resolution.resolve_original(
+            class_id, occurrence_date
+        )
         if occurrence is None:
             raise ValueError(
                 f"No class occurrence on {occurrence_date} for this class"
@@ -130,65 +108,6 @@ class CheckinClassResolver:
             instructor_id=occurrence.instructor_id,
             duration_minutes=occurrence.duration_minutes,
         )
-
-    # -- occurrence resolution --------------------------------------------
-
-    async def _resolve_occurrence(
-        self,
-        class_id: UUID,
-        occurrence_date: date,
-    ) -> EffectiveOccurrence | None:
-        """The occurrence whose ORIGINAL date is ``occurrence_date``, or None
-        when the class has never been scheduled, the date isn't a
-        recurrence date, or it's cancelled that day. See the module
-        docstring for why the expand window is widened."""
-        versions = await self._queries.get_schedule_versions(class_id)
-        if not versions:
-            return None
-
-        window_start, window_end = await self._resolution_window(
-            class_id, occurrence_date
-        )
-        instances = await self._queries.get_instance_exceptions(
-            class_id, window_start, window_end
-        )
-        ranges = await self._queries.get_range_exceptions(
-            class_id, window_start, window_end
-        )
-        occurrences = self._version_expander.expand(
-            [to_expander_schedule(row) for row in versions],
-            [to_expander_instance(row) for row in instances],
-            [to_expander_range(row) for row in ranges],
-            window_start,
-            window_end,
-        )
-        return next(
-            (
-                occ
-                for occ in occurrences
-                if occ.original_date == occurrence_date
-            ),
-            None,
-        )
-
-    async def _resolution_window(
-        self, class_id: UUID, occurrence_date: date
-    ) -> tuple[date, date]:
-        """The window to expand: normally just ``occurrence_date``, widened
-        to also cover a reschedule's ``new_date`` so the moved occurrence
-        still resolves when addressed by its ORIGINAL date."""
-        same_day = await self._queries.get_instance_exceptions(
-            class_id, occurrence_date, occurrence_date
-        )
-        exception = same_day[0] if same_day else None
-        if (
-            exception is None
-            or exception["is_cancelled"]
-            or exception["new_date"] is None
-        ):
-            return occurrence_date, occurrence_date
-        new_date = exception["new_date"]
-        return min(occurrence_date, new_date), max(occurrence_date, new_date)
 
     @staticmethod
     def _parse_allowed_plan_ids(raw: object) -> list[UUID] | None:

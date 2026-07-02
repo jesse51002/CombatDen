@@ -1,7 +1,9 @@
 -- The mint engine's wipe collection: a class's attendance (early check-ins)
--- on/after the mint's gym-local floor date. The instant test happens in
--- Python (see classes_wipe_collect_signups.sql). Non-surviving rows are
--- reversed per member via the shared CheckinReverser (points clawback).
+-- on/after the mint's gym-local floor date. The instant tests happen in
+-- Python — rows store the wall-clock key, and a date's EFFECTIVE start (the
+-- proof an occurrence rescheduled into the past already ran, so its real
+-- attendance is never reversed by a schedule edit) is derived from its
+-- exception row.
 SELECT
     member_id,
     original_date,

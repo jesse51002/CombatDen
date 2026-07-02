@@ -187,11 +187,16 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     }
     final bloc = context.read<ScheduleBloc>();
     _action = _Action.override;
-    // Only send `newDate` when the user actually picked a different (later)
-    // date — leaving the picker on the occurrence's original date is a plain
-    // retime/instructor/capacity override, not a reschedule.
-    final sameDate = _isSameDate(_selectedDate, widget.entry.classDate);
-    final newDate = sameDate ? null : _selectedDate;
+    // `newDate` is judged against the occurrence's ORIGINAL (identity) date,
+    // not the displayed effective one: on an already-rescheduled occurrence
+    // the picker sits on the effective date, and re-sending it preserves the
+    // move (the upsert full-replaces the exception row — omitting new_date
+    // would silently un-reschedule; the backend treats a re-sent unchanged
+    // landing as a no-op move). Picking the original date back is the
+    // explicit "move it back" action and sends null.
+    final sameAsOriginal =
+        _isSameDate(_selectedDate, widget.entry.originalDate);
+    final newDate = sameAsOriginal ? null : _selectedDate;
     _beginMutation(bloc);
     bloc.add(ScheduleInstanceOverridden(
       classId: widget.entry.classId,

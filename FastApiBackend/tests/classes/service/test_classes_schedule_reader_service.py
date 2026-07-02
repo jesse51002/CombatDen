@@ -15,7 +15,13 @@ sign-up counts. These tests cover:
   its ORIGINAL date, not its displayed ``class_date``;
 * every row carries ``original_date`` (distinct from ``class_date`` once
   rescheduled);
-* a cancelled occurrence is still emitted, flagged.
+* a cancelled occurrence is still emitted, flagged;
+* an occurrence rescheduled INTO the window from an ORIGINAL date outside it
+  renders here (with its counts keyed by the out-of-window original date),
+  via the widened expand bounds;
+* an occurrence rescheduled OUT of the window (its original date inside, its
+  new_date outside) does not render in the source window — only its
+  unaffected sibling days do.
 
 The DB reads (``_read_all``) are stubbed by sql-file name; the real
 ``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``) does the
@@ -305,3 +311,108 @@ async def test_counts_keyed_by_original_date_and_cancelled_included(
     assert natural.attendance_count == 0
     assert natural.signup_count == 1  # keyed to day3's OWN original_date
     assert natural.is_cancelled is False
+
+
+async def test_reschedule_into_window_from_outside_original_renders(
+    monkeypatch,
+) -> None:
+    """An occurrence whose ORIGINAL date is BEFORE the view window but whose
+    reschedule target (new_date) falls INSIDE it is rendered here — the
+    widened expand bounds enumerate it by its original date, then the
+    effective-date filter keeps it because its landing IS in-window. Its
+    counts are keyed by the out-of-window ORIGINAL date via the same
+    widened bounds."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)  # well before anything here
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    window_start, window_end = date(2026, 6, 5), date(2026, 6, 7)
+    outside_original = date(2026, 6, 1)  # before window_start
+    moved_into_window = date(2026, 6, 6)  # inside the window
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    instances = [
+        _instance_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            original_date=outside_original,
+            new_date=moved_into_window,
+        )
+    ]
+    attendance = [
+        {
+            "class_id": class_id,
+            "original_date": outside_original,
+            "attendance_count": 4,
+        }
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+        attendance=attendance,
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, window_start, window_end
+    )
+
+    by_original = {row.original_date: row for row in resp.items}
+    # The moved occurrence renders under its OWN original date...
+    assert outside_original in by_original
+    moved = by_original[outside_original]
+    assert moved.class_date == moved_into_window  # ...displayed on the target
+    assert moved.attendance_count == 4  # counted at the ORIGINAL date
+    # ...alongside the window's own natural (unaffected) daily occurrences.
+    assert by_original.keys() >= {
+        outside_original,
+        date(2026, 6, 5),
+        date(2026, 6, 6),
+        date(2026, 6, 7),
+    }
+
+
+async def test_reschedule_out_of_window_does_not_render_in_source_window(
+    monkeypatch,
+) -> None:
+    """An occurrence whose ORIGINAL date is inside the view window but whose
+    reschedule target (new_date) falls OUTSIDE it is dropped from this
+    window entirely (the effective-date filter excludes it) — only its
+    unaffected sibling days render."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    day1, day2, day3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
+    moved_out_of_window = date(2026, 6, 20)
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    instances = [
+        _instance_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            original_date=day2,
+            new_date=moved_out_of_window,
+        )
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day3)
+
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day3}
+    assert day2 not in rendered

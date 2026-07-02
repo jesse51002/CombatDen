@@ -282,17 +282,21 @@ class ClassesUndoService:
             new_occurred_at,
         )
 
+        landing_unchanged = self.is_landing_unchanged(
+            owning, exception_row, occurrence_date, new_date, new_occurred_at
+        )
         is_future = new_date > gym_today(owning.timezone)
         try:
             async with self._db_pool.session() as session:
-                await self.apply_reschedule_attendance(
-                    session,
-                    class_id,
-                    gym_id,
-                    occurrence_date,
-                    new_occurred_at,
-                    is_future,
-                )
+                if not landing_unchanged:
+                    await self.apply_reschedule_attendance(
+                        session,
+                        class_id,
+                        gym_id,
+                        occurrence_date,
+                        new_occurred_at,
+                        is_future,
+                    )
                 row = (
                     (
                         await session.execute(
@@ -493,7 +497,7 @@ class ClassesUndoService:
         slot = self._owning_slot(versions, original_date)
         if slot is None:
             return None
-        exception_row = await self._exception_on(class_id, original_date)
+        exception_row = await self.exception_on(class_id, original_date)
         if exception_row is not None and exception_row["is_cancelled"]:
             return None
         return slot[0], exception_row
@@ -549,15 +553,43 @@ class ClassesUndoService:
             when,
         )
 
-    async def _exception_on(
+    async def exception_on(
         self, class_id: UUID, when: date
     ) -> dict | None:
-        """The instance-exception row keyed to ``when``, if any."""
+        """The instance-exception row keyed to ``when``, if any. Public: the
+        exceptions service reads it to detect a no-op re-send of an existing
+        reschedule (the CRM preserves a move by re-sending its target)."""
         rows = await self._read_all(
             load_sql(SQL_DIR / "classes_instance_exception_list.sql"),
             {"class_id": str(class_id), "start_date": when, "end_date": when},
         )
         return rows[0] if rows else None
+
+    def is_landing_unchanged(
+        self,
+        owning: ExpanderScheduleVersion,
+        exception_row: dict | None,
+        original_date: date,
+        new_date: date,
+        new_occurred_at: datetime,
+    ) -> bool:
+        """Whether a reschedule request targets the occurrence's CURRENT
+        effective landing (same date, same instant). A no-op move must not
+        re-run the attendance handling — a future-target wipe would reverse
+        early check-ins on a save that changed nothing about the slot (the
+        CRM re-sends the existing target to preserve a move across an
+        override edit)."""
+        current_date = (
+            exception_row["new_date"] or original_date
+            if exception_row is not None
+            else original_date
+        )
+        current_instant = datetime.combine(
+            current_date,
+            self._effective_time(owning, exception_row),
+            tzinfo=ZoneInfo(owning.timezone),
+        ).astimezone(UTC)
+        return new_date == current_date and new_occurred_at == current_instant
 
     # -- row plumbing ------------------------------------------------------
 

@@ -14,11 +14,20 @@ Coverage:
   — same instant rejected, same date different time allowed, and a candidate
   reschedule collision resolved against EACH candidate's own owning version
   (not a fixed/current version);
+* ``teardown_occurrence`` (the shared cancel teardown BOTH cancel entry points
+  — this service's ``cancel_occurrence`` AND the exceptions service's
+  ``is_cancelled=True`` override — and the version-mint wipe route through) —
+  reverses attendance, deletes sign-ups, and returns the combined counts;
 * cancel reverses attendance (via the real ``_reverse_attendance`` loop over
   the mocked reverser), deletes sign-ups, and writes the cancelled exception;
+* ``exception_on`` (the public single-date exception lookup the exceptions
+  service also reads to detect a no-op reschedule re-send);
 * ``apply_reschedule_attendance``'s branch — a FUTURE target wipes attendance,
   a today/past target re-syncs ``occurred_at`` instead — both directly and via
-  the full ``reschedule_occurrence`` orchestration.
+  the full ``reschedule_occurrence`` orchestration;
+* a reschedule re-send of the occurrence's CURRENT effective landing (a
+  no-op move) skips the attendance handling entirely but still (re)writes
+  the exception row.
 """
 
 from __future__ import annotations
@@ -230,6 +239,116 @@ class TestRescheduleConflict:
         await _check(time(9, 0))
 
 
+# -- teardown_occurrence (the shared cancel teardown) ------------------------
+
+
+class TestTeardownOccurrence:
+    """``teardown_occurrence`` is the extracted shared teardown — BOTH cancel
+    entry points (this service's ``cancel_occurrence`` and the exceptions
+    service's ``is_cancelled=True`` override upsert) and the version-mint
+    wipe (``ClassesVersionsService``) call it directly, so a cancel/wipe
+    behaves identically no matter which route it arrives by."""
+
+    async def test_reverses_attendance_and_deletes_signups(self) -> None:
+        class_id, gym_id = uuid4(), uuid4()
+        occurrence_date = date(2025, 7, 1)
+        member_a, member_b = uuid4(), uuid4()
+        points_worth = 40
+        unended_item = uuid4()
+
+        reverser = AsyncMock()
+        reverser.reverse.side_effect = [
+            CheckinRemoveResponse(
+                removed=True, points_reverted=points_worth
+            ),
+            CheckinRemoveResponse(
+                removed=True,
+                points_reverted=points_worth,
+                membership_unended=unended_item,
+            ),
+        ]
+        svc = _service(reverser=reverser)
+        svc._load_points = AsyncMock(return_value=points_worth)  # type: ignore[method-assign]
+        svc._attendee_members = AsyncMock(  # type: ignore[method-assign]
+            return_value=[member_a, member_b]
+        )
+        svc._delete_signups = AsyncMock(return_value=2)  # type: ignore[method-assign]
+        session = object()
+
+        (
+            attendance_deleted,
+            signups_deleted,
+            unended,
+        ) = await svc.teardown_occurrence(
+            session, class_id, gym_id, occurrence_date
+        )
+
+        assert attendance_deleted == 2
+        assert signups_deleted == 2
+        assert unended == [unended_item]
+        svc._delete_signups.assert_awaited_once_with(
+            session, class_id, occurrence_date
+        )
+        assert reverser.reverse.await_count == 2
+
+    async def test_no_attendees_still_deletes_signups(self) -> None:
+        class_id, gym_id = uuid4(), uuid4()
+        occurrence_date = date(2025, 7, 2)
+
+        svc = _service()
+        svc._load_points = AsyncMock(return_value=50)  # type: ignore[method-assign]
+        svc._attendee_members = AsyncMock(return_value=[])  # type: ignore[method-assign]
+        svc._delete_signups = AsyncMock(return_value=1)  # type: ignore[method-assign]
+
+        (
+            attendance_deleted,
+            signups_deleted,
+            unended,
+        ) = await svc.teardown_occurrence(
+            object(), class_id, gym_id, occurrence_date
+        )
+
+        assert attendance_deleted == 0
+        assert signups_deleted == 1
+        assert unended == []
+
+
+# -- exception_on -------------------------------------------------------
+
+
+class TestExceptionOn:
+    """The public single-date exception lookup — the exceptions service
+    reads this to detect a no-op re-send of an existing reschedule."""
+
+    async def test_returns_the_single_exception_row_for_the_date(self) -> None:
+        svc = _service()
+        target_date = date(2025, 3, 1)
+        row = {
+            "exception_id": uuid4(),
+            "original_date": target_date,
+            "is_cancelled": False,
+        }
+
+        async def _read_all(sql: str, params: dict) -> list[dict]:
+            assert params["start_date"] == target_date
+            assert params["end_date"] == target_date
+            return [row]
+
+        svc._read_all = _read_all  # type: ignore[method-assign]
+
+        result = await svc.exception_on(uuid4(), target_date)
+
+        assert result == row
+
+    async def test_returns_none_when_no_exception_exists(self) -> None:
+        svc = _service()
+        svc._read_all = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+        result = await svc.exception_on(uuid4(), date(2025, 3, 1))
+
+        assert result is None
+
+
 # -- cancel -----------------------------------------------------------------
 
 
@@ -431,3 +550,48 @@ class TestRescheduleOccurrence:
             _occurred_at(_FAR_PAST_DATE, v1.class_time),
         )
         assert resp.new_date == _FAR_PAST_DATE
+
+    async def test_noop_move_skips_attendance_handling_but_still_upserts(
+        self,
+    ) -> None:
+        """Re-sending the occurrence's CURRENT effective landing (the CRM
+        preserves an existing move across an unrelated override save this
+        way) is a no-op move: neither the future-wipe nor the today/past
+        occurred_at re-sync may run — a wipe would reverse early check-ins
+        over a save that changed nothing about the slot — but the exception
+        row is still (re)written."""
+        class_id, gym_id = uuid4(), uuid4()
+        v1 = _version(class_id=class_id, effective_from=_FAR_PAST)
+        original_date = date(2025, 1, 1)
+        current_landing = date(2025, 1, 5)  # already the occurrence's target
+        exception_id = uuid4()
+        row = {
+            "exception_id": exception_id,
+            "class_id": class_id,
+            "original_date": original_date,
+            "new_date": current_landing,
+        }
+        db_pool = _fake_db_pool(row)
+        svc = _service(db_pool=db_pool)
+        self._prep(svc, class_id, gym_id)
+        svc.load_versions = AsyncMock(return_value=[v1])  # type: ignore[method-assign]
+        # An existing exception already targets `current_landing` -- the
+        # request below re-sends that SAME target, changing nothing.
+        svc.exception_on = AsyncMock(  # type: ignore[method-assign]
+            return_value={
+                "new_date": current_landing,
+                "new_class_time": None,
+                "is_cancelled": False,
+            }
+        )
+        svc._reverse_attendance = AsyncMock()  # type: ignore[method-assign]
+        svc.sync_attendance_occurred_at = AsyncMock()  # type: ignore[method-assign]
+
+        resp = await svc.reschedule_occurrence(
+            class_id, gym_id, original_date, current_landing
+        )
+
+        svc._reverse_attendance.assert_not_awaited()
+        svc.sync_attendance_occurred_at.assert_not_awaited()
+        assert resp.exception_id == exception_id
+        assert resp.new_date == current_landing

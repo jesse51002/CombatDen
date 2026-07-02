@@ -5,12 +5,18 @@ Covers the effective-capacity resolution ``resolve`` folds into
 overriding the class's ``max_capacity`` (NULL = unlimited) — the same
 resolution ``SignupService`` runs for the sign-up path
 (``test_signup_service.py``), mirrored here since it's the check-in capacity
-gate's actual input; and the occurrence resolution itself, including the
-reschedule-window-widening fix (an occurrence addressed by its ORIGINAL date
-still resolves after being rescheduled to a different date). The DB reads
-(class row / schedule versions / instance+range exceptions) are mocked; the
-real ``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``)
-resolves the occurrence.
+gate's actual input; the ``ValueError`` mapping around a ``None`` resolution
+(class not found / deleted / inactive / no real occurrence); and the
+early-check-in window gate.
+
+Occurrence resolution itself (the shared ``CheckinOccurrenceResolution`` —
+window-widening for a rescheduled occurrence, cancelled-day handling, etc.)
+is the canonical coverage of ``test_checkin_occurrence_resolution.py``; this
+file builds a REAL ``CheckinOccurrenceResolution`` (with its own internal
+``CheckinQueries`` mocked, the same pattern the old tests used) so the
+resolver is exercised against real production wiring rather than a stubbed
+seam, and keeps a couple of the reschedule cases here too since they're the
+resolver's actual input shape.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -21,6 +27,9 @@ import pytest
 from schema.gym_class import RecurringUnit
 
 from src.checkin.service.checkin_class_resolver import CheckinClassResolver
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
+)
 from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_version_expander import ClassesVersionExpander
 
@@ -105,19 +114,20 @@ def _instance_exception_row(
     }
 
 
-def _resolver(
-    class_row: dict | None,
+def _occurrence_resolution(
     *,
     versions: list[dict] | None = None,
     instances: list[dict] | None = None,
     ranges: list[dict] | None = None,
-) -> CheckinClassResolver:
-    resolver = CheckinClassResolver(
+) -> CheckinOccurrenceResolution:
+    """A REAL ``CheckinOccurrenceResolution`` with its internal
+    ``CheckinQueries`` mocked — the shared, one-way ``checkin -> classes``
+    resolution seam ``CheckinClassResolver`` injects."""
+    resolution = CheckinOccurrenceResolution(
         MagicMock(), ClassesVersionExpander(ClassesExpander())
     )
-    resolver._queries = MagicMock()
-    resolver._queries.get_class_for_checkin = AsyncMock(return_value=class_row)
-    resolver._queries.get_schedule_versions = AsyncMock(
+    resolution._queries = MagicMock()
+    resolution._queries.get_schedule_versions = AsyncMock(
         return_value=versions if versions is not None else []
     )
 
@@ -128,10 +138,28 @@ def _resolver(
             if start_date <= row["original_date"] <= end_date
         ]
 
-    resolver._queries.get_instance_exceptions = AsyncMock(
+    resolution._queries.get_instance_exceptions = AsyncMock(
         side_effect=_instances_for
     )
-    resolver._queries.get_range_exceptions = AsyncMock(return_value=ranges or [])
+    resolution._queries.get_range_exceptions = AsyncMock(return_value=ranges or [])
+    return resolution
+
+
+def _resolver(
+    class_row: dict | None,
+    *,
+    versions: list[dict] | None = None,
+    instances: list[dict] | None = None,
+    ranges: list[dict] | None = None,
+) -> CheckinClassResolver:
+    resolver = CheckinClassResolver(
+        MagicMock(),
+        _occurrence_resolution(
+            versions=versions, instances=instances, ranges=ranges
+        ),
+    )
+    resolver._queries = MagicMock()
+    resolver._queries.get_class_for_checkin = AsyncMock(return_value=class_row)
     return resolver
 
 

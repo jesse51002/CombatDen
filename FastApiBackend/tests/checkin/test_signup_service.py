@@ -1,16 +1,20 @@
 """Unit tests for SignupService (no DB).
 
-Two collaborators are mocked: ``CheckinQueries`` (the class row / schedule
-version / instance-and-range-exception reads, and the shared
+Collaborators: ``CheckinQueries`` (the class row read + the shared
 signed-up-or-attended union) and the raw ``db_pool`` session (the
-insert/existing-lookup/delete writes). The real ``ClassesVersionExpander``
-(wrapping the real ``ClassesExpander``) is used as-is — it's pure (no
-DB/IO), so exercising it directly gives the occurrence validation tests
-(cancelled day vs. non-recurrence date vs. a real occurrence, incl. a
-rescheduled one) real expander behavior instead of a hand-rolled stand-in.
-This is the capacity + occurrence-validation coverage that doesn't need the
-live ``class_signups`` table — see ``test_signup_integration.py`` for the
-live-DB behavior (which needs the migration to be applied first).
+insert/existing-lookup/delete writes) are mocked directly on the service. The
+occurrence resolution itself goes through a REAL ``CheckinOccurrenceResolution``
+— the same shared, one-way ``checkin -> classes`` seam ``CheckinClassResolver``
+injects — with ITS internal ``CheckinQueries`` mocked (the pattern the old
+tests used before the resolution logic moved out to the shared service), so
+the occurrence validation tests (cancelled day vs. non-recurrence date vs. a
+real occurrence, incl. a rescheduled one) exercise the real expander/window-
+widening behavior via real production wiring instead of a hand-rolled
+stand-in. The canonical coverage of the shared resolution algorithm itself
+lives in ``test_checkin_occurrence_resolution.py``. This is the capacity +
+occurrence-validation coverage that doesn't need the live ``class_signups``
+table — see ``test_signup_integration.py`` for the live-DB behavior (which
+needs the migration to be applied first).
 """
 
 from datetime import date, datetime, time, timedelta
@@ -20,6 +24,9 @@ from uuid import UUID, uuid4
 import pytest
 from schema.gym_class import RecurringUnit
 
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
+)
 from src.checkin.service.signup_service import SignupService
 from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_version_expander import ClassesVersionExpander
@@ -134,10 +141,11 @@ def _service(
     pool = MagicMock()
     pool.session.return_value = session
 
-    service = SignupService(pool, ClassesVersionExpander(ClassesExpander()))
-    service._queries = MagicMock()
-    service._queries.get_class_for_checkin = AsyncMock(return_value=class_row)
-    service._queries.get_schedule_versions = AsyncMock(
+    occurrence_resolution = CheckinOccurrenceResolution(
+        MagicMock(), ClassesVersionExpander(ClassesExpander())
+    )
+    occurrence_resolution._queries = MagicMock()
+    occurrence_resolution._queries.get_schedule_versions = AsyncMock(
         return_value=versions if versions is not None else []
     )
 
@@ -148,10 +156,16 @@ def _service(
             if start_date <= row["original_date"] <= end_date
         ]
 
-    service._queries.get_instance_exceptions = AsyncMock(
+    occurrence_resolution._queries.get_instance_exceptions = AsyncMock(
         side_effect=_instances_for
     )
-    service._queries.get_range_exceptions = AsyncMock(return_value=ranges or [])
+    occurrence_resolution._queries.get_range_exceptions = AsyncMock(
+        return_value=ranges or []
+    )
+
+    service = SignupService(pool, occurrence_resolution)
+    service._queries = MagicMock()
+    service._queries.get_class_for_checkin = AsyncMock(return_value=class_row)
     return service, session
 
 

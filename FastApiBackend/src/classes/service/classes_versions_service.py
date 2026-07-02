@@ -7,31 +7,42 @@ always happens in ONE transaction with the version-change WIPE:
   future — no scheduled takeovers) and freezes the gym's current timezone.
 * A submission deep-equal to the current version (all shape fields AND the
   timezone) is a no-op: no mint, no wipe.
-* The wipe: every future-keyed row of the class — sign-ups, attendance (early
-  check-ins), instance exceptions whose ORIGINAL slot instant is at/after the
-  mint — is checked against the NEW version. A row SURVIVES iff the new
-  version's recurrence still emits its ``original_date`` (with the new slot
-  instant itself at/after the mint) AND the new ``class_time`` equals the
-  row's ``original_time`` (exact wall-clock match). Non-survivors: sign-ups
-  are DELETEd; attendance is reversed per member via the shared
-  ``CheckinReverser`` (delete + points clawback floored at 0 + activity drop
-  + pack auto-end reversal — billing-adjacent); instance exceptions are
-  DELETEd (a dangling exception would zombie-apply if a later version
-  reintroduced its date). Range exceptions are untouched — date-range
-  semantics survive any schedule shape.
-* Rows whose original slot already started before the mint are never touched
-  — the old version owns them forever (the immutable past).
+* **The WIPE decides per occurrence DATE.** A date is a wipe candidate when
+  its ORIGINAL slot instant (the row's own ``original_time`` in the outgoing
+  version's timezone; exceptions use the outgoing ``class_time``) is at/after
+  the mint. A candidate is then LEFT ALONE when any of these hold:
+    - the exception on it is a CANCELLATION — a cancellation is date-keyed
+      intent ("this date is off"), so it survives any shape change; deleting
+      it would silently revive the cancelled occurrence;
+    - its EFFECTIVE start (the reschedule/retime target) is before the mint —
+      the occurrence already ran; its attendance is real (points were
+      legitimately earned) and the exception row is what anchors it;
+    - the new version's recurrence still emits the date at the exact same
+      wall-clock ``original_time`` (the exact-slot match — the row's
+      identity survives untouched).
+  Otherwise the date is torn down via the undo service's shared
+  ``teardown_occurrence`` — attendance reversed per member through the one
+  ``CheckinReverser`` implementation (points clawback floored at 0 + activity
+  drop + pack auto-end reversal — billing-adjacent) and sign-ups deleted —
+  and its (non-cancelled) instance exception is DELETEd. Range exceptions are
+  never touched — date-range semantics survive any schedule shape. Rows whose
+  original slot already started before the mint are never even candidates —
+  the old version owns them forever (the immutable past).
 
 Consumers: class create (the FIRST version — no prior rows, no wipe), the
 schedule half of a class update, the soft-delete wipe (no mint — a deleted
 class produces no future slots, so NOTHING survives), and the gym
-timezone-change re-mint (same shape + new tz per live class; wall-clock
-matching keeps every row).
+timezone-change re-mint. The tz re-mint NEVER wipes: the shape is identical,
+so every wall-clock slot survives by construction — running the instant-based
+wipe would only produce false positives for slots inside the tz-delta window
+around the re-mint moment. (Known narrow limitation of a tz change: a slot
+whose instant falls between the new-tz and old-tz reading of the re-mint
+moment sits in an ownership gap and may not render for that ONE day; its
+rows are deliberately left untouched.)
 
-This service injects ``CheckinReverser`` — the same sanctioned
-``classes -> checkin`` dependency ``ClassesUndoService`` uses, so the
-per-member reversal has exactly one implementation. The reverser imports
-nothing from ``src.classes``; no cycle.
+This service depends on ``ClassesUndoService`` for the teardown, so the
+billing-adjacent reversal + sign-up delete has exactly one implementation
+across cancel, future-reschedule, and the wipe.
 """
 
 from datetime import UTC, date, datetime, time
@@ -43,10 +54,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
-from src.checkin.service.checkin_reverser import CheckinReverser
 from src.classes import SQL_DIR
 from src.classes.schema.classes_crud_schema import GymClassScheduleFields
 from src.classes.schema.classes_expander_schema import ExpanderScheduleVersion
+from src.classes.service.classes_undo_service import ClassesUndoService
 from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
@@ -57,6 +68,7 @@ from src.shared.sql_loader import load_sql
 _MINT_RACE_MSG = (
     "Another schedule edit for this class landed at the same instant; retry."
 )
+_MINT_RACE_CONSTRAINT = "uq_class_schedule_version"
 
 # The GymClassScheduleFields shape columns, compared one-by-one for the
 # deep-equal no-op check (timezone is compared separately).
@@ -72,11 +84,11 @@ class ClassesVersionsService:
         self,
         db_pool: DirectDatabasePool,
         version_expander: ClassesVersionExpander,
-        reverser: CheckinReverser,
+        undo_service: ClassesUndoService,
     ) -> None:
         self._db_pool = db_pool
         self._version_expander = version_expander
-        self._reverser = reverser
+        self._undo_service = undo_service
 
     # -- minting ----------------------------------------------------------
 
@@ -98,18 +110,17 @@ class ClassesVersionsService:
 
         Raises:
             ValueError: two mints for the class landed on the same instant
-                (the ``uq_class_schedule_version`` race; retry).
+                (the ``uq_class_schedule_version`` race; retry). Any other
+                constraint violation (bad instructor / date range) propagates
+                as ``IntegrityError`` for the caller's own mapping.
         """
         current = await self._current_version(session, class_id)
-        if current is not None and self._shape_equal(
-            shape, timezone, current
-        ):
-            return None
-
-        effective_from = datetime.now(UTC)
-        schedule_id = await self._insert_version(
-            session, class_id, gym_id, shape, timezone, effective_from
+        minted = await self._mint_version(
+            session, class_id, gym_id, shape, timezone, current
         )
+        if minted is None:
+            return None
+        schedule_id, effective_from = minted
         if current is not None:
             new_version = self._as_expander_version(
                 schedule_id, class_id, gym_id, shape, timezone, effective_from
@@ -135,10 +146,12 @@ class ClassesVersionsService:
     ) -> None:
         """The soft-delete wipe: a deleted class produces no future slots, so
         NO future-keyed row survives — every future sign-up is deleted, every
-        early check-in reversed (points clawed back), every future instance
-        exception dropped. Past rows are untouched (the past renders forever).
-        Runs in the caller's OPEN transaction. A never-scheduled class (no
-        versions) is a no-op.
+        early check-in reversed (points clawed back), every future
+        (non-cancelled, not-yet-run) instance exception dropped. Rows of
+        occurrences that already ran — by original slot OR by an effective
+        (rescheduled) start in the past — are untouched (the past renders
+        forever). Runs in the caller's OPEN transaction. A never-scheduled
+        class (no versions) is a no-op.
         """
         current = await self._current_version(session, class_id)
         if current is None:
@@ -156,10 +169,12 @@ class ClassesVersionsService:
     async def remint_timezone(self, gym_id: UUID, new_timezone: str) -> int:
         """The gym timezone-change hook: mint a same-shape version (new tz)
         for every LIVE (non-deleted) class of the gym, one transaction per
-        class. The wall-clock exact-slot match keeps every future-keyed row —
-        same dates, same times — so nothing is wiped; the future simply
-        renders in the new zone from the mint on, while every existing
-        version keeps its own frozen zone (the past never moves).
+        class. NO wipe runs — the shape is identical, so every wall-clock
+        slot survives by construction, and the instant-based wipe would only
+        false-positive on slots inside the tz-delta window around the
+        re-mint moment. Every existing version keeps its own frozen zone
+        (the past never moves); the future renders in the new zone from the
+        re-mint on.
 
         Returns the number of classes re-minted (tz-identical classes are
         deep-equal no-ops and don't count).
@@ -174,8 +189,8 @@ class ClassesVersionsService:
                 shape = GymClassScheduleFields(
                     **{key: current[key] for key in _SHAPE_FIELDS}
                 )
-                if await self.mint(
-                    session, class_id, gym_id, shape, new_timezone
+                if await self._mint_version(
+                    session, class_id, gym_id, shape, new_timezone, current
                 ):
                     minted += 1
                 await session.commit()
@@ -184,6 +199,27 @@ class ClassesVersionsService:
     async def gym_timezone(self, session: AsyncSession, gym_id: UUID) -> str:
         """The gym's CURRENT IANA timezone — what a fresh mint freezes."""
         return await get_gym_timezone(session, gym_id)
+
+    async def _mint_version(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        gym_id: UUID,
+        shape: GymClassScheduleFields,
+        timezone: str,
+        current: dict | None,
+    ) -> tuple[UUID, datetime] | None:
+        """The deep-equal check + version INSERT (no wipe). Returns
+        ``(schedule_id, effective_from)`` or None for a no-op."""
+        if current is not None and self._shape_equal(
+            shape, timezone, current
+        ):
+            return None
+        effective_from = datetime.now(UTC)
+        schedule_id = await self._insert_version(
+            session, class_id, gym_id, shape, timezone, effective_from
+        )
+        return schedule_id, effective_from
 
     # -- the wipe ---------------------------------------------------------
 
@@ -197,15 +233,9 @@ class ClassesVersionsService:
         mint_instant: datetime,
         survives,
     ) -> None:
-        """Collect the class's future-keyed rows and wipe the non-survivors.
-
-        A row is FUTURE-KEYED when its original slot instant — computed per
-        row from ``original_date`` + its own ``original_time`` (exceptions,
-        which store no time, use the OUTGOING version's ``class_time``) in
-        the outgoing version's timezone — is at/after ``mint_instant``. A row
-        whose slot already started (e.g. this morning's class, or anything
-        past) is never collected. ``survives(day, slot_time) -> bool`` decides
-        keep-vs-wipe per (date, wall-clock time) key.
+        """Collect the class's future-keyed occurrence dates and tear down
+        the non-survivors (see the module docstring for the per-date rules).
+        ``survives(day, slot_time) -> bool`` is the shape-specific keep test.
         """
         zone = ZoneInfo(outgoing_tz)
         floor_date = mint_instant.astimezone(zone).date()
@@ -221,46 +251,38 @@ class ClassesVersionsService:
             session, "classes_wipe_collect_exceptions.sql", params
         )
 
-        wiped_signup_dates: set[date] = set()
-        for row in signup_rows:
-            if not self._is_future_keyed(
-                row["original_date"], row["original_time"], zone, mint_instant
-            ):
-                continue
-            if not survives(row["original_date"], row["original_time"]):
-                wiped_signup_dates.add(row["original_date"])
-        for day in sorted(wiped_signup_dates):
-            await self._delete_signups(session, class_id, day)
+        exceptions_by_date: dict[date, dict] = {
+            row["original_date"]: row for row in exception_rows
+        }
+        # One original occurrence per gym-local date (the one-per-day
+        # invariant), so any row's original_time is THE date's slot time;
+        # exception-only dates fall back to the outgoing version's time.
+        slot_times: dict[date, time] = {}
+        for row in [*signup_rows, *attendance_rows]:
+            slot_times.setdefault(row["original_date"], row["original_time"])
 
-        doomed_attendance = [
-            row
-            for row in attendance_rows
-            if self._is_future_keyed(
-                row["original_date"], row["original_time"], zone, mint_instant
+        candidate_dates = set(slot_times) | set(exceptions_by_date)
+        for day in sorted(candidate_dates):
+            slot_time = slot_times.get(day, outgoing_time)
+            if not self._is_future_keyed(
+                day, slot_time, zone, mint_instant
+            ):
+                continue  # original slot already started — immutable past
+            exception_row = exceptions_by_date.get(day)
+            if exception_row is not None and exception_row["is_cancelled"]:
+                continue  # date-keyed intent: a cancellation never revives
+            effective_start = self._effective_start(
+                day, slot_time, exception_row, zone
             )
-            and not survives(row["original_date"], row["original_time"])
-        ]
-        if doomed_attendance:
-            points_worth = await self._load_points(session, class_id)
-            for row in doomed_attendance:
-                await self._reverser.reverse(
-                    session,
-                    row["member_id"],
-                    gym_id,
-                    class_id,
-                    row["original_date"],
-                    points_worth,
-                )
-
-        for row in exception_rows:
-            if not self._is_future_keyed(
-                row["original_date"], outgoing_time, zone, mint_instant
-            ):
+            if effective_start < mint_instant:
+                continue  # rescheduled into the past — it already ran
+            if survives(day, slot_time):
                 continue
-            if not survives(row["original_date"], outgoing_time):
-                await self._delete_exception(
-                    session, class_id, row["original_date"]
-                )
+            await self._undo_service.teardown_occurrence(
+                session, class_id, gym_id, day
+            )
+            if exception_row is not None:
+                await self._delete_exception(session, class_id, day)
 
     def _survives_new_version(
         self,
@@ -297,19 +319,43 @@ class ClassesVersionsService:
         ).astimezone(UTC)
         return slot_instant >= mint_instant
 
+    @staticmethod
+    def _effective_start(
+        day: date,
+        slot_time: time,
+        exception_row: dict | None,
+        zone: ZoneInfo,
+    ) -> datetime:
+        """The occurrence's EFFECTIVE start instant — the reschedule/retime
+        target when an exception moves it, else the original slot."""
+        if exception_row is None:
+            effective_day, effective_time = day, slot_time
+        else:
+            effective_day = exception_row["new_date"] or day
+            effective_time = exception_row["new_class_time"] or slot_time
+        return datetime.combine(
+            effective_day, effective_time, tzinfo=zone
+        ).astimezone(UTC)
+
     # -- row plumbing ------------------------------------------------------
 
     async def _current_version(
         self, session: AsyncSession, class_id: UUID
     ) -> dict | None:
-        """The class's latest version row (or None for a never-scheduled
-        class — only possible mid-create)."""
-        rows = await self._fetchall(
-            session,
-            "classes_schedules_for_class.sql",
-            {"class_id": str(class_id)},
+        """The class's latest version row via the one-row
+        ``gym_class_schedules_current`` view read (or None for a
+        never-scheduled class — only possible mid-create)."""
+        row = (
+            (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "classes_schedule_current.sql")),
+                    {"class_id": str(class_id)},
+                )
+            )
+            .mappings()
+            .fetchone()
         )
-        return rows[-1] if rows else None
+        return dict(row) if row else None
 
     async def _insert_version(
         self,
@@ -347,7 +393,12 @@ class ClassesVersionsService:
                 .fetchone()
             )
         except IntegrityError as exc:
-            raise ValueError(_MINT_RACE_MSG) from exc
+            # Only the same-instant mint race becomes the retry message;
+            # FK / CHECK violations (bad instructor, end_date < start_date)
+            # propagate so the caller maps them to its own 400.
+            if _MINT_RACE_CONSTRAINT in str(exc.orig):
+                raise ValueError(_MINT_RACE_MSG) from exc
+            raise
         if not row:
             raise RuntimeError("Version INSERT did not return a row")
         return row["schedule_id"]
@@ -408,35 +459,6 @@ class ClassesVersionsService:
         return [
             row["class_id"] for row in rows if not row["is_deleted"]
         ]
-
-    async def _load_points(
-        self, session: AsyncSession, class_id: UUID
-    ) -> int:
-        """The class's points_worth — the per-check-in award the wipe claws
-        back, loaded once per wipe."""
-        row = (
-            (
-                await session.execute(
-                    text(load_sql(SQL_DIR / "classes_load_one.sql")),
-                    {"class_id": str(class_id)},
-                )
-            )
-            .mappings()
-            .fetchone()
-        )
-        return int(row["points_worth"]) if row else 0
-
-    async def _delete_signups(
-        self, session: AsyncSession, class_id: UUID, day: date
-    ) -> None:
-        await session.execute(
-            text(
-                load_sql(
-                    SQL_DIR / "classes_signups_delete_for_occurrence.sql"
-                )
-            ),
-            {"class_id": str(class_id), "original_date": day},
-        )
 
     async def _delete_exception(
         self, session: AsyncSession, class_id: UUID, day: date
