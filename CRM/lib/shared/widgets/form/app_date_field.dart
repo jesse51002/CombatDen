@@ -37,11 +37,11 @@ class AppDateField extends StatelessWidget {
   Future<void> _pick(BuildContext context) async {
     final first = firstDate ?? DateTime(2020);
     final last = lastDate ?? DateTime(2030);
-    // [value] may sit before a caller-supplied [firstDate] (e.g. a reschedule
-    // field defaults to the occurrence's original date, which is before the
-    // forward-only floor) — clamp so `showDatePicker`'s initialDate-in-range
-    // assertion never fires.
-    var initial = value ?? (firstDate != null ? first : DateTime(2026, 2, 1));
+    // An empty field opens at today; a filled one at its value. Either may
+    // sit outside the caller's bounds (e.g. a reschedule field defaults to
+    // the occurrence's original date, before a forward-only floor) — clamp
+    // so `showDatePicker`'s initialDate-in-range assertion never fires.
+    var initial = value ?? DateTime.now();
     if (initial.isBefore(first)) initial = first;
     if (initial.isAfter(last)) initial = last;
     final picked = await showDatePicker(
