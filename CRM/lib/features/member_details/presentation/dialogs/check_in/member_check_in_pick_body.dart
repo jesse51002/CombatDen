@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_reserve_selection.dart';
-import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_section.dart';
 import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 
@@ -16,53 +13,61 @@ import 'package:crm/shared/widgets/error_message.dart';
 /// `ClassOccurrenceScreen._kCheckInOpensHours`.
 const int _kCheckInOpensHours = 2;
 
-/// How far back "Show past classes" reaches.
+/// How far back the past-classes picker reaches.
 const int _kLookbackDays = 30;
 
-/// How far forward the Reserve section reaches.
+/// How far forward the Reserve picker reaches.
 const int _kHorizonDays = 14;
 
-/// The check-in/reserve dialog's selection body. Loads every effective
-/// occurrence in one `[today - 30d, today + 14d]` window, drops cancelled
-/// days, then splits it CLIENT-SIDE by each occurrence's computed start
-/// (`classDate` + `resolvedClassTime`) / end (`+ resolvedDurationMinutes`)
-/// against `DateTime.now()`:
+/// Builds the pick phase's content once the load settles, given the three
+/// CLIENT-SIDE splits of the loaded window (see [MemberCheckInPickBody]).
+typedef CheckInPickBuilder = Widget Function(
+  BuildContext context,
+  List<EffectiveClassInstance> checkIn,
+  List<EffectiveClassInstance> past,
+  List<EffectiveClassInstance> reserve,
+);
+
+/// The check-in/reserve dialog's data loader: loads every effective
+/// occurrence in one `[today - 30d, today + 14d]` window via
+/// `ScheduleRepository.listEffectiveInstances`, drops cancelled days, then
+/// splits it CLIENT-SIDE by each occurrence's computed start (`classDate` +
+/// `resolvedClassTime`) / end (`+ resolvedDurationMinutes`) against
+/// `DateTime.now()`:
 ///
-/// - **Check in** (emphasized, always shown): in session OR starting within
-///   the next 2h (`start <= now + 2h` and not yet ended) — soonest first.
-/// - **Past classes** (behind a "Show past classes" toggle, hidden by
-///   default): already ended (`end <= now`) — most recent first.
-/// - **Reserve**: any occurrence that hasn't started yet (`start > now`,
-///   i.e. not currently in session) — soonest first. This INTENTIONALLY
-///   overlaps Check-in: a class starting within the next 2h appears in BOTH
-///   sections (pick the Check-in tile to record attendance now, or the
-///   Reserve tile to hold a spot); a class already in session appears only
-///   under Check-in.
+/// - **Check in**: in session OR starting within the next 2h
+///   (`_kCheckInOpensHours`, mirroring the backend
+///   `checkin_opens_hours_before_start`) — soonest first.
+/// - **Past**: already ended — most recent first (feeds the "Check into a
+///   past class" identity picker, then that class's occurrences).
+/// - **Reserve**: any occurrence that hasn't started yet — soonest first
+///   (feeds the Reserve identity picker, then that class's occurrences).
+///   This INTENTIONALLY overlaps Check-in: a class starting within the next
+///   2h appears in BOTH — a class already in session appears only in
+///   Check-in.
 ///
-/// Picking a tile emits a [CheckInReserveSelection] carrying which action it
-/// drives, since the same occurrence can appear under both actions.
+/// Pure data + loading/error chrome; the pick-phase NAVIGATION (which view,
+/// which step, which class/occurrence is picked) lives in the dialog's own
+/// state and is handed the three lists via [builder] so it never re-fetches
+/// on a step or view change.
 class MemberCheckInPickBody extends StatefulWidget {
   final String gymId;
-  final String? selectedKey;
-  final ValueChanged<CheckInReserveSelection> onSelect;
+  final CheckInPickBuilder builder;
 
   const MemberCheckInPickBody({
     super.key,
     required this.gymId,
-    required this.onSelect,
-    this.selectedKey,
+    required this.builder,
   });
 
   @override
-  State<MemberCheckInPickBody> createState() =>
-      _MemberCheckInPickBodyState();
+  State<MemberCheckInPickBody> createState() => _MemberCheckInPickBodyState();
 }
 
 class _MemberCheckInPickBodyState extends State<MemberCheckInPickBody> {
   List<EffectiveClassInstance> _checkIn = [];
   List<EffectiveClassInstance> _past = [];
   List<EffectiveClassInstance> _reserve = [];
-  bool _showPast = false;
   bool _loading = true;
   String? _loadError;
 
@@ -148,44 +153,6 @@ class _MemberCheckInPickBodyState extends State<MemberCheckInPickBody> {
       );
     }
     if (_loadError != null) return ErrorMessage(message: _loadError!);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        CheckInSection(
-          title: 'Check in',
-          action: CheckInReserveAction.checkIn,
-          instances: _checkIn,
-          selectedKey: widget.selectedKey,
-          onSelect: widget.onSelect,
-          emptyLabel: 'No classes open for check-in right now.',
-        ),
-        if (_past.isNotEmpty)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppOutlineButton(
-              text: _showPast ? 'Hide past classes' : 'Show past classes',
-              borderRadius: DesignConstants.radiusSmall,
-              onPressed: () => setState(() => _showPast = !_showPast),
-            ),
-          ),
-        if (_showPast && _past.isNotEmpty)
-          CheckInSection(
-            title: 'Past classes',
-            action: CheckInReserveAction.checkIn,
-            instances: _past,
-            selectedKey: widget.selectedKey,
-            onSelect: widget.onSelect,
-          ),
-        if (_reserve.isNotEmpty)
-          CheckInSection(
-            title: 'Reserve',
-            action: CheckInReserveAction.reserve,
-            instances: _reserve,
-            selectedKey: widget.selectedKey,
-            onSelect: widget.onSelect,
-          ),
-      ],
-    );
+    return widget.builder(context, _checkIn, _past, _reserve);
   }
 }
