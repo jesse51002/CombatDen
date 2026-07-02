@@ -258,6 +258,7 @@ ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
       signupCount: i.signupCount,
       occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
       isCancelled: i.isCancelled,
+      cancellingRangeId: i.cancellingRangeId,
       resolvedClassTime: i.resolvedClassTime,
       resolvedInstructorId: i.resolvedInstructorId,
       resolvedDurationMinutes: i.resolvedDurationMinutes,

@@ -50,6 +50,14 @@ class EffectiveClassInstance extends Equatable {
   final bool hasInstanceException;
   final bool hasRangeException;
 
+  /// The range exception (`class_range_exceptions.exception_id`) that
+  /// actually cancelled this occurrence, per the backend's own precedence
+  /// resolution — set ONLY when a RANGE exception (not an instance
+  /// exception) is what cancelled it; null for an instance-cancel and for a
+  /// non-cancelled occurrence. Lets the occurrence screen show "Cancelled by
+  /// a range" with an Edit/Remove path straight to the governing range.
+  final String? cancellingRangeId;
+
   /// Recorded attendance for this occurrence (0 when none; never null).
   @JsonKey(defaultValue: 0)
   final int attendanceCount;
@@ -76,6 +84,7 @@ class EffectiveClassInstance extends Equatable {
     required this.isCancelled,
     required this.hasInstanceException,
     required this.hasRangeException,
+    this.cancellingRangeId,
     this.attendanceCount = 0,
     this.signupCount = 0,
   });
@@ -101,6 +110,7 @@ class EffectiveClassInstance extends Equatable {
         isCancelled,
         hasInstanceException,
         hasRangeException,
+        cancellingRangeId,
         attendanceCount,
         signupCount,
       ];

@@ -199,3 +199,41 @@ class ScheduleRangeCancelled extends ScheduleEvent {
   @override
   List<Object?> get props => [classId, start, end];
 }
+
+/// Move range exception [exceptionId] (of [classId]) to `[start, end]`, then
+/// reload the board. For a CANCEL range the backend atomically re-runs the
+/// create path's teardown over the NEW coverage — newly covered upcoming
+/// dates lose their reservations and early check-ins (points reversed);
+/// dates that fall out of coverage are never restored.
+class ScheduleRangeExceptionUpdated extends ScheduleEvent {
+  final String classId;
+  final String exceptionId;
+  final DateTime start;
+  final DateTime end;
+
+  const ScheduleRangeExceptionUpdated({
+    required this.classId,
+    required this.exceptionId,
+    required this.start,
+    required this.end,
+  });
+
+  @override
+  List<Object?> get props => [classId, exceptionId, start, end];
+}
+
+/// Remove range exception [exceptionId] (of [classId]) outright, then reload
+/// the board. Covered dates revive; anything already torn down while it was
+/// active is not restored.
+class ScheduleRangeExceptionDeleted extends ScheduleEvent {
+  final String classId;
+  final String exceptionId;
+
+  const ScheduleRangeExceptionDeleted({
+    required this.classId,
+    required this.exceptionId,
+  });
+
+  @override
+  List<Object?> get props => [classId, exceptionId];
+}

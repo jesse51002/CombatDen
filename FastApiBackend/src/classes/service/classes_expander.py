@@ -263,6 +263,7 @@ class ClassesExpander:
                     default_instructor,
                     gym_tz,
                     include_cancelled,
+                    cancelling_range_id=covering.exception_id,
                 )
             instructor = (
                 covering.new_instructor_id
@@ -298,12 +299,15 @@ class ClassesExpander:
         default_instructor: UUID | None,
         gym_tz: str,
         include_cancelled: bool,
+        cancelling_range_id: UUID | None = None,
     ) -> EffectiveOccurrence | None:
         """Emit a cancelled occurrence for display, or drop it.
 
         Returns None (the default drop) unless ``include_cancelled`` is set, in
         which case the occurrence is emitted on its ``original_date`` with the
         class's default time / duration / instructor and ``is_cancelled=True``.
+        ``cancelling_range_id`` is set by the caller ONLY for a range cancel
+        (never an instance cancel) and carried onto the emitted occurrence.
         """
         if not include_cancelled:
             return None
@@ -317,6 +321,7 @@ class ClassesExpander:
             False,
             gym_tz,
             is_cancelled=True,
+            cancelling_range_id=cancelling_range_id,
         )
 
     def _resolve_instance(
@@ -411,6 +416,7 @@ class ClassesExpander:
         is_rescheduled: bool,
         gym_tz: str,
         is_cancelled: bool = False,
+        cancelling_range_id: UUID | None = None,
     ) -> EffectiveOccurrence:
         """Materialize one resolved occurrence, computing ``occurred_at``.
 
@@ -418,7 +424,8 @@ class ClassesExpander:
         and converted to UTC. See the module docstring for the DST policy.
         ``original_time`` is the schedule's pre-exception default start time —
         the occurrence's identity time, distinct from the effective
-        ``class_time``.
+        ``class_time``. ``cancelling_range_id`` is only ever non-None when a
+        RANGE exception cancelled this occurrence (see ``_cancelled_display``).
         """
         occurred_at = datetime.combine(
             effective_date, class_time, tzinfo=ZoneInfo(gym_tz)
@@ -433,6 +440,7 @@ class ClassesExpander:
             instructor_id=instructor_id,
             is_rescheduled=is_rescheduled,
             is_cancelled=is_cancelled,
+            cancelling_range_id=cancelling_range_id,
         )
 
     # -- weekday lookups (mirror the seed) -------------------------------

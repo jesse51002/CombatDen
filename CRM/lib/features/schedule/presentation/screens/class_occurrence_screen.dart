@@ -8,14 +8,18 @@ import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/data/class_time_format.dart';
+import 'package:crm/features/schedule/data/models/class_range_exception.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
+import 'package:crm/features/schedule/data/range_exception_helpers.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
+import 'package:crm/features/schedule/presentation/dialogs/class_range_dates_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
 import 'package:crm/features/schedule/presentation/dialogs/signup/class_signup_dialog.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_attendee_roster.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_occurrence_actions.dart';
+import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_cancelling_range_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_header.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_override_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_read_only_details.dart';
@@ -32,7 +36,7 @@ import 'package:crm/shared/widgets/error_message.dart';
 const int _kCheckInOpensHours = 2;
 
 /// Which mutation the screen is running (drives the success copy).
-enum _Action { override, cancelInstance }
+enum _Action { override, cancelInstance, editRange, removeRangeCancellation }
 
 /// The screen's run state: idle, or processing (a mutation + board reload in
 /// flight). Only gates the [OccurrenceMutationOverlay] now — the real content
@@ -316,6 +320,70 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     ));
   }
 
+  /// "Edit range" on the "Cancelled by a range" section: pick new dates for
+  /// the governing [range], warn if the move WIDENS its coverage (newly
+  /// covered upcoming dates lose their reservations/check-ins), then run the
+  /// same mutation lifecycle as every other occurrence-screen action —
+  /// success dialog, then pop back to the (now-reloaded) board, since a
+  /// widened/narrowed/moved range can change whether THIS occurrence is
+  /// still cancelled at all.
+  Future<void> _editCancellingRange(ClassRangeException range) async {
+    final picked = await ClassRangeDatesDialog.show(
+      context: context,
+      className: widget.entry.name,
+      initialStart: range.startDate,
+      initialEnd: range.endDate,
+    );
+    if (picked == null || !mounted) return;
+    final (start, end) = picked;
+    if (rangeWidensCoverage(
+      oldStart: range.startDate,
+      oldEnd: range.endDate,
+      newStart: start,
+      newEnd: end,
+    )) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: kRangeEditWidenTitle,
+        message: kRangeEditWidenMessage,
+        confirmLabel: kRangeEditWidenConfirmLabel,
+        confirmColor: DesignConstants.badRed,
+      );
+      if (!confirmed || !mounted) return;
+    }
+    final bloc = context.read<ScheduleBloc>();
+    _action = _Action.editRange;
+    _beginMutation(bloc);
+    bloc.add(ScheduleRangeExceptionUpdated(
+      classId: widget.entry.classId,
+      exceptionId: range.exceptionId,
+      start: start,
+      end: end,
+    ));
+  }
+
+  /// "Remove range cancellation" on the "Cancelled by a range" section:
+  /// confirm, then remove [range] outright — the covered dates (including
+  /// this occurrence) come back on the schedule; anything already torn down
+  /// while the range was active is NOT restored.
+  Future<void> _removeRangeCancellation(ClassRangeException range) async {
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: kRangeRemoveTitle,
+      message: kRangeRemoveMessage,
+      confirmLabel: kRangeRemoveConfirmLabel,
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed || !mounted) return;
+    final bloc = context.read<ScheduleBloc>();
+    _action = _Action.removeRangeCancellation;
+    _beginMutation(bloc);
+    bloc.add(ScheduleRangeExceptionDeleted(
+      classId: widget.entry.classId,
+      exceptionId: range.exceptionId,
+    ));
+  }
+
   void _beginMutation(ScheduleBloc bloc) {
     final state = bloc.state;
     _successBaseline = state is ScheduleLoaded ? state.actionSuccessCount : 0;
@@ -354,11 +422,16 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   String get _successTitle => switch (_action) {
         _Action.override => 'Day updated',
         _Action.cancelInstance => 'Class cancelled',
+        _Action.editRange => 'Range updated',
+        _Action.removeRangeCancellation => 'Cancellation removed',
       };
 
   String get _successMessage => switch (_action) {
         _Action.override => "This day's details are updated.",
         _Action.cancelInstance => 'This class is cancelled for that day.',
+        _Action.editRange => 'The cancelled range now covers new dates.',
+        _Action.removeRangeCancellation =>
+          'This class\'s dates are back on the schedule.',
       };
 
   @override
@@ -401,7 +474,15 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
             onBack: _close,
           ),
           if (_inlineError != null) ErrorMessage(message: _inlineError!),
-          if (!widget.entry.isCancelled) _detailsSection(instructors),
+          if (!widget.entry.isCancelled)
+            _detailsSection(instructors)
+          else if (widget.entry.cancellingRangeId case final rangeId?)
+            ClassOccurrenceCancellingRangeSection(
+              classId: widget.entry.classId,
+              cancellingRangeId: rangeId,
+              onEdit: _editCancellingRange,
+              onRemove: _removeRangeCancellation,
+            ),
           ClassOccurrenceActions(
             occurrenceDate: widget.entry.classDate,
             isCancelled: widget.entry.isCancelled,

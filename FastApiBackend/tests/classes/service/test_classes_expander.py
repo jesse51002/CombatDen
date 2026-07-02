@@ -90,9 +90,11 @@ def _range(
     is_cancelled: bool = False,
     new_instructor_id: UUID | None = None,
     created_at: datetime = _DEFAULT_CREATED,
+    exception_id: UUID | None = None,
 ) -> ExpanderRangeException:
     """Build a date-range exception."""
     return ExpanderRangeException(
+        exception_id=exception_id or uuid4(),
         start_date=start_date,
         end_date=end_date,
         is_cancelled=is_cancelled,
@@ -433,6 +435,10 @@ def test_include_cancelled_shows_cancelled_instance() -> None:
     assert jan3.duration_minutes == 60  # class default, not the 15 override
     assert jan3.instructor_id == sub_iid  # weekday default, not the override
     assert all(not o.is_cancelled for o in shown if o.effective_date != date(2025, 1, 3))
+    # An INSTANCE cancel never sets cancelling_range_id -- only a RANGE cancel
+    # does (see test_include_cancelled_shows_cancelled_range).
+    assert jan3.cancelling_range_id is None
+    assert all(o.cancelling_range_id is None for o in shown)
 
 
 def test_include_cancelled_shows_cancelled_range() -> None:
@@ -463,6 +469,45 @@ def test_include_cancelled_shows_cancelled_range() -> None:
     assert _effective(shown) == _dates(2025, 1, [1, 2, 3, 4, 5, 6, 7])
     cancelled = {o.effective_date for o in shown if o.is_cancelled}
     assert cancelled == set(_dates(2025, 1, [4, 5, 6]))
+    # A RANGE cancel threads the cancelling range's own id onto every
+    # occurrence it cancels; everything else stays None.
+    for occ in shown:
+        expected = rng.exception_id if occ.is_cancelled else None
+        assert occ.cancelling_range_id == expected
+
+
+def test_cancelling_range_id_is_the_earliest_created_covering_range() -> None:
+    """When several ranges overlap, the id threaded onto a cancelled
+    occurrence is the same earliest-created range that actually governs it
+    (mirrors test_earliest_created_range_wins_on_overlap)."""
+    exp = ClassesExpander()
+    cls = _class(recurring_unit=RecurringUnit.daily, start_date=date(2025, 1, 4))
+    early_cancel = _range(
+        date(2025, 1, 4),
+        date(2025, 1, 4),
+        is_cancelled=True,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    late_cancel = _range(
+        date(2025, 1, 4),
+        date(2025, 1, 4),
+        is_cancelled=True,
+        created_at=datetime(2025, 1, 2, tzinfo=UTC),
+    )
+
+    occ = exp.expand(
+        cls,
+        [],
+        [late_cancel, early_cancel],
+        date(2025, 1, 4),
+        date(2025, 1, 4),
+        UTC_TZ,
+        include_cancelled=True,
+    )
+
+    assert len(occ) == 1
+    assert occ[0].is_cancelled is True
+    assert occ[0].cancelling_range_id == early_cancel.exception_id
 
 
 # -- timezone / DST ------------------------------------------------------

@@ -16,6 +16,7 @@ from src.classes.schema.classes_crud_schema import (
     ClassRangeExceptionCreateRequest,
     ClassRangeExceptionListResponse,
     ClassRangeExceptionResponse,
+    ClassRangeExceptionUpdateRequest,
     EffectiveClassInstanceListResponse,
     GymClassCreateRequest,
     GymClassListResponse,
@@ -501,7 +502,14 @@ async def create_range_exception(
 @classes_router.get(
     "/{class_id}/exceptions/range",
     response_model=ClassRangeExceptionListResponse,
-    summary="List a class's range exceptions in a window",
+    summary="List all of a class's range exceptions",
+    description=(
+        "Every range exception ever created for this class — cancel and "
+        "instructor-substitution alike — newest-created first. Gym-employee "
+        "read; the caller's gym is resolved from the class (no client-"
+        "supplied gym_id), like every other ``/{class_id}/exceptions/*`` "
+        "route."
+    ),
     responses={
         200: {"description": "Range exceptions listed"},
         401: {"description": "Not authenticated"},
@@ -512,8 +520,6 @@ async def create_range_exception(
 @inject
 async def list_range_exceptions(
     class_id: UUID,
-    start_date: date,
-    end_date: date,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     crud_service: ClassesCrudService = Depends(
@@ -523,14 +529,12 @@ async def list_range_exceptions(
         Provide[DependencyInjector.classes_exceptions_service]
     ),
 ) -> ClassRangeExceptionListResponse:
-    """List range exceptions for a class within a window."""
+    """List all range exceptions for a class."""
     user_payload = auth.get_current_user(credentials)
     await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
 
     try:
-        return await exceptions_service.list_range_exceptions(
-            class_id, start_date, end_date
-        )
+        return await exceptions_service.list_range_exceptions(class_id)
     except Exception:
         logger.error(
             "Failed to list range exceptions: class_id=%s",
@@ -540,6 +544,121 @@ async def list_range_exceptions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list range exceptions",
+        ) from None
+
+
+@classes_router.put(
+    "/{class_id}/exceptions/range/{exception_id}",
+    response_model=ClassRangeExceptionResponse,
+    summary="Move a range exception's dates",
+    description=(
+        "Updates ``start_date``/``end_date`` on an existing range exception. "
+        "For a CANCEL range, the SAME teardown pass as create re-runs over "
+        "the range's NEW coverage in the SAME transaction as the date "
+        "update — newly covered future dates the range now actually "
+        "cancels are torn down; dates that fall out of coverage simply "
+        "revive on the next expansion (nothing already torn down is "
+        "restored). An instructor-substitution range is a plain date move "
+        "(no teardown)."
+    ),
+    responses={
+        200: {"description": "Range exception updated"},
+        400: {"description": "Invalid date range"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class or range exception not found"},
+    },
+)
+@inject
+async def update_range_exception(
+    class_id: UUID,
+    exception_id: UUID,
+    request: ClassRangeExceptionUpdateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassRangeExceptionResponse:
+    """Move a range exception's dates (admin/owner)."""
+    user_payload = auth.get_current_user(credentials)
+    existing = await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await exceptions_service.update_range_exception(
+            class_id, existing.gym_id, exception_id, request
+        )
+    except ValueError as exc:
+        _raise_for_undo_value_error(str(exc))
+    except Exception:
+        logger.error(
+            "Failed to update range exception: class_id=%s, exception_id=%s",
+            class_id,
+            exception_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update range exception",
+        ) from None
+
+
+@classes_router.delete(
+    "/{class_id}/exceptions/range/{exception_id}",
+    response_model=ClassRangeExceptionResponse,
+    summary="Remove a range exception",
+    description=(
+        "Deletes the range exception outright. Covered dates revive on the "
+        "next expansion — reservations / check-ins already torn down while "
+        "the range was active are NOT restored."
+    ),
+    responses={
+        200: {"description": "Range exception removed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Class or range exception not found"},
+    },
+)
+@inject
+async def delete_range_exception(
+    class_id: UUID,
+    exception_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    crud_service: ClassesCrudService = Depends(
+        Provide[DependencyInjector.classes_crud_service]
+    ),
+    exceptions_service: ClassesExceptionsService = Depends(
+        Provide[DependencyInjector.classes_exceptions_service]
+    ),
+) -> ClassRangeExceptionResponse:
+    """Remove a range exception (admin/owner)."""
+    user_payload = auth.get_current_user(credentials)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+    )
+
+    try:
+        return await exceptions_service.delete_range_exception(
+            class_id, exception_id
+        )
+    except ValueError as exc:
+        _raise_for_undo_value_error(str(exc))
+    except Exception:
+        logger.error(
+            "Failed to delete range exception: class_id=%s, exception_id=%s",
+            class_id,
+            exception_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete range exception",
         ) from None
 
 

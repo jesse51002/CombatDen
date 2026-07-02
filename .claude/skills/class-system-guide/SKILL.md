@@ -157,6 +157,24 @@ weekday instructor) resolve against the OWNING version — a retro edit on an
 old-version date falls back to THAT version's defaults
 (`ClassesUndoService.owning_version` / `resolve_default_instructor`).
 
+**Range exceptions have a full CRUD surface**: `POST` create,
+`GET /{class_id}/exceptions/range` (every range ever created for the class,
+newest first — no window filter, no client-supplied `gym_id`; the caller's
+gym is resolved from the class like every other `/{class_id}/exceptions/*`
+route), `PUT .../range/{exception_id}` (move `start_date`/`end_date` only —
+`is_cancelled`/`new_instructor_id` are fixed at creation; for a CANCEL range
+this re-runs the SAME teardown as create over the range's NEW coverage,
+atomically with the date update, via the shared private seam
+`_write_range_and_teardown`), `DELETE .../range/{exception_id}` (removes the
+row outright). Dates that fall OUT of a range's coverage — narrowed by a PUT
+or freed by a DELETE — are never explicitly restored; they simply stop being
+covered on the next expansion (anything already torn down while covered stays
+torn down). The expander threads WHICH range cancelled an occurrence onto
+`EffectiveOccurrence.cancelling_range_id` (→
+`EffectiveClassInstanceResponse.cancelling_range_id` on the board) — set only
+when a RANGE (not an instance) exception is what cancelled it, letting the
+CRM jump straight from a cancelled occurrence to editing its governing range.
+
 **"Immutable past" applies to schedule-VERSION edits only.** Past-dated
 exceptions, cancel-past, reschedule-to-past, and retroactive check-ins are
 all supported — the exception layer is how the past gets corrected.
@@ -314,10 +332,27 @@ builds `checkin_reverser` before all consumers; no import cycle.
 - **Occurrence screen** (`class_occurrence_screen.dart`): view-first /
   edit (override section incl. a **date** field = reschedule); a two-tab
   **Reserved | Attended** roster; Reserve members (future) + Update
-  attendees (check-in, ≤2h).
+  attendees (check-in, ≤2h). When the viewed occurrence is cancelled AND
+  `cancellingRangeId != null` (a range, not an instance, cancelled it), a
+  **"Cancelled by a range"** section (a self-contained side read finding the
+  governing range by id) replaces the read-only details block with the
+  range's `start – end` plus **Edit range** / **Remove range cancellation** —
+  both run through the screen's own mutation lifecycle (success dialog, then
+  pop back to the reloaded board, exactly like "Cancel this class"), since
+  either action can change whether this occurrence is still cancelled at all.
 - **Class form** (`class_form_screen.dart`): submits the split update —
   `identity` (partial) + `schedule` (the complete shape; a no-change
-  schedule is a backend no-op).
+  schedule is a backend no-op). Edit mode shows a **"Cancelled ranges"**
+  section (`ClassCancelledRangesSection`, hidden when empty) listing the
+  class's CANCEL ranges whose `end_date` is today or later, each row with
+  Edit / Remove — a self-contained side read (mirrors the attendee roster's
+  own-repository pattern) whose mutations dispatch through the shared
+  `ScheduleBloc` (so the board reloads consistently) and confirm via a
+  SnackBar rather than a full success dialog, since editing one range doesn't
+  invalidate the rest of the form the way it does the occurrence screen.
+  Editing a range that WIDENS coverage warns first (newly covered upcoming
+  dates lose their reservations/check-ins, points reversed); removing warns
+  that covered dates come back but nothing already torn down is restored.
 - **Member page**: a **"Check in / Reserve"** popup — Check-in section
   (in-session + ≤2h) + past-classes toggle + Reserve section (any future
   not-yet-started).

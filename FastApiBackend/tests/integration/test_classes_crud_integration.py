@@ -8,7 +8,10 @@ Endpoints under test (all gym-employee gated, hit on the live backend):
   DELETE /api/v1/classes/{id}            (soft-delete)
   POST   /api/v1/classes/{id}/exceptions/instance  (upsert; reschedule + 409)
   POST   /api/v1/classes/{id}/exceptions/range     (create)
-  GET    /api/v1/classes/instances       (schedule board)
+  GET    /api/v1/classes/{id}/exceptions/range     (list, all, newest first)
+  PUT    /api/v1/classes/{id}/exceptions/range/{exception_id}  (move dates)
+  DELETE /api/v1/classes/{id}/exceptions/range/{exception_id}  (remove)
+  GET    /api/v1/classes/instances       (schedule board; cancelling_range_id)
 
 Run against the live backend + the seeded DB; the suite DISCOVERS a real
 instructor and a real membership from the DB and skips gracefully when the DB
@@ -317,6 +320,178 @@ class TestRangeExceptions:
             },
         )
         assert resp.status_code == 400, resp.text
+
+    def test_list_range_exceptions_returns_all_newest_first(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        class_id = _create_class(api, created, seed)["class_id"]
+        first = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": _START.isoformat(),
+                "end_date": _CANCEL_DATE.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert first.status_code == 201, first.text
+        second = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": _RESCHEDULE_TO.isoformat(),
+                "end_date": (_RESCHEDULE_TO + timedelta(days=3)).isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert second.status_code == 201, second.text
+
+        listed = api.get(f"{CLASSES_BASE}/{class_id}/exceptions/range")
+        assert listed.status_code == 200, listed.text
+        items = listed.json()["items"]
+        ids = {item["exception_id"] for item in items}
+        assert ids == {first.json()["exception_id"], second.json()["exception_id"]}
+        # Newest-created first.
+        assert items[0]["exception_id"] == second.json()["exception_id"]
+        assert items[1]["exception_id"] == first.json()["exception_id"]
+
+    def test_update_range_exception_moves_dates(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        class_id = _create_class(api, created, seed)["class_id"]
+        created_range = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": _START.isoformat(),
+                "end_date": _CANCEL_DATE.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert created_range.status_code == 201, created_range.text
+        exception_id = created_range.json()["exception_id"]
+
+        new_start = _RESCHEDULE_TO.isoformat()
+        new_end = (_RESCHEDULE_TO + timedelta(days=2)).isoformat()
+        moved = api.put(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{exception_id}",
+            json={"start_date": new_start, "end_date": new_end},
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["start_date"] == new_start
+        assert moved.json()["end_date"] == new_end
+        assert moved.json()["is_cancelled"] is True  # unchanged by the move
+
+    def test_update_unknown_range_exception_returns_404(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        class_id = _create_class(api, created, seed)["class_id"]
+        resp = api.put(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{uuid4()}",
+            json={
+                "start_date": _START.isoformat(),
+                "end_date": _END.isoformat(),
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+    def test_delete_range_exception_revives_the_date(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        class_id = _create_class(api, created, seed)["class_id"]
+        created_range = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": _CANCEL_DATE.isoformat(),
+                "end_date": _CANCEL_DATE.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert created_range.status_code == 201, created_range.text
+        exception_id = created_range.json()["exception_id"]
+
+        board_before = api.get(
+            f"{CLASSES_BASE}/instances",
+            params={
+                "gym_id": GYM_ID,
+                "start_date": _START.isoformat(),
+                "end_date": _END.isoformat(),
+            },
+        )
+        before_row = next(
+            row
+            for row in board_before.json()["items"]
+            if row["class_id"] == class_id
+            and row["original_date"] == _CANCEL_DATE.isoformat()
+        )
+        assert before_row["is_cancelled"] is True
+        assert before_row["cancelling_range_id"] == exception_id
+
+        deleted = api.delete(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{exception_id}"
+        )
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["exception_id"] == exception_id
+
+        # A second delete of the same (now-gone) row is a clean 404.
+        redelete = api.delete(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{exception_id}"
+        )
+        assert redelete.status_code == 404, redelete.text
+
+        # The listing no longer includes it.
+        listed = api.get(f"{CLASSES_BASE}/{class_id}/exceptions/range")
+        ids = {item["exception_id"] for item in listed.json()["items"]}
+        assert exception_id not in ids
+
+        # The date revived: no longer cancelled on the board.
+        board_after = api.get(
+            f"{CLASSES_BASE}/instances",
+            params={
+                "gym_id": GYM_ID,
+                "start_date": _START.isoformat(),
+                "end_date": _END.isoformat(),
+            },
+        )
+        after_row = next(
+            row
+            for row in board_after.json()["items"]
+            if row["class_id"] == class_id
+            and row["original_date"] == _CANCEL_DATE.isoformat()
+        )
+        assert after_row["is_cancelled"] is False
+        assert after_row["cancelling_range_id"] is None
+
+    def test_cancelling_range_id_null_for_instance_cancel(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """A board row cancelled by an INSTANCE exception carries
+        ``cancelling_range_id: null`` — only a RANGE cancel sets it (see
+        ``test_delete_range_exception_revives_the_date`` for the range
+        case)."""
+        class_id = _create_class(api, created, seed)["class_id"]
+        cancel = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": _CANCEL_DATE.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert cancel.status_code == 200, cancel.text
+
+        board = api.get(
+            f"{CLASSES_BASE}/instances",
+            params={
+                "gym_id": GYM_ID,
+                "start_date": _START.isoformat(),
+                "end_date": _END.isoformat(),
+            },
+        )
+        row = next(
+            r
+            for r in board.json()["items"]
+            if r["class_id"] == class_id
+            and r["original_date"] == _CANCEL_DATE.isoformat()
+        )
+        assert row["is_cancelled"] is True
+        assert row["cancelling_range_id"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -632,3 +807,67 @@ class TestRangeExceptionTeardown:
 
         # Past covered date: attendance kept (the asymmetry).
         assert self._attendance_exists(class_id, past_covered) is True
+
+    def test_put_widens_range_and_tears_down_the_newly_covered_date(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """PUT re-runs the SAME teardown as create, over the range's NEW
+        coverage: a date NOT covered by the original range keeps its
+        reservation until the range is widened to cover it, at which point
+        the same atomic teardown as create tears it down."""
+        if seed["membership"] is None:
+            pytest.skip("No membership in seed to attribute attendance to")
+
+        today = date.today()
+        payload = self._dynamic_class_payload(seed, today)
+        resp = api.post(CLASSES_BASE, json=payload)
+        assert resp.status_code == 201, resp.text
+        class_id = resp.json()["class_id"]
+        created.track_class(class_id)
+
+        member_id = seed["membership"]["member_id"]
+        narrow_end = today + timedelta(days=2)
+        newly_covered = today + timedelta(days=5)
+
+        # A reservation on a date OUTSIDE the range's initial coverage.
+        self._insert_signup(class_id, member_id, newly_covered)
+
+        created_range = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": today.isoformat(),
+                "end_date": narrow_end.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert created_range.status_code == 201, created_range.text
+        exception_id = created_range.json()["exception_id"]
+
+        # Not yet covered — the reservation survives the create.
+        assert self._signup_exists(class_id, newly_covered) is True
+
+        # Widen the range to now cover `newly_covered`.
+        moved = api.put(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{exception_id}",
+            json={
+                "start_date": today.isoformat(),
+                "end_date": (newly_covered + timedelta(days=1)).isoformat(),
+            },
+        )
+        assert moved.status_code == 200, moved.text
+
+        # The newly-covered date's reservation is torn down atomically with
+        # the move — the same teardown the create path runs.
+        assert self._signup_exists(class_id, newly_covered) is False
+
+        # Narrowing back OUT of coverage does not restore anything (the
+        # documented irreversibility) — the date simply stops being cancelled.
+        narrowed = api.put(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range/{exception_id}",
+            json={
+                "start_date": today.isoformat(),
+                "end_date": narrow_end.isoformat(),
+            },
+        )
+        assert narrowed.status_code == 200, narrowed.text
+        assert self._signup_exists(class_id, newly_covered) is False

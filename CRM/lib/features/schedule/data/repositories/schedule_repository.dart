@@ -7,7 +7,9 @@ import 'package:crm/features/check_in/data/models/signup_request.dart';
 import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/models/class_instance_exception_request.dart';
+import 'package:crm/features/schedule/data/models/class_range_exception.dart';
 import 'package:crm/features/schedule/data/models/class_range_exception_request.dart';
+import 'package:crm/features/schedule/data/models/class_range_exception_update_request.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_create_request.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
@@ -272,6 +274,56 @@ class ScheduleRepository {
         endDate: _dateParam.format(endDate),
         isCancelled: true,
       ).toJson(),
+    );
+  }
+
+  /// `GET /api/v1/classes/{class_id}/exceptions/range` — every range
+  /// exception ever created for this class (cancel and instructor-
+  /// substitution alike), newest-created first.
+  Future<List<ClassRangeException>> listRangeExceptions(
+    String classId,
+  ) async {
+    final response =
+        await _apiClient.get('/api/v1/classes/$classId/exceptions/range');
+    final items = (response.data as Map<String, dynamic>)['items'] as List;
+    return items
+        .map((e) => ClassRangeException.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `PUT /api/v1/classes/{class_id}/exceptions/range/{exception_id}` — move
+  /// a range exception's dates. For a CANCEL range the backend atomically
+  /// re-runs the create path's teardown over the NEW coverage; dates that
+  /// fall out of coverage simply revive (nothing already removed is
+  /// restored).
+  Future<ClassRangeException> updateRangeException(
+    String classId,
+    String exceptionId,
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final response = await _apiClient.put(
+      '/api/v1/classes/$classId/exceptions/range/$exceptionId',
+      data: ClassRangeExceptionUpdateRequest(
+        startDate: _dateParam.format(startDate),
+        endDate: _dateParam.format(endDate),
+      ).toJson(),
+    );
+    return ClassRangeException.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `DELETE /api/v1/classes/{class_id}/exceptions/range/{exception_id}` —
+  /// remove a range exception outright. Covered dates revive on the next
+  /// expansion; reservations/check-ins already torn down while it was
+  /// active are not restored.
+  Future<void> deleteRangeException(
+    String classId,
+    String exceptionId,
+  ) async {
+    await _apiClient.delete(
+      '/api/v1/classes/$classId/exceptions/range/$exceptionId',
     );
   }
 }

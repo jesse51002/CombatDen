@@ -49,6 +49,12 @@ class ScheduleClassEntry {
   /// True when this occurrence is cancelled — the card shows a badge.
   final bool isCancelled;
 
+  /// The range exception that cancelled this occurrence — set ONLY when a
+  /// RANGE exception (not an instance exception) is what cancelled it; null
+  /// for an instance-cancel and for a non-cancelled occurrence. Drives the
+  /// occurrence screen's "Cancelled by a range" section.
+  final String? cancellingRangeId;
+
   /// Effective local start time of day (`HH:MM:SS`) — the raw form behind
   /// [timeLabel] (which is display-only), used to pre-fill the occurrence-edit
   /// screen's time picker.
@@ -88,6 +94,7 @@ class ScheduleClassEntry {
     this.signupCount = 0,
     this.occurrenceInPast = false,
     this.isCancelled = false,
+    this.cancellingRangeId,
     this.maxCapacity,
   });
 }

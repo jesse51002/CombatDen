@@ -25,6 +25,7 @@ EffectiveClassInstance _$EffectiveClassInstanceFromJson(
   isCancelled: json['is_cancelled'] as bool,
   hasInstanceException: json['has_instance_exception'] as bool,
   hasRangeException: json['has_range_exception'] as bool,
+  cancellingRangeId: json['cancelling_range_id'] as String?,
   attendanceCount: (json['attendance_count'] as num?)?.toInt() ?? 0,
   signupCount: (json['signup_count'] as num?)?.toInt() ?? 0,
 );

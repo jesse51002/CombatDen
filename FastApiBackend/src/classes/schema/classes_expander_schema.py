@@ -131,6 +131,10 @@ class ExpanderRangeException(BaseModel):
     (the expander sorts by ``created_at`` and takes the first that covers).
 
     Attributes:
+        exception_id: The row's own identity — threaded onto a cancelled
+            occurrence's ``cancelling_range_id`` (see ``EffectiveOccurrence``)
+            so a caller can tell WHICH range cancelled it, for the CRM's
+            range-exception edit surfaces.
         start_date: First covered date (inclusive).
         end_date: Last covered date (inclusive).
         is_cancelled: When True, every covered occurrence is dropped.
@@ -139,6 +143,7 @@ class ExpanderRangeException(BaseModel):
         created_at: Row creation timestamp — the overlap tie-breaker.
     """
 
+    exception_id: UUID
     start_date: date
     end_date: date
     is_cancelled: bool = False
@@ -172,6 +177,13 @@ class EffectiveOccurrence(BaseModel):
             occurrence carries the class's default time / duration / instructor
             (the overrides are irrelevant once cancelled) and stays on its
             ``original_date`` (never rescheduled).
+        cancelling_range_id: The ``class_range_exceptions.exception_id`` that
+            cancelled this occurrence — set ONLY when a RANGE exception (not
+            an instance exception) is what cancelled it; None for an
+            instance-cancel and for a non-cancelled occurrence. Lets a caller
+            (the CRM's occurrence screen) distinguish a range-cancelled day
+            from an instance-cancelled one and jump straight to editing the
+            governing range.
         schedule_id: The OWNING version row (set by the version expander;
             None when a single shape was expanded directly).
         original_start_at: UTC instant of the ORIGINAL slot
@@ -190,5 +202,6 @@ class EffectiveOccurrence(BaseModel):
     instructor_id: UUID | None
     is_rescheduled: bool
     is_cancelled: bool = False
+    cancelling_range_id: UUID | None = None
     schedule_id: UUID | None = None
     original_start_at: datetime | None = None

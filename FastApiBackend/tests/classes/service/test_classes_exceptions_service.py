@@ -5,9 +5,17 @@ branching logic that decides whether a range-covered date is torn down is
 under test. Mirrors the mock style of ``test_classes_undo_service.py``.
 
 Coverage:
-* ``create_range_exception`` routes a CANCEL range through the teardown path
-  and an instructor-substitution range through the plain write only — never
-  both;
+* ``_write_range_and_teardown`` (the shared seam both ``create_range_exception``
+  and ``update_range_exception`` route through) — a CANCEL range tears down
+  after the write, an instructor-substitution range skips the teardown
+  entirely — never both;
+* ``update_range_exception`` — 404s when the exception doesn't belong to the
+  class; otherwise re-runs the SAME teardown decision keyed off the
+  EXISTING row's ``is_cancelled`` (not any field on the update request,
+  which carries no such flag);
+* ``delete_range_exception`` — 404s on a zero-row delete, else returns the
+  deleted row;
+* ``list_range_exceptions`` — reads the "all, newest-first" SQL (no window);
 * ``_teardown_if_still_cancelled`` — the per-candidate-date decision: an
   instance exception on the date short-circuits (the range never applies to
   a date any instance exception governs — same-date override or moved
@@ -19,9 +27,7 @@ Coverage:
   untouched;
 * ``_teardown_covered_occurrences`` — a no-op when there are no candidate
   dates (skips loading versions), else iterates every candidate;
-* ``_range_cancel_candidates`` — the raw SQL read, sorted/deduped;
-* ``_create_cancelled_range_with_teardown`` — insert + teardown + commit in
-  ONE session.
+* ``_range_cancel_candidates`` — the raw SQL read, sorted/deduped.
 """
 
 from __future__ import annotations
@@ -30,8 +36,11 @@ from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+import pytest
+
 from src.classes.schema.classes_crud_schema import (
     ClassRangeExceptionCreateRequest,
+    ClassRangeExceptionUpdateRequest,
 )
 from src.classes.service.classes_exceptions_service import (
     ClassesExceptionsService,
@@ -88,35 +97,209 @@ def _fake_session() -> AsyncMock:
     return session
 
 
-# -- create_range_exception routing ------------------------------------------
+# -- create_range_exception / update_range_exception routing ----------------
 
 
 class TestCreateRangeExceptionRouting:
     async def test_substitution_range_never_tears_down(self) -> None:
         svc = _service(MagicMock())
-        svc._write_returning = AsyncMock(
+        svc._write_range_and_teardown = AsyncMock(
             return_value=_range_row(is_cancelled=False)
         )
-        svc._create_cancelled_range_with_teardown = AsyncMock()
         request = _range_request(is_cancelled=False, new_instructor_id=uuid4())
 
         await svc.create_range_exception(uuid4(), uuid4(), request)
 
-        svc._write_returning.assert_awaited_once()
-        svc._create_cancelled_range_with_teardown.assert_not_awaited()
+        svc._write_range_and_teardown.assert_awaited_once()
+        assert svc._write_range_and_teardown.await_args.kwargs["is_cancelled"] is False
 
     async def test_cancel_range_routes_through_the_teardown_path(self) -> None:
         svc = _service(MagicMock())
-        svc._write_returning = AsyncMock()
-        svc._create_cancelled_range_with_teardown = AsyncMock(
+        svc._write_range_and_teardown = AsyncMock(
             return_value=_range_row(is_cancelled=True)
         )
         request = _range_request(is_cancelled=True)
 
         await svc.create_range_exception(uuid4(), uuid4(), request)
 
-        svc._create_cancelled_range_with_teardown.assert_awaited_once()
-        svc._write_returning.assert_not_awaited()
+        svc._write_range_and_teardown.assert_awaited_once()
+        assert svc._write_range_and_teardown.await_args.kwargs["is_cancelled"] is True
+
+    async def test_rejects_a_range_that_neither_cancels_nor_substitutes(
+        self,
+    ) -> None:
+        svc = _service(MagicMock())
+        request = _range_request(is_cancelled=False, new_instructor_id=None)
+
+        with pytest.raises(ValueError, match="cancel the range"):
+            await svc.create_range_exception(uuid4(), uuid4(), request)
+
+
+class TestUpdateRangeExceptionRouting:
+    async def test_not_found_raises_before_any_write(self) -> None:
+        undo = MagicMock()
+        svc = _service(undo)
+        svc._load_range_exception = AsyncMock(
+            side_effect=ValueError("Range exception not found")
+        )
+        svc._write_range_and_teardown = AsyncMock()
+
+        with pytest.raises(ValueError, match="not found"):
+            await svc.update_range_exception(
+                uuid4(),
+                uuid4(),
+                uuid4(),
+                ClassRangeExceptionUpdateRequest(
+                    start_date=date(2026, 8, 1), end_date=date(2026, 8, 5)
+                ),
+            )
+        svc._write_range_and_teardown.assert_not_awaited()
+
+    async def test_teardown_decision_follows_the_existing_rows_is_cancelled(
+        self,
+    ) -> None:
+        """The UPDATE request has no is_cancelled field at all — the
+        teardown decision must come from the EXISTING row, not the request."""
+        svc = _service(MagicMock())
+        svc._load_range_exception = AsyncMock(
+            return_value=_range_row(is_cancelled=True)
+        )
+        svc._write_range_and_teardown = AsyncMock(
+            return_value=_range_row(is_cancelled=True)
+        )
+        new_start, new_end = date(2026, 8, 1), date(2026, 8, 10)
+
+        await svc.update_range_exception(
+            uuid4(),
+            uuid4(),
+            uuid4(),
+            ClassRangeExceptionUpdateRequest(
+                start_date=new_start, end_date=new_end
+            ),
+        )
+
+        kwargs = svc._write_range_and_teardown.await_args.kwargs
+        assert kwargs["is_cancelled"] is True
+        assert kwargs["start_date"] == new_start
+        assert kwargs["end_date"] == new_end
+
+    async def test_substitution_range_update_never_tears_down(self) -> None:
+        svc = _service(MagicMock())
+        svc._load_range_exception = AsyncMock(
+            return_value=_range_row(is_cancelled=False)
+        )
+        svc._write_range_and_teardown = AsyncMock(
+            return_value=_range_row(is_cancelled=False)
+        )
+
+        await svc.update_range_exception(
+            uuid4(),
+            uuid4(),
+            uuid4(),
+            ClassRangeExceptionUpdateRequest(
+                start_date=date(2026, 8, 1), end_date=date(2026, 8, 5)
+            ),
+        )
+
+        assert svc._write_range_and_teardown.await_args.kwargs["is_cancelled"] is False
+
+
+class TestDeleteRangeException:
+    async def test_not_found_raises(self) -> None:
+        svc = _service(MagicMock())
+        svc._write_returning = AsyncMock(return_value=None)
+
+        with pytest.raises(ValueError, match="not found"):
+            await svc.delete_range_exception(uuid4(), uuid4())
+
+    async def test_returns_the_deleted_row(self) -> None:
+        svc = _service(MagicMock())
+        row = _range_row(is_cancelled=True)
+        svc._write_returning = AsyncMock(return_value=row)
+
+        result = await svc.delete_range_exception(row["class_id"], row["exception_id"])
+
+        assert result.exception_id == row["exception_id"]
+        assert svc._write_returning.await_args.kwargs.get("allow_missing") is True
+
+
+class TestListRangeExceptions:
+    async def test_reads_all_with_no_window(self) -> None:
+        svc = _service(MagicMock())
+        rows = [_range_row(is_cancelled=True), _range_row(is_cancelled=False)]
+        svc._read_all = AsyncMock(return_value=rows)
+
+        result = await svc.list_range_exceptions(uuid4())
+
+        assert len(result.items) == 2
+        args, kwargs = svc._read_all.await_args
+        # No start_date/end_date -- the "all ranges" read is unwindowed.
+        assert "start_date" not in args[1]
+        assert "end_date" not in args[1]
+
+
+# -- _write_range_and_teardown ------------------------------------------------
+
+
+class TestWriteRangeAndTeardown:
+    async def test_writes_tears_down_then_commits_for_a_cancel(self) -> None:
+        row = _range_row(is_cancelled=True)
+        session = _fake_session()
+        result = MagicMock()
+        result.mappings.return_value.fetchone.return_value = row
+        session.execute = AsyncMock(return_value=result)
+        db_pool = MagicMock()
+        db_pool.session.return_value = session
+
+        svc = _service(MagicMock())
+        svc._db_pool = db_pool
+        svc._teardown_covered_occurrences = AsyncMock()
+
+        result_row = await svc._write_range_and_teardown(
+            row["class_id"],
+            row["gym_id"],
+            "SQL",
+            {"a": 1},
+            is_cancelled=True,
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 31),
+        )
+
+        assert result_row == row
+        svc._teardown_covered_occurrences.assert_awaited_once_with(
+            session,
+            row["class_id"],
+            row["gym_id"],
+            date(2026, 8, 1),
+            date(2026, 8, 31),
+        )
+        session.commit.assert_awaited_once()
+
+    async def test_substitution_write_skips_teardown(self) -> None:
+        row = _range_row(is_cancelled=False)
+        session = _fake_session()
+        result = MagicMock()
+        result.mappings.return_value.fetchone.return_value = row
+        session.execute = AsyncMock(return_value=result)
+        db_pool = MagicMock()
+        db_pool.session.return_value = session
+
+        svc = _service(MagicMock())
+        svc._db_pool = db_pool
+        svc._teardown_covered_occurrences = AsyncMock()
+
+        await svc._write_range_and_teardown(
+            row["class_id"],
+            row["gym_id"],
+            "SQL",
+            {"a": 1},
+            is_cancelled=False,
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 31),
+        )
+
+        svc._teardown_covered_occurrences.assert_not_awaited()
+        session.commit.assert_awaited_once()
 
 
 # -- _teardown_if_still_cancelled --------------------------------------------
@@ -268,36 +451,3 @@ class TestRangeCancelCandidates:
         )
 
         assert dates == [date(2026, 7, 1), date(2026, 7, 5)]
-
-
-# -- _create_cancelled_range_with_teardown ------------------------------------
-
-
-class TestCreateCancelledRangeWithTeardown:
-    async def test_inserts_then_tears_down_then_commits(self) -> None:
-        row = _range_row(is_cancelled=True)
-        session = _fake_session()
-        result = MagicMock()
-        result.mappings.return_value.fetchone.return_value = row
-        session.execute = AsyncMock(return_value=result)
-        db_pool = MagicMock()
-        db_pool.session.return_value = session
-
-        svc = _service(MagicMock())
-        svc._db_pool = db_pool
-        svc._teardown_covered_occurrences = AsyncMock()
-
-        request = _range_request(is_cancelled=True)
-        result_row = await svc._create_cancelled_range_with_teardown(
-            row["class_id"], row["gym_id"], request, "SQL", {"a": 1}
-        )
-
-        assert result_row == row
-        svc._teardown_covered_occurrences.assert_awaited_once_with(
-            session,
-            row["class_id"],
-            row["gym_id"],
-            request.start_date,
-            request.end_date,
-        )
-        session.commit.assert_awaited_once()

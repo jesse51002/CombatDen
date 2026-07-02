@@ -71,6 +71,7 @@ def to_expander_instance(row: Mapping) -> ExpanderInstanceException:
 def to_expander_range(row: Mapping) -> ExpanderRangeException:
     """Project a ``class_range_exceptions`` row onto the expander contract."""
     return ExpanderRangeException(
+        exception_id=row["exception_id"],
         start_date=row["start_date"],
         end_date=row["end_date"],
         is_cancelled=row["is_cancelled"],

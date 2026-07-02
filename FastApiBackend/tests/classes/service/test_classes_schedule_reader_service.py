@@ -127,6 +127,27 @@ def _instance_row(
     }
 
 
+def _range_row(
+    *,
+    class_id: UUID,
+    gym_id: UUID,
+    start_date: date,
+    end_date: date,
+    is_cancelled: bool = True,
+    created_at: datetime = datetime(2025, 1, 1, tzinfo=UTC),
+) -> dict:
+    return {
+        "exception_id": uuid4(),
+        "class_id": class_id,
+        "gym_id": gym_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "is_cancelled": is_cancelled,
+        "new_instructor_id": None,
+        "created_at": created_at,
+    }
+
+
 def _service(
     *,
     classes: list[dict],
@@ -416,3 +437,57 @@ async def test_reschedule_out_of_window_does_not_render_in_source_window(
     rendered = {row.original_date for row in resp.items}
     assert rendered == {day1, day3}
     assert day2 not in rendered
+
+
+async def test_cancelling_range_id_distinguishes_range_from_instance_cancel(
+    monkeypatch,
+) -> None:
+    """A range-cancelled day carries the governing range's exception_id on
+    the board row; an instance-cancelled day and a plain day both carry
+    None — the CRM's only way to tell the two cancel sources apart."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    range_cancelled_day = date(2026, 6, 2)
+    instance_cancelled_day = date(2026, 6, 3)
+    plain_day = date(2026, 6, 1)
+
+    version = _version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    ranges = [
+        _range_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            start_date=range_cancelled_day,
+            end_date=range_cancelled_day,
+        )
+    ]
+    instances = [
+        _instance_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            original_date=instance_cancelled_day,
+            is_cancelled=True,
+        )
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+        ranges=ranges,
+    )
+
+    resp = await service.list_effective_instances(gym_id, plain_day, instance_cancelled_day)
+
+    by_date = {row.original_date: row for row in resp.items}
+    assert by_date[range_cancelled_day].is_cancelled is True
+    assert by_date[range_cancelled_day].cancelling_range_id == ranges[0]["exception_id"]
+    assert by_date[instance_cancelled_day].is_cancelled is True
+    assert by_date[instance_cancelled_day].cancelling_range_id is None
+    assert by_date[plain_day].is_cancelled is False
+    assert by_date[plain_day].cancelling_range_id is None

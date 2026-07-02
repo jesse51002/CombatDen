@@ -243,6 +243,22 @@ class ClassRangeExceptionListResponse(BaseModel):
     items: list[ClassRangeExceptionResponse]
 
 
+class ClassRangeExceptionUpdateRequest(BaseModel):
+    """Body for PUT /api/v1/classes/{class_id}/exceptions/range/{exception_id}.
+
+    Moves the range's dates only — ``is_cancelled`` / ``new_instructor_id``
+    are fixed at creation (create a new range instead of changing what kind
+    of range it is). For a CANCEL range, the write atomically re-runs the
+    create path's teardown over the NEW ``[start_date, end_date]`` — see
+    ``ClassesExceptionsService.update_range_exception``. Dates that fall OUT
+    of the new coverage are never explicitly restored; they simply stop
+    being covered on the next expansion.
+    """
+
+    start_date: date
+    end_date: date
+
+
 class EffectiveClassInstanceResponse(BaseModel):
     """One effective dated class occurrence for the schedule board.
 
@@ -274,6 +290,13 @@ class EffectiveClassInstanceResponse(BaseModel):
             occurrence's original date.
         has_range_exception: True when a range exception covers this
             occurrence's original date.
+        cancelling_range_id: The range exception (``class_range_exceptions
+            .exception_id``) that actually cancelled this occurrence, per the
+            expander's own precedence resolution — set ONLY when a RANGE
+            exception (not an instance exception) is what cancelled it; None
+            for an instance-cancel and for a non-cancelled occurrence. Lets
+            the CRM tell a range-cancelled occurrence apart from an
+            instance-cancelled one and jump to editing the governing range.
         attendance_count: Recorded attendance for this occurrence (0 when
             none).
         signup_count: Members signed up (reserved) for this occurrence — 0
@@ -298,6 +321,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     is_cancelled: bool
     has_instance_exception: bool
     has_range_exception: bool
+    cancelling_range_id: UUID | None = None
     attendance_count: int = 0
     signup_count: int = 0
 

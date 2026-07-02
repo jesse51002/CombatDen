@@ -39,6 +39,8 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     on<ScheduleInstanceCancelled>(_onInstanceCancelled);
     on<ScheduleInstanceOverridden>(_onInstanceOverridden);
     on<ScheduleRangeCancelled>(_onRangeCancelled);
+    on<ScheduleRangeExceptionUpdated>(_onRangeExceptionUpdated);
+    on<ScheduleRangeExceptionDeleted>(_onRangeExceptionDeleted);
     on<ScheduleBatchCheckInRequested>(_onBatchCheckIn);
     on<ScheduleBatchCheckInCleared>(_onBatchCheckInCleared);
     on<ScheduleSignUpRequested>(_onSignUp);
@@ -121,6 +123,32 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
       _mutateAndReload(
         emit,
         () => _repository.cancelRange(event.classId, event.start, event.end),
+      );
+
+  Future<void> _onRangeExceptionUpdated(
+    ScheduleRangeExceptionUpdated event,
+    Emitter<ScheduleState> emit,
+  ) =>
+      _mutateAndReload(
+        emit,
+        () => _repository.updateRangeException(
+          event.classId,
+          event.exceptionId,
+          event.start,
+          event.end,
+        ),
+      );
+
+  Future<void> _onRangeExceptionDeleted(
+    ScheduleRangeExceptionDeleted event,
+    Emitter<ScheduleState> emit,
+  ) =>
+      _mutateAndReload(
+        emit,
+        () => _repository.deleteRangeException(
+          event.classId,
+          event.exceptionId,
+        ),
       );
 
   /// Staff batch check-in. A DEDICATED channel (`isCheckingIn` /

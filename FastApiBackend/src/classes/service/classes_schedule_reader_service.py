@@ -251,6 +251,7 @@ class ClassesScheduleReaderService:
             is_cancelled=occ.is_cancelled,
             has_instance_exception=occ.original_date in instance_dates,
             has_range_exception=has_range,
+            cancelling_range_id=occ.cancelling_range_id,
             attendance_count=attendance.get(occurrence_key, 0),
             signup_count=signups.get(occurrence_key, 0),
         )

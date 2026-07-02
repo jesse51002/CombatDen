@@ -17,6 +17,7 @@ import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/data/models/recurring_unit.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_range_cancel_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
+import 'package:crm/features/schedule/presentation/widgets/form/class_cancelled_ranges_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_days_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_details_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/form/class_form_actions.dart';
@@ -517,6 +518,11 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
                 setState(() => _instructorByDay[day] = id),
             instructors: instructors,
           ),
+          if (_isEdit)
+            ClassCancelledRangesSection(
+              classId: widget.existing!.classId,
+              className: widget.existing!.className,
+            ),
           ClassFormActions(
             onCancel: _close,
             onSave: _save,
