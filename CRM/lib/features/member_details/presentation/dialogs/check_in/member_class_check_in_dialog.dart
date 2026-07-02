@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_class_group.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_class_picker.dart';
+import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_occurrence_card_grid.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_reserve_selection.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/check_in_section.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/member_check_in_pick_body.dart';
@@ -38,11 +39,14 @@ enum _ReserveStep { classes, occurrences }
 /// IDENTITY level (an image card, like the schedule board's `ClassCard`)
 /// before its date/time.
 ///
-/// **Check in**: step 1 is the existing occurrence-level list for CURRENT
-/// classes (in session or starting within the next 2h) plus a "Check into a
-/// past class" action; that opens step 2, the identity-level class picker
-/// over already-ended occurrences, then step 3, that class's past
-/// occurrences (most recent first) for a retroactive check-in.
+/// **Check in**: step 1 is an occurrence-level CARD GRID for CURRENT
+/// classes (in session or starting within the next 2h) — the same image
+/// cards and layout as the Reserve picker, but one card PER OCCURRENCE
+/// (not per class identity) so a tap directly selects that occurrence, no
+/// drill-in — plus a "Check into a past class" action; that opens step 2,
+/// the identity-level class picker over already-ended occurrences, then
+/// step 3, that class's past occurrences (most recent first) for a
+/// retroactive check-in.
 ///
 /// **Reserve**: step 1 is the identity-level class picker over any class
 /// with an upcoming occurrence; step 2 is that class's upcoming occurrences
@@ -251,9 +255,7 @@ class _MemberClassCheckInDialogState extends State<MemberClassCheckInDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingBig,
           children: [
-            CheckInSection(
-              title: 'Check in',
-              action: CheckInReserveAction.checkIn,
+            CheckInOccurrenceCardGrid(
               instances: checkIn,
               selectedKey: _checkInSelectedKey,
               onSelect: (sel) =>

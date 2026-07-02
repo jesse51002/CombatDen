@@ -48,9 +48,10 @@ class CheckInClassPicker extends StatelessWidget {
           ClassCard(
             name: group.className,
             timeLabel: '$hintPrefix '
-                '${classDateTimeLabel(
+                '${classDateTimeRangeLabel(
                   group.representative.classDate,
                   group.representative.resolvedClassTime,
+                  group.representative.resolvedDurationMinutes,
                 )}',
             imageUrl: group.imageUrl,
             pointsWorth: group.representative.pointsWorth,

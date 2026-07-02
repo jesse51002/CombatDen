@@ -11,7 +11,7 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 ///
 /// [showClassName] is off in the class-scoped occurrence steps (the class was
 /// just picked, so every tile is the same class) — the date/time becomes the
-/// tile's primary line. It stays on in the mixed current-classes list.
+/// tile's primary line. It defaults on for any future mixed-class list.
 class CheckInInstanceTile extends StatelessWidget {
   final EffectiveClassInstance instance;
   final bool selected;
@@ -60,9 +60,10 @@ class CheckInInstanceTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   Text(
-                    classDateTimeLabel(
+                    classDateTimeRangeLabel(
                       instance.classDate,
                       instance.resolvedClassTime,
+                      instance.resolvedDurationMinutes,
                     ),
                     style: showClassName
                         ? DesignConstants.h3Regular.copyWith(

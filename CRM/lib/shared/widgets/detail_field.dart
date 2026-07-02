@@ -12,11 +12,16 @@ class DetailField extends StatelessWidget {
   final String label;
   final String value;
 
+  /// Optional secondary line under [value], for a small qualifier the value
+  /// alone doesn't spell out (e.g. a duration beside a start–end time range).
+  final String? caption;
+
   const DetailField({
     super.key,
     required this.icon,
     required this.label,
     required this.value,
+    this.caption,
   });
 
   @override
@@ -48,6 +53,13 @@ class DetailField extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
+        if (caption != null)
+          Text(
+            caption!,
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text3rd,
+            ),
+          ),
       ],
     );
   }

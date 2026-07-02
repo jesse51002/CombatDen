@@ -51,6 +51,7 @@ class PaymentHistorySection extends StatefulWidget {
 class _PaymentHistorySectionState
     extends State<PaymentHistorySection> {
   late final MemberRepository _repo;
+  final ScrollController _scrollController = ScrollController();
   final List<PaymentRecord> _payments = [];
   bool _loading = false;
   bool _hasMore = true;
@@ -67,6 +68,12 @@ class _PaymentHistorySectionState
     super.initState();
     _repo = MemberRepository(apiClient: ApiClient());
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -142,14 +149,21 @@ class _PaymentHistorySectionState
 
   @override
   Widget build(BuildContext context) {
+    // Fixed height + internal scroll so the card doesn't grow unbounded inside
+    // the page scroll: the title stays pinned, the rows scroll in the
+    // remaining space, and the card stays exactly [historyCardHeight] tall so
+    // it lines up with the Class history card beside it.
     return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Text('Payment history', style: DesignConstants.h2),
-          _content(context),
-        ],
+      child: SizedBox(
+        height: DesignConstants.historyCardHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            Text('Payment history', style: DesignConstants.h2),
+            Expanded(child: _content(context)),
+          ],
+        ),
       ),
     );
   }
@@ -160,37 +174,48 @@ class _PaymentHistorySectionState
         return const Center(child: AppSpinner());
       }
       if (_error != null) {
-        return ErrorMessage(message: _error!);
+        return Center(child: ErrorMessage(message: _error!));
       }
-      return _Empty();
+      return Center(child: _Empty());
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        AppDataTable(
-          shrinkWrap: true,
-          showBackground: true,
-          columns: const [
-            AppDataTableColumn(label: 'Name', fill: true),
-            AppDataTableColumn(label: 'Paid by', minWidth: 130),
-            AppDataTableColumn(label: 'Date', minWidth: 110),
-            AppDataTableColumn(label: '', minWidth: 92),
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        // Right gutter so the scrollbar clears the full-width rows / "Show
+        // more" button instead of overlapping them (as the attendee roster
+        // reserves for its overlay scrollbar).
+        padding: const EdgeInsets.only(right: DesignConstants.spacingLarge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            AppDataTable(
+              shrinkWrap: true,
+              showBackground: true,
+              columns: const [
+                AppDataTableColumn(label: 'Name', fill: true),
+                AppDataTableColumn(label: 'Paid by', minWidth: 130),
+                AppDataTableColumn(label: 'Date', minWidth: 110),
+                AppDataTableColumn(label: '', minWidth: 92),
+              ],
+              rows: _payments
+                  .map((p) => _row(context, p))
+                  .toList(),
+            ),
+            if (_loading)
+              const Center(child: AppSpinner())
+            else if (_hasMore)
+              AppOutlineButton(
+                fullWidth: true,
+                text: 'Show more',
+                borderRadius: DesignConstants.radiusSmall,
+                onPressed: _load,
+              ),
           ],
-          rows: _payments
-              .map((p) => _row(context, p))
-              .toList(),
         ),
-        if (_loading)
-          const Center(child: AppSpinner())
-        else if (_hasMore)
-          AppOutlineButton(
-            fullWidth: true,
-            text: 'Show more',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: _load,
-          ),
-      ],
+      ),
     );
   }
 

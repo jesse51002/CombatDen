@@ -43,6 +43,7 @@ class ClassHistorySection extends StatefulWidget {
 
 class _ClassHistorySectionState extends State<ClassHistorySection> {
   late final ScheduleRepository _repo;
+  final ScrollController _scrollController = ScrollController();
   List<MemberClassHistoryRow> _upcoming = [];
   final List<MemberClassHistoryRow> _history = [];
   bool _loading = false;
@@ -60,6 +61,12 @@ class _ClassHistorySectionState extends State<ClassHistorySection> {
     super.initState();
     _repo = ScheduleRepository(apiClient: ApiClient());
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -139,14 +146,22 @@ class _ClassHistorySectionState extends State<ClassHistorySection> {
 
   @override
   Widget build(BuildContext context) {
+    // Fixed height + internal scroll so the card doesn't grow unbounded inside
+    // the page scroll: the title stays pinned, the Upcoming/History blocks
+    // scroll in the remaining space, and the card stays exactly
+    // [historyCardHeight] tall so it lines up with the Payment history card
+    // beside it.
     return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Text('Class history', style: DesignConstants.h2),
-          _content(context),
-        ],
+      child: SizedBox(
+        height: DesignConstants.historyCardHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            Text('Class history', style: DesignConstants.h2),
+            Expanded(child: _content(context)),
+          ],
+        ),
       ),
     );
   }
@@ -157,34 +172,45 @@ class _ClassHistorySectionState extends State<ClassHistorySection> {
         return const Center(child: AppSpinner());
       }
       if (_error != null) {
-        return ErrorMessage(message: _error!);
+        return Center(child: ErrorMessage(message: _error!));
       }
-      return const _Empty();
+      return const Center(child: _Empty());
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        if (_upcoming.isNotEmpty)
-          _Block(
-            title: 'Upcoming',
-            rows: _upcoming.map(_row).toList(),
-          ),
-        if (_history.isNotEmpty)
-          _Block(
-            title: 'History',
-            rows: _history.map(_row).toList(),
-          ),
-        if (_loading)
-          const Center(child: AppSpinner())
-        else if (_hasMore)
-          AppOutlineButton(
-            fullWidth: true,
-            text: 'Show more',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: _load,
-          ),
-      ],
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        // Right gutter so the scrollbar clears the full-width tables / "Show
+        // more" button instead of overlapping them (as the attendee roster
+        // reserves for its overlay scrollbar).
+        padding: const EdgeInsets.only(right: DesignConstants.spacingLarge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            if (_upcoming.isNotEmpty)
+              _Block(
+                title: 'Upcoming',
+                rows: _upcoming.map(_row).toList(),
+              ),
+            if (_history.isNotEmpty)
+              _Block(
+                title: 'History',
+                rows: _history.map(_row).toList(),
+              ),
+            if (_loading)
+              const Center(child: AppSpinner())
+            else if (_hasMore)
+              AppOutlineButton(
+                fullWidth: true,
+                text: 'Show more',
+                borderRadius: DesignConstants.radiusSmall,
+                onPressed: _load,
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -198,7 +224,11 @@ class _ClassHistorySectionState extends State<ClassHistorySection> {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          classDateTimeLabel(row.originalDate, row.originalTime),
+          classDateTimeRangeLabel(
+            row.originalDate,
+            row.originalTime,
+            row.durationMinutes,
+          ),
           style: DesignConstants.h3.copyWith(
             color: DesignConstants.text2nd,
           ),
@@ -255,7 +285,9 @@ class _Block extends StatelessWidget {
           showBackground: true,
           columns: const [
             AppDataTableColumn(label: 'Class', fill: true),
-            AppDataTableColumn(label: 'When', minWidth: 150),
+            // Wide enough for the full start–end range + short date
+            // ("6:00 PM - 7:00 PM · Wed, Jul 2").
+            AppDataTableColumn(label: 'When', minWidth: 190),
             AppDataTableColumn(label: 'Status', minWidth: 90),
           ],
           rows: rows,

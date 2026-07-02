@@ -6,11 +6,13 @@ import 'package:crm/features/member_details/presentation/dialogs/check_in/check_
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
 /// One labelled, single-[action] section of pickable occurrences in the
-/// check-in/reserve dialog — the emphasized "Check in" list, the revealed
-/// "Past classes" list (also a check-in action, retroactive), or the
-/// "Reserve" list. Renders [emptyLabel] when [instances] is empty so a
-/// section that should always communicate state (Check in) can; the parent
-/// simply omits an empty optional section instead.
+/// check-in/reserve dialog — the class-scoped occurrence steps: a picked
+/// class's past occurrences (a retroactive check-in) or its upcoming
+/// occurrences (a reservation). (The Check-in view's CURRENT step renders
+/// image cards via `CheckInOccurrenceCardGrid` instead, sharing [keyFor].)
+/// Renders [emptyLabel] when [instances] is empty so a section that should
+/// always communicate state can; the parent simply omits an empty optional
+/// section instead.
 class CheckInSection extends StatelessWidget {
   final String title;
   final CheckInReserveAction action;

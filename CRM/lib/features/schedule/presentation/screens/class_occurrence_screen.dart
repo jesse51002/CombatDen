@@ -78,6 +78,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   late DateTime _selectedDate;
   late bool _capacityEnabled;
   final _capacityController = TextEditingController();
+  final _durationController = TextEditingController();
 
   _Step _step = _Step.idle;
   _DetailsMode _mode = _DetailsMode.view;
@@ -95,6 +96,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   @override
   void dispose() {
     _capacityController.dispose();
+    _durationController.dispose();
     super.dispose();
   }
 
@@ -106,6 +108,8 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     _classTime = parseHmsTime(widget.entry.resolvedClassTime);
     _capacityEnabled = widget.entry.maxCapacity != null;
     _capacityController.text = widget.entry.maxCapacity?.toString() ?? '';
+    _durationController.text =
+        widget.entry.resolvedDurationMinutes.toString();
     _selectedDate = widget.entry.classDate;
   }
 
@@ -198,6 +202,11 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       setState(() => _inlineError = 'Pick a start time.');
       return;
     }
+    final duration = int.tryParse(_durationController.text.trim());
+    if (duration == null || duration <= 0) {
+      setState(() => _inlineError = 'Enter a duration in minutes.');
+      return;
+    }
     // Warn before a save the backend treats as an attendance-wiping move.
     // Mirrors the backend exactly, which decides by the new effective start
     // INSTANT, never the day: the save must actually SEND `new_date`
@@ -255,7 +264,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       originalDate: widget.entry.originalDate,
       originalTime: widget.entry.originalTime,
       newClassTime: formatTimeOfDayHms(time),
-      newDurationMinutes: widget.entry.resolvedDurationMinutes,
+      newDurationMinutes: duration,
       newMaxCapacity: _capacityOrNull(),
       newInstructorId: _instructorId,
       newDate: newDate,
@@ -516,6 +525,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           instructors: instructors,
           classTime: _classTime,
           onTimeChanged: (t) => setState(() => _classTime = t),
+          durationController: _durationController,
           capacityController: _capacityController,
           capacityEnabled: _capacityEnabled,
           onCapacityEnabledChanged: (v) =>

@@ -43,7 +43,6 @@ class ClassOccurrenceReadOnlyDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final time = parseHmsTime(entry.resolvedClassTime);
     return SubtitleSection(
       title: "This day's details",
       child: Column(
@@ -60,8 +59,12 @@ class ClassOccurrenceReadOnlyDetails extends StatelessWidget {
               ),
               DetailField(
                 icon: Symbols.schedule_sharp,
-                label: 'Start time',
-                value: time?.format(context) ?? '—',
+                label: 'Time',
+                value: classTimeRangeLabel(
+                  entry.resolvedClassTime,
+                  entry.resolvedDurationMinutes,
+                ),
+                caption: classDurationLabel(entry.resolvedDurationMinutes),
               ),
               DetailField(
                 icon: Symbols.person_sharp,

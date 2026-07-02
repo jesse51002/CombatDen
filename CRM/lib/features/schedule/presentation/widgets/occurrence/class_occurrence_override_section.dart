@@ -13,11 +13,11 @@ import 'package:crm/shared/widgets/form/app_time_field.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// "This day's details" — the occurrence screen's editable overrides:
-/// instructor, start time, an opt-in max capacity, and date for just this
-/// occurrence. Pre-filled by the caller with the occurrence's current
-/// effective values; Save dispatches a single-date instance-exception
-/// override (see [onSave]); Cancel discards the in-progress edits and
-/// returns to the read-only view (see [onCancel]).
+/// instructor, start time, duration, an opt-in max capacity, and date for
+/// just this occurrence. Pre-filled by the caller with the occurrence's
+/// current effective values; Save dispatches a single-date
+/// instance-exception override (see [onSave]); Cancel discards the
+/// in-progress edits and returns to the read-only view (see [onCancel]).
 ///
 /// [capacityEnabled] gates whether a limit applies at all — the number field
 /// only renders when it's on, so there's never a fake placeholder number
@@ -34,6 +34,7 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
   final List<InstructorOption> instructors;
   final TimeOfDay? classTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
+  final TextEditingController durationController;
   final TextEditingController capacityController;
   final bool capacityEnabled;
   final ValueChanged<bool> onCapacityEnabledChanged;
@@ -49,6 +50,7 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
     required this.instructors,
     required this.classTime,
     required this.onTimeChanged,
+    required this.durationController,
     required this.capacityController,
     required this.capacityEnabled,
     required this.onCapacityEnabledChanged,
@@ -80,6 +82,13 @@ class ClassOccurrenceOverrideSection extends StatelessWidget {
             label: 'Start time',
             value: classTime,
             onChanged: onTimeChanged,
+          ),
+          CustomTextField(
+            controller: durationController,
+            label: 'Duration (minutes)',
+            hintText: 'e.g. 60',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
           AppSwitchField(
             label: 'Limit capacity',

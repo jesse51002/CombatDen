@@ -14,6 +14,7 @@ MemberClassHistoryRow _$MemberClassHistoryRowFromJson(
   imageUrl: json['image_url'] as String?,
   originalDate: DateTime.parse(json['original_date'] as String),
   originalTime: json['original_time'] as String,
+  durationMinutes: (json['duration_minutes'] as num).toInt(),
   occurredAt: json['occurred_at'] == null
       ? null
       : DateTime.parse(json['occurred_at'] as String),

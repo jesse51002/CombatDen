@@ -38,7 +38,9 @@ enum MemberClassHistoryStatus {
 /// Mirrors the backend `MemberClassHistoryRow`. [originalDate] +
 /// [originalTime] are the occurrence's IDENTITY slot (its display date/time
 /// — there is no separate "effective" pair here, unlike the schedule
-/// board). [occurredAt] is the attendance row's UTC start instant, set only
+/// board). [durationMinutes] is the class's length (the current schedule
+/// version's), so the row can render a start–end time range.
+/// [occurredAt] is the attendance row's UTC start instant, set only
 /// for [MemberClassHistoryStatus.attended] rows.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
@@ -50,6 +52,7 @@ class MemberClassHistoryRow extends Equatable {
   final String? imageUrl;
   final DateTime originalDate;
   final String originalTime;
+  final int durationMinutes;
   final DateTime? occurredAt;
   @JsonKey(fromJson: MemberClassHistoryStatus.fromJson)
   final MemberClassHistoryStatus status;
@@ -60,6 +63,7 @@ class MemberClassHistoryRow extends Equatable {
     this.imageUrl,
     required this.originalDate,
     required this.originalTime,
+    required this.durationMinutes,
     this.occurredAt,
     required this.status,
   });
@@ -74,6 +78,7 @@ class MemberClassHistoryRow extends Equatable {
         imageUrl,
         originalDate,
         originalTime,
+        durationMinutes,
         occurredAt,
         status,
       ];
