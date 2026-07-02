@@ -224,11 +224,7 @@ class _ClassHistorySectionState extends State<ClassHistorySection> {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          classDateTimeRangeLabel(
-            row.originalDate,
-            row.originalTime,
-            row.durationMinutes,
-          ),
+          classDateTimeStartLabel(row.originalDate, row.originalTime),
           style: DesignConstants.h3.copyWith(
             color: DesignConstants.text2nd,
           ),
@@ -287,7 +283,7 @@ class _Block extends StatelessWidget {
             AppDataTableColumn(label: 'Class', fill: true),
             // Wide enough for the full start–end range + short date
             // ("6:00 PM - 7:00 PM · Wed, Jul 2").
-            AppDataTableColumn(label: 'When', minWidth: 190),
+            AppDataTableColumn(label: 'When', minWidth: 150),
             AppDataTableColumn(label: 'Status', minWidth: 90),
           ],
           rows: rows,

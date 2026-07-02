@@ -31,6 +31,17 @@ String classDateTimeRangeLabel(
     '${classTimeRangeLabel(classTime, durationMinutes)}'
     ' · ${_shortDateFormat.format(date)}';
 
+/// `6:00 PM · Wed, Jul 2` — one occurrence's START time + short date, no
+/// end-time range. For compact list rows where the range is noise (the
+/// member class-history card).
+String classDateTimeStartLabel(DateTime date, String classTime) {
+  final parts = classTime.split(':');
+  final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+  final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+  final start = DateTime(2000, 1, 1, hour, minute);
+  return '${_timeFormat.format(start)} · ${_shortDateFormat.format(date)}';
+}
+
 /// `1 hr` / `1 hr 30 min` / `45 min` — a class occurrence's length as a short
 /// human caption. Used beside a start–end range where the exact duration is
 /// worth calling out (e.g. the occurrence screen's "Time" detail).

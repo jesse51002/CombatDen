@@ -21,8 +21,9 @@ const int _kPageSize = 20;
 /// the Waivers / Invoices sections. Returns the invoices this member
 /// PAID, the invoices a membership they have ever held was on, and
 /// the invoices that were FOR them (the payer's `paid_for`) — so a
-/// charge a parent made for this member shows here. The "Paid by"
-/// column names the payer; the invoice popup adds who it was "For".
+/// charge a parent made for this member shows here. Who PAID lives in
+/// the invoice popup (with who it was "For") — the table itself stays
+/// compact: name, date, invoice.
 /// Each row opens the full invoice (via [PaymentInvoiceDialog]);
 /// "Show more" loads the next page. Reloads from page 1 whenever
 /// [refreshKey] changes — bumped on every billing change (and on each
@@ -196,7 +197,6 @@ class _PaymentHistorySectionState
               showBackground: true,
               columns: const [
                 AppDataTableColumn(label: 'Name', fill: true),
-                AppDataTableColumn(label: 'Paid by', minWidth: 130),
                 AppDataTableColumn(label: 'Date', minWidth: 110),
                 AppDataTableColumn(label: '', minWidth: 92),
               ],
@@ -228,16 +228,6 @@ class _PaymentHistorySectionState
         Text(
           _label(payment),
           style: DesignConstants.h3,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        Text(
-          payment.paidByName.isNotEmpty
-              ? payment.paidByName
-              : '—',
-          style: DesignConstants.h3.copyWith(
-            color: DesignConstants.text2nd,
-          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
