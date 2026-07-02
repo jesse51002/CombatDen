@@ -92,6 +92,7 @@ class CheckinHistoryService:
             image_url=row["image_url"],
             original_date=row["original_date"],
             original_time=row["original_time"],
+            duration_minutes=row["duration_minutes"],
             occurred_at=row["occurred_at"],
             status=status,
         )

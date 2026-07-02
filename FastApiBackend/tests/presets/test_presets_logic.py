@@ -470,3 +470,62 @@ async def test_list_template_cards_empty_discipline_skipped() -> None:
 
     assert len(page.gyms) == 1
     assert page.gyms[0].video_gym_id == "mma-gym"
+
+
+# ── the no-show top-up guarantee ─────────────────────────────────────────
+
+
+async def test_ensure_no_shows_gives_every_pool_member_at_least_one() -> None:
+    """EVERY pool member ends the import with >=1 no-show: members the
+    organic draw left at zero get topped up on past occurrences they
+    neither attended nor signed up for; members who already no-showed are
+    left alone (no extra inserts for them)."""
+    from src.presets.service.presets_service import _PastSeed
+
+    svc = _make_presets_service()
+    svc._insert_signups = AsyncMock()
+
+    covered = uuid4()  # already no-showed organically
+    uncovered_a = uuid4()  # attended one, no-showed nowhere
+    uncovered_b = uuid4()  # untouched entirely
+    pool = [(m, uuid4(), uuid4()) for m in (covered, uncovered_a, uncovered_b)]
+
+    seeds = [
+        _PastSeed(
+            class_id=uuid4(),
+            original_date=date(2026, 6, 22),
+            original_time=time(6, 0),
+            attended={uncovered_a},
+            signed={covered},
+            no_shows={covered},
+            max_capacity=None,
+        ),
+        _PastSeed(
+            class_id=uuid4(),
+            original_date=date(2026, 6, 24),
+            original_time=time(18, 30),
+            attended=set(),
+            signed=set(),
+            no_shows=set(),
+            max_capacity=None,
+        ),
+    ]
+
+    await svc._ensure_no_shows(
+        session=MagicMock(), gym_id_str=str(uuid4()), pool=pool,
+        past_seeds=seeds, insert_signup_sql="",
+    )
+
+    no_show_members = {m for s in seeds for m in s.no_shows}
+    assert {covered, uncovered_a, uncovered_b} <= no_show_members
+    # The topped-up members' rows were actually written, one member per call.
+    written = {
+        member_id
+        for call in svc._insert_signups.await_args_list
+        for member_id in call.args[5]
+    }
+    assert {uncovered_a, uncovered_b} <= written
+    assert covered not in written  # already covered — no extra insert
+    # A top-up never lands where the member attended or already signed up.
+    for seed in seeds:
+        assert seed.no_shows.isdisjoint(seed.attended)

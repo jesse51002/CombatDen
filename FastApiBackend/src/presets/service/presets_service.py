@@ -19,6 +19,7 @@ import json
 import random
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
+from typing import NamedTuple
 from uuid import UUID
 
 from schema.gym_class import RecurringUnit
@@ -108,6 +109,12 @@ _SKIP_SIGNUPS_WHEN_NO_ATTENDANCE_CHANCE = 0.7
 _SIGNED_AND_ATTENDED_CHANCE = 0.65
 _NO_SHOW_CHANCE = 0.5
 _MAX_NO_SHOWS = 3
+# Post-pass guarantee: EVERY pool member ends the import with at least one
+# no-show (the organic per-occurrence draw above stays random; the top-up
+# only covers members the dice left at zero, adding 1.._TOPUP_MAX_NO_SHOWS
+# sign-up-only rows on past occurrences they never attended) — so the member
+# page's Class-history card always has all three statuses to show.
+_TOPUP_MAX_NO_SHOWS = 3
 # When a class has no capacity limit (max_capacity IS NULL — true for every
 # preset-imported class today, since the import never sets one), cap the
 # no-show / future sign-up draw pool at this many rather than an unbounded
@@ -127,6 +134,21 @@ _FALLBACK_LAST_NAME = "Coach"
 # membership pins the NOT-NULL attendance attribution; it need NOT span the
 # occurrence date (demo check-ins are attributed loosely).
 _AttendeePool = list[tuple[UUID, UUID, UUID]]
+
+
+class _PastSeed(NamedTuple):
+    """One seeded past occurrence's outcome, for the no-show top-up pass:
+    who attended, who holds a sign-up row (mutated as the top-up adds
+    members), who no-showed organically, and the room left (None cap =
+    unlimited)."""
+
+    class_id: UUID
+    original_date: date
+    original_time: time
+    attended: set[UUID]
+    signed: set[UUID]
+    no_shows: set[UUID]
+    max_capacity: int | None
 
 
 class PresetsService:
@@ -564,20 +586,26 @@ class PresetsService:
         insert_signup_sql = load_sql(
             SQL_DIR / "presets_insert_class_signup.sql"
         )
+        past_seeds: list[_PastSeed] = []
         for gym_class in expander_classes:
-            await self._seed_one_class(
-                session=session,
-                gym_id_str=gym_id_str,
-                gym_class=gym_class,
-                max_capacity=class_capacities.get(gym_class.class_id),
-                gym_tz=gym_tz,
-                now=now,
-                window_start=window_start,
-                window_end=window_end,
-                pool=pool,
-                insert_attendance_sql=insert_attendance_sql,
-                insert_signup_sql=insert_signup_sql,
+            past_seeds.extend(
+                await self._seed_one_class(
+                    session=session,
+                    gym_id_str=gym_id_str,
+                    gym_class=gym_class,
+                    max_capacity=class_capacities.get(gym_class.class_id),
+                    gym_tz=gym_tz,
+                    now=now,
+                    window_start=window_start,
+                    window_end=window_end,
+                    pool=pool,
+                    insert_attendance_sql=insert_attendance_sql,
+                    insert_signup_sql=insert_signup_sql,
+                )
             )
+        await self._ensure_no_shows(
+            session, gym_id_str, pool, past_seeds, insert_signup_sql
+        )
 
     async def _seed_one_class(
         self,
@@ -592,7 +620,7 @@ class PresetsService:
         pool: _AttendeePool,
         insert_attendance_sql: str,
         insert_signup_sql: str,
-    ) -> None:
+    ) -> list[_PastSeed]:
         """Write attendance + sign-ups for every occurrence of one class.
 
         An occurrence whose EFFECTIVE START INSTANT has already passed
@@ -605,21 +633,27 @@ class PresetsService:
         (see ``SignupService``'s module docstring). This import never writes
         exceptions, so every occurrence's ``original_time`` equals its slot's
         scheduled time and ``effective_date`` equals ``original_date``.
+
+        Returns one ``_PastSeed`` per already-occurred occurrence — the
+        no-show top-up pass's candidates.
         """
         occurrences = self._expander.expand(
             gym_class, [], [], window_start, window_end, gym_tz
         )
+        past_seeds: list[_PastSeed] = []
         for occ in occurrences:
             if occ.occurred_at <= now:
-                await self._seed_past_occurrence(
-                    session=session,
-                    gym_id_str=gym_id_str,
-                    gym_class=gym_class,
-                    occ=occ,
-                    max_capacity=max_capacity,
-                    pool=pool,
-                    insert_attendance_sql=insert_attendance_sql,
-                    insert_signup_sql=insert_signup_sql,
+                past_seeds.append(
+                    await self._seed_past_occurrence(
+                        session=session,
+                        gym_id_str=gym_id_str,
+                        gym_class=gym_class,
+                        occ=occ,
+                        max_capacity=max_capacity,
+                        pool=pool,
+                        insert_attendance_sql=insert_attendance_sql,
+                        insert_signup_sql=insert_signup_sql,
+                    )
                 )
             else:
                 await self._seed_future_signups(
@@ -632,6 +666,7 @@ class PresetsService:
                     pool=pool,
                     insert_signup_sql=insert_signup_sql,
                 )
+        return past_seeds
 
     async def _seed_past_occurrence(
         self,
@@ -643,8 +678,9 @@ class PresetsService:
         pool: _AttendeePool,
         insert_attendance_sql: str,
         insert_signup_sql: str,
-    ) -> None:
-        """Write one already-occurred occurrence's attendance + sign-ups."""
+    ) -> _PastSeed:
+        """Write one already-occurred occurrence's attendance + sign-ups;
+        return its ``_PastSeed`` for the no-show top-up pass."""
         attended_ids = await self._seed_attendance(
             session=session,
             gym_id_str=gym_id_str,
@@ -653,7 +689,7 @@ class PresetsService:
             pool=pool,
             insert_attendance_sql=insert_attendance_sql,
         )
-        await self._seed_past_signups(
+        signed, no_shows = await self._seed_past_signups(
             session=session,
             gym_id_str=gym_id_str,
             class_id=gym_class.class_id,
@@ -663,6 +699,15 @@ class PresetsService:
             max_capacity=max_capacity,
             pool=pool,
             insert_signup_sql=insert_signup_sql,
+        )
+        return _PastSeed(
+            class_id=gym_class.class_id,
+            original_date=occ.original_date,
+            original_time=occ.original_time,
+            attended=set(attended_ids),
+            signed=signed,
+            no_shows=no_shows,
+            max_capacity=max_capacity,
         )
 
     async def _seed_attendance(
@@ -725,7 +770,7 @@ class PresetsService:
         max_capacity: int | None,
         pool: _AttendeePool,
         insert_signup_sql: str,
-    ) -> None:
+    ) -> tuple[set[UUID], set[UUID]]:
         """Sign-ups for one already-occurred occurrence: a realistic mix of
         signed-up-and-attended, no-show (signed up, never attended), and
         walk-in (attended, no sign-up row — left alone, so attendance is
@@ -737,12 +782,16 @@ class PresetsService:
         the occurrence's (already-written, unbounded) attendance count — when
         attendance alone already fills/exceeds the room, only already-attended
         members get a mirrored sign-up row.
+
+        Returns ``(signed_up_members, no_shows)`` — everyone who got a
+        sign-up row, and the no-show subset — for the top-up pass.
         """
         if (
             not attended_ids
             and random.random() < _SKIP_SIGNUPS_WHEN_NO_ATTENDANCE_CHANCE
         ):
-            return  # most attendance-less occurrences stay signup-less too
+            # Most attendance-less occurrences stay signup-less too.
+            return set(), set()
 
         signed_and_attended = {
             member_id
@@ -777,6 +826,63 @@ class PresetsService:
             signed_and_attended | no_shows,
             insert_signup_sql,
         )
+        return signed_and_attended | no_shows, no_shows
+
+    async def _ensure_no_shows(
+        self,
+        session: AsyncSession,
+        gym_id_str: str,
+        pool: _AttendeePool,
+        past_seeds: list[_PastSeed],
+        insert_signup_sql: str,
+    ) -> None:
+        """Guarantee EVERY pool member at least one no-show.
+
+        The per-occurrence draw above is random, so some members end the
+        import with zero no-shows; this pass tops them up with
+        1..``_TOPUP_MAX_NO_SHOWS`` sign-up-only rows on past occurrences they
+        neither attended nor already signed up for (capacity-respecting),
+        so any member's Class-history card can show all three statuses. A
+        member with no eligible past occurrence left (attended everything —
+        vanishingly rare) is skipped.
+        """
+        no_show_members = {
+            member_id
+            for seed in past_seeds
+            for member_id in seed.no_shows
+        }
+        for member_id, _, _ in pool:
+            if member_id in no_show_members:
+                continue
+            eligible = [
+                seed
+                for seed in past_seeds
+                if member_id not in seed.attended
+                and member_id not in seed.signed
+                and (
+                    seed.max_capacity is None
+                    or len(seed.attended | seed.signed)
+                    < seed.max_capacity
+                )
+            ]
+            if not eligible:
+                continue
+            picks = random.sample(
+                eligible,
+                min(len(eligible), random.randint(1, _TOPUP_MAX_NO_SHOWS)),
+            )
+            for seed in picks:
+                await self._insert_signups(
+                    session,
+                    gym_id_str,
+                    seed.class_id,
+                    seed.original_date,
+                    seed.original_time,
+                    {member_id},
+                    insert_signup_sql,
+                )
+                seed.signed.add(member_id)
+                seed.no_shows.add(member_id)
 
     async def _seed_future_signups(
         self,

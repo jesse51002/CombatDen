@@ -53,8 +53,10 @@ SELECT
     h.original_time,
     h.occurred_at,
     h.status,
+    s.duration_minutes,
     COUNT(*) OVER () AS total_rows
 FROM history h
 JOIN gym_classes c ON c.class_id = h.class_id
+JOIN gym_class_schedules_current s ON s.class_id = h.class_id
 ORDER BY h.original_date DESC, h.original_time DESC
 LIMIT :limit OFFSET :offset

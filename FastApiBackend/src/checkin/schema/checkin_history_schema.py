@@ -35,6 +35,9 @@ class MemberClassHistoryRow(BaseModel):
         image_url: The class image, if any.
         original_date: The occurrence's identity date (the original slot).
         original_time: The occurrence's identity time.
+        duration_minutes: The class's length (the CURRENT schedule
+            version's — the same approximation the ended-ness split uses),
+            so the card can render a start–end time range.
         occurred_at: The attendance row's effective start instant —
             attended rows only (None for reservations / no-shows, which
             have no attendance row to read it from).
@@ -46,6 +49,7 @@ class MemberClassHistoryRow(BaseModel):
     image_url: str | None
     original_date: date
     original_time: time
+    duration_minutes: int
     occurred_at: datetime | None
     status: MemberClassHistoryStatus
 
