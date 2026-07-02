@@ -20,6 +20,17 @@ class SettingsThemeModeChanged extends SettingsEvent {
   List<Object?> get props => [mode];
 }
 
+/// The user confirmed a gym timezone change. NOT optimistic (unlike the
+/// theme): the repo saves first; only on success does `selectedGym` update.
+class SettingsTimezoneChanged extends SettingsEvent {
+  final String timezone;
+
+  const SettingsTimezoneChanged(this.timezone);
+
+  @override
+  List<Object?> get props => [timezone];
+}
+
 /// Dismiss the inline error after a failed save was surfaced.
 class SettingsErrorCleared extends SettingsEvent {
   const SettingsErrorCleared();

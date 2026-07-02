@@ -2,13 +2,40 @@ from dependency_injector import containers, providers
 from schema.task import TaskType
 
 import src.shared.db_schema_path  # noqa: F401
-from src.classes.service.checkin.classes_checkin_service import (
-    ClassesCheckinService,
+from src.checkin.service.batch_checkin_service import BatchCheckinService
+from src.checkin.service.checkin_attendees_service import (
+    CheckinAttendeesService,
 )
-from src.classes.service.classes_cycle_counts_service import (
-    ClassesCycleCountsService,
+from src.checkin.service.checkin_class_resolver import (
+    CheckinClassResolver,
 )
-from src.classes.service.classes_streak_service import ClassesStreakService
+from src.checkin.service.checkin_history_service import (
+    CheckinHistoryService,
+)
+from src.checkin.service.checkin_member_gate import CheckinMemberGate
+from src.checkin.service.checkin_occurrence_resolution import (
+    CheckinOccurrenceResolution,
+)
+from src.checkin.service.checkin_remover import CheckinRemover
+from src.checkin.service.checkin_reverser import CheckinReverser
+from src.checkin.service.cycle_counts_service import CycleCountsService
+from src.checkin.service.signup_service import SignupService
+from src.checkin.service.streak_service import StreakService
+from src.classes.service.classes_crud_service import ClassesCrudService
+from src.classes.service.classes_exceptions_service import (
+    ClassesExceptionsService,
+)
+from src.classes.service.classes_expander import ClassesExpander
+from src.classes.service.classes_schedule_reader_service import (
+    ClassesScheduleReaderService,
+)
+from src.classes.service.classes_undo_service import ClassesUndoService
+from src.classes.service.classes_version_expander import (
+    ClassesVersionExpander,
+)
+from src.classes.service.classes_versions_service import (
+    ClassesVersionsService,
+)
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
 from src.gyms.service.gyms_service import GymsService
@@ -163,6 +190,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
         modules=[
             "src.main",
+            "src.checkin.checkin_router",
             "src.classes.classes_router",
             "src.gyms.gyms_router",
             "src.members.members_router",
@@ -186,15 +214,141 @@ class DependencyInjector(containers.DeclarativeContainer):
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
 
-    streak_service = providers.Factory(ClassesStreakService, db_pool=db_pool)
-    cycle_counts_service = providers.Factory(
-        ClassesCycleCountsService,
-        db_pool=db_pool,
+    # The canonical single-shape recurrence + exception engine is pure (no
+    # I/O); a single shared instance is reused everywhere.
+    classes_expander = providers.Singleton(ClassesExpander)
+    # The versioned expander (also pure): windows a class's schedule versions
+    # by effective_from (ownership), dedups boundary days, and expands each
+    # version with its own frozen timezone. Every occurrence resolution —
+    # the board, check-in validation, sign-up validation, reschedule checks,
+    # the mint wipe — goes through it.
+    classes_version_expander = providers.Singleton(
+        ClassesVersionExpander,
+        expander=classes_expander,
     )
-    checkin_service = providers.Factory(
-        ClassesCheckinService,
+
+    # ── Checkin domain (the class consumer side) ─────────────────
+    # Gated lazy check-in (resolve → per-member gate), staff batch, attendance
+    # streak, and per-cycle class usage (also feeds member billing detail).
+    cycle_counts_service = providers.Factory(CycleCountsService, db_pool=db_pool)
+    streak_service = providers.Factory(StreakService, db_pool=db_pool)
+    # The member-page class-history feed (reservations + attendance +
+    # no-shows) — a plain member-scoped read, no gate involvement.
+    checkin_history_service = providers.Factory(
+        CheckinHistoryService, db_pool=db_pool
+    )
+    # The ONE original-date occurrence-resolution algorithm the checkin
+    # domain shares (versions + exceptions → the version expander, with the
+    # reschedule window-widening) — injected by BOTH the check-in resolver
+    # and the sign-up service so the two can never disagree about whether an
+    # occurrence exists. The one-way checkin → classes dependency lives here.
+    checkin_occurrence_resolution = providers.Factory(
+        CheckinOccurrenceResolution,
+        db_pool=db_pool,
+        version_expander=classes_version_expander,
+    )
+    # Resolve a single occurrence for check-in (identity gate + the shared
+    # resolution + the 2h early-check-in window). A pure read — occurrences
+    # are computed, never stored.
+    checkin_class_resolver = providers.Factory(
+        CheckinClassResolver,
+        db_pool=db_pool,
+        occurrence_resolution=checkin_occurrence_resolution,
+    )
+    # Per-member gate + write (eligibility, capacity, plan selection, auto-end).
+    checkin_member_gate = providers.Factory(
+        CheckinMemberGate,
         db_pool=db_pool,
         cycle_counts_service=cycle_counts_service,
+    )
+    # Batch staff check-in. Resolves the occurrence ONCE via the resolver, then
+    # loops the member gate over a de-duped member list — the same two seams the
+    # single-check-in router injects directly.
+    batch_checkin_service = providers.Factory(
+        BatchCheckinService,
+        resolver=checkin_class_resolver,
+        member_gate=checkin_member_gate,
+    )
+    # Read-only: the combined signed-up-or-attended roster of one occurrence
+    # (gym-local day-bounds resolve, class_signups + member_attendance join).
+    checkin_attendees_service = providers.Factory(
+        CheckinAttendeesService,
+        db_pool=db_pool,
+    )
+    # Create / remove a member's sign-up (reservation) for an occurrence.
+    # create() validates the occurrence via the SAME shared resolution the
+    # check-in resolver injects, then its capacity check reads the same
+    # signed-up-or-attended union the check-in capacity gate reads (both go
+    # through CheckinQueries).
+    signup_service = providers.Factory(
+        SignupService,
+        db_pool=db_pool,
+        occurrence_resolution=checkin_occurrence_resolution,
+    )
+    # Shared per-member check-in reverser: delete attendance, claw back points,
+    # drop a feed activity, reverse the pack auto-end — on a KNOWN occurrence, in
+    # the caller's transaction, importing nothing from src.classes. Built before
+    # both consumers (checkin_remover below and classes_undo_service, which loops
+    # it over every attendee — the deliberate classes -> checkin dependency).
+    checkin_reverser = providers.Factory(CheckinReverser)
+    # Reverse one member's check-in: find the occurrence, then delegate the
+    # reversal to the shared checkin_reverser for that single member.
+    checkin_remover = providers.Factory(
+        CheckinRemover,
+        db_pool=db_pool,
+        reverser=checkin_reverser,
+    )
+
+    # Un-occur (cancel) + reschedule a single occurrence. Billing-adjacent
+    # (deletes member_attendance, claws back points, may clear an auto-end
+    # end_date), so each op runs in one transaction. Its teardown loops the
+    # shared checkin_reverser (defined above) over every attendee — a
+    # deliberate classes -> checkin dependency that avoids duplicating the
+    # reversal. Also HOSTS the shared reschedule engine (time-aware conflict
+    # check + attendance wipe / occurred_at re-sync) AND the shared cancel
+    # teardown (teardown_occurrence) that the exceptions service and the
+    # versions service's wipe reuse — hence defined before all of them.
+    classes_undo_service = providers.Factory(
+        ClassesUndoService,
+        db_pool=db_pool,
+        expander=classes_expander,
+        version_expander=classes_version_expander,
+        reverser=checkin_reverser,
+    )
+    # The schedule-version MINT engine: the one writer of
+    # gym_class_schedules. Minting runs the version-change wipe in the same
+    # transaction (per-date: cancellations and already-ran occurrences are
+    # untouched; non-surviving dates are torn down via the undo service's
+    # shared teardown — attendance reversed, sign-ups deleted, the exception
+    # dropped). Also owns the soft-delete wipe and the gym timezone-change
+    # re-mint (which never wipes — same shape, wall-clock survival by
+    # construction).
+    classes_versions_service = providers.Factory(
+        ClassesVersionsService,
+        db_pool=db_pool,
+        version_expander=classes_version_expander,
+        undo_service=classes_undo_service,
+    )
+    # Class CRUD: identity in place; the schedule half mints versions via the
+    # versions service; soft delete runs the future-keyed wipe.
+    classes_crud_service = providers.Factory(
+        ClassesCrudService,
+        db_pool=db_pool,
+        versions_service=classes_versions_service,
+        default_image_url=settings.default_class_image_url,
+    )
+    # A reschedule (new_date) on an instance-exception upsert delegates the
+    # conflict check + attendance move to the undo service's engine, then writes
+    # the override row in the same transaction.
+    classes_exceptions_service = providers.Factory(
+        ClassesExceptionsService,
+        db_pool=db_pool,
+        undo_service=classes_undo_service,
+    )
+    classes_schedule_reader_service = providers.Factory(
+        ClassesScheduleReaderService,
+        db_pool=db_pool,
+        version_expander=classes_version_expander,
     )
 
     rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
@@ -289,8 +443,15 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # Presets: transactional import of a video_gym template into a real gym's
-    # production tables. Owner-gated + email allowlist. No Stripe.
-    presets_service = providers.Factory(PresetsService, db_pool=db_pool)
+    # production tables. Owner-gated + email allowlist. No Stripe. Reuses the
+    # canonical classes_expander to seed each imported class's past month of
+    # attendance + sign-ups (so the demo gym shows realistic counts).
+    presets_service = providers.Factory(
+        PresetsService,
+        db_pool=db_pool,
+        expander=classes_expander,
+        default_class_image_url=settings.default_class_image_url,
+    )
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).
@@ -552,11 +713,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         GymsStripeConnectService,
         stripe_client=stripe_client,
     )
+    # classes_versions_service is the documented gyms -> classes edge: a gym
+    # TIMEZONE change re-mints every live class's schedule version with the
+    # new zone (wall-clock match keeps all future sign-ups / check-ins).
     gyms_service = providers.Factory(
         GymsService,
         db_pool=db_pool,
         stripe_connect_service=gyms_stripe_connect_service,
         waivers_service=waivers_service,
+        classes_versions_service=classes_versions_service,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────

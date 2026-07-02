@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/check_in/member_class_check_in_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/edit_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_wizard.dart';
 import 'package:crm/features/member_details/presentation/dialogs/unlink_payment_dialog.dart';
@@ -15,9 +15,9 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
 /// Profile header: avatar, name, membership summary, paid
-/// badge, the member-level action row (Check In / Charge
-/// Card / Add or Update Card / Start Membership / Edit),
-/// and the linked-accounts block.
+/// badge, the member-level action row (Check In / Reserve /
+/// Charge Card / Add or Update Card / Start Membership /
+/// Edit), and the linked-accounts block.
 class ProfileHeaderSection extends StatelessWidget {
   final MemberDetailResponse member;
   final ValueChanged<String>? onLinkedAccountTap;
@@ -183,13 +183,10 @@ class _ActionButtonsRow extends StatelessWidget {
       runSpacing: DesignConstants.spacingMedium,
       children: [
         _ActionButton(
-          label: 'Check In',
-          onPressed: () => ComingSoonDialog.show(
+          label: 'Check In / Reserve',
+          onPressed: () => MemberClassCheckInDialog.show(
             context: context,
-            title: 'Check In',
-            message:
-                'Class check-in is pending the classes '
-                'feature on the backend.',
+            gymId: member.gymId,
           ),
         ),
         _ActionButton(

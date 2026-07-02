@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/presentation/sections/class_history_section.dart';
 import 'package:crm/features/member_details/presentation/sections/invoices_section.dart';
 import 'package:crm/features/member_details/presentation/sections/member_waivers_section.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_carousel.dart';
@@ -20,7 +21,8 @@ import 'package:crm/shared/widgets/balanced_columns.dart';
 /// carousel and the account's Invoices card stacked on the right (the
 /// invoices sit with the membership they relate to). Below the breakpoint
 /// everything stacks into a single column. Below the grid, the account-level
-/// Payment History card spans full width (it is not tied to one membership).
+/// Payment History and Class History cards sit side by side (neither is
+/// tied to one membership) — stacked below the same tablet breakpoint.
 class MemberDetailGrid extends StatelessWidget {
   final MemberDetailResponse member;
   final int currentIndex;
@@ -139,12 +141,52 @@ class MemberDetailGrid extends StatelessWidget {
           payers: _invoicePayers,
           refreshToken: refreshToken,
         ),
-        PaymentHistorySection(
+        _HistoryRow(member: member, refreshToken: refreshToken),
+      ],
+    );
+  }
+}
+
+/// The bottom row: Payment History | Class History, side by side at the
+/// same tablet breakpoint as [_Grid], stacked below it.
+class _HistoryRow extends StatelessWidget {
+  final MemberDetailResponse member;
+  final int refreshToken;
+
+  const _HistoryRow({required this.member, required this.refreshToken});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final payments = PaymentHistorySection(
           memberId: member.memberId,
           gymId: member.gymId,
           refreshKey: refreshToken,
-        ),
-      ],
+        );
+        final classHistory = ClassHistorySection(
+          memberId: member.memberId,
+          gymId: member.gymId,
+          refreshKey: refreshToken,
+        );
+        final wide =
+            constraints.maxWidth >= AppConstants.breakpointTablet;
+        if (!wide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingBig,
+            children: [payments, classHistory],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            Expanded(child: payments),
+            Expanded(child: classHistory),
+          ],
+        );
+      },
     );
   }
 }

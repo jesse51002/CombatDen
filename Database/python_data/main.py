@@ -27,8 +27,10 @@ Flow:
           (start parent -> link + start children -> freeze -> apply discounts)
           on one worker, several families at once.
        g. A couple of overdue members via Stripe test clocks (direct Stripe).
-       i. Engagement (direct DB, keyed on the backend member_ids): classes,
-          class_history + attendance, rewards + redemptions, activities.
+       i. Engagement (direct DB, keyed on the backend member_ids): classes
+          (identity + append-only schedule versions), attendance,
+          class_signups (past + future reservations), rewards + redemptions,
+          activities.
        j. Invoice + charge history (direct DB, synthetic Stripe IDs).
        k. gym_history rollup.
 
@@ -177,14 +179,40 @@ def seed() -> None:
         membership_rows = history_rows + pseudo_current
 
         progress.log("Creating classes...")
-        classes = bs_classes.create(client, gym_id, bundle.gym_name, bundle.all_employees)
+        classes, schedules, instance_exc, range_exc = bs_classes.create(
+            client, gym_id, bundle.gym.timezone, bundle.gym_name, bundle.all_employees
+        )
 
         progress.log("Creating rewards...")
         gym_rewards = bs_rewards.create(client, gym_id)
 
-        progress.log("Creating class history + attendance...")
-        bs_classes.create_history_and_attendance(
-            client, gym_id, bundle.gym_name, classes, members, membership_rows
+        progress.log("Creating class attendance...")
+        eligible_classes, attendance = bs_classes.create_attendance(
+            client,
+            gym_id,
+            bundle.gym.timezone,
+            bundle.gym_name,
+            classes,
+            schedules,
+            members,
+            membership_rows,
+            instance_exc,
+            range_exc,
+        )
+
+        progress.log("Creating class sign-ups...")
+        bs_classes.create_signups(
+            client,
+            gym_id,
+            bundle.gym.timezone,
+            bundle.gym_name,
+            classes,
+            eligible_classes,
+            schedules,
+            members,
+            attendance,
+            instance_exc,
+            range_exc,
         )
 
         progress.log("Creating reward redemptions...")

@@ -26,8 +26,9 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// YouTube search queries; the agent proposes a draft the owner can review,
 /// confirm, and save.
 ///
-/// Entry: navigated to from the Settings screen's Video Agent section.
-/// Backed by [VideoAgentBloc] (full FastApiBackend path).
+/// Entry: navigated to from the member-app preview's Videos tab (the Edit &
+/// Focus card's "Start editing"). Backed by [VideoAgentBloc] (full
+/// FastApiBackend path).
 class VideoAgentScreen extends StatelessWidget {
   const VideoAgentScreen({super.key});
 
@@ -41,7 +42,7 @@ class VideoAgentScreen extends StatelessWidget {
           repository: ctx.read<VideoAgentRepository>(),
         )..add(VideoAgentScreenOpened(gymId)),
         child: AppShell(
-          activeRoute: AppRoutes.settings,
+          activeRoute: AppRoutes.memberAppPreview,
           child: _VideoAgentBody(gymId: gymId),
         ),
       ),
@@ -95,7 +96,7 @@ class _TopBar extends StatelessWidget {
               weight: DesignConstants.iconWeight,
             ),
             onPressed: () => Navigator.of(context).pop(),
-            tooltip: 'Back to Settings',
+            tooltip: 'Back',
           ),
           Expanded(
             child: Text(

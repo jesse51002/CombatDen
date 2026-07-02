@@ -1,24 +1,51 @@
--- Append-only log of member attendance at a specific class instance.
--- Each row points to a class_history row (the actual occurrence) and is
--- attributed to the membership/plan that covered the check-in (set once by the
--- gated check-in service; the cycle-count query groups attendance by item_id,
+-- Append-only log of member attendance at a class occurrence.
+-- An occurrence is identified by its ORIGINAL slot — (class_id,
+-- original_date, original_time), the date + time the OWNING schedule version
+-- (gym_class_schedules) defines BEFORE exceptions, gym-local wall clock. A
+-- reschedule / retime exception never re-keys the occurrence, so attendance
+-- follows the occurrence wherever it moves.
+--
+-- When a covering membership exists it is attributed to that membership/plan
+-- (set once at check-in; the cycle-count query groups attendance by item_id,
 -- so a member holding two packs on the same plan draws each down separately).
+-- An admin (non-kiosk) check-in records even when the member has NO covering
+-- membership — those rows carry NULL plan_id/item_id (no pack is drawn),
+-- which the cycle-count / streak reads ignore. plan_id and item_id are
+-- therefore either both set (covered) or both NULL (no-membership admin
+-- check-in).
 CREATE TABLE member_attendance (
     log_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     member_id UUID NOT NULL,
     gym_id UUID NOT NULL CONSTRAINT fk_attendance_gym REFERENCES gyms(gym_id),
-    class_history_id UUID NOT NULL CONSTRAINT fk_attendance_class_history_id REFERENCES class_history(class_history_id),
-    -- The membership row + plan that covered this check-in (billing attribution).
-    plan_id UUID NOT NULL,
-    item_id UUID NOT NULL,
+    class_id UUID NOT NULL CONSTRAINT fk_attendance_class_id REFERENCES gym_classes(class_id),
+    -- Occurrence identity: the owning schedule version's original slot.
+    original_date DATE NOT NULL,
+    original_time TIME NOT NULL,
+    -- Denormalized EFFECTIVE start instant (exceptions applied), written at
+    -- check-in and re-synced by the two paths that re-time a kept occurrence
+    -- (same-date override on an attended occurrence; reschedule-to-today/past).
+    -- Consumed ONLY by time-window SQL (streak / cycle counts / last_class);
+    -- identity joins always use (class_id, original_date, original_time).
+    occurred_at TIMESTAMPTZ NOT NULL,
+    -- The membership row + plan that covered this check-in (billing attribution);
+    -- NULL together when an admin check-in had no covering membership to attribute to.
+    plan_id UUID,
+    item_id UUID,
     PRIMARY KEY (log_id),
-    UNIQUE (member_id, class_history_id),
+    -- Idempotency anchor: one attendance row per member per original
+    -- occurrence. A class may occur SEVERAL times on one gym-local date
+    -- (weekday_slots holds a slot list per day), so the occurrence key is the
+    -- full original slot — date AND time.
+    CONSTRAINT uq_attendance_member_occurrence
+        UNIQUE (member_id, class_id, original_date, original_time),
+    CONSTRAINT chk_attendance_membership_pair
+        CHECK ((plan_id IS NULL) = (item_id IS NULL)),
     CONSTRAINT fk_attendance_member_gym
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id),
-    CONSTRAINT fk_attendance_class_history_gym
-        FOREIGN KEY (class_history_id, gym_id)
-        REFERENCES class_history (class_history_id, gym_id),
+    CONSTRAINT fk_attendance_class_gym
+        FOREIGN KEY (class_id, gym_id)
+        REFERENCES gym_classes (class_id, gym_id),
     CONSTRAINT fk_attendance_plan_gym
         FOREIGN KEY (plan_id, gym_id)
         REFERENCES membership_plans_unfiltered (plan_id, gym_id),
@@ -30,5 +57,8 @@ CREATE TABLE member_attendance (
 CREATE INDEX idx_member_attendance_member_gym
     ON member_attendance (member_id, gym_id);
 
-CREATE INDEX idx_member_attendance_class_history
-    ON member_attendance (class_history_id);
+CREATE INDEX idx_member_attendance_class_occurrence
+    ON member_attendance (class_id, original_date, original_time);
+
+CREATE INDEX idx_member_attendance_member_occurred
+    ON member_attendance (member_id, occurred_at DESC);

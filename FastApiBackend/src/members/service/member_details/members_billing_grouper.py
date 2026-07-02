@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
+from src.checkin.schema.cycle_counts_schema import MembershipUsage
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
 )

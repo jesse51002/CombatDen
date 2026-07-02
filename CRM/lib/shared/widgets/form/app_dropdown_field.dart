@@ -7,8 +7,12 @@ import 'package:crm/core/constants/design_constants.dart';
 /// [DropdownButtonFormField] with the **same** `InputDecoration`
 /// (fill, 2px rounded border, 16px content padding) as the text
 /// field, so the two render at identical heights side by side.
+///
+/// [label] is optional — omit it when the surrounding layout already labels
+/// the field (e.g. a column-header row above a list of repeating rows),
+/// mirroring [TappableField]'s optional label.
 class AppDropdownField<T> extends StatelessWidget {
-  final String label;
+  final String? label;
   final T? value;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?>? onChanged;
@@ -16,8 +20,8 @@ class AppDropdownField<T> extends StatelessWidget {
 
   const AppDropdownField({
     super.key,
-    required this.label,
     required this.items,
+    this.label,
     this.value,
     this.onChanged,
     this.hintText,
@@ -34,7 +38,7 @@ class AppDropdownField<T> extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(label, style: DesignConstants.h2),
+        if (label != null) Text(label!, style: DesignConstants.h2),
         DropdownButtonFormField<T>(
           initialValue: value,
           isExpanded: true,

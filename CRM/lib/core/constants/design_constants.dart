@@ -312,6 +312,12 @@ class DesignConstants {
   static const double dialogMemberPickerHeight = 320.0;
   static const double dialogWaiverEditorHeight = 240.0;
 
+  // Shared fixed height for the side-by-side account-history cards (Payment
+  // history + Class history). Both cards use it so the row stays equal-height
+  // and aligned; each card pins its title and scrolls its rows internally
+  // rather than growing the page. Sized to show ~6–7 rows before scrolling.
+  static const double historyCardHeight = 560.0;
+
   // Fixed-height controls (a selector pill, a +/- stepper button).
   static const double pillControlHeight = 40.0;
   static const double stepperButtonHeight = 56.0;

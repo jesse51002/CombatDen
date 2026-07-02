@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/schedule/data/mock_schedule.dart';
+import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/presentation/widgets/list/schedule_day_column.dart';
 
 /// Minimum width a day column needs before a day is dropped. Tuned so a full
@@ -15,7 +15,15 @@ const double _kMinDayColumnWidth = 150;
 class ScheduleClassList extends StatelessWidget {
   final List<ScheduleDayGroup> days;
 
-  const ScheduleClassList({super.key, required this.days});
+  /// Forwarded to each card: opens the manage dialog for the tapped occurrence
+  /// (edit the class, or cancel just that day).
+  final void Function(ScheduleClassEntry entry) onClassTap;
+
+  const ScheduleClassList({
+    super.key,
+    required this.days,
+    required this.onClassTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +35,12 @@ class ScheduleClassList extends StatelessWidget {
 
         final children = <Widget>[];
         for (var i = 0; i < shown.length; i++) {
-          children.add(Expanded(child: ScheduleDayColumn(group: shown[i])));
+          children.add(Expanded(
+            child: ScheduleDayColumn(
+              group: shown[i],
+              onClassTap: onClassTap,
+            ),
+          ));
           if (i < shown.length - 1) children.add(const _ColumnDivider());
         }
 

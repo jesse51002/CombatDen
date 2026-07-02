@@ -21,7 +21,20 @@ SELECT
     mp.plan_type,
     mp.plan_name,
     mp.duration_unit,
-    (now() AT TIME ZONE g.timezone)::date AS gym_today
+    (now() AT TIME ZONE g.timezone)::date AS gym_today,
+    -- Gym-LOCAL date diff, never a bare UTC one: an evening class is
+    -- already "tomorrow" in UTC for a gym west of it, so diffing raw
+    -- timestamptz dates would go negative for a same-gym-day class. Both
+    -- sides are read through the gym's own timezone first, then floored
+    -- at 0 (derived numbers never negative).
+    CASE
+        WHEN p.last_class IS NULL THEN NULL
+        ELSE GREATEST(
+            0,
+            (now() AT TIME ZONE g.timezone)::date
+                - (p.last_class AT TIME ZONE g.timezone)::date
+        )
+    END AS days_since_last_class
 FROM members p
 LEFT JOIN latest_memberships m
     ON p.member_id = m.member_id

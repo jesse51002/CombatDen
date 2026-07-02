@@ -1,15 +1,22 @@
-"""Integration tests for the scheduled reconciler.
+"""Tests for the scheduled reconciler.
 
-Run against the real local Supabase DB. These cover the genuinely-new reconciler
-logic that needs no live Stripe subscription:
+Two layers:
 
-- ``ResourceLock`` (generic non-blocking TTL lease)
-- ``OrphanCleanupSweep`` (lock-guarded delete of ``not_added`` rows)
+- A pure unit test of the ``ReconcilerService`` orchestrator: FIVE billing
+  step-services run in order (invoice-fetch -> stale-task -> orphan-cleanup ->
+  payment-push -> subscription-orphans) and nothing else — the reconciler owns
+  no non-billing step (class occurrences are computed from schedule versions
+  at read time; there is no materialize sweep).
+- Integration tests against the real local Supabase DB for the
+  genuinely-new reconciler logic that needs no live Stripe subscription:
+  ``ResourceLock`` (generic non-blocking TTL lease) and ``OrphanCleanupSweep``
+  (lock-guarded delete of ``not_added`` rows).
 
 The Stripe-read path (``InvoiceFetchSweep``) needs a real subscription/test-clock
 fixture and is not covered here.
 """
 
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -18,9 +25,51 @@ from src.core.config import settings
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
+from src.reconciler.service.reconciler.reconciler_result import SweepResult
+from src.reconciler.service.reconciler.reconciler_service import (
+    ReconcilerService,
+)
 from src.shared.resource_lock import ResourceLock
 
 _TOTAL_PRICE = 5000
+
+
+# ── ReconcilerService orchestrator (pure unit) ─────────────────
+
+
+async def test_run_executes_the_five_billing_sweeps_in_order():
+    """The orchestrator runs exactly the five billing step-services, in the
+    documented order, and aggregates each one's ``SweepResult``."""
+    order: list[str] = []
+
+    def _sweep(name: str) -> AsyncMock:
+        async def _run() -> SweepResult:
+            order.append(name)
+            return SweepResult(name=name)
+
+        sweep = AsyncMock()
+        sweep.run = AsyncMock(side_effect=_run)
+        return sweep
+
+    service = ReconcilerService(
+        orphan_cleanup_sweep=_sweep("orphan_cleanup"),
+        payment_push_sweep=_sweep("payment_push"),
+        invoice_fetch_sweep=_sweep("invoice_fetch"),
+        stale_task_sweep=_sweep("stale_task"),
+        subscription_orphan_sweep=_sweep("subscription_orphan"),
+    )
+
+    result = await service.run()
+
+    assert order == [
+        "invoice_fetch",
+        "stale_task",
+        "orphan_cleanup",
+        "payment_push",
+        "subscription_orphan",
+    ]
+    assert [sweep.name for sweep in result.sweeps] == order
+    assert len(result.sweeps) == 5
 
 
 

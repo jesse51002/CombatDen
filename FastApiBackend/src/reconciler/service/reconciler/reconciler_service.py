@@ -60,12 +60,13 @@ class ReconcilerService:
         """Run every step-service in order and return each one's ``SweepResult``."""
         logger.info("Reconciler sweep starting")
         sweeps: list[SweepResult] = []
-        # Run order: invoice-fetch (refresh dates/charges) -> stale-task
-        # recovery (re-run crashed tracked tasks) -> orphan-cleanup ->
-        # payment-push (config drift) -> subscription-orphans. The push's sync
-        # self-heals a dead sub natively (cancels the family + nulls the sub id),
-        # so there is no separate Stripe-status pass; subscription-orphans runs
-        # LAST so the push has re-linked any real sub before we judge orphans.
+        # Billing run order (steps 1-5, unchanged): invoice-fetch (refresh
+        # dates/charges) -> stale-task recovery (re-run crashed tracked tasks)
+        # -> orphan-cleanup -> payment-push (config drift) ->
+        # subscription-orphans. The push's sync self-heals a dead sub natively
+        # (cancels the family + nulls the sub id), so there is no separate
+        # Stripe-status pass; subscription-orphans runs LAST so the push has
+        # re-linked any real sub before we judge orphans.
         sweeps.append(await self._invoice_fetch_sweep.run())
         sweeps.append(await self._stale_task_sweep.run())
         sweeps.append(await self._orphan_cleanup_sweep.run())

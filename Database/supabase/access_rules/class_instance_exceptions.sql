@@ -28,5 +28,6 @@ CREATE POLICY "Gym staff can update instance exceptions"
     USING (is_gym_admin_or_owner(class_instance_exceptions.gym_id))
     WITH CHECK (is_gym_admin_or_owner(class_instance_exceptions.gym_id));
 
-REVOKE UPDATE (exception_id, class_id, gym_id, original_date, created_at)
+REVOKE UPDATE (exception_id, class_id, gym_id, original_date, original_time,
+               created_at)
     ON TABLE class_instance_exceptions FROM authenticated;

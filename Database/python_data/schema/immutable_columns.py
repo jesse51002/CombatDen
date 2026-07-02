@@ -62,12 +62,32 @@ GYM_CLASSES: frozenset[str] = frozenset(
     }
 )
 
+GYM_CLASS_SCHEDULES: frozenset[str] = frozenset(
+    {
+        # Append-only versioned schedule rows: written once by the backend
+        # (service_role) at mint, never UPDATE'd by anyone. Every column is
+        # user-immutable; a schedule edit mints a NEW version row.
+        "schedule_id",  # PK, auto-generated UUID
+        "class_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "effective_from",  # version boundary, server-stamped at mint
+        "timezone",  # IANA zone frozen at mint
+        "duration_minutes",
+        "recurring_unit",
+        "recurring_interval",
+        "weekday_slots",  # day -> slot-list JSONB (the WHEN of the shape)
+        "start_date",
+        "end_date",
+    }
+)
+
 CLASS_INSTANCE_EXCEPTIONS: frozenset[str] = frozenset(
     {
         "exception_id",  # PK, auto-generated UUID
         "class_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
-        "original_date",  # part of UNIQUE constraint
+        "original_date",  # occurrence identity (part of UNIQUE constraint)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
         "created_at",  # auto-generated timestamp
     }
 )
@@ -81,23 +101,29 @@ CLASS_RANGE_EXCEPTIONS: frozenset[str] = frozenset(
     }
 )
 
-CLASS_HISTORY: frozenset[str] = frozenset(
-    {
-        "class_history_id",  # PK, auto-generated UUID
-        "class_id",  # identity FK
-        "gym_id",  # identity FK, per-gym resource
-        "created_at",  # auto-generated timestamp
-    }
-)
-
 MEMBER_ATTENDANCE: frozenset[str] = frozenset(
     {
         "log_id",  # PK, auto-generated UUID
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
-        "class_history_id",  # identity FK
+        "class_id",  # identity FK
+        "original_date",  # occurrence identity (part of UNIQUE constraint)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
+        "occurred_at",  # denormalized effective start, backend-synced only
         "plan_id",  # billing attribution, set once at check-in
         "item_id",  # membership row that covered the check-in
+    }
+)
+
+CLASS_SIGNUPS: frozenset[str] = frozenset(
+    {
+        "signup_id",  # PK, auto-generated UUID
+        "class_id",  # identity FK, part of UNIQUE constraint
+        "gym_id",  # identity FK, per-gym resource
+        "member_id",  # identity FK, part of UNIQUE constraint
+        "original_date",  # occurrence identity (part of UNIQUE constraint)
+        "original_time",  # occurrence identity (part of UNIQUE constraint)
+        "created_at",  # auto-generated timestamp
     }
 )
 

@@ -13,11 +13,8 @@ CREATE POLICY "Users and gym staff can view attendance"
         OR is_gym_admin_or_owner(member_attendance.gym_id)
     );
 
-CREATE POLICY "Gym staff can insert attendance"
-    ON member_attendance
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (is_gym_admin_or_owner(member_attendance.gym_id));
-
--- Append-only
-REVOKE UPDATE ON TABLE member_attendance FROM authenticated;
+-- Append-only AND written by the service-role backend ONLY (the check-in gate).
+-- No authenticated write path at all: staff never insert attendance directly —
+-- every write goes through the gated check-in endpoint, so a raw client INSERT
+-- can't bypass the eligibility / capacity / points / billing-attribution logic.
+REVOKE INSERT, UPDATE, DELETE ON TABLE member_attendance FROM authenticated;

@@ -2,18 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/schedule/data/mock_schedule.dart';
+import 'package:crm/features/schedule/data/models/recurring_unit.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/app_date_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
-import 'package:crm/shared/widgets/form/app_time_field.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
-/// "Schedule" form section: start time, duration, recurrence, and the
-/// active date range.
+/// "Schedule" form section: duration, recurrence, and the active date range.
+/// Start time(s) are per-slot now — see `ClassDaysSection`.
 class ClassScheduleSection extends StatelessWidget {
-  final TimeOfDay? classTime;
-  final ValueChanged<TimeOfDay> onTimeChanged;
   final TextEditingController durationController;
   final RecurringUnit recurringUnit;
   final ValueChanged<RecurringUnit?> onUnitChanged;
@@ -25,8 +22,6 @@ class ClassScheduleSection extends StatelessWidget {
 
   const ClassScheduleSection({
     super.key,
-    required this.classTime,
-    required this.onTimeChanged,
     required this.durationController,
     required this.recurringUnit,
     required this.onUnitChanged,
@@ -45,27 +40,12 @@ class ClassScheduleSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              Expanded(
-                child: AppTimeField(
-                  label: 'Start time',
-                  value: classTime,
-                  onChanged: onTimeChanged,
-                ),
-              ),
-              Expanded(
-                child: CustomTextField(
-                  controller: durationController,
-                  label: 'Duration (minutes)',
-                  hintText: '60',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
-            ],
+          CustomTextField(
+            controller: durationController,
+            label: 'Duration (minutes)',
+            hintText: '60',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

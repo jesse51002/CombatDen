@@ -58,6 +58,13 @@ class AppTheme {
         weight: DesignConstants.iconWeight,
       ),
       dividerColor: DesignConstants.divider,
+      // The M3 time picker reads textTheme.displayLarge for its hour/minute
+      // digits; ours is `big1` (160px), which clips the digits into garbage.
+      // Pin a sane digit style (the picker still resolves the selected-state
+      // color itself, so the style's color is overridden).
+      timePickerTheme: TimePickerThemeData(
+        hourMinuteTextStyle: DesignConstants.big2Bold,
+      ),
     );
   }
 }

@@ -4,10 +4,9 @@ import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/theme_controller.dart';
 
-/// Persists per-employee CRM settings through the FastApiBackend.
-///
-/// Today this is just the appearance (theme) preference, saved on the caller's
-/// `gym_employees` row. Layered like every other CRM data path:
+/// Persists CRM settings through the FastApiBackend — the caller's appearance
+/// (theme) preference on their `gym_employees` row and the gym's timezone on
+/// the gym row. Layered like every other CRM data path:
 /// Screen → Bloc → Repository → [ApiClient] → backend.
 class SettingsRepository {
   final ApiClient _apiClient;
@@ -32,6 +31,30 @@ class SettingsRepository {
     } on ServerException catch (e) {
       throw DatabaseException(
         'Couldn\'t save your theme. Please try again.${e.detail != null ? ' (${e.detail})' : ''}',
+      );
+    } on NetworkException catch (e) {
+      throw DatabaseException(e.message);
+    }
+  }
+
+  /// `PUT /api/v1/gyms/{gymId}` — save the gym's IANA [timezone]. The backend
+  /// re-mints every class's schedule version in the new zone (nothing is
+  /// wiped; upcoming classes keep their local times). Throws
+  /// [DatabaseException] on any failure so the bloc can surface the error.
+  Future<void> updateGymTimezone({
+    required String gymId,
+    required String timezone,
+  }) async {
+    try {
+      await _apiClient.put<dynamic>(
+        '/api/v1/gyms/$gymId',
+        data: {
+          'data': {'timezone': timezone},
+        },
+      );
+    } on ServerException catch (e) {
+      throw DatabaseException(
+        'Couldn\'t update the gym timezone. Please try again.${e.detail != null ? ' (${e.detail})' : ''}',
       );
     } on NetworkException catch (e) {
       throw DatabaseException(e.message);

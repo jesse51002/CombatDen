@@ -31,6 +31,11 @@ CREATE TABLE gyms (
 
 CREATE TABLE gym_employees (
     employee_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    -- Login principal link. ONLY owner/admin rows may carry one: a
+    -- 'trainer' row is instructor DATA (a name/photo shown on classes),
+    -- never an account — enforced by chk_trainer_has_no_account below,
+    -- which is what makes is_gym_employee() (and every backend staff
+    -- check) owner/admin-only by construction.
     user_id UUID CONSTRAINT fk_employee_user REFERENCES auth.users(id),
     gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms(gym_id),
     employee_type employee_type NOT NULL,
@@ -45,7 +50,10 @@ CREATE TABLE gym_employees (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (employee_id),
     UNIQUE (user_id, gym_id),
-    UNIQUE (employee_id, gym_id)
+    UNIQUE (employee_id, gym_id),
+    -- Trainers have no accounts at all (see user_id comment above).
+    CONSTRAINT chk_trainer_has_no_account
+        CHECK (employee_type <> 'trainer' OR user_id IS NULL)
 );
 
 -- ============================================================

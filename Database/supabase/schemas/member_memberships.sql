@@ -17,6 +17,14 @@ CREATE TABLE member_memberships_unfiltered (
     -- Payer's Stripe customer/subscription bills this row. Immutable; changing payer = cancel + new row.
     paid_by_member_id UUID NOT NULL CONSTRAINT fk_membership_payer REFERENCES members(member_id),
     start_date DATE NOT NULL,
+    -- The two terminal dates split by WHO terminates (the load-bearing
+    -- convention): end_date is AUTOMATIC-only — the purchase-stamped
+    -- duration expiry and the check-in depletion auto-end write it, and the
+    -- check-in reversal's un-end restores it (back to the duration-derived
+    -- expiry, or NULL for a pure class-count pack). cancel_date is MANUAL —
+    -- a human terminating early (the recurring cancel flow, the one-time /
+    -- trial end-early op) — and is never touched by attendance removal, so
+    -- a staff-ended pack can't be resurrected by an un-checked-in class.
     end_date DATE,
     cancel_date DATE,
     last_paid_date DATE,
@@ -120,15 +128,29 @@ CREATE TRIGGER trg_prevent_paid_by_member_id_overwrite
     BEFORE UPDATE OF paid_by_member_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_paid_by_member_id_overwrite();
 
--- Trigger: cancel_date locks once stripe_sync_status = 'deleted'. Before that, an unconfirmed cancel can revert.
+-- Trigger: a written cancel_date locks. RECURRING locks once
+-- stripe_sync_status = 'deleted' (before that, an unconfirmed cancel can
+-- revert — the DB-first cancel's failure path clears it). ONE_TIME / TRIAL
+-- packs lock IMMEDIATELY: their cancel is a pure DB write with no Stripe
+-- converge (no confirmation step to wait for), so a pack's manual
+-- termination is final the moment it lands — nothing may overwrite or
+-- clear it.
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.cancel_date IS NOT NULL
-       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date
-       AND OLD.stripe_sync_status = 'deleted' THEN
-        RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
-            USING CONSTRAINT = 'cancel_date_immutable';
+       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date THEN
+        IF OLD.stripe_sync_status = 'deleted' THEN
+            RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
+                USING CONSTRAINT = 'cancel_date_immutable';
+        END IF;
+        IF (
+            SELECT plan_type FROM membership_plans_unfiltered
+            WHERE plan_id = OLD.plan_id
+        ) IN ('trial', 'one_time') THEN
+            RAISE EXCEPTION 'cancel_date is final on a one-time / trial membership'
+                USING CONSTRAINT = 'cancel_date_immutable';
+        END IF;
     END IF;
     RETURN NEW;
 END;

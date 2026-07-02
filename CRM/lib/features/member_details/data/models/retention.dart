@@ -28,11 +28,18 @@ class Retention extends Equatable {
   ) =>
       _$RetentionFromJson(json);
 
-  /// Days since the member's last class, or null if
-  /// unknown.
+  /// Days since the member's last class (calendar-day
+  /// diff in local time, never negative — an evening
+  /// class or an early check-in can put the raw
+  /// timestamp ahead of now), or null if unknown.
   int? get daysSinceLastClass {
     if (lastClass == null) return null;
-    return DateTime.now().difference(lastClass!).inDays;
+    final now = DateTime.now();
+    final last = lastClass!.toLocal();
+    final days = DateTime(now.year, now.month, now.day)
+        .difference(DateTime(last.year, last.month, last.day))
+        .inDays;
+    return days < 0 ? 0 : days;
   }
 
   @override

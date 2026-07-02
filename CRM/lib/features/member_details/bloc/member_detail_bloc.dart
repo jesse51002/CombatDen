@@ -1,9 +1,13 @@
 import 'dart:developer';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/check_in/data/models/check_in_request.dart';
+import 'package:crm/features/check_in/data/models/check_in_response.dart';
+import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -16,11 +20,17 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
 class MemberDetailBloc
     extends Bloc<MemberDetailEvent, MemberDetailState> {
   final MemberRepository _repository;
+
+  /// Reserve (sign-up) is a cross-feature reuse of the schedule feature's
+  /// wiring (`ScheduleRepository.signUp`) for this one member/occurrence —
+  /// there is no `MemberRepository` equivalent.
+  final ScheduleRepository _scheduleRepository;
 
   /// Drives the post-charge invoice poll (5/10/15/30/60s). Each
   /// charge / start / refund / mark-paid-cash restarts it, so a new
@@ -36,8 +46,10 @@ class MemberDetailBloc
 
   MemberDetailBloc({
     required MemberRepository repository,
+    required ScheduleRepository scheduleRepository,
     InvoicePoller? poller,
   })  : _repository = repository,
+        _scheduleRepository = scheduleRepository,
         _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
@@ -67,8 +79,8 @@ class MemberDetailBloc
     on<UpgradeMembershipOutcomeCleared>(
       _onUpgradeMembershipOutcomeCleared,
     );
-    on<EndMembershipRequested>(_onEndMembership);
-    on<EndMembershipOutcomeCleared>(_onEndMembershipOutcomeCleared);
+    on<CancelOneTimeMembershipRequested>(_onCancelOneTimeMembership);
+    on<CancelOneTimeOutcomeCleared>(_onCancelOneTimeOutcomeCleared);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
@@ -80,8 +92,17 @@ class MemberDetailBloc
     on<ChargeCardOutcomeCleared>(_onChargeCardOutcomeCleared);
     on<RefundChargeRequested>(_onRefundCharge);
 
+    on<MemberCheckInRequested>(_onCheckIn);
+    on<MemberCheckInCleared>(_onCheckInCleared);
+
+    on<MemberReserveRequested>(_onReserve);
+    on<MemberReserveCleared>(_onReserveCleared);
+
     on<InvoicePollRequested>(_onInvoicePoll);
   }
+
+  /// Backend `date` body fields are bare `YYYY-MM-DD` (gym-local, no tz).
+  static final DateFormat _occurrenceDate = DateFormat('yyyy-MM-dd');
 
   // ----- Load + UI handlers -----
 
@@ -622,8 +643,8 @@ class MemberDetailBloc
   /// the end dialog owns its own processing → success step (the screen-level
   /// overlay + error dialog never fire while it is open). No Stripe / no
   /// invoice, so — unlike upgrade — it does NOT poll for an invoice.
-  Future<void> _onEndMembership(
-    EndMembershipRequested event,
+  Future<void> _onCancelOneTimeMembership(
+    CancelOneTimeMembershipRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
@@ -633,12 +654,12 @@ class MemberDetailBloc
       clearEndOutcome: true,
     ));
     try {
-      await _repository.endMembership(
+      await _repository.cancelOneTimeMembership(
         itemId: event.itemId,
         memberId: event.memberId,
       );
     } catch (e, stackTrace) {
-      log('End membership failed', error: e, stackTrace: stackTrace);
+      log('Cancel one-time membership failed', error: e, stackTrace: stackTrace);
       final current = state;
       if (current is! MemberDetailLoaded) return;
       emit(current.copyWith(
@@ -674,8 +695,8 @@ class MemberDetailBloc
     }
   }
 
-  void _onEndMembershipOutcomeCleared(
-    EndMembershipOutcomeCleared event,
+  void _onCancelOneTimeOutcomeCleared(
+    CancelOneTimeOutcomeCleared event,
     Emitter<MemberDetailState> emit,
   ) {
     final s = state;
@@ -888,6 +909,151 @@ class MemberDetailBloc
         idempotencyKey: const Uuid().v4(),
       ),
     );
+  }
+
+  // ----- Class check-in -----
+
+  /// The check-in dialog's mutation. Like [_onChargeCard] it rides a DEDICATED
+  /// channel ([isCheckingIn] / [checkInResult] / [checkInError]) so the
+  /// screen-level overlay + error dialog never fire while the dialog is open;
+  /// the dialog flips to its own terminal step off the result. The CRM sends
+  /// `is_member: false`: a clean check-in is recorded, any gate conditions ride
+  /// along as non-blocking `warnings`; one that hits a warning is NOT recorded
+  /// (`requiresConfirmation` true) unless [MemberCheckInRequested.ignoreWarnings]
+  /// is set — the dialog re-dispatches with it true on "Check in anyway". Only
+  /// a real recorded attendance bumps `refreshToken` (so last-class /
+  /// attendance / rewards refresh) — an idempotent repeat or a
+  /// needs-confirmation hold changes nothing.
+  Future<void> _onCheckIn(
+    MemberCheckInRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isCheckingIn: true,
+      clearCheckInOutcome: true,
+    ));
+
+    final CheckInResponse result;
+    try {
+      result = await _repository.checkInMember(
+        CheckInRequest(
+          memberId: s.member.memberId,
+          gymId: s.member.gymId,
+          classId: event.classId,
+          occurrenceDate: _occurrenceDate.format(event.occurrenceDate),
+          occurrenceTime: event.occurrenceTime,
+          ignoreWarnings: event.ignoreWarnings,
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Check in failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isCheckingIn: false,
+        checkInError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    // An idempotent repeat wrote nothing — surface the result without a
+    // refresh. A fresh attendance bumps `refreshToken` so the detail surfaces
+    // (last class, attendance, rewards) re-read behind the still-open dialog.
+    emit(committed.copyWith(
+      isCheckingIn: false,
+      checkInResult: result,
+      refreshToken:
+          result.isRecorded ? committed.refreshToken + 1 : null,
+    ));
+    if (!result.isRecorded) return;
+
+    try {
+      final refreshed =
+          await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Check in recorded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onCheckInCleared(
+    MemberCheckInCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearCheckInOutcome: true));
+  }
+
+  // ----- Class reserve (sign-up) -----
+
+  /// The check-in/reserve dialog's Reserve mutation. Rides its own DEDICATED
+  /// channel ([isReserving] / [reserveResult] / [reserveError]) mirroring
+  /// [_onCheckIn]'s shape. A reservation doesn't change points/attendance/
+  /// billing, so — unlike check-in — there is no member-detail refresh and
+  /// no `refreshToken` bump; the result is rendered straight from
+  /// [SignupResponse].
+  Future<void> _onReserve(
+    MemberReserveRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isReserving: true,
+      clearReserveOutcome: true,
+    ));
+
+    final SignupResponse result;
+    try {
+      result = await _scheduleRepository.signUp(
+        s.member.gymId,
+        event.classId,
+        event.occurrenceDate,
+        event.occurrenceTime,
+        s.member.memberId,
+      );
+    } catch (e, stackTrace) {
+      log('Reserve failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isReserving: false,
+        reserveError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    final current = state;
+    if (current is! MemberDetailLoaded) return;
+    emit(current.copyWith(
+      isReserving: false,
+      reserveResult: result,
+    ));
+  }
+
+  void _onReserveCleared(
+    MemberReserveCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearReserveOutcome: true));
   }
 
   // ----- Invoice polling -----

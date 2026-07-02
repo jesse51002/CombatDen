@@ -1,10 +1,13 @@
 flowchart TB
   %% Scheduled reconciler — orchestration flow of ReconcilerService.run().
   %% Source of truth: src/reconciler/ (reconciler-guide skill).
-  %% APScheduler (app lifespan) fires run() twice daily, then runs the five
+  %% APScheduler (app lifespan) fires run() twice daily, then runs five billing
   %% step-services in order: invoice-fetch -> stale-task recovery ->
   %% orphan-cleanup -> payment-push -> subscription-orphans (cancel live Stripe
-  %% subs with no live DB link, last). Stale-task recovery re-runs unfinished
+  %% subs with no live DB link, last). The reconciler is billing-only — the
+  %% class system needs no sweep (occurrences are computed from versioned
+  %% schedules, never stored).
+  %% Stale-task recovery re-runs unfinished
   %% tracked tasks (src/tasks/) whose in-process run died — the recovery loop
   %% lives here, the tasks engine only knows how to run ONE task.
   %% No reconciler-wide lock — safety is the per-family PayingMemberLock every

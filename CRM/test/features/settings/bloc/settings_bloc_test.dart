@@ -27,6 +27,7 @@ void main() {
       gymId: 'gym-1',
       displayName: 'Test Gym',
       role: EmployeeRole.owner,
+      timezone: 'America/Chicago',
     );
     themeController.setMode(ThemeMode.system);
   });
@@ -92,6 +93,79 @@ void main() {
           () => repository.updateMyTheme(
             gymId: any(named: 'gymId'),
             mode: any(named: 'mode'),
+          ),
+        );
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'saves the timezone, then updates selectedGym and bumps the '
+      'saved count (not optimistic)',
+      setUp: () {
+        when(
+          () => repository.updateGymTimezone(
+            gymId: 'gym-1',
+            timezone: 'America/Denver',
+          ),
+        ).thenAnswer((_) async {});
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) =>
+          bloc.add(const SettingsTimezoneChanged('America/Denver')),
+      expect: () => const [
+        SettingsState(savingTimezone: true),
+        SettingsState(savingTimezone: false, timezoneSavedCount: 1),
+      ],
+      verify: (_) {
+        // selectedGym only updates AFTER the backend commit.
+        expect(selectedGym.timezone, 'America/Denver');
+        verify(
+          () => repository.updateGymTimezone(
+            gymId: 'gym-1',
+            timezone: 'America/Denver',
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'surfaces an error and leaves selectedGym untouched when the '
+      'timezone save fails',
+      setUp: () {
+        when(
+          () => repository.updateGymTimezone(
+            gymId: 'gym-1',
+            timezone: 'America/Denver',
+          ),
+        ).thenThrow(Exception('save failed'));
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) =>
+          bloc.add(const SettingsTimezoneChanged('America/Denver')),
+      expect: () => [
+        const SettingsState(savingTimezone: true),
+        isA<SettingsState>()
+            .having((s) => s.savingTimezone, 'savingTimezone', false)
+            .having((s) => s.timezoneSavedCount, 'timezoneSavedCount', 0)
+            .having((s) => s.error, 'error', isNotNull),
+      ],
+      verify: (_) {
+        // NOT optimistic: the failed save never touches selectedGym.
+        expect(selectedGym.timezone, 'America/Chicago');
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'ignores a no-op timezone pick (same zone) without calling the backend',
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) =>
+          bloc.add(const SettingsTimezoneChanged('America/Chicago')),
+      expect: () => const <SettingsState>[],
+      verify: (_) {
+        verifyNever(
+          () => repository.updateGymTimezone(
+            gymId: any(named: 'gymId'),
+            timezone: any(named: 'timezone'),
           ),
         );
       },

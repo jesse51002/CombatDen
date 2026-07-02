@@ -25,7 +25,7 @@ class RefundChargeDialog extends StatefulWidget {
 
   /// Resolves to `true` once a refund is submitted (the bloc commit is
   /// dispatched), `null` when dismissed — so a caller can chain a
-  /// follow-up (e.g. the one-time "also end?" prompt). Callers that only
+  /// follow-up (e.g. the one-time "also cancel?" prompt). Callers that only
   /// fire-and-forget can ignore the result.
   static Future<bool?> show({
     required BuildContext context,
