@@ -222,11 +222,11 @@ class UpgradeMembershipRequested extends MemberDetailEvent {
 
 /// End a ONE-TIME / TRIAL membership early — sets its end date to
 /// today. No charge, no Stripe action. [memberId] is the covered member.
-class EndMembershipRequested extends MemberDetailEvent {
+class CancelOneTimeMembershipRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
 
-  const EndMembershipRequested({
+  const CancelOneTimeMembershipRequested({
     required this.itemId,
     required this.memberId,
   });
@@ -351,8 +351,8 @@ class UpgradeMembershipOutcomeCleared extends MemberDetailEvent {
 /// Clears the end-membership outcome (error) when the end dialog
 /// opens, so a prior end's failure doesn't flash (mirrors
 /// [UpgradeMembershipOutcomeCleared]).
-class EndMembershipOutcomeCleared extends MemberDetailEvent {
-  const EndMembershipOutcomeCleared();
+class CancelOneTimeOutcomeCleared extends MemberDetailEvent {
+  const CancelOneTimeOutcomeCleared();
 }
 
 /// NOTE: refund has no backend endpoint in the merged

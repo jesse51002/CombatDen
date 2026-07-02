@@ -128,7 +128,7 @@ Table gym_classes {
   class_description varchar
   allowed_plan_ids jsonb [note: 'plan_id strings allowed; NULL = all plans (check-in eligibility gate)']
   max_capacity integer [note: 'room capacity; gated at check-in/sign-up time, per-occurrence override on class_instance_exceptions']
-  image_url varchar
+  image_url varchar [not null, note: 'every class has an image -- writers fill the platform default (people-in-a-gym photo) when none is provided']
   points_worth integer [not null, default: 50]
   is_active boolean [not null, default: true]
   is_deleted boolean [not null, default: false]

@@ -7,7 +7,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/end_membership_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_one_time_membership_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/freeze/freeze_account_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/freeze/unfreeze_account_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/one_time_refund_flow.dart';
@@ -22,7 +22,7 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 /// One "Edit membership" entry point for a membership card — a menu of
 /// the actions valid for THIS membership's type and status. Recurring:
 /// upgrade plan, migrate to current price (if outdated), cancel, freeze.
-/// One-time / trial: end membership, refund. Each item opens its own
+/// One-time / trial: cancel membership, refund. Each item opens its own
 /// sub-dialog stacked on this menu, then closes the menu.
 class EditMembershipDialog extends StatelessWidget {
   final MemberDetailResponse member;
@@ -157,10 +157,10 @@ class EditMembershipDialog extends StatelessWidget {
     if (_isOneTimeOrTrial) {
       if (!_isTerminal) {
         items.add(_button(
-          'End membership',
+          'Cancel membership',
           () => _run(
             context,
-            () => EndMembershipDialog.show(
+            () => CancelOneTimeMembershipDialog.show(
               context: context,
               membership: membership,
               coveredMemberId: coveredMemberId,

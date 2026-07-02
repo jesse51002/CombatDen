@@ -46,7 +46,7 @@ class MemberClassHistoryRow(BaseModel):
 
     class_id: UUID
     class_name: str
-    image_url: str | None
+    image_url: str
     original_date: date
     original_time: time
     duration_minutes: int

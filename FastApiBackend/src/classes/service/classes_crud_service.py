@@ -65,9 +65,14 @@ class ClassesCrudService:
         self,
         db_pool: DirectDatabasePool,
         versions_service: ClassesVersionsService,
+        default_image_url: str,
     ) -> None:
         self._db_pool = db_pool
         self._versions_service = versions_service
+        # Every class HAS an image (gym_classes.image_url is NOT NULL): an
+        # omitted / null image on create or identity-update normalizes to
+        # this platform default instead of ever writing NULL.
+        self._default_image_url = default_image_url
 
     async def create_class(
         self,
@@ -338,7 +343,7 @@ class ClassesCrudService:
             "allowed_plan_ids": self._jsonb_uuid_array(
                 request.allowed_plan_ids
             ),
-            "image_url": request.image_url,
+            "image_url": request.image_url or self._default_image_url,
             "points_worth": request.points_worth,
         }
 
@@ -348,6 +353,10 @@ class ClassesCrudService:
         for col, value in update_fields.items():
             if col == "allowed_plan_ids":
                 params[col] = self._jsonb_uuid_array(value)
+            elif col == "image_url":
+                # Clearing the image resets to the platform default — the
+                # column is NOT NULL and every class has an image.
+                params[col] = value or self._default_image_url
             elif isinstance(value, UUID):
                 params[col] = str(value)
             else:

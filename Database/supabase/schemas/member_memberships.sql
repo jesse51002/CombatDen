@@ -128,15 +128,29 @@ CREATE TRIGGER trg_prevent_paid_by_member_id_overwrite
     BEFORE UPDATE OF paid_by_member_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_paid_by_member_id_overwrite();
 
--- Trigger: cancel_date locks once stripe_sync_status = 'deleted'. Before that, an unconfirmed cancel can revert.
+-- Trigger: a written cancel_date locks. RECURRING locks once
+-- stripe_sync_status = 'deleted' (before that, an unconfirmed cancel can
+-- revert — the DB-first cancel's failure path clears it). ONE_TIME / TRIAL
+-- packs lock IMMEDIATELY: their cancel is a pure DB write with no Stripe
+-- converge (no confirmation step to wait for), so a pack's manual
+-- termination is final the moment it lands — nothing may overwrite or
+-- clear it.
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.cancel_date IS NOT NULL
-       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date
-       AND OLD.stripe_sync_status = 'deleted' THEN
-        RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
-            USING CONSTRAINT = 'cancel_date_immutable';
+       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date THEN
+        IF OLD.stripe_sync_status = 'deleted' THEN
+            RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
+                USING CONSTRAINT = 'cancel_date_immutable';
+        END IF;
+        IF (
+            SELECT plan_type FROM membership_plans_unfiltered
+            WHERE plan_id = OLD.plan_id
+        ) IN ('trial', 'one_time') THEN
+            RAISE EXCEPTION 'cancel_date is final on a one-time / trial membership'
+                USING CONSTRAINT = 'cancel_date_immutable';
+        END IF;
     END IF;
     RETURN NEW;
 END;

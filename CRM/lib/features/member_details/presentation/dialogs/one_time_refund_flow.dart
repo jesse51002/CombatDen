@@ -8,15 +8,15 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
-import 'package:crm/features/member_details/presentation/dialogs/end_membership_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_one_time_membership_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/payment_invoice_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
-/// Refund a ONE-TIME / TRIAL membership's purchase, then offer to also end
-/// it. Refund + end are SEPARATE actions, but a refund usually pairs with
-/// ending the pack — so after a submitted refund this opens
-/// [EndMembershipDialog] (its own confirm → processing → success), rather
-/// than firing the end in the background.
+/// Refund a ONE-TIME / TRIAL membership's purchase, then offer to also cancel
+/// it. Refund + cancel are SEPARATE actions, but a refund usually pairs with
+/// cancelling the pack — so after a submitted refund this opens
+/// [CancelOneTimeMembershipDialog] (its own confirm → processing → success), rather
+/// than firing the cancellation in the background.
 ///
 /// Opens the membership's **purchase invoice** in the same rich popup
 /// Payment History uses ([PaymentInvoiceDialog]): the full breakdown, the
@@ -82,10 +82,11 @@ Future<void> runOneTimeRefundFlow(
           false;
   if (!refunded || !allowEnd || !context.mounted) return;
 
-  // Offer to also end the pack. The end dialog IS the "end this membership?"
-  // confirm plus its own visible processing → success step (Cancel = "not
-  // now") — so the end is never a silent background dispatch.
-  await EndMembershipDialog.show(
+  // Offer to also cancel the pack. The cancel dialog IS the "cancel this
+  // membership?" confirm plus its own visible processing → success step
+  // ("Keep membership" = "not now") — so the cancellation is never a silent
+  // background dispatch.
+  await CancelOneTimeMembershipDialog.show(
     context: context,
     membership: membership,
     coveredMemberId: coveredMemberId,

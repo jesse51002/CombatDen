@@ -16,7 +16,11 @@ CREATE TABLE gym_classes (
     -- check-in/sign-up time ("now"), never snapshotted per occurrence, and
     -- per-occurrence overrides live on class_instance_exceptions.
     max_capacity INTEGER CHECK (max_capacity > 0),
-    image_url VARCHAR,
+    -- Every class HAS an image (the card/board/check-in UI leans on it):
+    -- writers that receive none fill in the platform default (a generic
+    -- people-in-a-gym photo — settings.default_class_image_url in the
+    -- backend), so NULL never reaches the row.
+    image_url VARCHAR NOT NULL,
     points_worth INTEGER NOT NULL DEFAULT 50 CHECK (points_worth > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,

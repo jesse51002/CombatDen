@@ -335,6 +335,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         ClassesCrudService,
         db_pool=db_pool,
         versions_service=classes_versions_service,
+        default_image_url=settings.default_class_image_url,
     )
     # A reschedule (new_date) on an instance-exception upsert delegates the
     # conflict check + attendance move to the undo service's engine, then writes
@@ -446,7 +447,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     # canonical classes_expander to seed each imported class's past month of
     # attendance + sign-ups (so the demo gym shows realistic counts).
     presets_service = providers.Factory(
-        PresetsService, db_pool=db_pool, expander=classes_expander
+        PresetsService,
+        db_pool=db_pool,
+        expander=classes_expander,
+        default_class_image_url=settings.default_class_image_url,
     )
 
     # === CRM billing DI providers (restored) ===

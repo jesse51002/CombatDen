@@ -155,13 +155,19 @@ class PresetsService:
     """Transactionally imports a video_gym template into a real gym's tables."""
 
     def __init__(
-        self, db_pool: DirectDatabasePool, expander: ClassesExpander
+        self,
+        db_pool: DirectDatabasePool,
+        expander: ClassesExpander,
+        default_class_image_url: str,
     ) -> None:
         self._db = db_pool
         # The canonical recurrence expander (pure, stateless) — reused to
         # materialize each imported class's past occurrences exactly as the live
         # board / check-in paths would, so seeded history can never disagree.
         self._expander = expander
+        # gym_classes.image_url is NOT NULL — a template class without a
+        # photo imports with the platform default instead.
+        self._default_class_image_url = default_class_image_url
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -382,7 +388,8 @@ class PresetsService:
                             "gym_id": gym_id_str,
                             "class_name": c["name"],
                             "class_description": c["description"],
-                            "image_url": c["image_url"],
+                            "image_url": c["image_url"]
+                            or self._default_class_image_url,
                             "points_worth": _DEFAULT_POINTS_WORTH,
                         },
                     )

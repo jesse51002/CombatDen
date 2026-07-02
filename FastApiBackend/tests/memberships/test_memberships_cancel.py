@@ -719,13 +719,13 @@ async def test_remove_authorization_threads_caller_idempotency_key(
         await delete_member_data(db_pool, payer.member_id)
 
 
-async def test_end_one_time_membership(
+async def test_cancel_one_time_membership(
     memberships_service,
     db_pool,
     gym_id,
     created,
 ):
-    """Ending a one-time membership sets cancel_date=today → status
+    """Cancelling a one-time membership sets cancel_date=today → status
     'cancelled' — the MANUAL terminal date (the cancel=manual /
     end_date=automatic convention), so the purchase-stamped duration
     end_date stays untouched and the check-in reversal's un-end can never
@@ -768,7 +768,7 @@ async def test_end_one_time_membership(
             ).mappings().fetchone()
         item_id = UUID(str(row["item_id"]))
 
-        terminated_on = await memberships_service.end_one_time(
+        terminated_on = await memberships_service.cancel_one_time(
             item_id, member.member_id,
         )
         assert terminated_on is not None
@@ -802,8 +802,8 @@ async def test_end_one_time_membership(
         await delete_member_data(db_pool, member.member_id)
 
 
-def test_end_one_time_rejects_recurring_unit():
-    """The end-one-time guard refuses a RECURRING membership (use cancel)."""
+def test_cancel_one_time_rejects_recurring_unit():
+    """The cancel-one-time guard refuses a RECURRING membership (use the recurring cancel)."""
     row = {
         "plan_type": "recurring",
         "cancel_date": None,
@@ -811,12 +811,12 @@ def test_end_one_time_rejects_recurring_unit():
         "timezone": "America/Chicago",
     }
     with pytest.raises(ValueError, match="recurring"):
-        MemberMembershipsCancel._validate_end_one_time(
+        MemberMembershipsCancel._validate_cancel_one_time(
             row, uuid4(), uuid4(), date.today()
         )
 
 
-def test_end_one_time_rejects_already_ended_unit():
+def test_cancel_one_time_rejects_already_ended_unit():
     """The end-one-time guard refuses an already-ended membership."""
     row = {
         "plan_type": "one_time",
@@ -825,34 +825,35 @@ def test_end_one_time_rejects_already_ended_unit():
         "timezone": "America/Chicago",
     }
     with pytest.raises(ValueError, match="already ended"):
-        MemberMembershipsCancel._validate_end_one_time(
+        MemberMembershipsCancel._validate_cancel_one_time(
             row, uuid4(), uuid4(), date.today()
         )
 
 
-def test_end_one_time_rejects_pending_cancellation_unit():
-    """The end-one-time guard refuses ANY pending cancellation — even a FUTURE
-    cancel_date — because member_memberships_end.sql sets end_date WITHOUT
-    clearing cancel_date, so ending would leave dual terminal dates (a ghost
-    scheduled-cancel for downstream status / reconciler logic)."""
+def test_cancel_one_time_rejects_pending_cancellation_unit():
+    """The cancel-one-time guard refuses ANY existing cancel_date — even a
+    FUTURE one — the pack already has a manual termination on record, and
+    this op's own write IS a cancel_date (overwriting a scheduled cancel
+    would silently move a termination someone already committed to)."""
     row = {
         "plan_type": "one_time",
         "cancel_date": date(2099, 1, 1),  # future, not yet effective
         "end_date": None,
         "timezone": "America/Chicago",
     }
-    with pytest.raises(ValueError, match="pending cancellation"):
-        MemberMembershipsCancel._validate_end_one_time(
+    with pytest.raises(ValueError, match="already cancelled"):
+        MemberMembershipsCancel._validate_cancel_one_time(
             row, uuid4(), uuid4(), date.today()
         )
 
 
-async def test_end_one_time_writes_subject_member_id():
-    """end_one_time drives the end UPDATE off the row's SUBJECT member_id, not
-    the request actor. A payer ending a one-time pack they fund for a child
-    passes their OWN member_id (the _get_membership auth allows it via
-    paid_by_member_id), so filtering the UPDATE by the actor would match zero
-    rows and scalar_one() would raise NoResultFound (an opaque 500)."""
+async def test_cancel_one_time_writes_subject_member_id():
+    """cancel_one_time drives the cancel UPDATE off the row's SUBJECT
+    member_id, not the request actor. A payer cancelling a one-time pack
+    they fund for a child passes their OWN member_id (the _get_membership
+    auth allows it via paid_by_member_id), so filtering the UPDATE by the
+    actor would match zero rows and scalar_one() would raise NoResultFound
+    (an opaque 500)."""
     svc = MemberMembershipsCancel(MagicMock(), MagicMock(), MagicMock())
     actor, subject, item = uuid4(), uuid4(), uuid4()
 
@@ -888,7 +889,7 @@ async def test_end_one_time_writes_subject_member_id():
 
     svc._db_pool.session = _session
 
-    await svc.end_one_time(item, actor)
+    await svc.cancel_one_time(item, actor)
 
     # The UPDATE is keyed on the SUBJECT (child), not the request actor (payer).
     assert captured["member_id"] == str(subject)

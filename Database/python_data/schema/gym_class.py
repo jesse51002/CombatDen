@@ -24,7 +24,10 @@ class GymClassCreate(SeedModel):
     # JSONB array of plan_id strings allowed to attend; None = all plans.
     allowed_plan_ids: list[UUID] | None = None
     max_capacity: int | None = None
-    image_url: str | None = None
+    # NOT NULL in the DB — every class has an image (the seed always
+    # assigns one; the backend fills a platform default when a writer
+    # provides none).
+    image_url: str
     points_worth: int = 50
     is_active: bool = True
     is_deleted: bool = False

@@ -79,8 +79,8 @@ class MemberDetailBloc
     on<UpgradeMembershipOutcomeCleared>(
       _onUpgradeMembershipOutcomeCleared,
     );
-    on<EndMembershipRequested>(_onEndMembership);
-    on<EndMembershipOutcomeCleared>(_onEndMembershipOutcomeCleared);
+    on<CancelOneTimeMembershipRequested>(_onCancelOneTimeMembership);
+    on<CancelOneTimeOutcomeCleared>(_onCancelOneTimeOutcomeCleared);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
@@ -643,8 +643,8 @@ class MemberDetailBloc
   /// the end dialog owns its own processing → success step (the screen-level
   /// overlay + error dialog never fire while it is open). No Stripe / no
   /// invoice, so — unlike upgrade — it does NOT poll for an invoice.
-  Future<void> _onEndMembership(
-    EndMembershipRequested event,
+  Future<void> _onCancelOneTimeMembership(
+    CancelOneTimeMembershipRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
@@ -654,12 +654,12 @@ class MemberDetailBloc
       clearEndOutcome: true,
     ));
     try {
-      await _repository.endMembership(
+      await _repository.cancelOneTimeMembership(
         itemId: event.itemId,
         memberId: event.memberId,
       );
     } catch (e, stackTrace) {
-      log('End membership failed', error: e, stackTrace: stackTrace);
+      log('Cancel one-time membership failed', error: e, stackTrace: stackTrace);
       final current = state;
       if (current is! MemberDetailLoaded) return;
       emit(current.copyWith(
@@ -695,8 +695,8 @@ class MemberDetailBloc
     }
   }
 
-  void _onEndMembershipOutcomeCleared(
-    EndMembershipOutcomeCleared event,
+  void _onCancelOneTimeOutcomeCleared(
+    CancelOneTimeOutcomeCleared event,
     Emitter<MemberDetailState> emit,
   ) {
     final s = state;

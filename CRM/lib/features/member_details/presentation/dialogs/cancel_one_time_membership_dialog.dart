@@ -6,25 +6,26 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/presentation/dialogs/end_membership_success_view.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_one_time_membership_success_view.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 enum _Step { confirm, processing, success }
 
-/// Confirms ending a ONE-TIME / TRIAL membership early (sets the end date
-/// to today → 'ended'; no money moves). Submitting drives an in-dialog
-/// spinner → success step; the outcome rides the bloc's dedicated end
-/// channel ([isEnding] / [endSuccess] / [endError]) so the screen-level
-/// overlay + error dialog never fire while this dialog is open (mirrors the
-/// upgrade dialog).
-class EndMembershipDialog extends StatefulWidget {
+/// Confirms cancelling a ONE-TIME / TRIAL membership early — a MANUAL
+/// termination, so the backend writes `cancel_date` (today) → status
+/// 'cancelled'; no money moves. Submitting drives an in-dialog spinner →
+/// success step; the outcome rides the bloc's dedicated channel ([isEnding] /
+/// [endSuccess] / [endError] — code names kept; the endpoint is still
+/// `POST /member_memberships/end`) so the screen-level overlay + error dialog
+/// never fire while this dialog is open (mirrors the upgrade dialog).
+class CancelOneTimeMembershipDialog extends StatefulWidget {
   final MembershipInfo membership;
   final String coveredMemberId;
   final String coveredMemberName;
 
-  const EndMembershipDialog({
+  const CancelOneTimeMembershipDialog({
     super.key,
     required this.membership,
     required this.coveredMemberId,
@@ -42,7 +43,7 @@ class EndMembershipDialog extends StatefulWidget {
       barrierDismissible: false,
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
-        child: EndMembershipDialog(
+        child: CancelOneTimeMembershipDialog(
           membership: membership,
           coveredMemberId: coveredMemberId,
           coveredMemberName: coveredMemberName,
@@ -52,10 +53,10 @@ class EndMembershipDialog extends StatefulWidget {
   }
 
   @override
-  State<EndMembershipDialog> createState() => _EndMembershipDialogState();
+  State<CancelOneTimeMembershipDialog> createState() => _EndMembershipDialogState();
 }
 
-class _EndMembershipDialogState extends State<EndMembershipDialog> {
+class _EndMembershipDialogState extends State<CancelOneTimeMembershipDialog> {
   late final MemberDetailBloc _bloc;
   late final int _successTokenAtOpen;
   _Step _step = _Step.confirm;
@@ -69,7 +70,7 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
     _successTokenAtOpen =
         st is MemberDetailLoaded ? st.endSuccess : 0;
     // Clear any prior end error so a stale failure never flashes.
-    _bloc.add(const EndMembershipOutcomeCleared());
+    _bloc.add(const CancelOneTimeOutcomeCleared());
   }
 
   void _submit() {
@@ -78,7 +79,7 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
       _step = _Step.processing;
     });
     _bloc.add(
-      EndMembershipRequested(
+      CancelOneTimeMembershipRequested(
         itemId: widget.membership.itemId,
         memberId: widget.coveredMemberId,
       ),
@@ -94,7 +95,7 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
         _error = err;
         _step = _Step.confirm;
       });
-      _bloc.add(const EndMembershipOutcomeCleared());
+      _bloc.add(const CancelOneTimeOutcomeCleared());
       return;
     }
     if (state.endSuccess != _successTokenAtOpen) {
@@ -108,7 +109,7 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
       listenWhen: (prev, curr) => curr is MemberDetailLoaded,
       listener: _onState,
       child: AppDialog(
-        title: 'End membership',
+        title: 'Cancel membership',
         showCloseButton: _step != _Step.processing,
         body: _buildBody(),
         actions: _buildActions(),
@@ -124,10 +125,10 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
           spacing: DesignConstants.spacingMedium,
           children: [
             Text(
-              'End ${widget.coveredMemberName}’s '
+              'Cancel ${widget.coveredMemberName}’s '
               '${widget.membership.planName} now? It will be marked '
-              'ended and lose access. This does not refund any payment '
-              '— use Refund for that.',
+              'cancelled and lose access immediately. This can’t be undone. '
+              'It does not refund any payment — use Refund for that.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text,
               ),
@@ -144,7 +145,7 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
       case _Step.processing:
         return const _EndProcessing();
       case _Step.success:
-        return EndMembershipSuccessView(
+        return CancelOneTimeMembershipSuccessView(
           memberName: widget.coveredMemberName,
           planName: widget.membership.planName,
         );
@@ -155,15 +156,15 @@ class _EndMembershipDialogState extends State<EndMembershipDialog> {
     switch (_step) {
       case _Step.confirm:
         return AppDialogActions(
-          primaryLabel: 'End membership',
+          primaryLabel: 'Cancel membership',
           primaryColor: DesignConstants.badRed,
           primaryOnPressed: _submit,
-          secondaryLabel: 'Cancel',
+          secondaryLabel: 'Keep membership',
           secondaryOnPressed: () => Navigator.of(context).pop(),
         );
       case _Step.processing:
         return const AppDialogActions(
-          primaryLabel: 'End membership',
+          primaryLabel: 'Cancel membership',
           isLoading: true,
           primaryOnPressed: null,
         );
@@ -190,7 +191,7 @@ class _EndProcessing extends StatelessWidget {
           children: [
             const AppSpinner(),
             Text(
-              'Ending…',
+              'Cancelling…',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),

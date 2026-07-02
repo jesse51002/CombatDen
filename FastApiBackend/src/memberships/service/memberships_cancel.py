@@ -205,13 +205,13 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             preview=preview,
         )
 
-    async def end_one_time(
+    async def cancel_one_time(
         self,
         item_id: UUID,
         member_id: UUID,
     ) -> date:
-        """End a one-time/trial membership early (pure DB write). Returns
-        the resolved termination date.
+        """Cancel a one-time/trial membership early (pure DB write).
+        Returns the resolved cancel_date.
 
         A HUMAN-initiated termination, so it writes ``cancel_date`` — never
         ``end_date``, which is automatic-only by convention (the depletion
@@ -224,9 +224,9 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         # write, so they can't straddle midnight (validate on day N, end on
         # day N+1).
         today = gym_today(row["timezone"])
-        self._validate_end_one_time(row, item_id, member_id, today)
+        self._validate_cancel_one_time(row, item_id, member_id, today)
 
-        sql = load_sql(SQL_DIR / "member_memberships_end.sql")
+        sql = load_sql(SQL_DIR / "member_memberships_cancel_one_time.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
@@ -304,24 +304,24 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         )
 
     @staticmethod
-    def _validate_end_one_time(
+    def _validate_cancel_one_time(
         row: dict,
         item_id: UUID,
         member_id: UUID,
         today: date,
     ) -> None:
-        """Validate a one-time / trial membership can be ended early."""
+        """Validate a one-time / trial membership can be cancelled early."""
         if row["plan_type"] == PlanType.recurring:
             raise ValueError(
-                f"Cannot end a recurring membership here — use cancel: "
+                f"Cannot cancel a recurring membership here — use the "
+                f"recurring cancel (DELETE /): "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        # Any cancel_date blocks ending — the pack was already manually
+        # Any cancel_date blocks the op — the pack was already manually
         # terminated (this op's own write IS a cancel_date).
         if row["cancel_date"] is not None:
             raise ValueError(
-                f"Cannot end a membership with a pending cancellation "
-                f"— clear the cancellation first: "
+                f"Membership already cancelled: "
                 f"item_id={item_id}, member_id={member_id}"
             )
         if row["end_date"] is not None and row["end_date"] <= today:

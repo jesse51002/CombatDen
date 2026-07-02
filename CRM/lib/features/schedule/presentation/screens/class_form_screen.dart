@@ -576,6 +576,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             nameController: _nameController,
             descriptionController: _descriptionController,
             imageUrl: _imageUrl,
+            onImageChanged: (url) => setState(() => _imageUrl = url),
           ),
           ClassRewardsSection(
             pointsController: _pointsController,

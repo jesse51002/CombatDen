@@ -73,7 +73,7 @@ def _class_row(
         "class_description": None,
         "max_capacity": max_capacity,
         "allowed_plan_ids": None,
-        "image_url": None,
+        "image_url": "https://example.test/class.jpg",
         "points_worth": 10,
         "is_active": True,
         "is_deleted": is_deleted,

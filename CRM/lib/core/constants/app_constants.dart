@@ -30,5 +30,14 @@ class AppConstants {
     defaultValue: 'boxing',
   );
 
+  /// The platform default class image — a people-in-a-gym photo the backend
+  /// applies to any class created/updated without an image (`gym_classes
+  /// .image_url` is NOT NULL). Previewed in the class form so the owner sees
+  /// exactly what a new class gets before they choose their own. Kept in one
+  /// place — never inline this URL at a call site.
+  static const String defaultClassImageUrl =
+      'https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg'
+      '?auto=compress&cs=tinysrgb&w=1200';
+
   AppConstants._();
 }

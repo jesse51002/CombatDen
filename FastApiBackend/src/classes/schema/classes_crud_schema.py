@@ -149,7 +149,9 @@ class GymClassResponse(BaseModel):
     end_date: date | None
     max_capacity: int | None
     allowed_plan_ids: list[UUID] | None
-    image_url: str | None
+    # Never None: gym_classes.image_url is NOT NULL (writers fill the
+    # platform default when no image is provided).
+    image_url: str
     points_worth: int
     is_active: bool
     is_deleted: bool
@@ -318,7 +320,7 @@ class EffectiveClassInstanceResponse(BaseModel):
     resolved_duration_minutes: int
     resolved_instructor_id: UUID | None
     resolved_instructor_name: str | None
-    image_url: str | None
+    image_url: str
     points_worth: int
     max_capacity: int | None
     is_cancelled: bool

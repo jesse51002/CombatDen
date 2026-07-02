@@ -129,13 +129,13 @@ void main() {
   group('end channel', () {
     blocTest<MemberDetailBloc, MemberDetailState>(
       'success bumps endSuccess + refreshToken (own channel)',
-      setUp: () => when(() => repo.endMembership(
+      setUp: () => when(() => repo.cancelOneTimeMembership(
             itemId: any(named: 'itemId'),
             memberId: any(named: 'memberId'),
           )).thenAnswer((_) async {}),
       build: build,
       seed: seedState,
-      act: (bloc) => bloc.add(const EndMembershipRequested(
+      act: (bloc) => bloc.add(const CancelOneTimeMembershipRequested(
         itemId: 'it_1',
         memberId: memberId,
       )),
@@ -153,13 +153,13 @@ void main() {
 
     blocTest<MemberDetailBloc, MemberDetailState>(
       'error sets endError, no success token',
-      setUp: () => when(() => repo.endMembership(
+      setUp: () => when(() => repo.cancelOneTimeMembership(
             itemId: any(named: 'itemId'),
             memberId: any(named: 'memberId'),
           )).thenThrow(Exception('cannot end')),
       build: build,
       seed: seedState,
-      act: (bloc) => bloc.add(const EndMembershipRequested(
+      act: (bloc) => bloc.add(const CancelOneTimeMembershipRequested(
         itemId: 'it_1',
         memberId: memberId,
       )),

@@ -42,8 +42,11 @@ roster, streak, cycle usage, and **sign-ups/reservations**). Routes:
 **A class = one IDENTITY row + append-only SCHEDULE VERSIONS.**
 
 - **`gym_classes`** (identity): name, description, `allowed_plan_ids`,
-  `max_capacity`, `image_url`, `points_worth`, `is_active`, `is_deleted`.
-  Identity applies across all time — a rename renames the past too.
+  `max_capacity`, `image_url` (**NOT NULL — every class has an image**;
+  create/update/preset-import fill `settings.default_class_image_url`, a
+  generic people-in-a-gym photo, when none is provided), `points_worth`,
+  `is_active`, `is_deleted`. Identity applies across all time — a rename
+  renames the past too.
 - **`gym_class_schedules`** (versions): the schedule shape —
   `duration_minutes`, recurrence (`recurring_unit`/`interval`),
   `start_date`/`end_date` (the recurrence range), and **`weekday_slots`
@@ -420,8 +423,8 @@ builds `checkin_reverser` before all consumers; no import cycle.
 - **`end_date` = automatic, `cancel_date` = manual** (the terminal-date
   convention on `member_memberships`): the depletion auto-end and the
   purchase-stamped duration expiry write `end_date`; a human ending a pack
-  early writes `cancel_date` (the one-time/trial `POST /memberships/end`
-  op included). The check-in reversal's un-end only ever touches
+  early writes `cancel_date` (the one-time/trial `POST
+  /memberships/cancel-one-time` op — `cancel_one_time` — included). The check-in reversal's un-end only ever touches
   `end_date` — restoring the duration-derived expiry (or NULL for a pure
   class-count pack), never blind-NULLing — so a manually-terminated pack
   can never be resurrected by removing an attendance.

@@ -75,7 +75,11 @@ def test_class_recurrence_backdate_covers_past_history_window():
 
 
 def _make_presets_service() -> PresetsService:
-    return PresetsService(db_pool=MagicMock(), expander=ClassesExpander())
+    return PresetsService(
+        db_pool=MagicMock(),
+        expander=ClassesExpander(),
+        default_class_image_url="https://example.test/default-class.jpg",
+    )
 
 
 def test_build_weekday_slots_single_slot_mon_to_fri():

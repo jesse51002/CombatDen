@@ -3,13 +3,13 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The end-membership dialog's success step: a green-check confirmation
-/// that [planName] was ended for [memberName].
-class EndMembershipSuccessView extends StatelessWidget {
+/// The cancel-membership dialog's success step: a green-check confirmation
+/// that [planName] was cancelled for [memberName].
+class CancelOneTimeMembershipSuccessView extends StatelessWidget {
   final String memberName;
   final String planName;
 
-  const EndMembershipSuccessView({
+  const CancelOneTimeMembershipSuccessView({
     super.key,
     required this.memberName,
     required this.planName,
@@ -32,9 +32,9 @@ class EndMembershipSuccessView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           spacing: DesignConstants.spacingSmall,
           children: [
-            Text('Membership ended', style: DesignConstants.h2),
+            Text('Membership cancelled', style: DesignConstants.h2),
             Text(
-              "$memberName’s $planName has been marked ended.",
+              "$memberName’s $planName has been marked cancelled.",
               textAlign: TextAlign.center,
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,

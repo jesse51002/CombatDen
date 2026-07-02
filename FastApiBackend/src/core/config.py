@@ -104,6 +104,15 @@ class Settings(BaseSettings):
     # at once. Past / in-session occurrences are always check-in-able.
     checkin_opens_hours_before_start: int = 2
 
+    # Every class HAS an image (gym_classes.image_url is NOT NULL — the
+    # card/board/check-in UI leans on it): class create/update and the preset
+    # import fill this platform default (a generic people-in-a-gym photo,
+    # Pexels 1552242) whenever no image is provided.
+    default_class_image_url: str = (
+        "https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg"
+        "?auto=compress&cs=tinysrgb&w=1200"
+    )
+
     # On-demand post-op invoice fetch: right after an invoice-creating
     # membership op, pull that payer's new invoices straight from Stripe and
     # apply them (deterministic) instead of waiting on the invoice.paid /

@@ -566,15 +566,18 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/member_memberships/end` — end a ONE-TIME / TRIAL
-  /// membership early (sets its end date to today → status 'ended').
-  /// No Stripe action, no money movement (refund is the separate flow).
-  Future<void> endMembership({
+  /// `POST /api/v1/member_memberships/end` — MANUALLY cancel a ONE-TIME /
+  /// TRIAL membership early. A human terminating it early sets `cancel_date`
+  /// to today → status 'cancelled' (vs an AUTOMATIC duration/depletion end →
+  /// 'ended'). Endpoint path + method name kept; the CRM surfaces it as
+  /// "Cancel membership". No Stripe action, no money movement (refund is the
+  /// separate flow).
+  Future<void> cancelOneTimeMembership({
     required String itemId,
     required String memberId,
   }) async {
     await _apiClient.post(
-      '/api/v1/member_memberships/end',
+      '/api/v1/member_memberships/cancel-one-time',
       data: {
         'item_id': itemId,
         'member_id': memberId,

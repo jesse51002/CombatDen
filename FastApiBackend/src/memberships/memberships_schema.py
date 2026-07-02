@@ -453,24 +453,27 @@ class MemberMembershipsUpgradePreviewRequest(BaseModel):
     )
 
 
-class MemberMembershipsEndRequest(BaseModel):
-    """End a ONE-TIME / TRIAL membership early.
+class MemberMembershipsCancelOneTimeRequest(BaseModel):
+    """Cancel a ONE-TIME / TRIAL membership early — a MANUAL termination.
 
-    A one-time / trial pack is a terminal invoice with no subscription line, so
-    ending it is a pure DB date write (``end_date`` = today → status ``ended``)
-    with NO Stripe action and no money movement (a refund is the separate
-    ``/refund`` flow). Recurring memberships use ``DELETE /`` (cancel) instead —
-    this endpoint rejects them.
+    Writes ``cancel_date`` = today → status ``cancelled`` (the terminal-date
+    convention: ``cancel_date`` is the human's date; ``end_date`` stays
+    automatic-only — the purchase-stamped duration expiry and the check-in
+    depletion auto-end). A one-time / trial pack is a terminal invoice with
+    no subscription line, so this is a pure DB date write with NO Stripe
+    action and no money movement (a refund is the separate ``/refund``
+    flow). Recurring memberships use ``DELETE /`` (cancel) instead — this
+    endpoint rejects them.
     """
 
     item_id: UUID
     member_id: UUID
 
 
-class MemberMembershipsEndResponse(BaseModel):
-    """The resolved ``end_date`` (today) the membership now ends on."""
+class MemberMembershipsCancelOneTimeResponse(BaseModel):
+    """The resolved ``cancel_date`` (today) the membership terminated on."""
 
-    end_date: date
+    cancel_date: date
 
 
 class MemberMembershipsAddDiscountsRequest(BaseModel):
