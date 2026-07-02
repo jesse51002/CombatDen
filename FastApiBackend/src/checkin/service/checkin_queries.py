@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from src.checkin import SQL_DIR
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
 
 
@@ -226,7 +227,4 @@ class CheckinQueries:
     async def _read_all(self, sql_path: Path, params: dict) -> list[dict]:
         sql = load_sql(sql_path)
         async with self._db_pool.session() as session:
-            rows = (
-                (await session.execute(text(sql), params)).mappings().all()
-            )
-        return [dict(row) for row in rows]
+            return await fetch_all(session, sql, params)

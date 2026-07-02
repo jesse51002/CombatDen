@@ -70,6 +70,7 @@ from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all
 from src.shared.gym_timezone import get_gym_timezone
 from src.shared.sql_loader import load_sql
 
@@ -567,13 +568,4 @@ class ClassesVersionsService:
     async def _fetchall(
         session: AsyncSession, sql_file: str, params: dict
     ) -> list[dict]:
-        rows = (
-            (
-                await session.execute(
-                    text(load_sql(SQL_DIR / sql_file)), params
-                )
-            )
-            .mappings()
-            .all()
-        )
-        return [dict(row) for row in rows]
+        return await fetch_all(session, load_sql(SQL_DIR / sql_file), params)

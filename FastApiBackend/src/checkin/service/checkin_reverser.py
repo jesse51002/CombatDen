@@ -34,6 +34,7 @@ from src.checkin.schema.checkin_schema import (
     CLASS_ATTENDED_ACTIVITY_TYPE,
     CheckinRemoveResponse,
 )
+from src.shared.db_rows import fetch_one
 from src.shared.sql_loader import load_sql
 
 
@@ -100,7 +101,7 @@ class CheckinReverser:
         original_time: time,
     ) -> dict | None:
         """Delete the member's attendance row; return its (item_id, plan_id)."""
-        return await self._fetchone(
+        return await fetch_one(
             session,
             load_sql(SQL_DIR / "checkin_delete_member_attendance.sql"),
             {
@@ -158,7 +159,7 @@ class CheckinReverser:
         its duration expiry is a no-op)."""
         if item_id is None:
             return None
-        info = await self._fetchone(
+        info = await fetch_one(
             session,
             load_sql(SQL_DIR / "checkin_load_membership_for_reversal.sql"),
             {"item_id": str(item_id)},
@@ -169,7 +170,7 @@ class CheckinReverser:
         capacity = int(info["class_count"]) * int(info["quantity"])
         if remaining >= capacity:
             return None
-        changed = await self._fetchone(
+        changed = await fetch_one(
             session,
             load_sql(SQL_DIR / "checkin_reverse_membership_end.sql"),
             {
@@ -201,7 +202,7 @@ class CheckinReverser:
         self, session: AsyncSession, item_id: UUID, member_id: UUID
     ) -> int:
         """Attendance still recorded against the pack (post-delete)."""
-        row = await self._fetchone(
+        row = await fetch_one(
             session,
             load_sql(SQL_DIR / "checkin_count_attendance.sql"),
             {"item_id": str(item_id), "member_id": str(member_id)},
@@ -223,13 +224,3 @@ class CheckinReverser:
             PlanType.trial,
             PlanType.one_time,
         )
-
-    @staticmethod
-    async def _fetchone(
-        session: AsyncSession, sql: str, params: dict
-    ) -> dict | None:
-        """One row of a query as a dict, or None."""
-        row = (
-            (await session.execute(text(sql), params)).mappings().fetchone()
-        )
-        return dict(row) if row else None

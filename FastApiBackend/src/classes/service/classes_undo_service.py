@@ -89,6 +89,7 @@ from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
 
 _CLASS_NOT_FOUND_MSG = "Class not found"
@@ -816,14 +817,6 @@ class ClassesUndoService:
         transaction (so an uncommitted write earlier in that transaction is
         visible), omitted opens a short-lived session of its own."""
         if session is not None:
-            rows = (
-                (await session.execute(text(sql), params)).mappings().all()
-            )
-            return [dict(row) for row in rows]
+            return await fetch_all(session, sql, params)
         async with self._db_pool.session() as owned_session:
-            rows = (
-                (await owned_session.execute(text(sql), params))
-                .mappings()
-                .all()
-            )
-        return [dict(row) for row in rows]
+            return await fetch_all(owned_session, sql, params)

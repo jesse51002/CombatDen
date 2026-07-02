@@ -15,13 +15,13 @@ class still happened, this one member just didn't attend.
 from datetime import date, time
 from uuid import UUID
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
 from src.checkin.schema.checkin_schema import CheckinRemoveResponse
 from src.checkin.service.checkin_reverser import CheckinReverser
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_one
 from src.shared.sql_loader import load_sql
 
 _CLASS_NOT_FOUND_MSG = "Class not found"
@@ -82,7 +82,7 @@ class CheckinRemover:
         self, session: AsyncSession, class_id: UUID, gym_id: UUID
     ) -> dict:
         """Load the class (gym auth + points_worth); 404 on a wrong/absent gym."""
-        row = await self._fetchone(
+        row = await fetch_one(
             session,
             load_sql(SQL_DIR / "checkin_load_class_for_removal.sql"),
             {"class_id": str(class_id)},
@@ -90,13 +90,3 @@ class CheckinRemover:
         if row is None or str(row["gym_id"]) != str(gym_id):
             raise ValueError(_CLASS_NOT_FOUND_MSG)
         return row
-
-    @staticmethod
-    async def _fetchone(
-        session: AsyncSession, sql: str, params: dict
-    ) -> dict | None:
-        """One row of a query as a dict, or None."""
-        row = (
-            (await session.execute(text(sql), params)).mappings().fetchone()
-        )
-        return dict(row) if row else None

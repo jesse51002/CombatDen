@@ -25,8 +25,6 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
-from sqlalchemy import text
-
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
 from src.classes.schema.classes_crud_schema import (
@@ -43,6 +41,7 @@ from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -341,7 +340,4 @@ class ClassesScheduleReaderService:
     async def _read_all(self, sql_file: str, params: dict) -> list[dict]:
         sql = load_sql(SQL_DIR / sql_file)
         async with self._db_pool.session() as session:
-            rows = (
-                (await session.execute(text(sql), params)).mappings().all()
-            )
-        return [dict(row) for row in rows]
+            return await fetch_all(session, sql, params)

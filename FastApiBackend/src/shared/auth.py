@@ -66,10 +66,18 @@ class Auth:
         gym_id: UUID,
         user_payload: dict,
     ) -> None:
-        """Verify the authenticated user is an employee of the gym.
+        """Verify the authenticated user is a STAFF PRINCIPAL of the gym —
+        an owner or admin.
+
+        TRAINERS ARE NOT PRINCIPALS: a ``gym_employees`` row with
+        ``employee_type = 'trainer'`` is instructor DATA (a name/photo shown
+        on classes), never a login. Trainers have no accounts at all, so
+        every staff check — read or write — resolves to owner/admin; the
+        type filter here makes that explicit rather than relying on trainer
+        rows never carrying a ``user_id``.
 
         Raises:
-            HTTPException: 403 if user is not an employee of
+            HTTPException: 403 if user is not an owner/admin of
                 the gym.
         """
         auth_user_id = user_payload["sub"]
@@ -79,6 +87,10 @@ class Auth:
             .select("employee_id")
             .eq("user_id", auth_user_id)
             .eq("gym_id", str(gym_id))
+            .in_(
+                "employee_type",
+                [EmployeeType.owner.value, EmployeeType.admin.value],
+            )
             .maybe_single()
             .execute()
         )
@@ -139,9 +151,11 @@ class Auth:
         """Verify the authenticated user is an ADMIN or OWNER of the gym.
 
         Gates gym-config writes (classes / rewards / discounts / plans
-        create / update / delete). Trainers are rejected: they may read
-        gym config as employees but may not mutate it. Mirrors the DB's
-        ``is_gym_admin_or_owner`` RLS function at the API layer.
+        create / update / delete). Mirrors the DB's
+        ``is_gym_admin_or_owner`` RLS function at the API layer. Enforces
+        the same set as ``verify_gym_employee`` (trainers are not
+        principals — no accounts); both names are kept so call sites
+        document intent: this one marks a deliberate WRITE gate.
 
         Raises:
             HTTPException: 403 if the user is neither an admin nor an
@@ -181,8 +195,9 @@ class Auth:
     ) -> None:
         """Verify the authenticated user can view this member.
 
-        Access is granted if the user is the member themselves
-        or an employee of the member's gym.
+        Access is granted if the user is the member themselves or a staff
+        principal (owner/admin — trainers are not principals, see
+        ``verify_gym_employee``) of the member's gym.
 
         Raises:
             HTTPException: 404 if member not found,
@@ -216,6 +231,10 @@ class Auth:
             .select("employee_id")
             .eq("user_id", auth_user_id)
             .eq("gym_id", member.data["gym_id"])
+            .in_(
+                "employee_type",
+                [EmployeeType.owner.value, EmployeeType.admin.value],
+            )
             .maybe_single()
             .execute()
         )
@@ -238,16 +257,17 @@ class Auth:
         member_id: UUID,
         user_payload: dict,
     ) -> None:
-        """Verify the authenticated user is an employee of this member's gym.
+        """Verify the authenticated user is a staff principal of this
+        member's gym.
 
         Staff-only: unlike ``verify_can_view_member`` this does NOT grant the
-        member themselves access. Gates staff-managed billing writes — e.g.
-        authorizing / de-authorizing a payer — that a member must not
-        self-serve.
+        member themselves access. Like every staff check, this resolves to
+        admin/owner — trainers are not principals (see
+        ``verify_gym_employee``).
 
         Raises:
             HTTPException: 404 if the member is not found, 403 if the user is
-                not an employee of the member's gym.
+                not a staff principal of the member's gym.
         """
         member = await (
             self._supabase.client.from_("members")

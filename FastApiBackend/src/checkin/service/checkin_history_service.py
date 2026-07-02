@@ -10,9 +10,6 @@ service just pages and maps rows.
 
 from uuid import UUID
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.checkin import SQL_DIR
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
@@ -20,6 +17,7 @@ from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryStatus,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
 
 
@@ -58,12 +56,14 @@ class CheckinHistoryService:
             "gym_id": str(gym_id),
         }
         async with self._db_pool.session() as session:
-            upcoming_rows = await self._fetchall(
-                session, "checkin_member_upcoming.sql", params
-            )
-            history_rows = await self._fetchall(
+            upcoming_rows = await fetch_all(
                 session,
-                "checkin_member_history.sql",
+                load_sql(SQL_DIR / "checkin_member_upcoming.sql"),
+                params,
+            )
+            history_rows = await fetch_all(
+                session,
+                load_sql(SQL_DIR / "checkin_member_history.sql"),
                 {**params, "limit": limit, "offset": offset},
             )
 
@@ -96,18 +96,3 @@ class CheckinHistoryService:
             occurred_at=row["occurred_at"],
             status=status,
         )
-
-    @staticmethod
-    async def _fetchall(
-        session: AsyncSession, sql_file: str, params: dict
-    ) -> list[dict]:
-        rows = (
-            (
-                await session.execute(
-                    text(load_sql(SQL_DIR / sql_file)), params
-                )
-            )
-            .mappings()
-            .all()
-        )
-        return [dict(row) for row in rows]

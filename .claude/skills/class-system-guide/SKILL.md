@@ -332,7 +332,8 @@ keep-paths (same-date override; reschedule-to-past).
 is NOT attendance** — `member_attendance` is only written by a check-in; a
 signed-up member who never checks in is a no-show. `POST`/`DELETE
 /api/v1/signup` (`SignupService`), auth `verify_can_view_member`
-(staff-for-any-gym-member OR member-for-self; RLS has NO authenticated write
+(admin/owner-for-any-gym-member OR member-for-self — trainers have no
+accounts; RLS has NO authenticated write
 policy). Create validates the occurrence via the version expander (real,
 active, non-cancelled), stamps `original_time` from the resolved slot, runs
 the union capacity gate, and is idempotent (`ON CONFLICT DO NOTHING`). The

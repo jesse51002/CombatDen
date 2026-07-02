@@ -80,6 +80,7 @@ from src.classes.schema.classes_crud_schema import (
 from src.classes.schema.classes_expander_schema import ExpanderScheduleVersion
 from src.classes.service.classes_undo_service import ClassesUndoService
 from src.shared.database import DirectDatabasePool
+from src.shared.db_rows import fetch_all, fetch_one
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -689,14 +690,8 @@ class ClassesExceptionsService:
 
     async def _read_one(self, sql: str, params: dict) -> dict | None:
         async with self._db_pool.session() as session:
-            row = (
-                (await session.execute(text(sql), params)).mappings().fetchone()
-            )
-        return dict(row) if row else None
+            return await fetch_one(session, sql, params)
 
     async def _read_all(self, sql: str, params: dict) -> list[dict]:
         async with self._db_pool.session() as session:
-            rows = (
-                (await session.execute(text(sql), params)).mappings().all()
-            )
-        return [dict(row) for row in rows]
+            return await fetch_all(session, sql, params)
