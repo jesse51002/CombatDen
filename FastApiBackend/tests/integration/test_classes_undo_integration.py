@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -844,6 +844,91 @@ class TestRescheduleAttendance:
             )
             == 0
         )
+
+    def test_move_to_later_today_wipes_by_instant_not_day(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """The wipe/keep decision is INSTANT-based, never day-based: moving
+        an attended occurrence to TODAY at a time still ahead of now is a
+        move to a class that hasn't happened — its check-ins wipe (the
+        same-day 'keep' shortcut was the bug: a move past the check-in
+        window but on the same calendar day silently kept attendance).
+        Reservations carry either way."""
+        membership = seed["unlimited"]
+        if membership is None:
+            pytest.skip("No unlimited membership in seed")
+        local_now = datetime.now(ZoneInfo(seed["timezone"]))
+        target_local = local_now + timedelta(hours=3)
+        if target_local.date() != local_now.date():
+            pytest.skip("Too close to gym-local midnight for a same-day move")
+        member_id = membership["member_id"]
+        class_id = _create_class(api, created, seed)
+        _run_async(
+            _insert_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                member_id,
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+        _run_async(_insert_signup(class_id, _ATTEND_DATE, member_id))
+
+        resp = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": _ATTEND_DATE.isoformat(),
+                "new_date": local_now.date().isoformat(),
+                "new_class_time": target_local.time().replace(
+                    microsecond=0
+                ).isoformat(),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Same calendar day, future instant -> the check-in is wiped; the
+        # reservation carries.
+        assert _attendance_count(class_id, _ATTEND_DATE) == 0
+        assert _signup_count(class_id, _ATTEND_DATE) == 1
+
+    def test_move_to_earlier_today_keeps_by_instant(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        """The mirror case: a same-day target whose instant already PASSED
+        keeps the check-ins (re-synced onto the new instant)."""
+        membership = seed["unlimited"]
+        if membership is None:
+            pytest.skip("No unlimited membership in seed")
+        local_now = datetime.now(ZoneInfo(seed["timezone"]))
+        target_local = local_now - timedelta(hours=3)
+        if target_local.date() != local_now.date():
+            pytest.skip("Too close to gym-local midnight for a same-day move")
+        member_id = membership["member_id"]
+        class_id = _create_class(api, created, seed)
+        _run_async(
+            _insert_attendance(
+                class_id,
+                seed["timezone"],
+                _ATTEND_DATE,
+                member_id,
+                membership["plan_id"],
+                membership["item_id"],
+            )
+        )
+
+        resp = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": _ATTEND_DATE.isoformat(),
+                "new_date": local_now.date().isoformat(),
+                "new_class_time": target_local.time().replace(
+                    microsecond=0
+                ).isoformat(),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert _attendance_count(class_id, _ATTEND_DATE) == 1
 
     def test_move_to_earlier_date_accepted(
         self, api: httpx.Client, created: _Created, seed: dict

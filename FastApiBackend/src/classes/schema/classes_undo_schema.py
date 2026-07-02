@@ -10,10 +10,12 @@ its ORIGINAL date):
   exception.
 * **Reschedule** — moves an occurrence to ``new_date`` (any date — past,
   today, or future) by upserting the instance exception's ``new_date``. The
-  occurrence's identity key never changes, so sign-ups always carry;
-  attendance follows the move: a future target wipes the occurrence's
-  check-ins (points clawed back), a today / past target keeps them with
-  their denormalized ``occurred_at`` re-synced onto the new instant.
+  occurrence's identity key never changes, so reservations always carry;
+  attendance follows the move, decided by the new EFFECTIVE start INSTANT
+  (never the calendar day): a target instant still ahead of now — including
+  later today — wipes the occurrence's check-ins (points clawed back); an
+  already-past target instant keeps them with their denormalized
+  ``occurred_at`` re-synced.
 """
 
 from datetime import date

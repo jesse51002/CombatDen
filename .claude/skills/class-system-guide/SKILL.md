@@ -192,13 +192,16 @@ diverge):
   occurrence can't be attended — dead rows otherwise) — then write the
   cancelled exception, all in one transaction.
 - **Reschedule** (`POST .../reschedule` or an exception upsert with
-  `new_date`): upsert the exception's `new_date`. **Sign-ups always carry**
-  (identity key untouched). Attendance: a FUTURE target wipes the
-  occurrence's check-ins (same reversal as cancel); a today/PAST target
-  keeps them with their denormalized `occurred_at` re-synced onto the new
-  effective instant (`sync_attendance_occurred_at` — also called by a plain
-  same-date retime override on an attended occurrence). All instants compute
-  in the OWNING version's frozen timezone. **A re-sent unchanged landing is
+  `new_date`): upsert the exception's `new_date`. **Reservations (sign-ups)
+  always carry** (identity key untouched). Attendance follows the move,
+  decided by the new EFFECTIVE start INSTANT — never the calendar day: a
+  target instant still ahead of now (including later TODAY) wipes the
+  occurrence's check-ins (same reversal as cancel — the class hasn't
+  happened at its new slot); an already-past target instant keeps them with
+  their denormalized `occurred_at` re-synced
+  (`sync_attendance_occurred_at` — also called by a plain same-date retime
+  override on an attended occurrence). All instants compute in the OWNING
+  version's frozen timezone. **A re-sent unchanged landing is
   a no-op move** (`is_landing_unchanged`) — attendance handling is skipped,
   so the CRM's preserve-the-move re-send (its override save re-sends the
   current effective date, judged against `originalDate`) never re-wipes

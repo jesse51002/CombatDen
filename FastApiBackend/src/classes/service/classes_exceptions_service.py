@@ -45,7 +45,6 @@ from src.classes.schema.classes_crud_schema import (
 from src.classes.schema.classes_expander_schema import ExpanderScheduleVersion
 from src.classes.service.classes_undo_service import ClassesUndoService
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -284,7 +283,9 @@ class ClassesExceptionsService:
         landing_unchanged = self._undo_service.is_landing_unchanged(
             owning, existing, request.original_date, new_date, new_occurred_at
         )
-        is_future = new_date > gym_today(owning.timezone)
+        # INSTANT-based, never day-based: a move to later TODAY is still a
+        # move to a class that hasn't happened — its check-ins must wipe.
+        is_future = new_occurred_at > datetime.now(UTC)
         row = await self._write_reschedule(
             class_id,
             gym_id,

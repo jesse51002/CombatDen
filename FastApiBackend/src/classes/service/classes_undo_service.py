@@ -22,13 +22,16 @@ Two operations:
 
 * ``reschedule_occurrence`` — move an occurrence to ``new_date`` (ANY date —
   past, today, or future; ``original_date`` is only the anchor) by upserting
-  the instance exception's ``new_date``. Sign-ups ALWAYS carry (the identity
-  key is untouched). Attendance follows the move: a FUTURE target wipes the
-  moved occurrence's check-ins (same reversal as cancel); a today / PAST
-  target keeps them, with their denormalized ``occurred_at`` re-synced onto
-  the move's effective instant (``sync_attendance_occurred_at``) so the
-  streak / cycle-count / last-class window SQL keeps reading the right
-  instant. The move is rejected only when the exact target instant
+  the instance exception's ``new_date``. Reservations (sign-ups) ALWAYS
+  carry (the identity key is untouched). Attendance follows the move,
+  decided by the new EFFECTIVE START INSTANT — never the calendar day: a
+  target instant still ahead of now (including later TODAY) wipes the moved
+  occurrence's check-ins (same reversal as cancel — the class hasn't
+  happened at its new slot); a target instant already past keeps them, with
+  their denormalized ``occurred_at`` re-synced onto the move's effective
+  instant (``sync_attendance_occurred_at``) so the streak / cycle-count /
+  last-class window SQL keeps reading the right instant. The move is
+  rejected only when the exact target instant
   (new_date + effective start time) is already taken by a non-cancelled
   occurrence — landing on a busy day at a different time is allowed. The
   same ``assert_no_reschedule_conflict`` + ``apply_reschedule_attendance``
@@ -83,7 +86,6 @@ from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 _CLASS_NOT_FOUND_MSG = "Class not found"
@@ -285,7 +287,9 @@ class ClassesUndoService:
         landing_unchanged = self.is_landing_unchanged(
             owning, exception_row, occurrence_date, new_date, new_occurred_at
         )
-        is_future = new_date > gym_today(owning.timezone)
+        # INSTANT-based, never day-based: a move to later TODAY is still a
+        # move to a class that hasn't happened — its check-ins must wipe.
+        is_future = new_occurred_at > datetime.now(UTC)
         try:
             async with self._db_pool.session() as session:
                 if not landing_unchanged:
@@ -403,12 +407,13 @@ class ClassesUndoService:
         transaction (no commit here — the caller owns the txn so the
         exception write lands atomically with this).
 
-        * ``is_future`` (new_date after today, gym-local): WIPE the
-          occurrence's check-ins (the shared reversal, points clawed back).
-          Sign-ups are NOT touched — they always carry.
-        * today / past: KEEP the check-ins, their denormalized ``occurred_at``
-          re-synced onto the move's effective instant (a no-op when nobody
-          attended).
+        * ``is_future`` (the new EFFECTIVE start instant is still ahead of
+          now — includes a move to later today): WIPE the occurrence's
+          check-ins (the shared reversal, points clawed back). Reservations
+          are NOT touched — they always carry.
+        * an already-past target instant: KEEP the check-ins, their
+          denormalized ``occurred_at`` re-synced onto the move's effective
+          instant (a no-op when nobody attended).
         """
         if is_future:
             await self._reverse_attendance(
