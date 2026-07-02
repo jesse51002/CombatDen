@@ -27,14 +27,20 @@ not a code defect.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import asyncpg
 import httpx
 import pytest
 from dotenv import dotenv_values
+from sqlalchemy import text
 
+from src.checkin import SQL_DIR
+from src.checkin.service.streak_service import StreakService
+from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
 from tests.seed_constants import SEEDED_GYM_ID
 
 GYM_ID = SEEDED_GYM_ID
@@ -103,6 +109,28 @@ WHERE m.gym_id = $1
       WHERE ms.member_id = m.member_id AND ms.status = 'active'
   )
 LIMIT 1
+"""
+
+# A member with ZERO attendance rows at all -> a clean slate for the streak
+# week-boundary regression test (isolates the synthetic row from any real
+# seed/test attendance history).
+_ATTENDANCE_FREE_MEMBER_SQL = """
+SELECT m.member_id
+FROM members m
+WHERE m.gym_id = $1
+  AND NOT EXISTS (
+      SELECT 1 FROM member_attendance ma WHERE ma.member_id = m.member_id
+  )
+LIMIT 1
+"""
+
+# Any class at the gym -> just needs to satisfy member_attendance's FKs.
+_ANY_CLASS_ID_SQL = """
+SELECT class_id FROM gym_classes WHERE gym_id = $1 LIMIT 1
+"""
+
+_GYM_TIMEZONE_SQL = """
+SELECT timezone FROM gyms WHERE gym_id = $1
 """
 
 
@@ -175,6 +203,11 @@ def seed_ids(api: httpx.Client) -> dict:
                 "covering": covering,
                 "existing": await conn.fetchrow(_EXISTING_ATTENDANCE_SQL, gym),
                 "no_membership": await conn.fetchrow(_NO_MEMBERSHIP_MEMBER_SQL, gym),
+                "attendance_free_member": await conn.fetchrow(
+                    _ATTENDANCE_FREE_MEMBER_SQL, gym
+                ),
+                "any_class_id": await conn.fetchval(_ANY_CLASS_ID_SQL, gym),
+                "gym_timezone": await conn.fetchval(_GYM_TIMEZONE_SQL, gym),
             }
         finally:
             await conn.close()
@@ -242,6 +275,56 @@ def _attendance_exists(
             await conn.close()
 
     return _run_async(_run())
+
+
+def _insert_raw_attendance(
+    member_id: str,
+    class_id: str,
+    original_date: date,
+    original_time: time,
+    occurred_at: datetime,
+) -> None:
+    """Insert a bare member_attendance row directly (no covering membership --
+    plan_id/item_id stay NULL together), for the streak week-boundary
+    regression test below."""
+
+    async def _run() -> None:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            await conn.execute(
+                "INSERT INTO member_attendance "
+                "(member_id, gym_id, class_id, original_date, original_time, "
+                "occurred_at) VALUES ($1, $2, $3, $4, $5, $6)",
+                UUID(member_id),
+                UUID(GYM_ID),
+                UUID(class_id),
+                original_date,
+                original_time,
+                occurred_at,
+            )
+        finally:
+            await conn.close()
+
+    _run_async(_run())
+
+
+def _delete_raw_attendance(
+    member_id: str, class_id: str, original_date: date
+) -> None:
+    async def _run() -> None:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            await conn.execute(
+                "DELETE FROM member_attendance "
+                "WHERE member_id = $1 AND class_id = $2 AND original_date = $3",
+                UUID(member_id),
+                UUID(class_id),
+                original_date,
+            )
+        finally:
+            await conn.close()
+
+    _run_async(_run())
 
 
 def _teardown_checkin(
@@ -778,3 +861,85 @@ class TestStreakResponse:
             params={"member_id": str(uuid4()), "gym_id": GYM_ID},
         )
         assert resp.status_code == 404, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Regression: streak weeks bucket in the GYM's local timezone, not UTC
+# ---------------------------------------------------------------------------
+
+
+class TestStreakWeekBoundaryIsGymLocal:
+    """Founder-confirmed bug: a late Sunday-evening class in the gym's
+    timezone must land in that Sunday's GYM-LOCAL week, even though its UTC
+    instant already spills onto the following Monday. Exercises the real
+    ``streak_weeks.sql`` (via a live DB session) plus the full
+    ``StreakService`` pipeline (the Python current-week anchor must also be
+    gym-local)."""
+
+    def test_late_sunday_gym_local_buckets_into_the_previous_gym_local_week(
+        self, seed_ids: dict
+    ) -> None:
+        member_row = seed_ids["attendance_free_member"]
+        class_id = seed_ids["any_class_id"]
+        tz_name = seed_ids["gym_timezone"]
+        if member_row is None or class_id is None or tz_name is None:
+            pytest.skip(
+                "Seed missing an attendance-free member / class / gym timezone"
+            )
+        member_id = str(member_row["member_id"])
+        class_id = str(class_id)
+        gym_tz = ZoneInfo(tz_name)
+
+        # This week's gym-local Monday, and the Sunday that ends the
+        # PREVIOUS gym-local week.
+        today_gym = datetime.now(UTC).astimezone(gym_tz).date()
+        current_monday = today_gym - timedelta(days=today_gym.weekday())
+        previous_monday = current_monday - timedelta(days=7)
+        target_sunday = current_monday - timedelta(days=1)
+
+        occurred_at_local = datetime.combine(
+            target_sunday, time(23, 0), tzinfo=gym_tz
+        )
+        occurred_at_utc = occurred_at_local.astimezone(UTC)
+        # Sanity: this is exactly the scenario the founder flagged -- the
+        # gym-local instant's UTC calendar date has already rolled to the
+        # following (Monday) date. If this ever fails, the seeded gym's
+        # timezone offset changed and this test needs re-anchoring.
+        assert occurred_at_utc.date() == current_monday
+
+        _insert_raw_attendance(
+            member_id, class_id, target_sunday, time(23, 0), occurred_at_utc
+        )
+        try:
+
+            async def _run_checks() -> tuple[set[date], int]:
+                pool = DirectDatabasePool()
+                try:
+                    sql = load_sql(SQL_DIR / "streak_weeks.sql")
+                    async with pool.session() as session:
+                        rows = (
+                            await session.execute(
+                                text(sql),
+                                {"member_id": member_id, "gym_id": GYM_ID},
+                            )
+                        ).all()
+                    week_starts = {row[0] for row in rows}
+                    streak = await StreakService(pool).get_streak(
+                        UUID(member_id), UUID(GYM_ID)
+                    )
+                    return week_starts, streak
+                finally:
+                    await pool.engine.dispose()
+
+            week_starts, streak = _run_async(_run_checks())
+
+            # Gym-local bucketing: the Sunday-evening attendance belongs to
+            # the week that STARTED the previous Monday -- NOT a UTC-derived
+            # bucket keyed to the instant's UTC calendar date.
+            assert week_starts == {previous_monday}
+            # The full pipeline (Python current-week anchor + the SQL
+            # bucket) must agree: exactly a 1-week streak, anchored off
+            # "last week" gym-locally.
+            assert streak == 1
+        finally:
+            _delete_raw_attendance(member_id, class_id, target_sunday)

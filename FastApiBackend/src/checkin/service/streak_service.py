@@ -1,12 +1,13 @@
 """Service for computing weekly class attendance streaks."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import text
 
 from src.checkin import SQL_DIR
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
 
 
@@ -16,6 +17,10 @@ class StreakService:
     The current incomplete week counts toward the streak only if the
     member has already attended this week. Otherwise the streak is
     measured from last week back so members aren't penalised mid-week.
+
+    Weeks are bucketed in the GYM's current-local timezone -- both the SQL
+    week truncation and the "current week" anchor here -- not UTC, so a
+    late Sunday-evening class doesn't spill into next week's bucket.
 
     Args:
         db_pool: Injected database connection pool.
@@ -33,13 +38,14 @@ class StreakService:
         }
 
         async with self._db_pool.session() as session:
+            timezone = await get_gym_timezone(session, gym_id)
             rows = (await session.execute(text(sql), params)).all()
 
         week_starts: set[date] = {row[0] for row in rows}
-        return self._count_streak(week_starts)
+        return self._count_streak(week_starts, timezone)
 
-    def _count_streak(self, week_starts: set[date]) -> int:
-        current_monday = self._current_week_monday()
+    def _count_streak(self, week_starts: set[date], timezone: str) -> int:
+        current_monday = self._current_week_monday(timezone)
         previous_monday = current_monday - timedelta(weeks=1)
 
         if current_monday in week_starts:
@@ -55,6 +61,6 @@ class StreakService:
             cursor -= timedelta(weeks=1)
         return streak
 
-    def _current_week_monday(self) -> date:
-        today = datetime.now(UTC).date()
+    def _current_week_monday(self, timezone: str) -> date:
+        today = gym_today(timezone)
         return today - timedelta(days=today.weekday())

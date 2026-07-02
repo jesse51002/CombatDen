@@ -659,6 +659,9 @@ def test_streak_returns_zero_when_no_attendance(
     """GET /api/v1/streak returns 0 weeks for a never-attended member."""
     streak_result = MagicMock()
     streak_result.all.return_value = []
+    # Same mocked result serves both the gym-timezone lookup
+    # (``scalar_one``) and the week-bucket query (``all``).
+    streak_result.scalar_one.return_value = "America/Chicago"
 
     session = db_pool_mock.session.return_value
     session.execute = AsyncMock(return_value=streak_result)

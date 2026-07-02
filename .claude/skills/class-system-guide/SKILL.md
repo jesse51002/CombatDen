@@ -262,8 +262,13 @@ ignore_warnings)`:
 `member_attendance` rows carry the identity key + a denormalized
 **`occurred_at`** (the EFFECTIVE start instant) whose ONLY consumers are the
 time-window SQL — streak (`streak_weeks.sql`), cycle counts
-(`classes_all_memberships.sql`), `last_class` — all joins-free now. It is
-re-synced by the two keep-paths (same-date override; reschedule-to-past).
+(`classes_all_memberships.sql`), `last_class`. **Streak weeks bucket in the
+gym's CURRENT-local timezone, not UTC** (`streak_weeks.sql` truncates on
+`occurred_at AT TIME ZONE gyms.timezone`, joined by `gym_id`; the Python
+current-week anchor uses `gym_today`, mirroring the members-list gym-local
+date idiom) — a live gamification convention, so it reads the gym's present
+zone rather than any frozen per-version zone. It is re-synced by the two
+keep-paths (same-date override; reschedule-to-past).
 
 ## 6. Sign-ups (reservations) — in the checkin domain
 
