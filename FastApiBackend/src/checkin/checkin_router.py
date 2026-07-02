@@ -19,6 +19,9 @@ from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinRequest,
     BatchCheckinResponse,
 )
+from src.checkin.schema.checkin_history_schema import (
+    MemberClassHistoryResponse,
+)
 from src.checkin.schema.checkin_schema import (
     AttendeeListResponse,
     CheckinRemoveResponse,
@@ -37,6 +40,9 @@ from src.checkin.service.checkin_attendees_service import (
 )
 from src.checkin.service.checkin_class_resolver import (
     CheckinClassResolver,
+)
+from src.checkin.service.checkin_history_service import (
+    CheckinHistoryService,
 )
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_remover import CheckinRemover
@@ -486,6 +492,56 @@ async def list_attendees(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list attendees",
+        ) from None
+
+
+@checkin_router.get(
+    "/checkin/history",
+    response_model=MemberClassHistoryResponse,
+    summary="A member's class history (reservations, attendance, no-shows)",
+    description=(
+        "The member-page history card's feed: the member's OPEN "
+        "reservations (occurrences not yet ended, soonest first, "
+        "unpaginated) plus a newest-first PAGE of their history — attended "
+        "occurrences and no-shows (a reservation whose occurrence ended "
+        "with no matching check-in). Staff for any gym member, or the "
+        "member themselves."
+    ),
+    responses={
+        200: {"description": "History retrieved"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this member"},
+    },
+)
+@inject
+async def get_member_class_history(
+    member_id: UUID,
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    limit: int = 20,
+    offset: int = 0,
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    history_service: CheckinHistoryService = Depends(
+        Provide[DependencyInjector.checkin_history_service]
+    ),
+) -> MemberClassHistoryResponse:
+    """One member's reservations + attended + no-show feed."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await history_service.get_history(
+            member_id, gym_id, limit=min(max(limit, 1), 100), offset=max(offset, 0)
+        )
+    except Exception:
+        logger.error(
+            "Class-history query failed: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve class history",
         ) from None
 
 

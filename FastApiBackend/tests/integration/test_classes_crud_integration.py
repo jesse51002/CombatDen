@@ -493,6 +493,7 @@ class TestRangeExceptions:
                 "end_date": _END.isoformat(),
             },
         )
+        assert board.status_code == 200, board.text
         row = next(
             r
             for r in board.json()["items"]
@@ -633,12 +634,16 @@ class TestScheduleBoard:
             for row in board.json()["items"]
         }
 
-        cancelled_row = by_date[(class_id, _CANCEL_DATE.isoformat())]
+        cancelled_row = by_date[
+            (class_id, _CANCEL_DATE.isoformat(), _CLASS_TIME.isoformat())
+        ]
         assert cancelled_row["is_cancelled"] is True
         assert cancelled_row["has_instance_exception"] is True
         assert cancelled_row["class_date"] == _CANCEL_DATE.isoformat()
 
-        attended_row = by_date[(class_id, _ATTEND_DATE.isoformat())]
+        attended_row = by_date[
+            (class_id, _ATTEND_DATE.isoformat(), _CLASS_TIME.isoformat())
+        ]
         assert attended_row["is_cancelled"] is False
         assert attended_row["attendance_count"] == 1
 
@@ -660,22 +665,26 @@ class TestRangeExceptionTeardown:
         entirely in the past by the time this runs) — needed to exercise the
         instant-based future/past teardown split for real."""
         instructor_id = str(seed["instructor"]["employee_id"])
-        payload = {
+        return {
             "gym_id": GYM_ID,
             "class_name": f"ZZ Range Teardown Test {uuid4().hex[:8]}",
             "class_description": "range-cancel teardown test class",
-            "class_time": _CLASS_TIME.isoformat(),
             "duration_minutes": 60,
             "recurring_unit": "daily",
             "recurring_interval": 1,
+            "weekday_slots": {
+                "all": [
+                    {
+                        "time": _CLASS_TIME.isoformat(),
+                        "instructor_id": instructor_id,
+                    }
+                ]
+            },
             "start_date": (today - timedelta(days=30)).isoformat(),
             "end_date": (today + timedelta(days=30)).isoformat(),
             "max_capacity": 20,
             "points_worth": 50,
         }
-        for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-            payload[f"{day}_instructor_id"] = instructor_id
-        return payload
 
     def _insert_signup(
         self, class_id: str, member_id: UUID, occurrence_date: date
@@ -797,6 +806,7 @@ class TestRangeExceptionTeardown:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": override_protected.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_class_time": "10:00:00",
             },
         )

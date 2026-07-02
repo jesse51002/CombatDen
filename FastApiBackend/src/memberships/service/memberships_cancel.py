@@ -210,10 +210,19 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
     ) -> date:
-        """End a one-time/trial membership early (pure DB write). Returns the resolved end_date."""
+        """End a one-time/trial membership early (pure DB write). Returns
+        the resolved termination date.
+
+        A HUMAN-initiated termination, so it writes ``cancel_date`` — never
+        ``end_date``, which is automatic-only by convention (the depletion
+        auto-end + the purchase-stamped duration expiry). The split keeps a
+        staff-ended pack safe from the check-in reversal's un-end, which
+        only ever touches ``end_date``.
+        """
         row = await self._get_membership(item_id, member_id)
-        # One gym-local ``today`` for BOTH the guard and the end_date write, so
-        # they can't straddle midnight (validate on day N, end on day N+1).
+        # One gym-local ``today`` for BOTH the guard and the cancel_date
+        # write, so they can't straddle midnight (validate on day N, end on
+        # day N+1).
         today = gym_today(row["timezone"])
         self._validate_end_one_time(row, item_id, member_id, today)
 
@@ -228,9 +237,9 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                     "gym_today": today,
                 },
             )
-            end_date = result.scalar_one()
+            terminated_on = result.scalar_one()
             await session.commit()
-        return end_date
+        return terminated_on
 
     # ── Private ────────────────────────────────────────────────
 
@@ -307,7 +316,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 f"Cannot end a recurring membership here — use cancel: "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        # Any cancel_date blocks ending — dual terminal dates corrupt status logic.
+        # Any cancel_date blocks ending — the pack was already manually
+        # terminated (this op's own write IS a cancel_date).
         if row["cancel_date"] is not None:
             raise ValueError(
                 f"Cannot end a membership with a pending cancellation "

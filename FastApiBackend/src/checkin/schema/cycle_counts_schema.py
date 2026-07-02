@@ -33,12 +33,21 @@ class MembershipUsage(BaseModel):
         start_date: When this membership started (the oldest pack with
             capacity is drained first).
         plan_type: Trial, one_time, or recurring.
-        status: Membership status (active, frozen, ended, cancelled).
+        status: Membership status as of NOW (active, frozen, ended,
+            cancelled) — display only; the gate predicate is
+            ``covers_reference``.
+        covers_reference: Whether the membership was ACTIVE at the reference
+            instant the counts were evaluated for (the occurrence being
+            checked into; now when no reference was passed — then it equals
+            ``status == active``). THE check-in gate's candidacy predicate:
+            an ended trial still covers a class that ran inside its window;
+            a membership started after the occurrence does not.
         class_count: Max classes allowed for this membership — the plan's
             ``class_count`` times the membership's ``quantity`` (None =
             unlimited). NOT the raw plan value when the pack is stacked.
-        classes_used: Classes attended this cycle.
-        classes_remaining: Classes left (None = unlimited).
+        classes_used: Classes attended in the billing cycle CONTAINING the
+            reference instant (the current cycle when no reference).
+        classes_remaining: Classes left in that cycle (None = unlimited).
         renew_date: Next renewal / due date (recurring plans; None
             otherwise).
         end_date: Membership expiry date (trial / one_time plans; None
@@ -50,6 +59,7 @@ class MembershipUsage(BaseModel):
     start_date: date
     plan_type: PlanType
     status: str
+    covers_reference: bool = True
     class_count: int | None
     classes_used: int
     classes_remaining: int | None

@@ -44,17 +44,20 @@ All occurrence resolution goes through the class's schedule VERSIONS
 ``original_date``'s slot supplies the defaults (time / duration / weekday
 instructor) and the frozen timezone every instant is computed in.
 
-Auto-end reversal — IMPORTANT, inexact by necessity: there is no stored link
-recording that a membership's ``end_date`` came from an auto-end-on-depletion
-(versus a manual end). The best available signal is the depletion recompute:
-after deleting the un-occurred attendance, if a trial / one_time pack with a
-non-null ``end_date`` is now below its pack capacity (class_count * quantity,
-the same capacity the check-in's auto-end uses), the ``end_date`` is treated
-as the auto-end and cleared. This CANNOT perfectly distinguish an auto-end
-from a manual end on a pack that still has capacity left. It is deliberately
-keyed on the recomputed capacity, NOT on ``occurrence_date == end_date``: a
-retroactive check-in stamps ``end_date`` = the day it was written, not the
-occurrence date, so a date match would miss it.
+Auto-end reversal — safe by the terminal-date convention: ``end_date`` is
+AUTOMATIC-only (the depletion auto-end + the purchase-stamped duration
+expiry), while a MANUAL termination writes ``cancel_date`` — which the
+reversal never touches, so a staff-ended pack can't be resurrected here. The
+trigger signal is the depletion recompute: after deleting the un-occurred
+attendance, if a trial / one_time pack with a non-null ``end_date`` is now
+below its pack capacity (class_count * quantity, the same capacity the
+check-in's auto-end uses), its ``end_date`` is RESTORED to the plan's
+duration-derived expiry (start_date + duration; NULL for a pure class-count
+pack) — never blind-NULLed, which would erase a duration pack's natural
+expiry. It is deliberately keyed on the recomputed capacity, NOT on
+``occurrence_date == end_date``: a retroactive check-in stamps ``end_date``
+= the day it was written, not the occurrence date, so a date match would
+miss it.
 """
 
 from datetime import UTC, date, datetime, time

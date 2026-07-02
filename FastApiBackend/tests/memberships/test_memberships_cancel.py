@@ -725,7 +725,11 @@ async def test_end_one_time_membership(
     gym_id,
     created,
 ):
-    """Ending a one-time membership sets end_date=today → status 'ended'.
+    """Ending a one-time membership sets cancel_date=today → status
+    'cancelled' — the MANUAL terminal date (the cancel=manual /
+    end_date=automatic convention), so the purchase-stamped duration
+    end_date stays untouched and the check-in reversal's un-end can never
+    resurrect a staff-ended pack.
 
     A one-time pack is a terminal invoice with no subscription line, so this is
     a pure DB date write — no Stripe action.
@@ -764,16 +768,17 @@ async def test_end_one_time_membership(
             ).mappings().fetchone()
         item_id = UUID(str(row["item_id"]))
 
-        end_date = await memberships_service.end_one_time(
+        terminated_on = await memberships_service.end_one_time(
             item_id, member.member_id,
         )
-        assert end_date is not None
+        assert terminated_on is not None
 
         async with db_pool.session() as session:
             persisted = (
                 await session.execute(
                     text(
-                        "SELECT end_date FROM member_memberships_unfiltered "
+                        "SELECT end_date, cancel_date "
+                        "FROM member_memberships_unfiltered "
                         "WHERE item_id = :id"
                     ),
                     {"id": str(item_id)},
@@ -788,8 +793,11 @@ async def test_end_one_time_membership(
                     {"id": str(item_id)},
                 )
             ).mappings().one()
-        assert persisted["end_date"] == end_date
-        assert status_row["status"] == "ended"
+        # The manual end writes cancel_date; the automatic (purchase-stamped
+        # duration) end_date is untouched.
+        assert persisted["cancel_date"] == terminated_on
+        assert persisted["end_date"] != terminated_on
+        assert status_row["status"] == "cancelled"
     finally:
         await delete_member_data(db_pool, member.member_id)
 

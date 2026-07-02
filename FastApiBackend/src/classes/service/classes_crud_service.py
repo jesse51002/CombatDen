@@ -227,12 +227,15 @@ class ClassesCrudService:
         """One employee-name lookup for every distinct instructor id across
         the rows' ``weekday_slots`` — the merge replaces the old seven
         per-weekday joins."""
+        # .get(): an omitted instructor_id key is a legitimate stored shape
+        # (the slot's instructor is optional; e.g. the seed's exclude_none
+        # serialization drops the key entirely instead of writing null).
         ids = {
-            slot["instructor_id"]
+            slot.get("instructor_id")
             for row in rows
             for slots in row["weekday_slots"].values()
             for slot in slots
-            if slot["instructor_id"] is not None
+            if slot.get("instructor_id") is not None
         }
         if not ids:
             return {}
@@ -261,10 +264,10 @@ class ClassesCrudService:
             day: [
                 ClassSlotResponse(
                     time=slot["time"],
-                    instructor_id=slot["instructor_id"],
+                    instructor_id=slot.get("instructor_id"),
                     instructor_name=(
                         names.get(str(slot["instructor_id"]))
-                        if slot["instructor_id"] is not None
+                        if slot.get("instructor_id") is not None
                         else None
                     ),
                 )

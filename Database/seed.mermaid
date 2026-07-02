@@ -110,9 +110,12 @@ flowchart TB
   %% ── Classes ×7 — recurrence + state + schedule versions + capacity
   %% co-occur (stacked, reconverge); schedule exceptions are an overlay on
   %% top. A class is identity (gym_classes) + append-only schedule version(s)
-  %% (gym_class_schedules) -- the ~30% two-version split exercises a real
-  %% historical schedule change (a different class_time or weekday set,
-  %% superseded 1–6 weeks ago by the current shape).
+  %% (gym_class_schedules; the shape's WHEN is weekday_slots JSONB — ~25% of
+  %% classes get a genuine MULTI-SLOT day, two times on one weekday, so
+  %% same-day sibling occurrences are exercised) -- the ~30% two-version
+  %% split exercises a real historical schedule change (a shifted slot time,
+  %% an added/removed slot, or a toggled weekday, superseded 1–6 weeks ago
+  %% by the current shape).
   Classes["📅 Classes ×7"]
   Classes -->|"80%"| c_weekly["weekly"]
   Classes -->|"10%"| c_daily["daily"]

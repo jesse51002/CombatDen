@@ -25,11 +25,20 @@ The gate evaluates the blocking conditions ONCE (relative to the attributed
 "best available" membership); ``is_member`` decides block-vs-warn. Idempotent: a
 repeat check-in for the same (member, class instance) returns the existing row
 without consuming capacity, re-awarding points, or re-ending a membership.
+
+**Membership coverage is evaluated at the OCCURRENCE'S instant, never at
+now** (``resolved_class.occurred_at`` — the effective start). A retro
+check-in attributes to the membership that covered THAT class: a trial that
+has since ended still covers a class inside its window; a membership started
+after the occurrence does not; a recurring plan's ``out_of_classes`` counts
+usage in the billing cycle CONTAINING the occurrence, not the current one
+(``CycleCountsService`` with ``reference_instant``). For a current occurrence
+this degenerates exactly to the old now-anchored behavior. Known best-effort
+limit: only the member's current/most recent freeze window is stored, so
+historical freezes are invisible to the coverage test.
 """
 
 from uuid import UUID
-
-from schema.member_membership import MembershipDbStatus
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin.schema.checkin_schema import (
@@ -118,7 +127,7 @@ class CheckinMemberGate:
                 existing["item_id"],
             )
 
-        active = await self._active_memberships(member_id, resolved_class.gym_id)
+        active = await self._active_memberships(member_id, resolved_class)
         eligible = (
             await self._queries.get_eligible_plans(
                 resolved_class.gym_id, resolved_class.class_id, [m.plan_id for m in active]
@@ -336,20 +345,29 @@ class CheckinMemberGate:
     async def _active_memberships(
         self,
         member_id: UUID,
-        gym_id: UUID,
+        resolved_class: ResolvedClass,
     ) -> list[MembershipUsage]:
-        """Return the member's active memberships with current usage."""
+        """The member's memberships that COVERED the resolved occurrence,
+        with usage counted in the cycle containing it.
+
+        Coverage (``covers_reference``) is evaluated at the occurrence's
+        effective start instant, not at now — the whole point of retro
+        check-ins attributing correctly (see the module docstring). For a
+        current occurrence this is exactly the old ``status == active``
+        filter.
+        """
         counts_request = CheckinCycleCountsRequest(
-            gym_id=gym_id,
+            gym_id=resolved_class.gym_id,
             member_ids=[member_id],
         )
-        counts = await self._cycle_counts.get_cycle_counts(counts_request)
+        counts = await self._cycle_counts.get_cycle_counts(
+            counts_request,
+            reference_instant=resolved_class.occurred_at,
+        )
         if not counts.users:
             return []
         return [
-            m
-            for m in counts.users[0].memberships
-            if m.status == MembershipDbStatus.active
+            m for m in counts.users[0].memberships if m.covers_reference
         ]
 
     def _already_checked_in(

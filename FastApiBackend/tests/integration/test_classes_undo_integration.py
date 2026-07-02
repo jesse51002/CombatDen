@@ -230,24 +230,29 @@ def created() -> _Created:
 
 
 def _make_class_payload(seed: dict) -> dict:
-    """A daily-recurring class over [_START, _END] with one instructor."""
+    """A daily-recurring class over [_START, _END] with one instructor on its
+    single "all" slot."""
     instructor_id = str(seed["instructor"]["employee_id"])
-    payload = {
+    return {
         "gym_id": GYM_ID,
         "class_name": f"ZZ Undo Test {uuid4().hex[:8]}",
         "class_description": "integration test class",
-        "class_time": _CLASS_TIME.isoformat(),
         "duration_minutes": 60,
         "recurring_unit": "daily",
         "recurring_interval": 1,
+        "weekday_slots": {
+            "all": [
+                {
+                    "time": _CLASS_TIME.isoformat(),
+                    "instructor_id": instructor_id,
+                }
+            ]
+        },
         "start_date": _START.isoformat(),
         "end_date": _END.isoformat(),
         "max_capacity": 20,
         "points_worth": 50,
     }
-    for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
-        payload[f"{day}_instructor_id"] = instructor_id
-    return payload
 
 
 def _create_class(api: httpx.Client, created: _Created, seed: dict) -> str:
@@ -400,11 +405,12 @@ class TestCancelOccurrence:
 
         resp = api.delete(
             f"{CLASSES_BASE}/{class_id}/occurrences/{_ATTEND_DATE.isoformat()}",
-            params={"gym_id": GYM_ID},
+            params={"gym_id": GYM_ID, "occurrence_time": _CLASS_TIME.isoformat()},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["occurrence_date"] == _ATTEND_DATE.isoformat()
+        assert body["occurrence_time"] == _CLASS_TIME.isoformat()
         assert body["attendance_rows_deleted"] == 1
         assert body["signups_deleted"] == 1
         assert body["memberships_unended"] == []
@@ -453,7 +459,7 @@ class TestCancelOccurrence:
 
         resp = api.delete(
             f"{CLASSES_BASE}/{class_id}/occurrences/{_ATTEND_DATE.isoformat()}",
-            params={"gym_id": GYM_ID},
+            params={"gym_id": GYM_ID, "occurrence_time": _CLASS_TIME.isoformat()},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -475,7 +481,7 @@ class TestCancelOccurrence:
     ) -> None:
         resp = api.delete(
             f"{CLASSES_BASE}/{uuid4()}/occurrences/{_ATTEND_DATE.isoformat()}",
-            params={"gym_id": GYM_ID},
+            params={"gym_id": GYM_ID, "occurrence_time": _CLASS_TIME.isoformat()},
         )
         assert resp.status_code == 404, resp.text
 
@@ -550,7 +556,7 @@ class TestAutoEndReversal:
 
         resp = api.delete(
             f"{CLASSES_BASE}/{class_id}/occurrences/{_PACK_DATE.isoformat()}",
-            params={"gym_id": GYM_ID},
+            params={"gym_id": GYM_ID, "occurrence_time": _CLASS_TIME.isoformat()},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -581,11 +587,13 @@ class TestRescheduleOccurrence:
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
             f"{_RESCHEDULE_FROM.isoformat()}/reschedule",
+            params={"occurrence_time": _CLASS_TIME.isoformat()},
             json={"gym_id": GYM_ID, "new_date": _RESCHEDULE_TO.isoformat()},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["original_date"] == _RESCHEDULE_FROM.isoformat()
+        assert body["original_time"] == _CLASS_TIME.isoformat()
         assert body["new_date"] == _RESCHEDULE_TO.isoformat()
         assert body["class_id"] == class_id
 
@@ -598,6 +606,7 @@ class TestRescheduleOccurrence:
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
             f"{_START.isoformat()}/reschedule",
+            params={"occurrence_time": _CLASS_TIME.isoformat()},
             json={"gym_id": GYM_ID, "new_date": _ATTEND_DATE.isoformat()},
         )
         assert resp.status_code == 409, resp.text
@@ -631,6 +640,7 @@ class TestRescheduleOccurrence:
         resp = api.post(
             f"{CLASSES_BASE}/{class_id}/occurrences/"
             f"{_ATTENDED_PAST_DATE.isoformat()}/reschedule",
+            params={"occurrence_time": _CLASS_TIME.isoformat()},
             json={"gym_id": GYM_ID, "new_date": _KEEP_TO.isoformat()},
         )
         assert resp.status_code == 200, resp.text
@@ -650,6 +660,7 @@ class TestRescheduleOccurrence:
         resp = api.post(
             f"{CLASSES_BASE}/{uuid4()}/occurrences/"
             f"{_RESCHEDULE_FROM.isoformat()}/reschedule",
+            params={"occurrence_time": _CLASS_TIME.isoformat()},
             json={"gym_id": GYM_ID, "new_date": _RESCHEDULE_TO.isoformat()},
         )
         assert resp.status_code == 404, resp.text
@@ -677,6 +688,7 @@ class TestRescheduleAttendance:
     ) -> httpx.Response:
         payload = {
             "original_date": original_date.isoformat(),
+            "original_time": _CLASS_TIME.isoformat(),
             "new_date": new_date.isoformat(),
         }
         if new_instructor_id is not None:
@@ -879,6 +891,7 @@ class TestRescheduleAttendance:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": _ATTEND_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_date": local_now.date().isoformat(),
                 "new_class_time": target_local.time().replace(
                     microsecond=0
@@ -921,6 +934,7 @@ class TestRescheduleAttendance:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": _ATTEND_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_date": local_now.date().isoformat(),
                 "new_class_time": target_local.time().replace(
                     microsecond=0
@@ -996,6 +1010,7 @@ class TestOverrideAttendanceSync:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": _ATTEND_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_class_time": new_time.isoformat(),
                 "new_duration_minutes": new_duration,
                 "new_instructor_id": new_instructor_id,
@@ -1041,6 +1056,7 @@ class TestOverrideAttendanceSync:
             f"{CLASSES_BASE}/{class_id}/exceptions/instance",
             json={
                 "original_date": _ATTEND_DATE.isoformat(),
+                "original_time": _CLASS_TIME.isoformat(),
                 "new_class_time": "11:30:00",
                 "new_duration_minutes": 90,
             },

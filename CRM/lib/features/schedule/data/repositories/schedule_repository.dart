@@ -5,6 +5,7 @@ import 'package:crm/features/check_in/data/models/batch_check_in_request.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
 import 'package:crm/features/check_in/data/models/signup_request.dart';
 import 'package:crm/features/check_in/data/models/signup_response.dart';
+import 'package:crm/features/member_details/data/models/member_class_history.dart';
 import 'package:crm/features/schedule/data/models/attendee_list_response.dart';
 import 'package:crm/features/schedule/data/models/class_instance_exception_request.dart';
 import 'package:crm/features/schedule/data/models/class_range_exception.dart';
@@ -15,9 +16,12 @@ import 'package:crm/features/schedule/data/models/gym_class_create_request.dart'
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_update_request.dart';
 
-/// Repository for the Schedule screen over the FastAPI `classes` domain via
-/// [ApiClient]. Paths and shapes match the backend schemas in
-/// `../FastApiBackend/src/classes/schema/classes_crud_schema.py`.
+/// Repository for the schedule surfaces over the FastAPI `classes` domain
+/// AND the `checkin` domain's occurrence-scoped + member-scoped reads/writes
+/// (roster, check-in removal, sign-ups, batch check-in, the member
+/// class-history feed) via [ApiClient]. Paths and shapes match the backend
+/// schemas in `../FastApiBackend/src/classes/schema/classes_crud_schema.py`
+/// and `../FastApiBackend/src/checkin/schema/*.py`.
 ///
 /// The two list endpoints wrap their list in a `{ "items": [...] }` envelope
 /// (`EffectiveClassInstanceListResponse` / `GymClassListResponse`); the write
@@ -137,6 +141,32 @@ class ScheduleRepository {
       },
     );
     return AttendeeListResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `GET /api/v1/checkin/history?member_id=&gym_id=&limit=&offset=` — one
+  /// member's class-history card feed: their open reservations (soonest
+  /// first, unpaginated) plus a newest-first PAGE of their attended/no-show
+  /// history. [limit]/[offset] paginate `history` only; `upcoming` is always
+  /// complete. Read-only side read for the member-detail page's Class
+  /// history card.
+  Future<MemberClassHistoryResponse> getMemberClassHistory(
+    String memberId,
+    String gymId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/v1/checkin/history',
+      queryParameters: {
+        'member_id': memberId,
+        'gym_id': gymId,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    return MemberClassHistoryResponse.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

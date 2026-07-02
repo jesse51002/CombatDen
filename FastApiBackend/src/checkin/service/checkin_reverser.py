@@ -23,6 +23,7 @@ would create a Python import cycle.
 from datetime import date, time
 from uuid import UUID
 
+from dateutil.relativedelta import relativedelta
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -147,9 +148,14 @@ class CheckinReverser:
         member_id: UUID,
         item_id: UUID | None,
     ) -> UUID | None:
-        """Clear the pack's auto-end end_date if the removal drops it below
-        capacity. None item_id (no-membership attendance) charged nothing, so
-        there is nothing to reverse."""
+        """Restore the pack's end_date if the removal drops it below
+        capacity: back to the plan's duration-derived expiry (start_date +
+        duration, mirroring the purchase stamp) or NULL for a pure
+        class-count pack — never a blind NULL, which would erase a duration
+        pack's natural expiry. None item_id (no-membership attendance)
+        charged nothing, so there is nothing to reverse. Returns the item_id
+        only when the end_date actually changed (a pack already sitting at
+        its duration expiry is a no-op)."""
         if item_id is None:
             return None
         info = await self._fetchone(
@@ -163,11 +169,33 @@ class CheckinReverser:
         capacity = int(info["class_count"]) * int(info["quantity"])
         if remaining >= capacity:
             return None
-        await session.execute(
-            text(load_sql(SQL_DIR / "checkin_reverse_membership_end.sql")),
-            {"item_id": str(item_id), "member_id": str(member_id)},
+        changed = await self._fetchone(
+            session,
+            load_sql(SQL_DIR / "checkin_reverse_membership_end.sql"),
+            {
+                "item_id": str(item_id),
+                "member_id": str(member_id),
+                "end_date": self._duration_end_date(info),
+            },
         )
-        return item_id
+        return item_id if changed is not None else None
+
+    @staticmethod
+    def _duration_end_date(info: dict) -> date | None:
+        """The pack's duration-derived expiry (start_date + the plan's
+        duration — the same derivation the purchase stamps), or None for a
+        pure class-count pack with no duration."""
+        amount, unit = info["duration_amount"], info["duration_unit"]
+        if amount is None or unit is None:
+            return None
+        start: date = info["start_date"]
+        if unit == "week":
+            return start + relativedelta(weeks=amount)
+        if unit == "month":
+            return start + relativedelta(months=amount)
+        if unit == "year":
+            return start + relativedelta(years=amount)
+        return None
 
     async def _count_attendance(
         self, session: AsyncSession, item_id: UUID, member_id: UUID
@@ -182,8 +210,13 @@ class CheckinReverser:
 
     @staticmethod
     def _is_depletion_auto_end(info: dict) -> bool:
-        """Whether the pack's end_date is a depletion auto-end to reverse: a
-        non-null end_date on a finite-count trial / one_time pack."""
+        """Whether the pack's end_date may hold a depletion auto-end to
+        reverse: a non-null end_date on a finite-count trial / one_time
+        pack. Safe by convention: end_date is AUTOMATIC-only (a depletion
+        auto-end or the purchase-stamped duration expiry — the restore
+        target) — a MANUAL termination writes cancel_date, which the
+        reversal never touches, so a staff-ended pack can never be
+        resurrected here."""
         if info["end_date"] is None or info["class_count"] is None:
             return False
         return PlanType(info["plan_type"]) in (

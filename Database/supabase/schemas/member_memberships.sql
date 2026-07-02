@@ -17,6 +17,14 @@ CREATE TABLE member_memberships_unfiltered (
     -- Payer's Stripe customer/subscription bills this row. Immutable; changing payer = cancel + new row.
     paid_by_member_id UUID NOT NULL CONSTRAINT fk_membership_payer REFERENCES members(member_id),
     start_date DATE NOT NULL,
+    -- The two terminal dates split by WHO terminates (the load-bearing
+    -- convention): end_date is AUTOMATIC-only — the purchase-stamped
+    -- duration expiry and the check-in depletion auto-end write it, and the
+    -- check-in reversal's un-end restores it (back to the duration-derived
+    -- expiry, or NULL for a pure class-count pack). cancel_date is MANUAL —
+    -- a human terminating early (the recurring cancel flow, the one-time /
+    -- trial end-early op) — and is never touched by attendance removal, so
+    -- a staff-ended pack can't be resurrected by an un-checked-in class.
     end_date DATE,
     cancel_date DATE,
     last_paid_date DATE,

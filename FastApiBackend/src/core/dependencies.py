@@ -9,6 +9,9 @@ from src.checkin.service.checkin_attendees_service import (
 from src.checkin.service.checkin_class_resolver import (
     CheckinClassResolver,
 )
+from src.checkin.service.checkin_history_service import (
+    CheckinHistoryService,
+)
 from src.checkin.service.checkin_member_gate import CheckinMemberGate
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
@@ -229,6 +232,11 @@ class DependencyInjector(containers.DeclarativeContainer):
     # streak, and per-cycle class usage (also feeds member billing detail).
     cycle_counts_service = providers.Factory(CycleCountsService, db_pool=db_pool)
     streak_service = providers.Factory(StreakService, db_pool=db_pool)
+    # The member-page class-history feed (reservations + attendance +
+    # no-shows) — a plain member-scoped read, no gate involvement.
+    checkin_history_service = providers.Factory(
+        CheckinHistoryService, db_pool=db_pool
+    )
     # The ONE original-date occurrence-resolution algorithm the checkin
     # domain shares (versions + exceptions → the version expander, with the
     # reschedule window-widening) — injected by BOTH the check-in resolver

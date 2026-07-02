@@ -9,6 +9,7 @@ SELECT
     class_id,
     gym_id,
     original_date,
+    original_time,
     is_cancelled,
     new_class_time,
     new_duration_minutes,

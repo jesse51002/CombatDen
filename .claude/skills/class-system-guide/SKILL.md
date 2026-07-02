@@ -336,7 +336,15 @@ the union capacity gate, and is idempotent (`ON CONFLICT DO NOTHING`). The
 **roster** (`GET /api/v1/checkin/attendees`) returns everyone **signed-up ∪
 attended** by the original slot, each flagged `signed_up`/`attended`
 (attendance fields null when not attended). The board carries
-**`signup_count`** (future + past).
+**`signup_count`** (future + past). **The member-scoped history feed**
+(`GET /api/v1/checkin/history?member_id&gym_id&limit&offset`,
+`CheckinHistoryService`) powers the member page's Class-history card:
+`upcoming` (open reservations — occurrences not yet ENDED, soonest first,
+unpaginated) + a paginated newest-first `history` of attended rows and
+NO-SHOWS (a sign-up whose occurrence ended — original slot instant + the
+CURRENT version's duration in its frozen tz — with no matching attendance
+on the exact slot; the current-version ended-ness is a documented
+approximation). Auth `verify_can_view_member`, same as streak/sign-up.
 
 **User-facing wording is "Reserve"/"Reserved"** (the CRM), but code
 identifiers stay `signup`/`signUp`/`signup_count`/`class_signups`.
@@ -409,9 +417,21 @@ builds `checkin_reverser` before all consumers; no import cycle.
   a sub-agent, the USER runs `npx supabase migration up`.
 - **Points/capacity are billing-adjacent** — the reversal touches
   `members.points_balance`; edit carefully.
-- Undo's auto-end reversal can't distinguish an auto-end from a manual end
-  on a below-capacity trial/one_time pack (no stored link) — a future
-  `auto_ended` flag would make it airtight.
+- **`end_date` = automatic, `cancel_date` = manual** (the terminal-date
+  convention on `member_memberships`): the depletion auto-end and the
+  purchase-stamped duration expiry write `end_date`; a human ending a pack
+  early writes `cancel_date` (the one-time/trial `POST /memberships/end`
+  op included). The check-in reversal's un-end only ever touches
+  `end_date` — restoring the duration-derived expiry (or NULL for a pure
+  class-count pack), never blind-NULLing — so a manually-terminated pack
+  can never be resurrected by removing an attendance.
+- **The membership gate is occurrence-time-aware**: coverage
+  (`covers_reference`) and cycle usage evaluate at the occurrence's
+  effective start instant, so a retro check-in attributes to the
+  membership that covered THAT class (an ended trial included) and counts
+  against the billing cycle CONTAINING it. Current occurrences behave
+  exactly as before. Historical freezes are invisible (only the current
+  freeze window is stored) — a documented best-effort limit.
 - The version-mint race (two edits of one class in the same instant) is
   guarded by `UNIQUE(class_id, effective_from)` → a retryable 400.
 
