@@ -137,7 +137,9 @@ class TestRescheduleConflict:
         instance_rows: list[dict] | None = None,
         range_rows: list[dict] | None = None,
     ) -> None:
-        async def _read_all(sql: str, params: dict) -> list[dict]:
+        async def _read_all(
+            sql: str, params: dict, session: object | None = None
+        ) -> list[dict]:
             if "original_date <> :original_date" in sql:
                 return list(collision_rows or [])
             if "class_range_exceptions" in sql:
@@ -329,7 +331,9 @@ class TestExceptionOn:
             "is_cancelled": False,
         }
 
-        async def _read_all(sql: str, params: dict) -> list[dict]:
+        async def _read_all(
+            sql: str, params: dict, session: object | None = None
+        ) -> list[dict]:
             assert params["start_date"] == target_date
             assert params["end_date"] == target_date
             return [row]

@@ -372,7 +372,7 @@ class ClassesUndoService:
             },
         )
         for row in candidates:
-            slot = self._owning_slot(versions, row["original_date"])
+            slot = self.owning_slot(versions, row["original_date"])
             default_time = (
                 slot[0].class_time if slot is not None else None
             )
@@ -459,13 +459,17 @@ class ClassesUndoService:
         )
         return [to_expander_schedule(row) for row in rows]
 
-    def _owning_slot(
+    def owning_slot(
         self,
         versions: list[ExpanderScheduleVersion],
         when: date,
     ) -> tuple[ExpanderScheduleVersion, EffectiveOccurrence] | None:
         """The version whose recurrence owns ``when``'s slot (+ the bare
-        occurrence), exceptions NOT applied — pure ownership."""
+        occurrence), exceptions NOT applied — pure ownership. Public: the
+        range-cancel teardown uses the bare occurrence's ``occurred_at`` as
+        a torn-down date's effective start instant (with no instance
+        exception in play, a range never changes the time, so the pure
+        owning slot IS the effective instant)."""
         occurrences = self._version_expander.expand(
             versions, [], [], when, when
         )
@@ -487,7 +491,7 @@ class ClassesUndoService:
         old-version date falls back to THAT version's defaults, never the
         current one's."""
         versions = await self.load_versions(class_id)
-        slot = self._owning_slot(versions, when)
+        slot = self.owning_slot(versions, when)
         return slot[0] if slot is not None else None
 
     async def _resolve_occurrence(
@@ -499,7 +503,7 @@ class ClassesUndoService:
         """The owning version + any existing exception row for the date, or
         None when the recurrence doesn't emit the date / the occurrence is
         cancelled."""
-        slot = self._owning_slot(versions, original_date)
+        slot = self.owning_slot(versions, original_date)
         if slot is None:
             return None
         exception_row = await self.exception_on(class_id, original_date)
@@ -539,16 +543,23 @@ class ClassesUndoService:
         class_id: UUID,
         versions: list[ExpanderScheduleVersion],
         when: date,
+        session: AsyncSession | None = None,
     ) -> list[EffectiveOccurrence]:
         """Expand the class over the single day ``[when, when]`` with its
-        exceptions applied."""
+        exceptions applied. ``session``, when given, runs both reads on the
+        CALLER's open transaction — so an uncommitted write earlier in that
+        same transaction (e.g. a just-inserted range exception) is visible;
+        omitted, each read opens its own short-lived session (the default,
+        read-only-elsewhere usage)."""
         instances = await self._read_all(
             load_sql(SQL_DIR / "classes_instance_exception_list.sql"),
             {"class_id": str(class_id), "start_date": when, "end_date": when},
+            session=session,
         )
         ranges = await self._read_all(
             load_sql(SQL_DIR / "classes_range_exception_list.sql"),
             {"class_id": str(class_id), "start_date": when, "end_date": when},
+            session=session,
         )
         return self._version_expander.expand(
             versions,
@@ -558,15 +569,39 @@ class ClassesUndoService:
             when,
         )
 
+    async def expand_day(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        versions: list[ExpanderScheduleVersion],
+        when: date,
+    ) -> list[EffectiveOccurrence]:
+        """Public seam onto ``_expand_day``, session REQUIRED: expand one
+        day inside the CALLER's open transaction so an uncommitted write in
+        that same transaction is visible. Used by the range-cancel teardown
+        (``ClassesExceptionsService``) to resolve a covered date THROUGH the
+        just-inserted range — the same instance-wins-over-range /
+        earliest-created-range-wins precedence every other read uses,
+        without duplicating the expansion logic."""
+        return await self._expand_day(class_id, versions, when, session=session)
+
     async def exception_on(
-        self, class_id: UUID, when: date
+        self,
+        class_id: UUID,
+        when: date,
+        session: AsyncSession | None = None,
     ) -> dict | None:
         """The instance-exception row keyed to ``when``, if any. Public: the
         exceptions service reads it to detect a no-op re-send of an existing
-        reschedule (the CRM preserves a move by re-sending its target)."""
+        reschedule (the CRM preserves a move by re-sending its target), and
+        the range-cancel teardown reads it (on the caller's open session) to
+        confirm no instance exception governs a candidate date instead of
+        the range. ``session``, when given, runs on the CALLER's open
+        transaction."""
         rows = await self._read_all(
             load_sql(SQL_DIR / "classes_instance_exception_list.sql"),
             {"class_id": str(class_id), "start_date": when, "end_date": when},
+            session=session,
         )
         return rows[0] if rows else None
 
@@ -694,9 +729,24 @@ class ClassesUndoService:
             },
         )
 
-    async def _read_all(self, sql: str, params: dict) -> list[dict]:
-        async with self._db_pool.session() as session:
+    async def _read_all(
+        self,
+        sql: str,
+        params: dict,
+        session: AsyncSession | None = None,
+    ) -> list[dict]:
+        """Run a read; ``session`` given runs it on the caller's OPEN
+        transaction (so an uncommitted write earlier in that transaction is
+        visible), omitted opens a short-lived session of its own."""
+        if session is not None:
             rows = (
                 (await session.execute(text(sql), params)).mappings().all()
+            )
+            return [dict(row) for row in rows]
+        async with self._db_pool.session() as owned_session:
+            rows = (
+                (await owned_session.execute(text(sql), params))
+                .mappings()
+                .all()
             )
         return [dict(row) for row in rows]

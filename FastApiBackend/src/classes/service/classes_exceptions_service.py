@@ -22,6 +22,23 @@ instant is re-synced onto those rows' denormalized ``occurred_at`` in the
 SAME transaction (``sync_attendance_occurred_at`` — a no-op when nobody
 attended), so the streak / cycle-count / last-class window SQL keeps reading
 the right instant.
+
+A CANCEL range (``create_range_exception`` with ``is_cancelled=True``)
+additionally tears down the range's covered occurrences in the SAME
+transaction as the range insert (``_create_cancelled_range_with_teardown``):
+a candidate date (one still carrying a live reservation or attendance row)
+is LEFT ALONE when a non-cancelled instance exception governs it instead —
+same-date override or moved elsewhere, either way the range never applies to
+a date with ANY instance exception on it — or when an earlier-created
+covering range already renders it; otherwise it is torn down
+(``ClassesUndoService.teardown_occurrence``) ONLY when its original slot
+instant is still at/after now. An already-run occurrence keeps its
+attendance even when covered by a retroactive range cancel — deliberately
+asymmetric with the future case: mass-clawing-back historical points from
+one bulk range action is a shock hazard, so a gym that wants that cancels
+the single occurrence instead (which tears down regardless of instant). An
+instructor-substitution range (``is_cancelled=False``) never tears anything
+down.
 """
 
 import logging
@@ -31,6 +48,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
@@ -160,7 +178,15 @@ class ClassesExceptionsService:
         gym_id: UUID,
         request: ClassRangeExceptionCreateRequest,
     ) -> ClassRangeExceptionResponse:
-        """Create a continuous-range cancel / instructor-substitution override."""
+        """Create a continuous-range cancel / instructor-substitution override.
+
+        A CANCEL range (``is_cancelled=True``) additionally tears down the
+        range's covered occurrences in the SAME transaction as the range
+        insert — see ``_create_cancelled_range_with_teardown`` and the
+        module docstring for the precedence + past-instant rules. An
+        instructor-substitution range (``is_cancelled=False``) is the plain
+        insert only — the class still runs, so nothing is torn down.
+        """
         if not request.is_cancelled and request.new_instructor_id is None:
             raise ValueError(_RANGE_NEEDS_ACTION_MSG)
 
@@ -177,8 +203,134 @@ class ClassesExceptionsService:
                 else None
             ),
         }
-        row = await self._write_returning(sql, params)
+        if request.is_cancelled:
+            row = await self._create_cancelled_range_with_teardown(
+                class_id, gym_id, request, sql, params
+            )
+        else:
+            row = await self._write_returning(sql, params)
         return ClassRangeExceptionResponse(**row)
+
+    # -- range-cancel teardown ---------------------------------------------
+
+    async def _create_cancelled_range_with_teardown(
+        self,
+        class_id: UUID,
+        gym_id: UUID,
+        request: ClassRangeExceptionCreateRequest,
+        sql: str,
+        params: dict,
+    ) -> dict:
+        """Insert the CANCEL range, then tear down the occurrences it
+        actually cancels — all in ONE transaction with the range insert, so
+        the teardown's per-date resolution sees the just-inserted range."""
+        try:
+            async with self._db_pool.session() as session:
+                row = (
+                    (await session.execute(text(sql), params))
+                    .mappings()
+                    .fetchone()
+                )
+                if not row:
+                    raise RuntimeError("Write did not return a row")
+                await self._teardown_covered_occurrences(
+                    session,
+                    class_id,
+                    gym_id,
+                    request.start_date,
+                    request.end_date,
+                )
+                await session.commit()
+        except IntegrityError as exc:
+            raise ValueError(_BAD_EXCEPTION_MSG) from exc
+        return dict(row)
+
+    async def _teardown_covered_occurrences(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        gym_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> None:
+        """Tear down every candidate date in ``[start_date, end_date]`` the
+        range actually cancels — see the module docstring for the
+        precedence + past-instant rules. A no-op when no candidate date
+        (one still carrying a live reservation or attendance row) exists."""
+        candidate_dates = await self._range_cancel_candidates(
+            session, class_id, start_date, end_date
+        )
+        if not candidate_dates:
+            return
+        versions = await self._undo_service.load_versions(class_id)
+        now = datetime.now(UTC)
+        for day in candidate_dates:
+            await self._teardown_if_still_cancelled(
+                session, class_id, gym_id, versions, day, now
+            )
+
+    async def _teardown_if_still_cancelled(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        gym_id: UUID,
+        versions: list[ExpanderScheduleVersion],
+        day: date,
+        now: datetime,
+    ) -> None:
+        """Resolve one candidate date and tear it down only when the range
+        genuinely cancels it AND its original slot instant hasn't happened
+        yet (INSTANT-based, never day-based — see the module docstring)."""
+        exception_row = await self._undo_service.exception_on(
+            class_id, day, session=session
+        )
+        if exception_row is not None:
+            return  # an instance exception governs this date, not the range
+        occurrences = await self._undo_service.expand_day(
+            session, class_id, versions, day
+        )
+        if occurrences:
+            return  # an earlier-created covering range still renders it
+        slot = self._undo_service.owning_slot(versions, day)
+        if slot is None:
+            return  # not a recurrence date under the current versions
+        _, bare_occurrence = slot
+        if bare_occurrence.occurred_at < now:
+            return  # already ran -- historical attendance is never wiped
+        await self._undo_service.teardown_occurrence(
+            session, class_id, gym_id, day
+        )
+
+    async def _range_cancel_candidates(
+        self,
+        session: AsyncSession,
+        class_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> list[date]:
+        """Distinct ``original_date``s in ``[start_date, end_date]`` still
+        carrying a live reservation or attendance row for this class — the
+        only dates a range cancel could possibly need to tear down."""
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        load_sql(
+                            SQL_DIR
+                            / "classes_range_cancel_candidate_dates.sql"
+                        )
+                    ),
+                    {
+                        "class_id": str(class_id),
+                        "start_date": start_date,
+                        "end_date": end_date,
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return sorted(row["original_date"] for row in rows)
 
     async def list_instance_exceptions(
         self,

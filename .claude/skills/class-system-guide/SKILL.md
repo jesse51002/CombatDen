@@ -149,7 +149,9 @@ Consumers of the engine:
 overrides or cancels ONE original slot (incl. `new_date` = reschedule target
 — any date, `new_max_capacity`, `new_class_time`, `new_instructor_id`,
 `new_duration_minutes`); `class_range_exceptions` cancels/substitutes a
-continuous range. An exception binds to whatever slot the owning version
+continuous range — a CANCEL range additionally tears down the dates it
+actually cancels, in the same transaction as the range insert (§4). An
+exception binds to whatever slot the owning version
 defines on its `original_date`; override fallbacks (time / duration / the
 weekday instructor) resolve against the OWNING version — a retro edit on an
 old-version date falls back to THAT version's defaults
@@ -191,6 +193,20 @@ diverge):
   attendance (points clawed back), DELETE its sign-ups (a cancelled
   occurrence can't be attended — dead rows otherwise) — then write the
   cancelled exception, all in one transaction.
+- **Range cancel** (`POST .../exceptions/range` with `is_cancelled=true`) —
+  a THIRD `teardown_occurrence` consumer (`ClassesExceptionsService
+  ._teardown_covered_occurrences`): in the SAME transaction as the range
+  insert, every date in `[start_date, end_date]` still carrying a
+  reservation or attendance row is re-resolved THROUGH the just-inserted
+  range (a same-session read) and left alone when an instance exception
+  governs that date instead (override or moved elsewhere — an instance
+  exception always wins over any range) or an earlier-created covering
+  range still renders it; otherwise it tears down ONLY when its original
+  slot instant is still at/after now. An already-run occurrence covered by
+  a retroactive range cancel KEEPS its attendance — deliberately asymmetric
+  with the single-occurrence cancel above, which tears down regardless of
+  instant (mass-clawing-back historical points from one bulk range action
+  is a shock hazard; a gym wanting that cancels the single occurrence).
 - **Reschedule** (`POST .../reschedule` or an exception upsert with
   `new_date`): upsert the exception's `new_date`. **Reservations (sign-ups)
   always carry** (identity key untouched). Attendance follows the move,

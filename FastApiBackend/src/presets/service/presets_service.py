@@ -71,13 +71,15 @@ _SCHEDULE_EFFECTIVE_FROM_BACKDATE_DAYS = 40
 # how far ahead to seed upcoming sign-up reservations, so a freshly-imported
 # gym shows realistic counts on both past and upcoming classes. Occurrences
 # are expanded ONCE over [today - _PAST_HISTORY_DAYS, today +
-# _FUTURE_SIGNUP_DAYS], then split: a past-or-today occurrence gets a
-# member_attendance row (a real check-in record, keyed by its original slot)
-# + a mirrored mix of class_signups reservations; a future occurrence gets
-# ONLY a class_signups reservation. member_attendance is never written for a
-# future occurrence — a sign-up is a reservation, not a check-in, mirroring
-# the live sign-up path (``SignupService`` deliberately doesn't record
-# attendance early; see its module docstring).
+# _FUTURE_SIGNUP_DAYS], then split by EFFECTIVE START INSTANT (never by date
+# — a class later today hasn't started yet): an occurrence whose occurred_at
+# is already at/before now gets a member_attendance row (a real check-in
+# record, keyed by its original slot) + a mirrored mix of class_signups
+# reservations; a not-yet-started occurrence gets ONLY a class_signups
+# reservation. member_attendance is never written for a not-yet-started
+# occurrence — a sign-up is a reservation, not a check-in, mirroring the live
+# sign-up path (``SignupService`` deliberately doesn't record attendance
+# early; see its module docstring).
 _PAST_HISTORY_DAYS = 30
 _FUTURE_SIGNUP_DAYS = 7
 # Attendance spread per occurrence: draw a random subset (0..MAX_FRACTION) of the
@@ -464,18 +466,20 @@ class PresetsService:
         For each imported class, expand its occurrences ONCE over
         ``[today - _PAST_HISTORY_DAYS, today + _FUTURE_SIGNUP_DAYS]`` via the
         canonical expander (the same call the rest of the preset already uses —
-        no separate re-derivation for the future side), then split by date: a
-        past-or-today occurrence gets a random subset of the gym's eligible
-        members as a recorded ``member_attendance`` row (keyed by its original
-        slot) + a mirrored mix of ``class_signups`` reservations; a future
-        occurrence gets ONLY a ``class_signups`` reservation (no attendance — a
-        sign-up is a reservation, not a check-in). Eligibility is
-        date-independent for this demo seed: any member holding a synced
-        membership can attend / sign up for any occurrence, attributed to one
-        of their memberships (NOT-NULL plan_id/item_id) — so participation
-        spreads evenly across the window instead of bunching on the dates that
-        members' memberships happen to span. A no-op when the import wrote no
-        classes.
+        no separate re-derivation for the future side), then split by EFFECTIVE
+        START INSTANT (never by date — a class later TODAY hasn't happened yet
+        and must not be seeded as attended): an occurrence whose
+        ``occurred_at`` is already at/before now gets a random subset of the
+        gym's eligible members as a recorded ``member_attendance`` row (keyed
+        by its original slot) + a mirrored mix of ``class_signups``
+        reservations; a not-yet-started occurrence gets ONLY a
+        ``class_signups`` reservation (no attendance — a sign-up is a
+        reservation, not a check-in). Eligibility is date-independent for this
+        demo seed: any member holding a synced membership can attend / sign up
+        for any occurrence, attributed to one of their memberships (NOT-NULL
+        plan_id/item_id) — so participation spreads evenly across the window
+        instead of bunching on the dates that members' memberships happen to
+        span. A no-op when the import wrote no classes.
         """
         if not expander_classes:
             return
@@ -490,6 +494,7 @@ class PresetsService:
         today = date.today()
         window_start = today - timedelta(days=_PAST_HISTORY_DAYS)
         window_end = today + timedelta(days=_FUTURE_SIGNUP_DAYS)
+        now = datetime.now(UTC)
         pool = self._eligible_attendees(membership_rows)
 
         insert_attendance_sql = load_sql(
@@ -505,7 +510,7 @@ class PresetsService:
                 gym_class=gym_class,
                 max_capacity=class_capacities.get(gym_class.class_id),
                 gym_tz=gym_tz,
-                today=today,
+                now=now,
                 window_start=window_start,
                 window_end=window_end,
                 pool=pool,
@@ -520,7 +525,7 @@ class PresetsService:
         gym_class: ExpanderClass,
         max_capacity: int | None,
         gym_tz: str,
-        today: date,
+        now: datetime,
         window_start: date,
         window_end: date,
         pool: _AttendeePool,
@@ -529,21 +534,22 @@ class PresetsService:
     ) -> None:
         """Write attendance + sign-ups for every occurrence of one class.
 
-        A past-or-today occurrence (``occ.effective_date <= today``) gets a
-        random subset of attendance (a real check-in record) and a mirrored
-        mix of sign-up reservations. A future occurrence gets ONLY a sign-up
-        reservation — no ``member_attendance`` — mirroring the live sign-up
-        path, which deliberately never records attendance for a not-yet-started
-        occurrence (see ``SignupService``'s module docstring). This import
-        never writes exceptions, so every occurrence's ``original_time``
-        equals the class's schedule ``class_time`` and ``effective_date``
-        equals ``original_date``.
+        An occurrence whose EFFECTIVE START INSTANT has already passed
+        (``occ.occurred_at <= now`` — INSTANT-based, never day-based: a class
+        later TODAY hasn't started yet) gets a random subset of attendance (a
+        real check-in record) and a mirrored mix of sign-up reservations. A
+        not-yet-started occurrence gets ONLY a sign-up reservation — no
+        ``member_attendance`` — mirroring the live sign-up path, which
+        deliberately never records attendance for a not-yet-started occurrence
+        (see ``SignupService``'s module docstring). This import never writes
+        exceptions, so every occurrence's ``original_time`` equals the class's
+        schedule ``class_time`` and ``effective_date`` equals ``original_date``.
         """
         occurrences = self._expander.expand(
             gym_class, [], [], window_start, window_end, gym_tz
         )
         for occ in occurrences:
-            if occ.effective_date <= today:
+            if occ.occurred_at <= now:
                 await self._seed_past_occurrence(
                     session=session,
                     gym_id_str=gym_id_str,

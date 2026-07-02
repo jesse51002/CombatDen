@@ -9,17 +9,21 @@ DB session to assert that limit/offset/filter params are forwarded to SQL and
 that total is extracted from the ``COUNT(*) OVER()`` column.
 
 The class-history/attendance/sign-up seeding itself (``_seed_history_and_
-attendance`` and friends) is DB-session-driven and has no unit coverage here
-(mirroring the rest of this file's pure/mockable-only scope) — it is
-exercised only by a live import, not by this suite. The two pieces below
-that ARE pure — the identity->expander-contract mapping and the versioned-
-schedule backdating constants — get dedicated regression tests instead.
+attendance`` and friends) is DB-session-driven and mostly has no unit
+coverage here (mirroring the rest of this file's pure/mockable-only scope) —
+it is exercised only by a live import, not by this suite. The ONE exception
+is ``_seed_one_class``'s past-vs-future split, pinned by a dedicated
+regression test below (the same instant-vs-date bug class as the reschedule
+wipe/keep fix — the expander + DB writers are mocked, only the branch
+decision is under test). The two pieces below that ARE otherwise pure — the
+identity->expander-contract mapping and the versioned-schedule backdating
+constants — get dedicated regression tests too.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date, time
+from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -27,6 +31,7 @@ from schema.gym_class import RecurringUnit
 from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
+from src.classes.schema.classes_expander_schema import EffectiveOccurrence
 from src.classes.service.classes_expander import ClassesExpander
 from src.presets.service.presets_service import (
     _CLASS_RECURRENCE_BACKDATE_DAYS,
@@ -94,6 +99,79 @@ def test_to_expander_class_is_always_weekly_mon_to_fri():
         assert str(getattr(result, f"{day}_instructor_id")) == instructor_id
     for day in ("sat", "sun"):
         assert getattr(result, day) is False
+
+
+def _seed_occurrence(*, today: date, occurred_at: datetime) -> EffectiveOccurrence:
+    """A minimal occurrence landing on ``today`` (never rescheduled), whose
+    effective start instant is the given ``occurred_at`` — lets a test place
+    an occurrence's calendar date on "today" while its actual start instant
+    sits on either side of "now"."""
+    return EffectiveOccurrence(
+        original_date=today,
+        original_time=occurred_at.time(),
+        effective_date=today,
+        occurred_at=occurred_at,
+        class_time=occurred_at.time(),
+        duration_minutes=60,
+        instructor_id=None,
+        is_rescheduled=False,
+        is_cancelled=False,
+    )
+
+
+async def test_seed_one_class_splits_by_instant_not_calendar_date():
+    """Regression: the past-vs-future seeding split must compare the
+    occurrence's EFFECTIVE START INSTANT to now, never its calendar date to
+    today's date — the same instant-vs-date bug class as the reschedule
+    wipe/keep fix. Two occurrences share ``effective_date == today``: one
+    already started (occurred_at in the past) and must be seeded as
+    attendance; the other is later today (occurred_at still ahead of now)
+    and must get ONLY a sign-up — a `effective_date <= today` comparison
+    would wrongly treat both as already-attended."""
+    svc = _make_presets_service()
+    now = datetime.now(UTC)
+    today = now.date()
+    gym_class = svc._to_expander_class(
+        class_id=uuid4(),
+        gym_id=uuid4(),
+        class_time=time(7, 30),
+        instructor_id=str(uuid4()),
+        start_date=today - timedelta(days=1),
+    )
+    already_started = _seed_occurrence(
+        today=today, occurred_at=now - timedelta(hours=1)
+    )
+    later_today = _seed_occurrence(
+        today=today, occurred_at=now + timedelta(hours=1)
+    )
+    svc._expander.expand = MagicMock(
+        return_value=[already_started, later_today]
+    )
+    svc._seed_past_occurrence = AsyncMock()
+    svc._seed_future_signups = AsyncMock()
+
+    await svc._seed_one_class(
+        session=AsyncMock(),
+        gym_id_str=str(uuid4()),
+        gym_class=gym_class,
+        max_capacity=None,
+        gym_tz="America/Chicago",
+        now=now,
+        window_start=today - timedelta(days=1),
+        window_end=today + timedelta(days=1),
+        pool=[],
+        insert_attendance_sql="",
+        insert_signup_sql="",
+    )
+
+    svc._seed_past_occurrence.assert_awaited_once()
+    assert svc._seed_past_occurrence.await_args.kwargs["occ"] is already_started
+
+    svc._seed_future_signups.assert_awaited_once()
+    assert (
+        svc._seed_future_signups.await_args.kwargs["original_date"]
+        == later_today.original_date
+    )
 
 
 def test_split_name_two_parts():

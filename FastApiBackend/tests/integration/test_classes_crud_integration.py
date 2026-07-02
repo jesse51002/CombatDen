@@ -32,7 +32,7 @@ the migration — that is a missing migration, not a code defect.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -444,3 +444,191 @@ class TestScheduleBoard:
         attended_row = by_date[(class_id, _ATTEND_DATE.isoformat())]
         assert attended_row["is_cancelled"] is False
         assert attended_row["attendance_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Range-cancel teardown
+# ---------------------------------------------------------------------------
+
+
+class TestRangeExceptionTeardown:
+    """A CANCEL range (``is_cancelled=True``) tears down the reservations +
+    early check-ins of the dates it actually cancels, in the SAME
+    transaction as the range insert — with the founder-approved asymmetry
+    that an already-run (past-instant) occurrence keeps its attendance."""
+
+    def _dynamic_class_payload(self, seed: dict, today: date) -> dict:
+        """A daily-recurring class spanning past-to-future relative to the
+        REAL current time (unlike the fixed 2025 window above, which is
+        entirely in the past by the time this runs) — needed to exercise the
+        instant-based future/past teardown split for real."""
+        instructor_id = str(seed["instructor"]["employee_id"])
+        payload = {
+            "gym_id": GYM_ID,
+            "class_name": f"ZZ Range Teardown Test {uuid4().hex[:8]}",
+            "class_description": "range-cancel teardown test class",
+            "class_time": _CLASS_TIME.isoformat(),
+            "duration_minutes": 60,
+            "recurring_unit": "daily",
+            "recurring_interval": 1,
+            "start_date": (today - timedelta(days=30)).isoformat(),
+            "end_date": (today + timedelta(days=30)).isoformat(),
+            "max_capacity": 20,
+            "points_worth": 50,
+        }
+        for day in ("sun", "mon", "tue", "wed", "thu", "fri", "sat"):
+            payload[f"{day}_instructor_id"] = instructor_id
+        return payload
+
+    def _insert_signup(
+        self, class_id: str, member_id: UUID, occurrence_date: date
+    ) -> None:
+        async def _run() -> None:
+            conn = await asyncpg.connect(_get_db_url())
+            try:
+                await conn.execute(
+                    "INSERT INTO class_signups "
+                    "(gym_id, class_id, member_id, original_date, original_time) "
+                    "VALUES ($1, $2, $3, $4, $5)",
+                    UUID(GYM_ID),
+                    UUID(class_id),
+                    member_id,
+                    occurrence_date,
+                    _CLASS_TIME,
+                )
+            finally:
+                await conn.close()
+
+        _run_async(_run())
+
+    def _insert_attendance_for(
+        self,
+        class_id: str,
+        occurrence_date: date,
+        gym_tz: str,
+        membership: asyncpg.Record,
+    ) -> None:
+        occurred_at = datetime.combine(
+            occurrence_date, _CLASS_TIME, tzinfo=ZoneInfo(gym_tz)
+        ).astimezone(UTC)
+
+        async def _run() -> None:
+            conn = await asyncpg.connect(_get_db_url())
+            try:
+                await conn.execute(
+                    "INSERT INTO member_attendance "
+                    "(member_id, gym_id, class_id, original_date, "
+                    " original_time, occurred_at, plan_id, item_id) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    membership["member_id"],
+                    UUID(GYM_ID),
+                    UUID(class_id),
+                    occurrence_date,
+                    _CLASS_TIME,
+                    occurred_at,
+                    membership["plan_id"],
+                    membership["item_id"],
+                )
+            finally:
+                await conn.close()
+
+        _run_async(_run())
+
+    def _signup_exists(self, class_id: str, occurrence_date: date) -> bool:
+        async def _run() -> bool:
+            conn = await asyncpg.connect(_get_db_url())
+            try:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM class_signups "
+                    "WHERE class_id = $1 AND original_date = $2",
+                    UUID(class_id),
+                    occurrence_date,
+                )
+                return row is not None
+            finally:
+                await conn.close()
+
+        return _run_async(_run())
+
+    def _attendance_exists(self, class_id: str, occurrence_date: date) -> bool:
+        async def _run() -> bool:
+            conn = await asyncpg.connect(_get_db_url())
+            try:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM member_attendance "
+                    "WHERE class_id = $1 AND original_date = $2",
+                    UUID(class_id),
+                    occurrence_date,
+                )
+                return row is not None
+            finally:
+                await conn.close()
+
+        return _run_async(_run())
+
+    def test_range_cancel_tears_down_future_keeps_override_and_past(
+        self, api: httpx.Client, created: _Created, seed: dict
+    ) -> None:
+        if seed["membership"] is None:
+            pytest.skip("No membership in seed to attribute attendance to")
+
+        today = date.today()
+        payload = self._dynamic_class_payload(seed, today)
+        resp = api.post(CLASSES_BASE, json=payload)
+        assert resp.status_code == 201, resp.text
+        class_id = resp.json()["class_id"]
+        created.track_class(class_id)
+
+        future_covered = today + timedelta(days=5)
+        override_protected = today + timedelta(days=10)
+        past_covered = today - timedelta(days=5)
+        range_start = today - timedelta(days=7)
+        range_end = today + timedelta(days=14)
+
+        member_id = seed["membership"]["member_id"]
+
+        # A future covered date: a reservation + an early check-in (the 2h
+        # check-in window) — both must be torn down.
+        self._insert_signup(class_id, member_id, future_covered)
+        self._insert_attendance_for(
+            class_id, future_covered, seed["timezone"], seed["membership"]
+        )
+
+        # A covered date with a non-cancelled instance override — the range
+        # can never apply to a date any instance exception governs.
+        override = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/instance",
+            json={
+                "original_date": override_protected.isoformat(),
+                "new_class_time": "10:00:00",
+            },
+        )
+        assert override.status_code == 200, override.text
+        self._insert_signup(class_id, member_id, override_protected)
+
+        # A past covered date that already ran and was attended — kept.
+        self._insert_attendance_for(
+            class_id, past_covered, seed["timezone"], seed["membership"]
+        )
+
+        # The range cancel — one transaction covering the insert + teardown.
+        range_resp = api.post(
+            f"{CLASSES_BASE}/{class_id}/exceptions/range",
+            json={
+                "start_date": range_start.isoformat(),
+                "end_date": range_end.isoformat(),
+                "is_cancelled": True,
+            },
+        )
+        assert range_resp.status_code == 201, range_resp.text
+        assert range_resp.json()["is_cancelled"] is True
+
+        # Future covered date: torn down.
+        assert self._signup_exists(class_id, future_covered) is False
+        assert self._attendance_exists(class_id, future_covered) is False
+
+        # Override-protected date: untouched (instance exception wins).
+        assert self._signup_exists(class_id, override_protected) is True
+
+        # Past covered date: attendance kept (the asymmetry).
+        assert self._attendance_exists(class_id, past_covered) is True
