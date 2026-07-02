@@ -148,7 +148,15 @@ class _PickerBodyState extends State<_PickerBody> {
                         color: DesignConstants.text2nd,
                       ),
                     )
-                  : _ZoneList(zones: zones, current: widget.current),
+                  // Keyed by the query so a filter change remounts the
+                  // list at the top — a kept scroll offset from the
+                  // unfiltered list renders past the shorter result's
+                  // end (blank space that reads as broken pagination).
+                  : _ZoneList(
+                      key: ValueKey(_query),
+                      zones: zones,
+                      current: widget.current,
+                    ),
             ),
           ],
         );
@@ -162,7 +170,7 @@ class _ZoneList extends StatelessWidget {
   final List<_ZoneEntry> zones;
   final String? current;
 
-  const _ZoneList({required this.zones, required this.current});
+  const _ZoneList({super.key, required this.zones, required this.current});
 
   @override
   Widget build(BuildContext context) {
