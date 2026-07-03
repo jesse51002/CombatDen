@@ -212,12 +212,9 @@ class RewardsRedemptionService:
             )
         total = rows[0]["total"] if rows else 0
         return PendingRedemptionListResponse(
-            items=[
-                PendingRedemptionItem(
-                    **{k: v for k, v in dict(row).items() if k != "total"}
-                )
-                for row in rows
-            ],
+            # The window-count `total` column rides on every row; Pydantic's
+            # default extra="ignore" drops it, no per-row filtering needed.
+            items=[PendingRedemptionItem(**dict(row)) for row in rows],
             total=total,
         )
 

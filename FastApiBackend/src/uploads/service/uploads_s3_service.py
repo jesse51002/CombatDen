@@ -4,15 +4,14 @@ Proxies raw image bytes to the shared private S3 bucket and returns a
 CloudFront CDN URL with a content-hash cache-buster (?v=<sha256[:16]>).
 CloudFront is configured to key its cache on the ``v`` query parameter, so
 the bytes behind a given URL never change — they can be cached hard.
-
-boto3 is imported lazily so the rest of the app (and any tests that don't
-exercise the upload path) never need it imported.
 """
 
 import asyncio
 import hashlib
 import logging
 import uuid
+
+import boto3
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +43,11 @@ class UploadsS3Service:
         self._bucket = assets_bucket
         self._region = aws_region
         self._cdn_base = assets_cdn_base_url.rstrip("/")
+        # Built once and reused: a boto3 client construction loads botocore's
+        # service model + signer stack (tens of ms), which per-upload would
+        # be pure overhead. Clients are thread-safe for put_object, and a
+        # long-lived client refreshes credentials internally.
+        self._s3 = boto3.Session(region_name=aws_region).client("s3")
 
     # ------------------------------------------------------------------
     # Public async API
@@ -65,7 +69,12 @@ class UploadsS3Service:
         Returns:
             Absolute CDN URL: ``{cdn_base}/{category}/{uuid}<ext>?v=<hash>``.
         """
-        ext = _CONTENT_TYPE_TO_EXT.get(content_type, ".bin")
+        # Normalize before the extension lookup: a parameterized MIME
+        # ("image/jpeg; charset=binary") or odd casing would miss the map
+        # and mint a misleading ".bin" key. S3's ContentType keeps the
+        # original value.
+        base_type = content_type.split(";", 1)[0].strip().lower()
+        ext = _CONTENT_TYPE_TO_EXT.get(base_type, ".bin")
         content_hash = hashlib.sha256(data).hexdigest()[:16]
         key = f"{category}/{uuid.uuid4()}{ext}"
 
@@ -82,10 +91,7 @@ class UploadsS3Service:
 
     def _put_object(self, data: bytes, key: str, content_type: str) -> None:
         """Blocking S3 put_object — run inside a thread executor."""
-        import boto3  # noqa: PLC0415 — lazy import; only the upload path needs it
-
-        s3 = boto3.Session(region_name=self._region).client("s3")
-        s3.put_object(
+        self._s3.put_object(
             Bucket=self._bucket,
             Key=key,
             Body=data,

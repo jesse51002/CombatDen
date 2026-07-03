@@ -108,7 +108,10 @@ class MembersManagementUpdate(MembersManagementBase):
                 )
                 row = result.mappings().fetchone()
                 await session.commit()
-        except sa_exc.IntegrityError as exc:
+        except (sa_exc.IntegrityError, sa_exc.DataError) as exc:
+            # DataError = out-of-range arithmetic (an int4 overflow of
+            # points_balance + amount) — same "the DB refused the write"
+            # class as a constraint violation, so both map to the 400 path.
             raise ValueError(
                 f"Points adjustment rejected by database constraint: {exc}"
             ) from exc

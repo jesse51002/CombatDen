@@ -48,7 +48,7 @@ class ThemePreviewPane extends StatelessWidget {
   final int slide;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelect;
@@ -108,7 +108,7 @@ class _PreviewContent extends StatelessWidget {
   final ShowcaseScreen screen;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
 
   @override
   Widget build(BuildContext context) {

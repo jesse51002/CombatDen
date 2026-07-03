@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schema.member_charge import ChargeKind, ChargeStatus
 from schema.member_invoice_line_item import LineItemType
 from schema.membership_plan import PlanType
@@ -226,10 +226,12 @@ class PointsAdjustRequest(BaseModel):
 
     Positive ``amount`` awards points; negative ``amount`` corrects
     (deducts) points. The service rejects an adjustment that would
-    take the balance below zero.
+    take the balance below zero. Bounded so an absurd value 422s here
+    instead of overflowing int4 in ``points_balance + :amount`` (a
+    DataError the service would otherwise surface as a 500).
     """
 
-    amount: int
+    amount: int = Field(ge=-1_000_000, le=1_000_000)
 
 
 class PointsAdjustResponse(BaseModel):

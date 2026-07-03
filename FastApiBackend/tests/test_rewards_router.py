@@ -196,6 +196,32 @@ def test_update_reward_rejects_explicit_null_price_label(
     assert response.status_code == 422
 
 
+def test_update_reward_rejects_explicit_null_title(
+    client, auth_headers, fake_reward_id
+):
+    """PUT with an explicit ``"title": null`` 422s — title is NOT NULL, so
+    an unguarded null would reach the SET clause as a DB error / 500."""
+    response = client.put(
+        f"/api/v1/rewards/{fake_reward_id}",
+        json={"data": {"title": None}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_reward_rejects_explicit_null_point_cost(
+    client, auth_headers, fake_reward_id
+):
+    """PUT with an explicit ``"point_cost": null`` 422s — point_cost is
+    NOT NULL; ``gt=0`` alone would let the None union branch through."""
+    response = client.put(
+        f"/api/v1/rewards/{fake_reward_id}",
+        json={"data": {"point_cost": None}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
 def test_immutable_columns_guard_blocks_reward_id_update(
     client, db_pool_mock, auth_headers, fake_gym_id, fake_reward_id
 ):
@@ -551,6 +577,17 @@ def test_list_pending_redemptions_rejects_limit_over_200(
         headers=auth_headers,
     )
     assert response.status_code == 422
+
+
+def test_list_pending_redemptions_rejects_negative_pagination(
+    client, auth_headers, fake_gym_id
+):
+    """Negative limit/offset (and limit=0) 422 at validation instead of
+    reaching Postgres LIMIT/OFFSET, which rejects negatives as a 500."""
+    base = f"/api/v1/rewards/redemptions/pending?gym_id={fake_gym_id}"
+    for params in ("&limit=-1", "&limit=0", "&offset=-1"):
+        response = client.get(base + params, headers=auth_headers)
+        assert response.status_code == 422, params
 
 
 # ─── redemption history ───────────────────────────────────────────────────────

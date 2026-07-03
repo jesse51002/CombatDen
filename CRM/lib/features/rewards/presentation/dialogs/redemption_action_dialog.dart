@@ -13,6 +13,7 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/info_row.dart';
+import 'package:crm/features/rewards/presentation/redemption_format.dart';
 
 enum _ActionPhase { confirm, acting, approvedSuccess, rejectedSuccess, error }
 
@@ -155,7 +156,7 @@ class _ConfirmBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final redeemedStr = _formatDate(item.requestedAt);
+    final redeemedStr = formatRedemptionDate(item.requestedAt);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -306,23 +307,4 @@ class _ErrorBody extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatDate(DateTime dt) {
-  final local = dt.toLocal();
-  final now = DateTime.now();
-  final isToday = local.year == now.year &&
-      local.month == now.month &&
-      local.day == now.day;
-  final hour = local.hour > 12
-      ? local.hour - 12
-      : (local.hour == 0 ? 12 : local.hour);
-  final amPm = local.hour >= 12 ? 'PM' : 'AM';
-  final min = local.minute.toString().padLeft(2, '0');
-  if (isToday) return 'Today, $hour:$min $amPm';
-  final months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  return '${months[local.month - 1]} ${local.day}, $hour:$min $amPm';
 }

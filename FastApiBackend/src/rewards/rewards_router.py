@@ -348,8 +348,8 @@ async def list_pending_redemptions(
     redemption_service: RewardsRedemptionService = Depends(
         Provide[DependencyInjector.rewards_redemption_service]
     ),
-    limit: int = Query(default=100, le=200),
-    offset: int = Query(default=0),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ) -> PendingRedemptionListResponse:
     """List a page of pending redemptions for a gym."""
     user_payload = auth.get_current_user(credentials)
@@ -403,9 +403,10 @@ async def approve_redemption(
             detail="Redemption not found",
         ) from None
 
-    await auth.verify_gym_employee_for_member(
-        UUID(str(info["member_id"])), user_payload
-    )
+    # The redemption row already carries its gym: authorize against that
+    # directly — verify_gym_employee_for_member would pay a second members
+    # round-trip just to re-derive the same gym_id.
+    await auth.verify_gym_employee(UUID(str(info["gym_id"])), user_payload)
 
     try:
         return await redemption_service.approve(redemption_id)
@@ -458,9 +459,10 @@ async def reject_redemption(
             detail="Redemption not found",
         ) from None
 
-    await auth.verify_gym_employee_for_member(
-        UUID(str(info["member_id"])), user_payload
-    )
+    # The redemption row already carries its gym: authorize against that
+    # directly — verify_gym_employee_for_member would pay a second members
+    # round-trip just to re-derive the same gym_id.
+    await auth.verify_gym_employee(UUID(str(info["gym_id"])), user_payload)
 
     try:
         return await redemption_service.reject(redemption_id)

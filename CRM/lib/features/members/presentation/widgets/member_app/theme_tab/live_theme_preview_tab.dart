@@ -135,13 +135,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     SystemNavigator.routeInformationUpdated(uri: uri, replace: true);
   }
 
-  // The phone mockup's fallback identity for the PUBLIC browser (no real gym).
-  // In the admin context the real gym name + uploaded logo are shown instead
-  // (see [build]); the admin edits them via the Gym profile editor above.
-  final ImageProvider _mockLogo = AssetImage(
-    kMockMemberAppPreview.gymLogoAsset,
-  );
-
   int _slide = 0;
   bool _forward = true;
   int get _count => ShowcaseScreen.values.length;
@@ -183,14 +176,19 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
           listenable: selectedGym,
           builder: (context, _) {
             final isAdmin = selectedGym.gymId != null;
-            // Admin: show the real gym identity; public browser: the mock.
-            final gymName = isAdmin && (selectedGym.gymName?.isNotEmpty ?? false)
-                ? selectedGym.gymName!
+            // Admin: ALWAYS the real gym identity — the mock name exists
+            // only for the public browser (no gym there). The logo is NEVER
+            // a bundled asset here: the gym's uploaded logo when set, else
+            // null — the showcase topbar then falls through to the ACTIVE
+            // THEME's logo (themeTabPreview resolution order in
+            // showcase_topbar.dart), so switching themes re-logos the mock.
+            final gymName = isAdmin
+                ? (selectedGym.gymName ?? '')
                 : kMockMemberAppPreview.gymName;
-            final ImageProvider gymLogo =
+            final ImageProvider? gymLogo =
                 isAdmin && (selectedGym.logoUrl?.isNotEmpty ?? false)
                     ? NetworkImage(selectedGym.logoUrl!)
-                    : _mockLogo;
+                    : null;
 
             // The Gym profile editor is ADMIN-ONLY: the phone preview's
             // "Edit gym name / logo" button (under the mock) opens
@@ -239,7 +237,7 @@ class _PhonePreview extends StatelessWidget {
   final int slide;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelectSlide;

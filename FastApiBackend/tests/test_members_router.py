@@ -499,6 +499,20 @@ def test_adjust_points_amount_required(client, auth_headers, fake_member_id):
     assert response.status_code == 422
 
 
+def test_adjust_points_rejects_out_of_bounds_amount(
+    client, auth_headers, fake_member_id
+):
+    """An absurd ``amount`` 422s at the schema bound instead of overflowing
+    int4 in ``points_balance + :amount`` (a DataError → 500 in the DB)."""
+    for amount in (3_000_000_000, 1_000_001, -1_000_001):
+        response = client.post(
+            f"/api/v1/members/{fake_member_id}/points",
+            json={"amount": amount},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, amount
+
+
 # ── E.1 — pending redemptions on member detail ────────────────────
 
 

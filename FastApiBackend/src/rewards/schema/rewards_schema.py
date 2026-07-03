@@ -29,11 +29,13 @@ class RewardCreateRequest(BaseModel):
 class RewardUpdateData(BaseModel):
     """Mutable fields on a reward row.
 
-    ``image_url`` and ``price_label`` can be changed but never cleared —
-    every reward always has both (``gym_rewards.image_url`` /
-    ``price_label`` are NOT NULL). Patch semantics: an absent field leaves
-    the column unchanged; an explicit ``null`` 422s instead of silently
-    resetting to a default (unlike the classes identity-update path).
+    Every non-``is_active`` field here maps to a NOT NULL column on
+    ``gym_rewards`` (``title``, ``point_cost``, ``image_url``,
+    ``price_label``), so each can be changed but never cleared. Patch
+    semantics: an absent field leaves the column unchanged; an explicit
+    ``null`` 422s instead of silently resetting to a default (unlike the
+    classes identity-update path) — or reaching the SET clause as a
+    NOT NULL violation that would surface as a 500.
     """
 
     title: str | None = None
@@ -42,11 +44,11 @@ class RewardUpdateData(BaseModel):
     price_label: str | None = None
     is_active: bool | None = None
 
-    @field_validator("image_url", "price_label")
+    @field_validator("title", "point_cost", "image_url", "price_label")
     @classmethod
     def _reject_explicit_null(
-        cls, value: str | None, info
-    ) -> str | None:
+        cls, value: str | int | None, info
+    ) -> str | int | None:
         """Only runs when the field is explicitly present in the request
         body (Pydantic skips validators on an unset default), so an absent
         field is untouched while an explicit ``null`` raises -> 422."""

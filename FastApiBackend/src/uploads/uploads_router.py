@@ -1,7 +1,7 @@
 """API routes for the uploads domain."""
 
 import logging
-from typing import Annotated, Literal
+from typing import Annotated
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
 from src.uploads.service.uploads_s3_service import UploadsS3Service
-from src.uploads.uploads_schema import ImageUploadResponse
+from src.uploads.uploads_schema import ImageUploadResponse, UploadCategory
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
 @inject
 async def upload_image(
     file: UploadFile,
-    category: Annotated[Literal["reward", "member", "class", "gym"], Form()],
+    category: Annotated[UploadCategory, Form()],
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     uploads_service: UploadsS3Service = Depends(
@@ -80,7 +80,9 @@ async def upload_image(
         raise size_error
 
     try:
-        cdn_url = await uploads_service.upload_image(data, content_type, category)
+        cdn_url = await uploads_service.upload_image(
+            data, content_type, category.value
+        )
         return ImageUploadResponse(url=cdn_url)
     except Exception:
         logger.error("Image upload failed: category=%s", category, exc_info=True)

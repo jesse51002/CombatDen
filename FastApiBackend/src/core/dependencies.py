@@ -230,7 +230,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Uploads (image proxy → S3 + CloudFront CDN) ──────────────
-    uploads_s3_service = providers.Factory(
+    # Singleton, not Factory: the service holds a reusable boto3 S3 client
+    # (built once in __init__ — construction loads botocore's service model
+    # and signer stack, too costly to repeat per request).
+    uploads_s3_service = providers.Singleton(
         UploadsS3Service,
         assets_bucket=settings.assets_bucket,
         aws_region=settings.aws_region,
