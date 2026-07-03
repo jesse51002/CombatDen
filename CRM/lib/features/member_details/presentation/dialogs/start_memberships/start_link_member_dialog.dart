@@ -1,26 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
+import 'package:crm/shared/widgets/sign_waiver_panel.dart';
 
-enum _LinkStep { select, sign }
+enum _LinkStep { select, sign, success, error }
 
 /// The wizard's "link first" jump: pick a gym member to authorize the
-/// PAYER to pay for, run the backend eligibility check, then have the
-/// payer sign the picked member's gym default authorized-payer waiver.
-/// On confirm it dispatches [LinkParentRequested] (payee = the pick,
-/// payer = the wizard's payer, who signs) and pops with the linked
-/// member's id so the wizard refreshes the payer's roster.
+/// PAYER to pay for, then have the payer sign the picked member's gym
+/// default authorized-payer waiver. On confirm it dispatches
+/// [LinkParentRequested] (payee = the pick, payer = the wizard's
+/// payer, who signs) and pops with the linked member's id so the
+/// wizard refreshes the payer's roster.
 ///
 /// The inverse of [LinkParentDialog] (which picks a payer for the
 /// viewed member): here the payer is fixed and the payee is picked.
@@ -77,13 +83,18 @@ class _StartLinkMemberDialogState
   String? _checkError;
 
   QuillController? _waiverController;
-  final TextEditingController _signerName = TextEditingController();
+  String? _waiverVersionId;
+  String _waiverBody = ''; // raw template body; rendered into the controller
+  String _signerName = '';
   bool _consent = false;
   bool _submitting = false;
 
+  /// Snapshot of the bloc's refreshToken before dispatching,
+  /// so we can detect a successful commit.
+  int _tokenBefore = 0;
+
   @override
   void dispose() {
-    _signerName.dispose();
     _waiverController?.dispose();
     super.dispose();
   }
@@ -133,74 +144,140 @@ class _StartLinkMemberDialogState
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _waiverController =
-            WaiverMarkdownEditor.controllerFromMarkdown(
-          waiver.body,
-          readOnly: true,
-        );
-        // Never pre-fill the signature — the payer must type their
-        // own name; a pre-filled field is not a signature.
+        _waiverVersionId = waiver.versionId;
+        _waiverBody = waiver.body;
+        // Built with the payee selected at this point; signer_name re-renders
+        // live afterwards (see _onSignChanged).
+        _waiverController = _buildWaiverController();
         _step = _LinkStep.sign;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _checkError = 'We couldn’t load the waiver. '
+        _checkError = "We couldn't load the waiver. "
             'Please try again.';
       });
     }
   }
 
+  // Display-only render of the payer-agreement body — the mirror of
+  // LinkParentDialog: here the payer (signer) is fixed and the payee is
+  // picked. member_name is the fixed payer, payee_name is the selected
+  // member, gym_name/date are fixed, signer_name follows the live typed
+  // name (empty stays literal).
+  Map<String, String> _renderValues() => {
+        kWaiverParamMemberName: widget.payerName,
+        kWaiverParamPayeeName: _selected?.fullName ?? '',
+        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamDate: waiverSignDateUtc(),
+        // Empty name -> a literal ___ blank (escaped so markdown never
+        // reads it as a rule); fills live once the signer types.
+        kWaiverParamSignerName:
+            _signerName.isEmpty ? r'\_\_\_' : _signerName,
+      };
+
+  QuillController _buildWaiverController() =>
+      WaiverMarkdownEditor.controllerFromMarkdown(
+        renderWaiverPlaceholders(_waiverBody, _renderValues()),
+        readOnly: true,
+      );
+
+  // Rebuild the read-only controller on each name keystroke so
+  // {{signer_name}} tracks live. Bodies are short — a per-keystroke
+  // rebuild is fine.
+  void _onSignChanged(String name, bool consent) {
+    final nameChanged = name != _signerName;
+    setState(() {
+      _signerName = name;
+      _consent = consent;
+      if (nameChanged) {
+        _waiverController?.dispose();
+        _waiverController = _buildWaiverController();
+      }
+    });
+  }
+
   bool get _canSign =>
       _consent &&
-      _signerName.text.trim().isNotEmpty &&
+      _signerName.isNotEmpty &&
+      _waiverVersionId != null &&
       !_submitting;
 
   void _confirmSign() {
     final payee = _selected;
-    if (payee == null || !_canSign) return;
+    final versionId = _waiverVersionId;
+    if (payee == null || versionId == null || !_canSign) return;
+    final bloc = context.read<MemberDetailBloc>();
+    final s = bloc.state;
+    if (s is MemberDetailLoaded) _tokenBefore = s.refreshToken;
     setState(() => _submitting = true);
-    context.read<MemberDetailBloc>().add(
-          LinkParentRequested(
-            memberId: payee.memberId,
-            payerMemberId: widget.payerMemberId,
-            signerName: _signerName.text.trim(),
-            consentAcknowledged: true,
-          ),
-        );
-    Navigator.of(context).pop(payee.memberId);
+    bloc.add(
+      LinkParentRequested(
+        memberId: payee.memberId,
+        payerMemberId: widget.payerMemberId,
+        waiverVersionId: versionId,
+        signerName: _signerName,
+        consentAcknowledged: true,
+      ),
+    );
+    // Do NOT pop here — BlocConsumer below detects success/failure.
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSign = _step == _LinkStep.sign;
-    return AppDialog(
-      title: isSign
-          ? 'Sign authorized-payer waiver'
-          : 'Add someone ${widget.payerName} pays for',
-      body: isSign ? _signBody() : _selectBody(),
-      actions: isSign
-          ? AppDialogActions(
-              primaryLabel: 'Authorize payer',
-              isLoading: _submitting,
-              primaryOnPressed: _canSign ? _confirmSign : null,
-              secondaryLabel: 'Back',
-              secondaryOnPressed: _submitting
-                  ? null
-                  : () => setState(() => _step = _LinkStep.select),
-            )
-          : AppDialogActions(
-              primaryLabel: 'Continue',
-              isLoading: _checking,
-              primaryOnPressed: _selected == null || _checking
-                  ? null
-                  : _continueToSign,
-              secondaryLabel: 'Cancel',
-              secondaryOnPressed: () =>
-                  Navigator.of(context).pop(),
-            ),
+    return BlocConsumer<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (_, s) =>
+          _submitting && s is MemberDetailLoaded,
+      listener: (context, state) {
+        if (state is! MemberDetailLoaded) return;
+        if (!_submitting) return;
+        if (state.refreshToken > _tokenBefore &&
+            !state.isMutating) {
+          // Committed — pop with the linked payee's id so the
+          // wizard can add them to the family list.
+          final payeeId = _selected?.memberId;
+          setState(() {
+            _submitting = false;
+            _step = _LinkStep.success;
+          });
+          // Pop after a brief frame so the success UI renders.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).pop(payeeId);
+          });
+        } else if (state.actionError != null) {
+          setState(() {
+            _submitting = false;
+            _step = _LinkStep.error;
+          });
+        }
+      },
+      builder: (context, state) {
+        final isSign = _step == _LinkStep.sign;
+        return AppDialog(
+          title: _title,
+          body: isSign
+              ? _signBody()
+              : _step == _LinkStep.select
+                  ? _selectBody()
+                  : _terminalBody(state),
+          actions: _actions(context, state),
+        );
+      },
     );
+  }
+
+  String get _title {
+    switch (_step) {
+      case _LinkStep.sign:
+        return 'Sign authorized-payer waiver';
+      case _LinkStep.success:
+        return 'Payer authorized';
+      case _LinkStep.error:
+        return 'Authorization failed';
+      case _LinkStep.select:
+        return 'Add someone ${widget.payerName} pays for';
+    }
   }
 
   Widget _selectBody() {
@@ -209,7 +286,7 @@ class _StartLinkMemberDialogState
       spacing: DesignConstants.spacingLarge,
       children: [
         Text(
-          'The picked member joins ${widget.payerName}’s paying '
+          "The picked member joins ${widget.payerName}'s paying "
           'account, so they can be enrolled in this run. The '
           'payer signs their waiver next.',
           style: DesignConstants.p.copyWith(
@@ -258,51 +335,92 @@ class _StartLinkMemberDialogState
             color: DesignConstants.text,
           ),
         ),
-        SizedBox(
-          height: DesignConstants.dialogWaiverEditorHeight,
-          child: WaiverMarkdownEditor(
-            controller: _waiverController!,
-          ),
+        SignWaiverPanel(
+          controller: _waiverController!,
+          enabled: !_submitting,
+          onChanged: _onSignChanged,
         ),
-        TextField(
-          controller: _signerName,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'Type full name to sign',
+      ],
+    );
+  }
+
+  Widget _terminalBody(MemberDetailState state) {
+    if (_step == _LinkStep.success) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Icon(
+            Symbols.check_circle_sharp,
+            size: DesignConstants.iconSizeBig,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.goodGreen,
           ),
+          Text(
+            '${widget.payerName} is now authorized to pay for '
+            '${_selected?.fullName ?? 'this member'}.',
+            style: DesignConstants.p.copyWith(
+              color: DesignConstants.text,
+            ),
+          ),
+        ],
+      );
+    }
+    final msg = state is MemberDetailLoaded
+        ? (state.actionError ?? 'An unexpected error occurred.')
+        : 'An unexpected error occurred.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingLarge,
+      children: [
+        Icon(
+          Symbols.error_sharp,
+          size: DesignConstants.iconSizeBig,
+          weight: DesignConstants.iconWeight,
+          color: DesignConstants.badRed,
         ),
-        InkWell(
-          onTap: () => setState(() => _consent = !_consent),
-          borderRadius: BorderRadius.circular(
-            DesignConstants.radiusSmall,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingSmall,
-            children: [
-              Checkbox(
-                value: _consent,
-                onChanged: (v) =>
-                    setState(() => _consent = v ?? false),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    top: DesignConstants.spacingMedium,
-                  ),
-                  child: Text(
-                    'I, the payer, have read and agree to the '
-                    'waiver above.',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        Text(
+          msg,
+          style: DesignConstants.p.copyWith(
+            color: DesignConstants.badRed,
           ),
         ),
       ],
     );
+  }
+
+  Widget? _actions(
+    BuildContext context,
+    MemberDetailState state,
+  ) {
+    switch (_step) {
+      case _LinkStep.select:
+        return AppDialogActions(
+          primaryLabel: 'Continue',
+          isLoading: _checking,
+          primaryOnPressed: _selected == null || _checking
+              ? null
+              : _continueToSign,
+          secondaryLabel: 'Cancel',
+          secondaryOnPressed: () =>
+              Navigator.of(context).pop(),
+        );
+      case _LinkStep.sign:
+        return AppDialogActions(
+          primaryLabel: 'Authorize payer',
+          isLoading: _submitting,
+          primaryOnPressed: _canSign ? _confirmSign : null,
+          secondaryLabel: 'Back',
+          secondaryOnPressed: _submitting
+              ? null
+              : () => setState(() => _step = _LinkStep.select),
+        );
+      case _LinkStep.success:
+      case _LinkStep.error:
+        return AppDialogActions(
+          primaryLabel: 'Close',
+          primaryOnPressed: () => Navigator.of(context).pop(),
+        );
+    }
   }
 }

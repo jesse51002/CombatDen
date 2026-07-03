@@ -177,7 +177,7 @@ from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 class DependencyInjector(containers.DeclarativeContainer):

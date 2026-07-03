@@ -430,7 +430,7 @@ class ClassesVersionsService:
                 value = value.value
             elif field == "weekday_slots":
                 # Serialized to a JSON string here and CAST(... AS JSONB) in
-                # the INSERT (the house rule — never `:param::jsonb`), the
+                # the INSERT (the house rule — never a double-colon cast), the
                 # same shape the canonicalizer round-trips back on read.
                 value = json.dumps(
                     {

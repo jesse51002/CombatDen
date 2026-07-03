@@ -56,6 +56,8 @@ class StartMembershipsFooter extends StatelessWidget {
         return hasNextMember ? 'Next member' : 'Review';
       case StartMembershipsStep.review:
         return 'Preview charges';
+      case StartMembershipsStep.signWaivers:
+        return 'Preview charges';
       case StartMembershipsStep.preview:
         return 'Continue to payment';
       case StartMembershipsStep.payment:

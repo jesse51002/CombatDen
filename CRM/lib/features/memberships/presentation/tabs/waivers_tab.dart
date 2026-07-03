@@ -7,10 +7,12 @@ import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_state.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/presentation/widgets/add_row_button.dart';
 import 'package:crm/features/memberships/presentation/widgets/membership_edit_button.dart';
 import 'package:crm/features/memberships/presentation/widgets/memberships_tab_scaffold.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 
 /// Waivers tab — the gym's waiver documents. Each row shows how
 /// many members signed the current version and drills into the
@@ -78,9 +80,22 @@ class _WaiversTable extends StatelessWidget {
             AppDataTableRow(
               onTap: () => _openEditor(context, waiver: waiver),
               cells: [
-                Text(waiver.name, style: DesignConstants.p),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: DesignConstants.spacingSmall,
+                  children: [
+                    Flexible(
+                      child: Text(waiver.name, style: DesignConstants.p),
+                    ),
+                    if (waiver.waiverType == WaiverType.payerAuth)
+                      const InvoiceChip(
+                        label: 'Payer agreement',
+                        tone: InvoiceChipTone.brand,
+                      ),
+                  ],
+                ),
                 Text(
-                  '${waiver.currentVersionSignedCount} signed',
+                  '${waiver.totalSignedCount} signed',
                   style: DesignConstants.p,
                 ),
                 MembershipEditButton(

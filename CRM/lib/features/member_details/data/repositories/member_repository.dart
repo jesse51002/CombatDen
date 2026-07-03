@@ -175,13 +175,15 @@ class MemberRepository {
 
   /// `PUT /api/v1/members/{member_id}/link` — authorize [payerMemberId] to pay
   /// for the member. The payer signs the gym's default authorized-payer waiver
-  /// in the same call ([signerName] + [consentAcknowledged]); the signature and
-  /// the authorization are recorded atomically. A pure DB change (the
-  /// authorization layer — nothing is re-billed); the endpoint returns no body,
-  /// so callers refetch member detail afterward.
+  /// in the same call; [waiverVersionId] is the version id the UI displayed
+  /// (echoed back so the backend can version-lock — 409 if stale), [signerName]
+  /// is the typed signature, and [consentAcknowledged] must be true. The
+  /// signature + authorization are recorded atomically. A pure DB change;
+  /// the endpoint returns no body, so callers refetch member detail afterward.
   Future<void> linkMemberAccount(
     String memberId, {
     required String payerMemberId,
+    required String waiverVersionId,
     required String signerName,
     required bool consentAcknowledged,
   }) async {
@@ -189,6 +191,7 @@ class MemberRepository {
       '/api/v1/members/$memberId/link',
       data: MembersManagementLinkRequest(
         payerMemberId: payerMemberId,
+        waiverVersionId: waiverVersionId,
         signerName: signerName,
         consentAcknowledged: consentAcknowledged,
       ).toJson(),
@@ -348,33 +351,71 @@ class MemberRepository {
   /// per-membership created/failed breakdown (status is 201 when all
   /// created, 207 when some failed — both 2xx; inspect each result
   /// either way). A total failure (nothing created) throws.
+  ///
+  /// Throws [WaiverGateException] on 422 when required waiver signatures are
+  /// missing — the wizard routes to its sign-waivers step in that case.
   Future<MemberMembershipsStartResponse> startMemberships(
     MemberMembershipsStartRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/',
-      data: req.toJson(),
-    );
-    return MemberMembershipsStartResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/',
+        data: req.toJson(),
+      );
+      return MemberMembershipsStartResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 422) {
+        final gate = _parseWaiverGate(e.data);
+        if (gate != null) throw gate;
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/preview` — stage the
   /// same start request (discounts included) and return the
   /// three-way one-time / due-now / recurring split without
   /// committing anything.
+  ///
+  /// Throws [WaiverGateException] on 422 (same gate as the real start).
   Future<MemberMembershipsStartPreview>
       previewStartMemberships(
     MemberMembershipsStartRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/preview',
-      data: req.toJson(),
-    );
-    return MemberMembershipsStartPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/preview',
+        data: req.toJson(),
+      );
+      return MemberMembershipsStartPreview.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 422) {
+        final gate = _parseWaiverGate(e.data);
+        if (gate != null) throw gate;
+      }
+      rethrow;
+    }
+  }
+
+  /// Parses `{"detail": {"message": "...", "unsigned": [...]}}` from a 422
+  /// body. Returns null when the shape doesn't match (a normal 422 validation
+  /// error should still propagate as a [ServerException]).
+  WaiverGateException? _parseWaiverGate(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final detail = data['detail'];
+    if (detail is! Map) return null;
+    final message = detail['message'];
+    final unsignedRaw = detail['unsigned'];
+    if (message is! String || unsignedRaw is! List) return null;
+    final unsigned = unsignedRaw
+        .whereType<Map<String, dynamic>>()
+        .map(WaiverGateItem.fromJson)
+        .toList();
+    return WaiverGateException(message: message, unsigned: unsigned);
   }
 
   /// `DELETE /api/v1/member_memberships/` — cancel ONE OR MORE

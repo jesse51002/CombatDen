@@ -6,6 +6,7 @@ INSERT with NULL stripe ID -> Stripe API -> UPDATE stripe ID.
 Standalone module — no pytest imports, no fixture dependencies.
 Every function accepts its dependencies as explicit parameters.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID

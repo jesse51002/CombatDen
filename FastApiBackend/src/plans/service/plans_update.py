@@ -62,6 +62,11 @@ class MembershipPlansUpdate(MembershipPlansBase):
             )
 
         validate_mutable_columns(MEMBERSHIP_PLANS, set(changes.keys()))
+        if request.data.waiver_ids is not None:
+            await self._validate_waiver_ids(
+                request.gym_id,
+                request.data.waiver_ids,
+            )
 
         merged = {**existing, **changes}
         self._validate_merged_state(merged)

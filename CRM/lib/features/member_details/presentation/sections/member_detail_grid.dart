@@ -221,6 +221,7 @@ class _Grid extends StatelessWidget {
           MemberWaiversSection(
             memberId: member.memberId,
             gymId: member.gymId,
+            memberName: member.fullName,
           ),
           if (member.rank != null)
             RankSection(rank: member.rank!),
