@@ -1,162 +1,159 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/navigation/app_routes.dart';
-import 'package:crm/features/home/data/mock_attendance.dart';
-import 'package:crm/features/members/presentation/widgets/table/cells/member_name_cell.dart';
-import 'package:crm/shared/widgets/app_data_table.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
-import 'package:crm/shared/widgets/app_primary_button.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/home/bloc/live_attendance_bloc.dart';
+import 'package:crm/features/home/bloc/live_attendance_event.dart';
+import 'package:crm/features/home/bloc/live_attendance_state.dart';
+import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_footer.dart';
+import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_header.dart';
+import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_roster.dart';
+import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_states.dart';
+import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
+import 'package:crm/features/schedule/bloc/schedule_event.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:crm/features/schedule/data/schedule_week.dart';
 
-/// Top section of the dashboard's left column: the live class roster
-/// (member avatar + name + checked-in pill) with a "Check In Member" /
-/// "View all" footer. It fills its (equal-flex) half of the column — the
-/// roster scrolls between a fixed header and a **pinned** footer so the
-/// action buttons stay visible.
+/// Poll cadence — front-desk check-ins appear without a reload.
+const Duration _kRefreshInterval = Duration(seconds: 60);
+
+/// Top section of the dashboard's left column: the LIVE class roster — the
+/// in-session occurrence(s)' combined signed-up ∪ attended members, each
+/// flagged Checked In / Not Here, falling forward to the next class's
+/// reservations when nothing is running. Self-contained like the Overdue /
+/// Upcoming cards: owns a [ScheduleRepository] + [LiveAttendanceBloc]
+/// (data + 60s poll) plus a loaded [ScheduleBloc] backing the footer's real
+/// batch check-in / occurrence-screen actions. It fills its (equal-flex)
+/// half of the column — the roster scrolls between a fixed header and a
+/// **pinned** footer so the action buttons stay visible.
 class LiveAttendanceCard extends StatelessWidget {
-  final List<AttendanceEntry> entries;
-
-  const LiveAttendanceCard({super.key, required this.entries});
+  const LiveAttendanceCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final checkedIn = entries.where((e) => e.checkedIn).length;
-    final notArrived = entries.length - checkedIn;
-    final percent = entries.isEmpty
-        ? 0
-        : ((checkedIn / entries.length) * 100).round();
+    final gymId = selectedGym.gymId;
+    if (gymId == null) {
+      return const _Frame(
+        header: LiveAttendanceHeader(),
+        body: LiveAttendanceMessage('Select a gym to load its attendance.'),
+      );
+    }
+    return RepositoryProvider<ScheduleRepository>(
+      create: (_) => ScheduleRepository(apiClient: ApiClient()),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<LiveAttendanceBloc>(
+            create: (ctx) => LiveAttendanceBloc(
+              repository: ctx.read<ScheduleRepository>(),
+            )..add(LiveAttendanceLoadRequested(gymId)),
+          ),
+          // The footer's batch check-in dialog and occurrence screen both
+          // dispatch schedule mutations, so the card hosts its own LOADED
+          // ScheduleBloc — the same wiring they get from the board.
+          BlocProvider<ScheduleBloc>(
+            create: (ctx) => ScheduleBloc(
+              repository: ctx.read<ScheduleRepository>(),
+            )..add(
+                ScheduleInitRequested(
+                  gymId: gymId,
+                  weekStart: currentWeekStart(),
+                ),
+              ),
+          ),
+        ],
+        child: const _LiveAttendanceBody(),
+      ),
+    );
+  }
+}
 
+/// Hosts the poll timer and renders the bloc's state.
+class _LiveAttendanceBody extends StatefulWidget {
+  const _LiveAttendanceBody();
+
+  @override
+  State<_LiveAttendanceBody> createState() => _LiveAttendanceBodyState();
+}
+
+class _LiveAttendanceBodyState extends State<_LiveAttendanceBody> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(
+      _kRefreshInterval,
+      (_) => context
+          .read<LiveAttendanceBloc>()
+          .add(const LiveAttendanceRefreshRequested()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<LiveAttendanceBloc, LiveAttendanceState>(
+      builder: (context, state) {
+        switch (state) {
+          case LiveAttendanceError(:final gymId):
+            return _Frame(
+              header: const LiveAttendanceHeader(),
+              body: LiveAttendanceErrorBody(gymId: gymId),
+            );
+          case LiveAttendanceLoaded():
+            return _Frame(
+              header: LiveAttendanceHeader(
+                subtitle: LiveAttendanceHeader.summaryFor(state),
+              ),
+              body: SingleChildScrollView(
+                child: LiveAttendanceRoster(
+                  sections: state.sections,
+                  isNextPreview: state.isNextPreview,
+                ),
+              ),
+              footer: LiveAttendanceFooter(
+                target:
+                    state.sections.isEmpty ? null : state.sections.first,
+              ),
+            );
+          case LiveAttendanceInitial():
+          case LiveAttendanceLoading():
+            return const _Frame(
+              header: LiveAttendanceHeader(),
+              body: LiveAttendanceMessage(null),
+            );
+        }
+      },
+    );
+  }
+}
+
+/// Fixed header, scrolling body, optional pinned footer.
+class _Frame extends StatelessWidget {
+  final Widget header;
+  final Widget body;
+  final Widget? footer;
+
+  const _Frame({required this.header, required this.body, this.footer});
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingBig,
       children: [
-        _Header(
-          checkedIn: checkedIn,
-          notArrived: notArrived,
-          percent: percent,
-        ),
-        // Roster scrolls in the space between the fixed header and the
-        // pinned footer below, so the action buttons stay visible.
-        Expanded(
-          child: SingleChildScrollView(
-            child: _AttendanceTable(entries: entries),
-          ),
-        ),
-        _Footer(),
-      ],
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  final int checkedIn;
-  final int notArrived;
-  final int percent;
-
-  const _Header({
-    required this.checkedIn,
-    required this.notArrived,
-    required this.percent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Text('Live Attendance', style: DesignConstants.h1),
-        Text(
-          '$checkedIn checked in, $notArrived not arrived ($percent% attendance)',
-          style: DesignConstants.h3.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AttendanceTable extends StatelessWidget {
-  final List<AttendanceEntry> entries;
-  const _AttendanceTable({required this.entries});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppDataTable(
-      shrinkWrap: true,
-      columns: const [
-        AppDataTableColumn(label: 'Name', minWidth: 160, fill: true),
-        AppDataTableColumn(label: 'Attending', minWidth: 110),
-      ],
-      rows: [
-        for (final entry in entries)
-          AppDataTableRow(
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.memberDetail),
-            cells: [
-              MemberNameCell(name: entry.fullName),
-              _StatusPill(checkedIn: entry.checkedIn),
-            ],
-          ),
-      ],
-    );
-  }
-}
-
-/// Small status indicator at the right of an attendance row —
-/// a colored vertical bar plus "Checked In" / "Not Here" text.
-class _StatusPill extends StatelessWidget {
-  final bool checkedIn;
-  const _StatusPill({required this.checkedIn});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = checkedIn
-        ? DesignConstants.goodGreen
-        : DesignConstants.badRed;
-    final label = checkedIn ? 'Checked In' : 'Not Here';
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        Container(
-          width: 5,
-          height: DesignConstants.statusAccentBarHeight,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-          ),
-        ),
-        Text(label, style: DesignConstants.h3.copyWith(color: color)),
-      ],
-    );
-  }
-}
-
-class _Footer extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Expanded(
-          child: AppPrimaryButton(
-            text: 'Check In Member',
-            fullWidth: true,
-            onPressed: () =>
-                debugPrint('TODO: wire Check In Member action'),
-          ),
-        ),
-        Expanded(
-          child: AppOutlineButton(
-            text: 'View all',
-            fullWidth: true,
-            onPressed: () =>
-                debugPrint('TODO: wire View all attendance action'),
-          ),
-        ),
+        header,
+        Expanded(child: body),
+        ?footer,
       ],
     );
   }
