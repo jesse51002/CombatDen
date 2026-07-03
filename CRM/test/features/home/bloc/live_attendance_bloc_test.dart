@@ -163,6 +163,45 @@ void main() {
     );
 
     blocTest<LiveAttendanceBloc, LiveAttendanceState>(
+      "one occurrence's roster failure keeps the other sections (flagged)",
+      setUp: () {
+        final now = DateTime.now();
+        stubInstances([
+          instance('broken', now.subtract(const Duration(minutes: 10))),
+          instance('healthy', now.subtract(const Duration(minutes: 5))),
+        ]);
+        when(() => repository.listAttendees(any(), 'broken', any(), any()))
+            .thenThrow(Exception('blip'));
+        when(() => repository.listAttendees(any(), 'healthy', any(), any()))
+            .thenAnswer(
+          (_) async => AttendeeListResponse(
+            classId: 'healthy',
+            occurrenceDate: '2026-07-03',
+            attendees: [attendee('m', attended: true)],
+          ),
+        );
+      },
+      build: () => LiveAttendanceBloc(repository: repository),
+      act: (bloc) => bloc.add(const LiveAttendanceLoadRequested(gymId)),
+      expect: () => [
+        const LiveAttendanceLoading(),
+        isA<LiveAttendanceLoaded>()
+            .having((s) => s.sections.length, 'sections', 2)
+            .having(
+              (s) => s.sections.first.rosterFailed,
+              'broken flagged',
+              true,
+            )
+            .having(
+              (s) => s.sections.last.rosterFailed,
+              'healthy unflagged',
+              false,
+            )
+            .having((s) => s.checkedIn, 'checkedIn', 1),
+      ],
+    );
+
+    blocTest<LiveAttendanceBloc, LiveAttendanceState>(
       'emits an empty preview (no roster reads) when nothing is scheduled',
       setUp: () => stubInstances([]),
       build: () => LiveAttendanceBloc(repository: repository),

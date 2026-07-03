@@ -15,6 +15,7 @@ import 'package:crm/features/home/presentation/widgets/live_attendance_card/live
 import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_states.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
+import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/features/schedule/data/schedule_week.dart';
 
@@ -54,6 +55,8 @@ class LiveAttendanceCard extends StatelessWidget {
           // The footer's batch check-in dialog and occurrence screen both
           // dispatch schedule mutations, so the card hosts its own LOADED
           // ScheduleBloc — the same wiring they get from the board.
+          // loadBoard: false — the card never renders the week board, so
+          // only the class catalog is fetched on the dashboard hot path.
           BlocProvider<ScheduleBloc>(
             create: (ctx) => ScheduleBloc(
               repository: ctx.read<ScheduleRepository>(),
@@ -61,11 +64,12 @@ class LiveAttendanceCard extends StatelessWidget {
                 ScheduleInitRequested(
                   gymId: gymId,
                   weekStart: currentWeekStart(),
+                  loadBoard: false,
                 ),
               ),
           ),
         ],
-        child: const _LiveAttendanceBody(),
+        child: _LiveAttendanceBody(gymId: gymId),
       ),
     );
   }
@@ -73,7 +77,9 @@ class LiveAttendanceCard extends StatelessWidget {
 
 /// Hosts the poll timer and renders the bloc's state.
 class _LiveAttendanceBody extends StatefulWidget {
-  const _LiveAttendanceBody();
+  final String gymId;
+
+  const _LiveAttendanceBody({required this.gymId});
 
   @override
   State<_LiveAttendanceBody> createState() => _LiveAttendanceBodyState();
@@ -85,12 +91,24 @@ class _LiveAttendanceBodyState extends State<_LiveAttendanceBody> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(
-      _kRefreshInterval,
-      (_) => context
-          .read<LiveAttendanceBloc>()
-          .add(const LiveAttendanceRefreshRequested()),
-    );
+    _timer = Timer.periodic(_kRefreshInterval, (_) => _onTick());
+  }
+
+  void _onTick() {
+    context
+        .read<LiveAttendanceBloc>()
+        .add(const LiveAttendanceRefreshRequested());
+    // Self-heal the footer's ScheduleBloc too: it has no poll of its own,
+    // so a failed init would otherwise stick as ScheduleError and silently
+    // disable the footer buttons under a perfectly healthy roster.
+    final schedule = context.read<ScheduleBloc>();
+    if (schedule.state is ScheduleError) {
+      schedule.add(ScheduleInitRequested(
+        gymId: widget.gymId,
+        weekStart: currentWeekStart(),
+        loadBoard: false,
+      ));
+    }
   }
 
   @override

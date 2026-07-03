@@ -6,6 +6,7 @@ import 'package:crm/features/home/bloc/live_attendance_event.dart';
 import 'package:crm/features/home/bloc/live_attendance_state.dart';
 import 'package:crm/features/home/data/live_attendance_section.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
+import 'package:crm/features/schedule/data/occurrence_windows.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// How far BACK the instances window reaches — one day, so a class that
@@ -40,6 +41,16 @@ class LiveAttendanceBloc
   /// Captured from [LiveAttendanceLoadRequested] so refresh ticks reuse it.
   String _gymId = '';
 
+  /// Monotonic fetch sequence — an emit is allowed only for the NEWEST
+  /// fetch, so a slow overlapping fetch (a poll tick outliving the interval
+  /// on a degraded network, or racing a user-initiated reload) can never
+  /// land its stale snapshot after fresher data.
+  int _fetchSeq = 0;
+
+  /// True while a refresh tick's fetch is in flight — later ticks are
+  /// dropped instead of queued (the next interval retries anyway).
+  bool _refreshInFlight = false;
+
   LiveAttendanceBloc({required ScheduleRepository repository})
       : _repository = repository,
         super(const LiveAttendanceInitial()) {
@@ -52,12 +63,16 @@ class LiveAttendanceBloc
     Emitter<LiveAttendanceState> emit,
   ) async {
     _gymId = event.gymId;
+    final seq = ++_fetchSeq;
     emit(const LiveAttendanceLoading());
     try {
-      emit(await _fetch());
+      final loaded = await _fetch();
+      if (seq == _fetchSeq) emit(loaded);
     } catch (e, stackTrace) {
       log('Failed to load live attendance', error: e, stackTrace: stackTrace);
-      emit(LiveAttendanceError(e.toString(), gymId: event.gymId));
+      if (seq == _fetchSeq) {
+        emit(LiveAttendanceError(e.toString(), gymId: event.gymId));
+      }
     }
   }
 
@@ -66,8 +81,12 @@ class LiveAttendanceBloc
     Emitter<LiveAttendanceState> emit,
   ) async {
     if (_gymId.isEmpty) return;
+    if (_refreshInFlight) return;
+    _refreshInFlight = true;
+    final seq = ++_fetchSeq;
     try {
-      emit(await _fetch());
+      final loaded = await _fetch();
+      if (seq == _fetchSeq) emit(loaded);
     } catch (e, stackTrace) {
       // Silent: keep whatever the card is showing; the next tick retries.
       log(
@@ -75,6 +94,8 @@ class LiveAttendanceBloc
         error: e,
         stackTrace: stackTrace,
       );
+    } finally {
+      _refreshInFlight = false;
     }
   }
 
@@ -92,18 +113,31 @@ class LiveAttendanceBloc
     final isNextPreview = shown.isEmpty;
     if (isNextPreview) shown = _nextUpcoming(active, now);
 
-    final sections = <LiveAttendanceSection>[];
-    for (final i in shown) {
-      final roster = await _repository.listAttendees(
-        _gymId,
-        i.classId,
-        i.originalDate,
-        i.originalTime,
-      );
-      sections.add(
-        LiveAttendanceSection(instance: i, attendees: roster.attendees),
-      );
-    }
+    // Roster reads run in parallel, each isolated: one occurrence's failed
+    // read flags just that section instead of hiding the healthy classes
+    // (or, on a poll tick, discarding all the fresh data).
+    final sections = await Future.wait(shown.map((i) async {
+      try {
+        final roster = await _repository.listAttendees(
+          _gymId,
+          i.classId,
+          i.originalDate,
+          i.originalTime,
+        );
+        return LiveAttendanceSection(instance: i, attendees: roster.attendees);
+      } catch (e, stackTrace) {
+        log(
+          'Roster read failed for one occurrence (section kept, flagged)',
+          error: e,
+          stackTrace: stackTrace,
+        );
+        return LiveAttendanceSection(
+          instance: i,
+          attendees: const [],
+          rosterFailed: true,
+        );
+      }
+    }));
     return LiveAttendanceLoaded(
       sections: sections,
       isNextPreview: isNextPreview,
@@ -117,11 +151,13 @@ class LiveAttendanceBloc
     List<EffectiveClassInstance> active,
     DateTime now,
   ) {
-    return active.where((i) {
-      final end =
-          i.occurredAt.add(Duration(minutes: i.resolvedDurationMinutes));
-      return !i.occurredAt.isAfter(now) && end.isAfter(now);
-    }).toList()
+    return active
+        .where((i) => occurrenceInSession(
+              i.occurredAt,
+              i.resolvedDurationMinutes,
+              now,
+            ))
+        .toList()
       ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
   }
 

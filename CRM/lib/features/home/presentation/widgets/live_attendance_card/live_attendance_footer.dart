@@ -10,14 +10,11 @@ import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
+import 'package:crm/features/schedule/data/occurrence_windows.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
 import 'package:crm/features/schedule/presentation/screens/class_occurrence_screen.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
-
-/// Mirrors the backend `checkin_opens_hours_before_start` (and the
-/// occurrence screen's own `_kCheckInOpensHours`).
-const int _kCheckInOpensHours = 2;
 
 /// Pinned action row under the roster, acting on [target] (the first shown
 /// occurrence): "Check In Member" opens its batch check-in dialog,
@@ -31,13 +28,11 @@ class LiveAttendanceFooter extends StatelessWidget {
 
   const LiveAttendanceFooter({super.key, required this.target});
 
-  /// Started already, or starts within the 2h early window — a next-class
-  /// preview further out hides check-in (the backend rejects it anyway).
-  bool _checkInOpen(EffectiveClassInstance instance) {
-    final opensBoundary =
-        DateTime.now().add(const Duration(hours: _kCheckInOpensHours));
-    return !instance.occurredAt.isAfter(opensBoundary);
-  }
+  /// Started already, or starts within the shared [kCheckInOpensHours]
+  /// early window — a next-class preview further out disables check-in (the
+  /// backend rejects it anyway).
+  bool _checkInOpen(EffectiveClassInstance instance) =>
+      occurrenceCheckInOpen(instance.occurredAt, DateTime.now());
 
   Future<void> _openBatchCheckIn(BuildContext context) async {
     final instance = target!.instance;

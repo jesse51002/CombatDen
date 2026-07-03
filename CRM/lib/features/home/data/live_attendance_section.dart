@@ -11,9 +11,16 @@ class LiveAttendanceSection extends Equatable {
   final EffectiveClassInstance instance;
   final List<Attendee> attendees;
 
+  /// True when this occurrence's roster read failed (the occurrence itself
+  /// loaded fine) — the card keeps the section and shows a small
+  /// couldn't-load note instead of hiding the class or failing the whole
+  /// load. [attendees] is empty and the header counts skip it.
+  final bool rosterFailed;
+
   const LiveAttendanceSection({
     required this.instance,
     required this.attendees,
+    this.rosterFailed = false,
   });
 
   /// Members with a recorded attendance row — the green "Checked In" rows.
@@ -25,5 +32,5 @@ class LiveAttendanceSection extends Equatable {
       attendees.where((a) => a.signedUp && !a.attended).length;
 
   @override
-  List<Object?> get props => [instance, attendees];
+  List<Object?> get props => [instance, attendees, rosterFailed];
 }

@@ -90,7 +90,9 @@ class _SectionBlock extends StatelessWidget {
             _SecondaryText(_whenLabel),
           ],
         ),
-        if (section.attendees.isEmpty)
+        if (section.rosterFailed)
+          const _SecondaryText("Couldn't load this class's roster.")
+        else if (section.attendees.isEmpty)
           _SecondaryText(
             isNextPreview
                 ? 'No reservations yet.'
