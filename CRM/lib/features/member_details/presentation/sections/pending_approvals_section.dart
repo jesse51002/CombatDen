@@ -7,10 +7,10 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/pending_redemption.dart';
 import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
-import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
-/// Shows pending reward redemptions awaiting staff action.
+/// Pending reward redemptions awaiting staff action, rendered as
+/// a subsection INSIDE the Retention card (not its own card).
 ///
 /// Renders a list of pending redemption cards with per-row
 /// Approve and Reject buttons. Each action dispatches an
@@ -19,7 +19,8 @@ import 'package:crm/shared/widgets/subtitle_section.dart';
 /// member detail on success so the list and points balance
 /// refresh automatically.
 ///
-/// Hidden when [pendingRedemptions] is empty.
+/// The parent ([RetentionSection]) only mounts this when the
+/// list is non-empty, so no empty state is rendered here.
 class PendingApprovalsSection extends StatelessWidget {
   final List<PendingRedemption> pendingRedemptions;
   final String memberName;
@@ -32,21 +33,18 @@ class PendingApprovalsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (pendingRedemptions.isEmpty) return const SizedBox.shrink();
-    return SectionCard(
-      child: SubtitleSection(
-        title: 'Pending approvals',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            for (final r in pendingRedemptions)
-              _PendingRedemptionRow(
-                redemption: r,
-                memberName: memberName,
-              ),
-          ],
-        ),
+    return SubtitleSection(
+      title: 'Pending approvals',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          for (final r in pendingRedemptions)
+            _PendingRedemptionRow(
+              redemption: r,
+              memberName: memberName,
+            ),
+        ],
       ),
     );
   }

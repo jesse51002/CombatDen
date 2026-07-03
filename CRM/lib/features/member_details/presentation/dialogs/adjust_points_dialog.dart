@@ -58,6 +58,18 @@ class _AdjustPointsDialogState
   final _amountController = TextEditingController();
   String? _validationError;
 
+  /// The typed adjustment, or null while the field doesn't
+  /// parse to an integer (empty, lone "-", ...).
+  int? get _amount =>
+      int.tryParse(_amountController.text.trim());
+
+  @override
+  void initState() {
+    super.initState();
+    // Re-render the live final-balance line as the user types.
+    _amountController.addListener(() => setState(() {}));
+  }
+
   @override
   void dispose() {
     _amountController.dispose();
@@ -124,6 +136,11 @@ class _AdjustPointsDialogState
               ],
               validator: _validate,
             ),
+            if (_amount != null && _amount != 0)
+              _FinalBalanceLine(
+                current: widget.currentBalance,
+                amount: _amount!,
+              ),
             if (_validationError != null)
               Text(
                 _validationError!,
@@ -140,6 +157,41 @@ class _AdjustPointsDialogState
         secondaryLabel: 'Cancel',
         secondaryOnPressed: () =>
             Navigator.of(context).pop(),
+      ),
+    );
+  }
+}
+
+/// Live "current ± amount = result" preview under the input.
+///
+/// Red with a below-zero note when the result is negative —
+/// the backend rejects an adjustment that would take the
+/// balance below zero, so the staff member sees it coming.
+class _FinalBalanceLine extends StatelessWidget {
+  final int current;
+  final int amount;
+
+  const _FinalBalanceLine({
+    required this.current,
+    required this.amount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final result = current + amount;
+    final negative = result < 0;
+    final sign = amount >= 0 ? '+' : '-';
+    final equation =
+        'New balance: $current $sign ${amount.abs()} '
+        '= $result pts';
+    return Text(
+      negative
+          ? '$equation — can\'t go below zero'
+          : equation,
+      style: DesignConstants.p.copyWith(
+        color: negative
+            ? DesignConstants.badRed
+            : DesignConstants.text2nd,
       ),
     );
   }

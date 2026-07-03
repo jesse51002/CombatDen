@@ -8,7 +8,6 @@ import 'package:crm/features/member_details/presentation/sections/invoices_secti
 import 'package:crm/features/member_details/presentation/sections/member_waivers_section.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_carousel.dart';
 import 'package:crm/features/member_details/presentation/sections/payment_history_section.dart';
-import 'package:crm/features/member_details/presentation/sections/pending_approvals_section.dart';
 import 'package:crm/features/member_details/presentation/sections/personal_info_section.dart';
 import 'package:crm/features/member_details/presentation/sections/rank_section.dart';
 import 'package:crm/features/member_details/presentation/sections/retention_section.dart';
@@ -224,16 +223,12 @@ class _Grid extends StatelessWidget {
             gymId: member.gymId,
             memberName: member.fullName,
           ),
-          if (member.pendingRedemptions.isNotEmpty)
-            PendingApprovalsSection(
-              pendingRedemptions: member.pendingRedemptions,
-              memberName: member.fullName,
-            ),
           if (member.rank != null)
             RankSection(rank: member.rank!),
           RetentionSection(
             retention: member.retention,
             rewards: member.recentlyRedeemedRewards,
+            pendingRedemptions: member.pendingRedemptions,
             memberId: member.memberId,
             memberName: member.fullName,
             gymId: member.gymId,

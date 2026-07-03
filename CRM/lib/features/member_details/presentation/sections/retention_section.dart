@@ -3,10 +3,12 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/retention_thresholds.dart';
+import 'package:crm/features/member_details/data/models/pending_redemption.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/models/reward_card_model.dart';
 import 'package:crm/features/member_details/presentation/dialogs/adjust_points_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/redeem_reward_dialog.dart';
+import 'package:crm/features/member_details/presentation/sections/pending_approvals_section.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
@@ -22,10 +24,13 @@ const double _kRewardStripHeight = 140;
 ///
 /// Also provides "Redeem reward" and "Award / adjust points"
 /// action buttons that open their respective dialogs and
-/// dispatch bloc events on confirm.
+/// dispatch bloc events on confirm, and — when any exist —
+/// the member's pending redemption approvals as a subsection
+/// (same card, between the actions and the redeemed strip).
 class RetentionSection extends StatelessWidget {
   final Retention retention;
   final List<RewardCardModel> rewards;
+  final List<PendingRedemption> pendingRedemptions;
   final String memberId;
   final String memberName;
   final String gymId;
@@ -34,6 +39,7 @@ class RetentionSection extends StatelessWidget {
     super.key,
     required this.retention,
     required this.rewards,
+    required this.pendingRedemptions,
     required this.memberId,
     required this.memberName,
     required this.gymId,
@@ -54,6 +60,11 @@ class RetentionSection extends StatelessWidget {
             gymId: gymId,
             pointsBalance: retention.pointsBalance,
           ),
+          if (pendingRedemptions.isNotEmpty)
+            PendingApprovalsSection(
+              pendingRedemptions: pendingRedemptions,
+              memberName: memberName,
+            ),
           SubtitleSection(
             title: 'Recently redeemed rewards',
             child: rewards.isEmpty
