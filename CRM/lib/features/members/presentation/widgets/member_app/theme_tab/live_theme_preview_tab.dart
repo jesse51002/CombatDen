@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/mock_member_app_preview.dart';
-import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/edit_branding_dialog.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
 import 'package:crm/features/members/presentation/widgets/themes_library/library_view.dart';
+import 'package:crm/features/settings/bloc/settings_bloc.dart';
+import 'package:crm/features/settings/bloc/settings_event.dart';
+import 'package:crm/features/settings/bloc/settings_state.dart';
+import 'package:crm/features/settings/data/repositories/settings_repository.dart';
+import 'package:crm/features/settings/presentation/sections/gym_profile_section.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_screen.dart';
 import 'package:crm/showcase/showcase_slots.dart';
@@ -134,10 +142,10 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     SystemNavigator.routeInformationUpdated(uri: uri, replace: true);
   }
 
-  // Gym identity, owned by the host (seeded from the shared mock). The Edit
-  // button under the phone updates the name; the logo is the in-memory asset.
-  String _gymName = kMockMemberAppPreview.gymName;
-  final ImageProvider _gymLogo = AssetImage(
+  // The phone mockup's fallback identity for the PUBLIC browser (no real gym).
+  // In the admin context the real gym name + uploaded logo are shown instead
+  // (see [build]); the admin edits them via the Gym profile editor above.
+  final ImageProvider _mockLogo = AssetImage(
     kMockMemberAppPreview.gymLogoAsset,
   );
 
@@ -158,13 +166,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         _slide = i;
       });
 
-  Future<void> _editBranding() async {
-    final name = await showEditBrandingDialog(context, _gymName);
-    if (name != null && name.trim().isNotEmpty) {
-      setState(() => _gymName = name.trim());
-    }
-  }
-
   void _openLibrary() {
     setState(() => _mode = _Mode.library);
     _syncUrl();
@@ -183,22 +184,83 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _CenteredSpinner();
         }
-        return switch (_mode) {
-          _Mode.library => LibraryView(onPicked: _openPhone),
-          _Mode.phone => _PhonePreview(
-              engineReady: _engineReady,
-              slide: _slide,
-              forward: _forward,
-              gymName: _gymName,
-              gymLogo: _gymLogo,
-              onPrev: _prevSlide,
-              onNext: _nextSlide,
-              onSelectSlide: _selectSlide,
-              onEditBranding: _editBranding,
-              onBackToLibrary: _openLibrary,
-            ),
-        };
+        // Rebuild on gym changes so the preview reflects a just-saved name /
+        // logo and the admin gate flips correctly.
+        return ListenableBuilder(
+          listenable: selectedGym,
+          builder: (context, _) {
+            final isAdmin = selectedGym.gymId != null;
+            // Admin: show the real gym identity; public browser: the mock.
+            final gymName = isAdmin && (selectedGym.gymName?.isNotEmpty ?? false)
+                ? selectedGym.gymName!
+                : kMockMemberAppPreview.gymName;
+            final ImageProvider gymLogo =
+                isAdmin && (selectedGym.logoUrl?.isNotEmpty ?? false)
+                    ? NetworkImage(selectedGym.logoUrl!)
+                    : _mockLogo;
+
+            final content = switch (_mode) {
+              _Mode.library => LibraryView(onPicked: _openPhone),
+              _Mode.phone => _PhonePreview(
+                  engineReady: _engineReady,
+                  slide: _slide,
+                  forward: _forward,
+                  gymName: gymName,
+                  gymLogo: gymLogo,
+                  onPrev: _prevSlide,
+                  onNext: _nextSlide,
+                  onSelectSlide: _selectSlide,
+                  onBackToLibrary: _openLibrary,
+                ),
+            };
+
+            // The Gym profile editor is ADMIN-ONLY. The public standalone
+            // browser has no gym (gymId null) and no Supabase, so its bloc is
+            // never constructed there — the mode content renders bare.
+            if (!isAdmin) return content;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingBig,
+              children: [
+                const _ThemeTabGymProfile(),
+                const Hairline(),
+                Expanded(child: content),
+              ],
+            );
+          },
+        );
       },
+    );
+  }
+}
+
+/// The admin-only Gym profile editor mounted at the top of the Theme tab. It
+/// owns its own [SettingsBloc] (the Theme tab has none) and, like the Settings
+/// screen, surfaces save FAILURES via a SnackBar; the shared [GymProfileSection]
+/// surfaces the SUCCESS. Constructed only in the admin context (see [build]),
+/// so the public theme browser never builds a Supabase-backed bloc.
+class _ThemeTabGymProfile extends StatelessWidget {
+  const _ThemeTabGymProfile();
+
+  @override
+  Widget build(BuildContext context) {
+    return RepositoryProvider<SettingsRepository>(
+      create: (_) => SettingsRepository(apiClient: ApiClient()),
+      child: BlocProvider<SettingsBloc>(
+        create: (ctx) =>
+            SettingsBloc(repository: ctx.read<SettingsRepository>()),
+        child: BlocListener<SettingsBloc, SettingsState>(
+          listenWhen: (prev, curr) =>
+              curr.error != null && prev.error != curr.error,
+          listener: (context, state) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(SnackBar(content: Text(state.error!)));
+            context.read<SettingsBloc>().add(const SettingsErrorCleared());
+          },
+          child: const GymProfileSection(),
+        ),
+      ),
     );
   }
 }
@@ -213,7 +275,6 @@ class _PhonePreview extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelectSlide,
-    required this.onEditBranding,
     required this.onBackToLibrary,
   });
 
@@ -225,7 +286,6 @@ class _PhonePreview extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelectSlide;
-  final VoidCallback onEditBranding;
   final VoidCallback onBackToLibrary;
 
   @override
@@ -239,7 +299,6 @@ class _PhonePreview extends StatelessWidget {
       onPrev: onPrev,
       onNext: onNext,
       onSelect: onSelectSlide,
-      onEditBranding: onEditBranding,
     );
     return LayoutBuilder(
       builder: (context, constraints) {

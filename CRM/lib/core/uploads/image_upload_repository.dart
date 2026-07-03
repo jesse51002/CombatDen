@@ -20,7 +20,8 @@ class ImageUploadRepository {
   ///
   /// [filename] is the original file name (used for the
   /// multipart part and MIME-type auto-detection fallback).
-  /// [category] must be `'reward'` or `'member'`.
+  /// [category] must be one of `'reward'`, `'member'`,
+  /// `'class'`, or `'gym'` (the gym logo).
   /// [mimeType] should be the actual MIME type from the picker
   /// (e.g. `'image/jpeg'`); defaults to `'image/jpeg'`.
   ///

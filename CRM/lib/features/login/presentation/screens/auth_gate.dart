@@ -153,6 +153,7 @@ class _AuthenticatedGateState
       displayName: gym.gymName,
       role: gym.role,
       timezone: gym.timezone,
+      logoUrl: gym.logoUrl,
     );
     selectedGym.select(
       videoGymId: AppConstants.defaultVideoGymId,

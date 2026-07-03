@@ -10,11 +10,14 @@ import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 /// gym (one gym → straight in; several → the gym picker). The
 /// chosen gym's [gymId] (a real UUID) then scopes every CRM member
 /// query, and [themePreference] (the caller's saved CRM appearance
-/// for that gym) hydrates the theme.
+/// for that gym) hydrates the theme. [logoUrl] (the gym's uploaded
+/// brand logo, nullable — null means none) seeds the nav chrome and
+/// the Gym profile editor.
 class GymWithRole {
   final String gymId;
   final String gymName;
   final String? gymDescription;
+  final String? logoUrl;
   final String timezone;
   final EmployeeRole role;
   final ThemeMode themePreference;
@@ -26,6 +29,7 @@ class GymWithRole {
     required this.role,
     required this.themePreference,
     this.gymDescription,
+    this.logoUrl,
   });
 
   factory GymWithRole.fromJson(Map<String, dynamic> json) {
@@ -33,6 +37,7 @@ class GymWithRole {
       gymId: json['gym_id'] as String,
       gymName: json['gym_name'] as String,
       gymDescription: json['gym_description'] as String?,
+      logoUrl: json['logo_url'] as String?,
       timezone: json['timezone'] as String,
       role: EmployeeRole.fromJson(json['employee_type'] as String),
       themePreference:

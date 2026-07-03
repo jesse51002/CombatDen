@@ -103,8 +103,8 @@ def test_upload_image_400_when_oversized(
 def test_upload_image_422_when_category_invalid(
     client, auth_headers, uploads_service_mock
 ):
-    """category is a Literal["reward", "member", "class"] form field — an
-    unrecognized value is a 422 validation error, not a 400."""
+    """category is a Literal["reward", "member", "class", "gym"] form field
+    — an unrecognized value is a 422 validation error, not a 400."""
     response = client.post(
         UPLOAD_URL,
         files={"file": ("photo.png", b"tiny-bytes", "image/png")},
@@ -144,3 +144,30 @@ def test_upload_image_201_happy_path(client, auth_headers, uploads_service_mock)
     assert sent_bytes == payload
     assert sent_content_type == "image/png"
     assert sent_category == "class"
+
+
+def test_upload_image_201_happy_path_gym_category(
+    client, auth_headers, uploads_service_mock
+):
+    """category='gym' is accepted — for gym logo uploads from the CRM."""
+    cdn_url = "https://cdn.combatden.net/gym/abc123.png?v=deadbeef"
+    uploads_service_mock.upload_image.return_value = cdn_url
+    payload = b"tiny-fake-png-bytes"
+
+    response = client.post(
+        UPLOAD_URL,
+        files={"file": ("logo.png", payload, "image/png")},
+        data={"category": "gym"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json() == {"url": cdn_url}
+
+    uploads_service_mock.upload_image.assert_called_once()
+    sent_bytes, sent_content_type, sent_category = (
+        uploads_service_mock.upload_image.call_args.args
+    )
+    assert sent_bytes == payload
+    assert sent_content_type == "image/png"
+    assert sent_category == "gym"

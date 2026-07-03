@@ -22,6 +22,7 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
+  logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']

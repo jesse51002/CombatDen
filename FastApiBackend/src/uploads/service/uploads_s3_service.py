@@ -60,7 +60,7 @@ class UploadsS3Service:
         Args:
             data: Raw image bytes.
             content_type: MIME type (e.g. ``image/jpeg``).
-            category: S3 key prefix — ``reward``, ``member``, or ``class``.
+            category: S3 key prefix — ``reward``, ``member``, ``class``, or ``gym``.
 
         Returns:
             Absolute CDN URL: ``{cdn_base}/{category}/{uuid}<ext>?v=<hash>``.

@@ -16,8 +16,8 @@ const double _kMaxWidth = 360;
 /// Labeled image upload field.
 ///
 /// On tap: opens the system file picker, uploads the chosen
-/// image to the CDN via [category] (`'reward'`, `'member'`, or
-/// `'class'`), shows a loading spinner during the upload, then
+/// image to the CDN via [category] (`'reward'`, `'member'`,
+/// `'class'`, or `'gym'`), shows a loading spinner during the upload, then
 /// calls [onUploaded] with the returned CDN URL and shows the
 /// uploaded preview.  Inline error text is shown on failure.
 ///
@@ -30,7 +30,7 @@ const double _kMaxWidth = 360;
 class ImageUploadPickerField extends StatefulWidget {
   final String label;
 
-  /// Backend upload category: `'reward'`, `'member'`, or `'class'`.
+  /// Backend upload category: `'reward'`, `'member'`, `'class'`, or `'gym'`.
   final String category;
 
   /// Called with the CDN URL after a successful upload.

@@ -3,7 +3,6 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
@@ -26,8 +25,9 @@ List<T> _fillSlots<T>(List<T>? real, List<T> defaults) {
 
 /// The left pane: a large phone mockup that fills the available space,
 /// showing the active showcase screen (re-themed live, animation looping),
-/// with prev/next arrows, a tappable view list, and an "edit gym name / logo"
-/// button beneath it.
+/// with prev/next arrows and a tappable view list beneath it. The gym name +
+/// logo shown here are edited via the Gym profile editor (Settings / the Theme
+/// tab header), not from this pane.
 class ThemePreviewPane extends StatelessWidget {
   const ThemePreviewPane({
     super.key,
@@ -39,7 +39,6 @@ class ThemePreviewPane extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelect,
-    required this.onEditBranding,
   });
 
   final Future<void> engineReady;
@@ -50,7 +49,6 @@ class ThemePreviewPane extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelect;
-  final VoidCallback onEditBranding;
 
   @override
   Widget build(BuildContext context) {
@@ -77,10 +75,6 @@ class ThemePreviewPane extends StatelessWidget {
           onPrev: onPrev,
           onNext: onNext,
           onSelect: onSelect,
-        ),
-        AppOutlineButton(
-          text: 'Edit gym name / logo',
-          onPressed: onEditBranding,
         ),
       ],
     );

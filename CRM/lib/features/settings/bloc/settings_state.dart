@@ -17,12 +17,22 @@ class SettingsState extends Equatable {
   /// surface the success SnackBar (the save is not optimistic, so the
   /// confirmation must be explicit).
   final int timezoneSavedCount;
+
+  /// True while a Gym profile (name + logo) save is in flight — its own
+  /// channel so that section can disable independently of the other saves.
+  final bool savingGymProfile;
+
+  /// Bumps once per committed Gym profile save; the section's `BlocListener`
+  /// watches it to surface the success SnackBar (the save is not optimistic).
+  final int gymProfileSavedCount;
   final String? error;
 
   const SettingsState({
     this.saving = false,
     this.savingTimezone = false,
     this.timezoneSavedCount = 0,
+    this.savingGymProfile = false,
+    this.gymProfileSavedCount = 0,
     this.error,
   });
 
@@ -30,6 +40,8 @@ class SettingsState extends Equatable {
     bool? saving,
     bool? savingTimezone,
     int? timezoneSavedCount,
+    bool? savingGymProfile,
+    int? gymProfileSavedCount,
     String? error,
     bool clearError = false,
   }) {
@@ -37,10 +49,19 @@ class SettingsState extends Equatable {
       saving: saving ?? this.saving,
       savingTimezone: savingTimezone ?? this.savingTimezone,
       timezoneSavedCount: timezoneSavedCount ?? this.timezoneSavedCount,
+      savingGymProfile: savingGymProfile ?? this.savingGymProfile,
+      gymProfileSavedCount: gymProfileSavedCount ?? this.gymProfileSavedCount,
       error: clearError ? null : (error ?? this.error),
     );
   }
 
   @override
-  List<Object?> get props => [saving, savingTimezone, timezoneSavedCount, error];
+  List<Object?> get props => [
+        saving,
+        savingTimezone,
+        timezoneSavedCount,
+        savingGymProfile,
+        gymProfileSavedCount,
+        error,
+      ];
 }

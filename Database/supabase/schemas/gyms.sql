@@ -11,6 +11,9 @@ CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
+    -- The gym's uploaded logo (CDN URL). NULL = no logo uploaded yet;
+    -- clients fall back to a default mark client-side.
+    logo_url TEXT,
     timezone TEXT NOT NULL DEFAULT 'America/Chicago'
         CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
     is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,

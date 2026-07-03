@@ -29,7 +29,7 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
     summary="Upload an image to the CDN",
     description=(
         "Accepts a multipart image upload and a ``category`` form field "
-        "(``reward``, ``member``, or ``class``). Proxies the bytes to the private S3 "
+        "(``reward``, ``member``, ``class``, or ``gym``). Proxies the bytes to the private S3 "
         "bucket and returns the CloudFront CDN URL with a content-hash "
         "cache-buster. Requires a staff principal (owner/admin of at "
         "least one gym)."
@@ -45,7 +45,7 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
 @inject
 async def upload_image(
     file: UploadFile,
-    category: Annotated[Literal["reward", "member", "class"], Form()],
+    category: Annotated[Literal["reward", "member", "class", "gym"], Form()],
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     uploads_service: UploadsS3Service = Depends(

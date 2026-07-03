@@ -8,15 +8,15 @@ import 'package:crm/features/settings/bloc/settings_event.dart';
 import 'package:crm/features/settings/bloc/settings_state.dart';
 import 'package:crm/features/settings/data/repositories/settings_repository.dart';
 
-/// Saves the chosen CRM theme to the caller's `gym_employees` row and the
-/// gym's timezone to the gym row.
+/// Saves the chosen CRM theme to the caller's `gym_employees` row, and the
+/// gym's timezone and profile (name + logo) to the gym row.
 ///
 /// The theme is applied **optimistically** to [themeController] (so the app
 /// re-skins the instant a pill is tapped) and reverted if the backend save
 /// fails — the same shape as the member-detail billing actions, kept tiny.
-/// The timezone save is **not** optimistic: the backend commits first, then
-/// [selectedGym] updates and `timezoneSavedCount` bumps for the success
-/// SnackBar.
+/// The timezone and Gym profile saves are **not** optimistic: the backend
+/// commits first, then [selectedGym] updates and the matching saved-count
+/// bumps for the success SnackBar.
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final SettingsRepository _repository;
 
@@ -25,6 +25,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         super(const SettingsState()) {
     on<SettingsThemeModeChanged>(_onThemeModeChanged);
     on<SettingsTimezoneChanged>(_onTimezoneChanged);
+    on<GymProfileSaveRequested>(_onGymProfileSave);
     on<SettingsErrorCleared>(
       (event, emit) => emit(state.copyWith(clearError: true)),
     );
@@ -85,6 +86,46 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         state.copyWith(
           savingTimezone: false,
           error: 'Couldn\'t update the gym timezone. Please try again.',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onGymProfileSave(
+    GymProfileSaveRequested event,
+    Emitter<SettingsState> emit,
+  ) async {
+    final gymId = selectedGym.gymId;
+    if (gymId == null) return;
+    // No-op guard: skip the round trip when nothing actually changed.
+    if (event.gymName == selectedGym.gymName &&
+        event.logoUrl == selectedGym.logoUrl) {
+      return;
+    }
+
+    // NOT optimistic: the backend commits first, then the local state updates.
+    emit(state.copyWith(savingGymProfile: true, clearError: true));
+
+    try {
+      await _repository.updateGymProfile(
+        gymId: gymId,
+        gymName: event.gymName,
+        logoUrl: event.logoUrl,
+      );
+      selectedGym.updateGymName(event.gymName);
+      selectedGym.updateLogoUrl(event.logoUrl);
+      emit(
+        state.copyWith(
+          savingGymProfile: false,
+          gymProfileSavedCount: state.gymProfileSavedCount + 1,
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Failed to save gym profile', error: e, stackTrace: stackTrace);
+      emit(
+        state.copyWith(
+          savingGymProfile: false,
+          error: 'Couldn\'t update your gym profile. Please try again.',
         ),
       );
     }
