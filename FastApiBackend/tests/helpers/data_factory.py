@@ -14,6 +14,7 @@ from uuid import UUID
 import stripe
 from sqlalchemy import text
 
+from src.core.config import settings
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.database import DirectDatabasePool
 
@@ -41,6 +42,12 @@ class TestPlan:
 class TestDiscount:
     discount_id: UUID
     value_id: UUID
+
+
+@dataclass(frozen=True)
+class TestReward:
+    reward_id: UUID
+    gym_id: UUID
 
 
 # ── Payment method ──────────────────────────────────────────────
@@ -365,3 +372,48 @@ async def create_discount(
         await session.commit()
 
     return TestDiscount(discount_id=discount_id, value_id=value_id)
+
+
+# ── Reward ────────────────────────────────────────────────────
+
+
+async def create_reward(
+    db_pool: DirectDatabasePool,
+    gym_id: UUID,
+    *,
+    title: str = "ZZ Test Reward",
+    point_cost: int = 100,
+    # gym_rewards.price_label / image_url are NOT NULL — default to the same
+    # platform-default values the production create path fills in.
+    price_label: str = "Free",
+    image_url: str = settings.default_reward_image_url,
+) -> TestReward:
+    """Create a gym_rewards row directly.
+
+    Unlike members/plans/discounts, a reward carries no Stripe object — it
+    is plain gym config — so this is a single INSERT, no DB-first/Stripe
+    round trip.
+    """
+    insert_reward_sql = """
+        INSERT INTO gym_rewards (
+            gym_id, title, point_cost, price_label, image_url
+        ) VALUES (
+            :gym_id, :title, :point_cost, :price_label, :image_url
+        )
+        RETURNING reward_id
+    """
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(insert_reward_sql),
+            {
+                "gym_id": str(gym_id),
+                "title": title,
+                "point_cost": point_cost,
+                "price_label": price_label,
+                "image_url": image_url,
+            },
+        )
+        row = result.mappings().fetchone()
+        await session.commit()
+
+    return TestReward(reward_id=UUID(str(row["reward_id"])), gym_id=gym_id)

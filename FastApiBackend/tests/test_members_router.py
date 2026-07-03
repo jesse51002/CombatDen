@@ -1,5 +1,6 @@
 """Smoke + edge tests for the members router."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from src.members.schema.members_billing_schema import (
     BillingRetention,
     MemberBillingDetailResponse,
     MembersBillingProfileResponse,
+    PendingRedemptionCard,
 )
 from src.members.schema.members_crm_members_list_schema import (
     AllViewRow,
@@ -438,3 +440,176 @@ def test_remove_authorization_still_requires_idempotency_key(
         err["loc"][-1] == "idempotency_key"
         for err in response.json()["detail"]
     )
+
+
+# ── C.2 — manual points award ─────────────────────────────────────
+
+
+def test_adjust_points_returns_new_balance(client, auth_headers, fake_member_id):
+    """POST /api/v1/members/{member_id}/points returns the new points_balance."""
+    mgmt = MagicMock()
+    mgmt.adjust_points = AsyncMock(return_value=1500)
+
+    app.container.members_management_service.override(mgmt)
+    try:
+        response = client.post(
+            f"/api/v1/members/{fake_member_id}/points",
+            json={"amount": 500},
+            headers=auth_headers,
+        )
+    finally:
+        app.container.members_management_service.reset_override()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["points_balance"] == 1500
+    mgmt.adjust_points.assert_awaited_once()
+    call_args = mgmt.adjust_points.await_args
+    assert str(call_args.args[1]) == "500"  # amount passed through
+
+
+def test_adjust_points_400_on_underflow(client, auth_headers, fake_member_id):
+    """Service ValueError (underflow / not found) maps to 400."""
+    mgmt = MagicMock()
+    mgmt.adjust_points = AsyncMock(
+        side_effect=ValueError("adjustment would make balance negative")
+    )
+
+    app.container.members_management_service.override(mgmt)
+    try:
+        response = client.post(
+            f"/api/v1/members/{fake_member_id}/points",
+            json={"amount": -9999},
+            headers=auth_headers,
+        )
+    finally:
+        app.container.members_management_service.reset_override()
+
+    assert response.status_code == 400
+    assert "negative" in response.json()["detail"]
+
+
+def test_adjust_points_amount_required(client, auth_headers, fake_member_id):
+    """Missing ``amount`` body field yields 422 (Pydantic validation)."""
+    response = client.post(
+        f"/api/v1/members/{fake_member_id}/points",
+        json={},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_adjust_points_rejects_out_of_bounds_amount(
+    client, auth_headers, fake_member_id
+):
+    """An absurd ``amount`` 422s at the schema bound instead of overflowing
+    int4 in ``points_balance + :amount`` (a DataError → 500 in the DB)."""
+    for amount in (3_000_000_000, 1_000_001, -1_000_001):
+        response = client.post(
+            f"/api/v1/members/{fake_member_id}/points",
+            json={"amount": amount},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, amount
+
+
+# ── E.1 — pending redemptions on member detail ────────────────────
+
+
+def test_member_detail_includes_pending_redemptions(
+    client, auth_headers, fake_member_id, fake_gym_id, fake_reward_id
+):
+    """GET /api/v1/members/{id} surfaces pending_redemptions in the response."""
+    redemption_id = str(uuid4())
+    now = datetime.now(UTC)
+
+    mock_response = MemberBillingDetailResponse(
+        member_id=fake_member_id,
+        gym_id=fake_gym_id,
+        first_name="Ada",
+        last_name="Lovelace",
+        membership_overview="Active",
+        total_monthly_recurring_price=0,
+        total_membership_count=0,
+        personal_info=BillingPersonalInfo(),
+        linked_accounts=[],
+        memberships=[],
+        retention=BillingRetention(
+            class_streak_weeks=0,
+            points_balance=500,
+            videos_watched=0,
+        ),
+        recently_redeemed_rewards=[],
+        pending_redemptions=[
+            PendingRedemptionCard(
+                redemption_id=redemption_id,
+                reward_id=fake_reward_id,
+                title="Free T-Shirt",
+                price_label="Official gym branded tee",
+                image_url="https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200",
+                point_cost=1500,
+                requested_at=now,
+            )
+        ],
+    )
+
+    mock_service = MagicMock()
+    mock_service.get_member_billing_detail = AsyncMock(return_value=mock_response)
+
+    container = client.app.container
+    container.members_billing_detail_service.override(mock_service)
+    try:
+        response = client.get(
+            f"/api/v1/members/{fake_member_id}",
+            headers=auth_headers,
+        )
+    finally:
+        container.members_billing_detail_service.reset_override()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["pending_redemptions"]) == 1
+    pr = body["pending_redemptions"][0]
+    assert pr["redemption_id"] == redemption_id
+    assert pr["title"] == "Free T-Shirt"
+    assert pr["point_cost"] == 1500
+
+
+def test_member_detail_pending_redemptions_defaults_empty(
+    client, auth_headers, fake_member_id, fake_gym_id
+):
+    """pending_redemptions defaults to [] when omitted from the service response."""
+    mock_response = MemberBillingDetailResponse(
+        member_id=fake_member_id,
+        gym_id=fake_gym_id,
+        first_name="Ada",
+        last_name="Lovelace",
+        membership_overview="Active",
+        total_monthly_recurring_price=0,
+        total_membership_count=0,
+        personal_info=BillingPersonalInfo(),
+        linked_accounts=[],
+        memberships=[],
+        retention=BillingRetention(
+            class_streak_weeks=0,
+            points_balance=0,
+            videos_watched=0,
+        ),
+        recently_redeemed_rewards=[],
+    )
+
+    mock_service = MagicMock()
+    mock_service.get_member_billing_detail = AsyncMock(return_value=mock_response)
+
+    container = client.app.container
+    container.members_billing_detail_service.override(mock_service)
+    try:
+        response = client.get(
+            f"/api/v1/members/{fake_member_id}",
+            headers=auth_headers,
+        )
+    finally:
+        container.members_billing_detail_service.reset_override()
+
+    assert response.status_code == 200
+    assert response.json()["pending_redemptions"] == []

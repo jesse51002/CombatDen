@@ -177,7 +177,7 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
   Map<String, String> _renderValues() => {
         kWaiverParamMemberName: _selected?.fullName ?? '',
         kWaiverParamPayeeName: widget.subjectName,
-        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamGymName: selectedGym.gymName ?? '',
         kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.

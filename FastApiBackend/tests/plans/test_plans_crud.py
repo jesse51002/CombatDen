@@ -7,9 +7,8 @@ members, they only configure what gets billed when a membership
 starts.
 """
 
-from uuid import uuid4
-
 from schema.membership_plan import DurationUnit, PlanType
+from sqlalchemy import text
 
 from src.plans.plans_schema import (
     MembershipPlanCreateRequest,
@@ -17,6 +16,8 @@ from src.plans.plans_schema import (
     MembershipPlanUpdateData,
     MembershipPlanUpdateRequest,
 )
+from src.waivers.schema.waivers_schema import WaiverCreateRequest
+from src.waivers.service.waivers_service import WaiversService
 
 
 async def _fetch_product(stripe_client, product_id, connect_opts):
@@ -167,6 +168,7 @@ async def test_update_plan_name(
 
 async def test_update_plan_with_waiver_ids(
     plans_service,
+    db_pool,
     gym_id,
     created,
 ):
@@ -178,6 +180,10 @@ async def test_update_plan_with_waiver_ids(
     ``syntax error at or near ":"``. The builder must use
     ``CAST(:waiver_ids AS JSONB)`` (see CLAUDE.md → SQL Files). The plain
     name-only update never exercised this branch, which is how the bug shipped.
+
+    ``waiver_ids`` are validated at plan write time (existing, non-archived,
+    ``custom`` waivers of the gym — see ``_validate_waiver_ids``), so the
+    test mints a real waiver rather than a bare uuid.
     """
     created_resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
@@ -191,22 +197,56 @@ async def test_update_plan_with_waiver_ids(
     )
     _track_plan(created, created_resp)
 
-    waiver_id = uuid4()  # jsonb array element; no FK, any uuid is valid
-    resp = await plans_service.update_plan(
-        MembershipPlanUpdateRequest(
-            plan_id=created_resp.plan_id,
-            gym_id=gym_id,
-            data=MembershipPlanUpdateData(
-                plan_name="Waiver Update",
-                duration_amount=1,
-                duration_unit=DurationUnit.month,
-                waiver_ids=[waiver_id],
-            ),
+    waiver = await WaiversService(db_pool).create_waiver(
+        WaiverCreateRequest(
+            gym_id=gym_id, name="Plan Update Waiver", body="# body"
         ),
     )
+    try:
+        resp = await plans_service.update_plan(
+            MembershipPlanUpdateRequest(
+                plan_id=created_resp.plan_id,
+                gym_id=gym_id,
+                data=MembershipPlanUpdateData(
+                    plan_name="Waiver Update",
+                    duration_amount=1,
+                    duration_unit=DurationUnit.month,
+                    waiver_ids=[waiver.waiver_id],
+                ),
+            ),
+        )
 
-    # The jsonb column round-trips through the CAST(...) SET clause.
-    assert resp.waiver_ids == [waiver_id]
+        # The jsonb column round-trips through the CAST(...) SET clause.
+        assert resp.waiver_ids == [waiver.waiver_id]
+    finally:
+        # Strip the id from the plan (created-fixture deletes the plan row
+        # later anyway), then hard-delete the waiver + its version rows.
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE membership_plans SET waiver_ids = '[]' "
+                    "WHERE plan_id = :p",
+                ),
+                {"p": str(created_resp.plan_id)},
+            )
+            await session.execute(
+                text(
+                    "UPDATE gym_waivers SET current_version_id = NULL "
+                    "WHERE waiver_id = :w",
+                ),
+                {"w": str(waiver.waiver_id)},
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM gym_waiver_versions WHERE waiver_id = :w",
+                ),
+                {"w": str(waiver.waiver_id)},
+            )
+            await session.execute(
+                text("DELETE FROM gym_waivers WHERE waiver_id = :w"),
+                {"w": str(waiver.waiver_id)},
+            )
+            await session.commit()
 
 
 async def test_delete_plan(

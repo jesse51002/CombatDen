@@ -46,8 +46,8 @@ flowchart TB
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + spec/agent authoring + worker control + RAG recs/search)<br/>presets (template catalog + import) · theme (gym showcase)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner<br/>VideosWorkerControl · VideoRecsService · VideoSearchService · MemberVideoProfileService<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService"]
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + spec/agent authoring + worker control + RAG recs/search)<br/>presets (template catalog + import) · theme (gym showcase)<br/>uploads (S3 image proxy)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner<br/>VideosWorkerControl · VideoRecsService · VideoSearchService · MemberVideoProfileService<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService · UploadsService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
@@ -90,6 +90,7 @@ flowchart TB
   FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
   FastApiBackend -.->|"packaged into"| Deploy
   VS_create -.->|"worker → combined image"| Deploy
+  FastApiBackend -->|"image uploads (uploads domain)"| CDN
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;

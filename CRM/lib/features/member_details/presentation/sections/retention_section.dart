@@ -3,8 +3,13 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/retention_thresholds.dart';
+import 'package:crm/features/member_details/data/models/pending_redemption.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/models/reward_card_model.dart';
+import 'package:crm/features/member_details/presentation/dialogs/adjust_points_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/redeem_reward_dialog.dart';
+import 'package:crm/features/member_details/presentation/sections/pending_approvals_section.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
@@ -16,14 +21,28 @@ const double _kRewardStripHeight = 140;
 /// Retention stats (last class, class streak, points,
 /// videos watched) with threshold-driven coloring, plus a
 /// horizontal strip of recently redeemed rewards.
+///
+/// Also provides "Redeem reward" and "Award / adjust points"
+/// action buttons that open their respective dialogs and
+/// dispatch bloc events on confirm, and — when any exist —
+/// the member's pending redemption approvals as a subsection
+/// (same card, between the actions and the redeemed strip).
 class RetentionSection extends StatelessWidget {
   final Retention retention;
   final List<RewardCardModel> rewards;
+  final List<PendingRedemption> pendingRedemptions;
+  final String memberId;
+  final String memberName;
+  final String gymId;
 
   const RetentionSection({
     super.key,
     required this.retention,
     required this.rewards,
+    required this.pendingRedemptions,
+    required this.memberId,
+    required this.memberName,
+    required this.gymId,
   });
 
   @override
@@ -35,6 +54,20 @@ class RetentionSection extends StatelessWidget {
         children: [
           Text('Retention', style: DesignConstants.h2),
           _RetentionGrid(retention: retention),
+          _RewardsActions(
+            memberId: memberId,
+            memberName: memberName,
+            gymId: gymId,
+            pointsBalance: retention.pointsBalance,
+            pendingRewardIds: {
+              for (final r in pendingRedemptions) r.rewardId,
+            },
+          ),
+          if (pendingRedemptions.isNotEmpty)
+            PendingApprovalsSection(
+              pendingRedemptions: pendingRedemptions,
+              memberName: memberName,
+            ),
           SubtitleSection(
             title: 'Recently redeemed rewards',
             child: rewards.isEmpty
@@ -56,6 +89,62 @@ class RetentionSection extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Inline action bar for rewards staff actions.
+class _RewardsActions extends StatelessWidget {
+  final String memberId;
+  final String memberName;
+  final String gymId;
+  final int pointsBalance;
+  final Set<String> pendingRewardIds;
+
+  const _RewardsActions({
+    required this.memberId,
+    required this.memberName,
+    required this.gymId,
+    required this.pointsBalance,
+    required this.pendingRewardIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        AppOutlineButton(
+          text: 'Redeem reward',
+          icon: Icon(
+            Symbols.redeem_sharp,
+            size: DesignConstants.iconSizeMedium,
+            weight: DesignConstants.iconWeight,
+          ),
+          onPressed: () => RedeemRewardDialog.show(
+            context: context,
+            gymId: gymId,
+            memberId: memberId,
+            memberName: memberName,
+            pointsBalance: pointsBalance,
+            pendingRewardIds: pendingRewardIds,
+          ),
+        ),
+        AppOutlineButton(
+          text: 'Award / adjust pts',
+          icon: Icon(
+            Symbols.star_sharp,
+            size: DesignConstants.iconSizeMedium,
+            weight: DesignConstants.iconWeight,
+          ),
+          onPressed: () => AdjustPointsDialog.show(
+            context: context,
+            memberId: memberId,
+            memberName: memberName,
+            currentBalance: pointsBalance,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -242,9 +331,9 @@ class _RewardCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          if (reward.amountOff != null)
+          if (reward.priceLabel != null)
             Text(
-              reward.amountOff!,
+              reward.priceLabel!,
               style: DesignConstants.pSmall.copyWith(
                 color: DesignConstants.text2nd,
               ),

@@ -208,3 +208,14 @@ async def await_task_terminal(
     raise AssertionError(
         f"Task {task_id} not terminal after {timeout_seconds}s"
     )
+
+
+async def get_points_balance(
+    db_pool: DirectDatabasePool,
+    member_id: UUID,
+) -> int:
+    """Return a member's current ``points_balance``."""
+    sql = "SELECT points_balance FROM members WHERE member_id = :id"
+    async with db_pool.session() as session:
+        result = await session.execute(text(sql), {"id": str(member_id)})
+        return result.scalar_one()

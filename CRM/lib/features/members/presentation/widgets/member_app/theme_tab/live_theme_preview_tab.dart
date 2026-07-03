@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/mock_member_app_preview.dart';
-import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/edit_branding_dialog.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
 import 'package:crm/features/members/presentation/widgets/themes_library/library_view.dart';
+import 'package:crm/features/settings/presentation/dialogs/gym_profile_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_screen.dart';
@@ -134,13 +135,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     SystemNavigator.routeInformationUpdated(uri: uri, replace: true);
   }
 
-  // Gym identity, owned by the host (seeded from the shared mock). The Edit
-  // button under the phone updates the name; the logo is the in-memory asset.
-  String _gymName = kMockMemberAppPreview.gymName;
-  final ImageProvider _gymLogo = AssetImage(
-    kMockMemberAppPreview.gymLogoAsset,
-  );
-
   int _slide = 0;
   bool _forward = true;
   int get _count => ShowcaseScreen.values.length;
@@ -157,13 +151,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         _forward = i >= _slide;
         _slide = i;
       });
-
-  Future<void> _editBranding() async {
-    final name = await showEditBrandingDialog(context, _gymName);
-    if (name != null && name.trim().isNotEmpty) {
-      setState(() => _gymName = name.trim());
-    }
-  }
 
   void _openLibrary() {
     setState(() => _mode = _Mode.library);
@@ -183,21 +170,50 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _CenteredSpinner();
         }
-        return switch (_mode) {
-          _Mode.library => LibraryView(onPicked: _openPhone),
-          _Mode.phone => _PhonePreview(
-              engineReady: _engineReady,
-              slide: _slide,
-              forward: _forward,
-              gymName: _gymName,
-              gymLogo: _gymLogo,
-              onPrev: _prevSlide,
-              onNext: _nextSlide,
-              onSelectSlide: _selectSlide,
-              onEditBranding: _editBranding,
-              onBackToLibrary: _openLibrary,
-            ),
-        };
+        // Rebuild on gym changes so the preview reflects a just-saved name /
+        // logo and the admin gate flips correctly.
+        return ListenableBuilder(
+          listenable: selectedGym,
+          builder: (context, _) {
+            final isAdmin = selectedGym.gymId != null;
+            // Admin: ALWAYS the real gym identity — the mock name exists
+            // only for the public browser (no gym there). The logo is NEVER
+            // a bundled asset here: the gym's uploaded logo when set, else
+            // null — the showcase topbar then falls through to the ACTIVE
+            // THEME's logo (themeTabPreview resolution order in
+            // showcase_topbar.dart), so switching themes re-logos the mock.
+            final gymName = isAdmin
+                ? (selectedGym.gymName ?? '')
+                : kMockMemberAppPreview.gymName;
+            final ImageProvider? gymLogo =
+                isAdmin && (selectedGym.logoUrl?.isNotEmpty ?? false)
+                    ? NetworkImage(selectedGym.logoUrl!)
+                    : null;
+
+            // The Gym profile editor is ADMIN-ONLY: the phone preview's
+            // "Edit gym name / logo" button (under the mock) opens
+            // [GymProfileDialog]. The public standalone browser has no gym
+            // (gymId null) and no Supabase, so the button never renders and
+            // the dialog's bloc is never constructed there.
+            return switch (_mode) {
+              _Mode.library => LibraryView(onPicked: _openPhone),
+              _Mode.phone => _PhonePreview(
+                  engineReady: _engineReady,
+                  slide: _slide,
+                  forward: _forward,
+                  gymName: gymName,
+                  gymLogo: gymLogo,
+                  onPrev: _prevSlide,
+                  onNext: _nextSlide,
+                  onSelectSlide: _selectSlide,
+                  onBackToLibrary: _openLibrary,
+                  onEditBranding: isAdmin
+                      ? () => GymProfileDialog.show(context)
+                      : null,
+                ),
+            };
+          },
+        );
       },
     );
   }
@@ -213,20 +229,20 @@ class _PhonePreview extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelectSlide,
-    required this.onEditBranding,
     required this.onBackToLibrary,
+    this.onEditBranding,
   });
 
   final Future<void> engineReady;
   final int slide;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelectSlide;
-  final VoidCallback onEditBranding;
   final VoidCallback onBackToLibrary;
+  final VoidCallback? onEditBranding;
 
   @override
   Widget build(BuildContext context) {

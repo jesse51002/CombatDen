@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -13,6 +14,7 @@ import 'package:mocktail/mocktail.dart';
 class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
+class MockRewardsRepository extends Mock implements RewardsRepository {}
 
 /// charge_card is payer-aware: the dialog picks WHO pays (the member or their
 /// linked parent), and that `paidByMemberId` must reach the repository
@@ -41,10 +43,12 @@ void main() {
 
   late MockMemberRepository repo;
   late MockScheduleRepository scheduleRepo;
+  late MockRewardsRepository rewardsRepo;
 
   setUp(() {
     repo = MockMemberRepository();
     scheduleRepo = MockScheduleRepository();
+    rewardsRepo = MockRewardsRepository();
     when(() => repo.getMemberDetail(any()))
         .thenAnswer((_) async => buildMember());
     when(
@@ -63,7 +67,8 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card bills the chosen payer (parent), not the beneficiary member',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -93,7 +98,8 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card self-pay sends the member as their own payer',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -123,7 +129,8 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card threads a one-off payment_method_id to the repository',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -155,7 +162,8 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card out-of-band threads paid_cash to the repository',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -191,7 +199,8 @@ void main() {
   // fire the screen-level overlay + error dialog).
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card success bumps chargeCardSuccess, not isMutating/actionError',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo),
+    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -233,7 +242,8 @@ void main() {
           paymentMethodId: any(named: 'paymentMethodId'),
         ),
       ).thenThrow(Exception('card declined'));
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),
@@ -267,7 +277,8 @@ void main() {
       // chargeCard succeeds (the setUp stub); the refresh throws.
       when(() => repo.getMemberDetail(any()))
           .thenThrow(Exception('member refresh unreachable'));
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),

@@ -40,6 +40,28 @@ class GymUpdateData(BaseModel):
     gym_name: str | None = None
     gym_description: str | None = None
     timezone: str | None = None
+    # Nullable, unlike a reward's image: explicit null clears the logo
+    # back to NULL (no logo uploaded). Absent = unchanged.
+    logo_url: str | None = None
+
+    @field_validator("gym_name", "timezone")
+    @classmethod
+    def _reject_explicit_null(
+        cls, value: str | None, info
+    ) -> str | None:
+        """gym_name / timezone are NOT NULL columns: an explicit ``null``
+        would reach the dynamic SET clause as a NOT NULL violation (500),
+        so reject it here as a 422. Only runs when the field is present
+        in the request body (Pydantic skips validators on an unset
+        default), so an absent field still means "unchanged".
+        ``gym_description`` and ``logo_url`` are genuinely nullable and
+        stay clearable via explicit null."""
+        if value is None:
+            raise ValueError(
+                f"{info.field_name} cannot be cleared; omit the field "
+                "to leave it unchanged"
+            )
+        return value
 
 
 class GymUpdateRequest(BaseModel):
@@ -55,6 +77,8 @@ class GymResponse(BaseModel):
     gym_name: str
     gym_description: str | None
     timezone: str
+    # The gym's uploaded logo (CDN URL); None = no logo uploaded yet.
+    logo_url: str | None = None
     # The ThemeService design id this gym brands with (None until chosen).
     theme_design_id: str | None = None
 

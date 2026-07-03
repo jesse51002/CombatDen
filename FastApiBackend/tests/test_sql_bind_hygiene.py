@@ -70,12 +70,21 @@ def test_no_python_string_builds_bind_then_cast() -> None:
 
     Catches the dynamic recurrence the .sql scan can't see, such as
     ``f"{col} = :{col}::jsonb"``. Use ``CAST(:{col} AS JSONB)`` instead.
+
+    Mirroring the .sql scan's `--`-strip: `#` comments are stripped and
+    backtick-quoted matches are skipped, because comments/docstrings
+    legitimately spell out the forbidden pattern in prose (always
+    backtick-quoted). Real SQL-building code is never inside a `#` comment
+    and never backtick-prefixed.
     """
     offenders: list[str] = []
     for py_file in _SRC_DIR.rglob("*.py"):
         text = py_file.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
-            for match in _PY_BIND_THEN_CAST.finditer(line):
+            code = line.split("#", 1)[0]
+            for match in _PY_BIND_THEN_CAST.finditer(code):
+                if match.start() > 0 and code[match.start() - 1] == "`":
+                    continue
                 rel = py_file.relative_to(_SRC_DIR.parent)
                 offenders.append(f"{rel}:{lineno}: {match.group(0)}")
 

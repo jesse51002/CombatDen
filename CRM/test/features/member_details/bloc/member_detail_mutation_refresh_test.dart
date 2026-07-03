@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -16,6 +17,7 @@ import 'package:mocktail/mocktail.dart';
 class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
+class MockRewardsRepository extends Mock implements RewardsRepository {}
 
 class MockMembersManagementResponse extends Mock
     implements MembersManagementResponse {}
@@ -46,10 +48,12 @@ void main() {
 
   late MockMemberRepository repo;
   late MockScheduleRepository scheduleRepo;
+  late MockRewardsRepository rewardsRepo;
 
   setUp(() {
     repo = MockMemberRepository();
     scheduleRepo = MockScheduleRepository();
+    rewardsRepo = MockRewardsRepository();
     when(() => repo.unlinkMemberPayment(any()))
         .thenAnswer((_) async => MockMembersManagementResponse());
   });
@@ -68,7 +72,8 @@ void main() {
       });
       Future<void>.delayed(const Duration(milliseconds: 20))
           .then((_) => gate.complete());
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo);
+      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
+        rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),

@@ -15,6 +15,8 @@ from src.members.schema.members_billing_schema import (
     MemberBillingDetailResponse,
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
+    PointsAdjustRequest,
+    PointsAdjustResponse,
 )
 from src.members.schema.members_crm_members_list_schema import (
     CrmMembersListRequest,
@@ -363,6 +365,58 @@ async def get_member_billing_detail(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve member billing detail",
+        ) from None
+
+
+@members_router.post(
+    "/{member_id}/points",
+    response_model=PointsAdjustResponse,
+    summary="Manually adjust a member's points balance",
+    description=(
+        "Awards or corrects a member's points balance by a signed integer "
+        "``amount``. Positive values award points; negative values deduct "
+        "(correct) points. The adjustment is rejected when it would take "
+        "the balance below zero. Gym staff only."
+    ),
+    responses={
+        200: {"description": "Adjusted — new balance returned"},
+        400: {"description": "Member not found, or adjustment would go negative"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this member's gym"},
+    },
+)
+@inject
+async def adjust_member_points(
+    member_id: UUID,
+    request: PointsAdjustRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> PointsAdjustResponse:
+    """Award or correct a member's points balance. Gym staff only."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
+
+    try:
+        new_balance = await management_service.adjust_points(member_id, request.amount)
+        return PointsAdjustResponse(points_balance=new_balance)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to adjust points: member_id=%s amount=%s",
+            member_id,
+            request.amount,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to adjust points balance",
         ) from None
 
 

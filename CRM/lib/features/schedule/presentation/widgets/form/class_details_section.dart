@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
-import 'package:crm/shared/widgets/form/image_upload_field.dart';
+import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// "Class details" form section: name, description, and class image.
@@ -15,7 +15,9 @@ class ClassDetailsSection extends StatelessWidget {
   /// platform default is previewed instead).
   final String? imageUrl;
 
-  /// Called with a pasted image URL the owner confirms in the picker dialog.
+  /// Called with the CDN URL after the owner uploads a class image. The
+  /// URL is bubbled up into the form state so the create/update request
+  /// carries the chosen image.
   final ValueChanged<String> onImageChanged;
 
   const ClassDetailsSection({
@@ -34,11 +36,12 @@ class ClassDetailsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: DesignConstants.spacingLarge,
         children: [
-          ImageUploadField(
+          ImageUploadPickerField(
             label: 'Class image',
+            category: 'class',
             imageUrl: imageUrl,
             defaultImageUrl: AppConstants.defaultClassImageUrl,
-            onChanged: onImageChanged,
+            onUploaded: onImageChanged,
           ),
           CustomTextField(
             controller: nameController,

@@ -128,7 +128,7 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
   // blank so the signer sees where their name will land).
   Map<String, String> _renderValues() => {
         kWaiverParamMemberName: widget.memberName,
-        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamGymName: selectedGym.gymName ?? '',
         kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.

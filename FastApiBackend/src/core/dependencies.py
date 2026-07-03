@@ -169,6 +169,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
 )
 from src.tasks.service.tasks_service import TasksService
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.videos.service.member_video_profile_service import (
     MemberVideoProfileService,
 )
@@ -213,6 +214,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.videos.videos_router",
             "src.presets.presets_router",
             "src.theme.theme_router",
+            "src.uploads.uploads_router",
         ],
     )
 
@@ -231,6 +233,17 @@ class DependencyInjector(containers.DeclarativeContainer):
     classes_version_expander = providers.Singleton(
         ClassesVersionExpander,
         expander=classes_expander,
+    )
+
+    # ── Uploads (image proxy → S3 + CloudFront CDN) ──────────────
+    # Singleton, not Factory: the service holds a reusable boto3 S3 client
+    # (built once in __init__ — construction loads botocore's service model
+    # and signer stack, too costly to repeat per request).
+    uploads_s3_service = providers.Singleton(
+        UploadsS3Service,
+        assets_bucket=settings.assets_bucket,
+        aws_region=settings.aws_region,
+        assets_cdn_base_url=settings.assets_cdn_base_url,
     )
 
     # ── Checkin domain (the class consumer side) ─────────────────
@@ -357,7 +370,11 @@ class DependencyInjector(containers.DeclarativeContainer):
         version_expander=classes_version_expander,
     )
 
-    rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
+    rewards_service = providers.Factory(
+        RewardsService,
+        db_pool=db_pool,
+        default_image_url=settings.default_reward_image_url,
+    )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
     ranks_service = providers.Factory(RanksService, db_pool=db_pool)
@@ -496,6 +513,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         expander=classes_expander,
         default_class_image_url=settings.default_class_image_url,
+        default_reward_image_url=settings.default_reward_image_url,
     )
 
     # === CRM billing DI providers (restored) ===

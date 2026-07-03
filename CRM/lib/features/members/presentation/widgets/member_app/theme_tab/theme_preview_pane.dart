@@ -26,8 +26,10 @@ List<T> _fillSlots<T>(List<T>? real, List<T> defaults) {
 
 /// The left pane: a large phone mockup that fills the available space,
 /// showing the active showcase screen (re-themed live, animation looping),
-/// with prev/next arrows, a tappable view list, and an "edit gym name / logo"
-/// button beneath it.
+/// with prev/next arrows and a tappable view list beneath it. The gym name +
+/// logo shown in the mock are edited via the "Edit gym name / logo" button
+/// under the controls ([onEditBranding], admin context only — the public
+/// theme browser passes null and gets no button).
 class ThemePreviewPane extends StatelessWidget {
   const ThemePreviewPane({
     super.key,
@@ -39,18 +41,18 @@ class ThemePreviewPane extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelect,
-    required this.onEditBranding,
+    this.onEditBranding,
   });
 
   final Future<void> engineReady;
   final int slide;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelect;
-  final VoidCallback onEditBranding;
+  final VoidCallback? onEditBranding;
 
   @override
   Widget build(BuildContext context) {
@@ -78,10 +80,16 @@ class ThemePreviewPane extends StatelessWidget {
           onNext: onNext,
           onSelect: onSelect,
         ),
-        AppOutlineButton(
-          text: 'Edit gym name / logo',
-          onPressed: onEditBranding,
-        ),
+        if (onEditBranding != null)
+          AppOutlineButton(
+            text: 'Edit gym name / logo',
+            icon: Icon(
+              Symbols.edit_sharp,
+              size: DesignConstants.iconSizeMedium,
+              weight: DesignConstants.iconWeight,
+            ),
+            onPressed: onEditBranding,
+          ),
       ],
     );
   }
@@ -100,7 +108,7 @@ class _PreviewContent extends StatelessWidget {
   final ShowcaseScreen screen;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
 
   @override
   Widget build(BuildContext context) {

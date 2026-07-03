@@ -22,6 +22,7 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
+  logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
@@ -222,10 +223,9 @@ Table gym_rewards {
   reward_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   title varchar [not null]
-  amount_off varchar
-  image_url varchar
+  image_url varchar [not null, note: 'every reward has an image -- writers fill the platform default (wrapped-gift-box photo) when none is provided']
   point_cost integer [not null]
-  price_label varchar [note: 'nullable; display label for the reward price / value (e.g. "$50 off")']
+  price_label varchar [not null, note: 'reward value label/badge, e.g. "Free", "30% off" -- writers fill "Free" when none is provided']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
@@ -239,8 +239,10 @@ Table member_reward_redemptions {
   gym_id uuid [not null]
   member_id uuid [not null]
   reward_id uuid [not null]
-  point_cost integer [not null]
-  redeemed_at timestamptz [not null, default: `now()`]
+  point_cost integer [not null, note: 'snapshot at redemption time']
+  requested_at timestamptz [not null, default: `now()`, note: 'when the member requested the redemption']
+  status reward_redemption_status [not null, default: 'pending', note: 'backend-written']
+  resolved_at timestamptz [note: 'backend-written; set when staff approves/rejects; NULL iff status=pending']
 }
 
 Table gym_waivers {

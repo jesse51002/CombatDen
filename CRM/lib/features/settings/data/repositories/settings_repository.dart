@@ -60,4 +60,30 @@ class SettingsRepository {
       throw DatabaseException(e.message);
     }
   }
+
+  /// `PUT /api/v1/gyms/{gymId}` — save the gym's identity: its [gymName] and
+  /// [logoUrl] (the uploaded brand logo's CDN URL; an explicit null clears the
+  /// logo). Patch semantics — both fields are sent together, so pass the
+  /// current logo unchanged when only the name is edited. Throws
+  /// [DatabaseException] on any failure so the bloc can surface the error.
+  Future<void> updateGymProfile({
+    required String gymId,
+    required String gymName,
+    required String? logoUrl,
+  }) async {
+    try {
+      await _apiClient.put<dynamic>(
+        '/api/v1/gyms/$gymId',
+        data: {
+          'data': {'gym_name': gymName, 'logo_url': logoUrl},
+        },
+      );
+    } on ServerException catch (e) {
+      throw DatabaseException(
+        'Couldn\'t update your gym profile. Please try again.${e.detail != null ? ' (${e.detail})' : ''}',
+      );
+    } on NetworkException catch (e) {
+      throw DatabaseException(e.message);
+    }
+  }
 }

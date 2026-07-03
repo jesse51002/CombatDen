@@ -11,6 +11,6 @@ RewardCardModel _$RewardCardModelFromJson(Map<String, dynamic> json) =>
       rewardId: json['reward_id'] as String,
       title: json['title'] as String,
       pointCost: (json['point_cost'] as num).toInt(),
-      amountOff: json['amount_off'] as String?,
+      priceLabel: json['price_label'] as String?,
       imageUrl: json['image_url'] as String?,
     );

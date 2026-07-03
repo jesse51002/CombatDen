@@ -6,6 +6,7 @@ import logging
 from uuid import UUID
 
 from schema.immutable_columns import MEMBERS as MEMBERS_IMMUTABLE
+from sqlalchemy import exc as sa_exc
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -72,6 +73,54 @@ class MembersManagementUpdate(MembersManagementBase):
         if not row:
             raise ValueError("Member not found")
         return MemberResponse(**row)
+
+    # ── Points ─────────────────────────────────────────────────
+
+    async def adjust_points(
+        self,
+        member_id: UUID,
+        amount: int,
+    ) -> int:
+        """Apply a signed points adjustment and return the new balance.
+
+        The SQL locks the member row (FOR UPDATE) and applies the delta only
+        when the result would not go below zero. An empty RETURNING means
+        either the member does not exist or the adjustment would underflow —
+        both raise ValueError so the router maps them to 400.
+
+        Args:
+            member_id: The member whose balance to adjust.
+            amount: Signed integer — positive awards points, negative corrects.
+
+        Returns:
+            The new points_balance after the adjustment.
+
+        Raises:
+            ValueError: Member not found, or adjustment would make balance
+                negative, or a database constraint prevented the write.
+        """
+        sql = load_sql(SQL_DIR / "adjust_points.sql")
+        try:
+            async with self._db_pool.session() as session:
+                result = await session.execute(
+                    text(sql),
+                    {"member_id": str(member_id), "amount": amount},
+                )
+                row = result.mappings().fetchone()
+                await session.commit()
+        except (sa_exc.IntegrityError, sa_exc.DataError) as exc:
+            # DataError = out-of-range arithmetic (an int4 overflow of
+            # points_balance + amount) — same "the DB refused the write"
+            # class as a constraint violation, so both map to the 400 path.
+            raise ValueError(
+                f"Points adjustment rejected by database constraint: {exc}"
+            ) from exc
+        if not row:
+            raise ValueError(
+                f"Points adjustment rejected: member {member_id} not found "
+                "or adjustment would make balance negative"
+            )
+        return row["points_balance"]
 
     # ── Update Card ────────────────────────────────────────────
 

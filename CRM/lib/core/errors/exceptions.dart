@@ -152,3 +152,13 @@ class WaiverGateException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Thrown when an approve/reject on a redemption returns HTTP 409,
+/// meaning another staff member has already decided it.
+class RedemptionAlreadyDecidedException implements Exception {
+  const RedemptionAlreadyDecidedException();
+
+  @override
+  String toString() =>
+      'This redemption has already been decided by another staff member.';
+}

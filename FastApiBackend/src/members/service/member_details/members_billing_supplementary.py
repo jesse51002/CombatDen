@@ -9,6 +9,7 @@ from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
     BillingLinkedAccount,
     BillingRewardCard,
+    PendingRedemptionCard,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -42,6 +43,7 @@ class MembersBillingSupplementary:
         self._member_id = member_id
         self._rewards: dict[UUID, BillingRewardCard] = {}
         self._redeemed_rewards: list[BillingRewardCard] = []
+        self._pending_redemptions: list[PendingRedemptionCard] = []
         self._authorized_payers: list[BillingLinkedAccount] = []
         self._authorized_to_pay_for: list[BillingLinkedAccount] = []
 
@@ -56,6 +58,10 @@ class MembersBillingSupplementary:
         async with self._db_pool.session() as session:
             self._rewards = await self._fetch_rewards(session, gym_params)
             self._redeemed_rewards = await self._fetch_reward_redemptions(
+                session,
+                member_params,
+            )
+            self._pending_redemptions = await self._fetch_pending_redemptions(
                 session,
                 member_params,
             )
@@ -83,7 +89,7 @@ class MembersBillingSupplementary:
             reward = BillingRewardCard(
                 reward_id=row["reward_id"],
                 title=row["title"],
-                amount_off=row["amount_off"],
+                price_label=row["price_label"],
                 image_url=row["image_url"],
                 point_cost=row["point_cost"],
             )
@@ -104,12 +110,35 @@ class MembersBillingSupplementary:
                 BillingRewardCard(
                     reward_id=row["reward_id"],
                     title=row["title"],
-                    amount_off=row["amount_off"],
+                    price_label=row["price_label"],
                     image_url=row["image_url"],
                     point_cost=row["point_cost"],
                 )
             )
         return redeemed
+
+    async def _fetch_pending_redemptions(
+        self,
+        session: AsyncSession,
+        params: dict[str, str],
+    ) -> list[PendingRedemptionCard]:
+        """Load member's pending (awaiting-approval) reward redemptions."""
+        sql = load_sql(_DETAILS_SQL / "member_details_pending_redemptions.sql")
+        result = await session.execute(text(sql), params)
+        pending: list[PendingRedemptionCard] = []
+        for row in result.mappings().all():
+            pending.append(
+                PendingRedemptionCard(
+                    redemption_id=row["redemption_id"],
+                    reward_id=row["reward_id"],
+                    title=row["title"],
+                    price_label=row["price_label"],
+                    image_url=row["image_url"],
+                    point_cost=row["point_cost"],
+                    requested_at=row["requested_at"],
+                )
+            )
+        return pending
 
     async def _fetch_roster(
         self,
@@ -134,6 +163,11 @@ class MembersBillingSupplementary:
     def redeemed_rewards(self) -> list[BillingRewardCard]:
         """Return all recently redeemed rewards for the member."""
         return self._redeemed_rewards
+
+    @property
+    def pending_redemptions(self) -> list[PendingRedemptionCard]:
+        """Return all pending (awaiting-approval) redemptions for the member."""
+        return self._pending_redemptions
 
     @property
     def authorized_payers(self) -> list[BillingLinkedAccount]:

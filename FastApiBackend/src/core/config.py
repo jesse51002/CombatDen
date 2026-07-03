@@ -102,6 +102,19 @@ class Settings(BaseSettings):
     # Default result count for GET /videos/search (the route caps at 50).
     video_search_limit: int = 20
 
+    # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
+    # build-time asset pipeline populates (theme images, fonts, etc.). This
+    # backend is the only RUNTIME writer into it (the uploads domain, e.g.
+    # reward/member images uploaded live from the CRM); ThemeService only
+    # writes at build time via its own scripts.
+    # AWS credentials are read from the standard boto3 credential chain
+    # (env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, ~/.aws/credentials,
+    # or an EC2/App Runner instance role). For local upload testing, add
+    # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to FastApiBackend/.env.
+    assets_bucket: str = "combatden-assets"
+    aws_region: str = "us-east-1"
+    assets_cdn_base_url: str = "https://cdn.combatden.net"
+
     # Logging Configuration
     log_level: str = "DEBUG"
 
@@ -135,6 +148,15 @@ class Settings(BaseSettings):
     # Pexels 1552242) whenever no image is provided.
     default_class_image_url: str = (
         "https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg"
+        "?auto=compress&cs=tinysrgb&w=1200"
+    )
+
+    # Every reward HAS an image (gym_rewards.image_url is NOT NULL — the
+    # points-store card leans on it): reward create and the preset import
+    # fill this platform default (a generic wrapped-gift-box handoff photo,
+    # Pexels 5493207) whenever no image is provided.
+    default_reward_image_url: str = (
+        "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg"
         "?auto=compress&cs=tinysrgb&w=1200"
     )
 
