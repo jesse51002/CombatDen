@@ -23,8 +23,8 @@ class ThemeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      // Records the gym globally (rewards/classes/spec) AND brands with its
-      // theme — one call keeps the global and the live preview in lockstep.
+      // Records the previewed design + its category globally and brands the
+      // live preview with it (theme-only — decoupled from the content gym).
       onTap: () => selectedGym.selectStyle(style),
       child: Container(
         padding: const EdgeInsets.all(DesignConstants.spacingMedium),

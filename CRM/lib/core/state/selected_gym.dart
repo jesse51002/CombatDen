@@ -4,7 +4,6 @@ import 'package:theme_flutter/data/models/customization_style.dart';
 
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/gym_setup/data/models/employee_role.dart';
-import 'package:crm/features/members/data/gym_api_client.dart';
 import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/gym_detail.dart';
 
@@ -16,12 +15,15 @@ import 'package:crm/features/members/data/gym_detail.dart';
 ///   discounts). Set once at sign-in (or via the gym picker) through
 ///   [setActiveGym]. [role] is the caller's role at that gym.
 /// - [videoGymId] — the **VideoService content key** (a string like `boxing`).
-///   It drives the read-only member-app surfaces: the loyalty store, the videos
-///   feed/content focus, the phone preview, and the dashboard's Upcoming
-///   Classes card. (The Schedule screen now reads the real `classes` domain
-///   scoped by [gymId], not this content key.) Picking a gym in the theme picker
-///   records it here, applies its theme via [ThemeRuntime.selectDesign], and
-///   fetches the whole [GymDetail] **once**.
+///   It drives the read-only member-app content surfaces: the loyalty store,
+///   the videos feed/content focus, the phone preview. Seeded to a default at
+///   sign-in and overridden only by a preset import ([setVideoGymId]).
+///
+/// **Theme selection is decoupled from both ids.** Picking a theme in the
+/// picker records only the design id ([designId]) and its [themeCategory] and
+/// re-brands the live preview via [ThemeRuntime.selectDesign] — it does NOT
+/// touch [videoGymId], [detail], or [displayName]. The theme catalog is now the
+/// ThemeService styles list, which is gym-agnostic.
 ///
 /// The two ids never mix: passing the real [gymId] to the VideoService 404s,
 /// and passing a [videoGymId] to a CRM member query is meaningless.
@@ -30,18 +32,22 @@ import 'package:crm/features/members/data/gym_detail.dart';
 /// listenable, not a state-management framework. Surfaces watch it with
 /// `ListenableBuilder(listenable: selectedGym, ...)`.
 class SelectedGym extends ChangeNotifier {
-  SelectedGym({GymApiClient? client}) : _client = client ?? GymApiClient();
-
-  final GymApiClient _client;
-
   // ── Real admin gym (FastApiBackend UUID) ──
   String? _gymId;
   EmployeeRole? _role;
   String? _timezone;
 
+  /// The gym's persisted ThemeService design id (`gyms.theme_design_id`),
+  /// hydrated at login. The "Set as app theme" action compares the previewed
+  /// design against this to know whether the pick is already saved.
+  String? _savedThemeDesignId;
+
   // ── VideoService content selection ──
   String? _videoGymId;
+
+  // ── Live theme selection (decoupled from the gym) ──
   String? _designId;
+  String? _themeCategory;
   String _displayName = '';
 
   GymDetail? _detail;
@@ -61,10 +67,23 @@ class SelectedGym extends ChangeNotifier {
   /// timezone save commits.
   String? get timezone => _timezone;
 
+  /// The gym's persisted ThemeService design id; null until it loads (or until
+  /// a theme has ever been saved). Updated in place by [updateSavedThemeDesignId]
+  /// when the "Set as app theme" save commits.
+  String? get savedThemeDesignId => _savedThemeDesignId;
+
   /// The VideoService content gym id (the content key); null before first
-  /// select. Drives the read-only member-app preview surfaces.
+  /// select. Drives the read-only member-app content surfaces.
   String? get videoGymId => _videoGymId;
+
+  /// The currently-previewed ThemeService design id; null before first pick.
   String? get designId => _designId;
+
+  /// The picked theme's showcase category (Fighting/Yoga/…); null until a theme
+  /// is picked or [reconcileFromCatalog] resolves it for a seeded/deep-linked
+  /// design. Keys the phone-preview's demo class/reward defaults.
+  String? get themeCategory => _themeCategory;
+
   String get displayName => _displayName;
 
   /// The fetched detail (rewards / classes / spec); null until it loads.
@@ -73,19 +92,23 @@ class SelectedGym extends ChangeNotifier {
   Object? get error => _error;
 
   /// Record the active admin gym: the real gym UUID, its display name, the
-  /// caller's [role], and the gym's IANA [timezone]. Set once at sign-in / via
-  /// the gym picker. Independent of the VideoService content selection below —
-  /// it does not touch [videoGymId] or the theme.
+  /// caller's [role], the gym's IANA [timezone], and the gym's persisted
+  /// ThemeService design id ([savedThemeDesignId]). Set once at sign-in / via
+  /// the gym picker. Independent of the VideoService content selection and the
+  /// live theme — it does not touch [videoGymId] or apply a theme (the theme
+  /// runtime isn't initialized yet at login).
   void setActiveGym({
     required String gymId,
     required String displayName,
     required EmployeeRole role,
     required String timezone,
+    String? savedThemeDesignId,
   }) {
     _gymId = gymId;
     _displayName = displayName;
     _role = role;
     _timezone = timezone;
+    _savedThemeDesignId = savedThemeDesignId;
     notifyListeners();
   }
 
@@ -96,9 +119,17 @@ class SelectedGym extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Update the VideoService content gym id after a preset import, and (in the
-  /// admin context) re-fetch the real gym's showcase so the preview surfaces
-  /// immediately reflect the imported content.
+  /// Record the gym's persisted ThemeService design id after the "Set as app
+  /// theme" save commits (NOT optimistic — only called on success).
+  void updateSavedThemeDesignId(String themeDesignId) {
+    _savedThemeDesignId = themeDesignId;
+    notifyListeners();
+  }
+
+  /// Set (or re-seed) the VideoService content gym id and, in the admin context
+  /// (`gymId != null`), re-fetch the real gym's showcase so the preview surfaces
+  /// immediately reflect it. Called once at sign-in (seed with the default
+  /// content gym) and again after a preset import.
   ///
   /// **Does NOT touch the theme.** Theme selection/application is the Theme
   /// tab's job — a preset import from Settings only changes content, never the
@@ -111,25 +142,28 @@ class SelectedGym extends ChangeNotifier {
   /// content key changes here; the real gym UUID is untouched.
   void setVideoGymId({required String videoGymId}) {
     _videoGymId = videoGymId;
-    // Admin: re-fetch showcase so Loyalty/classes/schedule reflect the import.
+    // Admin: re-fetch showcase so Loyalty/classes/schedule reflect the content.
     if (_gymId != null) {
-      _fetchDetail(videoGymId);
+      _fetchDetail();
     }
     notifyListeners();
   }
 
-  /// Clear all selection on sign-out — both the admin gym ([gymId]/[role]) and
-  /// the VideoService content selection — so the next authenticated session
-  /// resolves gyms from scratch. Without this, [gymId] persists past logout and
-  /// the auth gate skips the gym picker (it mounts the workspace whenever
-  /// `gymId != null`), silently reusing the previous gym after a re-login. The
-  /// counterpart to [setActiveGym]/[select]; called from the auth gate teardown.
+  /// Clear all selection on sign-out — the admin gym ([gymId]/[role]/…), the
+  /// VideoService content selection, and the live theme selection — so the next
+  /// authenticated session resolves gyms from scratch. Without this, [gymId]
+  /// persists past logout and the auth gate skips the gym picker (it mounts the
+  /// workspace whenever `gymId != null`), silently reusing the previous gym
+  /// after a re-login. The counterpart to [setActiveGym]; called from the auth
+  /// gate teardown.
   void reset() {
     _gymId = null;
     _role = null;
     _timezone = null;
+    _savedThemeDesignId = null;
     _videoGymId = null;
     _designId = null;
+    _themeCategory = null;
     _displayName = '';
     _detail = null;
     _isLoading = false;
@@ -137,103 +171,62 @@ class SelectedGym extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Select [style] from the picker: record its content gym, brand with its
-  /// theme, and fetch its detail. No-op if it's already the selected content
-  /// gym.
-  void selectStyle(ThemeStyle style) => select(
-    videoGymId: style.gymId,
-    designId: style.id,
-    displayName: style.displayName,
-  );
-
-  /// Select a VideoService content gym by its ids. [videoGymId] may be null when
-  /// only the theme is known (a deep link); detail then waits for
-  /// [reconcileFromCatalog] to supply it.
-  void select({
-    required String? videoGymId,
-    required String designId,
-    required String displayName,
-  }) {
-    final sameGym = _videoGymId == videoGymId && _designId == designId;
-    if (sameGym && (_detail != null || _isLoading)) return;
-
-    _videoGymId = videoGymId;
-    _designId = designId;
-    _displayName = displayName;
-
+  /// Select [style] from the picker: record the previewed design id + its
+  /// [themeCategory] and re-brand the live preview. **Theme-only** — it does
+  /// NOT touch [videoGymId], [detail], or [displayName]; the theme catalog is
+  /// gym-agnostic and the real gym's content is fetched independently. No-op if
+  /// it's already the previewed design.
+  void selectStyle(ThemeStyle style) {
+    if (_designId == style.id && _themeCategory == style.category) return;
+    _designId = style.id;
+    _themeCategory = style.category;
     // Drive branding; idempotent — skip when the engine is already on it.
-    if (designId.isNotEmpty && ThemeRuntime.activeDesignId != designId) {
-      ThemeRuntime.selectDesign(designId);
+    if (style.id.isNotEmpty && ThemeRuntime.activeDesignId != style.id) {
+      ThemeRuntime.selectDesign(style.id);
     }
-
-    if (videoGymId == null || videoGymId.isEmpty) {
-      _detail = null;
-      _error = null;
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-    _fetchDetail(videoGymId);
+    notifyListeners();
   }
 
-  Future<void> _fetchDetail(String videoGymId) async {
+  Future<void> _fetchDetail() async {
+    final gymId = _gymId;
+    if (gymId == null) return; // admin-only; the public browser has no detail.
     _detail = null;
     _error = null;
     _isLoading = true;
     notifyListeners();
-    if (_gymId != null) {
-      // Admin path: fetch real gym showcase via authed ApiClient.
-      // Guard staleness on the real gym UUID — if the admin switches gyms
-      // (sign-out / gym picker) during the fetch, drop the stale result.
-      final gymIdAtStart = _gymId!;
-      try {
-        final detail = await GymContentRepository(
-          ApiClient(),
-        ).fetchShowcase(gymIdAtStart);
-        if (_gymId != gymIdAtStart) return;
-        _detail = detail;
-      } catch (e) {
-        if (_gymId != gymIdAtStart) return;
-        _error = e;
-      } finally {
-        if (_gymId == gymIdAtStart) {
-          _isLoading = false;
-          notifyListeners();
-        }
-      }
-    } else {
-      // Public browser path: fetch template by video_gym slug (unauthenticated).
-      // Guard staleness on the slug — a newer picker selection supersedes this.
-      try {
-        final detail = await _client.fetchGym(videoGymId);
-        if (_videoGymId != videoGymId) return;
-        _detail = detail;
-      } catch (e) {
-        if (_videoGymId != videoGymId) return;
-        _error = e;
-      } finally {
-        if (_videoGymId == videoGymId) {
-          _isLoading = false;
-          notifyListeners();
-        }
+    // Guard staleness on the real gym UUID — if the admin switches gyms
+    // (sign-out / gym picker) during the fetch, drop the stale result.
+    try {
+      final detail = await GymContentRepository(ApiClient()).fetchShowcase(gymId);
+      if (_gymId != gymId) return;
+      _detail = detail;
+    } catch (e) {
+      if (_gymId != gymId) return;
+      _error = e;
+    } finally {
+      if (_gymId == gymId) {
+        _isLoading = false;
+        notifyListeners();
       }
     }
   }
 
-  /// Seed the content selection from a loaded gym catalog when only the theme is
-  /// known (the initial or deep-linked case): find the catalog row for the
-  /// intended design and select it. **Only fires when no content gym is selected
-  /// yet** — once one is chosen (by the seed or an explicit pick) this never
-  /// overrides it, so a pick can't be clobbered by a later page-load reconcile.
-  /// Matches on the intended [_designId], not [ThemeRuntime.activeDesignId],
-  /// which lags behind a pick (selectDesign is async).
+  /// Resolve [themeCategory] from a loaded style catalog for the currently
+  /// previewed [designId] when the category isn't known yet — a seeded or
+  /// deep-linked theme carries only its id (via the URL / the gym's saved
+  /// design), not its category, until its catalog row streams in. **Only fires
+  /// when no category is locked in yet**, so an explicit pick is never
+  /// overridden. Matches on the intended [designId], falling back to
+  /// [ThemeRuntime.activeDesignId] (which the seed applied).
   void reconcileFromCatalog(Iterable<ThemeStyle> items) {
-    if (_videoGymId != null) return; // a content gym is locked in — don't override
+    if (_themeCategory != null) return; // category known — don't override a pick
     final target = _designId ?? ThemeRuntime.activeDesignId;
     if (target == null || target.isEmpty) return;
     for (final s in items) {
-      if (s.id == target && (s.gymId?.isNotEmpty ?? false)) {
-        selectStyle(s);
+      if (s.id == target) {
+        _designId = target;
+        _themeCategory = s.category;
+        notifyListeners();
         return;
       }
     }

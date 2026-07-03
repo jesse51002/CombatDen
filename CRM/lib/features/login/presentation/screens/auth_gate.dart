@@ -138,12 +138,10 @@ class _AuthenticatedGateState
   /// and the VideoService `video_gym` id (a string like `boxing`) are
   /// separate id spaces with no mapping, so passing the real UUID 404s
   /// the VideoService and breaks every content surface. The real gym's
-  /// name shows in the chrome via [displayName]. The Theme-tab picker
-  /// overrides the content gym for preview — `select` is idempotent and
-  /// `reconcileFromCatalog` only seeds when nothing is locked, so this
-  /// never clobbers a later pick. `designId` stays empty: branding
-  /// defaults until a Theme-tab pick (seeding a design here is unsafe —
-  /// `ThemeRuntime` isn't initialized yet).
+  /// name shows in the chrome via [displayName]. The gym's saved
+  /// ThemeService design ([GymWithRole.themeDesignId]) is passed through
+  /// so the Theme tab can boot on it; the theme itself isn't applied here
+  /// (the theme runtime isn't initialized yet — the Theme tab does it).
   void _activate(GymWithRole gym) {
     // Hydrate the saved CRM appearance for this gym before the workspace paints
     // (the app root rebuilds MaterialApp off [themeController]).
@@ -153,12 +151,11 @@ class _AuthenticatedGateState
       displayName: gym.gymName,
       role: gym.role,
       timezone: gym.timezone,
+      savedThemeDesignId: gym.themeDesignId,
     );
-    selectedGym.select(
-      videoGymId: AppConstants.defaultVideoGymId,
-      designId: '',
-      displayName: gym.gymName,
-    );
+    // Seed the content gym (drives the read-only member-app content surfaces);
+    // in the admin context this also fetches the real gym's showcase.
+    selectedGym.setVideoGymId(videoGymId: AppConstants.defaultVideoGymId);
   }
 
   @override

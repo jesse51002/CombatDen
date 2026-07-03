@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/mock_member_app_preview.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/edit_branding_dialog.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
@@ -13,11 +14,12 @@ import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_screen.dart';
 import 'package:crm/showcase/showcase_slots.dart';
 
-// The tenant + the preset the engine initializes on, only so the customization
-// runtime has something to fetch on first paint (the library/gym-select screen
-// uses AppManagement's own design, not this). NO gym is pre-selected — the
-// member-app surfaces stay empty until the admin picks one.
+// The tenant the engine initializes on. NO gym is pre-selected — the member-app
+// content surfaces stay empty until the admin picks one.
 const String _kAppId = 'combatden';
+// Last-resort seed when neither the URL nor the gym's saved theme supplies one
+// (e.g. the public standalone browser, or an admin gym with no theme yet), only
+// so the customization runtime has something to fetch on first paint.
 const String _kSeedDesignId = 'ApexMMA';
 
 // Below this preview width the phone goes full-bleed (mobile): no side-by-side
@@ -68,13 +70,18 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
   // `ThemeRuntime.changes`, which throws until `ThemeService` is registered.
   Listenable? _themeChanges;
 
-  // Seed the engine on the deep-linked theme so it paints right the first
-  // time; `selectDesign` corrects an in-session re-entry where the engine is
-  // already up. Both are no-throw and fall back to bundled defaults.
+  // Seed the engine on the intended theme — the deep-linked one, else the gym's
+  // saved design — so it paints right the first time; `selectDesign` corrects an
+  // in-session re-entry where the engine is already up. Both are no-throw and
+  // fall back to bundled defaults.
   Future<void> _bootstrap() async {
+    // The gym's persisted design (admin) or the deep-linked theme (either
+    // target) is what the engine should boot on; the standalone browser and an
+    // admin gym with no saved theme fall through to the constant seed.
+    final intended = _urlTheme ?? selectedGym.savedThemeDesignId;
     await ThemeRuntime.initialize(
       appId: _kAppId,
-      designId: _urlTheme ?? _kSeedDesignId,
+      designId: intended ?? _kSeedDesignId,
       expectedColors: ShowcaseSlots.expectedColors,
       expectedImages: ShowcaseSlots.expectedImages,
       expectedFonts: ShowcaseSlots.expectedFonts,
@@ -85,13 +92,13 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
       // `?v=` URLs pick up any asset edits.
       livePreview: true,
     );
-    final theme = _urlTheme;
-    if (theme != null && ThemeRuntime.activeDesignId != theme) {
-      await ThemeRuntime.selectDesign(theme);
+    if (intended != null && ThemeRuntime.activeDesignId != intended) {
+      await ThemeRuntime.selectDesign(intended);
     }
-    // No gym is seeded — selection is entirely driven by the admin's pick. A
-    // deep-linked theme (phone view on reload) is resolved to its gym by the
-    // side-pane's `reconcileFromCatalog` once the catalog loads.
+    // No gym is content-seeded here — the theme selection is decoupled from the
+    // content gym. A seeded/deep-linked theme (phone view on reload) is resolved
+    // to its showcase category by the side-pane's `reconcileFromCatalog` once
+    // the catalog loads.
     if (!mounted) return;
     // Engine registered now — safe to listen and to mirror the current state
     // into the URL. The listener keeps the URL in step on every later

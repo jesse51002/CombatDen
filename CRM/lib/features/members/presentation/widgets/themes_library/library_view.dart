@@ -10,7 +10,7 @@ import 'package:crm/shared/widgets/filter_pills.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
-import 'package:crm/features/members/data/gyms_pager.dart';
+import 'package:theme_flutter/data/styles_pager.dart';
 
 const String _kAllChip = 'All';
 const int _kPageSize = 50;
@@ -38,7 +38,7 @@ class LibraryView extends StatefulWidget {
 }
 
 class _LibraryViewState extends State<LibraryView> {
-  final GymsPager _pager = GymsPager(pageSize: _kPageSize);
+  final StylesPager _pager = StylesPager(pageSize: _kPageSize);
   final ScrollController _scrollController = ScrollController();
   // Tags the card of the already-selected gym so we can center it on entry.
   final GlobalKey _selectedCardKey = GlobalKey();
@@ -94,7 +94,7 @@ class _LibraryViewState extends State<LibraryView> {
   List<String> _chipsFor(List<ThemeStyle> items) {
     final seen = <String>{
       for (final s in items)
-        if ((s.gymType ?? '').isNotEmpty) s.gymType!,
+        if ((s.category ?? '').isNotEmpty) s.category!,
     };
     final sorted = seen.toList()..sort();
     return [_kAllChip, ...sorted];
@@ -102,11 +102,12 @@ class _LibraryViewState extends State<LibraryView> {
 
   List<ThemeStyle> _visible(List<ThemeStyle> items) {
     if (_selected == _kAllChip) return items;
-    return items.where((s) => s.gymType == _selected).toList();
+    return items.where((s) => s.category == _selected).toList();
   }
 
   void _pick(ThemeStyle style) {
-    // Records the gym globally (rewards/classes/spec) AND brands with its theme.
+    // Records the previewed design + its category globally and brands with it
+    // (theme-only — decoupled from the content gym).
     selectedGym.selectStyle(style);
     widget.onPicked();
   }
@@ -237,8 +238,7 @@ class _Grid extends StatelessWidget {
         text: isLoading
             ? 'Loading themes…'
             : errored
-                ? 'Could not reach the video service (the gym browser, '
-                      'port 8002).'
+                ? 'Could not reach the theme service.'
                 : 'No themes match this filter.',
       );
     }

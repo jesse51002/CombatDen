@@ -9,8 +9,10 @@ import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 /// The auth gate lists these after sign-in to choose the active
 /// gym (one gym → straight in; several → the gym picker). The
 /// chosen gym's [gymId] (a real UUID) then scopes every CRM member
-/// query, and [themePreference] (the caller's saved CRM appearance
-/// for that gym) hydrates the theme.
+/// query, [themePreference] (the caller's saved CRM appearance for
+/// that gym) hydrates the admin app's light/dark mode, and
+/// [themeDesignId] (the gym's saved ThemeService design) seeds the
+/// Theme-tab preview.
 class GymWithRole {
   final String gymId;
   final String gymName;
@@ -19,6 +21,11 @@ class GymWithRole {
   final EmployeeRole role;
   final ThemeMode themePreference;
 
+  /// The gym's persisted ThemeService design id (`gyms.theme_design_id`);
+  /// null until a theme is chosen. Seeds the Theme tab so it boots on the
+  /// gym's saved branding.
+  final String? themeDesignId;
+
   const GymWithRole({
     required this.gymId,
     required this.gymName,
@@ -26,6 +33,7 @@ class GymWithRole {
     required this.role,
     required this.themePreference,
     this.gymDescription,
+    this.themeDesignId,
   });
 
   factory GymWithRole.fromJson(Map<String, dynamic> json) {
@@ -37,6 +45,7 @@ class GymWithRole {
       role: EmployeeRole.fromJson(json['employee_type'] as String),
       themePreference:
           themeModeFromApi(json['theme_preference'] as String?),
+      themeDesignId: json['theme_design_id'] as String?,
     );
   }
 }
