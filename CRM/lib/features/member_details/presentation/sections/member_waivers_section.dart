@@ -134,6 +134,9 @@ class _MemberWaiversSectionState
               }
               return AppDataTable(
                 shrinkWrap: true,
+                // The three content columns share the width equally
+                // (multiple fill columns split the remaining space);
+                // the trailing action column stays button-sized.
                 columns: const [
                   AppDataTableColumn(
                     label: 'Waiver',
@@ -141,11 +144,11 @@ class _MemberWaiversSectionState
                   ),
                   AppDataTableColumn(
                     label: 'Status',
-                    minWidth: 150,
+                    fill: true,
                   ),
                   AppDataTableColumn(
                     label: 'Signed',
-                    minWidth: 120,
+                    fill: true,
                   ),
                   AppDataTableColumn(
                     label: '',
@@ -215,21 +218,15 @@ class _MemberWaiversSectionState
   }
 }
 
-/// Waiver name plus a dim caption when the row is only a record —
-/// "archived" (the waiver is deleted) and/or "not required" (not in
-/// the member's current required set). Both can apply at once.
+/// Waiver name plus a dim "archived" caption when the waiver itself is
+/// deleted (the row survives purely as the signature record — which also
+/// explains why it carries no sign action).
 class _WaiverNameCell extends StatelessWidget {
   final MemberWaiverStatus status;
 
   const _WaiverNameCell({required this.status});
 
-  String? get _caption {
-    final tags = <String>[
-      if (status.isDeleted) 'archived',
-      if (!status.required) 'not required',
-    ];
-    return tags.isEmpty ? null : tags.join(' · ');
-  }
+  String? get _caption => status.isDeleted ? 'archived' : null;
 
   @override
   Widget build(BuildContext context) {
