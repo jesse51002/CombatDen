@@ -20,6 +20,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 /// BLoC for the Specific Member Detail screen.
@@ -31,6 +32,11 @@ class MemberDetailBloc
   /// wiring (`ScheduleRepository.signUp`) for this one member/occurrence —
   /// there is no `MemberRepository` equivalent.
   final ScheduleRepository _scheduleRepository;
+
+  /// Approve/reject of a pending redemption reuse the rewards feature's
+  /// repository (`RewardsRepository.approve/reject`) — the same endpoints
+  /// the Loyalty tab drives, so there is a single redemption client.
+  final RewardsRepository _rewardsRepository;
 
   /// Drives the post-charge invoice poll (5/10/15/30/60s). Each
   /// charge / start / refund / mark-paid-cash restarts it, so a new
@@ -47,9 +53,11 @@ class MemberDetailBloc
   MemberDetailBloc({
     required MemberRepository repository,
     required ScheduleRepository scheduleRepository,
+    required RewardsRepository rewardsRepository,
     InvoicePoller? poller,
   })  : _repository = repository,
         _scheduleRepository = scheduleRepository,
+        _rewardsRepository = rewardsRepository,
         _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
@@ -1079,12 +1087,10 @@ class MemberDetailBloc
     ApproveRedemptionRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
-    await _runMutation(
+    await _runRedemptionDecision(
       actionLabel: 'Approve redemption',
       emit: emit,
-      action: () => _repository.approveRedemption(
-        event.redemptionId,
-      ),
+      action: () => _rewardsRepository.approve(event.redemptionId),
     );
   }
 
@@ -1092,13 +1098,83 @@ class MemberDetailBloc
     RejectRedemptionRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
-    await _runMutation(
+    await _runRedemptionDecision(
       actionLabel: 'Reject redemption',
       emit: emit,
-      action: () => _repository.rejectRedemption(
-        event.redemptionId,
-      ),
+      action: () => _rewardsRepository.reject(event.redemptionId),
     );
+  }
+
+  /// Approve/reject share the standard mutation happy-path (act → re-fetch
+  /// member detail → bump `refreshToken`) but must handle a **concurrent
+  /// decision** gracefully: another staff member may have already approved
+  /// or rejected the same redemption, which the repo raises as
+  /// [RedemptionAlreadyDecidedException] (HTTP 409). Rather than surface the
+  /// raw error and leave the now-stale row on screen, re-fetch member detail
+  /// (so the decided row disappears) and set a friendly `actionError`.
+  Future<void> _runRedemptionDecision({
+    required String actionLabel,
+    required Emitter<MemberDetailState> emit,
+    required Future<void> Function() action,
+  }) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+
+    emit(s.copyWith(isMutating: true, clearActionError: true));
+
+    try {
+      await action();
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        member: refreshed,
+        isMutating: false,
+        clearActionError: true,
+        refreshToken: current.refreshToken + 1,
+      ));
+    } on RedemptionAlreadyDecidedException {
+      await _refreshAfterAlreadyDecided(emit);
+    } catch (e, stackTrace) {
+      log('$actionLabel failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isMutating: false,
+        actionError: e.toString(),
+      ));
+    }
+  }
+
+  /// Re-fetch member detail after a 409 so the already-decided pending row
+  /// drops off, then surface a friendly, non-alarming message.
+  Future<void> _refreshAfterAlreadyDecided(
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    const message = 'That redemption was already decided by someone '
+        'else — the list has been refreshed.';
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        member: refreshed,
+        isMutating: false,
+        actionError: message,
+        refreshToken: current.refreshToken + 1,
+      ));
+    } catch (e, stackTrace) {
+      log(
+        'Refresh after already-decided redemption failed',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(isMutating: false, actionError: message));
+    }
   }
 
   Future<void> _onRedeemRewardForMember(

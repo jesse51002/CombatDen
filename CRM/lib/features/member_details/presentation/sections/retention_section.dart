@@ -314,9 +314,9 @@ class _RewardCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          if (reward.amountOff != null)
+          if (reward.priceLabel != null)
             Text(
-              reward.amountOff!,
+              reward.priceLabel!,
               style: DesignConstants.pSmall.copyWith(
                 color: DesignConstants.text2nd,
               ),

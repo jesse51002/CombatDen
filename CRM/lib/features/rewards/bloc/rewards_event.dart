@@ -17,14 +17,12 @@ class RewardsLoadRequested extends RewardsEvent {
 class RewardCreateRequested extends RewardsEvent {
   final String title;
   final int pointCost;
-  final String? amountOff;
   final String? priceLabel;
   final String? imageUrl;
 
   const RewardCreateRequested({
     required this.title,
     required this.pointCost,
-    this.amountOff,
     this.priceLabel,
     this.imageUrl,
   });
@@ -33,7 +31,6 @@ class RewardCreateRequested extends RewardsEvent {
   List<Object?> get props => [
     title,
     pointCost,
-    amountOff,
     priceLabel,
     imageUrl,
   ];
@@ -44,7 +41,6 @@ class RewardUpdateRequested extends RewardsEvent {
   final String rewardId;
   final String? title;
   final int? pointCost;
-  final String? amountOff;
   final String? priceLabel;
   final String? imageUrl;
   final bool? isActive;
@@ -53,7 +49,6 @@ class RewardUpdateRequested extends RewardsEvent {
     required this.rewardId,
     this.title,
     this.pointCost,
-    this.amountOff,
     this.priceLabel,
     this.imageUrl,
     this.isActive,
@@ -64,7 +59,6 @@ class RewardUpdateRequested extends RewardsEvent {
     rewardId,
     title,
     pointCost,
-    amountOff,
     priceLabel,
     imageUrl,
     isActive,

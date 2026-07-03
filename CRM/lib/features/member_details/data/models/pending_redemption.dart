@@ -10,7 +10,7 @@ part 'pending_redemption.g.dart';
 ///
 /// Sourced from `member_reward_redemptions` rows with
 /// `status = 'pending'`; carries the redemption's own
-/// [redemptionId] and [redeemedAt] timestamp so staff can
+/// [redemptionId] and [requestedAt] timestamp so staff can
 /// identify and act on specific pending requests.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
@@ -20,19 +20,19 @@ class PendingRedemption extends Equatable {
   final String redemptionId;
   final String rewardId;
   final String title;
-  final String? amountOff;
+  final String? priceLabel;
   final String? imageUrl;
   final int pointCost;
-  final DateTime redeemedAt;
+  final DateTime requestedAt;
 
   const PendingRedemption({
     required this.redemptionId,
     required this.rewardId,
     required this.title,
-    this.amountOff,
+    this.priceLabel,
     this.imageUrl,
     required this.pointCost,
-    required this.redeemedAt,
+    required this.requestedAt,
   });
 
   factory PendingRedemption.fromJson(
@@ -45,9 +45,9 @@ class PendingRedemption extends Equatable {
         redemptionId,
         rewardId,
         title,
-        amountOff,
+        priceLabel,
         imageUrl,
         pointCost,
-        redeemedAt,
+        requestedAt,
       ];
 }

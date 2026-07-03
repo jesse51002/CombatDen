@@ -5,8 +5,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
-import 'package:crm/features/member_details/data/models/gym_reward_item.dart';
-import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/rewards/data/models/reward_response.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
@@ -15,7 +15,8 @@ import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 /// on behalf of a member.
 ///
 /// Fetches `GET /api/v1/rewards/?gym_id=<uuid>` via the
-/// [MemberRepository]. On selection:
+/// [RewardsRepository] (the same reward-catalog client the
+/// Loyalty tab uses). On selection:
 /// - If the member's [pointsBalance] >= reward's point_cost,
 ///   shows a standard confirmation then dispatches
 ///   [RedeemRewardForMemberRequested] with override=false.
@@ -51,7 +52,7 @@ class RedeemRewardDialog extends StatefulWidget {
             value: context.read<MemberDetailBloc>(),
           ),
           RepositoryProvider.value(
-            value: context.read<MemberRepository>(),
+            value: context.read<RewardsRepository>(),
           ),
         ],
         child: RedeemRewardDialog(
@@ -71,19 +72,19 @@ class RedeemRewardDialog extends StatefulWidget {
 
 class _RedeemRewardDialogState
     extends State<RedeemRewardDialog> {
-  late final Future<List<GymRewardItem>> _rewardsFuture;
+  late final Future<List<RewardResponse>> _rewardsFuture;
 
   @override
   void initState() {
     super.initState();
     _rewardsFuture = context
-        .read<MemberRepository>()
-        .fetchGymRewards(widget.gymId);
+        .read<RewardsRepository>()
+        .listRewards(widget.gymId);
   }
 
   Future<void> _onRewardTap(
     BuildContext context,
-    GymRewardItem reward,
+    RewardResponse reward,
   ) async {
     final bloc = context.read<MemberDetailBloc>();
     final canAfford =
@@ -158,7 +159,7 @@ class _RedeemRewardDialogState
   Widget build(BuildContext context) {
     return AppDialog(
       title: 'Redeem reward for ${widget.memberName}',
-      body: FutureBuilder<List<GymRewardItem>>(
+      body: FutureBuilder<List<RewardResponse>>(
         future: _rewardsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState ==
@@ -225,7 +226,7 @@ class _RedeemRewardDialogState
 }
 
 class _RewardPickerTile extends StatelessWidget {
-  final GymRewardItem reward;
+  final RewardResponse reward;
   final bool canAfford;
   final VoidCallback onTap;
 

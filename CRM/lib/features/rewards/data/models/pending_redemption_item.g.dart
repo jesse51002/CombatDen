@@ -15,7 +15,7 @@ PendingRedemptionItem _$PendingRedemptionItemFromJson(
   rewardTitle: json['reward_title'] as String,
   rewardImageUrl: json['reward_image_url'] as String?,
   pointCost: (json['point_cost'] as num).toInt(),
-  redeemedAt: DateTime.parse(json['redeemed_at'] as String),
+  requestedAt: DateTime.parse(json['requested_at'] as String),
 );
 
 Map<String, dynamic> _$PendingRedemptionItemToJson(
@@ -27,5 +27,5 @@ Map<String, dynamic> _$PendingRedemptionItemToJson(
   'reward_title': instance.rewardTitle,
   'reward_image_url': instance.rewardImageUrl,
   'point_cost': instance.pointCost,
-  'redeemed_at': instance.redeemedAt.toIso8601String(),
+  'requested_at': instance.requestedAt.toIso8601String(),
 };

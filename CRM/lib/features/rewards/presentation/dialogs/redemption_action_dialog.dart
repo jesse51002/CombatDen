@@ -155,7 +155,7 @@ class _ConfirmBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final redeemedStr = _formatDate(item.redeemedAt);
+    final redeemedStr = _formatDate(item.requestedAt);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,6 +187,14 @@ class _ConfirmBody extends StatelessWidget {
             InfoRow(label: 'Member', value: item.memberName),
             InfoRow(label: 'Requested', value: redeemedStr),
           ],
+        ),
+        Text(
+          'Approving or rejecting is final and can\'t be undone — '
+          'rejecting refunds the points.',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+          textAlign: TextAlign.center,
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

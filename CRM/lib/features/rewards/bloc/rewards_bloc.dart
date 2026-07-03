@@ -78,7 +78,7 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
     String? pendingError;
 
     try {
-      pendingItems = await pendingFuture;
+      pendingItems = (await pendingFuture).items;
       pendingStatus = RewardsPendingStatus.loaded;
     } catch (e, st) {
       log('RewardsBloc: listPending failed', error: e, stackTrace: st);
@@ -109,7 +109,6 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
         gymId: gymId,
         title: event.title,
         pointCost: event.pointCost,
-        amountOff: event.amountOff,
         priceLabel: event.priceLabel,
         imageUrl: event.imageUrl,
       );
@@ -136,7 +135,6 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
         event.rewardId,
         title: event.title,
         pointCost: event.pointCost,
-        amountOff: event.amountOff,
         priceLabel: event.priceLabel,
         imageUrl: event.imageUrl,
         isActive: event.isActive,
@@ -239,7 +237,7 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
     ));
     if (gymId == null) return;
     try {
-      final items = await _repository.listPending(gymId);
+      final items = (await _repository.listPending(gymId)).items;
       emit(state.copyWith(
         pendingItems: items,
         pendingStatus: RewardsPendingStatus.loaded,

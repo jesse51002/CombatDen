@@ -15,17 +15,21 @@ const double _kMaxWidth = 360;
 /// Labeled image upload field.
 ///
 /// On tap: opens the system file picker, uploads the chosen
-/// image to the CDN via [category] (`'reward'` or `'member'`),
-/// shows a loading spinner during the upload, then calls
-/// [onUploaded] with the returned CDN URL and shows the
+/// image to the CDN via [category] (`'reward'`, `'member'`, or
+/// `'class'`), shows a loading spinner during the upload, then
+/// calls [onUploaded] with the returned CDN URL and shows the
 /// uploaded preview.  Inline error text is shown on failure.
 ///
 /// An optional current [imageUrl] or bundled [imageAsset] is
-/// displayed as the initial preview before any upload.
+/// displayed as the initial preview before any upload. When
+/// neither is set, an optional [defaultImageUrl] is previewed
+/// instead (with a "choose your own" caption) so the caller can
+/// show the platform default the record will get if the user
+/// never uploads their own.
 class ImageUploadPickerField extends StatefulWidget {
   final String label;
 
-  /// Backend upload category: `'reward'` or `'member'`.
+  /// Backend upload category: `'reward'`, `'member'`, or `'class'`.
   final String category;
 
   /// Called with the CDN URL after a successful upload.
@@ -37,6 +41,12 @@ class ImageUploadPickerField extends StatefulWidget {
   /// Optional bundled asset path shown when [imageUrl] is absent.
   final String? imageAsset;
 
+  /// Optional placeholder image previewed (with a caption) when the
+  /// user has chosen no image yet. Purely a preview: it is NOT bubbled
+  /// up via [onUploaded] — the caller only receives a URL once the user
+  /// actually uploads one.
+  final String? defaultImageUrl;
+
   const ImageUploadPickerField({
     super.key,
     required this.label,
@@ -44,6 +54,7 @@ class ImageUploadPickerField extends StatefulWidget {
     required this.onUploaded,
     this.imageUrl,
     this.imageAsset,
+    this.defaultImageUrl,
   });
 
   @override
@@ -67,6 +78,11 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
   bool get _hasImage =>
       (_effectiveUrl?.isNotEmpty ?? false) ||
       widget.imageAsset != null;
+
+  /// Whether to preview [ImageUploadPickerField.defaultImageUrl] because the
+  /// user has chosen no image of their own yet.
+  bool get _showDefault =>
+      !_hasImage && (widget.defaultImageUrl?.isNotEmpty ?? false);
 
   Future<void> _onTap() async {
     if (_isUploading) return;
@@ -147,10 +163,21 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                                   imageUrl: _effectiveUrl,
                                   asset: widget.imageAsset,
                                 )
-                              : const _UploadPrompt(),
+                              : _showDefault
+                                  ? _Preview(
+                                      imageUrl: widget.defaultImageUrl,
+                                    )
+                                  : const _UploadPrompt(),
                     ),
                   ),
                 ),
+                if (_showDefault)
+                  Text(
+                    'Default image — choose your own',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
                 if (_error != null)
                   Text(
                     _error!,

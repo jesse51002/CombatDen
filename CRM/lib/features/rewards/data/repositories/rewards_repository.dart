@@ -2,7 +2,7 @@ import 'dart:developer';
 
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/rewards/data/models/pending_redemption_item.dart';
+import 'package:crm/features/rewards/data/models/pending_redemption_list_response.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 
 /// Repository for the rewards domain.
@@ -54,7 +54,6 @@ class RewardsRepository {
     required String gymId,
     required String title,
     required int pointCost,
-    String? amountOff,
     String? priceLabel,
     String? imageUrl,
   }) async {
@@ -65,8 +64,6 @@ class RewardsRepository {
           'gym_id': gymId,
           'title': title,
           'point_cost': pointCost,
-          if (amountOff != null && amountOff.isNotEmpty)
-            'amount_off': amountOff,
           if (priceLabel != null && priceLabel.isNotEmpty)
             'price_label': priceLabel,
           'image_url': ?imageUrl,
@@ -90,7 +87,6 @@ class RewardsRepository {
     String rewardId, {
     String? title,
     int? pointCost,
-    String? amountOff,
     String? priceLabel,
     String? imageUrl,
     bool? isActive,
@@ -102,7 +98,6 @@ class RewardsRepository {
           'data': {
             'title': ?title,
             'point_cost': ?pointCost,
-            'amount_off': ?amountOff,
             'price_label': ?priceLabel,
             'image_url': ?imageUrl,
             'is_active': ?isActive,
@@ -137,7 +132,11 @@ class RewardsRepository {
   }
 
   /// `GET /api/v1/rewards/redemptions/pending?gym_id=<uuid>`
-  Future<List<PendingRedemptionItem>> listPending(String gymId) async {
+  ///
+  /// The backend paginates (default first page) and returns a `total`
+  /// count on the list response; the CRM keeps fetching the default page
+  /// (no load-more UI yet) but parses `total` off the response.
+  Future<PendingRedemptionListResponse> listPending(String gymId) async {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/api/v1/rewards/redemptions/pending',
@@ -145,16 +144,10 @@ class RewardsRepository {
       );
       final data = response.data;
       if (data == null) throw const ServerException('Empty response');
-      final raw = data['items'];
-      if (raw is! List) throw const ServerException('Missing items array');
-      return raw
-          .whereType<Map>()
-          .map(
-            (e) => PendingRedemptionItem.fromJson(
-              Map<String, dynamic>.from(e),
-            ),
-          )
-          .toList(growable: false);
+      if (data['items'] is! List) {
+        throw const ServerException('Missing items array');
+      }
+      return PendingRedemptionListResponse.fromJson(data);
     } on ServerException {
       rethrow;
     } on NetworkException {

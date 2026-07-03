@@ -68,7 +68,7 @@ class _PendingRedemptionRow extends StatelessWidget {
       title: 'Approve redemption',
       summary:
           'Approve ${redemption.title} for $memberName '
-          '(${redemption.pointCost} pts)?',
+          '(${redemption.pointCost} pts)? This can\'t be undone.',
       confirmLabel: 'Approve',
       effects: [
         BillingEffect(
@@ -90,7 +90,8 @@ class _PendingRedemptionRow extends StatelessWidget {
       title: 'Reject redemption',
       summary:
           'Reject ${redemption.title} for $memberName? '
-          'The ${redemption.pointCost} points will be refunded.',
+          'The ${redemption.pointCost} points will be refunded. '
+          'This can\'t be undone.',
       confirmLabel: 'Reject',
       confirmColor: DesignConstants.badRed,
       effects: [

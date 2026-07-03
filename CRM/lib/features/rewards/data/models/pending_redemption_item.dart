@@ -13,7 +13,7 @@ class PendingRedemptionItem {
   final String rewardTitle;
   final String? rewardImageUrl;
   final int pointCost;
-  final DateTime redeemedAt;
+  final DateTime requestedAt;
 
   const PendingRedemptionItem({
     required this.redemptionId,
@@ -22,7 +22,7 @@ class PendingRedemptionItem {
     required this.rewardTitle,
     this.rewardImageUrl,
     required this.pointCost,
-    required this.redeemedAt,
+    required this.requestedAt,
   });
 
   factory PendingRedemptionItem.fromJson(Map<String, dynamic> json) =>

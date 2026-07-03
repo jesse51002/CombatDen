@@ -19,7 +19,7 @@ class LiveRedemptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final redeemedStr = _formatDate(item.redeemedAt);
+    final redeemedStr = _formatDate(item.requestedAt);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(

@@ -10,7 +10,6 @@ class RewardResponse {
   final String gymId;
   final String title;
   final int pointCost;
-  final String? amountOff;
   final String? imageUrl;
   final String? priceLabel;
   final bool isActive;
@@ -21,7 +20,6 @@ class RewardResponse {
     required this.gymId,
     required this.title,
     required this.pointCost,
-    this.amountOff,
     this.imageUrl,
     this.priceLabel,
     required this.isActive,

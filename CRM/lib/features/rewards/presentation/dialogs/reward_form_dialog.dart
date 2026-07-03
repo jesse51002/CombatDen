@@ -68,7 +68,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _pointCostCtrl;
-  late final TextEditingController _amountOffCtrl;
   late final TextEditingController _priceLabelCtrl;
 
   String? _imageUrl;
@@ -89,7 +88,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
       text: e?.pointCost.toString() ??
           (widget.prefillPointCost?.toString() ?? ''),
     );
-    _amountOffCtrl = TextEditingController(text: e?.amountOff ?? '');
     _priceLabelCtrl = TextEditingController(
       text: e?.priceLabel ?? widget.prefillPriceLabel ?? '',
     );
@@ -100,7 +98,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
   void dispose() {
     _titleCtrl.dispose();
     _pointCostCtrl.dispose();
-    _amountOffCtrl.dispose();
     _priceLabelCtrl.dispose();
     super.dispose();
   }
@@ -121,9 +118,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
         rewardId: widget.existing!.rewardId,
         title: _titleCtrl.text.trim(),
         pointCost: pointCost,
-        amountOff: _amountOffCtrl.text.trim().isEmpty
-            ? null
-            : _amountOffCtrl.text.trim(),
         priceLabel: _priceLabelCtrl.text.trim().isEmpty
             ? null
             : _priceLabelCtrl.text.trim(),
@@ -133,9 +127,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
       context.read<RewardsBloc>().add(RewardCreateRequested(
         title: _titleCtrl.text.trim(),
         pointCost: pointCost,
-        amountOff: _amountOffCtrl.text.trim().isEmpty
-            ? null
-            : _amountOffCtrl.text.trim(),
         priceLabel: _priceLabelCtrl.text.trim().isEmpty
             ? null
             : _priceLabelCtrl.text.trim(),
@@ -190,7 +181,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
         formKey: _formKey,
         titleCtrl: _titleCtrl,
         pointCostCtrl: _pointCostCtrl,
-        amountOffCtrl: _amountOffCtrl,
         priceLabelCtrl: _priceLabelCtrl,
         imageUrl: _imageUrl,
         imageError: _imageError,
@@ -206,7 +196,6 @@ class _FormBody extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController titleCtrl;
   final TextEditingController pointCostCtrl;
-  final TextEditingController amountOffCtrl;
   final TextEditingController priceLabelCtrl;
   final String? imageUrl;
   final String? imageError;
@@ -218,7 +207,6 @@ class _FormBody extends StatelessWidget {
     required this.formKey,
     required this.titleCtrl,
     required this.pointCostCtrl,
-    required this.amountOffCtrl,
     required this.priceLabelCtrl,
     required this.imageUrl,
     required this.imageError,
@@ -270,11 +258,6 @@ class _FormBody extends StatelessWidget {
               }
               return null;
             },
-          ),
-          CustomTextField(
-            controller: amountOffCtrl,
-            label: 'Amount Off (optional)',
-            hintText: 'e.g. 30% off or \$10 off',
           ),
           CustomTextField(
             controller: priceLabelCtrl,

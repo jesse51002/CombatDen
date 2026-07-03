@@ -2,7 +2,6 @@ import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
-import 'package:crm/features/member_details/data/models/gym_reward_item.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
@@ -873,61 +872,6 @@ class MemberRepository {
   }
 
   // ----- Rewards / redemptions -----
-
-  /// `GET /api/v1/rewards/?gym_id=<uuid>` — the gym's active rewards,
-  /// used to populate the redeem-for-member picker.
-  Future<List<GymRewardItem>> fetchGymRewards(
-    String gymId,
-  ) async {
-    final response = await _apiClient.get(
-      '/api/v1/rewards/',
-      queryParameters: {'gym_id': gymId},
-    );
-    final data = response.data as Map<String, dynamic>;
-    return (data['items'] as List<dynamic>)
-        .map(
-          (e) => GymRewardItem.fromJson(
-            e as Map<String, dynamic>,
-          ),
-        )
-        .toList();
-  }
-
-  /// `POST /api/v1/rewards/redemptions/{id}/approve` — approve a
-  /// pending redemption. Throws [RedemptionAlreadyDecidedException]
-  /// on a 409 (already approved or rejected).
-  Future<void> approveRedemption(
-    String redemptionId,
-  ) async {
-    try {
-      await _apiClient.post(
-        '/api/v1/rewards/redemptions/$redemptionId/approve',
-      );
-    } on ServerException catch (e) {
-      if (e.statusCode == 409) {
-        throw const RedemptionAlreadyDecidedException();
-      }
-      rethrow;
-    }
-  }
-
-  /// `POST /api/v1/rewards/redemptions/{id}/reject` — reject a
-  /// pending redemption (refunds the member's points).
-  /// Throws [RedemptionAlreadyDecidedException] on a 409.
-  Future<void> rejectRedemption(
-    String redemptionId,
-  ) async {
-    try {
-      await _apiClient.post(
-        '/api/v1/rewards/redemptions/$redemptionId/reject',
-      );
-    } on ServerException catch (e) {
-      if (e.statusCode == 409) {
-        throw const RedemptionAlreadyDecidedException();
-      }
-      rethrow;
-    }
-  }
 
   /// `POST /api/v1/rewards/{reward_id}/redeem-for-member` —
   /// staff redeems a reward on behalf of a member.
