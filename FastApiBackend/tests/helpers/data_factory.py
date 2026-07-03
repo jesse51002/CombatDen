@@ -43,6 +43,12 @@ class TestDiscount:
     value_id: UUID
 
 
+@dataclass(frozen=True)
+class TestReward:
+    reward_id: UUID
+    gym_id: UUID
+
+
 # ── Payment method ──────────────────────────────────────────────
 
 
@@ -365,3 +371,46 @@ async def create_discount(
         await session.commit()
 
     return TestDiscount(discount_id=discount_id, value_id=value_id)
+
+
+# ── Reward ────────────────────────────────────────────────────
+
+
+async def create_reward(
+    db_pool: DirectDatabasePool,
+    gym_id: UUID,
+    *,
+    title: str = "ZZ Test Reward",
+    point_cost: int = 100,
+    price_label: str | None = None,
+    image_url: str | None = None,
+) -> TestReward:
+    """Create a gym_rewards row directly.
+
+    Unlike members/plans/discounts, a reward carries no Stripe object — it
+    is plain gym config — so this is a single INSERT, no DB-first/Stripe
+    round trip.
+    """
+    insert_reward_sql = """
+        INSERT INTO gym_rewards (
+            gym_id, title, point_cost, price_label, image_url
+        ) VALUES (
+            :gym_id, :title, :point_cost, :price_label, :image_url
+        )
+        RETURNING reward_id
+    """
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(insert_reward_sql),
+            {
+                "gym_id": str(gym_id),
+                "title": title,
+                "point_cost": point_cost,
+                "price_label": price_label,
+                "image_url": image_url,
+            },
+        )
+        row = result.mappings().fetchone()
+        await session.commit()
+
+    return TestReward(reward_id=UUID(str(row["reward_id"])), gym_id=gym_id)
