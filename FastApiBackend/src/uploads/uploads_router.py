@@ -31,12 +31,14 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
         "Accepts a multipart image upload and a ``category`` form field "
         "(``reward`` or ``member``). Proxies the bytes to the private S3 "
         "bucket and returns the CloudFront CDN URL with a content-hash "
-        "cache-buster. Requires a valid gym-employee JWT."
+        "cache-buster. Requires a staff principal (owner/admin of at "
+        "least one gym)."
     ),
     responses={
         201: {"description": "Image uploaded; CDN URL returned"},
         400: {"description": "Not an image, or file exceeds 5 MB"},
         401: {"description": "Not authenticated"},
+        403: {"description": "Not a gym staff principal"},
         500: {"description": "Upload failed"},
     },
 )
@@ -51,7 +53,8 @@ async def upload_image(
     ),
 ) -> ImageUploadResponse:
     """Upload an image; returns its CDN URL."""
-    auth.get_current_user(credentials)
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_staff_principal(user_payload)
 
     content_type = file.content_type or ""
     if not content_type.startswith("image/"):
@@ -60,15 +63,21 @@ async def upload_image(
             detail="Only image/* files are accepted",
         )
 
+    size_error = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            f"File exceeds the "
+            f"{MAX_IMAGE_SIZE_BYTES // (1024 * 1024)} MB size limit"
+        ),
+    )
+    # Reject on the parsed part size BEFORE buffering the body into memory;
+    # the post-read check below stays as the backstop for a missing size.
+    if file.size is not None and file.size > MAX_IMAGE_SIZE_BYTES:
+        raise size_error
+
     data = await file.read()
     if len(data) > MAX_IMAGE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"File exceeds the "
-                f"{MAX_IMAGE_SIZE_BYTES // (1024 * 1024)} MB size limit"
-            ),
-        )
+        raise size_error
 
     try:
         cdn_url = await uploads_service.upload_image(data, content_type, category)

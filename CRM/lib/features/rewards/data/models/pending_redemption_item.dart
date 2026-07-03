@@ -5,7 +5,7 @@ part 'pending_redemption_item.g.dart';
 /// One row from the gym-wide pending redemption queue.
 /// Mirrors `PendingRedemptionItem` from
 /// `FastApiBackend/src/rewards/schema/rewards_schema.py`.
-@JsonSerializable()
+@JsonSerializable(fieldRename: FieldRename.snake)
 class PendingRedemptionItem {
   final String redemptionId;
   final String memberId;

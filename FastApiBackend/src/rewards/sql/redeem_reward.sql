@@ -16,12 +16,17 @@ locked_reward AS (
     FOR UPDATE
 ),
 debited AS (
+    -- The is_active guard MUST live here, not only on the insert: Postgres
+    -- runs every data-modifying CTE exactly once regardless of whether the
+    -- final query reads it, so an unguarded debit on an inactive reward
+    -- would burn points while inserting no redemption row.
     UPDATE members
     SET points_balance = points_balance - (
         SELECT point_cost FROM locked_reward
     )
     WHERE member_id = :member_id
       AND points_balance >= (SELECT point_cost FROM locked_reward)
+      AND (SELECT is_active FROM locked_reward)
     RETURNING points_balance
 ),
 inserted AS (

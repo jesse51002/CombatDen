@@ -4,7 +4,7 @@ part 'reward_response.g.dart';
 
 /// API response for a single gym reward row.
 /// Mirrors `RewardResponse` from `FastApiBackend/src/rewards/schema/rewards_schema.py`.
-@JsonSerializable()
+@JsonSerializable(fieldRename: FieldRename.snake)
 class RewardResponse {
   final String rewardId;
   final String gymId;

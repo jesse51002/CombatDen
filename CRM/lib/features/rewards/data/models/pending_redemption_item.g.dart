@@ -9,23 +9,23 @@ part of 'pending_redemption_item.dart';
 PendingRedemptionItem _$PendingRedemptionItemFromJson(
   Map<String, dynamic> json,
 ) => PendingRedemptionItem(
-  redemptionId: json['redemptionId'] as String,
-  memberId: json['memberId'] as String,
-  memberName: json['memberName'] as String,
-  rewardTitle: json['rewardTitle'] as String,
-  rewardImageUrl: json['rewardImageUrl'] as String?,
-  pointCost: (json['pointCost'] as num).toInt(),
-  redeemedAt: DateTime.parse(json['redeemedAt'] as String),
+  redemptionId: json['redemption_id'] as String,
+  memberId: json['member_id'] as String,
+  memberName: json['member_name'] as String,
+  rewardTitle: json['reward_title'] as String,
+  rewardImageUrl: json['reward_image_url'] as String?,
+  pointCost: (json['point_cost'] as num).toInt(),
+  redeemedAt: DateTime.parse(json['redeemed_at'] as String),
 );
 
 Map<String, dynamic> _$PendingRedemptionItemToJson(
   PendingRedemptionItem instance,
 ) => <String, dynamic>{
-  'redemptionId': instance.redemptionId,
-  'memberId': instance.memberId,
-  'memberName': instance.memberName,
-  'rewardTitle': instance.rewardTitle,
-  'rewardImageUrl': instance.rewardImageUrl,
-  'pointCost': instance.pointCost,
-  'redeemedAt': instance.redeemedAt.toIso8601String(),
+  'redemption_id': instance.redemptionId,
+  'member_id': instance.memberId,
+  'member_name': instance.memberName,
+  'reward_title': instance.rewardTitle,
+  'reward_image_url': instance.rewardImageUrl,
+  'point_cost': instance.pointCost,
+  'redeemed_at': instance.redeemedAt.toIso8601String(),
 };
