@@ -634,7 +634,8 @@ class _PlaceholderLegend extends StatelessWidget {
             vertical: DesignConstants.spacingSmall,
           ),
           child: Text(
-            'Placeholder reference — use {{name}} in your text',
+            'Placeholders — type any of these in your text and they fill '
+            'in automatically when the waiver is signed. Only these work:',
             style: DesignConstants.pSmall.copyWith(
               color: DesignConstants.text2nd,
             ),
