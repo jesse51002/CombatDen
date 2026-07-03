@@ -424,10 +424,10 @@ rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   group's lowest, else NULL) then deletes the rows — one transaction.
 - **Rank belt images are generation-owned.** `gym_ranks.image_url` is not
   accepted by the create/update requests and is update-immutable — belt
-  art is theme-styled generated imagery (spec:
-  `docs/Business/Office_Hours/` rank-belt-image build spec; the writer is
-  the Phase-2 image pipeline, not a user field). Preset art still copies
-  through `insert_ranks_from_preset.sql` directly.
+  art is theme-styled generated imagery (full Phase-2 build spec:
+  `FastApiBackend/rank_belt_image_build_spec.md`; the writer is the image
+  pipeline, not a user field). Preset art still copies through
+  `insert_ranks_from_preset.sql` directly.
 
 ## Security
 
