@@ -35,11 +35,8 @@ class RequireResignDialog extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           Text(
-            signedCount > 0
-                ? '$signedCount member(s) have signed the current version. '
-                    'Saving publishes a new version of the text.'
-                : 'No one has signed the current version yet — saving '
-                    'updates it in place.',
+            '$signedCount member(s) have signed the current version. '
+            'Saving publishes a new version of the text.',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text,
             ),

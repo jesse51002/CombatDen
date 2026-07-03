@@ -259,13 +259,13 @@ shows the UNION of required + ever-signed waivers (`MemberWaiverStatusRow`:
 the yellow tappable "Needs re-sign" chip; archived/payer-auth rows display
 without a sign action) plus a "Sign new waiver" picker over the gym's custom
 waivers (any custom waiver is signable, required or not). The waiver editor
-surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; EVERY BODY
-edit asks at SAVE time via `RequireResignDialog` (signed or not — the choice
-lands on the resulting current version either way) —
+surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; a BODY edit
+over a SIGNED version asks at SAVE time via `RequireResignDialog` —
 "Don't require re-signing" is the PRIMARY action (small fixes are the common
 case), "Require re-signing" the secondary, dismiss aborts the save; the
-dialog explains what re-signing does. A rename alone saves without asking
-(the flag is left untouched). The catalog's "N signed" is
+dialog explains what re-signing does. A rename or an unsigned-version edit
+saves silently with the flag untouched (null) — the "Requires re-sign"
+switch on the current tile is the deliberate way to set it. The catalog's "N signed" is
 `total_signed_count` — DISTINCT members across ALL versions (a re-signer
 counts once); `current_version_signed_count` still drives the fork logic. The payer-auth waiver is
 badged ("Payer agreement") in the waivers list + editor, its Delete and

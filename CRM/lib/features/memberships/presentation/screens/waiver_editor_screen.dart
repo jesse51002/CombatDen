@@ -215,12 +215,13 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       return;
     }
 
-    // EVERY body edit asks whether it should require re-signing (dismissing
-    // aborts the save) — the choice lands on the resulting current version
-    // either way: stamped on a fork, applied to an in-place edit. A rename
-    // alone sends null (the flag is left untouched).
+    // A body edit over a SIGNED version forks a new one — ask whether prior
+    // signers must re-sign (dismissing aborts the save). With no signers
+    // the question is moot, so the save runs silently and requireResign
+    // stays null (the version's flag is untouched — the "Requires re-sign"
+    // switch on the current tile is the deliberate way to set it).
     bool? requireResign;
-    if (_isEdit && body != _originalBody) {
+    if (_isEdit && _currentSigned > 0 && body != _originalBody) {
       final choice = await RequireResignDialog.show(
         context,
         signedCount: _currentSigned,
