@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/members/data/mock_member_app_preview.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
 import 'package:crm/features/members/presentation/widgets/themes_library/library_view.dart';
@@ -176,21 +175,26 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _CenteredSpinner();
         }
-        // Rebuild on gym changes so the preview reflects a just-saved name /
-        // logo and the admin gate flips correctly.
+        // Rebuild on gym changes (a just-saved name/logo, the admin gate) AND
+        // on a theme switch (ThemeRuntime.changes) — the public branch's name
+        // tracks the loaded design directly, not just a selectedGym pick.
         return ListenableBuilder(
-          listenable: selectedGym,
+          listenable: Listenable.merge([selectedGym, ThemeRuntime.changes]),
           builder: (context, _) {
             final isAdmin = selectedGym.gymId != null;
-            // Admin: ALWAYS the real gym identity — the mock name exists
-            // only for the public browser (no gym there). The logo is NEVER
-            // a bundled asset here: the gym's uploaded logo when set, else
-            // null — the showcase topbar then falls through to the ACTIVE
-            // THEME's logo (themeTabPreview resolution order in
+            // Admin: ALWAYS the real gym identity. Public (no gym): the
+            // SELECTED THEME's own name — ThemeRuntime.activeDesignName reads
+            // the loaded design's `design_name` off the wire, so it's correct
+            // both on an explicit pick and on a seeded/deep-linked (`?theme=`)
+            // design with no pick yet (the engine is already booted on the
+            // intended design by the time this builds — see `_bootstrap`).
+            // The logo is NEVER a bundled asset here: the gym's uploaded logo
+            // when set, else null — the showcase topbar then falls through to
+            // the ACTIVE THEME's logo (themeTabPreview resolution order in
             // showcase_topbar.dart), so switching themes re-logos the mock.
             final gymName = isAdmin
                 ? (selectedGym.gymName ?? '')
-                : kMockMemberAppPreview.gymName;
+                : (ThemeRuntime.activeDesignName ?? '');
             final ImageProvider? gymLogo =
                 isAdmin && (selectedGym.logoUrl?.isNotEmpty ?? false)
                     ? NetworkImage(selectedGym.logoUrl!)

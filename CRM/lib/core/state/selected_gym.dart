@@ -22,8 +22,12 @@ import 'package:crm/features/members/data/gym_detail.dart';
 /// **Theme selection is decoupled from both ids.** Picking a theme in the
 /// picker records only the design id ([designId]) and its [themeCategory] and
 /// re-brands the live preview via [ThemeRuntime.selectDesign] — it does NOT
-/// touch [videoGymId], [detail], or [displayName]. The theme catalog is now the
-/// ThemeService styles list, which is gym-agnostic.
+/// touch [videoGymId], [detail], or the real gym's [gymName]. The theme
+/// catalog is now the ThemeService styles list, which is gym-agnostic. The
+/// **public** theme browser (no real gym) instead titles its preview off
+/// [ThemeRuntime.activeDesignName] — the loaded design's own human name —
+/// so the phone frame always shows the selected theme's name, not the admin
+/// gym's.
 ///
 /// The two ids never mix: passing the real [gymId] to the VideoService 404s,
 /// and passing a [videoGymId] to a CRM member query is meaningless.
@@ -50,7 +54,6 @@ class SelectedGym extends ChangeNotifier {
   // ── Live theme selection (decoupled from the gym) ──
   String? _designId;
   String? _themeCategory;
-  String _displayName = '';
 
   GymDetail? _detail;
   bool _isLoading = false;
@@ -64,10 +67,11 @@ class SelectedGym extends ChangeNotifier {
   EmployeeRole? get role => _role;
 
   /// The active gym's **real name** (from `GET /api/v1/gyms/`); null until
-  /// [setActiveGym]. This is the authoritative gym name — distinct from
-  /// [displayName], which tracks the selected theme/content gym and drifts to
-  /// the picked theme's label after a Theme-tab pick. Updated in place by
-  /// [updateGymName] when the Gym profile save commits.
+  /// [setActiveGym]. This is the authoritative gym name, used as-is by the
+  /// admin theme preview. It is never touched by a theme pick — the public
+  /// browser's preview name comes from [ThemeRuntime.activeDesignName]
+  /// instead (see the class doc). Updated in place by [updateGymName] when
+  /// the Gym profile save commits.
   String? get gymName => _gymName;
 
   /// The active gym's uploaded brand logo URL (a CDN URL); null means the gym
@@ -99,20 +103,18 @@ class SelectedGym extends ChangeNotifier {
   /// design. Keys the phone-preview's demo class/reward defaults.
   String? get themeCategory => _themeCategory;
 
-  String get displayName => _displayName;
-
   /// The fetched detail (rewards / classes / spec); null until it loads.
   GymDetail? get detail => _detail;
   bool get isLoading => _isLoading;
   Object? get error => _error;
 
-  /// Record the active admin gym: the real gym UUID, its name (also the
-  /// initial [displayName]), the caller's [role], the gym's IANA [timezone],
-  /// its uploaded [logoUrl] (null = no logo), and the gym's persisted
-  /// ThemeService design id ([savedThemeDesignId]). Set once at sign-in / via
-  /// the gym picker. Independent of the VideoService content selection and the
-  /// live theme — it does not touch [videoGymId] or apply a theme (the theme
-  /// runtime isn't initialized yet at login).
+  /// Record the active admin gym: the real gym UUID, its [displayName] (the
+  /// real gym name — becomes [gymName]), the caller's [role], the gym's IANA
+  /// [timezone], its uploaded [logoUrl] (null = no logo), and the gym's
+  /// persisted ThemeService design id ([savedThemeDesignId]). Set once at
+  /// sign-in / via the gym picker. Independent of the VideoService content
+  /// selection and the live theme — it does not touch [videoGymId] or apply a
+  /// theme (the theme runtime isn't initialized yet at login).
   void setActiveGym({
     required String gymId,
     required String displayName,
@@ -123,7 +125,6 @@ class SelectedGym extends ChangeNotifier {
   }) {
     _gymId = gymId;
     _gymName = displayName;
-    _displayName = displayName;
     _role = role;
     _timezone = timezone;
     _logoUrl = logoUrl;
@@ -146,8 +147,8 @@ class SelectedGym extends ChangeNotifier {
   }
 
   /// Update the active gym's real name after the Gym profile save commits
-  /// (NOT optimistic — only called on success). Touches [gymName] only; the
-  /// content [displayName] is left to the theme/content selection.
+  /// (NOT optimistic — only called on success). Touches [gymName] only —
+  /// never the theme selection.
   void updateGymName(String gymName) {
     _gymName = gymName;
     notifyListeners();
@@ -201,7 +202,6 @@ class SelectedGym extends ChangeNotifier {
     _videoGymId = null;
     _designId = null;
     _themeCategory = null;
-    _displayName = '';
     _detail = null;
     _isLoading = false;
     _error = null;
@@ -210,9 +210,12 @@ class SelectedGym extends ChangeNotifier {
 
   /// Select [style] from the picker: record the previewed design id + its
   /// [themeCategory] and re-brand the live preview. **Theme-only** — it does
-  /// NOT touch [videoGymId], [detail], or [displayName]; the theme catalog is
+  /// NOT touch [videoGymId], [detail], or [gymName]; the theme catalog is
   /// gym-agnostic and the real gym's content is fetched independently. No-op if
-  /// it's already the previewed design.
+  /// it's already the previewed design. The public browser's preview name
+  /// tracks [ThemeRuntime.activeDesignName] directly (via [ThemeRuntime.changes]
+  /// notifying once [ThemeRuntime.selectDesign] below resolves) rather than a
+  /// field on this class.
   void selectStyle(ThemeStyle style) {
     if (_designId == style.id && _themeCategory == style.category) return;
     _designId = style.id;
