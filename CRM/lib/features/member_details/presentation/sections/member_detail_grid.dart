@@ -228,6 +228,10 @@ class _Grid extends StatelessWidget {
           RetentionSection(
             retention: member.retention,
             rewards: member.recentlyRedeemedRewards,
+            pendingRedemptions: member.pendingRedemptions,
+            memberId: member.memberId,
+            memberName: member.fullName,
+            gymId: member.gymId,
           ),
         ];
         final carousel = MembershipCarousel(

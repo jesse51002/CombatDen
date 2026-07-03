@@ -177,6 +177,37 @@ async def delete_plan_data(db_pool: DirectDatabasePool, plan_id: UUID) -> None:
         await session.commit()
 
 
+async def delete_reward_redemption(
+    db_pool: DirectDatabasePool, redemption_id: UUID
+) -> None:
+    """Delete a single redemption row.
+
+    A redemption row FKs BOTH the member (member_id, gym_id) and the reward
+    (reward_id, gym_id) — call this before deleting either the member
+    (``delete_member_data``) or the reward (``delete_reward``).
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_reward_redemption.sql")),
+            {"id": str(redemption_id)},
+        )
+        await session.commit()
+
+
+async def delete_reward(db_pool: DirectDatabasePool, reward_id: UUID) -> None:
+    """Delete a single gym_rewards row.
+
+    Call AFTER any redemption rows referencing it are gone
+    (``delete_reward_redemption``) — they FK this row.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_reward.sql")),
+            {"id": str(reward_id)},
+        )
+        await session.commit()
+
+
 async def delete_discount_preset(
     db_pool: DirectDatabasePool, discount_id: UUID
 ) -> None:

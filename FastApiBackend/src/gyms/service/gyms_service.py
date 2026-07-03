@@ -172,8 +172,15 @@ class GymsService:
         the per-class mint is deep-equal-skipping (timezone included), a
         re-save is cheap — already-reminted classes no-op, the rest catch
         up — which is what makes the retry self-heal.
+
+        Uses ``exclude_unset=True`` only (no ``exclude_none``), matching
+        ``RewardsService``/``MembersManagementUpdate``/``RanksService``:
+        an explicitly-sent ``null`` for a nullable column (e.g. ``logo_url``)
+        is a real instruction to clear that column, distinct from the field
+        being absent (unchanged). A NOT NULL column sent as ``null`` still
+        fails at the DB constraint.
         """
-        update_fields = data.model_dump(exclude_unset=True, exclude_none=True)
+        update_fields = data.model_dump(exclude_unset=True)
 
         if not update_fields:
             raise ValueError("No fields provided to update")

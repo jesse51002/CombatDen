@@ -60,3 +60,25 @@ async def _an_employee_id(
             {"g": str(gym_id)},
         )
         return result.scalar_one()
+
+
+async def set_points_balance(
+    db_pool: DirectDatabasePool,
+    member_id: UUID,
+    points_balance: int,
+) -> None:
+    """Force a member's ``points_balance`` to a known value.
+
+    A direct write for test setup only — production never sets the balance
+    this way (it goes through redeem / adjust_points), but tests need a
+    deterministic starting balance for the redemption edge-case matrix.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(
+                "UPDATE members SET points_balance = :balance "
+                "WHERE member_id = :id"
+            ),
+            {"balance": points_balance, "id": str(member_id)},
+        )
+        await session.commit()

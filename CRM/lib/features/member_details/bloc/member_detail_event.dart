@@ -439,6 +439,64 @@ class MemberReserveCleared extends MemberDetailEvent {
   const MemberReserveCleared();
 }
 
+// ----- Rewards / redemptions -----
+
+/// Approve a pending reward redemption.
+/// Triggers a re-fetch of member detail on success so the
+/// pending list and points balance refresh.
+class ApproveRedemptionRequested extends MemberDetailEvent {
+  final String redemptionId;
+  const ApproveRedemptionRequested(this.redemptionId);
+
+  @override
+  List<Object?> get props => [redemptionId];
+}
+
+/// Reject a pending reward redemption (refunds the member's points).
+/// Triggers a re-fetch of member detail on success.
+class RejectRedemptionRequested extends MemberDetailEvent {
+  final String redemptionId;
+  const RejectRedemptionRequested(this.redemptionId);
+
+  @override
+  List<Object?> get props => [redemptionId];
+}
+
+/// Staff redeems a reward on behalf of a member.
+/// When [allowOverride] is true, the member's balance drains to zero
+/// (a comp redemption — used when balance < point_cost).
+class RedeemRewardForMemberRequested extends MemberDetailEvent {
+  final String rewardId;
+  final String memberId;
+  final bool allowOverride;
+
+  const RedeemRewardForMemberRequested({
+    required this.rewardId,
+    required this.memberId,
+    this.allowOverride = false,
+  });
+
+  @override
+  List<Object?> get props => [rewardId, memberId, allowOverride];
+}
+
+/// Manual points award or adjustment. [amount] is signed:
+/// positive awards points, negative deducts them. A 400
+/// from the backend (deduct below zero) surfaces as an
+/// [actionError] on the loaded state.
+class AdjustPointsRequested extends MemberDetailEvent {
+  final String memberId;
+  final int amount;
+
+  const AdjustPointsRequested({
+    required this.memberId,
+    required this.amount,
+  });
+
+  @override
+  List<Object?> get props => [memberId, amount];
+}
+
 // ----- Invoice polling -----
 
 /// One tick of the post-charge invoice poll. Dispatched by the

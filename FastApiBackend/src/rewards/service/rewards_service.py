@@ -23,8 +23,16 @@ logger = logging.getLogger(__name__)
 class RewardsService:
     """Reward catalog CRUD."""
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        default_image_url: str,
+    ) -> None:
         self._db_pool = db_pool
+        # Every reward HAS an image (gym_rewards.image_url is NOT NULL): an
+        # omitted image on create normalizes to this platform default
+        # instead of ever writing NULL — mirrors ClassesCrudService.
+        self._default_image_url = default_image_url
 
     async def create_reward(
         self,
@@ -36,8 +44,8 @@ class RewardsService:
             "gym_id": str(request.gym_id),
             "title": request.title,
             "point_cost": request.point_cost,
-            "amount_off": request.amount_off,
-            "image_url": request.image_url,
+            "image_url": request.image_url or self._default_image_url,
+            "price_label": request.price_label,
         }
         row = await self._db_pool.execute_with_retry(sql, params)
         if not row:

@@ -870,4 +870,41 @@ class MemberRepository {
       },
     );
   }
+
+  // ----- Rewards / redemptions -----
+
+  /// `POST /api/v1/rewards/{reward_id}/redeem-for-member` —
+  /// staff redeems a reward on behalf of a member.
+  ///
+  /// When [allowOverride] is false (default), the backend returns a 400
+  /// if the member's balance is insufficient — surface that via
+  /// [actionError]. When [allowOverride] is true, the balance drains to
+  /// zero (a "comp" redemption).
+  Future<void> redeemRewardForMember({
+    required String rewardId,
+    required String memberId,
+    bool allowOverride = false,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/rewards/$rewardId/redeem-for-member',
+      data: {
+        'member_id': memberId,
+        'override': allowOverride,
+      },
+    );
+  }
+
+  /// `POST /api/v1/members/{member_id}/points` — manually award
+  /// or deduct points. [amount] is signed (positive = award,
+  /// negative = deduct). A 400 is returned when deducting would
+  /// take the balance below zero.
+  Future<void> adjustPoints({
+    required String memberId,
+    required int amount,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/members/$memberId/points',
+      data: {'amount': amount},
+    );
+  }
 }

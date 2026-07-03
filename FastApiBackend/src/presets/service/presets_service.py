@@ -129,6 +129,11 @@ _MANUAL_SEED_COUNT = 3
 # Fallback last-name when an instructor is listed under a single word only.
 _FALLBACK_LAST_NAME = "Coach"
 
+# gym_rewards.price_label is NOT NULL; a template reward authored without one
+# imports with this platform default badge (mirrors the migration's own
+# NULL-backfill value for existing rows).
+_DEFAULT_PRICE_LABEL = "Free"
+
 # The eligible attendee pool for past-occurrence seeding: one (member_id,
 # plan_id, item_id) tuple per member who holds any synced membership. The
 # membership pins the NOT-NULL attendance attribution; it need NOT span the
@@ -159,6 +164,7 @@ class PresetsService:
         db_pool: DirectDatabasePool,
         expander: ClassesExpander,
         default_class_image_url: str,
+        default_reward_image_url: str,
     ) -> None:
         self._db = db_pool
         # The canonical recurrence expander (pure, stateless) — reused to
@@ -168,6 +174,10 @@ class PresetsService:
         # gym_classes.image_url is NOT NULL — a template class without a
         # photo imports with the platform default instead.
         self._default_class_image_url = default_class_image_url
+        # gym_rewards.image_url is NOT NULL — a template reward without a
+        # photo imports with the platform default instead (price_label uses
+        # _DEFAULT_PRICE_LABEL the same way).
+        self._default_reward_image_url = default_reward_image_url
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -441,8 +451,10 @@ class PresetsService:
                     {
                         "gym_id": gym_id_str,
                         "title": r["title"],
-                        "image_url": r["image_url"],
-                        "price_label": r["price_label"],
+                        "image_url": r["image_url"]
+                        or self._default_reward_image_url,
+                        "price_label": r["price_label"]
+                        or _DEFAULT_PRICE_LABEL,
                         "point_cost": r["points_cost"],
                     },
                 )

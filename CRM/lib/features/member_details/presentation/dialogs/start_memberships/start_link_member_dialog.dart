@@ -169,7 +169,7 @@ class _StartLinkMemberDialogState
   Map<String, String> _renderValues() => {
         kWaiverParamMemberName: widget.payerName,
         kWaiverParamPayeeName: _selected?.fullName ?? '',
-        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamGymName: selectedGym.gymName ?? '',
         kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.
