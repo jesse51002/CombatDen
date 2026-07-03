@@ -9,6 +9,7 @@ the fixtures for the duration of every test.
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest
@@ -377,33 +378,47 @@ def test_list_styles_returns_category_on_the_wire(
     assert items[0]["category"] == "Modern"
 
 
-def test_list_styles_skips_run_without_category(tmp_path: Path) -> None:
+def test_list_styles_skips_run_without_category(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """A named run whose ``output.yaml`` carries no ``category`` at
     all is skipped — category is required on the wire, so an
-    uncategorised run is never listed."""
+    uncategorised run is never listed. The skip is logged (not silent)
+    naming the run and the reason (no category stamped)."""
     _seed_named_styles(tmp_path, ["Categorized"], category="Modern")
     _seed_named_styles(tmp_path, ["Uncategorized"], category=None)
 
     svc = OutputService(apps_root=tmp_path)
-    page = asyncio.run(svc.list_styles("demo"))
+    with caplog.at_level(logging.WARNING, logger="src.api.service.output_service"):
+        page = asyncio.run(svc.list_styles("demo"))
 
     assert [s.id for s in page.items] == ["Categorized"]
+    assert any(
+        "Uncategorized" in r.getMessage() and "no category" in r.getMessage()
+        for r in caplog.records
+    )
 
 
 def test_list_styles_skips_category_outside_declared_vocabulary(
-    tmp_path: Path,
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """When the app declares a closed vocabulary, a run whose
     (non-null) category isn't one of the declared values is skipped,
-    even though a category is present."""
+    even though a category is present. The skip is logged naming the
+    run and the offending out-of-vocabulary value."""
     _write_demo_app_yaml(tmp_path, ["Modern", "Classic"])
     _seed_named_styles(tmp_path, ["InVocab"], category="Modern")
     _seed_named_styles(tmp_path, ["OutOfVocab"], category="Retro")
 
     svc = OutputService(apps_root=tmp_path)
-    page = asyncio.run(svc.list_styles("demo"))
+    with caplog.at_level(logging.WARNING, logger="src.api.service.output_service"):
+        page = asyncio.run(svc.list_styles("demo"))
 
     assert [s.id for s in page.items] == ["InVocab"]
+    assert any(
+        "OutOfVocab" in r.getMessage() and "vocabulary" in r.getMessage()
+        for r in caplog.records
+    )
 
 
 def test_list_styles_lists_categorised_runs_when_app_declares_no_vocabulary(

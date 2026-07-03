@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -33,12 +34,16 @@ from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.style_list_response import StyleListResponse
 from src.api.schema.style_summary import StyleSummary
 from src.core.asset_urls import cdn_url, image_key
+from src.core.errors import PipelineError
 from src.core.run_context import (
     APP_FILENAME,
     FINAL_IMAGES_DIRNAME,
     ICONS_DIRNAME,
     OUTPUT_FILENAME,
 )
+from src.core.util import load_yaml
+
+logger = logging.getLogger(__name__)
 
 # Run-dir layout — `output.yaml`, `final_images/` (the one place a delivered
 # per-slot PNG lives; `images/` raw+cutout intermediates are never served)
@@ -258,14 +263,18 @@ class OutputService:
         ``set()`` when the app.yaml is absent, unparseable, or declares
         no categories — the vocabulary check is then skipped (an app
         with no classification concept still lists categorised runs
-        as-is), consistent with the skip-a-bad-preset rule above."""
+        as-is), consistent with the skip-a-bad-preset rule above.
+
+        ``load_yaml`` (the package's one YAML read) is off-loaded to a
+        thread so its blocking file read never touches the event loop; it
+        raises ``PipelineError`` for an absent, unreadable, malformed, or
+        non-mapping file — all swallowed to ``set()`` here, same as an
+        invalid ``AppFormat``."""
         app_yaml = app_dir / APP_FILENAME
-        if not await asyncio.to_thread(app_yaml.is_file):
-            return set()
         try:
-            raw = await asyncio.to_thread(app_yaml.read_text)
-            app_format = AppFormat.model_validate(yaml.safe_load(raw))
-        except (yaml.YAMLError, ValidationError):
+            raw = await asyncio.to_thread(load_yaml, app_yaml)
+            app_format = AppFormat.model_validate(raw)
+        except (PipelineError, ValidationError):
             return set()
         return set(app_format.categories)
 
@@ -291,11 +300,29 @@ class OutputService:
                 continue
             # Category is REQUIRED on the wire: an uncategorised run —
             # or one whose category isn't in the app.yaml-declared
-            # vocabulary — is skipped, not listed unfilterable.
+            # vocabulary — is skipped, not listed unfilterable. Warn (once
+            # per run per list build — this loop is cache-gated) so a
+            # dropped theme isn't silent: today categories are hand-stamped,
+            # so a missing/typo'd stamp is the likely cause of a run vanishing
+            # from the picker.
             category = output.category
-            if category is None or (
-                declared_categories and category not in declared_categories
-            ):
+            if category is None:
+                logger.warning(
+                    "style list: skipping run %s/%s — no category stamped "
+                    "on its output.yaml",
+                    app_id,
+                    run_id,
+                )
+                continue
+            if declared_categories and category not in declared_categories:
+                logger.warning(
+                    "style list: skipping run %s/%s — category %r is not in "
+                    "the app.yaml-declared vocabulary %s",
+                    app_id,
+                    run_id,
+                    category,
+                    sorted(declared_categories),
+                )
                 continue
             # Card-art `?v=` cache-buster: prefer the stamped slot version from
             # output.yaml; locally fall back to hashing the on-disk PNG.

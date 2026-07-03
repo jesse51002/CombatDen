@@ -300,7 +300,13 @@ classification step**: a cheap structured LLM call at run production (and an
 `expand`-style backfill script for existing runs) that reads the design brief
 / design name and picks the category from the app.yaml vocabulary, so a new
 theme lands classified without any manual step. Until it exists, stamping the
-`category` line is part of producing a new named style.
+`category` line is part of producing a new named style. Once a run is stamped,
+every in-place lever carries the stamp forward — `regen`, `regen_image` and
+`expand` thread it through `Writer.write_expansion`, and a full in-place re-run
+(`src/cli.py` pointed at an existing dir) captures the prior `output.yaml`'s
+`category` before the pipeline clears the file and re-stamps it via
+`Writer.write` — so re-touching a run never silently drops the theme from the
+picker.
 
 ### Corner rounding — one paid call, the rest derived
 

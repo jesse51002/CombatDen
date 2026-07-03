@@ -125,6 +125,7 @@ async def main(argv: list[str] | None = None) -> int:
         result,
         run_ctx,
         original_cost=output.cost,
+        original_category=output.category,
         kind=ExpansionKind.REGENERATE,
     )
 

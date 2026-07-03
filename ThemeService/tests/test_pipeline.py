@@ -953,6 +953,7 @@ def test_write_expansion_preserves_cost_and_appends_ledger(
         expanded,
         ctx,
         original_cost=original.cost,
+        original_category=original.category,
         kind=ExpansionKind.REGENERATE,
     )
 
@@ -978,12 +979,95 @@ def test_write_expansion_preserves_cost_and_appends_ledger(
         expanded,
         ctx,
         original_cost=original.cost,
+        original_category=original.category,
         kind=ExpansionKind.REGENERATE,
     )
     ledger2 = ExpansionCostLog.model_validate(
         yaml.safe_load(ctx.expansion_cost_path().read_text())
     )
     assert len(ledger2.expansions) == 2
+
+
+def test_write_expansion_carries_category_forward(tmp_path, monkeypatch):
+    """A regen/expand pass carries the run's (hand-stamped) category forward
+    into the re-dumped output.yaml — the assembled Output has none, so without
+    the carry-forward the theme would silently drop out of the picker."""
+    from schema import ExpansionKind, OverwriteSpecs
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+    # Today's reality: a full run assembles category=None; the value is
+    # stamped by hand afterwards. Simulate that by writing it with the stamp,
+    # then reload the way the in-place scripts do (load_run → output.category).
+    Writer().write(full, ctx, prior_category="minimalist")
+    original = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert original.category == "minimalist"
+
+    # Regenerate one image, threading the loaded category as the scripts do.
+    ctx.overwrite_specs = OverwriteSpecs(specs="darker background")
+    seed = {
+        k: v for k, v in build_seed(ctx.app, full.output).items() if k != "hero"
+    }
+    expanded = asyncio.run(Pipeline().run(ctx, seed=seed))
+    Writer().write_expansion(
+        expanded,
+        ctx,
+        original_cost=original.cost,
+        original_category=original.category,
+        kind=ExpansionKind.REGENERATE,
+    )
+
+    after = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert after.category == "minimalist"
+
+
+def test_full_rerun_captures_and_carries_category(tmp_path, monkeypatch):
+    """The full in-place re-run seam: cli._existing_category reads the prior
+    run's stamp before the pipeline clears output.yaml, and Writer.write
+    re-stamps it — so a re-run keeps the theme categorised, while a fresh run
+    (no prior file, prior_category=None) stays uncategorised."""
+    import src.cli as cli
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    result = asyncio.run(Pipeline().run(ctx))
+
+    # No prior file → captured category is None (a fresh run stays None).
+    assert cli._existing_category(ctx.output_path()) is None
+    Writer().write(result, ctx)
+    fresh = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert fresh.category is None
+
+    # Hand-stamp the run, then take the full-re-run seam: capture the prior
+    # stamp (as cli.main does before Pipeline.run clears the file), re-stamp it.
+    Writer().write(result, ctx, prior_category="bold")
+    captured = cli._existing_category(ctx.output_path())
+    assert captured == "bold"
+    Writer().write(result, ctx, prior_category=captured)
+    after = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert after.category == "bold"
 
 
 def test_run_cost_by_model_back_compat():
