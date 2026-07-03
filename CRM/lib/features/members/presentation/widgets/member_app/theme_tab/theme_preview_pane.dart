@@ -3,6 +3,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/members/data/showcase_defaults.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/set_app_theme_button.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/phone_frame.dart';
@@ -80,6 +82,10 @@ class ThemePreviewPane extends StatelessWidget {
           onNext: onNext,
           onSelect: onSelect,
         ),
+        // Admin-only primary action: persist the previewed theme as the gym's
+        // app branding. Self-hides in the public browser (guarded here too so
+        // no spurious column gap is left where it would sit).
+        if (selectedGym.gymId != null) const SetAppThemeButton(),
         if (onEditBranding != null)
           AppOutlineButton(
             text: 'Edit gym name / logo',
@@ -122,92 +128,112 @@ class _PreviewContent extends StatelessWidget {
           );
         }
         final reduceMotion = MediaQuery.disableAnimationsOf(context);
-        return ListenableBuilder(
-          // Re-render on a theme switch (branding) AND on a gym switch / its
-          // detail loading (so the Store + Home surfaces get the real content).
-          listenable: Listenable.merge([ThemeRuntime.changes, selectedGym]),
-          builder: (context, _) {
-            final detail = selectedGym.detail;
-            final rawRewards = detail?.rewards
-                .map(
-                  (r) => ShowcaseReward(
-                    title: r.title,
-                    imageUrl: r.imageUrl,
-                    priceLabel: r.priceLabel,
-                    pointsCost: r.pointsCost,
-                  ),
-                )
-                .toList();
-            final rawClasses = detail?.classes
-                .map(
-                  (c) => ShowcaseClassInfo(
-                    name: c.name,
-                    imageUrl: c.imageUrl,
-                    instructorName: c.instructorName,
-                  ),
-                )
-                .toList();
-
-            // Group-aware defaults: resolve the selected gym's parent group,
-            // apply its default set when real data is absent, and repeat a
-            // single real item across all 4 slots so it is shown in every
-            // schedule/store slot instead of appearing only once.
-            final group = showcaseGroupFor(selectedGym.videoGymId);
-            final classes = _fillSlots(
-              rawClasses,
-              kShowcaseClassesByGroup[group] ??
-                  kShowcaseClassesByGroup[kDefaultShowcaseGroup]!,
-            );
-            final rewards = _fillSlots(
-              rawRewards,
-              kShowcaseRewardsByGroup[group] ??
-                  kShowcaseRewardsByGroup[kDefaultShowcaseGroup]!,
-            );
-
-            return AnimatedSwitcher(
-              duration: reduceMotion ? Duration.zero : _kSlideDuration,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeOutCubic,
-              transitionBuilder: (child, animation) => DualTransitionBuilder(
-                animation: animation,
-                // Entering screen.
-                forwardBuilder: (context, anim, child) => SlideTransition(
-                  position: Tween<Offset>(
-                    begin: Offset(forward ? 1.0 : -1.0, 0),
-                    end: Offset.zero,
-                  ).animate(anim),
-                  child: child,
-                ),
-                // Exiting screen (slides the opposite way).
-                reverseBuilder: (context, anim, child) => SlideTransition(
-                  position: Tween<Offset>(
-                    begin: Offset.zero,
-                    end: Offset(forward ? -1.0 : 1.0, 0),
-                  ).animate(anim),
-                  child: child,
-                ),
-                child: child,
-              ),
-              child: KeyedSubtree(
-                // Slide change drives the switch; a theme change keeps this
-                // key, so it re-themes in place (no slide).
-                key: ValueKey(screen),
-                child: KeyedSubtree(
-                  // Restart the showcase's own animation on theme change.
-                  key: ValueKey('${ThemeRuntime.activeDesignId}-$screen'),
-                  child: screen.build(
-                    gymName: gymName,
-                    gymLogo: gymLogo,
-                    rewards: rewards,
-                    classes: classes,
-                    themeTabPreview: true,
-                  ),
-                ),
+        return FutureBuilder<ShowcaseDefaults>(
+          // Cached app-side; the same future instance is returned every build so
+          // this never re-fetches. Renders bundled fallbacks until it resolves.
+          future: loadShowcaseDefaults(),
+          builder: (context, defaultsSnapshot) {
+            final showcaseDefaults = defaultsSnapshot.data;
+            return ListenableBuilder(
+              // Re-render on a theme switch (branding) AND on a gym switch / its
+              // detail loading (so Store + Home surfaces get the real content).
+              listenable: Listenable.merge([ThemeRuntime.changes, selectedGym]),
+              builder: (context, _) => _buildPreview(
+                context,
+                reduceMotion: reduceMotion,
+                showcaseDefaults: showcaseDefaults,
               ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildPreview(
+    BuildContext context, {
+    required bool reduceMotion,
+    required ShowcaseDefaults? showcaseDefaults,
+  }) {
+    final detail = selectedGym.detail;
+    final rawRewards = detail?.rewards
+        .map(
+          (r) => ShowcaseReward(
+            title: r.title,
+            imageUrl: r.imageUrl,
+            priceLabel: r.priceLabel,
+            pointsCost: r.pointsCost,
+          ),
+        )
+        .toList();
+    final rawClasses = detail?.classes
+        .map(
+          (c) => ShowcaseClassInfo(
+            name: c.name,
+            imageUrl: c.imageUrl,
+            instructorName: c.instructorName,
+          ),
+        )
+        .toList();
+
+    // Category-keyed demo defaults for when real data is absent (always so in
+    // the public browser). Prefer the picked theme's category; fall back to the
+    // legacy videoGymId group when no theme category is known yet. The fetched
+    // showcase-defaults win; the bundled `kShowcase*ByGroup` constants are the
+    // last-resort offline fallback (fetch failure / category absent). A single
+    // real item is repeated across all 4 slots so it fills every card.
+    final category =
+        selectedGym.themeCategory ?? showcaseGroupFor(selectedGym.videoGymId);
+    final fetched = showcaseDefaults?.forCategory(category);
+    final defaultClasses = fetched?.classes ??
+        (kShowcaseClassesByGroup[category] ??
+            kShowcaseClassesByGroup[kDefaultShowcaseGroup]!);
+    final defaultRewards = fetched?.rewards ??
+        (kShowcaseRewardsByGroup[category] ??
+            kShowcaseRewardsByGroup[kDefaultShowcaseGroup]!);
+    final classes = _fillSlots(rawClasses, defaultClasses);
+    final rewards = _fillSlots(rawRewards, defaultRewards);
+
+    return AnimatedSwitcher(
+      duration: reduceMotion ? Duration.zero : _kSlideDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) => DualTransitionBuilder(
+        animation: animation,
+        // Entering screen.
+        forwardBuilder: (context, anim, child) => SlideTransition(
+          position: Tween<Offset>(
+            begin: Offset(forward ? 1.0 : -1.0, 0),
+            end: Offset.zero,
+          ).animate(anim),
+          child: child,
+        ),
+        // Exiting screen (slides the opposite way).
+        reverseBuilder: (context, anim, child) => SlideTransition(
+          position: Tween<Offset>(
+            begin: Offset.zero,
+            end: Offset(forward ? -1.0 : 1.0, 0),
+          ).animate(anim),
+          child: child,
+        ),
+        child: child,
+      ),
+      child: KeyedSubtree(
+        // Slide change drives the switch; a theme change keeps this
+        // key, so it re-themes in place (no slide).
+        key: ValueKey(screen),
+        child: KeyedSubtree(
+          // Restart the showcase's own animation on theme change.
+          key: ValueKey('${ThemeRuntime.activeDesignId}-$screen'),
+          child: screen.build(
+            gymName: gymName,
+            gymLogo: gymLogo,
+            rewards: rewards,
+            classes: classes,
+            themeTabPreview: true,
+          ),
+        ),
+      ),
     );
   }
 }

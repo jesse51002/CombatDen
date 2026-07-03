@@ -8,9 +8,30 @@ domain and is served separately.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class ShowcaseCategory(StrEnum):
+    """The 8-bucket demo-content vocabulary the standalone theme browser keys
+    its bundled showcase cards by.
+
+    This mirrors ``ParentGymType`` in
+    ``src/videos/schema/videos_parent_gym_type.py`` (the discipline roll-up),
+    but is deliberately NOT imported from it: the videos domain owns gym
+    business logic, while this enum is the theme domain's own wire vocabulary
+    for static demo content. Keep the two value sets in sync by hand."""
+
+    fighting = "Fighting"
+    yoga = "Yoga"
+    pilates = "Pilates"
+    barre = "Barre"
+    hiit = "HIIT"
+    cardio = "Cardio"
+    dance = "Dance"
+    wellness = "Wellness"
 
 
 class ShowcaseClassCard(BaseModel):
@@ -54,3 +75,26 @@ class GymShowcase(BaseModel):
     gym_id: UUID
     classes: list[ShowcaseClassCard] = Field(default_factory=list)
     rewards: list[ShowcaseRewardCard] = Field(default_factory=list)
+
+
+class ShowcaseGroupDefaults(BaseModel):
+    """One category's bundled demo class and reward cards. Reuses the same
+    card models as a real gym's showcase — the demo content is production-shaped,
+    not a special-case model."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    classes: list[ShowcaseClassCard] = Field(default_factory=list)
+    rewards: list[ShowcaseRewardCard] = Field(default_factory=list)
+
+
+class ShowcaseDefaults(BaseModel):
+    """The standalone theme browser's static demo content: bundled class and
+    reward cards keyed by ``ShowcaseCategory``. Served from a repo YAML file
+    (no database) when no real gym is selected."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    categories: dict[ShowcaseCategory, ShowcaseGroupDefaults] = Field(
+        default_factory=dict
+    )

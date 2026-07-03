@@ -6,6 +6,7 @@ import argparse
 import logging
 from pathlib import Path
 
+from src.core.errors import PipelineError
 from src.core.logging_setup import configure_logging
 from src.core.run_context import OUTPUT_ROOT_DIRNAME, RunContext
 from src.core.util import load_yaml
@@ -20,6 +21,29 @@ DEFAULT_OUT_ROOT = Path(__file__).resolve().parent.parent / OUTPUT_ROOT_DIRNAME
 # A run name becomes a single folder segment under <out_root>/<app_id>/, so it
 # must not be empty or carry a path separator / parent-dir escape.
 ILLEGAL_RUN_NAME_CHARS = ("/", "\\", "..")
+
+
+def _existing_category(output_path: Path) -> str | None:
+    """The ``category`` stamped on a pre-existing run's ``output.yaml``, if any.
+
+    A full run pointed at an existing dir overwrites its ``output.yaml`` (the
+    pipeline clears the file up front), and the assembled ``Output`` carries no
+    ``category`` — the classification step is a README TODO, so categories are
+    hand-stamped today. Reading the prior value here lets the writer carry it
+    forward, so a re-run keeps the theme in the picker instead of dropping it.
+
+    Returns ``None`` when there is no prior run, the file is unreadable /
+    malformed, or it carries no ``category`` (a fresh run stays uncategorised —
+    correct until the classification step exists).
+    """
+    if not output_path.is_file():
+        return None
+    try:
+        data = load_yaml(output_path)
+    except PipelineError:
+        return None
+    category = data.get("category")
+    return category if isinstance(category, str) else None
 
 
 def _run_name(value: str) -> str:
@@ -83,8 +107,13 @@ async def main(argv: list[str] | None = None) -> int:
         run_id=args.run_name,
     )
 
+    # A full run pointed at an existing dir overwrites its output.yaml, so
+    # capture the prior run's (hand-stamped) category BEFORE the pipeline
+    # clears that file, then carry it forward through the writer.
+    prior_category = _existing_category(run_ctx.output_path())
+
     result = await Pipeline().run(run_ctx)
-    Writer().write(result, run_ctx)
+    Writer().write(result, run_ctx, prior_category=prior_category)
 
     logger.debug("done: %s", run_ctx.output_path())
     return 0

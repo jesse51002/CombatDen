@@ -94,7 +94,7 @@ Pydantic AI (`pydantic-ai-slim[anthropic]`) for `VideoAgentService` only. Python
 DI providers (videos domain): `litellm_client`, `video_spec_service`, `video_query_generator`,
 `video_spec_authoring`, `video_feed_refiner`, `video_agent_service`, `videos_service`.
 DI providers (presets domain): `presets_service`, `presets_template_service`.
-DI providers (theme domain): `theme_showcase_service`.
+DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
 No `video_config_*`, `video_template_service`, or `video_showcase_service` providers remain.
 
 ## 1. The spec is APPEND-ONLY VERSIONED — readers use the view, never the table

@@ -104,7 +104,11 @@ async def main(argv: list[str] | None = None) -> int:
 
     result = await Pipeline().run(run_ctx, seed=seed)
     Writer().write_expansion(
-        result, run_ctx, original_cost=output.cost, kind=ExpansionKind.EXPAND
+        result,
+        run_ctx,
+        original_cost=output.cost,
+        original_category=output.category,
+        kind=ExpansionKind.EXPAND,
     )
     # Expanded against an updated inventory → refresh the dir's snapshot so its
     # app.yaml matches the slots its output.yaml now has.

@@ -2,12 +2,12 @@ flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (WIP)"]
     direction TB
-    r_mem["<b>members</b> · /api/v1/members · 16 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link (authorize payer + sign waiver)<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/remove/preview<br/>POST /{member_id}/link/remove (cascade-cancel + de-authorize)<br/>GET /{member_id}/authorized-payer-waiver<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
-    r_gym["<b>gyms</b> · /api/v1/gyms · 6 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}<br/>PUT /{gym_id}/employees/me/theme"]
-    r_cls["<b>classes</b> · /api/v1/classes · 12 routes<br/>GET / · POST / · GET /{id} · PUT /{id} · DELETE /{id} (class CRUD)<br/>POST+GET /{id}/exceptions/instance<br/>POST+GET /{id}/exceptions/range<br/>GET /instances (schedule board — attendance_count + signup_count per occurrence)<br/>DELETE /{id}/occurrences/{date} (un-occur)<br/>POST /{id}/occurrences/{date}/reschedule"]
+    r_mem["<b>members</b> · /api/v1/members · 17 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link (authorize payer + sign waiver)<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/remove/preview<br/>POST /{member_id}/link/remove (cascade-cancel + de-authorize)<br/>GET /{member_id}/authorized-payer-waiver<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments<br/>POST /{member_id}/points (award/adjust points)"]
+    r_gym["<b>gyms</b> · /api/v1/gyms · 7 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}<br/>PUT /{gym_id}/theme (ThemeService design id)<br/>PUT /{gym_id}/employees/me/theme"]
+    r_cls["<b>classes</b> · /api/v1/classes · 14 routes<br/>GET / · POST / · GET /{id} · PUT /{id} · DELETE /{id} (class CRUD)<br/>POST+GET /{id}/exceptions/instance<br/>POST+GET /{id}/exceptions/range<br/>PUT+DELETE /{id}/exceptions/range/{exception_id} (edit/remove a cancelled range)<br/>GET /instances (schedule board — attendance_count + signup_count per occurrence)<br/>DELETE /{id}/occurrences/{date} (un-occur)<br/>POST /{id}/occurrences/{date}/reschedule"]
     r_chk["<b>checkin</b> · /api/v1 · 8 routes<br/>POST /checkin (is_member gate · staff clean-records / warns→confirm; ignore_warnings overrides · kiosk strict)<br/>DELETE /checkin (reverse one member's check-in)<br/>POST /checkin/batch (207 · class_id+occurrence_date in body)<br/>GET /checkin/attendees (combined roster: signed-up OR attended, each flagged)<br/>POST /signup (reserve a spot; capacity-gated on the signed-up-or-attended union)<br/>DELETE /signup (cancel a member's sign-up)<br/>GET /checkin/history (member class-history feed: reservations + attended + no-shows)<br/>GET /streak"]
     r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
-    r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
+    r_rew["<b>rewards</b> · /api/v1/rewards · 11 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem (member-initiated → pending)<br/>POST /{reward_id}/redeem-for-member (staff-initiated → approved; override drains to zero)<br/>GET /redemptions/pending (gym-wide queue, paginated)<br/>POST /redemptions/{redemption_id}/approve<br/>POST /redemptions/{redemption_id}/reject (refunds the debit)<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 9 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>POST /{waiver_id}/signatures (record signature, version-locked)<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
     r_mm["<b>memberships</b> · /api/v1/member_memberships · 16 routes<br/>DELETE / (cancel one+ recurring)<br/>POST /cancel-one-time (one-time/trial manual cancel — writes cancel_date)<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (same-plan reprice, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /upgrade (cross-plan, charge diff)<br/>POST /upgrade/preview<br/>POST /preview<br/>POST /cancel/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card<br/>POST /refund"]
@@ -16,7 +16,8 @@ flowchart TB
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
     r_vid["<b>videos</b> · /api/v1/gyms/{id}/videos + /gyms/{id}/video-spec + /gyms/{id}/video-agent · 10 routes<br/>GET /gyms/{id}/videos<br/>POST /gyms/{id}/videos/lookup<br/>POST /gyms/{id}/videos<br/>DELETE /gyms/{id}/videos/{video_id}<br/>POST /gyms/{id}/videos/{video_id}/keep<br/>GET /gyms/{id}/videos/preview<br/>GET /gyms/{id}/videos/spec<br/>GET /gyms/{id}/video-spec (gym-employee gated)<br/>POST /gyms/{id}/video-agent (gym-employee gated · also handles accept via accepted_spec)<br/>POST /gyms/{id}/video-agent/refine-from-feed (gym-employee gated)"]
     r_pres["<b>presets</b> · /api/v1/gyms/{id}/presets + /api/v1/presets/templates · 5 routes<br/>POST /gyms/{id}/presets/import (owner + email-allowlist gated)<br/>GET /presets/templates<br/>GET /presets/templates/{video_gym_id}<br/>GET /presets/templates/{video_gym_id}/videos<br/>GET /presets/templates/{video_gym_id}/videos/preview"]
-    r_theme["<b>theme</b> · /api/v1/gyms/{id}/showcase · 1 route<br/>GET /gyms/{id}/showcase (gym-employee gated)"]
+    r_theme["<b>theme</b> · /api/v1/gyms/{id}/showcase + /api/v1/theme · 2 routes<br/>GET /gyms/{id}/showcase (gym-employee gated)<br/>GET /theme/showcase-defaults (PUBLIC — category-keyed demo cards)"]
+    r_upl["<b>uploads</b> · /api/v1/uploads · 1 route<br/>POST /image (multipart + category form field → CDN URL; staff-principal gated)"]
     checkin_class_resolver["CheckinClassResolver<br/>src/checkin/ · resolve one occurrence against the class's schedule versions + exceptions (pure read)<br/>(the one-way checkin → classes dependency)"]
     checkin_member_gate["CheckinMemberGate<br/>src/checkin/ · per-member gate + write<br/>(eligibility, capacity vs the signed-up-or-attended union,<br/>unsigned-waiver gate, plan select trial→one_time→recurring, auto-end)"]
     cycle_counts_service["CycleCountsService<br/>src/checkin/"]
@@ -58,7 +59,9 @@ flowchart TB
     videos_service["VideosService<br/>src/videos/ · authed real-gym feed + spec facade<br/>reads gym_video_* (scan_status/run-versioned)<br/>+ owner feed add (YouTube Data API metadata; pool row owned via video.gym_id + added_via=manual)<br/>/ remove: owner=True → delete owner-section row (+ pool if manual); owner=False → reject latest-run row (scan_status=rejected)<br/>/ keep: un-reject (scan_status=accepted; reject audit retained)"]
     presets_service["PresetsService<br/>src/presets/ · owner-gated template-→-gym import<br/>writes gym_video_spec (system_update version) + gym_video_feed · gym_classes · gym_employees · gym_rewards · gyms.theme_design_id"]
     presets_template_service["PresetsTemplateService<br/>src/presets/service/ · public template catalog reads<br/>list_template_cards · load_template · load_template_feed_ids<br/>reads video_gym_* tables (slug-keyed demo templates)"]
-    theme_showcase_service["ThemeShowcaseService<br/>src/theme/service/ · gym showcase assembly<br/>load_showcase_classes · load_showcase_rewards<br/>reads gym_classes ⋈ gym_employees + gym_rewards"]
+    theme_showcase_service["ThemeShowcaseService<br/>src/theme/service/ · gym showcase assembly<br/>load_showcase_classes · load_showcase_rewards<br/>reads gym_classes ⋈ gym_class_schedules_current (weekday_slots instructor) ⋈ gym_employees + gym_rewards"]
+    theme_showcase_defaults_service["ThemeShowcaseDefaultsService<br/>src/theme/service/ · PUBLIC, no DB<br/>category-keyed demo class/reward cards from a bundled YAML file<br/>(ShowcaseCategory — 8-bucket vocabulary mirroring ParentGymType)"]
+    uploads_s3_service["UploadsS3Service<br/>src/uploads/service/ · boto3 proxy into combatden-assets<br/>size-caps the multipart part before buffering, then the byte count as a backstop"]
     litellm_client["LiteLLMClient — src/shared/litellm_client.py<br/>complete_structured(prompt, schema, model) · model=provider/name<br/>resolves provider key from settings · Singleton"]
     video_spec_service["VideoSpecService — src/videos/service/<br/>spec DB read/write · load_latest · save_version · no LLM"]
     video_query_generator["VideoQueryGenerator — src/videos/service/<br/>litellm structured query gen · generate / generate_for_gym<br/>genre-spread logic · called by VideoSpecAuthoring.commit"]
@@ -155,6 +158,8 @@ flowchart TB
     r_pres --> presets_template_service
     r_pres -->|"template feed/preview: load_pool_videos"| videos_service
     r_theme --> theme_showcase_service
+    r_theme --> theme_showcase_defaults_service
+    r_upl --> uploads_s3_service
     r_mm -->|"batch reprice: discover + create"| membership_reprice_task_handler
     r_mm -->|"in-task guard (item ops)"| tasks_service
     r_mm -->|"fire batch run"| tasks_executor
@@ -210,21 +215,23 @@ flowchart TB
   Stripe["Stripe — payments · Connect · webhooks"]
   YouTube["📺 YouTube Data API v3<br/>video metadata for owner-added videos"]
   LLMProvider["🤖 LLM Provider (Anthropic)<br/>agent: Pydantic AI · AnthropicModel · settings.video_agent_model<br/>regular calls: litellm · settings.video_llm_model<br/>keys: anthropic_api_key / openai_api_key / gemini_api_key"]
+  CDN["☁️ S3 + CloudFront CDN<br/>cdn.combatden.net · combatden-assets bucket"]
   CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
   FastApiBackend -->|"read/write · JWT auth · read+write applied-discount rows"| Supabase
   FastApiBackend -->|"via Payments core · compute coupons at sync, write back stripe_coupon_id"| Stripe
   Stripe -.->|"webhooks → /api/v1/stripe/webhooks"| FastApiBackend
   FastApiBackend -->|"videos: owner-add fetches video title/channel/thumbnail/views"| YouTube
   FastApiBackend -->|"videos: agent (Pydantic AI · AnthropicModel) + regular LLM calls (litellm)"| LLMProvider
+  FastApiBackend -->|"image uploads (uploads domain)"| CDN
   classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef route fill:#eef2ff,stroke:#5b6bb0,color:#222;
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
   class CRM client;
-  class Supabase,Stripe,YouTube,LLMProvider ext;
-  class r_mem,r_gym,r_cls,r_chk,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme route;
-  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
+  class Supabase,Stripe,YouTube,LLMProvider,CDN ext;
+  class r_mem,r_gym,r_cls,r_chk,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme,r_upl route;
+  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,theme_showcase_defaults_service,uploads_s3_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

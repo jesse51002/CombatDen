@@ -30,6 +30,16 @@ class Output(BaseModel):
     (``FontSet``). The wrappers exist so a group can gain run-wide
     fields without another breaking ``output.yaml`` reshape.
 
+    ``category`` is this run's classification bucket — one of the values
+    the app declares under ``categories`` in its ``app.yaml`` (the code
+    is app-agnostic: it supports "classification", the class values are
+    the app's own). The style picker REQUIRES it (an uncategorised run
+    is never listed by ``GET /apps/{id}/styles``), but the field is
+    ``None``-able here so runs that predate it — and runs of apps with
+    no classification concept — still validate. Today the value is
+    stamped into the artifact; the pipeline classification step that
+    will set it at production time is a README TODO.
+
     ``cost`` is optional, like ``ImageOutput.complexity``: every fresh run
     sets it, but older or externally-produced ``output.yaml`` files
     predate the field and must still validate (defaults to ``None``).
@@ -54,6 +64,7 @@ class Output(BaseModel):
     app: str
     display_name: str
     design_name: str
+    category: str | None = None
     image_set: ImageSet
     color_set: ColorPalette
     font_set: FontSet = Field(default_factory=lambda: FontSet(fonts={}))

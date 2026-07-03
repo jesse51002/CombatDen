@@ -1,6 +1,13 @@
 id: demo
 display_name: Demo App
 
+# Matches the `category: Modern` stamped in default/output.yaml (the
+# template `_seed_named_styles`/`_write_demo_app_yaml` in test_api.py copy
+# from) so the styles-list vocabulary check accepts it.
+categories:
+  - Modern
+  - Classic
+
 images:
   - id: hero
     description: Bold hero illustration on a flat solid background.

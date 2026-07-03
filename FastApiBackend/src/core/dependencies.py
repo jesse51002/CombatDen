@@ -168,6 +168,9 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.theme.service.theme_showcase_defaults_service import (
+    ThemeShowcaseDefaultsService,
+)
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
 from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
@@ -439,6 +442,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     theme_showcase_service = providers.Factory(
         ThemeShowcaseService,
         db_pool=db_pool,
+    )
+    # Theme: static, category-keyed demo showcase cards from a bundled YAML
+    # file (no DB) for the public standalone theme browser.
+    # Singleton, not Factory: the service caches the parsed + validated YAML
+    # on the instance for the process lifetime — a Factory would rebuild a
+    # fresh instance (and re-read + re-validate the YAML) on every request.
+    theme_showcase_defaults_service = providers.Singleton(
+        ThemeShowcaseDefaultsService,
     )
     # Presets: template catalog reads (list, detail, feed ids).
     presets_template_service = providers.Factory(

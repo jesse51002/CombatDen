@@ -12,8 +12,8 @@ import 'package:crm/features/members/data/video_feed.dart';
 /// cross-fetched from the videos domain) and video feed from UUID-keyed
 /// endpoints that require a valid Supabase session.
 ///
-/// Contrast with [VideoApiClient] / [GymApiClient] (public, package:http),
-/// which serve the slug-keyed template catalog used by the public theme browser.
+/// Contrast with [VideoApiClient] (public, package:http), which serves the
+/// slug-keyed template video feed.
 ///
 /// Layered per CRM convention:
 ///   Widget → GymContentRepository → ApiClient → backend.

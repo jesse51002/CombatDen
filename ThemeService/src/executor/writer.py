@@ -35,20 +35,38 @@ COST_PRECISION = 6
 class Writer:
     """Writes provenance + output for one run, together."""
 
-    def write(self, result: PipelineResult, run_ctx: RunContext) -> None:
+    def write(
+        self,
+        result: PipelineResult,
+        run_ctx: RunContext,
+        *,
+        prior_category: str | None = None,
+    ) -> None:
         """Serialize provenance, then ``output.yaml`` with the run cost.
 
         The writer already owns assembly, so it also aggregates cost:
         each paid service tracked its own running total during the run;
         here we sum them into an optional ``RunCost`` and stamp it onto
         the output before the dump.
+
+        ``prior_category`` is the classification of a run this write
+        *overwrites*: the assembled ``Output`` carries no ``category`` (the
+        pipeline classification step is a README TODO — categories are
+        hand-stamped today), so a full in-place re-run must carry the prior
+        run's stamp forward or the theme silently drops out of the picker.
+        The caller (``src/cli.py``) captures it from the existing
+        ``output.yaml`` *before* the pipeline clears that file, and passes it
+        here. A fresh run has no prior file → ``None`` → the run stays
+        uncategorised, which is correct until the classification step exists.
         """
         app_path = run_ctx.run_dir / APP_PROVENANCE_NAME
         cust_path = run_ctx.run_dir / CUSTOMIZATION_PROVENANCE_NAME
         output_path = run_ctx.output_path()
 
         run_cost = self._run_cost(result)
-        output = result.output.model_copy(update={"cost": run_cost})
+        output = result.output.model_copy(
+            update={"cost": run_cost, "category": prior_category}
+        )
         self._stamp_versions(output, run_ctx)
 
         self._dump_model(run_ctx.app, app_path)
@@ -80,6 +98,7 @@ class Writer:
         run_ctx: RunContext,
         *,
         original_cost: RunCost | None,
+        original_category: str | None,
         kind: ExpansionKind,
     ) -> None:
         """Write a reopen-time pass (expand or regenerate) back in place.
@@ -88,9 +107,12 @@ class Writer:
 
         - ``output.yaml`` is re-dumped from the merged ``Output`` (the seeded
           done nodes plus whatever this pass (re)generated), but its ``cost``
-          block is set to ``original_cost`` — the figure carried forward from
-          the file we loaded — so the original full-run cost is preserved
-          untouched, never overwritten with this pass's partial spend.
+          block is set to ``original_cost`` and its ``category`` to
+          ``original_category`` — both carried forward from the file we loaded
+          — so a partial pass never overwrites the original full-run cost, nor
+          drops the run's (today hand-stamped) classification. The assembled
+          ``Output`` carries neither, so without this carry-forward every
+          regen/expand would silently un-list the theme from the picker.
         - ``expansion_cost.yaml`` gains one appended ``ExpansionEntry``
           recording *this* pass: its ``kind`` (expand vs regenerate), when it
           ran, which node keys it (re)generated, the per-slot
@@ -100,7 +122,9 @@ class Writer:
         The dir's ``app.yaml`` / ``customization.yaml`` are left alone — they
         are the inputs the caller curated, not artifacts this writer owns.
         """
-        output = result.output.model_copy(update={"cost": original_cost})
+        output = result.output.model_copy(
+            update={"cost": original_cost, "category": original_category}
+        )
         self._stamp_versions(output, run_ctx)
         self._dump_model(output, run_ctx.output_path())
 

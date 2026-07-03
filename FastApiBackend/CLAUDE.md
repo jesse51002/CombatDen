@@ -109,12 +109,12 @@ When a task builds or heavily reshapes a domain (tables + services + routes):
 - Bad: `pool_size=10` buried inside a function or constructor; `LOCK_TTL_SECONDS: Final[int] = 60` at module level in `config.py`
 
 **Enums**
-- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
+- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `StrEnum` classes (`from enum import StrEnum`, Python 3.11+; ruff's `UP042` enforces this over `(str, Enum)` on this codebase's Python 3.13)
 - **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
 - **ALWAYS reuse enums and schemas from the Database package** (`../Database/python_data/schema/`) when they exist — import via `from schema.<module> import <Enum>` (available through `src/shared/db_schema_path.py`). Never redefine enums that already exist in the Database package.
 - Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
 - Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
-- Good: `value: list[MemberStatus]` with `class MemberStatus(str, Enum): active = "active"`
+- Good: `value: list[MemberStatus]` with `class MemberStatus(StrEnum): active = "active"`
 - Bad: `value: list[str]` with hardcoded `"active"`, `"trial"` scattered through the code
 
 **PEP 8 Naming**
@@ -533,7 +533,7 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 
-**DI providers (theme domain):** `theme_showcase_service`.
+**DI providers (theme domain):** `theme_showcase_service`, `theme_showcase_defaults_service`.
 
 There is NO separate `video_config` router or module.
 

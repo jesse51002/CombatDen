@@ -285,6 +285,29 @@ pass's spend.
 
 ## TODO
 
+### Classification pipeline step — categorise each run at production time
+
+Every run's `output.yaml` carries a top-level `category` — one of the values
+the app declares under `categories` in its `app.yaml` (app-agnostic: the code
+supports "classification", the class values are the app's own; for combatden
+they are the 8 parent gym-type buckets). The style picker requires it: an
+uncategorised run — or one whose value isn't in the declared vocabulary — is
+skipped by `GET /apps/{app_id}/styles`.
+
+Today the value is **stamped into the artifact by hand** (all 76 combatden
+runs were backfilled this way). The missing piece is a **pipeline
+classification step**: a cheap structured LLM call at run production (and an
+`expand`-style backfill script for existing runs) that reads the design brief
+/ design name and picks the category from the app.yaml vocabulary, so a new
+theme lands classified without any manual step. Until it exists, stamping the
+`category` line is part of producing a new named style. Once a run is stamped,
+every in-place lever carries the stamp forward — `regen`, `regen_image` and
+`expand` thread it through `Writer.write_expansion`, and a full in-place re-run
+(`src/cli.py` pointed at an existing dir) captures the prior `output.yaml`'s
+`category` before the pipeline clears the file and re-stamps it via
+`Writer.write` — so re-touching a run never silently drops the theme from the
+picker.
+
 ### Corner rounding — one paid call, the rest derived
 
 Brand personality lives in corner radius as much as in colour: sharp corners
