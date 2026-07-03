@@ -115,9 +115,13 @@ typed name), `{{gym_name}}` (⚠ the gyms column is `gym_name`, not `name`),
 ⚠ **The body is markdown, and a markdown serializer may backslash-escape the
 token** (`\{\{member\_name\}\}` — displays identically in the editor,
 matches nothing; this silently broke ALL rendering in live testing). Both
-renderers canonicalize escaped tokens before substituting, and the CRM
-editor's save path (`WaiverMarkdownEditor.markdownFromController`) unescapes
-tokens so new bodies store clean.
+renderers match escaped AND plain token forms, and the CRM editor's save
+path (`WaiverMarkdownEditor.markdownFromController`) unescapes tokens so new
+bodies store clean. ⚠ **Both renderers substitute in a SINGLE pass** — a
+substituted value is never re-scanned, so a signer typing a literal
+`{{gym_name}}` into the free-text name field lands verbatim in the frozen
+`rendered_body` instead of being expanded by a later key (placeholder
+injection; the backend's old sequential `str.replace` had this bug).
 The CRM waiver editor MUST surface the available tokens to the author, always
 visible — never behind a collapse (no invisible constants — a required UX
 affordance). Jesse chose to store the **full `rendered_body`**, not a params
@@ -255,9 +259,11 @@ name (empty → a `___` blank, escaped so markdown can't read it as a rule). The
 (after `review`, before `payment`) that blocks until every required waiver is
 signed; the backend 422 is the backstop. The member-detail Waivers section
 shows the UNION of required + ever-signed waivers (`MemberWaiverStatusRow`:
-`required`, `meets_floor`, `waiver_type`, `is_deleted` — signed-below-floor =
-the yellow tappable "Needs re-sign" chip; archived/payer-auth rows display
-without a sign action) plus a "Sign new waiver" picker over the gym's custom
+`required`, `meets_floor`, `waiver_type`, `is_deleted` — signed-below-floor
+on a custom, non-archived waiver = the yellow tappable "Needs re-sign" chip;
+an archived or payer-auth signature below floor just reads "Signed" with no
+sign action — re-signing isn't possible there, so a warning would be a
+dead-end instruction) plus a "Sign new waiver" picker over the gym's custom
 waivers (any custom waiver is signable, required or not). The waiver editor
 surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; a BODY edit
 over a SIGNED version asks at SAVE time via `RequireResignDialog` —

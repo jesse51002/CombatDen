@@ -113,16 +113,23 @@ class WaiversSignatures(WaiversBase):
         backslash-escape literal braces/underscores — storing a token as
         ``\\{\\{member\\_name\\}\\}`` (displays identically in the editor, but a
         plain string match never sees it; this silently broke rendering in
-        live testing). Escaped tokens are canonicalized to ``{{key}}`` first,
-        so both forms render.
+        live testing). The token regex matches both forms.
+
+        Substitution is a SINGLE pass over the template — a substituted
+        value is never re-scanned, so a signer typing a literal
+        ``{{gym_name}}`` into the free-text name field lands verbatim in
+        the frozen legal ``rendered_body`` instead of being expanded by a
+        later key (placeholder injection). Mirrors the CRM preview's
+        single-pass ``replaceAllMapped``.
         """
-        rendered = _ESCAPED_TOKEN.sub(
-            lambda m: "{{" + m.group(1).replace("\\_", "_") + "}}",
-            template,
-        )
-        for key, value in args.items():
-            rendered = rendered.replace("{{" + key + "}}", value)
-        return rendered
+
+        def _substitute(match: re.Match[str]) -> str:
+            key = match.group(1).replace("\\_", "_")
+            if key in args:
+                return args[key]
+            return "{{" + key + "}}"
+
+        return _ESCAPED_TOKEN.sub(_substitute, template)
 
     async def _insert_signature_row(
         self,

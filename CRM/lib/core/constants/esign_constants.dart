@@ -6,6 +6,12 @@
 /// signature row server-side (see
 /// `Database/python_data/schema/esign_disclosure.py`); the CRM only
 /// displays the text, so there is no version constant to send here.
+///
+/// This string is a hand-copied mirror of
+/// `Database/python_data/schema/esign_disclosure.md` (the version-pinned
+/// wording record). When the wording changes, ALL THREE move in lockstep —
+/// this constant, that .md, and `ESIGN_DISCLOSURE_VERSION` — otherwise
+/// signers see one text while their signature pins another.
 library;
 
 const String kEsignDisclosure =

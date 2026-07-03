@@ -243,8 +243,11 @@ async def delete_waiver(
     status_code=status.HTTP_200_OK,
     summary="List a member's waiver status",
     description=(
-        "Lists every non-deleted gym waiver with this member's latest sign "
-        "status for each (for the member-detail Waivers section)."
+        "Lists the UNION of the waivers this member must sign (required by "
+        "their current memberships' plans) and every waiver they have ever "
+        "signed — including archived ones, whose signature record survives "
+        "— with the member's latest sign status for each (for the "
+        "member-detail Waivers section)."
     ),
     responses={
         200: {"description": "Member waiver status listed successfully"},

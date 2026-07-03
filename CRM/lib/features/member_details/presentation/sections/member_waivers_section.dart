@@ -252,7 +252,10 @@ class _WaiverNameCell extends StatelessWidget {
 
 /// Status pill for a waiver row: red "Not signed" when unsigned,
 /// yellow "Needs re-sign" when the latest signature is below the
-/// re-sign floor, green "Signed" when compliant. The yellow chip is
+/// re-sign floor on a custom, non-archived waiver, green "Signed"
+/// when compliant. An archived or payer-auth signature below floor
+/// still reads "Signed" — re-signing isn't possible there, so a
+/// warning would be a dead-end instruction. The yellow chip is
 /// tappable (opens [SignWaiverDialog]) when [onResign] is non-null.
 class _StatusChip extends StatelessWidget {
   final MemberWaiverStatus status;
@@ -279,7 +282,9 @@ class _StatusChip extends StatelessWidget {
         tone: InvoiceChipTone.bad,
       );
     }
-    if (!status.meetsFloor) {
+    if (!status.meetsFloor &&
+        status.waiverType == WaiverType.custom &&
+        !status.isDeleted) {
       return const InvoiceChip(
         label: 'Needs re-sign',
         tone: InvoiceChipTone.warning,

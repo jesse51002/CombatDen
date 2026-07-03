@@ -264,6 +264,28 @@ def test_render_tolerates_markdown_escaped_tokens() -> None:
     )
 
 
+def test_render_never_expands_tokens_inside_values() -> None:
+    """Substitution is a single pass: a signer typing a literal token into
+    the free-text name field (the only caller-typed value) must land
+    verbatim in the frozen legal ``rendered_body``, never be expanded by a
+    later key (placeholder injection). Regression for the sequential
+    str.replace implementation, where ``signer_name = "{{gym_name}}"`` got
+    rewritten to the gym's name by the subsequent gym_name pass."""
+    from src.waivers.service.waivers_signatures import WaiversSignatures
+
+    rendered = WaiversSignatures._render(
+        "I, {{signer_name}}, sign at {{gym_name}} on {{date}}",
+        {
+            "signer_name": "{{gym_name}}",
+            "gym_name": "Iron Temple",
+            "date": "{{signer_name}}",
+        },
+    )
+    assert rendered == (
+        "I, {{gym_name}}, sign at Iron Temple on {{signer_name}}"
+    )
+
+
 async def test_member_status_union_and_floor(db_pool, gym_id, created):
     """The by-member status is the UNION of required + ever-signed: a signed
     waiver attached to NO plan still shows (required=False, meets the floor);
