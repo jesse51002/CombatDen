@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
@@ -45,13 +46,7 @@ class AddRewardCard extends StatelessWidget {
                   ],
                 ),
               ),
-              ClipOval(
-                child: SizedBox(
-                  height: DesignConstants.rewardAvatarSize,
-                  width: DesignConstants.rewardAvatarSize,
-                  child: Image.asset(template.imageAsset, fit: BoxFit.cover),
-                ),
-              ),
+              _Thumbnail(template: template),
             ],
           ),
           AppOutlineButton(
@@ -67,6 +62,51 @@ class AddRewardCard extends StatelessWidget {
                 : null,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The starter's grid thumbnail: a circular photo for the presets, or a
+/// sapphire-tinted gift-box icon for the [RewardTemplate.isCustom] starter,
+/// so "make your own" reads distinctly from the photographic presets.
+class _Thumbnail extends StatelessWidget {
+  final RewardTemplate template;
+
+  const _Thumbnail({required this.template});
+
+  @override
+  Widget build(BuildContext context) {
+    const size = DesignConstants.rewardAvatarSize;
+
+    if (template.isCustom) {
+      return Container(
+        height: size,
+        width: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: DesignConstants.primaryColor10,
+          border: Border.all(
+            color: DesignConstants.primaryColor25,
+            width: DesignConstants.buttonBorder,
+          ),
+        ),
+        child: Center(
+          child: Icon(
+            Symbols.card_giftcard_sharp,
+            size: DesignConstants.iconSizeBig,
+            color: DesignConstants.primaryColor,
+            weight: DesignConstants.iconWeight,
+          ),
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: SizedBox(
+        height: size,
+        width: size,
+        child: Image.asset(template.imageAsset!, fit: BoxFit.cover),
       ),
     );
   }

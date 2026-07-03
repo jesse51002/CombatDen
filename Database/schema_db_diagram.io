@@ -222,9 +222,9 @@ Table gym_rewards {
   reward_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   title varchar [not null]
-  image_url varchar
+  image_url varchar [not null, note: 'every reward has an image -- writers fill the platform default (wrapped-gift-box photo) when none is provided']
   point_cost integer [not null]
-  price_label varchar [note: 'nullable; reward value label/badge, e.g. "Free", "30% off"']
+  price_label varchar [not null, note: 'reward value label/badge, e.g. "Free", "30% off" -- writers fill "Free" when none is provided']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 

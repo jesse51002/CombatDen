@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from src.core.config import settings
 from tests.conftest import make_reward_row
-
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,7 @@ def test_create_reward_returns_201(client, db_pool_mock, auth_headers, fake_gym_
             "gym_id": fake_gym_id,
             "title": "Free smoothie",
             "point_cost": 50,
+            "price_label": "Free",
         },
         headers=auth_headers,
     )
@@ -116,6 +117,83 @@ def test_create_reward_with_price_label(client, db_pool_mock, auth_headers, fake
     )
     assert response.status_code == 201
     assert response.json()["price_label"] == "$5 off"
+
+
+def test_create_reward_without_image_url_uses_default(
+    client, db_pool_mock, auth_headers, fake_gym_id
+):
+    """POST /api/v1/rewards/ with no image_url fills
+    settings.default_reward_image_url before the INSERT (mirrors the classes
+    create path)."""
+    reward_id = str(uuid4())
+
+    async def fake_execute_with_retry(sql, params, max_retries=3):
+        return make_reward_row(
+            reward_id=reward_id,
+            gym_id=fake_gym_id,
+            title=params["title"],
+            point_cost=params["point_cost"],
+            price_label=params["price_label"],
+            image_url=params["image_url"],
+        )
+
+    db_pool_mock.execute_with_retry = AsyncMock(side_effect=fake_execute_with_retry)
+
+    response = client.post(
+        "/api/v1/rewards/",
+        json={
+            "gym_id": fake_gym_id,
+            "title": "Free smoothie",
+            "point_cost": 50,
+            "price_label": "Free",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["image_url"] == settings.default_reward_image_url
+
+
+def test_create_reward_without_price_label_returns_422(
+    client, auth_headers, fake_gym_id
+):
+    """POST /api/v1/rewards/ with no price_label 422s — price_label is a
+    required create field."""
+    response = client.post(
+        "/api/v1/rewards/",
+        json={
+            "gym_id": fake_gym_id,
+            "title": "Free smoothie",
+            "point_cost": 50,
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_reward_rejects_explicit_null_image_url(
+    client, auth_headers, fake_reward_id
+):
+    """PUT with an explicit ``"image_url": null`` 422s — image_url can be
+    changed but never cleared."""
+    response = client.put(
+        f"/api/v1/rewards/{fake_reward_id}",
+        json={"data": {"image_url": None}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_reward_rejects_explicit_null_price_label(
+    client, auth_headers, fake_reward_id
+):
+    """PUT with an explicit ``"price_label": null`` 422s — price_label can
+    be changed but never cleared."""
+    response = client.put(
+        f"/api/v1/rewards/{fake_reward_id}",
+        json={"data": {"price_label": None}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
 
 
 def test_immutable_columns_guard_blocks_reward_id_update(
@@ -419,7 +497,7 @@ def test_list_pending_redemptions(
         "member_id": fake_member_id,
         "member_name": "Ada Lovelace",
         "reward_title": "Free smoothie",
-        "reward_image_url": None,
+        "reward_image_url": "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg?auto=compress&cs=tinysrgb&w=1200",
         "point_cost": 50,
         "requested_at": datetime.now(UTC),
         "total": 1,
@@ -483,8 +561,8 @@ def test_redemption_history_returns_items(client, db_pool_mock, auth_headers, fa
         "redemption_id": str(uuid4()),
         "reward_id": str(uuid4()),
         "title": "Free smoothie",
-        "image_url": None,
-        "price_label": None,
+        "image_url": "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "price_label": "Free",
         "point_cost": 50,
         "requested_at": datetime.now(UTC),
         "status": "pending",

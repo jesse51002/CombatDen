@@ -184,12 +184,18 @@ class BillingRank(BaseModel):
 
 
 class BillingRewardCard(BaseModel):
-    """A recently redeemed reward."""
+    """A recently redeemed reward.
+
+    ``price_label`` / ``image_url`` are never None — both ``gym_rewards``
+    columns are NOT NULL and this card is always joined off that row (see
+    ``member_details_rewards.sql`` / ``member_details_reward_redemptions.sql``)
+    — mirrors ``RewardResponse``.
+    """
 
     reward_id: UUID
     title: str
-    price_label: str | None = None
-    image_url: str | None = None
+    price_label: str
+    image_url: str
     point_cost: int
 
 
@@ -199,14 +205,15 @@ class PendingRedemptionCard(BaseModel):
     Sourced from ``member_reward_redemptions`` with ``status = 'pending'``.
     Distinct from BillingRewardCard: carries the redemption's own
     ``redemption_id`` and ``requested_at`` timestamp so staff can identify
-    and act on specific pending requests.
+    and act on specific pending requests. ``price_label`` / ``image_url``
+    are never None, same reasoning as ``BillingRewardCard``.
     """
 
     redemption_id: UUID
     reward_id: UUID
     title: str
-    price_label: str | None = None
-    image_url: str | None = None
+    price_label: str
+    image_url: str
     point_cost: int
     requested_at: datetime
 

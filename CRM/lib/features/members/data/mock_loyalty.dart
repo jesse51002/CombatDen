@@ -9,26 +9,36 @@ library;
 
 /// A starter the admin can add to their store from the "Add your own"
 /// grid. Clicking one opens the reward create form pre-filled with
-/// [title], [suggestedPointCost], and [suggestedPriceLabel].
-/// The image is never pre-filled — the admin must upload one.
+/// [title], [suggestedPointCost], and [suggestedPriceLabel] — the reward
+/// image itself is never pre-filled; the form shows the platform default
+/// until the admin uploads their own.
+///
+/// [imageAsset] is the preset's showcase thumbnail in the grid (a photo
+/// matching the landing page). The **Custom** starter carries no
+/// [imageAsset] — [isCustom] is true and the card renders a gift-box icon
+/// treatment instead of a photo, so "make your own" reads distinctly from
+/// the photographic presets.
 class RewardTemplate {
   final String title;
   final String? subtitle;
-  final String imageAsset;
+  final String? imageAsset;
 
   /// Suggested starting value for the point-cost field.
   final int? suggestedPointCost;
 
-  /// Suggested badge label (e.g. 'Free', '30% off').
+  /// Suggested badge label (e.g. 'Free', 'Free session').
   final String? suggestedPriceLabel;
 
   const RewardTemplate({
     required this.title,
     this.subtitle,
-    required this.imageAsset,
+    this.imageAsset,
     this.suggestedPointCost,
     this.suggestedPriceLabel,
   });
+
+  /// The "make your own" starter: no photo, rendered as an icon treatment.
+  bool get isCustom => imageAsset == null;
 }
 
 /// A member redemption awaiting the admin's confirmation at the desk.
@@ -70,29 +80,28 @@ class PendingRedemption {
 
 const List<RewardTemplate> kMockRewardTemplates = [
   RewardTemplate(
-    title: 'Membership discount',
-    subtitle: '% off or \$ discount',
-    imageAsset: 'assets/images/reward_membership_discount.png',
-    suggestedPointCost: 2500,
-    suggestedPriceLabel: '30% off',
-  ),
-  RewardTemplate(
     title: 'Gym branded gear',
     subtitle: 'Apparel or equipment',
-    imageAsset: 'assets/images/reward_gym_tshirt.png',
+    imageAsset: 'assets/images/reward_gear.jpg',
     suggestedPointCost: 1500,
     suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
-    title: 'Film and review session',
-    subtitle: 'Recorded rounds + coach notes',
-    imageAsset: 'assets/images/reward_film_review.png',
-    suggestedPointCost: 2000,
+    title: 'Personal training',
+    subtitle: 'A 1-on-1 coaching session',
+    imageAsset: 'assets/images/reward_training.jpg',
+    suggestedPointCost: 2500,
+    suggestedPriceLabel: 'Free session',
+  ),
+  RewardTemplate(
+    title: 'Bring a friend',
+    subtitle: 'A guest day pass',
+    imageAsset: 'assets/images/reward_friend.jpg',
+    suggestedPointCost: 1000,
     suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
     title: 'Custom',
-    subtitle: 'Anything you want',
-    imageAsset: 'assets/images/reward_custom.png',
+    subtitle: 'Design your own reward',
   ),
 ];

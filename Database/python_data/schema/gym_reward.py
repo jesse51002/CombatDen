@@ -7,8 +7,13 @@ class GymRewardCreate(SeedModel):
     reward_id: UUID
     gym_id: UUID
     title: str
-    # Member-app reward-card badge, e.g. 'Free', '30% off'.
-    price_label: str | None = None
-    image_url: str | None = None
+    # NOT NULL in the DB — every reward has a value badge, e.g. 'Free',
+    # '30% off' (the seed always assigns one; the backend fills 'Free'
+    # when a writer provides none).
+    price_label: str
+    # NOT NULL in the DB — every reward has an image (the seed always
+    # assigns one; the backend fills a platform default when a writer
+    # provides none).
+    image_url: str
     point_cost: int
     is_active: bool = True

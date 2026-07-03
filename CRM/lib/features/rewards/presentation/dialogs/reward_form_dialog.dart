@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/rewards/bloc/rewards_bloc.dart';
 import 'package:crm/features/rewards/bloc/rewards_event.dart';
@@ -71,7 +72,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
   late final TextEditingController _priceLabelCtrl;
 
   String? _imageUrl;
-  String? _imageError;
   _FormPhase _phase = _FormPhase.form;
   int? _tokenBefore;
 
@@ -103,13 +103,11 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
   }
 
   void _submit() {
-    setState(() => _imageError = null);
+    // The image never blocks: the backend fills a gift-box default when none
+    // is uploaded, so an empty [_imageUrl] just omits image_url from the write.
     if (!_formKey.currentState!.validate()) return;
-    if (!_isEdit && (_imageUrl == null || _imageUrl!.isEmpty)) {
-      setState(() => _imageError = 'Please upload a reward image.');
-      return;
-    }
     final pointCost = int.tryParse(_pointCostCtrl.text.trim()) ?? 0;
+    final priceLabel = _priceLabelCtrl.text.trim();
     _tokenBefore = context.read<RewardsBloc>().state.catalogSuccessToken;
     setState(() => _phase = _FormPhase.saving);
 
@@ -118,18 +116,14 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
         rewardId: widget.existing!.rewardId,
         title: _titleCtrl.text.trim(),
         pointCost: pointCost,
-        priceLabel: _priceLabelCtrl.text.trim().isEmpty
-            ? null
-            : _priceLabelCtrl.text.trim(),
+        priceLabel: priceLabel,
         imageUrl: _imageUrl,
       ));
     } else {
       context.read<RewardsBloc>().add(RewardCreateRequested(
         title: _titleCtrl.text.trim(),
         pointCost: pointCost,
-        priceLabel: _priceLabelCtrl.text.trim().isEmpty
-            ? null
-            : _priceLabelCtrl.text.trim(),
+        priceLabel: priceLabel,
         imageUrl: _imageUrl,
       ));
     }
@@ -183,7 +177,6 @@ class _RewardFormDialogState extends State<RewardFormDialog> {
         pointCostCtrl: _pointCostCtrl,
         priceLabelCtrl: _priceLabelCtrl,
         imageUrl: _imageUrl,
-        imageError: _imageError,
         isEdit: _isEdit,
         onImageUploaded: (url) => setState(() => _imageUrl = url),
         onSubmit: _submit,
@@ -198,7 +191,6 @@ class _FormBody extends StatelessWidget {
   final TextEditingController pointCostCtrl;
   final TextEditingController priceLabelCtrl;
   final String? imageUrl;
-  final String? imageError;
   final bool isEdit;
   final void Function(String) onImageUploaded;
   final VoidCallback onSubmit;
@@ -209,7 +201,6 @@ class _FormBody extends StatelessWidget {
     required this.pointCostCtrl,
     required this.priceLabelCtrl,
     required this.imageUrl,
-    required this.imageError,
     required this.isEdit,
     required this.onImageUploaded,
     required this.onSubmit,
@@ -228,15 +219,10 @@ class _FormBody extends StatelessWidget {
             label: 'Reward Image',
             category: 'reward',
             imageUrl: imageUrl,
+            defaultImageUrl: AppConstants.defaultRewardImageUrl,
+            prominentUpload: true,
             onUploaded: onImageUploaded,
           ),
-          if (imageError != null)
-            Text(
-              imageError!,
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.badRed,
-              ),
-            ),
           CustomTextField(
             controller: titleCtrl,
             label: 'Title',
@@ -261,8 +247,11 @@ class _FormBody extends StatelessWidget {
           ),
           CustomTextField(
             controller: priceLabelCtrl,
-            label: 'Price Badge (optional)',
+            label: 'Price Badge',
             hintText: 'e.g. Free or 30% off',
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'A price badge is required.'
+                : null,
           ),
           AppPrimaryButton(
             text: isEdit ? 'Save Changes' : 'Add Reward',

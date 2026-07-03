@@ -14,6 +14,7 @@ from uuid import UUID
 import stripe
 from sqlalchemy import text
 
+from src.core.config import settings
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.database import DirectDatabasePool
 
@@ -382,8 +383,10 @@ async def create_reward(
     *,
     title: str = "ZZ Test Reward",
     point_cost: int = 100,
-    price_label: str | None = None,
-    image_url: str | None = None,
+    # gym_rewards.price_label / image_url are NOT NULL — default to the same
+    # platform-default values the production create path fills in.
+    price_label: str = "Free",
+    image_url: str = settings.default_reward_image_url,
 ) -> TestReward:
     """Create a gym_rewards row directly.
 

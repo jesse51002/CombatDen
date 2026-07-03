@@ -27,11 +27,14 @@ returns via ``created.track_redemption(...)``. ``CreatedResources.cleanup()``
 (``tests/conftest.py``) deletes redemption rows before members/rewards on
 teardown (FK-safe), so nothing here needs its own try/finally.
 
-REQUIRES both migrations applied to the shared local Supabase DB:
+REQUIRES all three migrations applied to the shared local Supabase DB:
   - ``20260628100000_reward_redemption_status.sql`` (status/resolved_at + enum)
   - ``20260703000000_rewards_label_and_timestamps.sql`` (price_label,
     requested_at/resolved_at renames, the resolved_matches_status CHECK)
-Until both land, every mutating call in this file 500s (undefined column) or
+  - ``20260703010000_gym_rewards_image_and_label_required.sql`` (image_url +
+    price_label NULL-backfill + NOT NULL — RewardResponse types both as
+    required ``str``, so a legacy NULL row 500s on read until backfilled)
+Until all land, every mutating call in this file 500s (undefined column) or
 422s (unknown schema field) — that is a missing migration, not a code defect.
 """
 

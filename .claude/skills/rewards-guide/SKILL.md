@@ -42,11 +42,23 @@ names those seams but defers their internals.
 | `reward_id` | PK |
 | `gym_id` | scope (composite `UNIQUE (reward_id, gym_id)`) |
 | `title` | `CHECK (title <> '')` |
-| `price_label` | the member-app value badge (e.g. `"Free"`, `"30% off"`) — nullable, purely cosmetic, never used in the points math |
-| `image_url` | nullable — set via the uploads domain (§6) |
+| `price_label` | the member-app value badge (e.g. `"Free"`, `"30% off"`) — **NOT NULL**, purely cosmetic, never used in the points math; **required on create** (`RewardCreateRequest.price_label` has `min_length=1` — the client must supply it, no backend fallback on a live create call) |
+| `image_url` | **NOT NULL** — optional on the create *request* (`RewardCreateRequest.image_url` stays `str \| None`); when omitted, `RewardsService.create_reward` fills the platform default (`settings.default_reward_image_url`, a "prize box" hand-off photo) before the INSERT, mirroring `gym_classes.image_url` / `ClassesCrudService` exactly. Set via the uploads domain (§6) when the creator does upload one. |
 | `point_cost` | `CHECK (point_cost > 0)` — always positive; a reward can never cost 0 or negative points |
 | `is_active` | soft-delete flag; default `true` |
 | `created_at` | |
+
+Both columns are NOT NULL as of `20260703010000_gym_rewards_image_and_label_required.sql`
+(mirroring `20260702010000_gym_classes_image_url_not_null.sql` for
+`gym_classes.image_url`) — every reward has an image and a value badge. On
+**update**, both can be changed but never cleared: `RewardUpdateData` runs a
+`field_validator` on `image_url` / `price_label` that raises when the client
+sends an explicit `null` (422) — patch semantics stay "absent field = column
+untouched"; there is no silent reset-to-default on update (unlike the classes
+identity-update path, which resets a nulled `image_url` back to its platform
+default instead of rejecting it — rewards deliberately diverges here per a
+founder decision that the two required fields must never silently change
+value out from under an explicit `null`).
 
 **CRUD is plain and coupon-free** (`RewardsService`, `src/rewards/service/rewards_service.py`):
 create / update / soft-delete (`deactivate_reward` = `update_reward(is_active=False)`)
@@ -205,9 +217,16 @@ gym — the gym-agnostic staff bar, since the endpoint takes no `gym_id`).
 Enforces `image/*` content-type and a 5 MB cap (checked on `file.size` before
 buffering, then again on the read bytes as a backstop). Returns a CDN URL
 (`cdn.combatden.net/<category>/<uuid><ext>?v=<sha256-prefix>`) that the CRM's
-`ImageUploadPickerField` writes into `gym_rewards.image_url` on save. Full
-detail lives in `FastApiBackend/CLAUDE.md`'s "Image upload domain" section —
-this guide only covers the reward-specific angle.
+`ImageUploadPickerField` writes into `gym_rewards.image_url` on save. When the
+creator skips the picker, `RewardsService.create_reward` fills
+`settings.default_reward_image_url` instead (a Pexels "prize box" hand-off
+photo — `src/core/config.py`) — the column is NOT NULL, so a reward is never
+created without an image. The preset import (`PresetsService`) applies the
+same fallback (plus a `"Free"` fallback for a template reward missing
+`price_label`) so an imported gym's reward rows can never violate either
+NOT NULL constraint. Full upload detail lives in `FastApiBackend/CLAUDE.md`'s
+"Image upload domain" section — this guide only covers the reward-specific
+angle.
 
 ---
 
@@ -252,13 +271,17 @@ this guide only covers the reward-specific angle.
   `member_reward_redemption.py` (`RewardRedemptionStatus`),
   `immutable_columns.py` (`GYM_REWARDS`, `MEMBER_REWARD_REDEMPTIONS`).
 - **Backend domain:** `FastApiBackend/src/rewards/` — `rewards_router.py`;
-  `service/rewards_service.py` (`RewardsService` — catalog CRUD);
+  `service/rewards_service.py` (`RewardsService` — catalog CRUD, takes a
+  `default_image_url` constructor arg, DI-wired from
+  `settings.default_reward_image_url` in `src/core/config.py`);
   `service/rewards_redemption_service.py` (`RewardsRedemptionService` +
-  `RedemptionAlreadyDecidedError`); `schema/rewards_schema.py`; SQL in
-  `sql/` (`insert_reward`, `update_reward`, `get_reward`, `list_rewards`,
-  `redeem_reward`, `redeem_reward_override`, `approve_redemption`,
-  `reject_redemption`, `get_redemption`, `list_pending_redemptions`,
-  `redemption_history`).
+  `RedemptionAlreadyDecidedError`); `schema/rewards_schema.py`
+  (`RewardCreateRequest.price_label` required, `image_url` optional;
+  `RewardUpdateData`'s `field_validator` rejects an explicit `null` on
+  either); SQL in `sql/` (`insert_reward`, `update_reward`, `get_reward`,
+  `list_rewards`, `redeem_reward`, `redeem_reward_override`,
+  `approve_redemption`, `reject_redemption`, `get_redemption`,
+  `list_pending_redemptions`, `redemption_history`).
 - **Points seams (owned elsewhere, do NOT duplicate):**
   `src/checkin/sql/classes_award_points.sql` +
   `checkin_revert_points.sql` (checkin domain, `class-system-guide` skill);

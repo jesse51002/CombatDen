@@ -50,11 +50,15 @@ class RewardsRepository {
   }
 
   /// `POST /api/v1/rewards/`
+  ///
+  /// [priceLabel] is required — the backend requires a value badge on every
+  /// reward. [imageUrl] stays optional: the backend fills a gift-box default
+  /// when it is omitted.
   Future<RewardResponse> createReward({
     required String gymId,
     required String title,
     required int pointCost,
-    String? priceLabel,
+    required String priceLabel,
     String? imageUrl,
   }) async {
     try {
@@ -64,8 +68,7 @@ class RewardsRepository {
           'gym_id': gymId,
           'title': title,
           'point_cost': pointCost,
-          if (priceLabel != null && priceLabel.isNotEmpty)
-            'price_label': priceLabel,
+          'price_label': priceLabel,
           'image_url': ?imageUrl,
         },
       );

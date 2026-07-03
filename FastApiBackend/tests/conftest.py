@@ -214,8 +214,11 @@ def make_reward_row(
     gym_id: str,
     title: str = "Free smoothie",
     point_cost: int = 50,
-    price_label: str | None = None,
-    image_url: str | None = None,
+    # gym_rewards.price_label / image_url are NOT NULL — default to
+    # realistic non-null values so callers that don't care about these
+    # fields don't have to pass them.
+    price_label: str = "Free",
+    image_url: str = "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg?auto=compress&cs=tinysrgb&w=1200",
     is_active: bool = True,
     created_at: datetime | None = None,
 ) -> dict:

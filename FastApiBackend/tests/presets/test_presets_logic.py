@@ -79,6 +79,7 @@ def _make_presets_service() -> PresetsService:
         db_pool=MagicMock(),
         expander=ClassesExpander(),
         default_class_image_url="https://example.test/default-class.jpg",
+        default_reward_image_url="https://example.test/default-reward.jpg",
     )
 
 

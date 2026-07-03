@@ -28,10 +28,13 @@ REWARDS_BASE = "/api/v1/rewards/"
 def _assert_reward_shape(item: dict) -> None:
     """Assert a single RewardResponse has all required fields with correct types."""
     required_uuid_fields = {"reward_id", "gym_id"}
-    required_str_fields = {"title"}
+    # price_label / image_url are NOT NULL on gym_rewards (writers fill
+    # platform defaults when omitted), so RewardResponse types both as
+    # required str, never null.
+    required_str_fields = {"title", "price_label", "image_url"}
     required_int_fields = {"point_cost"}
     required_bool_fields = {"is_active"}
-    required_nullable_str_fields = {"price_label", "image_url"}
+    required_nullable_str_fields: set[str] = set()
     required_datetime_fields = {"created_at"}
 
     for field in required_uuid_fields:

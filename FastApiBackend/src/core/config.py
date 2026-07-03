@@ -126,6 +126,15 @@ class Settings(BaseSettings):
         "?auto=compress&cs=tinysrgb&w=1200"
     )
 
+    # Every reward HAS an image (gym_rewards.image_url is NOT NULL — the
+    # points-store card leans on it): reward create and the preset import
+    # fill this platform default (a generic wrapped-gift-box handoff photo,
+    # Pexels 5493207) whenever no image is provided.
+    default_reward_image_url: str = (
+        "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg"
+        "?auto=compress&cs=tinysrgb&w=1200"
+    )
+
     # On-demand post-op invoice fetch: right after an invoice-creating
     # membership op, pull that payer's new invoices straight from Stripe and
     # apply them (deterministic) instead of waiting on the invoice.paid /

@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/uploads/image_upload_repository.dart';
+import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Enforced aspect ratio + max width for the upload preview.
 const double _kAspect = 16 / 9;
@@ -47,6 +48,14 @@ class ImageUploadPickerField extends StatefulWidget {
   /// actually uploads one.
   final String? defaultImageUrl;
 
+  /// When true, a full-width tonal upload button sits below the preview so
+  /// the upload is an obvious call to action — used where the record gets a
+  /// platform default and the owner is nudged to personalize it (the reward
+  /// form). The tile itself stays tappable; the button just makes the
+  /// affordance unmissable. Off by default so other call sites (class form,
+  /// member photo) are visually unchanged.
+  final bool prominentUpload;
+
   const ImageUploadPickerField({
     super.key,
     required this.label,
@@ -55,6 +64,7 @@ class ImageUploadPickerField extends StatefulWidget {
     this.imageUrl,
     this.imageAsset,
     this.defaultImageUrl,
+    this.prominentUpload = false,
   });
 
   @override
@@ -121,6 +131,25 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
     }
   }
 
+  /// The prominent full-width upload CTA (opt-in via
+  /// [ImageUploadPickerField.prominentUpload]). Tonal sapphire so it reads as
+  /// an unmistakable button without competing with a form's gradient submit.
+  Widget _uploadButton() {
+    return AppPrimaryButton(
+      text: _hasImage ? 'Replace image' : 'Upload your own image',
+      fullWidth: true,
+      backgroundColor: DesignConstants.primaryColor10,
+      textColor: DesignConstants.primaryColor,
+      icon: Icon(
+        Symbols.add_photo_alternate_sharp,
+        size: DesignConstants.iconSizeMedium,
+        color: DesignConstants.primaryColor,
+        weight: DesignConstants.iconWeight,
+      ),
+      onPressed: _isUploading ? null : _onTap,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -171,7 +200,8 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                     ),
                   ),
                 ),
-                if (_showDefault)
+                if (widget.prominentUpload) _uploadButton(),
+                if (_showDefault && !widget.prominentUpload)
                   Text(
                     'Default image — choose your own',
                     style: DesignConstants.pSmall.copyWith(

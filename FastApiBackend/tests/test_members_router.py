@@ -1,6 +1,6 @@
 """Smoke + edge tests for the members router."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -507,7 +507,7 @@ def test_member_detail_includes_pending_redemptions(
 ):
     """GET /api/v1/members/{id} surfaces pending_redemptions in the response."""
     redemption_id = str(uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     mock_response = MemberBillingDetailResponse(
         member_id=fake_member_id,
@@ -531,6 +531,8 @@ def test_member_detail_includes_pending_redemptions(
                 redemption_id=redemption_id,
                 reward_id=fake_reward_id,
                 title="Free T-Shirt",
+                price_label="Official gym branded tee",
+                image_url="https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200",
                 point_cost=1500,
                 requested_at=now,
             )

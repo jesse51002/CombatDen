@@ -14,16 +14,19 @@ class RewardsLoadRequested extends RewardsEvent {
 }
 
 /// Create a new reward for the current gym.
+///
+/// [priceLabel] is required — the backend requires a value badge on every
+/// reward, and the form validates it non-empty before dispatching.
 class RewardCreateRequested extends RewardsEvent {
   final String title;
   final int pointCost;
-  final String? priceLabel;
+  final String priceLabel;
   final String? imageUrl;
 
   const RewardCreateRequested({
     required this.title,
     required this.pointCost,
-    this.priceLabel,
+    required this.priceLabel,
     this.imageUrl,
   });
 

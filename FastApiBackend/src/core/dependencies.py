@@ -361,7 +361,11 @@ class DependencyInjector(containers.DeclarativeContainer):
         version_expander=classes_version_expander,
     )
 
-    rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
+    rewards_service = providers.Factory(
+        RewardsService,
+        db_pool=db_pool,
+        default_image_url=settings.default_reward_image_url,
+    )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
     ranks_service = providers.Factory(RanksService, db_pool=db_pool)
@@ -461,6 +465,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         expander=classes_expander,
         default_class_image_url=settings.default_class_image_url,
+        default_reward_image_url=settings.default_reward_image_url,
     )
 
     # === CRM billing DI providers (restored) ===
