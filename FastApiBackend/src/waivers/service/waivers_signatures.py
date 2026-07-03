@@ -13,6 +13,7 @@ resolves the gym's payer-auth waiver for display.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -33,6 +34,10 @@ from src.waivers.schema.waivers_schema import (
     WaiverSignatureResponse,
 )
 from src.waivers.service.waivers_base import WaiversBase
+
+# A waiver token as a markdown serializer may store it: each brace and the
+# underscores optionally backslash-escaped (e.g. ``\{\{member\_name\}\}``).
+_ESCAPED_TOKEN = re.compile(r"\\?\{\\?\{((?:\w|\\_)+)\\?\}\\?\}")
 
 
 class WaiversSignatures(WaiversBase):
@@ -103,8 +108,18 @@ class WaiversSignatures(WaiversBase):
         Only known keys are replaced; an unknown ``{{...}}`` token renders
         literally (the CRM editor surfaces the available placeholders so authors
         only use real ones — see ``schema/waiver_parameters.py``).
+
+        The template is MARKDOWN, and a markdown serializer may
+        backslash-escape literal braces/underscores — storing a token as
+        ``\\{\\{member\\_name\\}\\}`` (displays identically in the editor, but a
+        plain string match never sees it; this silently broke rendering in
+        live testing). Escaped tokens are canonicalized to ``{{key}}`` first,
+        so both forms render.
         """
-        rendered = template
+        rendered = _ESCAPED_TOKEN.sub(
+            lambda m: "{{" + m.group(1).replace("\\_", "_") + "}}",
+            template,
+        )
         for key, value in args.items():
             rendered = rendered.replace("{{" + key + "}}", value)
         return rendered

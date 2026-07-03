@@ -105,6 +105,12 @@ substitutes them at sign time. **Backend auto-fills** (in `sign_waiver`):
 typed name), `{{gym_name}}` (⚠ the gyms column is `gym_name`, not `name`),
 `{{date}}`. **Callers add extras via `waiver_args`** — the link flow passes
 `{{payee_name}}` (the member being paid for). Unknown tokens render literally.
+⚠ **The body is markdown, and a markdown serializer may backslash-escape the
+token** (`\{\{member\_name\}\}` — displays identically in the editor,
+matches nothing; this silently broke ALL rendering in live testing). Both
+renderers canonicalize escaped tokens before substituting, and the CRM
+editor's save path (`WaiverMarkdownEditor.markdownFromController`) unescapes
+tokens so new bodies store clean.
 The CRM waiver editor MUST surface the available tokens to the author, always
 visible — never behind a collapse (no invisible constants — a required UX
 affordance). Jesse chose to store the **full `rendered_body`**, not a params
@@ -237,7 +243,7 @@ surface pre-renders the `{{placeholders}}` for display** via
 `renderWaiverPlaceholders` (`lib/core/utils/waiver_render.dart`): member/payee
 names from the dialog's scope, `gym_name` from `selectedGym.displayName`,
 `date` = today UTC `YYYY-MM-DD`, and `signer_name` filled LIVE from the typed
-name (empty → the token stays visible). The membership-purchase wizard
+name (empty → a `___` blank, escaped so markdown can't read it as a rule). The membership-purchase wizard
 (`features/member_details/.../start_memberships/`) has a `signWaivers` step
 (after `review`, before `payment`) that blocks until every required waiver is
 signed; the backend 422 is the backstop. The waiver editor surfaces the

@@ -6,13 +6,23 @@ library;
 
 final RegExp _placeholder = RegExp(r'\{\{(\w+)\}\}');
 
+// A token as a markdown serializer may have stored it: braces/underscores
+// optionally backslash-escaped (`\{\{member\_name\}\}`). Displays identically
+// after markdown parsing, so it must render the same as the clean form.
+final RegExp _escapedPlaceholder =
+    RegExp(r'\\?\{\\?\{((?:\w|\\_)+)\\?\}\\?\}');
+
 /// Substitute `{{key}}` tokens in [body] with the matching entry from
 /// [values]. A token is only replaced when [values] holds a **non-empty**
 /// value for its key; a missing key or an empty value leaves the token
-/// literal (so, e.g., an unfilled `{{signer_name}}` still shows the signer
-/// where their name will land).
+/// literal. Tolerates markdown-escaped tokens (canonicalized first) so
+/// bodies saved before the editor unescaped on save still render.
 String renderWaiverPlaceholders(String body, Map<String, String> values) {
-  return body.replaceAllMapped(_placeholder, (match) {
+  final canonical = body.replaceAllMapped(
+    _escapedPlaceholder,
+    (m) => '{{${m.group(1)!.replaceAll(r'\_', '_')}}}',
+  );
+  return canonical.replaceAllMapped(_placeholder, (match) {
     final key = match.group(1)!;
     final value = values[key];
     if (value == null || value.isEmpty) return match.group(0)!;

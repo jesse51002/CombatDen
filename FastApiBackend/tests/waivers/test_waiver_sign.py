@@ -237,3 +237,28 @@ def test_sign_request_rejects_blank_signer_name():
             signer_name="   ",
             consent_acknowledged=True,
         )
+
+
+def test_render_tolerates_markdown_escaped_tokens() -> None:
+    """A markdown serializer may store a token backslash-escaped
+    (``\\{\\{member\\_name\\}\\}``) — it displays identically in the editor,
+    so the renderer must fill it exactly like the clean form. Regression:
+    live testing shipped bodies in this shape and nothing rendered."""
+    from src.waivers.service.waivers_signatures import WaiversSignatures
+
+    escaped = (
+        r"I \{\{member\_name\}\} sign on \{\{date\}\} at \{\{gym\_name\}\}"
+    )
+    rendered = WaiversSignatures._render(
+        escaped,
+        {"member_name": "Jane Doe", "date": "2026-07-02", "gym_name": "Iron"},
+    )
+    assert rendered == "I Jane Doe sign on 2026-07-02 at Iron"
+
+    # The clean form still renders; unknown tokens stay literal either way.
+    assert (
+        WaiversSignatures._render(
+            "Hi {{member_name}}, {{nope}} stays", {"member_name": "Jo"}
+        )
+        == "Hi Jo, {{nope}} stays"
+    )

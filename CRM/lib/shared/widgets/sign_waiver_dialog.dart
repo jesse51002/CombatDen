@@ -123,13 +123,15 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
 
   // Display-only render of the body with the values the backend substitutes
   // at sign time: member_name is the signed-for member, gym_name/date are
-  // fixed, and signer_name follows the live typed name (empty leaves the
-  // token literal so the signer sees where their name will land).
+  // fixed, and signer_name follows the live typed name (empty shows a ___
+  // blank so the signer sees where their name will land).
   Map<String, String> _renderValues() => {
         'member_name': widget.memberName,
         'gym_name': selectedGym.displayName,
         'date': waiverSignDateUtc(),
-        'signer_name': _signerName,
+        // Empty name -> a literal ___ blank (escaped so markdown never
+        // reads it as a rule); fills live once the signer types.
+        'signer_name': _signerName.isEmpty ? r'\_\_\_' : _signerName,
       };
 
   QuillController _buildController() =>

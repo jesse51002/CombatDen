@@ -178,7 +178,9 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
         'payee_name': widget.subjectName,
         'gym_name': selectedGym.displayName,
         'date': waiverSignDateUtc(),
-        'signer_name': _signerName,
+        // Empty name -> a literal ___ blank (escaped so markdown never
+        // reads it as a rule); fills live once the signer types.
+        'signer_name': _signerName.isEmpty ? r'\_\_\_' : _signerName,
       };
 
   QuillController _buildWaiverController() =>
