@@ -95,7 +95,7 @@ class _WaiversTable extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  '${waiver.currentVersionSignedCount} signed',
+                  '${waiver.totalSignedCount} signed',
                   style: DesignConstants.p,
                 ),
                 MembershipEditButton(

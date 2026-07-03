@@ -26,6 +26,11 @@ class WaiverResponse extends Equatable {
   final int? currentVersionNumber;
   @JsonKey(defaultValue: 0)
   final int currentVersionSignedCount;
+
+  /// DISTINCT members who signed ANY version — the catalog's headline
+  /// "N signed" (a re-signer counts once).
+  @JsonKey(defaultValue: 0)
+  final int totalSignedCount;
   @JsonKey(defaultValue: false)
   final bool isDeleted;
   final DateTime createdAt;
@@ -40,6 +45,7 @@ class WaiverResponse extends Equatable {
     this.currentVersionId,
     this.currentVersionNumber,
     this.currentVersionSignedCount = 0,
+    this.totalSignedCount = 0,
     this.isDeleted = false,
     required this.createdAt,
     required this.updatedAt,
@@ -60,6 +66,7 @@ class WaiverResponse extends Equatable {
         currentVersionId,
         currentVersionNumber,
         currentVersionSignedCount,
+        totalSignedCount,
         isDeleted,
         createdAt,
         updatedAt,

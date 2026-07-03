@@ -79,13 +79,20 @@ authorization's proof (see the authorize-payer link below).
 ## Versions: edit-in-place vs fork, and the re-sign FLOOR
 
 `WaiversUpdate._maybe_publish_version` (`src/waivers/service/waivers_update.py`):
-- A body edit whose hash matches the current version → **no-op**.
-- Current version has **0 signatures** → **edit in place** (same `version_number`;
-  `requires_resign` is irrelevant — no prior signers).
+- A body edit whose hash matches the current version → text untouched (the
+  `requires_resign` choice still lands, below).
+- Current version has **0 signatures** → **edit in place** (same
+  `version_number`), applying `requires_resign` when provided.
 - Current version is **signed** → **publish a NEW version** (bump number,
-  re-point `current_version_id`), stamped with `requires_resign` from
-  `WaiverUpdateData.requires_resign` (default true). Set it **false** for a minor
-  edit (typo) that should NOT re-block prior signers.
+  re-point `current_version_id`), stamped with `requires_resign` (a fork
+  defaults to true when omitted). **false** = a minor edit that should NOT
+  re-block prior signers.
+- **Flag-only update** (`requires_resign` with NO body) → flips the flag on
+  the CURRENT version in place (`waiver_versions_update_requires_resign.sql`)
+  — the mistake-correction path; moving it moves the floor. The CRM exposes
+  this as a "Requires re-sign" switch on the current version's tile.
+  `WaiverUpdateData.requires_resign` is `bool | None` — **None (a rename)
+  leaves the flag untouched**.
 
 The **re-sign floor** for a waiver = the highest `version_number` among its
 versions with `requires_resign = true`. A member is compliant iff they signed a
@@ -252,13 +259,15 @@ shows the UNION of required + ever-signed waivers (`MemberWaiverStatusRow`:
 the yellow tappable "Needs re-sign" chip; archived/payer-auth rows display
 without a sign action) plus a "Sign new waiver" picker over the gym's custom
 waivers (any custom waiver is signable, required or not). The waiver editor
-surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; a BODY
-edit over a signed version asks at SAVE time via `RequireResignDialog` —
+surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; EVERY BODY
+edit asks at SAVE time via `RequireResignDialog` (signed or not — the choice
+lands on the resulting current version either way) —
 "Don't require re-signing" is the PRIMARY action (small fixes are the common
 case), "Require re-signing" the secondary, dismiss aborts the save; the
-dialog explains what re-signing does. A rename or an unsigned-version edit
-saves without asking (`requires_resign` defaults true there — ignored for
-in-place edits, legal-safe if a concurrent signature forks the save). The payer-auth waiver is
+dialog explains what re-signing does. A rename alone saves without asking
+(the flag is left untouched). The catalog's "N signed" is
+`total_signed_count` — DISTINCT members across ALL versions (a re-signer
+counts once); `current_version_signed_count` still drives the fork logic. The payer-auth waiver is
 badged ("Payer agreement") in the waivers list + editor, its Delete and
 standalone "sign member" actions are hidden (signing it outside the link flow
 is meaningless — `{{payee_name}}` would render literally), and the plan form's

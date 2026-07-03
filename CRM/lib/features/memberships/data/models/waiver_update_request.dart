@@ -5,9 +5,10 @@ part 'waiver_update_request.g.dart';
 /// Mutable waiver fields for `PUT /api/v1/waivers/`. Sending
 /// [body] publishes a new immutable version; [name] renames in
 /// place. Only null fields are omitted from the payload.
-/// [requiresResign] is always sent — false for a minor body
-/// edit (typo) that should NOT re-block prior signers; defaults
-/// true (a material change).
+/// [requiresResign]: with a [body], stamped on the resulting version
+/// (false = a minor edit that should NOT re-block prior signers);
+/// WITHOUT a body it flips the flag on the current version in place
+/// (the mistake-correction toggle). Null leaves the flag untouched.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   includeIfNull: false,
@@ -21,12 +22,12 @@ class WaiverUpdateData {
   /// purchase even though a new version was minted. Use for
   /// typo-level fixes. Defaults true (re-sign required).
   @JsonKey(includeIfNull: false)
-  final bool requiresResign;
+  final bool? requiresResign;
 
   const WaiverUpdateData({
     this.name,
     this.body,
-    this.requiresResign = true,
+    this.requiresResign,
   });
 
   Map<String, dynamic> toJson() => _$WaiverUpdateDataToJson(this);

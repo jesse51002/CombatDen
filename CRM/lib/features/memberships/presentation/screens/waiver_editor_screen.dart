@@ -215,14 +215,12 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       return;
     }
 
-    // A BODY edit over a signed version mints a new one — ask whether prior
-    // signers must re-sign (dismissing aborts the save). A rename alone
-    // never mints, and an unsigned version is edited in place, so neither
-    // asks. When skipped, requireResign stays true: ignored for in-place
-    // edits, and the legal-safe default if a concurrent signature makes
-    // this save fork after all.
-    var requireResign = true;
-    if (_isEdit && _currentSigned > 0 && body != _originalBody) {
+    // EVERY body edit asks whether it should require re-signing (dismissing
+    // aborts the save) — the choice lands on the resulting current version
+    // either way: stamped on a fork, applied to an in-place edit. A rename
+    // alone sends null (the flag is left untouched).
+    bool? requireResign;
+    if (_isEdit && body != _originalBody) {
       final choice = await RequireResignDialog.show(
         context,
         signedCount: _currentSigned,
@@ -438,6 +436,42 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     );
   }
 
+  // The CURRENT version's requires_resign flag — the re-sign floor marker.
+  bool get _currentRequiresResign {
+    final cvId = _waiver?.currentVersionId;
+    for (final v in _versions) {
+      if (v.versionId == cvId) return v.requiresResign;
+    }
+    return true;
+  }
+
+  /// Flip requires_resign on the current version (mistake correction for
+  /// the save-time choice). Moving it moves the re-sign floor.
+  Future<void> _setRequiresResign(bool value) async {
+    setState(() => _saving = true);
+    try {
+      await widget.repository.updateWaiver(WaiverUpdateRequest(
+        waiverId: _waiver!.waiverId,
+        gymId: widget.gymId,
+        data: WaiverUpdateData(requiresResign: value),
+      ));
+      await _refresh();
+      if (mounted) {
+        setState(() => _saving = false);
+        _snack(
+          value
+              ? 'Prior signers must now re-sign this version.'
+              : 'Existing signatures count again.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _snack(e.toString(), isError: true);
+      }
+    }
+  }
+
   Widget _versionsPanel() {
     return Padding(
       padding: const EdgeInsets.only(left: DesignConstants.spacingLarge),
@@ -449,6 +483,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
             subtitle: '$_currentSigned signed',
             selected: _selectedVersionId == null,
             onTap: () => _selectVersion(null),
+            extra: _requiresResignRow(),
           ),
           for (final v in _versions)
             if (v.versionId != _waiver!.currentVersionId)
@@ -463,11 +498,34 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     );
   }
 
+  /// The current version's re-sign flag, editable in place so a wrong
+  /// save-time choice is correctable.
+  Widget _requiresResignRow() {
+    return Row(
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Expanded(
+          child: Text(
+            'Requires re-sign',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ),
+        Switch(
+          value: _currentRequiresResign,
+          onChanged: _saving ? null : _setRequiresResign,
+        ),
+      ],
+    );
+  }
+
   Widget _versionTile({
     required String label,
     required String subtitle,
     required bool selected,
     required VoidCallback onTap,
+    Widget? extra,
   }) {
     return InkWell(
       onTap: onTap,
@@ -492,6 +550,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
               style:
                   DesignConstants.pSmall.copyWith(color: DesignConstants.text2nd),
             ),
+            ?extra,
           ],
         ),
       ),

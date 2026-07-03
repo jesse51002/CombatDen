@@ -1,12 +1,18 @@
-"""Update a waiver — rename in place and/or persist a body edit.
+"""Update a waiver — rename, persist a body edit, or flip requires_resign.
 
 A name change is an in-place UPDATE of the catalog row. A body edit is
 conditional on whether the current version has been signed: while it has **0
 signatures** the version is **edited in place** (same version_number, body +
 content_hash updated); once **a member has signed it** the signed version is
 frozen and a **new** version is published (current_version_id re-pointed). An
-edit whose body hashes identically to the current version is a no-op. Existing
-signatures always stay bound to the exact version they signed.
+edit whose body hashes identically to the current version leaves the text
+untouched. Existing signatures always stay bound to the exact version they
+signed.
+
+``requires_resign`` rides along: stamped on a fork (default True when
+omitted), applied to an in-place edit, and — with no body at all — flipped on
+the CURRENT version in place (the mistake-correction toggle; moving it moves
+the re-sign floor).
 """
 
 from __future__ import annotations
@@ -65,6 +71,12 @@ class WaiversUpdate(WaiversBase):
                 request.data.body,
                 request.data.requires_resign,
             )
+        elif request.data.requires_resign is not None:
+            await self._set_requires_resign(
+                request.gym_id,
+                existing.get("current_version_id"),
+                request.data.requires_resign,
+            )
 
         return await self._load_full_waiver(request.waiver_id, request.gym_id)
 
@@ -97,16 +109,16 @@ class WaiversUpdate(WaiversBase):
         gym_id: UUID,
         current_version_id: UUID | None,
         body: str,
-        requires_resign: bool,
+        requires_resign: bool | None,
     ) -> None:
         """Persist a body edit (in place if unsigned, else a new version).
 
-        No-op if the body is unchanged. If the current version has 0
-        signatures it is edited in place; once it has been signed the signed
-        version is frozen and a fresh version is published, stamped with
-        ``requires_resign`` (whether prior signers must re-sign). The in-place
-        edit ignores ``requires_resign`` — an unsigned version has no prior
-        signers to invalidate.
+        If the current version has 0 signatures it is edited in place; once
+        it has been signed the signed version is frozen and a fresh version
+        is published. ``requires_resign`` (whether prior signers must
+        re-sign) is stamped on the fork (default True when None), applied to
+        the in-place edit, and — when the body is unchanged — still flipped
+        on the current version so the save-time choice always lands.
         """
         content_hash = self._compute_content_hash(body)
         current = (
@@ -115,7 +127,15 @@ class WaiversUpdate(WaiversBase):
             else None
         )
         if current is not None and current.content_hash == content_hash:
-            return  # No-op: identical body.
+            # Identical body — but the re-sign choice still applies.
+            if (
+                requires_resign is not None
+                and requires_resign != current.requires_resign
+            ):
+                await self._set_requires_resign(
+                    gym_id, current.version_id, requires_resign,
+                )
+            return
 
         if current is not None and current.signature_count == 0:
             await self._edit_version_in_place(
@@ -123,11 +143,16 @@ class WaiversUpdate(WaiversBase):
                 gym_id,
                 body,
                 content_hash,
+                requires_resign,
             )
             return
 
         await self._publish_new_version(
-            waiver_id, gym_id, body, content_hash, requires_resign,
+            waiver_id,
+            gym_id,
+            body,
+            content_hash,
+            requires_resign if requires_resign is not None else True,
         )
 
     async def _edit_version_in_place(
@@ -136,8 +161,12 @@ class WaiversUpdate(WaiversBase):
         gym_id: UUID,
         body: str,
         content_hash: str,
+        requires_resign: bool | None,
     ) -> None:
-        """Update an unsigned version's body in place (same version_number)."""
+        """Update an unsigned version's body in place (same version_number).
+
+        ``requires_resign`` is applied when provided (None keeps the flag).
+        """
         sql = load_sql(SQL_DIR / "waiver_versions_update_body.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
@@ -147,10 +176,40 @@ class WaiversUpdate(WaiversBase):
                     "gym_id": str(gym_id),
                     "body": body,
                     "content_hash": content_hash,
+                    "requires_resign": requires_resign,
                 },
             )
             if not result.mappings().fetchone():
                 raise ValueError(f"Waiver version {version_id} not found")
+            await session.commit()
+
+    async def _set_requires_resign(
+        self,
+        gym_id: UUID,
+        current_version_id: UUID | None,
+        requires_resign: bool,
+    ) -> None:
+        """Flip requires_resign on the CURRENT version (mistake correction).
+
+        Moving the flag moves the re-sign floor: raising it re-blocks prior
+        signers; lowering it makes their signatures count again.
+        """
+        if current_version_id is None:
+            raise ValueError("Waiver has no current version")
+        sql = load_sql(SQL_DIR / "waiver_versions_update_requires_resign.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "version_id": str(current_version_id),
+                    "gym_id": str(gym_id),
+                    "requires_resign": requires_resign,
+                },
+            )
+            if not result.mappings().fetchone():
+                raise ValueError(
+                    f"Waiver version {current_version_id} not found",
+                )
             await session.commit()
 
     async def _publish_new_version(

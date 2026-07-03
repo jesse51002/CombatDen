@@ -50,17 +50,19 @@ class WaiverCreateRequest(BaseModel):
 class WaiverUpdateData(BaseModel):
     """Mutable waiver fields. All optional — only send what changed.
 
-    Supplying `body` publishes a NEW version (the existing versions are
-    immutable); supplying `name` renames the catalog row in place.
-    `requires_resign` (only meaningful when a `body` edit forks a new version
-    over a signed one) marks whether prior signers must re-sign before their
-    next purchase — set it False for a minor edit (typo) that should NOT
-    re-block them. Defaults True (a material change).
+    Supplying `body` persists a text edit (in place while the current version
+    is unsigned, else a NEW version); supplying `name` renames the catalog row
+    in place. `requires_resign` marks whether prior signers must re-sign
+    before their next purchase / check-in (False = a minor edit that should
+    NOT re-block them): with a `body` it is stamped on the resulting current
+    version (a fork defaults to True when omitted); WITHOUT a `body` it flips
+    the flag on the CURRENT version in place — the mistake-correction toggle.
+    None = leave the flag untouched.
     """
 
     name: str | None = None
     body: str | None = None
-    requires_resign: bool = True
+    requires_resign: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -86,7 +88,11 @@ class WaiverUpdateRequest(BaseModel):
 
 
 class WaiverVersionResponse(BaseModel):
-    """An immutable published version of a waiver's text."""
+    """A published version of a waiver's text (body immutable once signed).
+
+    ``requires_resign``: whether this version, once it is the highest such
+    version, re-blocks prior signers (the re-sign floor). Correctable on the
+    CURRENT version via the update endpoint's flag-only path."""
 
     version_id: UUID
     waiver_id: UUID
@@ -94,6 +100,7 @@ class WaiverVersionResponse(BaseModel):
     version_number: int
     body: str
     content_hash: str
+    requires_resign: bool = True
     created_at: datetime
     signature_count: int = 0
 
@@ -111,6 +118,9 @@ class WaiverResponse(BaseModel):
     current_version_id: UUID | None = None
     current_version_number: int | None = None
     current_version_signed_count: int = 0
+    # DISTINCT members who signed ANY version — the catalog's headline
+    # "N signed" (a re-signer counts once).
+    total_signed_count: int = 0
     is_deleted: bool
     created_at: datetime
     updated_at: datetime

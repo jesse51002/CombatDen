@@ -10,7 +10,7 @@ Map<String, dynamic> _$WaiverUpdateDataToJson(WaiverUpdateData instance) =>
     <String, dynamic>{
       'name': ?instance.name,
       'body': ?instance.body,
-      'requires_resign': instance.requiresResign,
+      'requires_resign': ?instance.requiresResign,
     };
 
 Map<String, dynamic> _$WaiverUpdateRequestToJson(

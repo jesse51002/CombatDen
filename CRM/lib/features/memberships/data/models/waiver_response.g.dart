@@ -16,6 +16,7 @@ WaiverResponse _$WaiverResponseFromJson(Map<String, dynamic> json) =>
       currentVersionNumber: (json['current_version_number'] as num?)?.toInt(),
       currentVersionSignedCount:
           (json['current_version_signed_count'] as num?)?.toInt() ?? 0,
+      totalSignedCount: (json['total_signed_count'] as num?)?.toInt() ?? 0,
       isDeleted: json['is_deleted'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
