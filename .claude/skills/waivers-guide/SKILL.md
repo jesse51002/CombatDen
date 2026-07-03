@@ -13,7 +13,9 @@ description: >-
   authorize-payer LINK as one request that REUSES sign_waiver (rendering payer +
   payee names, not atomic), the membership-START waiver gate (_check_waivers + the
   requires_resign re-sign FLOOR, all plan types, 422 with the unsigned list,
-  surfaces in preview), the plans-only-custom guard (_validate_waiver_ids at plan
+  surfaces in preview), the CHECK-IN waiver gate (the checkin domain's
+  unsigned_waiver warning: kiosk-reject / staff warn-first with override;
+  reservations deliberately ungated), the plans-only-custom guard (_validate_waiver_ids at plan
   write time), archive semantics (payer_auth never archivable via the API; a
   custom archive strips its id from every plan's waiver_ids), parametrization
   (the {{placeholders}} catalog waiver_parameters.py, backend auto-fill + caller
@@ -195,6 +197,23 @@ waiver to EVERY plan — but only AFTER the seed's own membership phase**
 end state reads as "the gym added a waiver requirement later" — seeded members
 show it unsigned, and any NEW start demos the gate + the wizard sign step. No
 signatures are seeded (Jesse's pick: minimal).
+
+## Check-in waiver gate
+
+`CheckinMemberGate` (checkin domain) also enforces waivers: a member with an
+UNSIGNED required waiver — the union of `waiver_ids` across their CURRENT
+(active/frozen) memberships' plans, at the same `requires_resign` floor; the
+exact set the member-detail Waivers section shows — gets the
+`unsigned_waiver` gate reason (`checkin/sql/checkin_unsigned_waivers.sql`,
+`CheckinQueries.get_unsigned_waivers`). `is_member=True` (kiosk/member self)
+**rejects** the check-in; staff (`is_member=False`) get the warn-first
+pop-up (`requires_confirmation` + the warning, nothing written) and may
+record through it with `ignore_warnings` — the standard gate model (see the
+`class-system-guide` skill §5). Evaluated for the member NOW (independent of
+the occurrence's coverage window). **Reservations/sign-ups are deliberately
+NOT waiver-gated** — only the check-in (Jesse: "they can reserve anyways").
+The CRM label for the warning is `unsigned_waiver` → "Required waiver not
+signed" (`CRM/lib/features/check_in/data/models/check_in_warning.dart`).
 
 ## Legal evidence (what a signature proves)
 
