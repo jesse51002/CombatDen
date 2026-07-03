@@ -3,14 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
+import 'package:crm/features/schedule/data/occurrence_windows.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
-
-/// Check-in opens this many hours before a class starts (mirrors the backend
-/// `checkin_opens_hours_before_start`), matching
-/// `ClassOccurrenceScreen._kCheckInOpensHours`.
-const int _kCheckInOpensHours = 2;
 
 /// How far back the past-classes picker reaches.
 const int _kLookbackDays = 30;
@@ -35,7 +31,7 @@ typedef CheckInPickBuilder = Widget Function(
 /// against `DateTime.now()`:
 ///
 /// - **Check in**: in session OR starting within the next 2h
-///   (`_kCheckInOpensHours`, mirroring the backend
+///   (the shared `kCheckInOpensHours`, mirroring the backend
 ///   `checkin_opens_hours_before_start`) — soonest first.
 /// - **Past**: already ended — most recent first (feeds the "Check into a
 ///   past class" identity picker, then that class's occurrences).
@@ -98,19 +94,17 @@ class _MemberCheckInPickBodyState extends State<MemberCheckInPickBody> {
       );
       if (!mounted) return;
 
-      final checkInWindowEnd =
-          now.add(const Duration(hours: _kCheckInOpensHours));
       final checkIn = <EffectiveClassInstance>[];
       final past = <EffectiveClassInstance>[];
       final reserve = <EffectiveClassInstance>[];
       for (final i in all) {
         if (i.isCancelled) continue;
         final start = _startOf(i);
-        final end = start.add(Duration(minutes: i.resolvedDurationMinutes));
+        final end = occurrenceEnd(start, i.resolvedDurationMinutes);
         if (!end.isAfter(now)) {
           // Already ended.
           past.add(i);
-        } else if (!start.isAfter(checkInWindowEnd)) {
+        } else if (occurrenceCheckInOpen(start, now)) {
           // In session, or starts within the check-in window.
           checkIn.add(i);
         }

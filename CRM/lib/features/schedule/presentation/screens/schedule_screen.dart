@@ -9,11 +9,11 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
-import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:crm/features/schedule/data/schedule_week.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_occurrence_chooser_dialog.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
 import 'package:crm/features/schedule/presentation/screens/class_occurrence_screen.dart';
@@ -50,7 +50,7 @@ class ScheduleScreen extends StatelessWidget {
         ),
       );
     }
-    final weekStart = _currentWeekStart();
+    final weekStart = currentWeekStart();
     return RepositoryProvider<ScheduleRepository>(
       create: (_) => ScheduleRepository(apiClient: ApiClient()),
       child: BlocProvider<ScheduleBloc>(
@@ -64,15 +64,6 @@ class ScheduleScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The Sunday (local midnight) that starts the week containing today.
-/// TODO(class-system): uses the device date; the gym-local "today" is not yet
-/// exposed to the CRM. Revisit once a gym timezone is available client-side.
-DateTime _currentWeekStart() {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  return today.subtract(Duration(days: today.weekday % 7));
 }
 
 /// Open the **class definition** form (create, or edit a class's recurring
@@ -236,36 +227,13 @@ List<ScheduleDayGroup> _buildDays(
       ScheduleDayGroup(
         dayLabel: _dayColumnFormat.format(date),
         isToday: _isSameDay(date, today),
-        classes: dayInstances.map(_entryFromInstance).toList(),
+        classes:
+            dayInstances.map(ScheduleClassEntry.fromInstance).toList(),
       ),
     );
   }
   return days;
 }
-
-ScheduleClassEntry _entryFromInstance(EffectiveClassInstance i) =>
-    ScheduleClassEntry(
-      classId: i.classId,
-      classDate: i.classDate,
-      originalDate: i.originalDate,
-      originalTime: i.originalTime,
-      name: i.className,
-      timeLabel:
-          classTimeRangeLabel(i.resolvedClassTime, i.resolvedDurationMinutes),
-      instructorName: i.resolvedInstructorName,
-      imageUrl: i.imageUrl,
-      pointsWorth: i.pointsWorth,
-      attendeeCount: i.attendanceCount,
-      signupCount: i.signupCount,
-      occurredAt: i.occurredAt,
-      occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
-      isCancelled: i.isCancelled,
-      cancellingRangeId: i.cancellingRangeId,
-      resolvedClassTime: i.resolvedClassTime,
-      resolvedInstructorId: i.resolvedInstructorId,
-      resolvedDurationMinutes: i.resolvedDurationMinutes,
-      maxCapacity: i.maxCapacity,
-    );
 
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;

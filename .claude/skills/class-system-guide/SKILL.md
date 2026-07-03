@@ -412,6 +412,14 @@ builds `checkin_reverser` before all consumers; no import cycle.
 - **Member page**: a **"Check in / Reserve"** popup — Check-in section
   (in-session + ≤2h) + past-classes toggle + Reserve section (any future
   not-yet-started).
+- **Dashboard Live Attendance card** (`features/home/.../live_attendance_card/`
+  + `live_attendance_*` bloc): the IN-SESSION occurrence(s)' combined
+  signed-up ∪ attended roster (`/classes/instances` split by `occurredAt` +
+  duration, then `/checkin/attendees` per shown occurrence) — green Checked
+  In / red Not Here, falling forward to the next occurrence's reservations
+  (blue Reserved) when nothing is live; 60s silent poll. Hosts its own
+  loaded `ScheduleBloc` so its footer opens the REAL batch check-in dialog
+  (2h window) and occurrence screen for the shown occurrence.
 
 ## 9. Gotchas / operational
 
