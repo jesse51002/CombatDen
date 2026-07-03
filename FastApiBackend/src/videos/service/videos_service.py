@@ -1,8 +1,10 @@
 """VideosService — pure delegating facade for the videos domain.
 
 Composes: ``VideoFeedService`` (live gym feed + pool reads), ``VideoSpecService``
-(spec DB read/write), ``VideoSpecAuthoring`` (deterministic commit gate), and
-``VideoFeedRefiner`` (feed-learning refiner).
+(spec DB read/write), ``VideoSpecAuthoring`` (deterministic commit gate),
+``VideoFeedRefiner`` (feed-learning refiner), ``VideosWorkerControl`` (worker
+enqueue + status), ``VideoRecsService`` (member RAG recommendations), and
+``VideoSearchService`` (semantic feed search).
 
 The router injects this facade for every non-agent video operation; the
 conversational agent uses it for the deterministic accept-path
@@ -16,12 +18,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from schema.video import GymVideoSpecSource, VideoGenre
+from schema.video import GymVideoSpecSource, VideoGenre, VideoWorkerReason
 
+from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
+from src.videos.schema.video_search_schema import SearchResultCard
 from src.videos.schema.video_spec_schema import (
     VideoSpecDraft,
     VideoSpecView,
 )
+from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymVideoCard,
@@ -29,8 +34,11 @@ from src.videos.schema.videos_schema import (
 )
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
+from src.videos.service.video_recs_service import VideoRecsService
+from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
+from src.videos.service.videos_worker_control import VideosWorkerControl
 
 
 class VideosService:
@@ -46,11 +54,17 @@ class VideosService:
         spec_service: VideoSpecService,
         authoring: VideoSpecAuthoring,
         feed_refiner: VideoFeedRefiner,
+        worker_control: VideosWorkerControl,
+        recs_service: VideoRecsService,
+        search_service: VideoSearchService,
     ) -> None:
         self._feed = feed_service
         self._spec_service = spec_service
         self._authoring = authoring
         self._feed_refiner = feed_refiner
+        self._worker_control = worker_control
+        self._recs = recs_service
+        self._search = search_service
 
     # ── live gym feed ─────────────────────────────────────────────
 
@@ -163,3 +177,38 @@ class VideosService:
 
     async def refine_from_feed(self, gym_id: UUID) -> VideoSpecView | None:
         return await self._feed_refiner.refine_from_feed(gym_id)
+
+    # ── worker control (enqueue + status) ─────────────────────────
+
+    async def enqueue_worker_run(self, gym_id: UUID) -> None:
+        """Enqueue a MANUAL worker run for the gym (the CRM 'run now' button)."""
+        return await self._worker_control.enqueue(
+            gym_id, VideoWorkerReason.manual
+        )
+
+    async def load_worker_status(
+        self, gym_id: UUID
+    ) -> VideoWorkerStatusResponse:
+        """The gym's video-worker state (last refresh, queued, running, last run)."""
+        return await self._worker_control.status(gym_id)
+
+    # ── member recs + semantic search (RAG read surface) ──────────
+
+    async def get_video_recs(
+        self,
+        gym_id: UUID,
+        member_id: UUID,
+        *,
+        per_bucket: int,
+        record: bool,
+    ) -> MemberVideoRecsResponse:
+        """A member's mood-bucketed video recommendations (RAG-ranked)."""
+        return await self._recs.get_recs(
+            gym_id, member_id, per_bucket=per_bucket, record=record
+        )
+
+    async def search_videos(
+        self, gym_id: UUID, q: str, limit: int
+    ) -> list[SearchResultCard]:
+        """Semantic search over the gym's served feed (most-similar first)."""
+        return await self._search.search(gym_id, q, limit)

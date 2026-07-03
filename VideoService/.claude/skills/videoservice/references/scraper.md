@@ -1,63 +1,64 @@
-# Scrape (fetch + classify the pool)
+# Worker ingest — scrape → funnel → enrich
 
-Fill and refresh the **shared video pool** (`VideoService/videos/`). This guide
-is **only** about the scraper. It does not author gyms (a gym already exists with
-`queries` — see `gym_maker.md`) and it does not approve videos for any gym
-(that's the scan — see `scan.md`). The scraper produces a **gym-agnostic** pool;
-tagging here is content classification, never approval.
+The first half of the background **worker** (`src/worker`): turn a gym's spec into
+enriched, scanned-ready candidates. This is no longer an operator script — the
+FastApiBackend enqueues a gym on `video_worker_queue` (on every spec save, or the
+manual run route) and the worker pops the oldest and runs the whole pipeline under
+a global lock. Run it locally with `make worker`. This guide covers the three
+ingest stages; the scan + feed-write half is `scan.md`.
 
-## What it does, in one pass
+## Where it runs
 
-`scripts/scraper` does fetch **and** classify in one run:
+`python -m src.worker.run` (`make worker`) is a long-running loop: one gym per
+tick, then wait `worker_poll_seconds` (60). Each tick acquires the global
+`"video_worker_run"` lock on the shared `resource_locks` table (TTL 900s, heartbeat
+300s → one gym at a time across every instance), recovers any orphaned `running`
+run (mark `failed` + re-enqueue), then pops the oldest queued gym (`ORDER BY
+requested_at`, `FOR UPDATE SKIP LOCKED`, drain-on-pop).
 
-1. **Gather queries** — reads every gym's `videos.queries` (or one gym's, with
-   `--gym-id`) and unions them. The gyms own the searches; the scraper just
-   collects them.
-2. **Fetch from Apify** — one actor (`streamers/youtube-scraper`) does the search
-   + metadata + channel avatar + the transcript inline (`subtitlesFormat=plaintext`),
-   so search and transcript are the same step. Results are de-duplicated across
-   queries; each kept video records its `source_queries` and a `relevance_index`.
-3. **Classify** — an LLM reads each video's title / description / transcript and
-   writes two independent axes onto the pooled record:
-   - `tag` — the single genre (`VideoType`).
-   - `gym_type` — the **list** of disciplines the content fits (e.g.
-     `[kettlebell, rowing]`). This is what routes a video into the candidate
-     slices gyms scan. It is **content classification, not approval** — a video
-     tagged `vinyasa` is merely a *candidate* for vinyasa gyms; whether it's good
-     is decided per-gym by the scan.
+## Stage 1 — spec
 
-The result is `videos/<video_id>.yaml`, one file per video, no manifest wrapper.
+Load the gym's latest spec from the `gym_video_spec_latest` view. Compute
+`criteria_changed` by comparing the current `(videos_desc, avoid_desc)` against the
+spec version in force at the gym's previous **completed** run — this drives
+incremental (unchanged) vs fresh (changed) mode downstream.
 
-## Run it
+## Stage 2 — scrape
 
-```bash
-make scrape                 # every gym's queries → pool, then classify
-make scrape GYM_ID=vinyasa  # only the vinyasa gym's queries
-```
+One Apify `streamers/youtube-scraper` actor run **per spec query** (subtitles ride
+inline — search + metadata + channel avatar + transcript in one call), concurrency
+`worker_scrape_concurrency` (4), `worker_max_results_per_query` (20) each. A failed
+query is dropped, not fatal. Results are **merge-upserted** into the shared `video`
+pool: `source_queries` accumulate, `relevance_index` keeps the best, and `tag` /
+`disciplines` are **never overwritten** — fresh scrapes land untagged and get their
+tags at enrich.
 
-(Equivalently `poetry run python -m scripts.scraper.run [--gym-id <id>]`. Always
-`poetry run`, never bare `python3` / `.venv/bin/*`.)
+## Stage 3 — funnel
 
-## Cost, idempotency, env
+Pick up to `scan_budget_per_run` (1000) candidates:
 
-- **Apify** bills per result (~$2.40 / 1000 videos). The transcript rides along in
-  the same call, so there's no separate transcript spend.
-- **LLM** tagging is cheap per video but real — it's a model call per video.
-- A scrape **appends two `CostEntry`s** to `cost_log.yaml`: one `SEARCH` (Apify
-  spend) and one `TAG` (LLM spend), each with its breakdown.
-- Env: `APIFY_TOKEN` (fetch) and the tagging model key (e.g. `GEMINI_API_KEY`) in
-  `.env`.
+- **Tier 1** — pool rows whose `source_queries` overlap the spec queries AND match a
+  gym discipline (or are untagged, so this run's fresh scrapes are included),
+  relevance-ordered. In incremental mode, exclude the previous run's verdicted ids.
+- **Tier 2** (only if Tier 1 leaves room) — embed all spec queries in one call, then
+  a cosine top-`rag_probe_top_k` (40) probe over discipline-matched `video_rag` rows.
+  A full Tier 1 skips Tier 2 entirely; only already-enriched videos (a `video_rag`
+  row) can match a probe.
 
-## Sequential only
+## Stage 4 — enrich
 
-Per project rule (`[[feedback_aicust_generations_sequential]]`): **one pipeline
-run in flight at a time** — providers are rate-limited. Never launch a scrape in
-parallel with another scrape or a scan. Let one finish before starting the next.
+For each un-enriched candidate **and** the gym's owner-section videos, ONE
+multimodal LLM call (`enrich_model`, `gemini/gemini-2.5-flash-lite`) over the
+thumbnail image + metadata + a transcript slice (`enrich_transcript_char_budget`,
+8000 chars) → `{genre tag, disciplines, prose summary, facets}`. The tag +
+disciplines are written back onto the pool `video` row; the summary is embedded
+(`embedding_model`, `openai/text-embedding-3-small` → `vector(1536)`, batched) and
+stored as a `video_rag` row (`ON CONFLICT DO NOTHING`). This is the RAG layer the
+FastApiBackend's member recs + semantic search rank against — the model + dimension
+are a **cross-service contract** (`run.py` asserts `embedding_dim == 1536` at
+startup).
 
-## Boundaries
+Each stage logs spend to `video_cost_log` (`search` / `embed` / `enrich`), stamped
+with `gym_id` + `video_run_id`.
 
-- The scraper never writes gym files and never touches any gym's
-  `good_video_ids` / `rejected_video_ids` / `scan_costs`.
-- It writes only the pool (`videos/`) and the `cost_log.yaml`.
-- After a scrape, run the **scan** (`scan.md`) to turn the freshly-tagged pool
-  into each gym's curated feed.
+→ Continue with the scan + feed-write half in `scan.md`.

@@ -771,8 +771,9 @@ Table video_gym_feed {
 
 Table video_cost_log {
   entry_id uuid [primary key, default: `uuid_generate_v4()`, note: 'append-only']
-  execution_type video_execution_type [not null, note: 'enum: search|transcript|tag|scan']
-  gym_id text [note: 'set on scan entries; NULL for pool-wide search/tag runs']
+  execution_type video_execution_type [not null, note: 'enum: search|transcript|tag|enrich|embed|scan']
+  gym_id uuid [note: 'FK to gyms.gym_id (real gym attribution); NULL for unattributed spend; legacy template slugs moved into note']
+  video_run_id uuid [note: 'the worker run this spend belongs to (per-run cost = SUM per run_id); NULL for legacy rows']
   at timestamptz [not null]
   breakdown jsonb [not null, default: '{}', note: 'USD component map']
   note text
@@ -784,7 +785,8 @@ Ref: video_gym_reward.gym_id > video_gym.gym_id
 
 Ref: video_gym_feed.gym_id > video_gym.gym_id
 Ref: video_gym_feed.video_id > video.video_id
-Ref: video_cost_log.gym_id > video_gym.gym_id
+Ref: video_cost_log.gym_id > gyms.gym_id
+Ref: video_cost_log.video_run_id > video_run.run_id
 
 // ============================================================
 // Real-gym video content (gym_video_* tables). These reference the
@@ -817,6 +819,9 @@ Table gym_video_spec {
 Table video_run {
   run_id uuid [primary key, default: `gen_random_uuid()`]
   gym_id uuid [not null, note: 'FK to gyms.gym_id']
+  status video_run_status [not null, default: 'completed', note: 'enum: running | completed | failed; serve path selects latest COMPLETED; default keeps the preset import unchanged']
+  finished_at timestamptz [note: 'set at completed/failed; NULL while running']
+  error text [note: 'failure detail; "orphaned" when found dead on lock acquisition']
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -834,8 +839,72 @@ Table gym_video_feed {
 
 // gym_video_query was DROPPED — queries now live in gym_video_spec.queries JSONB.
 
+// RAG sidecar: one row per ENRICHED pool video (worker's one multimodal
+// classify+summarize call). Lazy — un-enriched videos have no row and are
+// invisible to RAG. ONE embedding kind: the summary embedding (vector(1536)).
+Table video_rag {
+  video_id text [primary key, note: 'FK to video.video_id, ON DELETE CASCADE']
+  summary text [not null, note: 'prose summary incl. thumbnail visuals (gi vs no-gi etc.)']
+  facets jsonb [not null, default: '{}', note: 'structured attrs from the same call']
+  embedding vector [not null, note: 'vector(1536) of summary; model+dim pinned cross-service (one-way door)']
+  embedding_model text [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// Per-member RAG profile, one row per mood bucket (teach|enjoy|inform|human|peak
+// — the query-gen clusters). Recs pull top-k per bucket then interleave.
+// v1 profile_text = deterministic template; built lazily by the backend.
+Table member_video_profile {
+  member_id uuid [not null, note: 'FK to members.member_id']
+  gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
+  bucket mood_bucket [not null, note: 'enum: teach | enjoy | inform | human | peak']
+  profile_text text [not null]
+  embedding vector [not null, note: 'vector(1536); same model+dim contract as video_rag']
+  embedding_model text [not null]
+  built_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (member_id, bucket) [pk]
+  }
+}
+
+// Rec-serve history: freshness partition (never-recommended first). One row
+// per (member, video) — re-serves bump last_recommended_at/times_recommended.
+// Written only when record=true (CRM previews leave no trace).
+Table member_video_recs {
+  rec_id uuid [primary key, default: `gen_random_uuid()`]
+  member_id uuid [not null, note: 'FK to members.member_id']
+  gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
+  video_id text [not null, note: 'FK to video.video_id']
+  bucket mood_bucket [not null, note: 'the bucket it was served under']
+  score float8 [not null, note: 'composite score at (last) serve time']
+  first_recommended_at timestamptz [not null, default: `now()`]
+  last_recommended_at timestamptz [not null, default: `now()`]
+  times_recommended int [not null, default: 1]
+
+  indexes {
+    (member_id, video_id) [unique, note: 'seen is global per member, not per-bucket']
+    member_id
+  }
+}
+
+// The video worker's job queue (Postgres IS the queue): backend enqueues
+// (spec commit + CRM manual run), VideoService worker pops oldest-first under
+// the global video-worker resource lock. gym_id PK = a gym queued at most once;
+// enqueue upsert keeps the OLDEST requested_at (anti-self-starvation).
+Table video_worker_queue {
+  gym_id uuid [primary key, note: 'FK to gyms.gym_id']
+  reason video_worker_reason [not null, note: 'enum: spec_update | manual']
+  requested_at timestamptz [not null, default: `now()`]
+}
+
 Ref: gym_video_spec.gym_id > gyms.gym_id
 Ref: video_run.gym_id > gyms.gym_id
 Ref: gym_video_feed.gym_id > gyms.gym_id
 Ref: gym_video_feed.video_id > video.video_id
 Ref: gym_video_feed.video_run_id > video_run.run_id
+Ref: video_rag.video_id - video.video_id
+Ref: member_video_profile.member_id > members.member_id
+Ref: member_video_recs.member_id > members.member_id
+Ref: member_video_recs.video_id > video.video_id
+Ref: video_worker_queue.gym_id - gyms.gym_id

@@ -1,41 +1,45 @@
-# Scan (curate a gym's feed)
+# Worker judgment — scan → feed-write
 
-Turn the shared pool into one gym's feed. This is a **thin** job — you run a
-command. It does not author gyms and does not fetch or tag videos (those are
-`gym_maker.md` and `scraper.md`). It needs a gym that already has a
-`specification`, and a pool that's already been scraped + classified.
+The second half of the background **worker** (`src/worker`): turn the enriched
+candidates into the gym's served feed. Continues from `scraper.md` (scrape →
+funnel → enrich) as part of the same `make worker` pipeline — not a separate
+command.
 
-## Run it
+## Stage 5 — scan
 
-```bash
-make scan GYM_ID=vinyasa   # scan one gym
-make scan GYM_ID=all       # scan every gym
-```
+Load the funnel candidates joined to `video_rag` (a candidate whose enrich failed —
+no `video_rag` row — is simply not scanned). Judge them in batches of
+`scan_batch_size` (≈12 summaries per LLM call, `scan_model`
+`gemini/gemini-2.5-flash-lite`, concurrency `worker_scan_concurrency`) against the
+spec's `videos_desc` / `avoid_desc` → a keep/drop verdict per video. A missing or
+hallucinated verdict defaults to **rejected**.
 
-(Equivalently `poetry run python -m scripts.scan.run --gym-id <id>` /
-`--all-gyms`. Always `poetry run`.)
+## Stage 6 — feed write (carry-forward)
 
-## What it does
+In one transaction, open a new `video_run` (`status='running'`) and:
 
-For each scanned gym: take the pool slice tagged with the gym's `gym_type`(s),
-judge each candidate against the gym's `videos.specification` (an LLM call), and
-write the verdicts back onto the gym.
+1. **Carry forward** the previous completed run's feed rows FIRST — ALL rows in
+   incremental mode (criteria unchanged), only the owner's **manual-curation** rows
+   in a fresh run (criteria changed).
+2. Insert the fresh **automatic** verdicts `ON CONFLICT (video_run_id, video_id) DO
+   NOTHING`. Because carried rows are inserted first, they win — **the owner's
+   manual keep/reject always beats a fresh automatic verdict.**
+3. Complete the run (`status='completed'`, `finished_at`). Only a completed run is
+   ever served: every "latest run" read filters `status='completed'`, so a
+   mid-flight `running` run never becomes latest and blanks the gym's feed.
 
-- **Overwrites** `good_video_ids` and `rejected_video_ids` every run — a scan is
-  a fresh verdict, not an append. (Re-running re-decides from scratch.)
-- **Appends** one `ScanCost {at, usd}` to the gym's `scan_costs` history per run.
-- **Appends** one `SCAN` `CostEntry` to `cost_log.yaml` for the whole run.
+A `scan` `video_cost_log` row is written for the run (stamped `gym_id` +
+`video_run_id`).
 
-Only `good_video_ids` is ever served (the gym's feed); the rejected list and the
-raw pool are never sent to the user.
+## Failure semantics
 
-## Before you scan
+Any stage exception marks the run `failed` (with the error) and does **NOT**
+auto-re-enqueue — a deterministic failure needs a manual CRM re-trigger (a poison
+guard). Only a crash that leaves a run stuck `running` is recovered (marked failed +
+re-enqueued) by the next tick's orphan sweep.
 
-- The gym exists and has a `specification` (`gym_maker.md`).
-- The pool is scraped and classified, so candidates carry `gym_type`
-  (`scraper.md`). A gym with no matching tagged videos scans to an empty feed.
+## Sequential by design
 
-## Sequential only
-
-Per project rule (`[[feedback_aicust_generations_sequential]]`): one run in
-flight. Don't scan in parallel with a scrape or another scan.
+The global `"video_worker_run"` lock means the worker processes **one gym at a
+time** across every instance; within a gym, provider calls fan out only to the
+configured `worker_*_concurrency`. Never bypass the lock.

@@ -16,11 +16,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExecutionType(str, enum.Enum):
-    """Which pipeline step a cost entry came from."""
+    """Which pipeline step a cost entry came from.
+
+    Mirrors the Postgres ``video_execution_type`` enum
+    (``Database/supabase/schemas/video_cost_log.sql``) — keep the two in sync.
+    """
 
     SEARCH = "search"  # Apify search (videos + channel avatar + inline transcript)
     TRANSCRIPT = "transcript"  # standalone transcript scraper (Apify)
-    TAG = "tag"  # pool tagging: gym_type + genre, gym-agnostic (LLM)
+    TAG = "tag"  # legacy classify-only pass: gym_type + genre (LLM)
+    ENRICH = "enrich"  # worker's one multimodal classify+summarize call (LLM)
+    EMBED = "embed"  # summary / probe embeddings
     SCAN = "scan"  # per-gym scan: is_good verdicts against gym specs (LLM)
 
 

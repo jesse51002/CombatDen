@@ -19,6 +19,14 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent``        — one conversational turn.
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
+    * ``POST /api/v1/gyms/{gym_id}/video-worker/run`` — manually enqueue a
+      worker run (202).
+    * ``GET /api/v1/gyms/{gym_id}/video-worker/status`` — the gym's worker
+      state (last refresh / queued / running / last run status).
+    * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-recs`` — a member's
+      mood-bucketed RAG recommendations (``verify_can_view_member``).
+    * ``GET /api/v1/gyms/{gym_id}/videos/search`` — semantic search over the
+      gym's served feed.
 
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
@@ -33,13 +41,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
+from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
 from src.videos.schema.video_agent_schema import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
+from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
+from src.videos.schema.video_search_schema import VideoSearchResponse
 from src.videos.schema.video_spec_schema import VideoSpecView
+from src.videos.schema.video_worker_schema import (
+    VideoWorkerStatusResponse,
+    WorkerRunQueuedResponse,
+)
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymFeedPreview,
@@ -68,6 +83,12 @@ DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 # Videos per genre in the one-shot "All" preview.
 PREVIEW_PER_TAG = 10
+# Member recs: default + cap on videos returned per mood bucket.
+DEFAULT_PER_BUCKET = 5
+MAX_PER_BUCKET = 20
+# Semantic search: min query length + result-count cap (default is a setting).
+SEARCH_Q_MIN_LENGTH = 2
+MAX_SEARCH_LIMIT = 50
 
 
 # ── A real gym's live feed ────────────────────────────────────────────
@@ -572,3 +593,187 @@ async def refine_video_spec_from_feed(
             detail="No new feed curation to learn from.",
         )
     return result
+
+
+# ── Video worker control (enqueue + status) ──────────────────
+
+
+@videos_router.post(
+    "/api/v1/gyms/{gym_id}/video-worker/run",
+    response_model=WorkerRunQueuedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Manually enqueue a video-worker run for a gym",
+    responses={
+        202: {"description": "The gym was queued for a worker run"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+    },
+)
+@inject
+async def run_video_worker(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> WorkerRunQueuedResponse:
+    """Enqueue a manual worker run for the gym (idempotent — a gym is queued at
+    most once; re-queueing keeps the oldest pending request)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        await videos_service.enqueue_worker_run(gym_id)
+    except Exception:
+        logger.error(
+            "Failed to enqueue video-worker run for %s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue the video-worker run",
+        ) from None
+
+    return WorkerRunQueuedResponse(queued=True)
+
+
+@videos_router.get(
+    "/api/v1/gyms/{gym_id}/video-worker/status",
+    response_model=VideoWorkerStatusResponse,
+    summary="Get a gym's video-worker state",
+    responses={
+        200: {"description": "The gym's worker state"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+    },
+)
+@inject
+async def get_video_worker_status(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> VideoWorkerStatusResponse:
+    """Return the gym's video-worker state: last feed refresh, whether a run is
+    queued or running, and the most-recent run's status."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await videos_service.load_worker_status(gym_id)
+    except Exception:
+        logger.error(
+            "Failed to load video-worker status for %s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load the video-worker status",
+        ) from None
+
+
+# ── RAG read surface (member recs + semantic search) ─────────
+
+
+@videos_router.get(
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-recs",
+    response_model=MemberVideoRecsResponse,
+    summary="Get a member's mood-bucketed video recommendations",
+    description=(
+        "Per-mood-bucket RAG recommendations for a member (top ``per_bucket`` "
+        "per bucket, all 5 buckets present). Ranked by summary-embedding cosine "
+        "similarity to the member's profile, blended with gym relevance + "
+        "popularity, with unseen videos surfaced ahead of already-recommended "
+        "ones. ``record=true`` records the served videos (they won't be "
+        "re-pushed while unseen ones remain); ``record=false`` (CRM preview) "
+        "writes nothing."
+    ),
+    responses={
+        200: {"description": "The member's recommendations, grouped by bucket"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def get_member_video_recs(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    per_bucket: int = Query(DEFAULT_PER_BUCKET, ge=1, le=MAX_PER_BUCKET),
+    record: bool = Query(False),
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> MemberVideoRecsResponse:
+    """Return the member's per-bucket recommendations. Gated by
+    ``verify_can_view_member`` (staff of the member's gym OR the member
+    themselves)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await videos_service.get_video_recs(
+            gym_id, member_id, per_bucket=per_bucket, record=record
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to build video recs for member %s", member_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to build video recommendations",
+        ) from None
+
+
+@videos_router.get(
+    "/api/v1/gyms/{gym_id}/videos/search",
+    response_model=VideoSearchResponse,
+    summary="Semantic search over a gym's served video feed",
+    description=(
+        "Embed the free-text query ``q`` and rank the gym's served, enriched "
+        "feed by cosine similarity to each video's summary embedding "
+        "(most-similar first). ``limit`` caps the result count (max 50)."
+    ),
+    responses={
+        200: {"description": "The most-similar served videos for the query"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+    },
+)
+@inject
+async def search_gym_videos(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    q: str = Query(..., min_length=SEARCH_Q_MIN_LENGTH),
+    limit: int = Query(
+        settings.video_search_limit, ge=1, le=MAX_SEARCH_LIMIT
+    ),
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> VideoSearchResponse:
+    """Return the most-similar served videos for ``q``. Gated by
+    ``verify_gym_employee`` like the other feed routes."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        results = await videos_service.search_videos(gym_id, q, limit)
+    except Exception:
+        logger.error(
+            "Failed to search gym videos for %s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to search gym videos",
+        ) from None
+
+    return VideoSearchResponse(results=results)

@@ -76,4 +76,37 @@ class VideoExecutionType(StrEnum):
     search = "search"
     transcript = "transcript"
     tag = "tag"
+    enrich = "enrich"
+    embed = "embed"
     scan = "scan"
+
+
+class VideoRunStatus(StrEnum):
+    """Mirrors the Postgres `video_run_status` enum in schemas/video_run.sql —
+    the lifecycle of a versioned worker run that built a gym's video feed."""
+
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class VideoWorkerReason(StrEnum):
+    """Mirrors the Postgres `video_worker_reason` enum in
+    schemas/video_worker_queue.sql — why a gym was queued for a worker run."""
+
+    spec_update = "spec_update"
+    manual = "manual"
+
+
+class MoodBucket(StrEnum):
+    """Mirrors the Postgres `mood_bucket` enum in schemas/member_video_profile.sql
+    — the five mood clusters (teach / enjoy / inform / human / peak) that member
+    video recs are retrieved against. This is the same vocabulary the
+    query-generator prompt already uses to enforce feed breadth; a video's bucket
+    membership derives deterministically from its `video.tag` genre."""
+
+    teach = "teach"
+    enjoy = "enjoy"
+    inform = "inform"
+    human = "human"
+    peak = "peak"

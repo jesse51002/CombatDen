@@ -484,6 +484,9 @@ VIDEO_RUN: frozenset[str] = frozenset(
         "run_id",  # PK
         "gym_id",  # identity FK
         "created_at",  # auto-generated
+        "status",  # worker-run lifecycle, backend-managed
+        "finished_at",  # set by the worker at completion/failure
+        "error",  # failure detail, backend-managed
     }
 )
 
@@ -498,6 +501,7 @@ VIDEO_COST_LOG: frozenset[str] = frozenset(
     {
         "entry_id",  # PK, identity (append-only)
         "gym_id",  # identity FK, set at insert (append-only)
+        "video_run_id",  # the run this spend belongs to, set at insert (append-only)
     }
 )
 
@@ -536,3 +540,52 @@ GYM_VIDEO_FEED: frozenset[str] = frozenset(
         "video_run_id",  # the run this row belongs to (NULL = owner section)
     }
 )
+
+# ============================================================
+# Video worker RAG (video_rag, member_video_profile, member_video_recs). All
+# three are readable by their subject member / gym staff (SELECT policy), but
+# INSERT/UPDATE/DELETE are revoked for authenticated — written only by the
+# VideoService worker / backend at service_role — so every column is listed,
+# mirroring VIDEO_COST_LOG / VIDEO_RUN / GYM_VIDEO_SPEC.
+# ============================================================
+
+VIDEO_RAG: frozenset[str] = frozenset(
+    {
+        "video_id",  # PK, FK to video
+        "summary",  # multimodal enrich output
+        "facets",  # multimodal enrich output
+        "embedding",  # embedding of summary
+        "embedding_model",  # embedding provenance
+        "created_at",  # auto-generated timestamp
+    }
+)
+
+MEMBER_VIDEO_PROFILE: frozenset[str] = frozenset(
+    {
+        "member_id",  # composite PK, identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "bucket",  # composite PK, mood bucket
+        "profile_text",  # backend-built profile text
+        "embedding",  # embedding of profile_text
+        "embedding_model",  # embedding provenance
+        "built_at",  # backend-stamped build timestamp
+    }
+)
+
+MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
+    {
+        "rec_id",  # PK, auto-generated UUID
+        "member_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "video_id",  # identity FK
+        "bucket",  # bucket served under
+        "score",  # composite score at (last) serve time
+        "first_recommended_at",  # backend-stamped
+        "last_recommended_at",  # backend-stamped
+        "times_recommended",  # backend-managed counter
+    }
+)
+
+# video_worker_queue is intentionally NOT listed here: like resource_locks, it
+# has no client SELECT policy at all (REVOKE ALL FROM authenticated) — pure
+# service-internal queue infrastructure, not a client-readable data model.

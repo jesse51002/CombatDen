@@ -25,7 +25,7 @@ from fastapi.responses import HTMLResponse
 from schema.video_output import VideoOutput
 from src.api.errors import InvalidConfigError
 from src.api.service.videos_service import videos_service
-from src.classification.video_classifier import format_duration
+from src.shared.util.duration import format_duration
 from src.shared.util.video_id import video_id_from_url
 
 logger = logging.getLogger(__name__)

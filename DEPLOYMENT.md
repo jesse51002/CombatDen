@@ -191,6 +191,41 @@ the theme-browser target + upload + invalidate). Day-to-day: just `make
 deploy-themes`. Note both targets build into `build/web`, so run admin and
 themes deploys one at a time.
 
+## Combined backend + worker image (`deploy/`)
+
+A separate deployment target from the demo App Runner services above: **one Docker
+image that runs the FastApiBackend API and the VideoService background worker
+together** (`deploy/Dockerfile` + `deploy/entrypoint.sh`). This is the production
+path for the CRM's backend + the video pipeline — it does **not** replace the
+ThemeService / VideoService read APIs, which stay on App Runner (the VideoService
+read API keeps serving the MobileApp until it's repointed).
+
+**What runs inside** (exactly two processes, supervised by `entrypoint.sh`):
+1. **FastApiBackend** — `uvicorn src.main:app` on `:8000` (the CRM-facing API).
+2. **VideoService worker** — `python -m src.worker.run`, a background loop that pops
+   the `video_worker_queue` and regenerates gym feeds (no listening port).
+
+Each app installs into its own poetry venv inside the image (the two projects pin
+different fastapi/uvicorn versions). If either process exits, the container exits
+nonzero so the platform restarts it (a half-alive container is a silent outage).
+
+**Build** — context is the **monorepo root**, not `deploy/` (the image needs
+`FastApiBackend/`, `VideoService/`, and `Database/python_data/schema/` as siblings):
+```
+docker build -f deploy/Dockerfile -t combatden-backend-worker .
+```
+
+**Platform — always-on, NOT App Runner.** The worker must keep running between
+requests, so this image targets an **always-on service (Amazon ECS Express Mode
+direction)**. App Runner's CPU throttling on scale-to-idle would starve the
+background worker. The Dockerfile itself is platform-agnostic.
+
+**Runtime env vars** — none are baked into the image; the platform injects them at
+container start. The authoritative list (names only) lives in **`deploy/CLAUDE.md`**:
+the FastApiBackend Supabase / Stripe / `DATABASE_URL` / LLM keys plus the worker's
+`DATABASE_URL` / `APIFY_TOKEN` / `GEMINI_API_KEY` / `OPENAI_API_KEY`, cross-checked
+against each app's `src/core/config.py` and `.env.example`.
+
 ## Demo on / off (pause posture)
 
 Pause both between demos to zero out compute billing; resume (~1 min) before:

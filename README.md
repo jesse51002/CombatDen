@@ -20,10 +20,11 @@ flowchart TB
   LandingPage["🌐 LandingPage<br/>marketing site"]
 
   ThemeService["🎨 ThemeService<br/>AI theme generator + read API"]
-  VideoService["🎬 VideoService<br/>video batch pipeline (scrape / classify / scan)<br/>+ MobileApp read API (transitional)"]
-  FastApiBackend["⚙️ FastApiBackend<br/>CRM / billing + video content API (not deployed)"]
+  VideoService["🎬 VideoService<br/>video worker (scrape → enrich → scan → feed + RAG)<br/>+ MobileApp read API (transitional)"]
+  FastApiBackend["⚙️ FastApiBackend<br/>CRM / billing + video content API<br/>(spec agent · worker control · RAG recs/search; not deployed)"]
 
   Database["🗄️ Database<br/>Supabase Postgres"]
+  Deploy["📦 deploy/<br/>combined image: FastApiBackend + VideoService worker<br/>always-on (ECS), NOT App Runner"]
   Stripe["Stripe"]
   LiteLLM["OpenAI / LiteLLM"]
   Gemini["Gemini"]
@@ -42,10 +43,12 @@ flowchart TB
   LandingPage -.->|"build-time screenshots"| MobileApp
   LandingPage -.->|"build-time feed assets"| VideoService
   VideoService -->|"design_id"| ThemeService
-  FastApiBackend -->|"read/write · auth"| Database
-  VideoService -->|"writes video_* tables"| Database
+  FastApiBackend -->|"read/write · auth · enqueue video_worker_queue"| Database
+  VideoService -->|"pop queue · write video / video_rag / gym_video_feed"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
   FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
+  FastApiBackend -.->|"packaged into"| Deploy
+  VideoService -.->|"worker → combined image"| Deploy
   VideoService --> Apify
   VideoService --> LiteLLM
   VideoService --> Gemini
@@ -58,18 +61,21 @@ flowchart TB
   classDef service fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef data fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef tool fill:#fdf6d8,stroke:#caab2f,color:#4a3d08;
   class MobileApp,CRM,LandingPage client;
   class ThemeService,VideoService,FastApiBackend service;
   class Database data;
+  class Deploy tool;
   class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN,LLMProvider ext;
   style FastApiBackend stroke-dasharray:4 3;
+  style Deploy stroke-dasharray:4 3;
 ```
 
 ### Legend
 
 - **Top-down = data/request flow.** Client apps up top, the backend services in the middle, the shared Database and external third-party services at the bottom.
-- **Colors:** blue = client apps · green = backend services / engines · **orange = the shared Database and all external third-party services**.
-- **Dashed box border = built but not yet deployed.** The CRM has been **restored to a full gym-admin CRM** — Supabase-auth login, members list + member detail, gym setup, and the Stripe billing surface are built natively and wired to the FastApiBackend over an authenticated `dio` client; its ThemeService read stays live. The **FastApiBackend** that backs it is built (members/gyms/classes/ranks/rewards + memberships/plans/discounts/payments/webhooks + the merged `videos` + `presets` domains) but has **no prod host yet** (`api.combatden.net` pending). Billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred). **VideoService** is the video batch pipeline (scrape/classify/scan) that owns the shared `video_*` pool; the CRM reads video content via FastApiBackend, while MobileApp still reads VideoService directly (transitional).
+- **Colors:** blue = client apps · green = backend services / engines · **orange = the shared Database and all external third-party services** · yellow = the combined `deploy/` image (operational packaging).
+- **Dashed box border = built but not yet deployed.** The CRM has been **restored to a full gym-admin CRM** — Supabase-auth login, members list + member detail, gym setup, and the Stripe billing surface are built natively and wired to the FastApiBackend over an authenticated `dio` client; its ThemeService read stays live. The **FastApiBackend** that backs it is built (members/gyms/classes/ranks/rewards + memberships/plans/discounts/payments/webhooks + the merged `videos` + `presets` domains) but has **no prod host yet** (`api.combatden.net` pending). Billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred). **VideoService** now runs the video content as a **queue-driven background worker** (scrape → funnel → enrich → scan → feed-write) that owns the shared `video_*` pool and builds the per-video RAG layer; the CRM reads video content via FastApiBackend, while MobileApp still reads VideoService's read API directly (transitional). The dashed **`deploy/`** node is the combined always-on image (FastApiBackend API + the VideoService worker) — the production target, not yet live.
 - **Solid arrow = a live runtime dependency** (HTTP, DB read/write, third-party API). **Dashed arrow = build-time or operational** — e.g. LandingPage capturing screenshots/feed assets at build time.
 - **Every arrow connects siblings** — at this level, system → system or system → external service.
 - **Want the inner workings?** `architecture.mermaid` opens every box up: the API vs creation split for ThemeService/VideoService, the pipeline steps, and the skills/scripts that operate each engine. Render it with the `mermaid-creation` skill (`npx @mermaid-js/mermaid-cli -i architecture.mermaid -o architecture.svg`).
@@ -84,9 +90,9 @@ flowchart TB
 
 **🌐 LandingPage** — Marketing site (React via CDN + Babel, no bundler) at `www.combatden.net`. Hero phone carousel, feed demo, loyalty loop, pricing. It makes no live API calls — its screenshots are captured from MobileApp and its feed thumbnails are pulled from VideoService **at build time**, then baked into the deploy. It links out to the theme browser. *Talks to:* CRM (link), MobileApp + VideoService (build-time assets only).
 
-**⚙️ FastApiBackend** — Python/FastAPI membership + billing + video content backend (the CRM's API). Routers for members, gyms, classes, ranks, rewards, plus the billing subsystem — membership plans, discounts, member memberships, payments, and Stripe webhooks — and three video domains: **`videos`** (authed real-gym feed + LLM spec/agent authoring surface — `VideoSpecService`, `VideoQueryGenerator`, `VideoSpecAuthoring`, `VideoFeedRefiner` as standalone general services using **litellm** (`LiteLLMClient`) for structured calls, plus `VideoAgentService` as a thin **Pydantic AI** conversational agent wrapper; one-way layering: agent → `VideosService` facade → services), **`presets`** (public slug-keyed template catalog via `PresetsTemplateService` + owner-gated import of a template into a gym's live tables), and **`theme`** (gym showcase — branded class/reward cards via `ThemeShowcaseService`). A service/SQL layer; Supabase-JWT auth; Python 3.13. The request/response contract lives in the backend's Pydantic schemas (`src/<domain>/<domain>_schema.py`). *Talks to:* Database (read/write + Supabase Auth), Stripe (payments + webhooks), Anthropic/LLM provider (video spec agent via Pydantic AI; query gen + feed refiner via litellm). **Built and wired to the CRM, not yet deployed** (prod target `api.combatden.net`); billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred).
+**⚙️ FastApiBackend** — Python/FastAPI membership + billing + video content backend (the CRM's API). Routers for members, gyms, classes, ranks, rewards, plus the billing subsystem — membership plans, discounts, member memberships, payments, and Stripe webhooks — and three video domains: **`videos`** (authed real-gym feed + LLM spec/agent authoring surface — `VideoSpecService`, `VideoQueryGenerator`, `VideoSpecAuthoring`, `VideoFeedRefiner` as standalone general services using **litellm** (`LiteLLMClient`) for structured calls, plus `VideoAgentService` as a thin **Pydantic AI** conversational agent wrapper; one-way layering: agent → `VideosService` facade → services; plus the **worker-control** routes (enqueue/status over `video_worker_queue`) and a **RAG read surface** — `VideoRecsService` mood-bucket member recs + `VideoSearchService` semantic search over `video_rag`), **`presets`** (public slug-keyed template catalog via `PresetsTemplateService` + owner-gated import of a template into a gym's live tables), and **`theme`** (gym showcase — branded class/reward cards via `ThemeShowcaseService`). A service/SQL layer; Supabase-JWT auth; Python 3.13. The request/response contract lives in the backend's Pydantic schemas (`src/<domain>/<domain>_schema.py`). *Talks to:* Database (read/write + Supabase Auth), Stripe (payments + webhooks), Anthropic/LLM provider (video spec agent via Pydantic AI; query gen + feed refiner via litellm). **Built and wired to the CRM, not yet deployed** (prod target `api.combatden.net`); billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred).
 
-**🎬 VideoService** — owns the gym-video **batch pipeline**, and is now **two distinct parts**. The **CREATION pipeline** (driven by the `videoservice` skill — make-gym / scrape / scan — plus the `gym_maker`, `scraper`, `scan`, `sync_gyms`, `import_yaml`, `sql` scripts and the `VideoDbWriter`) scrapes YouTube via Apify, classifies with Gemini/LiteLLM, and **writes** the shared Postgres `video_*` tables. The **READ API** at `video.combatden.net` is a transitional source for the **MobileApp** only — the CRM reads video content via FastApiBackend's merged `videos` domain. The two halves never call each other — the database is the handoff.
+**🎬 VideoService** — owns the gym-video content, in **two distinct parts**. The **CREATION side** is now a queue-driven **background worker** (`src/worker`, `make worker`): the FastApiBackend enqueues a gym on the Postgres `video_worker_queue`, the worker pops it and runs scrape (Apify) → funnel → enrich (Gemini + embeddings) → scan → feed-write, writing the shared `video` pool, the per-video `video_rag` layer, and each real gym's `gym_video_feed` runs. Gym-config **authoring** stays operator-driven (`gym_maker` + `make sync-gyms`). The **READ API** at `video.combatden.net` is a transitional source for the **MobileApp** only — the CRM reads video content via FastApiBackend's `videos` domain. The worker and the read API never call each other — the database is the handoff.
 
 **🎨 ThemeService** — the AI theme generator, also **two separate halves**. The **CREATION generator** (the `brand-brief` skill authors `customization.yaml`; the async-DAG orchestrator runs the color/font/image/icon/text/lottie modules; the `writer` emits `output.yaml`; the uploader pushes assets to the CDN — all operated by the `edit_theme` skill and the `regen`/`regen_image`/`edit_customization`/`expand`/`remove_bg`/`sync_assets`/`fetch_icon_sets` scripts) talks to Google Fonts, Recraft, OpenAI/LiteLLM, and AWS S3 + CloudFront. The **READ API** at `theme.combatden.net` (`/apps/{id}/styles`, plus the shared `ThemeFlutter` client package the apps import) only serves the produced `output.yaml`. Handoff is the artifact, not a call.
 
@@ -98,7 +104,7 @@ flowchart TB
 
 - **CRM is wired to FastApiBackend for all content.** CRM authenticates with Supabase, then calls FastApiBackend over an authenticated `dio` client (`api_client.dart` + JWT interceptor). The members list/detail, gym-setup, billing screens, and video content (gym feed + spec via `videos` domain; gym showcase via `theme` domain; template catalog via `presets` domain) are all dispatched through BLoC → repositories → the API. The ThemeService live preview is the one remaining direct edge integration. The backend isn't deployed yet, so end-to-end runs against a local FastApiBackend on `:8000`.
 - **One shared database is the hub.** FastApiBackend and VideoService both read/write the same Supabase Postgres. They stay consistent by importing enum mirrors from `Database/python_data/schema/` and honoring the backend's Pydantic schemas as the request/response contract.
-- **Each engine's creation and read sides are decoupled by an artifact.** ThemeService-CREATION writes `output.yaml` (+ CDN assets) that ThemeService-API serves; VideoService-CREATION writes the `video_*` tables that FastApiBackend (`videos` domain) and VideoService-READ-API both read. No direct call crosses creation and read halves.
+- **Each engine's creation and read sides are decoupled by an artifact.** ThemeService-CREATION writes `output.yaml` (+ CDN assets) that ThemeService-API serves; the VideoService **worker** writes the `video_*` / `gym_video_*` / `video_rag` tables that FastApiBackend (`videos` domain — feed + RAG recs/search) and VideoService-READ-API read. The FastApiBackend triggers the worker only through the `video_worker_queue` table (enqueue on every spec save + the manual run route) — no direct call crosses the two.
 - **One shared Flutter package is the theming backbone.** `ThemeService/ThemeFlutter` is imported by **both** MobileApp and CRM (`../ThemeService/ThemeFlutter`) — it fetches and caches each tenant's branding and resolves colors/fonts/images at runtime.
 - **VideoService points at ThemeService for branding.** Each gym's YAML stores a ThemeService `design_id`, so the curated feed and the visual theme line up per gym.
 - **LandingPage is downstream of the apps at build time.** Its phone screenshots come from MobileApp and its feed thumbnails from VideoService — captured and baked in, not fetched live — and it links to the CRM theme browser.
@@ -135,6 +141,7 @@ Full deploy/runbook detail (DNS, ECR push, App Runner env vars, CDN provisioning
 | `VideoService/` | Video pipeline + read API | `VideoService/CLAUDE.md`, `VideoService/README.md` |
 | `ThemeService/` | AI theme generator + read API + `ThemeFlutter` pkg | `ThemeService/CLAUDE.md`, `ThemeService/README.md` |
 | `Database/` | Supabase schema, RLS, enums | `Database/CLAUDE.md` |
+| `deploy/` | Combined FastApiBackend + VideoService-worker image (always-on target) | `deploy/CLAUDE.md` |
 | `architecture.mermaid` | Full detailed system graph (inner nodes) | rendered via the `mermaid-creation` skill |
 | `DEPLOYMENT.md` | Production deploy runbook | — |
 | `CLAUDE.md` | Monorepo-wide working conventions | — |

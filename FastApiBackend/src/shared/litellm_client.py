@@ -104,3 +104,36 @@ class LiteLLMClient:
         raise LLMStructuredOutputError(
             f"{schema.__name__} never validated after {_MAX_ATTEMPTS} attempts"
         ) from last_error
+
+    async def embed(
+        self,
+        *,
+        texts: list[str],
+        model: str,
+    ) -> list[list[float]]:
+        """Embed a batch of texts, returning one vector per input in input order.
+
+        Calls ``litellm.aembedding(model=..., input=texts)`` with the provider
+        key resolved from the model prefix (same rule as
+        :meth:`complete_structured`). The response's per-item ``index`` is used
+        to restore the original input order regardless of how the provider
+        returns them.
+
+        Args:
+            texts: The input strings to embed (one vector produced per string).
+            model: A litellm ``provider/name`` model string (e.g.
+                ``openai/text-embedding-3-small``); the prefix selects the key.
+
+        Returns:
+            A list of embedding vectors aligned to ``texts`` (``result[i]`` is
+            the embedding of ``texts[i]``).
+        """
+        api_key = self._api_key_for_model(model)
+        resp = await litellm.aembedding(
+            model=model,
+            input=texts,
+            api_key=api_key,
+            timeout=_REQUEST_TIMEOUT,
+        )
+        ordered = sorted(resp.data, key=lambda item: item["index"])
+        return [item["embedding"] for item in ordered]

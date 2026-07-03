@@ -1,0 +1,81 @@
+-- One mood bucket's ranked video recommendations for a member.
+--
+-- Candidate set = the gym's SERVED feed, EXACTLY as videos_load_feed_ids
+-- defines it: accepted rows of the gym's latest COMPLETED run PLUS the owner's
+-- run-independent rows (video_run_id IS NULL). The `status = 'completed'`
+-- filter on the latest-run subselect must mirror the feed serve path so a
+-- mid-flight 'running' run never leaks in. Restricted to this bucket via
+-- v.tag = ANY(:genres) (the deterministic genre → bucket map).
+--
+-- Only ENRICHED videos are eligible: the JOIN to video_rag drops any pool video
+-- without a summary embedding (RAG is lazy — un-enriched videos are invisible).
+--
+-- Ranking:
+--   similarity = 1 - cosine_distance(video summary embedding, profile embedding)
+--   score      = w_sim*similarity + w_rel*(1/(1+relevance_index))
+--                + w_views*min(ln(1+views)/20, 1)
+-- ORDER BY hard-partitions UNRECOMMENDED videos first (freshness), then:
+--   within unrecommended  → score DESC
+--   within recommended    → last_recommended_at ASC (oldest first), score DESC
+-- so a member never sees the same video re-pushed while unseen ones remain.
+WITH scored AS (
+    SELECT
+        v.video_id,
+        v.url,
+        v.title,
+        v.thumbnail_url,
+        v.channel_name,
+        v.channel_url,
+        v.channel_avatar_url,
+        v.view_count,
+        v.duration_seconds,
+        v.tag,
+        v.relevance_index,
+        (mvr.video_id IS NOT NULL) AS already_recommended,
+        mvr.last_recommended_at AS last_recommended_at,
+        (1 - (r.embedding <=> CAST(:profile_embedding AS vector))) AS similarity
+    FROM gym_video_feed f
+    JOIN video v ON v.video_id = f.video_id
+    JOIN video_rag r ON r.video_id = v.video_id
+    LEFT JOIN member_video_recs mvr
+        ON mvr.member_id = CAST(:member_id AS UUID)
+        AND mvr.video_id = v.video_id
+    WHERE f.gym_id = CAST(:gym_id AS UUID)
+      AND f.scan_status = 'accepted'
+      AND (
+        f.video_run_id IS NULL
+        OR f.video_run_id = (
+            SELECT run_id FROM video_run
+            WHERE gym_id = CAST(:gym_id AS UUID)
+              AND status = 'completed'
+            ORDER BY created_at DESC
+            LIMIT 1)
+      )
+      AND v.tag IS NOT NULL
+      AND v.tag::text = ANY(:genres)
+)
+SELECT
+    video_id,
+    url,
+    title,
+    thumbnail_url,
+    channel_name,
+    channel_url,
+    channel_avatar_url,
+    view_count,
+    duration_seconds,
+    tag,
+    relevance_index,
+    already_recommended,
+    similarity,
+    (
+        :w_sim * similarity
+        + :w_rel * (1.0 / (1.0 + relevance_index))
+        + :w_views * LEAST(LN(1 + COALESCE(view_count, 0)) / 20.0, 1.0)
+    ) AS score
+FROM scored
+ORDER BY
+    already_recommended ASC,
+    last_recommended_at ASC NULLS FIRST,
+    score DESC
+LIMIT :per_bucket

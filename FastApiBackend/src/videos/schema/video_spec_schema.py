@@ -4,8 +4,9 @@
 (disciplines + keep/avoid descriptions). Queries are generated deterministically by
 ``VideoQueryGenerator`` after the owner accepts the draft; the agent never sees or
 authors them.  ``VideoSpecView`` is the read projection of a gym's LATEST spec
-version (includes queries, source, created_at).  ``QueriesResult`` is the internal
-structured output of the single-call query generator.
+version (includes queries, source, created_at).  ``VideoQueryGenerator`` runs a
+two-call flow whose structured outputs are ``LandscapeResult`` (call 1 — the
+niche's content landscape) and ``QueriesResult`` (call 2 — the search queries).
 """
 
 from __future__ import annotations
@@ -17,9 +18,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from schema.video import GymVideoSpecSource
 
 from src.videos.schema.videos_gym_type import GymType
-
-# Default number of search queries generated per spec commit.
-DEFAULT_QUERY_COUNT = 24
 
 
 class VideoSpecDraft(BaseModel):
@@ -83,8 +81,39 @@ class VideoSpecView(BaseModel):
     created_at: datetime
 
 
+class LandscapeResult(BaseModel):
+    """Structured output of the landscape-research call (step 1 of query gen).
+
+    The LLM brainstorms the niche's content landscape from its own knowledge:
+    popular YouTube channels, well-known creators / athletes / instructors, and
+    notable series / events / shows. Hallucination is tolerated by design — a
+    wrong name just searches poorly — so nothing here is validated downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    channels: list[str] = Field(
+        description=(
+            "Popular YouTube channels in this niche — each a channel name, "
+            "optionally with a 2-4 word descriptor."
+        ),
+    )
+    creators: list[str] = Field(
+        description=(
+            "Well-known creators / athletes / instructors — each a name, "
+            "optionally with a 2-4 word descriptor."
+        ),
+    )
+    series_events: list[str] = Field(
+        description=(
+            "Notable series / events / shows — each a name, optionally with a "
+            "2-4 word descriptor."
+        ),
+    )
+
+
 class QueriesResult(BaseModel):
-    """Internal structured output of the single-call query generator."""
+    """Structured output of the query-generation call (step 2 of query gen)."""
 
     model_config = ConfigDict(extra="forbid")
 

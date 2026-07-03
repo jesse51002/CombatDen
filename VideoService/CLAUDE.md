@@ -4,12 +4,12 @@ Python/Pydantic package. See `README.md` for what it does. (Formerly
 CustomYoutubeService — renamed when the scope expanded beyond YouTube.)
 
 > **Standalone by design.** This service owns the full gym-video lifecycle:
-> gym config authoring, video pool scraping + classification, feed scanning, and
+> gym config authoring, the scrape + RAG-enrich + scan **background worker**, and
 > a read-only API. Data lives in the **shared Supabase Postgres** (the `video_*`
-> tables defined in `../Database/`): the read API queries it, and the pipeline
-> scripts write it. The hand-authored gym configs stay git-tracked YAML
-> (`gyms/<id>.yaml`) and are loaded into SQL by `make sync-gyms`. All SQL lives in
-> `.sql` files read via `sql_loader` — never inline.
+> tables defined in `../Database/`): the read API and the FastApiBackend query it,
+> the worker writes it, and `make sync-gyms` loads the hand-authored gym configs
+> (git-tracked YAML `gyms/<id>.yaml`) into SQL. All SQL lives in `.sql` files read
+> via `sql_loader` — never inline.
 >
 > **The read API has been merged into the FastApiBackend** (`../FastApiBackend/src/videos`
 > — a re-authored port keyed by the real gym UUID, with a public slug-keyed
@@ -18,8 +18,8 @@ CustomYoutubeService — renamed when the scope expanded beyond YouTube.)
 > The **CRM and the public theme browser now call that backend**, not this service.
 > This read API (`src/api`, port 8002, `video.combatden.net`) stays live only as
 > the source for the member **MobileApp**, which has not been repointed yet — once
-> it is, this read API can be retired. The **batch job** (scrape / classify / scan,
-> `scripts/`) and the gym-config YAML authoring remain owned here regardless.
+> it is, this read API can be retired. The **background worker** (`src/worker`,
+> `make worker`) and the gym-config YAML authoring remain owned here regardless.
 
 ---
 
@@ -108,9 +108,10 @@ from, not a per-gym value.
   prompt text.
 - **Never inline SQL in code.** Every query lives in its own `.sql` file and is
   read at use via `sql_loader.load_sql` (copied from `../FastApiBackend/` into
-  `src/shared/`). Read-path queries live in `src/api/sql/`; write-path queries in
-  `scripts/sql/`. Use `:param` bind params for values; `{var}` only for
-  structural parts (e.g. a WHERE clause).
+  `src/shared/`). Read-path queries live in `src/api/sql/`; the worker's pipeline
+  queries in `src/worker/sql/`; the YAML-sync scripts' in `scripts/sql/`. Use
+  `:param` bind params for values; `{var}` only for structural parts (e.g. a WHERE
+  clause).
 
 ---
 
@@ -146,7 +147,9 @@ Run the suite with `make test`. Two tiers:
   is set**, so `make test` stays green on a machine without a DB.
 
 Round-trip every gym file with `make gym-check GYM_ID=all` before committing.
-(The scrape/scan tests are skipped pending their SQL-writer migration.)
+The worker stages are covered by `tests/test_worker_*.py` (pure transforms,
+funnel, enricher, scanner, the tick, and the resource lock) against
+`tests/worker_fakes.py` — no DB or provider key needed.
 
 ---
 
@@ -155,17 +158,20 @@ Round-trip every gym file with `make gym-check GYM_ID=all` before committing.
 - Do not hardcode gym-specific names, disciplines, or search prompts in Python.
   Anything specific to one gym belongs in `gyms/<gym_id>.yaml`.
 - Do not add `dict[str, Any]` escape hatches to dodge strict typing.
-- Do not add scraping or scoring calls to `src/api/` or `schema/` — fetching
-  lives in `scripts/scraper/`, scanning in `scripts/scan/`. The read path only
-  *reads* (via `.sql` in `src/api/sql/`); every write goes through the pipeline
-  scripts' `VideoDbWriter` (`scripts/shared/video_db_writer.py`).
+- Do not add scraping or scanning calls to `src/api/` or `schema/` — the whole
+  scrape → funnel → enrich → scan → feed-write pipeline lives in `src/worker/`.
+  The read path only *reads* (via `.sql` in `src/api/sql/`). There are two write
+  paths: the **worker** writes the pool + RAG + feed + runs + cost log through its
+  own `src/worker/sql/`, and `make sync-gyms` / `make import-yaml` load the YAML
+  gym configs through `scripts/shared/video_db_writer.py` (`scripts/sql/`).
 
 ---
 
 ## Jobs / workflow
 
-Data lives in Postgres; the gym configs are authored as YAML and synced in. Each
-job is a `scripts/` module + `make` target:
+Two kinds of job. **Gym-config tooling** (author YAML + load it into SQL) runs as
+`scripts/` modules + `make` targets; the **content pipeline** runs as the background
+worker:
 
 1. **Make/edit a gym** (`make gym-check GYM_ID=<id|all>`) — author/update
    `gyms/<gym_id>.yaml` and validate it round-trips the `Gym` schema (YAML-only).
@@ -176,14 +182,103 @@ job is a `scripts/` module + `make` target:
    import with `--skip-cost-log`, so the append-only `cost_log.yaml` is **not**
    imported here (re-running would duplicate ledger rows); load it once by hand
    with `poetry run python -m scripts.import_yaml.run` if you need the history.
-3. **Scrape + classify** (`make scrape`) and **Scan** (`make scan`) — fetch +
-   tag the pool, and run the per-gym keep/drop scan. ⚠️ **Not yet migrated to
-   SQL**: these still target the removed YAML write methods and are pending the
-   scrape/scan → SQL rewrite; their tests are skipped until then.
+   These write through `scripts/shared/video_db_writer.py` + `scripts/sql/` and
+   pick their DB via the **`ENV_FILE`** flag (default `.env`; `ENV_FILE=.env.prod`
+   targets prod) — see `scripts/shared/db_target.py`.
+3. **The content worker** (`make worker` → `python -m src.worker.run`) — the
+   scrape → funnel → enrich → scan → feed-write pipeline, detailed in the next
+   section. It **replaced** the old standalone `scripts/scraper` + `scripts/scan`
+   jobs (both deleted, along with `src/classification`); it writes through its own
+   `src/worker/sql/`, not `VideoDbWriter`.
 
-Every write goes through `scripts/shared/video_db_writer.py` + `scripts/sql/`
-(no inline SQL). The write scripts pick their DB via the **`ENV_FILE`** flag
-(default `.env`; `ENV_FILE=.env.prod` targets prod) — see `scripts/shared/db_target.py`.
+---
+
+## The background worker (`src/worker`)
+
+A standalone long-running process — `python -m src.worker.run` (`make worker`) — that
+regenerates gym feeds and builds the RAG layer. **Not a web server, no port.** It is the
+video half of the combined `deploy/` container (the other half is FastApiBackend's
+uvicorn); the FastApiBackend owns the *control surface* (enqueue + status routes), the
+worker owns the *execution*. The two never call each other — the Postgres
+`video_worker_queue` table is the hand-off.
+
+### The tick
+
+`run.py` is a loop: one gym per tick, then wait `worker_poll_seconds` (60) for the next.
+Each `WorkerService.run_tick`:
+
+1. **Acquires a global TTL lock** `"video_worker_run"` on the shared `resource_locks`
+   table (single-shot, non-blocking — a second worker just no-ops the tick). TTL =
+   `worker_lock_ttl_seconds` (900s), renewed by a heartbeat every
+   `worker_heartbeat_seconds` (300s); a lost heartbeat aborts the run mid-pipeline. So
+   only one gym is ever processed at a time across every worker instance.
+2. **Recovers orphans** — under the exclusive lock, any `video_run` still `status='running'`
+   must be from a dead process: it is marked `failed` (`error='orphaned'`) and its gym is
+   re-enqueued (`reason='manual'`, at its original queue position). This is the ONLY
+   auto-re-enqueue.
+3. **Pops the oldest queued gym** — `DELETE … WHERE gym_id = (SELECT … ORDER BY
+   requested_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING gym_id`. The queue is
+   drain-on-pop; empty → the tick ends.
+
+### The queue contract with the backend
+
+`video_worker_queue` is PK `gym_id` (a gym is queued at most once), `reason`
+(`spec_update | manual`), `requested_at`. The **FastApiBackend enqueues** it —
+`spec_update` after every successful spec save (`VideoSpecAuthoring.commit`), `manual`
+from `POST …/video-worker/run` — via an upsert that keeps the OLDEST `requested_at` on
+conflict (anti-self-starvation). The worker pops it. `GET …/video-worker/status` reads the
+queue + the gym's runs (queued / running / last-run-status / last-completed timestamp).
+
+### The pipeline (six stages, per gym)
+
+1. **Spec** — load the gym's latest spec from the `gym_video_spec_latest` view; compute
+   `criteria_changed` by comparing the current `(videos_desc, avoid_desc)` against the spec
+   version in force at the gym's previous **completed** run (drives incremental vs fresh).
+2. **Scrape** — one Apify `streamers/youtube-scraper` actor run per spec query (subtitles
+   ride inline), concurrency `worker_scrape_concurrency` (4). A failed query is dropped, not
+   fatal. Results are **merge-upserted** into the shared `video` pool (`source_queries`
+   accumulate; `tag`/`disciplines` never overwritten — fresh scrapes land untagged).
+3. **Funnel** — pick candidates up to `scan_budget_per_run` (1000). **Tier 1**: pool rows
+   whose `source_queries` overlap the spec queries AND match a gym discipline (or are
+   untagged — so this run's fresh scrapes get scanned), relevance-ordered; incremental mode
+   excludes the previous run's already-verdicted ids. **Tier 2** (only if room left): every
+   spec query embedded in one call, then a cosine top-`rag_probe_top_k` (40) probe over
+   discipline-matched `video_rag` rows. A full Tier 1 skips Tier 2 entirely.
+4. **Enrich** — for each un-enriched candidate **and** the gym's owner-section videos, ONE
+   multimodal LLM call (`enrich_model`, `gemini/gemini-2.5-flash-lite`; thumbnail image +
+   metadata + a `enrich_transcript_char_budget` (8000-char) transcript slice) →
+   `{genre tag, disciplines, prose summary, facets}`. The tag + disciplines are written back
+   onto the `video` pool row; the summary is embedded (batched) and stored as a `video_rag`
+   row.
+5. **Scan** — batched keep/drop (`scan_batch_size` ≈ 12 summaries per LLM call,
+   `scan_model` `gemini/gemini-2.5-flash-lite`) against the spec's `videos_desc`/`avoid_desc`.
+   A missing verdict defaults to rejected.
+6. **Feed write (carry-forward)** — open a new `video_run` (`running`), copy the previous
+   completed run's rows FIRST (ALL rows in incremental mode; only manual-curation rows in a
+   fresh run), then insert the fresh automatic verdicts `ON CONFLICT DO NOTHING` — so the
+   owner's manual keep/reject always wins. Complete the run (`status='completed'`), which is
+   what makes it the served run.
+
+Each stage's spend is logged to `video_cost_log` as `search` / `enrich` / `embed` / `scan`
+rows, each stamped with `gym_id` + `video_run_id`. **A failed stage marks the run `failed`
+with no auto re-enqueue** (a deterministic failure needs a manual CRM re-trigger — poison
+guard); only crash-orphans (step 2) are recovered.
+
+### Settings + the embedding contract
+
+Worker knobs live in `src/worker/worker_config.py` (`WorkerSettings`) — the models above,
+budgets (`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
+`enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop timers,
+and `apify_token`. It reads `DATABASE_URL` from `src/api/config.py` and the LLM provider keys
+(`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from `src/core/config.py` — three
+`Settings` classes over the one `.env`.
+
+The **embedding contract is cross-service.** The worker embeds with
+`embedding_model` (`openai/text-embedding-3-small`) into `video_rag.embedding` typed
+`vector(1536)`; `run.py` asserts `embedding_dim == 1536` at startup. The FastApiBackend RAG
+readers (member recs + semantic search) rank against those same `video_rag` embeddings, so
+both sides pin the **same model + `vector(1536)` dimension** (`settings.video_embedding_dim`
+on the backend). Changing one without the other silently breaks similarity.
 
 ---
 
@@ -233,4 +328,7 @@ for the full runbook (ARNs, DNS, redeploy, pause/resume).
   GYM_ID=all` (sync + pool/feed import against prod). Keep prod secrets in `.env.prod`
   (gitignored). **Never `supabase db pull` while local schema is ahead of prod** —
   it generates destructive migrations that drop the new tables.
-- Only the **read path** is containerized; scrape / scan / sync / import stay local.
+- This `Dockerfile` containerizes only the **read API**. The **background worker**
+  (`src/worker`) ships separately, in the combined `../deploy/` image (FastApiBackend
+  uvicorn + this worker on an always-on platform — see `../deploy/CLAUDE.md` and
+  `../DEPLOYMENT.md`). The gym-config `sync-gyms` / `import-yaml` scripts stay local.

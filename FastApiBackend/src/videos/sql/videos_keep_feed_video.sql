@@ -11,8 +11,11 @@ SET scan_status = 'accepted',
     curated_at = now()
 WHERE gym_id = CAST(:gym_id AS UUID)
   AND video_id = :video_id
+  -- Target the run currently being SERVED (latest COMPLETED): an owner's keep
+  -- during an in-flight run must curate the served feed, not the 'running' one.
   AND video_run_id = (
       SELECT run_id FROM video_run
       WHERE gym_id = CAST(:gym_id AS UUID)
+        AND status = 'completed'
       ORDER BY created_at DESC
       LIMIT 1)

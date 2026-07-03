@@ -105,6 +105,32 @@ class DirectDatabasePool:
         logger.error("All %d DB retries exhausted", max_retries, exc_info=True)
         raise last_exc  # type: ignore[misc]
 
+    async def fetch_all(
+        self,
+        sql: str,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict]:
+        """Run a read query and return every row as a dict.
+
+        ``execute_with_retry`` returns only the first RETURNING row, so
+        multi-row SELECTs (the worker's funnel / enrich / scan reads) use this
+        instead. Read-only: no commit.
+        """
+        async with self.session() as session:
+            result = await session.execute(text(sql), params or {})
+            return [dict(row) for row in result.mappings().all()]
+
+    async def fetch_one(
+        self,
+        sql: str,
+        params: dict[str, Any] | None = None,
+    ) -> dict | None:
+        """Run a read query and return the first row as a dict (or None)."""
+        async with self.session() as session:
+            result = await session.execute(text(sql), params or {})
+            row = result.mappings().fetchone()
+            return dict(row) if row else None
+
     async def dispose(self) -> None:
         """Dispose the engine's connection pool (call on shutdown)."""
         await self.engine.dispose()

@@ -439,13 +439,18 @@ derivation across SQL files.
 ## `videos` domain — LLM spec and agent surface
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
-agent. Three gym-employee-gated routes cover the spec/agent surface:
+agent plus the RAG read surface. Seven routes cover the spec/agent + worker-control + RAG surface
+(all `verify_gym_employee`-gated EXCEPT the member recs route, which is `verify_can_view_member`):
 
 | Route | What it does |
 |---|---|
 | `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
 | `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
+| `POST /api/v1/gyms/{id}/video-worker/run` | Manually enqueue a worker run (`reason=manual`) → 202 `{queued: true}` |
+| `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state: `last_updated` / `queued` / `running` / `last_run_status` |
+| `GET /api/v1/gyms/{id}/members/{member_id}/video-recs` | A member's mood-bucketed RAG recs (`verify_can_view_member`; `per_bucket` cap 20, `record` bool) |
+| `GET /api/v1/gyms/{id}/videos/search` | Semantic search over the gym's served feed (`q` min-len 2, `limit` default `video_search_limit`, cap 50) |
 
 **Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
 
@@ -461,17 +466,70 @@ acknowledge and invite further changes (the conversation stays open, `saved=True
 
 - **`VideoSpecService`** (`video_spec_service.py`) — spec DB read/write: `load_latest`,
   `save_version(gym_id, draft, queries, *, source)`. `queries` is a separate arg — never in the draft.
-- **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`.
+- **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`. A **two-call** flow: call 1 researches the niche's content landscape (`LandscapeResult` — channels / creators / series, hallucination tolerated, never validated), call 2 turns criteria + that rendered landscape into queries (roughly one third landscape-targeted, the 5-cluster spread still governs the whole set). `count` is required — `VideoSpecAuthoring` injects `settings.video_query_count`.
 - **`VideoSpecAuthoring`** (`video_spec_authoring.py`) — shared deterministic commit: diff guard → query gen → save.
   `commit(gym_id, criteria, *, source) -> VideoSpecView | None`. Returns `None` when criteria are unchanged.
+  After a successful `save_version` it **enqueues** the gym for a feed-regeneration worker run via
+  `VideosWorkerControl.enqueue(gym_id, spec_update)` — the diff-guard `None` path never enqueues, and the
+  preset import (`src/presets/`) never enqueues.
 - **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
+- **`VideosWorkerControl`** (`videos_worker_control.py`) — the enqueue + status seam for the VideoService
+  background worker (the backend owns the control surface; the worker process runs in VideoService and pops
+  the Postgres `video_worker_queue`). `enqueue(gym_id, reason)` upserts the queue row keeping the OLDEST
+  `requested_at` on conflict (anti-self-starvation); `status(gym_id)` reads last-refresh / queued / running /
+  last-run-status in one query. **Serve-path invariant:** every "latest run" subselect filters
+  `AND status = 'completed'` so a mid-flight `running` run never becomes latest and blanks the feed —
+  including the owner keep/reject curation writes, which target the run currently being served.
 
 **`VideosService` (`videos_service.py`) is the domain FACADE** — composes `VideoFeedService`,
-`VideoSpecService`, `VideoSpecAuthoring`, and `VideoFeedRefiner`. Exposes: `load_latest_spec`,
-`save_accepted_spec` (→ authoring.commit), `refine_from_feed`, plus all feed operations
+`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`, `VideosWorkerControl`, `VideoRecsService`,
+and `VideoSearchService`. Exposes: `load_latest_spec`,
+`save_accepted_spec` (→ authoring.commit), `refine_from_feed`, `enqueue_worker_run` (→ `enqueue(manual)`),
+`load_worker_status`, `get_video_recs`, `search_videos`, plus all feed operations
 (`load_feed_ids`, `load_pool_videos`, owner add/remove/keep). The conversational agent uses it for
 the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
+
+**RAG read surface — member recs + semantic search (deterministic v1 profiles).**
+
+Three flat `service/` classes power the two RAG routes; readers compare a member's/query's embedding
+against `video_rag.embedding` (the VideoService worker's lazy per-video summary embeddings). The
+`vector(1536)` DDL is a **cross-service contract** — every produced vector is length-checked against
+`settings.video_embedding_dim` (a mismatch raises, not writes a wrong-width vector). Embeddings are
+serialized to pgvector text form (`'[0.1,0.2,...]'`) and bound with `CAST(:x AS vector)`.
+
+- **`MemberVideoProfileService`** (`member_video_profile_service.py`) — lazily builds a member's 5
+  mood-bucket profiles. `ensure_profiles(member_id, gym_id)` first verifies **the member actually
+  belongs to `gym_id`** — checked on every call, both the freshness no-op (via `gym_id` carried on
+  each `member_video_profile` row, frozen at insert) and the cold-build path (via the live `members`
+  row) — raising `ValueError("Member not found in this gym")` on a mismatch or missing member BEFORE
+  any profile read/build. This is what stops a caller who's authorized to view a member (`verify_can_view_member`
+  only checks the member, not the path `gym_id`) from ranking a DIFFERENT gym's feed by passing a
+  mismatched `gym_id`; the route maps this `ValueError` to 404. Otherwise: no-op when all 5 buckets
+  exist and the newest `built_at` is within `video_profile_ttl_days`; else reads member facts in ONE
+  query (rank, 90-day attendance count/recency, top-3 attended classes, gym disciplines from
+  `gym_video_spec_latest`), renders a **deterministic v1 template** per bucket (shared base sentence +
+  one bucket-flavor sentence; NULL-rank → "A member", zero-attendance → the attendance clause is
+  omitted), embeds all 5 in ONE `embed()` call, and upserts. `load_embeddings(member_id)` reads the
+  per-bucket embeddings back for recs.
+- **`VideoRecsService`** (`video_recs_service.py`) — `get_recs(gym_id, member_id, per_bucket, record)`:
+  calls `ensure_profiles`, then runs ONE candidate query per bucket (5 sequential). Candidates = the
+  gym's SERVED feed (accepted latest-COMPLETED-run rows + owner `video_run_id IS NULL` rows, mirroring
+  `videos_load_feed_ids`) JOIN `video_rag`, filtered to the bucket's genres (the deterministic
+  `video_mood_bucket` genre→bucket map). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
+  w_views*min(ln(1+views)/20,1)` (weights from `video_rec_weight_*` settings). ORDER BY hard-partitions
+  UNRECOMMENDED first, then within-unrecommended score DESC, within-recommended `last_recommended_at`
+  ASC then score DESC. `record=True` upserts served rows into `member_video_recs` (bumps
+  `times_recommended` / `last_recommended_at`); `record=False` (CRM preview) writes nothing.
+- **`VideoSearchService`** (`video_search_service.py`) — `search(gym_id, q, limit)`: embeds `q` once,
+  ranks the same served feed by cosine similarity (no bucket filter), most-similar first.
+
+The genre→bucket map lives in `schema/video_mood_bucket.py` (`GENRE_TO_BUCKET` + `genres_for_bucket`);
+`MoodBucket` is imported from the Database package (`schema.video`), never redefined. Response schemas:
+`schema/video_recs_schema.py` (`RecommendedVideoCard(GymVideoCard)` + score/already_recommended,
+`RecBucket`, `MemberVideoRecsResponse`) and `schema/video_search_schema.py`
+(`SearchResultCard(GymVideoCard)` + similarity, `VideoSearchResponse`). SQL in `sql/member_profile_*.sql`,
+`video_recs_candidates.sql`, `video_recs_record_upsert.sql`, `video_search_candidates.sql`.
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -481,7 +539,8 @@ The agent wrapper lives in `service/video_agent/`:
 
 **Schemas:**
 - `schema/video_spec_schema.py`: `VideoSpecDraft` (criteria only — no `queries` field),
-  `VideoSpecView` (read, includes queries/source/created_at), `QueriesResult`.
+  `VideoSpecView` (read, includes queries/source/created_at), `LandscapeResult` (query-gen call 1),
+  `QueriesResult` (query-gen call 2).
 - `schema/video_agent_schema.py`: `AgentTurnRequest` (`message`, `history`, `accepted_spec`),
   `AgentTurnResponse` (`reply`, `draft`, `question`, `history`, `saved`, `usage`).
   `AgentQuestion` (`question`, `options` 2–6, `multi_select`) — the agent can ask a
@@ -499,7 +558,8 @@ the file path, never the prompt text.
 The backend runs **Python 3.13** (`requires-python = ">=3.13,<3.14"`). litellm can't install on
 3.14, so the backend moved to 3.13 to get both LLM frameworks.
 
-- **Regular single-shot structured calls** (`VideoQueryGenerator`, `VideoFeedRefiner`) go through
+- **Regular structured litellm calls** (`VideoQueryGenerator` — a two-call landscape→query flow;
+  `VideoFeedRefiner` — one call) go through
   **litellm** via `src/shared/litellm_client.py` (`LiteLLMClient.complete_structured(prompt, schema,
   model)`). Model string is `settings.video_llm_model` in litellm's `provider/name` format (e.g.
   `anthropic/claude-sonnet-4-6`); the `provider/` prefix selects which API key to use.
@@ -513,7 +573,13 @@ The backend runs **Python 3.13** (`requires-python = ">=3.13,<3.14"`). litellm c
 services **never** call `VideoAgentService`.
 
 Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare model name),
-`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`.
+`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`,
+`video_query_count` (queries per commit, injected into `VideoSpecAuthoring`).
+
+RAG settings: `video_embedding_model` (litellm format, default `openai/text-embedding-3-small` — needs
+`openai_api_key`), `video_embedding_dim` (1536, pinned to the `vector(1536)` DDL), `video_profile_ttl_days`
+(30), `video_rec_weight_similarity` / `_relevance` / `_views` (0.7 / 0.2 / 0.1), `video_search_limit`
+(20; route caps at 50).
 
 **Versioned spec — readers always use the view, not the table.**
 `gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
@@ -529,7 +595,8 @@ surfaces the single most-recent version per gym. Do not `SELECT` directly from t
 separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
-`video_spec_authoring`, `video_feed_refiner`, `video_agent_service`, `videos_service`.
+`videos_worker_control`, `video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`,
+`video_recs_service`, `video_search_service`, `video_agent_service`, `videos_service`.
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 

@@ -108,6 +108,52 @@ versioned spec. Do not reference or recreate `gym_video_query`.
 `python_data/schema/` as a Python `StrEnum`. Update `immutable_columns.py` if `spec_id` or `source`
 are columns that must be guarded (they are immutable once written).
 
+## Video worker + RAG schema (`video_rag`, `member_video_*`, `video_worker_queue`)
+
+The VideoService background **worker** (a separate process; see `VideoService/src/worker/`) regenerates
+each gym's feed and, in the same pass, builds the RAG layer the backend serves per-member recs and
+semantic search from. Four new tables + two altered `video_*` tables support it. **pgvector** is enabled
+in `schemas/_extensions.sql` (`CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`); embedding
+columns are `vector(1536)`, a **cross-service contract** pinned to `settings.video_embedding_dim` in the
+backend (a wrong-width vector raises rather than writes).
+
+- **`video_rag`** — one RAG row per pooled video: `video_id TEXT` **PK** (FK → `video`, `ON DELETE
+  CASCADE`), `summary TEXT`, `facets JSONB` (object CHECK), `embedding vector(1536)`, `embedding_model`,
+  `created_at`. The worker enrich stage writes it once per un-enriched video; the summary embedding is
+  what recs/search rank against. (No ANN index yet — a future HNSW `vector_cosine_ops` index once rows
+  cross ~10k; the schema file documents it.)
+- **`member_video_profile`** — five rows per member, one per **mood bucket** (`CREATE TYPE mood_bucket AS
+  ENUM ('teach','enjoy','inform','human','peak')`). PK `(member_id, bucket)`; composite FK
+  `(member_id, gym_id)` → `members`; `profile_text TEXT`, `embedding vector(1536)`, `embedding_model`,
+  `built_at`. Lazily (re)built by the backend from deterministic v1 template text.
+- **`member_video_recs`** — per-member rec history (the freshness partition): `rec_id UUID` PK,
+  `(member_id, gym_id, video_id, bucket)`, `score`, `first_recommended_at` / `last_recommended_at`,
+  `times_recommended INTEGER` (CHECK `> 0`). **UNIQUE `(member_id, video_id)`** anchors the record upsert
+  ("already recommended" is global per member, not per bucket). No vector column.
+- **`video_worker_queue`** — the backend→worker hand-off. PK `gym_id` (a gym is queued at most once), FK →
+  `gyms`; `reason video_worker_reason` (`CREATE TYPE … AS ENUM ('spec_update','manual')`), `requested_at`
+  (index for oldest-first pop). The backend enqueues on every spec save (`spec_update`) or the manual
+  run route (`manual`); the worker pops it under a TTL lock.
+
+**`video_run` gains a status lifecycle.** New `CREATE TYPE video_run_status AS ENUM
+('running','completed','failed')`; `status` (DEFAULT `'completed'` so every pre-existing run and the
+plain preset-import `INSERT` stays served), `finished_at`, `error` (failure detail, or `'orphaned'` when
+the worker finds a dead `running` run on lock acquisition). **Serve invariant:** every "latest run"
+read is the newest by `created_at` **AND `status = 'completed'`** — a mid-flight `running` run must never
+become latest and blank the gym's feed.
+
+**`video_cost_log` retype + per-run attribution.** `gym_id` retyped `TEXT → UUID` (FK → `gyms`,
+`ON DELETE SET NULL`, now **nullable** — legacy rows and non-gym spend are NULL; the old template slug is
+folded into `note` as `template:<slug>`); new `video_run_id UUID` (FK → `video_run`, `ON DELETE SET
+NULL`) attributes each cost row to its run. The stage enum `video_execution_type` gains **`enrich`** and
+**`embed`** (full set now `search | transcript | tag | enrich | embed | scan`), added via transaction-safe
+`ALTER TYPE … ADD VALUE IF NOT EXISTS`.
+
+All of the above are mirrored in `python_data/schema/video.py` (`VideoRunStatus`, `VideoWorkerReason`,
+`MoodBucket` StrEnums; `VideoExecutionType` gains `enrich`/`embed`) and `immutable_columns.py` (new
+`VIDEO_RAG` / `MEMBER_VIDEO_PROFILE` / `MEMBER_VIDEO_RECS` frozensets; `video_worker_queue` is
+intentionally omitted, like `resource_locks`, since it has no client SELECT path).
+
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, constraints, indexes, triggers)
 - `access_rules/` — RLS policies, REVOKE/GRANT statements for each table (loaded after all schemas to avoid circular dependencies)

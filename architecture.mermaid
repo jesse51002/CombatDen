@@ -26,17 +26,15 @@ flowchart TB
   end
 
   %% ---------- VIDEO SERVICE: creation vs api (separate) ----------
-  subgraph VS_create["🎬 VideoService · CREATION (pipeline)"]
+  subgraph VS_create["🎬 VideoService · CREATION (worker + authoring)"]
     direction TB
-    VSc_skill["videoservice skill<br/>make-gym · scrape · scan"]
+    VSc_skill["videoservice skill<br/>gym authoring"]
     VSc_gym["gym_maker → gym YAML"]
-    VSc_scrape["scraper"]
-    VSc_scan["scan (keep / drop)"]
-    VSc_sync["sync_gyms · import_yaml · sql"]
-    VSc_writer["VideoDbWriter"]
+    VSc_sync["sync_gyms · import_yaml → templates + pool"]
+    VSc_worker["worker (src/worker) · queue-driven loop<br/>scrape → funnel → enrich → scan → feed-write<br/>writes video pool · video_rag · gym_video_feed runs"]
     VSc_skill -. "drives" .-> VSc_gym
-    VSc_gym --> VSc_scrape --> VSc_scan --> VSc_writer
-    VSc_sync --> VSc_writer
+    VSc_gym --> VSc_sync
+    VSc_sync -. "seeds pool" .-> VSc_worker
   end
   subgraph VS_api["🎬 VideoService · READ API (MobileApp source — transitional)"]
     direction TB
@@ -48,13 +46,14 @@ flowchart TB
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + LLM spec/agent authoring · Pydantic AI)<br/>presets (template catalog + import) · theme (gym showcase)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator · VideoSpecAuthoring · VideoFeedRefiner<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService"]
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + spec/agent authoring + worker control + RAG recs/search)<br/>presets (template catalog + import) · theme (gym showcase)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner<br/>VideosWorkerControl · VideoRecsService · VideoSearchService · MemberVideoProfileService<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
   end
-  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract<br/>tables: member · gym · rank/reward · membership/billing · class · video_* · gym_video_*"]
+  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract · pgvector<br/>tables: member · gym · rank/reward · membership/billing · class<br/>video_* · gym_video_* · video_rag · member_video_* · video_worker_queue"]
+  Deploy["📦 <b>deploy/</b> — combined image<br/>FastApiBackend API + VideoService worker<br/>always-on (ECS Express), NOT App Runner"]
 
   %% ---------- EXTERNAL ----------
   Stripe["Stripe"]
@@ -84,11 +83,13 @@ flowchart TB
   VS_create --> Apify
   VS_create --> LiteLLM
   VS_create --> Gemini
-  VS_create -->|"write video_* tables"| Database
+  VS_create -->|"pop video_worker_queue · write video / video_rag / gym_video_feed"| Database
   VS_api -->|"read video_* tables"| Database
-  FastApiBackend -->|"read/write · Supabase Auth"| Database
+  FastApiBackend -->|"read/write · Supabase Auth · enqueue video_worker_queue"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
   FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
+  FastApiBackend -.->|"packaged into"| Deploy
+  VS_create -.->|"worker → combined image"| Deploy
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
@@ -101,6 +102,7 @@ flowchart TB
   style TS_scripts fill:#fdf6d8,stroke:#caab2f;
   style FastApiBackend fill:#e6f7ec,stroke:#2f8f53,stroke-dasharray:4 3;
   style Database fill:#fff2e0,stroke:#c9781f;
+  style Deploy fill:#fdf6d8,stroke:#caab2f,stroke-dasharray:4 3;
   style MobileApp fill:#eaf2ff,stroke:#2f6fb0;
   style CRM fill:#eaf2ff,stroke:#2f6fb0;
   style LandingPage fill:#eaf2ff,stroke:#2f6fb0;

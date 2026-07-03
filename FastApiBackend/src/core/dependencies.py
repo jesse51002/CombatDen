@@ -169,13 +169,19 @@ from src.tasks.service.tasks_membership_reprice_handler import (
 )
 from src.tasks.service.tasks_service import TasksService
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.videos.service.member_video_profile_service import (
+    MemberVideoProfileService,
+)
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_query_generator import VideoQueryGenerator
+from src.videos.service.video_recs_service import VideoRecsService
+from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
+from src.videos.service.videos_worker_control import VideosWorkerControl
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers_service import WaiversService
 
@@ -390,10 +396,18 @@ class DependencyInjector(containers.DeclarativeContainer):
         litellm_client=litellm_client,
         model=settings.video_llm_model,
     )
+    # Enqueue seam + status for the VideoService background worker (the backend
+    # owns the control surface; the worker process runs elsewhere).
+    videos_worker_control = providers.Singleton(
+        VideosWorkerControl,
+        db_pool=db_pool,
+    )
     video_spec_authoring = providers.Singleton(
         VideoSpecAuthoring,
         spec_service=video_spec_service,
         query_generator=video_query_generator,
+        worker_control=videos_worker_control,
+        query_count=settings.video_query_count,
     )
     video_feed_refiner = providers.Singleton(
         VideoFeedRefiner,
@@ -409,14 +423,45 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         youtube_client=youtube_metadata_client,
     )
-    # Facade: composes feed + spec sub-services. Template catalog reads are in
-    # PresetsTemplateService; showcase reads are in ThemeShowcaseService.
+    # RAG read surface: lazy per-member mood-bucket profiles (built + embedded
+    # by the profile service) feed the per-bucket rec ranking; semantic search
+    # embeds the query and ranks the served feed. All pin the same embedding
+    # model + dim as the video_rag DDL (a cross-service contract).
+    member_video_profile_service = providers.Singleton(
+        MemberVideoProfileService,
+        db_pool=db_pool,
+        litellm_client=litellm_client,
+        embedding_model=settings.video_embedding_model,
+        embedding_dim=settings.video_embedding_dim,
+        profile_ttl_days=settings.video_profile_ttl_days,
+    )
+    video_recs_service = providers.Factory(
+        VideoRecsService,
+        db_pool=db_pool,
+        profile_service=member_video_profile_service,
+        weight_similarity=settings.video_rec_weight_similarity,
+        weight_relevance=settings.video_rec_weight_relevance,
+        weight_views=settings.video_rec_weight_views,
+    )
+    video_search_service = providers.Factory(
+        VideoSearchService,
+        db_pool=db_pool,
+        litellm_client=litellm_client,
+        embedding_model=settings.video_embedding_model,
+        embedding_dim=settings.video_embedding_dim,
+    )
+    # Facade: composes feed + spec + worker + RAG sub-services. Template catalog
+    # reads are in PresetsTemplateService; showcase reads are in
+    # ThemeShowcaseService.
     videos_service = providers.Factory(
         VideosService,
         feed_service=video_feed_service,
         spec_service=video_spec_service,
         authoring=video_spec_authoring,
         feed_refiner=video_feed_refiner,
+        worker_control=videos_worker_control,
+        recs_service=video_recs_service,
+        search_service=video_search_service,
     )
     # Theme: branded class/reward cards for the showcase surface.
     theme_showcase_service = providers.Factory(

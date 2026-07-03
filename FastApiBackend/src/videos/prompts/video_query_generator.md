@@ -33,8 +33,30 @@ disciplines and honour its keep/avoid criteria below.
 - Keep (what the feed wants): $videos_desc
 - Avoid (what must not appear): $avoid_desc
 
+## The content landscape
+
+A research step brainstormed the well-known content in this gym's world —
+channels, creators / athletes, and series / events you can target **by name**:
+
+$landscape
+
+## Targeting the landscape
+
+Roughly **one third** of your queries should be **targeted** at the names above:
+a specific channel, creator, or series someone would search for by name — e.g.
+"<channel> highlights", "<athlete> interview", "<series> best moments",
+"<coach> breakdown". The remaining ~two thirds stay **generic** (no proper name),
+phrased the way a member browsing the topic would type.
+
+The **5-cluster spread still governs the whole set** — targeted queries included.
+A targeted query still belongs to a cluster: "<athlete> interview" is *human*,
+"<channel> knockouts" is *enjoy*, "<coach> guard breakdown" is *teach*. Don't let
+targeting collapse the set back into all-educational, and keep ~half the full set
+teach/how-to with the rest across enjoy + human + peak.
+
 ## Your task
 
-Produce about **$count** distinct search queries for this gym, spread across the
-clusters above (~half teach, the rest enjoy + human + peak). Return only the
-queries.
+Produce about **$count** distinct search queries for this gym — roughly one third
+targeted at the landscape names above, the rest generic — with the full set
+spread across the clusters (~half teach, the rest enjoy + human + peak). Return
+only the queries.

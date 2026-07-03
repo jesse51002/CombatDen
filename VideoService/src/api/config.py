@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
     db_echo: bool = False
 
+    # Default TTL (seconds) for a ResourceLock lease when a caller passes none;
+    # a crashed/stuck holder self-heals once its lease expires. Mirrors the
+    # FastApiBackend default. A long-running worker acquires with a short TTL
+    # and heartbeats via ResourceLock.renew. See src/shared/services/resource_lock.py.
+    lock_ttl_seconds: int = 60
+
     # Authored-YAML root for the sync-gyms / import scripts (holds `gyms/`, and
     # the legacy `videos/` + `cost_log.yaml` consumed once at cutover).
     data_root: Path = _DEFAULT_DATA_ROOT

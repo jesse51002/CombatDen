@@ -76,6 +76,31 @@ class Settings(BaseSettings):
     # Bare Anthropic model name for the Pydantic AI VideoAgentService.
     video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
+    # Number of YouTube search queries VideoQueryGenerator produces per spec
+    # commit (VideoSpecAuthoring injects this into the generator's second call).
+    # Roughly one third land as landscape-targeted queries, the rest generic.
+    video_query_count: int = 30
+
+    # ── Video RAG read surface (member recs + semantic search) ──────
+    # Embedding model + dimension for member profiles AND the query embedded at
+    # search time. The dimension is pinned to the `vector(1536)` DDL — a
+    # CROSS-SERVICE CONTRACT with the VideoService worker that writes
+    # `video_rag.embedding` (both must use the same model + dim). Uses the
+    # litellm `provider/name` format so the provider key is resolved from the
+    # prefix (openai/ → openai_api_key). Changing the model is a one-way door:
+    # migration + full re-embed of video_rag AND member_video_profile.
+    video_embedding_model: str = "openai/text-embedding-3-small"
+    video_embedding_dim: int = 1536
+    # A member's 5 mood-bucket RAG profiles are rebuilt lazily when the newest
+    # one is older than this (deterministic v1 template — cheap to rebuild).
+    video_profile_ttl_days: int = 30
+    # Rec ranking weights (sum ~1.0): RAG cosine similarity dominant, blended
+    # with gym relevance (1/(1+relevance_index)) and popularity (log views).
+    video_rec_weight_similarity: float = 0.7
+    video_rec_weight_relevance: float = 0.2
+    video_rec_weight_views: float = 0.1
+    # Default result count for GET /videos/search (the route caps at 50).
+    video_search_limit: int = 20
 
     # Logging Configuration
     log_level: str = "DEBUG"

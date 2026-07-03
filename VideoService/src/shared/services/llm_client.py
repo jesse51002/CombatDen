@@ -1,10 +1,16 @@
 """LiteLLMClient — the LLM contract implemented via litellm, calling
 providers directly (no proxy hop).
 
-Copied from ``CustomizationService/src/shared/services/llm_client.py`` (imports
-rewritten for this service). It's a light wrapper; the classification pass uses
-``complete_structured`` only, but the file is ported whole to stay in lockstep
-with the source.
+Originally copied from ``CustomizationService/src/shared/services/llm_client.py``
+(imports rewritten for this service). The classification pass uses
+``complete_structured`` (batch cost accrues on ``self.cost``); the video worker
+adds three capabilities that RETURN cost per call instead of stashing it on the
+shared instance (concurrency-safe):
+
+- ``complete_structured`` gains an optional ``image_urls`` arg for multimodal
+  (vision) calls — the last user message becomes litellm multi-part content.
+- ``complete_structured_with_cost`` — same call, returns ``(parsed, cost_usd)``.
+- ``embed`` — ``litellm.aembedding`` wrapper returning ``(vectors, cost_usd)``.
 """
 
 from __future__ import annotations
@@ -12,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -151,9 +158,11 @@ class LiteLLMClient(LLMClient):
         __init__) — reads/initialises ``_cost`` on demand."""
         return getattr(self, "_cost", 0.0)
 
-    def _add_cost(self, resp: Any, model: str) -> None:
-        """Add one call's estimated cost to the running total."""
-        self._cost = getattr(self, "_cost", 0.0) + _call_cost(resp, model)
+    def _bump_cost(self, cost: float) -> None:
+        """Add one attempt's USD to the running instance total. Used only by
+        the cost-tracking ``complete`` / ``complete_structured`` batch path;
+        ``*_with_cost`` and ``embed`` return their cost instead of stashing it."""
+        self._cost = self.cost + cost
 
     @staticmethod
     def _api_key(model_name: str) -> str:
@@ -198,6 +207,45 @@ class LiteLLMClient(LLMClient):
             },
         ]
 
+    @staticmethod
+    def _attach_images(
+        messages: list[dict],
+        image_urls: list[str] | None,
+    ) -> list[dict]:
+        """Rebuild the last user message into litellm multi-part content when
+        ``image_urls`` is given; a no-op (the same list) otherwise.
+
+        Returns a NEW list — the caller's messages are never mutated. Text
+        stays first, then one ``image_url`` part per URL::
+
+            [{"type": "text", "text": <prompt>},
+             {"type": "image_url", "image_url": {"url": <url>}}, ...]
+
+        Raises ``ValueError`` when images are supplied but no user message
+        exists to carry them.
+        """
+        if not image_urls:
+            return messages
+        convo = [dict(message) for message in messages]
+        for message in reversed(convo):
+            if message.get("role") != "user":
+                continue
+            content = message.get("content", "")
+            parts: list[dict] = (
+                list(content)
+                if isinstance(content, list)
+                else [{"type": "text", "text": content}]
+            )
+            parts.extend(
+                {"type": "image_url", "image_url": {"url": url}}
+                for url in image_urls
+            )
+            message["content"] = parts
+            return convo
+        raise ValueError(
+            "image_urls supplied but no user message to attach them to"
+        )
+
     async def complete(
         self,
         messages: list[dict],
@@ -212,28 +260,29 @@ class LiteLLMClient(LLMClient):
         if tools is not None:
             kwargs["tools"] = tools
         resp = await self._acompletion(kwargs, model)
-        self._add_cost(resp, model)
+        self._bump_cost(_call_cost(resp, model))
         message = resp.choices[0].message.model_dump()
         logger.debug("complete output ← %s:\n\n%s\n", model, _render(message))
         return message
 
-    async def complete_structured(
+    async def _run_structured(
         self,
-        messages: list[dict],
-        *,
+        convo: list[dict],
         schema: type[ModelT],
         model: str,
+        record_cost: Callable[[float], None],
     ) -> ModelT:
-        """Constrained generation: schema in, model out. ``model`` is
-        required and carries the provider prefix (litellm routes on it).
+        """Shared constrained-generation retry loop.
 
-        A schema miss (parse/validation failure) is fed back and re-asked,
-        backing off ``RETRY_BACKOFF_SECONDS`` (5s, then 15s) between tries,
-        then raises ``SchemaValidationError``. ``ProviderError`` on a transport
-        failure.
+        Runs the call, validates the reply against ``schema``, and re-asks on a
+        miss (backing off ``RETRY_BACKOFF_SECONDS`` — 5s, then 15s). Every
+        billed attempt (success *or* miss) invokes ``record_cost`` with that
+        attempt's USD, so this core never touches instance state — the caller
+        decides whether to stash the cost or return it.
+
+        Raises ``SchemaValidationError`` when no attempt validates, or
+        ``ProviderError`` on a transport failure.
         """
-        # defensive copy: never reshape the caller's list
-        convo: list[dict] = list(messages)
         last_error: Exception | None = None
         total_attempts = len(RETRY_BACKOFF_SECONDS) + 1
 
@@ -242,9 +291,9 @@ class LiteLLMClient(LLMClient):
             kwargs["response_format"] = schema
 
             resp = await self._acompletion(kwargs, model)
-            # Every attempt is a billed call — count each, not just the
+            # Every attempt is a billed call — record each, not just the
             # one that finally validates.
-            self._add_cost(resp, model)
+            record_cost(_call_cost(resp, model))
             content = self._message_content(resp.choices[0].message)
             try:
                 parsed = schema.model_validate_json(content)
@@ -278,3 +327,89 @@ class LiteLLMClient(LLMClient):
         raise SchemaValidationError(
             f"{schema.__name__} never validated after {total_attempts} attempts"
         ) from last_error
+
+    async def complete_structured(
+        self,
+        messages: list[dict],
+        *,
+        schema: type[ModelT],
+        model: str,
+        image_urls: list[str] | None = None,
+    ) -> ModelT:
+        """Constrained generation: schema in, model out. ``model`` is
+        required and carries the provider prefix (litellm routes on it).
+
+        When ``image_urls`` is set, the last user message's content is rebuilt
+        into litellm's multi-part ``[{"type": "text", ...}, {"type":
+        "image_url", ...}]`` shape (a vision call). A schema miss is fed back and
+        re-asked, backing off ``RETRY_BACKOFF_SECONDS`` (5s, then 15s), then
+        raises ``SchemaValidationError``; ``ProviderError`` on a transport
+        failure.
+
+        Cost is accumulated on the instance (``self.cost``) for the existing
+        batch callers; use ``complete_structured_with_cost`` to get the cost
+        back per call instead.
+        """
+        convo = self._attach_images(list(messages), image_urls)
+        return await self._run_structured(
+            convo, schema, model, self._bump_cost
+        )
+
+    async def complete_structured_with_cost(
+        self,
+        messages: list[dict],
+        *,
+        schema: type[ModelT],
+        model: str,
+        image_urls: list[str] | None = None,
+    ) -> tuple[ModelT, float]:
+        """Like ``complete_structured`` but RETURNS ``(parsed, cost_usd)`` and
+        never stashes cost on the shared instance (concurrency-safe).
+
+        ``cost_usd`` sums every billed attempt (schema-correction re-asks
+        included). Same ``image_urls`` multimodal behaviour and same raises.
+        """
+        convo = self._attach_images(list(messages), image_urls)
+        costs: list[float] = []
+        parsed = await self._run_structured(
+            convo, schema, model, costs.append
+        )
+        return parsed, sum(costs)
+
+    async def embed(
+        self,
+        texts: list[str],
+        model: str,
+    ) -> tuple[list[list[float]], float]:
+        """Embed ``texts`` via ``litellm.aembedding`` → ``(vectors, cost_usd)``.
+
+        Vectors come back in input order. ``model`` carries the provider prefix
+        (e.g. ``openai/text-embedding-3-small``); its key is resolved exactly as
+        the completion path does. Cost is RETURNED, never stashed on the shared
+        instance (concurrency-safe). Raises ``ProviderError`` on a transport
+        failure.
+        """
+        try:
+            resp = await litellm.aembedding(
+                model=model,
+                input=texts,
+                api_key=self._api_key(model),
+            )
+        except Exception as exc:
+            raise ProviderError(
+                f"embedding failed for model {model!r}: {exc}"
+            ) from exc
+        ordered = sorted(
+            (self._embedding_item(item) for item in resp.data),
+            key=lambda pair: pair[0],
+        )
+        vectors = [embedding for _, embedding in ordered]
+        return vectors, _call_cost(resp, model)
+
+    @staticmethod
+    def _embedding_item(item: Any) -> tuple[int, list[float]]:
+        """(index, embedding) off one litellm embedding datum, tolerant of
+        dict or attribute access across litellm response shapes."""
+        if isinstance(item, dict):
+            return item["index"], item["embedding"]
+        return item.index, item.embedding
