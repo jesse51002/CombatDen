@@ -2,11 +2,11 @@
 ///
 /// PLACEHOLDER LEGAL COPY — NOT REVIEWED BY COUNSEL.
 /// Replace with attorney-approved wording before relying on it in
-/// production. Bump [kEsignDisclosureVersion] when the wording changes so
-/// existing signature rows keep pointing at the exact text they saw.
+/// production. The backend stamps the disclosure version on each
+/// signature row server-side (see
+/// `Database/python_data/schema/esign_disclosure.py`); the CRM only
+/// displays the text, so there is no version constant to send here.
 library;
-
-const int kEsignDisclosureVersion = 1;
 
 const String kEsignDisclosure =
     'By typing your name and selecting Sign, you agree to the following:\n\n'

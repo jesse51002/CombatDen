@@ -10,7 +10,7 @@ SELECT
     w.is_deleted,
     w.current_version_id,
     v.body AS template_body,
-    g.name AS gym_name,
+    g.gym_name AS gym_name,
     m.first_name AS member_first_name,
     m.last_name AS member_last_name
 FROM gym_waivers w

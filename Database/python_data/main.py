@@ -102,8 +102,8 @@ def seed() -> None:
             ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
             progress.log(f"  {len(ranks)} ranks")
 
-            # Default authorized-payer waiver (undeletable, direct DB).
-            progress.log("Creating default authorized-payer waiver...")
+            # Payer-auth authorized-payer waiver (undeletable, direct DB).
+            progress.log("Creating payer-auth waiver...")
             bs_waivers.create(client, gym_id)
 
             # Plans + prices (real Stripe products + prices).
@@ -164,6 +164,16 @@ def seed() -> None:
             if result.had_any_new:
                 progress.log("Creating overdue members via Stripe test clocks...")
                 api_overdue.create_overdue(client, gym_id, plan_records)
+
+            # Liability waiver, attached to every plan AFTER the membership
+            # phase (the start gate would 422 the seed's own starts if plans
+            # required an unsigned waiver earlier). Existing members show it
+            # unsigned; any NEW start demos the gate + wizard sign step.
+            progress.log("Creating liability waiver + attaching to plans...")
+            liability_waiver_id = bs_waivers.create_liability(client, gym_id)
+            api_plans.attach_waiver(
+                api, gym_id, plan_records, liability_waiver_id
+            )
 
         # --- direct-DB engagement (no JWT needed), keyed on backend member_ids ---
         members = [members_generator.to_member_create(gym_id, p) for p in member_plans]

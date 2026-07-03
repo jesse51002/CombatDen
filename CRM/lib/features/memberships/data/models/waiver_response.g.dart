@@ -11,6 +11,7 @@ WaiverResponse _$WaiverResponseFromJson(Map<String, dynamic> json) =>
       waiverId: json['waiver_id'] as String,
       gymId: json['gym_id'] as String,
       name: json['name'] as String,
+      waiverType: WaiverType.fromJson(json['waiver_type'] as String),
       currentVersionId: json['current_version_id'] as String?,
       currentVersionNumber: (json['current_version_number'] as num?)?.toInt(),
       currentVersionSignedCount:

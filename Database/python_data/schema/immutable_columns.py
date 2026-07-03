@@ -167,7 +167,7 @@ GYM_WAIVERS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
         "current_version_id",  # set by the publish-version flow, not a raw edit
-        "is_default",  # the undeletable default; set once at seed/create
+        "waiver_type",  # payer_auth/custom; set once at seed/create
         # name + is_deleted + updated_at are the writable update surface.
     }
 )

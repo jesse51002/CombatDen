@@ -25,23 +25,22 @@ async def authorize_payer(
 ) -> None:
     """Authorize ``payer_member_id`` to pay for ``member_id``.
 
-    Exercises the real sign-gated flow: resolves the gym's default
-    authorized-payer waiver, signs it for the payer via the shared signing
-    service (rendering the names in), and inserts the
-    ``member_authorized_payers`` junction row.
+    Exercises the real sign-gated flow: resolves the gym's payer-auth
+    waiver, signs it for the payer via the shared signing service (rendering
+    the names in), and inserts the ``member_authorized_payers`` junction row.
 
-    The seeded gym has a default waiver, so this always succeeds when both
+    The seeded gym has a payer-auth waiver, so this always succeeds when both
     members belong to it.
     """
     paying_lock = PayingMemberLock(db_pool)
     waivers_svc = WaiversService(db_pool)
     linked = MemberMembershipsLinked(db_pool, paying_lock, waivers_svc)
-    default = await waivers_svc.get_default_waiver_for_member(member_id)
-    operator_id = await _an_employee_id(db_pool, default.gym_id)
+    payer_auth = await waivers_svc.get_payer_auth_waiver_for_member(member_id)
+    operator_id = await _an_employee_id(db_pool, payer_auth.gym_id)
     await linked.link_account(
         member_id,
         payer_member_id,
-        waiver_version_id=default.version_id,
+        waiver_version_id=payer_auth.version_id,
         signer_name="Test Payer",
         consent_acknowledged=True,
         ip_address="0.0.0.0",

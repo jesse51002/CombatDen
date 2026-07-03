@@ -2,7 +2,7 @@
 
 Adding an authorized payer is **gated by a signed waiver** and happens in ONE
 op: it calls the shared signing service (``WaiversService.sign_waiver`` — the one
-signing path) to sign the gym's default authorized-payer waiver, rendering the
+signing path) to sign the gym's payer-auth waiver, rendering the
 payer's name and the member-being-paid-for's name into it, then records the
 ``member_authorized_payers`` row referencing the new signature. Signing commits
 its own txn and the authorization insert is separate (NOT atomic) — a retry after
@@ -83,8 +83,8 @@ class MemberMembershipsLinked:
     ) -> None:
         """Authorize ``payer_member_id`` to pay for ``member_id`` (sign + record).
 
-        Calls the shared signing service to sign the gym's default
-        authorized-payer waiver as the payer (rendering ``{{member_name}}`` = the
+        Calls the shared signing service to sign the gym's payer-auth
+        waiver as the payer (rendering ``{{member_name}}`` = the
         payer's account name and ``{{payee_name}}`` = the member being paid for),
         then records the ``member_authorized_payers`` row referencing the new
         signature.
@@ -92,7 +92,7 @@ class MemberMembershipsLinked:
         Args:
             member_id: The member being paid for.
             payer_member_id: The payer to authorize (the signer).
-            waiver_version_id: The default-waiver version the client displayed
+            waiver_version_id: The payer-auth waiver version the client displayed
                 (version-locked by the signing service before signing).
             signer_name: The payer's typed legal name at signing.
             consent_acknowledged: Must be True (a valid e-signature).
@@ -124,7 +124,7 @@ class MemberMembershipsLinked:
             payee_name = (
                 f"{row['candidate_first_name']} {row['candidate_last_name']}"
             )
-            default = await self._waivers.get_default_waiver_for_member(
+            payer_auth = await self._waivers.get_payer_auth_waiver_for_member(
                 member_id,
             )
 
@@ -136,7 +136,7 @@ class MemberMembershipsLinked:
             signature = await self._waivers.sign_waiver(
                 gym_id=gym_id,
                 member_id=payer_member_id,
-                waiver_id=default.waiver_id,
+                waiver_id=payer_auth.waiver_id,
                 waiver_version_id=waiver_version_id,
                 signer_name=signer_name,
                 consent_acknowledged=consent_acknowledged,

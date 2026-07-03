@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 
 part 'waiver_response.g.dart';
@@ -19,6 +20,8 @@ class WaiverResponse extends Equatable {
   final String waiverId;
   final String gymId;
   final String name;
+  @JsonKey(fromJson: WaiverType.fromJson)
+  final WaiverType waiverType;
   final String? currentVersionId;
   final int? currentVersionNumber;
   @JsonKey(defaultValue: 0)
@@ -33,6 +36,7 @@ class WaiverResponse extends Equatable {
     required this.waiverId,
     required this.gymId,
     required this.name,
+    required this.waiverType,
     this.currentVersionId,
     this.currentVersionNumber,
     this.currentVersionSignedCount = 0,
@@ -52,6 +56,7 @@ class WaiverResponse extends Equatable {
         waiverId,
         gymId,
         name,
+        waiverType,
         currentVersionId,
         currentVersionNumber,
         currentVersionSignedCount,

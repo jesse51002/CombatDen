@@ -76,9 +76,9 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
                 text(
                     "INSERT INTO member_waiver_signatures "
                     "(gym_id, member_id, waiver_id, waiver_version_id, "
-                    " signer_name, consent_acknowledged, content_hash, "
-                    " ip_address, user_agent) "
-                    "VALUES (:g, :m, :w, :v, :n, true, :h, "
+                    " signer_name, consent_acknowledged, rendered_body, "
+                    " content_hash, ip_address, user_agent) "
+                    "VALUES (:g, :m, :w, :v, :n, true, :b, :h, "
                     " CAST('0.0.0.0' AS INET), 'test')",
                 ),
                 {
@@ -87,6 +87,7 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
                     "w": str(waiver.waiver_id),
                     "v": str(v1.version_id),
                     "n": "Test Signer",
+                    "b": v1.body,
                     "h": v1.content_hash,
                 },
             )

@@ -249,7 +249,7 @@ Table gym_waivers {
   name varchar [not null]
   current_version_id uuid
   is_deleted boolean [not null, default: false]
-  is_default boolean [not null, default: false, note: 'undeletable default authorized-payer waiver; <=1 per gym']
+  waiver_type waiver_type [not null, default: 'custom', note: 'payer_auth = undeletable authorized-payer agreement (<=1 per gym, never plan-attachable); custom = normal gym waiver']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 

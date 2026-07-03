@@ -492,7 +492,7 @@ async def unlink_member_payment(
     summary="Authorize a payer for a member",
     description=(
         "Authorizes a payer (payer_member_id) to pay for this member in ONE "
-        "request: the payer signs the gym's default authorized-payer waiver "
+        "request: the payer signs the gym's payer-auth waiver "
         "(signer_name + consent_acknowledged, version-locked on waiver_version_id "
         "which the client echoes from GET /authorized-payer-waiver), the payer's "
         "and member's names are rendered into the waiver, and the authorization "
@@ -795,9 +795,9 @@ async def remove_authorization(
 @members_router.get(
     "/{member_id}/authorized-payer-waiver",
     response_model=AuthorizedPayerWaiverResponse,
-    summary="Get the default authorized-payer waiver a payer must sign",
+    summary="Get the payer-auth waiver a payer must sign",
     description=(
-        "Returns the member's gym default authorized-payer waiver — its id, "
+        "Returns the member's gym payer-auth waiver — its id, "
         "current version id, name, and body — for the front-desk sign dialog to "
         "display before authorizing a payer. The link flow records the signature "
         "against this same current version, so the caller only echoes back the "
@@ -807,7 +807,7 @@ async def remove_authorization(
         200: {"description": "Default waiver returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
-        404: {"description": "Member or default waiver not found"},
+        404: {"description": "Member or payer-auth waiver not found"},
     },
 )
 @inject
@@ -819,12 +819,12 @@ async def get_authorized_payer_waiver(
         Provide[DependencyInjector.waivers_service]
     ),
 ) -> AuthorizedPayerWaiverResponse:
-    """Resolve the default authorized-payer waiver (with body) for a member."""
+    """Resolve the payer-auth waiver (with body) for a member."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await waivers_service.get_default_waiver_with_body_for_member(
+        return await waivers_service.get_payer_auth_waiver_with_body_for_member(
             member_id,
         )
     except ValueError as exc:

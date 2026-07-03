@@ -6,6 +6,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
@@ -81,6 +83,7 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
   _Phase _phase = _Phase.loading;
   WaiverResponse? _waiver;
   QuillController? _controller;
+  String _templateBody = ''; // raw template body; rendered into _controller
   String _signerName = '';
   bool _consent = false;
   String? _errorMessage;
@@ -102,14 +105,10 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
       final waiver =
           await _repo.getWaiver(widget.waiverId, widget.gymId);
       if (!mounted) return;
-      final body = waiver.currentVersion?.body ?? '';
       setState(() {
         _waiver = waiver;
-        _controller =
-            WaiverMarkdownEditor.controllerFromMarkdown(
-          body,
-          readOnly: true,
-        );
+        _templateBody = waiver.currentVersion?.body ?? '';
+        _controller = _buildController();
         _phase = _Phase.form;
       });
     } catch (e) {
@@ -119,6 +118,38 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
         _phase = _Phase.error;
       });
     }
+  }
+
+  // Display-only render of the body with the values the backend substitutes
+  // at sign time: member_name is the signed-for member, gym_name/date are
+  // fixed, and signer_name follows the live typed name (empty leaves the
+  // token literal so the signer sees where their name will land).
+  Map<String, String> _renderValues() => {
+        'member_name': widget.memberName,
+        'gym_name': selectedGym.displayName,
+        'date': waiverSignDateUtc(),
+        'signer_name': _signerName,
+      };
+
+  QuillController _buildController() =>
+      WaiverMarkdownEditor.controllerFromMarkdown(
+        renderWaiverPlaceholders(_templateBody, _renderValues()),
+        readOnly: true,
+      );
+
+  // Each keystroke of the signer name re-renders the body: dispose the old
+  // read-only controller and rebuild it so {{signer_name}} tracks live. Bodies
+  // are short, so a per-keystroke rebuild is fine.
+  void _onPanelChanged(String name, bool consent) {
+    final nameChanged = name != _signerName;
+    setState(() {
+      _signerName = name;
+      _consent = consent;
+      if (nameChanged) {
+        _controller?.dispose();
+        _controller = _buildController();
+      }
+    });
   }
 
   bool get _canSign =>
@@ -194,10 +225,7 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
             SignWaiverPanel(
               controller: _controller!,
               enabled: _phase == _Phase.form,
-              onChanged: (name, consent) => setState(() {
-                _signerName = name;
-                _consent = consent;
-              }),
+              onChanged: _onPanelChanged,
             ),
           ],
         );

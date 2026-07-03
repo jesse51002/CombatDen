@@ -7,8 +7,8 @@ transaction, version-locked on the echoed version. It RENDERS the version's
 template body (``{{placeholders}}``) from auto-filled account/gym/clock values
 plus the caller's ``waiver_args`` (e.g. the link flow passes ``payee_name``),
 and freezes the full rendered text on the row. The standalone signing endpoint
-and the authorize-payer link flow both call it. ``get_default_waiver_for_member``
-resolves the gym's default authorized-payer waiver for display.
+and the authorize-payer link flow both call it. ``get_payer_auth_waiver_for_member``
+resolves the gym's payer-auth waiver for display.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from src.shared.sql_loader import load_sql
 from src.waivers import SQL_DIR
 from src.waivers.schema.waivers_schema import (
     MemberWaiverStatusRow,
-    WaiverDefaultInfo,
+    WaiverPayerAuthInfo,
     WaiverSignatoryRow,
     WaiverSignatureResponse,
 )
@@ -72,17 +72,17 @@ class WaiversSignatures(WaiversBase):
 
     # ── Signing capture ────────────────────────────────────────
 
-    async def get_default_waiver_for_member(
+    async def get_payer_auth_waiver_for_member(
         self,
         member_id: UUID,
-    ) -> WaiverDefaultInfo:
-        """Resolve a member's gym default authorized-payer waiver + version.
+    ) -> WaiverPayerAuthInfo:
+        """Resolve a member's gym payer-auth waiver + version.
 
         Raises:
-            ValueError: If the member's gym has no default waiver (the
+            ValueError: If the member's gym has no payer-auth waiver (the
                 authorized-payer gate cannot proceed).
         """
-        sql = load_sql(SQL_DIR / "waiver_default_for_member.sql")
+        sql = load_sql(SQL_DIR / "waiver_payer_auth_for_member.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
@@ -92,9 +92,9 @@ class WaiversSignatures(WaiversBase):
 
         if row is None:
             raise ValueError(
-                f"No default authorized-payer waiver for member {member_id}'s gym",
+                f"No payer-auth waiver for member {member_id}'s gym",
             )
-        return WaiverDefaultInfo(**dict(row))
+        return WaiverPayerAuthInfo(**dict(row))
 
     @staticmethod
     def _render(template: str, args: dict[str, str]) -> str:

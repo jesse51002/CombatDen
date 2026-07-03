@@ -5,9 +5,10 @@ in a single transaction (the gym_waivers.current_version_id FK to
 gym_waiver_versions is satisfied because the version row exists in the same
 transaction before the pointer is set).
 
-``create_waiver`` is the gym-staff path (a normal waiver); ``create_default_waiver``
-seed-copies the shared platform default authorized-payer waiver into a gym's own
-undeletable ``is_default`` row (the gym then owns and versions its copy).
+``create_waiver`` is the gym-staff path (a ``custom`` waiver);
+``create_payer_auth_waiver`` seed-copies the shared platform default
+authorized-payer agreement into the gym's own undeletable ``payer_auth`` row
+(the gym then owns and versions its copy).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from schema.default_waiver import (
     DEFAULT_AUTHORIZED_PAYER_WAIVER_NAME,
     default_authorized_payer_waiver_body,
 )
+from schema.gym_waiver import WaiverType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -54,16 +56,16 @@ class WaiversCreate(WaiversBase):
             request.gym_id,
             request.name,
             request.body,
-            is_default=False,
+            waiver_type=WaiverType.custom,
         )
 
-    async def create_default_waiver(
+    async def create_payer_auth_waiver(
         self,
         gym_id: UUID,
     ) -> WaiverResponse:
-        """Seed-copy the shared default authorized-payer waiver into a gym.
+        """Seed-copy the shared default authorized-payer agreement into a gym.
 
-        Creates the gym's undeletable ``is_default`` waiver from the shared
+        Creates the gym's undeletable ``payer_auth`` waiver from the shared
         platform default name + body. Called when a gym is created so the
         authorized-payer gate always has a document to sign.
         """
@@ -71,7 +73,7 @@ class WaiversCreate(WaiversBase):
             gym_id,
             DEFAULT_AUTHORIZED_PAYER_WAIVER_NAME,
             default_authorized_payer_waiver_body(),
-            is_default=True,
+            waiver_type=WaiverType.payer_auth,
         )
 
     async def _create(
@@ -80,11 +82,13 @@ class WaiversCreate(WaiversBase):
         name: str,
         body: str,
         *,
-        is_default: bool,
+        waiver_type: WaiverType,
     ) -> WaiverResponse:
         """Insert a waiver + version 1 + current-version pointer in one txn."""
         insert_name = (
-            "waivers_insert_default.sql" if is_default else "waivers_insert.sql"
+            "waivers_insert_payer_auth.sql"
+            if waiver_type is WaiverType.payer_auth
+            else "waivers_insert.sql"
         )
         insert_waiver_sql = load_sql(SQL_DIR / insert_name)
         insert_version_sql = load_sql(SQL_DIR / "waiver_versions_insert.sql")

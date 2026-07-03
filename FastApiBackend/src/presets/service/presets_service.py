@@ -495,7 +495,7 @@ class PresetsService:
 
         Mirrors ``ClassesVersionsService._insert_version``'s serialization
         exactly (the caller casts with ``CAST(:weekday_slots AS JSONB)``,
-        never ``:param::jsonb`` — the house rule), so a preset-imported row
+        never a double-colon cast — the house rule), so a preset-imported row
         and a live-minted row are byte-shape compatible.
         """
         return json.dumps(

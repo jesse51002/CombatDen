@@ -84,7 +84,7 @@ class GymsCreateService:
         # cleanly — no Stripe account has been created yet, so there is nothing
         # to orphan.
         try:
-            await self._waivers_service.create_default_waiver(gym_id)
+            await self._waivers_service.create_payer_auth_waiver(gym_id)
         except Exception:
             await self._cleanup_pending(gym_id)
             raise
@@ -215,12 +215,12 @@ class GymsCreateService:
         """
         owner_sql = load_sql(SQL_DIR / "gym_employees_delete_owner.sql")
         null_version_sql = load_sql(
-            SQL_DIR / "gyms_null_default_waiver_current_version.sql"
+            SQL_DIR / "gyms_null_payer_auth_waiver_current_version.sql"
         )
         delete_versions_sql = load_sql(
-            SQL_DIR / "gyms_delete_default_waiver_versions.sql"
+            SQL_DIR / "gyms_delete_payer_auth_waiver_versions.sql"
         )
-        delete_waiver_sql = load_sql(SQL_DIR / "gyms_delete_default_waiver.sql")
+        delete_waiver_sql = load_sql(SQL_DIR / "gyms_delete_payer_auth_waiver.sql")
         gym_sql = load_sql(SQL_DIR / "gyms_delete_pending.sql")
 
         try:

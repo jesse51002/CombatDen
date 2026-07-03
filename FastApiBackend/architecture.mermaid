@@ -54,7 +54,7 @@ flowchart TB
     checkin_history_service["CheckinHistoryService<br/>src/checkin/ · member class-history feed (open reservations + paginated attended/no-show history)"]
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
-    memberships_linked["MemberMembershipsLinked<br/>src/memberships/ · authorize payer + check eligibility (many-to-many)<br/>writes member_authorized_payers + signs authorized-payer waiver<br/>in one txn (no orphan signatures); owns two-family lock"]
+    memberships_linked["MemberMembershipsLinked<br/>src/memberships/ · authorize payer + check eligibility (many-to-many)<br/>signs the payer-auth waiver via the shared sign_waiver (own txn),<br/>then writes member_authorized_payers (retry may leave a harmless<br/>extra append-only signature — by design); owns two-family lock"]
     videos_service["VideosService<br/>src/videos/ · authed real-gym feed + spec facade<br/>reads gym_video_* (scan_status/run-versioned)<br/>+ owner feed add (YouTube Data API metadata; pool row owned via video.gym_id + added_via=manual)<br/>/ remove: owner=True → delete owner-section row (+ pool if manual); owner=False → reject latest-run row (scan_status=rejected)<br/>/ keep: un-reject (scan_status=accepted; reject audit retained)"]
     presets_service["PresetsService<br/>src/presets/ · owner-gated template-→-gym import<br/>writes gym_video_spec (system_update version) + gym_video_feed · gym_classes · gym_employees · gym_rewards · gyms.theme_design_id"]
     presets_template_service["PresetsTemplateService<br/>src/presets/service/ · public template catalog reads<br/>list_template_cards · load_template · load_template_feed_ids<br/>reads video_gym_* tables (slug-keyed demo templates)"]

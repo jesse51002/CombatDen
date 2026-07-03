@@ -19,6 +19,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
+from schema.gym_waiver import WaiverType
 from schema.member_waiver_signature import WaiverSignatureType
 
 import src.shared.db_schema_path  # noqa: F401
@@ -104,6 +105,9 @@ class WaiverResponse(BaseModel):
     waiver_id: UUID
     gym_id: UUID
     name: str
+    # payer_auth = the gym's one protected authorized-payer agreement
+    # (never plan-attachable); custom = a normal gym-authored waiver.
+    waiver_type: WaiverType
     current_version_id: UUID | None = None
     current_version_number: int | None = None
     current_version_signed_count: int = 0
@@ -142,7 +146,7 @@ class MemberWaiverStatusRow(BaseModel):
     signed_current_version: bool = False
 
 
-class WaiverDefaultInfo(BaseModel):
+class WaiverPayerAuthInfo(BaseModel):
     """A gym's default authorized-payer waiver + its current version — the
     target the payer signs when an authorized-payer link is created."""
 
@@ -209,7 +213,7 @@ __all__ = [
     "AuthorizedPayerWaiverResponse",
     "MemberWaiverStatusRow",
     "WaiverCreateRequest",
-    "WaiverDefaultInfo",
+    "WaiverPayerAuthInfo",
     "WaiverResponse",
     "WaiverSignRequest",
     "WaiverSignatoryRow",

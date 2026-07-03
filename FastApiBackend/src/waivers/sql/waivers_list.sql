@@ -2,6 +2,7 @@ SELECT
     w.waiver_id,
     w.gym_id,
     w.name,
+    w.waiver_type,
     w.current_version_id,
     w.is_deleted,
     w.created_at,

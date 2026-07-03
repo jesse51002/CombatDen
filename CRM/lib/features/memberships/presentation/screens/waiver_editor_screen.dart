@@ -13,11 +13,13 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/data/models/waiver_create_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signatory_row.dart';
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
@@ -91,6 +93,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   List<WaiverSignatoryRow> _signatories = const [];
 
   bool get _isEdit => _waiver != null;
+
+  // The gym's one protected authorized-payer agreement: it can't be deleted
+  // (the backend rejects it) and isn't signed member-by-member from here (it's
+  // signed only in the link-payer flow). Only its name/body stay editable.
+  bool get _isPayerAuth => _waiver?.waiverType == WaiverType.payerAuth;
 
   // Signatures on the version being edited — derived from the versions list so
   // it stays accurate after a save mints a new (0-signature) version.
@@ -365,6 +372,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
           ),
         ),
         Text(_isEdit ? 'Edit Waiver' : 'New Waiver', style: DesignConstants.big2),
+        if (_isPayerAuth)
+          const InvoiceChip(
+            label: 'Payer agreement',
+            tone: InvoiceChipTone.brand,
+          ),
         const Spacer(),
         if (_dirty)
           Text(
@@ -510,19 +522,24 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
                   s.versionNumber == null ? '—' : 'v${s.versionNumber}',
                   style: DesignConstants.p,
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppOutlineButton(
-                    text: 'Member Sign',
-                    onPressed: () => _openSignScreen(s),
-                    borderRadius: DesignConstants.radiusSmall,
-                    textStyle: DesignConstants.pSmall,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: DesignConstants.spacingMedium,
-                      vertical: DesignConstants.spacingSmall,
+                // The payer agreement is signed only in the link-payer flow,
+                // never member-by-member from here — so no Member Sign action.
+                if (_isPayerAuth)
+                  const SizedBox.shrink()
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppOutlineButton(
+                      text: 'Member Sign',
+                      onPressed: () => _openSignScreen(s),
+                      borderRadius: DesignConstants.radiusSmall,
+                      textStyle: DesignConstants.pSmall,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: DesignConstants.spacingMedium,
+                        vertical: DesignConstants.spacingSmall,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
         ],
@@ -585,7 +602,9 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
           isLoading: _saving,
           fullWidth: true,
         ),
-        if (_isEdit)
+        // The payer agreement is the gym's protected authorized-payer waiver —
+        // it can't be deleted (the backend rejects it), so hide the action.
+        if (_isEdit && !_isPayerAuth)
           AppOutlineButton(
             text: 'Delete',
             onPressed: _saving ? null : _delete,
@@ -599,16 +618,10 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   }
 }
 
-/// Collapsible legend showing every {{placeholder}} the waiver body supports.
-class _PlaceholderLegend extends StatefulWidget {
+/// Always-visible legend showing every {{placeholder}} the waiver body
+/// supports: a non-interactive caption above one row per token.
+class _PlaceholderLegend extends StatelessWidget {
   const _PlaceholderLegend();
-
-  @override
-  State<_PlaceholderLegend> createState() => _PlaceholderLegendState();
-}
-
-class _PlaceholderLegendState extends State<_PlaceholderLegend> {
-  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -616,28 +629,35 @@ class _PlaceholderLegendState extends State<_PlaceholderLegend> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingSmall,
       children: [
-        InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          borderRadius: BorderRadius.circular(
-            DesignConstants.radiusSmall,
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: DesignConstants.spacingSmall,
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: DesignConstants.spacingSmall,
+          child: Text(
+            'Placeholder reference — use {{name}} in your text',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ),
+        for (final e in kWaiverParameters.entries)
+          Padding(
+            padding: const EdgeInsets.only(
+              left: DesignConstants.spacingLarge,
             ),
             child: Row(
               spacing: DesignConstants.spacingSmall,
               children: [
-                Icon(
-                  _expanded
-                      ? Symbols.expand_less_sharp
-                      : Symbols.expand_more_sharp,
-                  size: DesignConstants.iconSizeSmall,
-                  weight: DesignConstants.iconWeight,
-                  color: DesignConstants.text2nd,
+                Text(
+                  '{{${e.key}}}',
+                  style: DesignConstants.pSmall
+                      .merge(DesignConstants.monoFont)
+                      .copyWith(
+                        color: DesignConstants.primaryColor,
+                      ),
                 ),
                 Text(
-                  'Placeholder reference — use {{name}} in your text',
+                  '— ${e.value}',
                   style: DesignConstants.pSmall.copyWith(
                     color: DesignConstants.text2nd,
                   ),
@@ -645,33 +665,6 @@ class _PlaceholderLegendState extends State<_PlaceholderLegend> {
               ],
             ),
           ),
-        ),
-        if (_expanded)
-          for (final e in kWaiverParameters.entries)
-            Padding(
-              padding: const EdgeInsets.only(
-                left: DesignConstants.spacingLarge,
-              ),
-              child: Row(
-                spacing: DesignConstants.spacingSmall,
-                children: [
-                  Text(
-                    '{{${e.key}}}',
-                    style: DesignConstants.pSmall
-                        .merge(DesignConstants.monoFont)
-                        .copyWith(
-                          color: DesignConstants.primaryColor,
-                        ),
-                  ),
-                  Text(
-                    '— ${e.value}',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ],
-              ),
-            ),
       ],
     );
   }

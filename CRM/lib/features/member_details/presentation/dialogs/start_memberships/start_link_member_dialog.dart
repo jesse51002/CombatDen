@@ -5,6 +5,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -81,6 +83,7 @@ class _StartLinkMemberDialogState
 
   QuillController? _waiverController;
   String? _waiverVersionId;
+  String _waiverBody = ''; // raw template body; rendered into the controller
   String _signerName = '';
   bool _consent = false;
   bool _submitting = false;
@@ -141,11 +144,10 @@ class _StartLinkMemberDialogState
       setState(() {
         _checking = false;
         _waiverVersionId = waiver.versionId;
-        _waiverController =
-            WaiverMarkdownEditor.controllerFromMarkdown(
-          waiver.body,
-          readOnly: true,
-        );
+        _waiverBody = waiver.body;
+        // Built with the payee selected at this point; signer_name re-renders
+        // live afterwards (see _onSignChanged).
+        _waiverController = _buildWaiverController();
         _step = _LinkStep.sign;
       });
     } catch (_) {
@@ -156,6 +158,40 @@ class _StartLinkMemberDialogState
             'Please try again.';
       });
     }
+  }
+
+  // Display-only render of the payer-agreement body — the mirror of
+  // LinkParentDialog: here the payer (signer) is fixed and the payee is
+  // picked. member_name is the fixed payer, payee_name is the selected
+  // member, gym_name/date are fixed, signer_name follows the live typed
+  // name (empty stays literal).
+  Map<String, String> _renderValues() => {
+        'member_name': widget.payerName,
+        'payee_name': _selected?.fullName ?? '',
+        'gym_name': selectedGym.displayName,
+        'date': waiverSignDateUtc(),
+        'signer_name': _signerName,
+      };
+
+  QuillController _buildWaiverController() =>
+      WaiverMarkdownEditor.controllerFromMarkdown(
+        renderWaiverPlaceholders(_waiverBody, _renderValues()),
+        readOnly: true,
+      );
+
+  // Rebuild the read-only controller on each name keystroke so
+  // {{signer_name}} tracks live. Bodies are short — a per-keystroke
+  // rebuild is fine.
+  void _onSignChanged(String name, bool consent) {
+    final nameChanged = name != _signerName;
+    setState(() {
+      _signerName = name;
+      _consent = consent;
+      if (nameChanged) {
+        _waiverController?.dispose();
+        _waiverController = _buildWaiverController();
+      }
+    });
   }
 
   bool get _canSign =>
@@ -298,10 +334,7 @@ class _StartLinkMemberDialogState
         SignWaiverPanel(
           controller: _waiverController!,
           enabled: !_submitting,
-          onChanged: (name, consent) => setState(() {
-            _signerName = name;
-            _consent = consent;
-          }),
+          onChanged: _onSignChanged,
         ),
       ],
     );
