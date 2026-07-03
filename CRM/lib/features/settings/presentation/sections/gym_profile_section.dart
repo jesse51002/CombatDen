@@ -19,11 +19,6 @@ const int _kNameMaxLength = 255;
 /// (matches the timezone selector's cap).
 const double _kNameFieldMaxWidth = 480;
 
-/// Above this width the name field and the logo picker sit side by side; below
-/// it they stack. Keeps the section compact where it hosts (the theme tab)
-/// while staying readable on a narrow viewport.
-const double _kSideBySideMinWidth = 700;
-
 /// The shared **Gym profile** editor — the gym's real name + its uploaded
 /// brand logo. Saved through [SettingsBloc] via `PUT /api/v1/gyms/{gymId}`
 /// (NOT optimistic): the field values come from [selectedGym] until the
@@ -31,11 +26,23 @@ const double _kSideBySideMinWidth = 700;
 /// off the state's monotonic `gymProfileSavedCount`.
 ///
 /// One implementation, two hosts: the Settings screen and — admin context
-/// only — the member-app preview's Theme tab. Both provide a [SettingsBloc]
-/// above this widget; the Theme-tab host also owns the error listener (the
-/// Settings screen already has one), so this section only surfaces success.
+/// only — the [GymProfileDialog] opened from the Theme tab's phone preview.
+/// Both provide a [SettingsBloc] above this widget; the dialog host also owns
+/// the error listener (the Settings screen already has one), so this section
+/// only surfaces success.
+///
+/// [showHeader] hides the section's own title/subtitle when the host (the
+/// dialog) already provides one. [onSaved] fires after a committed save, in
+/// the same listener as the success SnackBar — the dialog host closes on it.
 class GymProfileSection extends StatefulWidget {
-  const GymProfileSection({super.key});
+  final bool showHeader;
+  final VoidCallback? onSaved;
+
+  const GymProfileSection({
+    super.key,
+    this.showHeader = true,
+    this.onSaved,
+  });
 
   @override
   State<GymProfileSection> createState() => _GymProfileSectionState();
@@ -83,6 +90,7 @@ class _GymProfileSectionState extends State<GymProfileSection> {
           ..showSnackBar(
             const SnackBar(content: Text('Gym profile updated')),
           );
+        widget.onSaved?.call();
       },
       child: Form(
         key: _formKey,
@@ -90,53 +98,41 @@ class _GymProfileSectionState extends State<GymProfileSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: DesignConstants.spacingLarge,
           children: [
-            Text('Gym profile', style: DesignConstants.h1),
-            Text(
-              'Your gym\'s name and logo. The logo shows in the CRM nav and on '
-              'your members\' app.',
-              style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+            if (widget.showHeader) ...[
+              Text('Gym profile', style: DesignConstants.h1),
+              Text(
+                'Your gym\'s name and logo. The logo shows in the CRM nav '
+                'and on your members\' app.',
+                style:
+                    DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+              ),
+            ],
+            // Name above logo, always vertical. The plain Column keeps the
+            // width constraint LOOSE, so the 480px cap genuinely applies —
+            // the old side-by-side branch wrapped the field in Expanded,
+            // whose TIGHT constraint overrode the cap and stretched the
+            // field across the page.
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _kNameFieldMaxWidth,
+              ),
+              child: CustomTextField(
+                controller: _nameCtrl,
+                label: 'Gym name',
+                hintText: 'e.g. Apex MMA',
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(_kNameMaxLength),
+                ],
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Gym name is required.'
+                    : null,
+              ),
             ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final nameField = ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: _kNameFieldMaxWidth,
-                  ),
-                  child: CustomTextField(
-                    controller: _nameCtrl,
-                    label: 'Gym name',
-                    hintText: 'e.g. Apex MMA',
-                    inputFormatters: [
-                      LengthLimitingTextInputFormatter(_kNameMaxLength),
-                    ],
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Gym name is required.'
-                        : null,
-                  ),
-                );
-                final logo = ImageUploadPickerField(
-                  label: 'Gym logo',
-                  category: 'gym',
-                  imageUrl: _logoUrl,
-                  onUploaded: (url) => setState(() => _logoUrl = url),
-                );
-
-                if (constraints.maxWidth >= _kSideBySideMinWidth) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: DesignConstants.spacingBig,
-                    children: [
-                      Expanded(child: nameField),
-                      logo,
-                    ],
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: DesignConstants.spacingLarge,
-                  children: [nameField, logo],
-                );
-              },
+            ImageUploadPickerField(
+              label: 'Gym logo',
+              category: 'gym',
+              imageUrl: _logoUrl,
+              onUploaded: (url) => setState(() => _logoUrl = url),
             ),
             BlocBuilder<SettingsBloc, SettingsState>(
               buildWhen: (prev, curr) =>
