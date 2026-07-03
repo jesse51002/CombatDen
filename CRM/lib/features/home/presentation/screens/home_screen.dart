@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
-import 'package:crm/features/home/data/mock_attendance.dart';
 import 'package:crm/features/home/data/mock_member_stats.dart';
 import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_card.dart';
 import 'package:crm/features/home/presentation/widgets/overdue_payments/overdue_payments_section.dart';
@@ -19,10 +18,10 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///   2. Total Members hero card (semicircular arc + active/inactive)
 ///   3. Two-column row (capped at one viewport height): left = Live
 ///      Attendance over Overdue Payments, each an equal-height half that
-///      scrolls on its own; right = Upcoming Classes. Overdue Payments and
-///      Upcoming Classes are both live, bloc-backed surfaces (Upcoming reads
-///      the real `/classes/instances` schedule feed); only the hero + Live
-///      Attendance cards remain mock.
+///      scrolls on its own; right = Upcoming Classes. Live Attendance,
+///      Overdue Payments, and Upcoming Classes are all live, bloc-backed
+///      surfaces (Live Attendance + Upcoming read the real
+///      `/classes/instances` schedule feed); only the hero remains mock.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -92,7 +91,7 @@ class _AttendanceAndOverdue extends StatelessWidget {
         // buttons stay pinned (see LiveAttendanceCard); Overdue has no
         // pinned chrome, so the whole section scrolls.
         Expanded(
-          child: LiveAttendanceCard(entries: kMockLiveAttendance),
+          child: LiveAttendanceCard(),
         ),
         Hairline(),
         Expanded(
