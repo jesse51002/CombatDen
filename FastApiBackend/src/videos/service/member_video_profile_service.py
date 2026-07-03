@@ -30,6 +30,15 @@ from src.videos import SQL_DIR
 # and the "attended N classes in the last 90 days" clause.
 ATTENDANCE_WINDOW_DAYS = 90
 
+
+class MemberNotInGymError(ValueError):
+    """The member does not exist or does not belong to the given gym.
+
+    Raised by the ownership guard so the router can map exactly this case
+    to a 404 — any other ``ValueError`` (e.g. an embedding-dimension config
+    mismatch) stays a 500 and never leaks internals to the client.
+    """
+
 # The one bucket-flavor sentence appended per mood bucket. Deterministic v1
 # vocabulary matching the five clusters the query generator uses for breadth.
 _BUCKET_FLAVOR: dict[MoodBucket, str] = {
@@ -73,7 +82,7 @@ class MemberVideoProfileService:
     async def ensure_profiles(self, member_id: UUID, gym_id: UUID) -> None:
         """Ensure the member's 5 bucket profiles exist and are fresh.
 
-        Raises ``ValueError("Member not found in this gym")`` when the member
+        Raises ``MemberNotInGymError`` when the member
         doesn't exist or belongs to a DIFFERENT gym than ``gym_id`` — checked on
         every call (including the freshness no-op), so a caller authorized to
         view a member can never rank another gym's feed by passing a
@@ -116,7 +125,7 @@ class MemberVideoProfileService:
         """True when all 5 buckets exist, belong to ``gym_id``, and the newest
         is within the TTL.
 
-        Raises ``ValueError("Member not found in this gym")`` when existing
+        Raises ``MemberNotInGymError`` when existing
         profile rows belong to a different gym — every row shares the same
         gym_id (frozen at insert), so checking the first row suffices. No
         rows yet (first-ever request) is not an error here; the cold-build
@@ -133,7 +142,7 @@ class MemberVideoProfileService:
         if not rows:
             return False
         if str(rows[0]["gym_id"]) != str(gym_id):
-            raise ValueError("Member not found in this gym")
+            raise MemberNotInGymError("Member not found in this gym")
         if len({r["bucket"] for r in rows}) < len(MoodBucket):
             return False
         newest: datetime = max(r["built_at"] for r in rows)
@@ -145,7 +154,7 @@ class MemberVideoProfileService:
     async def _load_source(self, member_id: UUID, gym_id: UUID) -> dict:
         """Read the member facts the deterministic template is built from.
 
-        Raises ``ValueError("Member not found in this gym")`` when the member
+        Raises ``MemberNotInGymError`` when the member
         doesn't exist or belongs to a different gym than ``gym_id`` — the
         cold-build-path ownership guard (the freshness path's own guard lives
         in :meth:`_profiles_fresh`).
@@ -166,7 +175,7 @@ class MemberVideoProfileService:
                 .fetchone()
             )
         if row is None or str(row["gym_id"]) != str(gym_id):
-            raise ValueError("Member not found in this gym")
+            raise MemberNotInGymError("Member not found in this gym")
         return dict(row)
 
     # ── deterministic text ────────────────────────────────────────

@@ -502,10 +502,10 @@ serialized to pgvector text form (`'[0.1,0.2,...]'`) and bound with `CAST(:x AS 
   mood-bucket profiles. `ensure_profiles(member_id, gym_id)` first verifies **the member actually
   belongs to `gym_id`** — checked on every call, both the freshness no-op (via `gym_id` carried on
   each `member_video_profile` row, frozen at insert) and the cold-build path (via the live `members`
-  row) — raising `ValueError("Member not found in this gym")` on a mismatch or missing member BEFORE
+  row) — raising `MemberNotInGymError` (a `ValueError` subclass) on a mismatch or missing member BEFORE
   any profile read/build. This is what stops a caller who's authorized to view a member (`verify_can_view_member`
   only checks the member, not the path `gym_id`) from ranking a DIFFERENT gym's feed by passing a
-  mismatched `gym_id`; the route maps this `ValueError` to 404. Otherwise: no-op when all 5 buckets
+  mismatched `gym_id`; the route maps exactly this exception to 404 (any other `ValueError`, e.g. an embedding-dimension config mismatch, stays a 500 and never leaks internals). LLM list outputs are hard-capped by truncating validators (`MAX_GENERATED_QUERIES`/`MAX_LANDSCAPE_ITEMS` in `video_spec_schema.py`) — every generated query is real Apify spend. Otherwise: no-op when all 5 buckets
   exist and the newest `built_at` is within `video_profile_ttl_days`; else reads member facts in ONE
   query (rank, 90-day attendance count/recency, top-3 attended classes, gym disciplines from
   `gym_video_spec_latest`), renders a **deterministic v1 template** per bucket (shared base sentence +

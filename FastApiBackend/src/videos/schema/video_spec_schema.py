@@ -14,10 +14,17 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schema.video import GymVideoSpecSource
 
 from src.videos.schema.videos_gym_type import GymType
+
+# Hard caps on LLM list outputs (cost guards, not prompt targets). Queries
+# drive real Apify scrape spend per query, so a misbehaving model returning
+# hundreds is TRUNCATED (never rejected — a reject would just churn the
+# structured-output retry loop). ~2x the prompt's asks for headroom.
+MAX_GENERATED_QUERIES = 60
+MAX_LANDSCAPE_ITEMS = 25
 
 
 class VideoSpecDraft(BaseModel):
@@ -111,6 +118,12 @@ class LandscapeResult(BaseModel):
         ),
     )
 
+    @field_validator("channels", "creators", "series_events", mode="after")
+    @classmethod
+    def _cap_landscape(cls, value: list[str]) -> list[str]:
+        """Truncate runaway LLM lists to the hard cap (never reject)."""
+        return value[:MAX_LANDSCAPE_ITEMS]
+
 
 class QueriesResult(BaseModel):
     """Structured output of the query-generation call (step 2 of query gen)."""
@@ -122,3 +135,9 @@ class QueriesResult(BaseModel):
             "Concrete YouTube search phrases spread across the video genres."
         ),
     )
+
+    @field_validator("queries", mode="after")
+    @classmethod
+    def _cap_queries(cls, value: list[str]) -> list[str]:
+        """Truncate a runaway query list — every query is real Apify spend."""
+        return value[:MAX_GENERATED_QUERIES]

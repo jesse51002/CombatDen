@@ -26,6 +26,7 @@ from src.videos.schema.video_mood_bucket import (
 )
 from src.videos.service.member_video_profile_service import (
     ATTENDANCE_WINDOW_DAYS,
+    MemberNotInGymError,
     MemberVideoProfileService,
 )
 from src.videos.service.video_recs_service import VideoRecsService
@@ -364,7 +365,7 @@ async def test_ensure_profiles_raises_when_fresh_profile_belongs_to_different_gy
         profile_ttl_days=30,
     )
 
-    with pytest.raises(ValueError, match="Member not found in this gym"):
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
         await svc.ensure_profiles(uuid4(), wrong_gym_id)
 
     client.embed.assert_not_called()
@@ -402,7 +403,7 @@ async def test_ensure_profiles_raises_when_member_in_different_gym_cold_path() -
         profile_ttl_days=30,
     )
 
-    with pytest.raises(ValueError, match="Member not found in this gym"):
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
         await svc.ensure_profiles(uuid4(), wrong_gym_id)
 
     client.embed.assert_not_called()
@@ -422,7 +423,7 @@ async def test_ensure_profiles_raises_when_member_row_missing() -> None:
         profile_ttl_days=30,
     )
 
-    with pytest.raises(ValueError, match="Member not found in this gym"):
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
         await svc.ensure_profiles(uuid4(), uuid4())
 
     client.embed.assert_not_called()

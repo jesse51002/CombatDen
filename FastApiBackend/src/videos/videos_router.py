@@ -66,6 +66,9 @@ from src.videos.schema.videos_schema import (
     VideoKeepRequest,
     VideoRemoveRequest,
 )
+from src.videos.service.member_video_profile_service import (
+    MemberNotInGymError,
+)
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import (
@@ -718,7 +721,9 @@ async def get_member_video_recs(
         return await videos_service.get_video_recs(
             gym_id, member_id, per_bucket=per_bucket, record=record
         )
-    except ValueError as exc:
+    except MemberNotInGymError as exc:
+        # Only the ownership guard maps to 404 — any other ValueError (e.g.
+        # an embedding-dimension config mismatch) is a server fault -> 500.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from None

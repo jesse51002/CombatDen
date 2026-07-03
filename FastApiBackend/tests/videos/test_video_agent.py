@@ -24,7 +24,10 @@ import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` im
 from src.shared.litellm_client import LiteLLMClient
 from src.videos.schema.video_agent_schema import AgentTurnRequest, SpecProposal
 from src.videos.schema.video_spec_schema import (
+    MAX_GENERATED_QUERIES,
+    MAX_LANDSCAPE_ITEMS,
     LandscapeResult,
+    QueriesResult,
     VideoSpecDraft,
     VideoSpecView,
 )
@@ -912,3 +915,22 @@ def test_video_spec_draft_valid_round_trips() -> None:
     assert reloaded.short_avoid_desc == "nothing controversial"
     # Confirm queries field is absent from VideoSpecDraft (no queries authored by agent)
     assert "queries" not in VideoSpecDraft.model_fields
+
+
+def test_queries_result_truncates_runaway_lists() -> None:
+    """LLM list outputs are hard-capped (cost guard): a runaway model gets
+    truncated, never rejected (a reject would churn the structured-output
+    retry loop while every extra query is real Apify spend)."""
+    runaway = QueriesResult(
+        queries=[f"query {i}" for i in range(MAX_GENERATED_QUERIES + 40)]
+    )
+    assert len(runaway.queries) == MAX_GENERATED_QUERIES
+    assert runaway.queries[0] == "query 0"
+
+    landscape = LandscapeResult(
+        channels=[f"ch {i}" for i in range(MAX_LANDSCAPE_ITEMS + 10)],
+        creators=["a"],
+        series_events=[],
+    )
+    assert len(landscape.channels) == MAX_LANDSCAPE_ITEMS
+    assert landscape.creators == ["a"]
