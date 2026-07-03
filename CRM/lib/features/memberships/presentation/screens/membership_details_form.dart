@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_create_request.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_price_versions_section.dart';
@@ -106,9 +107,28 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     try {
       final waivers =
           await widget.repository.listWaivers(widget.gymId);
-      if (mounted) setState(() => _waivers = waivers);
+      // Only custom waivers are plan-attachable — the protected payer
+      // agreement and any future/unknown types are never selectable here
+      // (the backend also rejects a plan whose waiver_ids include a
+      // non-custom waiver).
+      final custom = waivers
+          .where((w) => w.waiverType == WaiverType.custom)
+          .toList();
+      if (mounted) {
+        setState(() {
+          _waivers = custom;
+          // The fetch SUCCEEDED (distinct from a failed load below): drop any
+          // preselected id that isn't a selectable custom waiver — a hidden
+          // payer-auth / deleted / unknown id — so a save can't silently
+          // re-send an unattachable waiver. A failed load never reaches here,
+          // so the ids stay untouched and a save can't wipe them.
+          final selectable = custom.map((w) => w.waiverId).toSet();
+          _waiverIds.retainWhere(selectable.contains);
+        });
+      }
     } catch (_) {
-      // Leave the waiver list empty on failure; the rest still works.
+      // Leave the waiver list empty on failure; the rest still works. Do NOT
+      // prune _waiverIds — a failed fetch must never wipe the plan's waivers.
     } finally {
       if (mounted) setState(() => _loadingWaivers = false);
     }

@@ -1,7 +1,7 @@
 SELECT
     reward_id,
     title,
-    amount_off,
+    price_label,
     image_url,
     point_cost
 FROM gym_rewards

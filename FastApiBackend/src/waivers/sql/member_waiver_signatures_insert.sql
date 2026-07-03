@@ -10,9 +10,12 @@ INSERT INTO member_waiver_signatures (
     waiver_version_id,
     signer_name,
     consent_acknowledged,
+    rendered_body,
     content_hash,
     ip_address,
-    user_agent
+    user_agent,
+    esign_disclosure_version,
+    operator_employee_id
 )
 VALUES (
     :gym_id,
@@ -21,8 +24,11 @@ VALUES (
     :waiver_version_id,
     :signer_name,
     :consent_acknowledged,
+    :rendered_body,
     :content_hash,
     :ip_address,
-    :user_agent
+    :user_agent,
+    :esign_disclosure_version,
+    :operator_employee_id
 )
-RETURNING signature_id
+RETURNING signature_id, signed_at, signature_type

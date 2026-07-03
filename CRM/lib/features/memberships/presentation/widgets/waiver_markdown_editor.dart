@@ -32,8 +32,25 @@ class WaiverMarkdownEditor extends StatelessWidget {
   }
 
   /// Export the controller's content as a Markdown string.
+  ///
+  /// [DeltaToMarkdown] backslash-escapes literal braces/underscores, which
+  /// would store a waiver placeholder as `\{\{member\_name\}\}` — it displays
+  /// identically in the editor (the parser unescapes), but the backend and
+  /// preview renderers match on the plain `{{token}}` form, so the escaped
+  /// form silently never fills. Canonicalize tokens on the way out.
   static String markdownFromController(QuillController controller) =>
-      DeltaToMarkdown().convert(controller.document.toDelta()).trim();
+      _unescapePlaceholders(
+        DeltaToMarkdown().convert(controller.document.toDelta()).trim(),
+      );
+
+  static final RegExp _escapedToken =
+      RegExp(r'\\?\{\\?\{((?:\w|\\_)+)\\?\}\\?\}');
+
+  static String _unescapePlaceholders(String markdown) =>
+      markdown.replaceAllMapped(
+        _escapedToken,
+        (m) => '{{${m.group(1)!.replaceAll(r'\_', '_')}}}',
+      );
 
   @override
   Widget build(BuildContext context) {

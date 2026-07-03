@@ -11,6 +11,8 @@ Endpoints:
     * ``POST /api/v1/gyms/{gym_id}/onboarding/link`` — mint a fresh
       hosted onboarding URL, resume flow (owner only).
     * ``PUT /api/v1/gyms/{gym_id}``     — update mutable gym fields.
+    * ``PUT /api/v1/gyms/{gym_id}/theme`` — save the gym's chosen
+      ThemeService design id (branding).
     * ``PUT /api/v1/gyms/{gym_id}/employees/me/theme`` — save the
       caller's CRM theme preference (system/light/dark).
 """
@@ -32,6 +34,8 @@ from src.gyms.schema.gyms_schema import (
     GymOnboardingLinkResponse,
     GymOnboardingStatusResponse,
     GymResponse,
+    GymThemeResponse,
+    GymThemeUpdateRequest,
     GymUpdateRequest,
     GymWithRoleResponse,
 )
@@ -323,7 +327,11 @@ async def new_onboarding_link(
     "/{gym_id}",
     response_model=GymResponse,
     summary="Update a gym",
-    description="Updates the gym name, description, or timezone.",
+    description=(
+        "Updates the gym name, description, timezone, or logo. "
+        "``logo_url`` may be explicitly set to ``null`` to clear the "
+        "logo back to none uploaded."
+    ),
     responses={
         200: {"description": "Gym updated"},
         400: {"description": "Invalid update payload"},
@@ -366,6 +374,60 @@ async def update_gym(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update gym",
+        ) from None
+
+
+# ── Gym theme (branding design) ───────────────────────────────
+
+
+@gyms_router.put(
+    "/{gym_id}/theme",
+    response_model=GymThemeResponse,
+    summary="Save a gym's ThemeService design id",
+    description=(
+        "Persists the gym's chosen ThemeService design id "
+        "(``gyms.theme_design_id``) — the branding shown in the "
+        "gym's member app. ThemeService remains a separate service; "
+        "this only stores the selected design's id."
+    ),
+    responses={
+        200: {"description": "Theme design saved"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+        404: {"description": "Gym not found"},
+    },
+)
+@inject
+async def update_gym_theme(
+    gym_id: UUID,
+    request: GymThemeUpdateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    gyms_service: GymsService = Depends(Provide[DependencyInjector.gyms_service]),
+) -> GymThemeResponse:
+    """Save the gym's chosen ThemeService design id."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await gyms_service.update_gym_theme(
+            gym_id=gym_id,
+            theme_design_id=request.data.theme_design_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to update gym theme: gym_id=%s",
+            gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update gym theme",
         ) from None
 
 

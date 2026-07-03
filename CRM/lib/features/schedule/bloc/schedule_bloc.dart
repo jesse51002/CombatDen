@@ -7,6 +7,7 @@ import 'package:crm/features/check_in/data/models/batch_check_in_request.dart';
 import 'package:crm/features/check_in/data/models/batch_check_in_response.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
+import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/signup_batch_result.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
@@ -52,7 +53,12 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     Emitter<ScheduleState> emit,
   ) async {
     _gymId = event.gymId;
-    await _load(emit, event.weekStart, knownClasses: null);
+    await _load(
+      emit,
+      event.weekStart,
+      knownClasses: null,
+      loadBoard: event.loadBoard,
+    );
   }
 
   Future<void> _onWeekChanged(
@@ -353,16 +359,19 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     Emitter<ScheduleState> emit,
     DateTime weekStart, {
     required List<GymClassResponse>? knownClasses,
+    bool loadBoard = true,
   }) async {
     emit(const ScheduleLoading());
     _weekStart = weekStart;
     final weekEnd = weekStart.add(const Duration(days: 6));
     try {
-      final instances = await _repository.listEffectiveInstances(
-        _gymId,
-        weekStart,
-        weekEnd,
-      );
+      final instances = loadBoard
+          ? await _repository.listEffectiveInstances(
+              _gymId,
+              weekStart,
+              weekEnd,
+            )
+          : const <EffectiveClassInstance>[];
       final classes =
           knownClasses ?? await _repository.listClasses(_gymId);
       emit(ScheduleLoaded(

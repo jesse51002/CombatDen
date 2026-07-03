@@ -11,6 +11,7 @@ import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
@@ -64,6 +65,12 @@ class MemberDetailScreen extends StatelessWidget {
         RepositoryProvider<ScheduleRepository>(
           create: (_) => ScheduleRepository(apiClient: ApiClient()),
         ),
+        // The "Redeem reward" picker and the pending-approval approve/reject
+        // actions reuse the Loyalty tab's reward-catalog client, so redemption
+        // has a single repository across the two surfaces.
+        RepositoryProvider<RewardsRepository>(
+          create: (_) => RewardsRepository(apiClient: ApiClient()),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -72,6 +79,7 @@ class MemberDetailScreen extends StatelessWidget {
               repository: ctx.read<MemberRepository>(),
               scheduleRepository: ctx.read<ScheduleRepository>(),
               ranksRepository: RanksRepository(apiClient: ApiClient()),
+              rewardsRepository: ctx.read<RewardsRepository>(),
             )..add(
                 MemberDetailRequested(memberId, gymId: _gymId),
               ),

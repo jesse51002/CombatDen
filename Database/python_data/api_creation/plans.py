@@ -108,3 +108,30 @@ def create_all(
             )
         )
     return records
+
+
+def attach_waiver(
+    api: GymApiClient,
+    gym_id: uuid.UUID,
+    plans: list[PlanRecord],
+    waiver_id: uuid.UUID,
+) -> None:
+    """Attach a required waiver to every plan via the production update path.
+
+    Runs AFTER the membership phase on purpose: the membership-start waiver
+    gate 422s any start whose plan requires an unsigned waiver, so attaching
+    earlier would gate the seed's own starts. The end state reads as "the gym
+    added a waiver requirement later" — existing members show it unsigned and
+    any NEW start demos the gate + the wizard's sign step.
+    """
+    total = len(plans)
+    for idx, plan in enumerate(plans):
+        progress.item(idx + 1, total, plan.plan_name)
+        api.put(
+            "/api/v1/membership_plans/",
+            json={
+                "plan_id": str(plan.plan_id),
+                "gym_id": str(gym_id),
+                "data": {"waiver_ids": [str(waiver_id)]},
+            },
+        )

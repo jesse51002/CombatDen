@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/data/models/pays_for_member.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/rank.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
+import 'package:crm/features/member_details/data/models/pending_redemption.dart';
 import 'package:crm/features/member_details/data/models/reward_card_model.dart';
 
 part 'member_detail_response.g.dart';
@@ -60,6 +61,12 @@ class MemberDetailResponse extends Equatable {
   final Rank? rank;
   @JsonKey(defaultValue: [])
   final List<RewardCardModel> recentlyRedeemedRewards;
+
+  /// Redemptions the member has submitted but staff have not
+  /// yet approved or rejected. Shown so staff can act on them.
+  @JsonKey(defaultValue: [])
+  final List<PendingRedemption> pendingRedemptions;
+
   final CardOnFile? cardOnFile;
 
   const MemberDetailResponse({
@@ -80,6 +87,7 @@ class MemberDetailResponse extends Equatable {
     required this.retention,
     this.rank,
     this.recentlyRedeemedRewards = const [],
+    this.pendingRedemptions = const [],
     this.cardOnFile,
   });
 
@@ -148,6 +156,7 @@ class MemberDetailResponse extends Equatable {
         retention,
         rank,
         recentlyRedeemedRewards,
+        pendingRedemptions,
         cardOnFile,
       ];
 }

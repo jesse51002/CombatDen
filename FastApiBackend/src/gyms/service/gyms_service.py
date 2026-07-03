@@ -23,6 +23,7 @@ from src.gyms.schema.gyms_schema import (
     GymOnboardingLinkResponse,
     GymOnboardingStatusResponse,
     GymResponse,
+    GymThemeResponse,
     GymUpdateData,
     GymWithRoleResponse,
 )
@@ -32,7 +33,7 @@ from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectServic
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 class GymsService:
@@ -172,8 +173,15 @@ class GymsService:
         the per-class mint is deep-equal-skipping (timezone included), a
         re-save is cheap — already-reminted classes no-op, the rest catch
         up — which is what makes the retry self-heal.
+
+        Uses ``exclude_unset=True`` only (no ``exclude_none``), matching
+        ``RewardsService``/``MembersManagementUpdate``/``RanksService``:
+        an explicitly-sent ``null`` for a nullable column (e.g. ``logo_url``)
+        is a real instruction to clear that column, distinct from the field
+        being absent (unchanged). A NOT NULL column sent as ``null`` still
+        fails at the DB constraint.
         """
-        update_fields = data.model_dump(exclude_unset=True, exclude_none=True)
+        update_fields = data.model_dump(exclude_unset=True)
 
         if not update_fields:
             raise ValueError("No fields provided to update")
@@ -200,6 +208,32 @@ class GymsService:
             )
 
         return GymResponse(**row)
+
+    async def update_gym_theme(
+        self,
+        gym_id: UUID,
+        theme_design_id: str,
+    ) -> GymThemeResponse:
+        """Save the gym's chosen ThemeService design id.
+
+        The caller's employment at ``gym_id`` is verified at the
+        router layer. ``theme_design_id`` is the only field this
+        writes; the guard call is defense-in-depth consistency with
+        ``update_gym`` even though the field is fixed here.
+        """
+        validate_mutable_columns(GYMS_IMMUTABLE, {"theme_design_id"})
+
+        sql = load_sql(SQL_DIR / "update_gym_theme.sql")
+        params = {
+            "theme_design_id": theme_design_id,
+            "gym_id": str(gym_id),
+        }
+        row = await self._db_pool.execute_with_retry(sql, params)
+
+        if not row:
+            raise ValueError("Gym not found")
+
+        return GymThemeResponse(**row)
 
     async def update_employee_theme(
         self,

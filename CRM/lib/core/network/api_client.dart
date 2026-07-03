@@ -90,6 +90,25 @@ class ApiClient {
     );
   }
 
+  /// Sends a multipart/form-data POST request to [path].
+  ///
+  /// Pass a pre-built [FormData] (e.g. from [FormData.fromMap]
+  /// with [MultipartFile.fromBytes]).  The base JSON
+  /// Content-Type is overridden per-request so the auth
+  /// interceptor still attaches and refreshes the JWT normally.
+  Future<Response<T>> postMultipart<T>(
+    String path, {
+    required FormData data,
+  }) async {
+    return _handleRequest(
+      () => _dio.post<T>(
+        path,
+        data: data,
+        options: Options(contentType: 'multipart/form-data'),
+      ),
+    );
+  }
+
   Future<Response<T>> _handleRequest<T>(
     Future<Response<T>> Function() request,
   ) async {

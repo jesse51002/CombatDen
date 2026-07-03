@@ -72,9 +72,9 @@ When a task builds or heavily reshapes a domain (tables + services + routes):
 **Integration tests must clean up exactly what they create (the `created` fixture)**
 - Tests run against a **real shared local Supabase DB + a real shared Stripe test Connect account** — no transaction rollback, no ephemeral DB. Every test must delete exactly the rows/Stripe objects it created, and **never** the single seeded gym (`tests/seed_constants.py`) or any other shared/seed data.
 - Use the function-scoped **`created`** fixture (a `CreatedResources` registry in `tests/conftest.py`); it deletes everything registered on teardown, FK-safe and best-effort. Two ways to register:
-  - **Create-and-track wrappers** for the data factory: `await created.member(...)`, `.plan(...)`, `.discount(...)`, `.payment_method()`, `.test_clock(...)` — prefer these over calling `tests/helpers/data_factory.py` directly so cleanup is automatic.
-  - **Manual trackers** for objects a service returns: `created.track_customer/track_product/track_price/track_coupon(<stripe_id>)`, `created.track_plan_db(plan_id)`, `created.track_discount(discount_id)`, `created.track_member(member_id)`.
-- Teardown order is clocks → members → plans → discounts → Stripe customers → coupons → archive prices/products. Stripe prices/products can only be **archived** (`active=false`), not deleted; coupons and customers are deleted (customer-delete cascades its subs/invoices); a test clock cascades its own clock-scoped customer/subs/invoices, so don't separately track those. Cleanup helpers live in `tests/helpers/cleanup.py`.
+  - **Create-and-track wrappers** for the data factory: `await created.member(...)`, `.plan(...)`, `.discount(...)`, `.reward(...)`, `.payment_method()`, `.test_clock(...)` — prefer these over calling `tests/helpers/data_factory.py` directly so cleanup is automatic.
+  - **Manual trackers** for objects a service returns: `created.track_customer/track_product/track_price/track_coupon(<stripe_id>)`, `created.track_plan_db(plan_id)`, `created.track_discount(discount_id)`, `created.track_member(member_id)`, `created.track_reward(reward_id)`, `created.track_redemption(redemption_id)` (a reward carries no Stripe object, so a redeem call's returned `redemption_id` is tracked manually).
+- Teardown order is clocks → redemption rows (FK both a member and a reward — always first) → members → plans → discounts → rewards → Stripe customers → coupons → archive prices/products. Stripe prices/products can only be **archived** (`active=false`), not deleted; coupons and customers are deleted (customer-delete cascades its subs/invoices); a test clock cascades its own clock-scoped customer/subs/invoices, so don't separately track those. Cleanup helpers live in `tests/helpers/cleanup.py`.
 - A test that needs special teardown ordering may keep its own `try/finally`, but the default is: register with `created` and let the fixture clean up.
 
 ## General Principles
@@ -109,12 +109,12 @@ When a task builds or heavily reshapes a domain (tables + services + routes):
 - Bad: `pool_size=10` buried inside a function or constructor; `LOCK_TTL_SECONDS: Final[int] = 60` at module level in `config.py`
 
 **Enums**
-- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
+- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `StrEnum` classes (`from enum import StrEnum`, Python 3.11+; ruff's `UP042` enforces this over `(str, Enum)` on this codebase's Python 3.13)
 - **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
 - **ALWAYS reuse enums and schemas from the Database package** (`../Database/python_data/schema/`) when they exist — import via `from schema.<module> import <Enum>` (available through `src/shared/db_schema_path.py`). Never redefine enums that already exist in the Database package.
 - Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
 - Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
-- Good: `value: list[MemberStatus]` with `class MemberStatus(str, Enum): active = "active"`
+- Good: `value: list[MemberStatus]` with `class MemberStatus(StrEnum): active = "active"`
 - Bad: `value: list[str]` with hardcoded `"active"`, `"trial"` scattered through the code
 
 **PEP 8 Naming**
@@ -597,9 +597,19 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 
-**DI providers (theme domain):** `theme_showcase_service`.
+**DI providers (theme domain):** `theme_showcase_service`, `theme_showcase_defaults_service`.
 
 There is NO separate `video_config` router or module.
+
+## Image upload domain (`src/uploads/`)
+
+`POST /api/v1/uploads/image` accepts a multipart image plus a `category` **form field** (`reward`, `member`, `class`, or `gym` — not a query parameter), stores it in the `combatden-assets` S3 bucket (under a key prefix matching the `category` value), and returns a CDN URL (`cdn.combatden.net/...?v=<content-hash>`). The bucket and CDN are the same infrastructure ThemeService uses for theme asset uploads; the uploads domain is the backend's own proxy into that same bucket. Used by the CRM's `ImageUploadPickerField` (reward catalog images, member photos, class photos, gym logos) via `ImageUploadRepository.uploadImage`.
+
+Gated by `Auth.verify_staff_principal` — the gym-agnostic staff bar (owner/admin of **at least one** gym; same bar as `verify_gym_employee`, just without a `gym_id` to scope against, since this endpoint takes none). The 5 MB cap is enforced twice: first cheaply on the parsed multipart part's `file.size` **before** the body is read into memory, then again on the actual byte count read as a backstop for a missing `file.size`.
+
+**Dependencies:** `boto3` (PyPI — S3 client) and `python-multipart` (FastAPI multipart form parser).
+
+**Required `Settings` fields** (`src/core/config.py`): `assets_bucket`, `aws_region`, `assets_cdn_base_url`. AWS credentials (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) must be present in the runtime environment — they are read by the standard boto3 credential chain, not via `Settings` fields.
 
 ## Database
 

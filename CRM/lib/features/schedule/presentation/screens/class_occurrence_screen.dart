@@ -11,6 +11,7 @@ import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/class_range_exception.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 import 'package:crm/features/schedule/data/models/gym_class_view_models.dart';
+import 'package:crm/features/schedule/data/occurrence_windows.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/data/range_exception_helpers.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
@@ -28,12 +29,6 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
-
-/// Check-in opens this many hours before a class starts (mirrors the backend
-/// `checkin_opens_hours_before_start`); "Update attendees" is hidden for an
-/// occurrence further out than this — 2h so back-to-back classes can be checked
-/// in together.
-const int _kCheckInOpensHours = 2;
 
 /// Which mutation the screen is running (drives the success copy).
 enum _Action { override, cancelInstance, editRange, removeRangeCancellation }
@@ -136,13 +131,11 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   }
 
   /// Whether check-in is open for this occurrence: its start is within the
-  /// early window (or already started / passed). The backend enforces the
-  /// same rule against the same [ScheduleClassEntry.occurredAt] instant.
-  bool get _checkInOpen {
-    return !widget.entry.occurredAt.isAfter(
-      DateTime.now().add(const Duration(hours: _kCheckInOpensHours)),
-    );
-  }
+  /// shared [kCheckInOpensHours] early window (or already started / passed);
+  /// "Update attendees" is hidden further out. The backend enforces the same
+  /// rule against the same [ScheduleClassEntry.occurredAt] instant.
+  bool get _checkInOpen =>
+      occurrenceCheckInOpen(widget.entry.occurredAt, DateTime.now());
 
   Widget? _rosterFor() {
     final gymId = selectedGym.gymId;

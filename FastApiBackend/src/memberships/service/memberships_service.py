@@ -85,7 +85,7 @@ if TYPE_CHECKING:
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
-    from src.waivers.service.waivers.waivers_service import (
+    from src.waivers.service.waivers_service import (
         WaiversService,
     )
 
@@ -523,19 +523,23 @@ class MemberMembershipsService:
         member_id: UUID,
         payer_member_id: UUID,
         *,
+        waiver_version_id: UUID,
         signer_name: str,
         consent_acknowledged: bool,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
+        ip_address: str,
+        user_agent: str,
+        operator_employee_id: UUID,
     ) -> None:
-        """Authorize a payer for a member (gated by signing the gym waiver)."""
+        """Authorize a payer for a member (signs the gym waiver, then records)."""
         await self._linked.link_account(
             member_id,
             payer_member_id,
+            waiver_version_id=waiver_version_id,
             signer_name=signer_name,
             consent_acknowledged=consent_acknowledged,
             ip_address=ip_address,
             user_agent=user_agent,
+            operator_employee_id=operator_employee_id,
         )
 
     async def check_link_account(

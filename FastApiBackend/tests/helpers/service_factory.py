@@ -7,6 +7,7 @@ to pass ``db_pool`` and/or ``stripe_client``.
 
 Standalone module — no pytest imports, no fixture dependencies.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
@@ -85,7 +86,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 # ── Payment services namespace ──────────────────────────────────
 

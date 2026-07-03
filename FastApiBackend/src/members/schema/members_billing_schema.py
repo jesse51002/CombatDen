@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schema.member_charge import ChargeKind, ChargeStatus
 from schema.member_invoice_line_item import LineItemType
 from schema.membership_plan import PlanType
@@ -187,13 +187,60 @@ class BillingRank(BaseModel):
 
 
 class BillingRewardCard(BaseModel):
-    """A recently redeemed reward."""
+    """A recently redeemed reward.
+
+    ``price_label`` / ``image_url`` are never None — both ``gym_rewards``
+    columns are NOT NULL and this card is always joined off that row (see
+    ``member_details_rewards.sql`` / ``member_details_reward_redemptions.sql``)
+    — mirrors ``RewardResponse``.
+    """
 
     reward_id: UUID
     title: str
-    amount_off: str | None = None
-    image_url: str | None = None
+    price_label: str
+    image_url: str
     point_cost: int
+
+
+class PendingRedemptionCard(BaseModel):
+    """A reward redemption awaiting staff approval.
+
+    Sourced from ``member_reward_redemptions`` with ``status = 'pending'``.
+    Distinct from BillingRewardCard: carries the redemption's own
+    ``redemption_id`` and ``requested_at`` timestamp so staff can identify
+    and act on specific pending requests. ``price_label`` / ``image_url``
+    are never None, same reasoning as ``BillingRewardCard``.
+    """
+
+    redemption_id: UUID
+    reward_id: UUID
+    title: str
+    price_label: str
+    image_url: str
+    point_cost: int
+    requested_at: datetime
+
+
+# ── Points adjustment request / response ─────────────────────────
+
+
+class PointsAdjustRequest(BaseModel):
+    """Signed points adjustment for POST /{member_id}/points.
+
+    Positive ``amount`` awards points; negative ``amount`` corrects
+    (deducts) points. The service rejects an adjustment that would
+    take the balance below zero. Bounded so an absurd value 422s here
+    instead of overflowing int4 in ``points_balance + :amount`` (a
+    DataError the service would otherwise surface as a 500).
+    """
+
+    amount: int = Field(ge=-1_000_000, le=1_000_000)
+
+
+class PointsAdjustResponse(BaseModel):
+    """Points balance after a manual adjustment."""
+
+    points_balance: int
 
 
 class BillingLineItemRecord(BaseModel):
@@ -303,4 +350,7 @@ class MemberBillingDetailResponse(BaseModel):
     retention: BillingRetention
     rank: BillingRank | None = None
     recently_redeemed_rewards: list[BillingRewardCard] = []
+    # Redemptions the member has submitted but staff have not yet
+    # approved or rejected — shown prominently so staff act on them.
+    pending_redemptions: list[PendingRedemptionCard] = []
     card_on_file: BillingCardOnFile | None = None

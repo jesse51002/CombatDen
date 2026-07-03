@@ -168,7 +168,11 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.theme.service.theme_showcase_defaults_service import (
+    ThemeShowcaseDefaultsService,
+)
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
+from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
@@ -177,7 +181,7 @@ from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 class DependencyInjector(containers.DeclarativeContainer):
@@ -207,6 +211,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.videos.videos_router",
             "src.presets.presets_router",
             "src.theme.theme_router",
+            "src.uploads.uploads_router",
         ],
     )
 
@@ -225,6 +230,17 @@ class DependencyInjector(containers.DeclarativeContainer):
     classes_version_expander = providers.Singleton(
         ClassesVersionExpander,
         expander=classes_expander,
+    )
+
+    # ── Uploads (image proxy → S3 + CloudFront CDN) ──────────────
+    # Singleton, not Factory: the service holds a reusable boto3 S3 client
+    # (built once in __init__ — construction loads botocore's service model
+    # and signer stack, too costly to repeat per request).
+    uploads_s3_service = providers.Singleton(
+        UploadsS3Service,
+        assets_bucket=settings.assets_bucket,
+        aws_region=settings.aws_region,
+        assets_cdn_base_url=settings.assets_cdn_base_url,
     )
 
     # ── Checkin domain (the class consumer side) ─────────────────
@@ -351,7 +367,11 @@ class DependencyInjector(containers.DeclarativeContainer):
         version_expander=classes_version_expander,
     )
 
-    rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
+    rewards_service = providers.Factory(
+        RewardsService,
+        db_pool=db_pool,
+        default_image_url=settings.default_reward_image_url,
+    )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
     ranks_service = providers.Factory(RanksService, db_pool=db_pool)
@@ -423,6 +443,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         ThemeShowcaseService,
         db_pool=db_pool,
     )
+    # Theme: static, category-keyed demo showcase cards from a bundled YAML
+    # file (no DB) for the public standalone theme browser.
+    # Singleton, not Factory: the service caches the parsed + validated YAML
+    # on the instance for the process lifetime — a Factory would rebuild a
+    # fresh instance (and re-read + re-validate the YAML) on every request.
+    theme_showcase_defaults_service = providers.Singleton(
+        ThemeShowcaseDefaultsService,
+    )
     # Presets: template catalog reads (list, detail, feed ids).
     presets_template_service = providers.Factory(
         PresetsTemplateService,
@@ -451,6 +479,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         expander=classes_expander,
         default_class_image_url=settings.default_class_image_url,
+        default_reward_image_url=settings.default_reward_image_url,
     )
 
     # === CRM billing DI providers (restored) ===

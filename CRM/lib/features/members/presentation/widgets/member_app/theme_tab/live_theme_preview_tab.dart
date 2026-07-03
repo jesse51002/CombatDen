@@ -3,21 +3,22 @@ import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
-import 'package:crm/features/members/data/mock_member_app_preview.dart';
-import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/edit_branding_dialog.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
 import 'package:crm/features/members/presentation/widgets/themes_library/library_view.dart';
+import 'package:crm/features/settings/presentation/dialogs/gym_profile_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_screen.dart';
 import 'package:crm/showcase/showcase_slots.dart';
 
-// The tenant + the preset the engine initializes on, only so the customization
-// runtime has something to fetch on first paint (the library/gym-select screen
-// uses AppManagement's own design, not this). NO gym is pre-selected — the
-// member-app surfaces stay empty until the admin picks one.
+// The tenant the engine initializes on. NO gym is pre-selected — the member-app
+// content surfaces stay empty until the admin picks one.
 const String _kAppId = 'combatden';
+// Last-resort seed when neither the URL nor the gym's saved theme supplies one
+// (e.g. the public standalone browser, or an admin gym with no theme yet), only
+// so the customization runtime has something to fetch on first paint.
 const String _kSeedDesignId = 'ApexMMA';
 
 // Below this preview width the phone goes full-bleed (mobile): no side-by-side
@@ -68,13 +69,18 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
   // `ThemeRuntime.changes`, which throws until `ThemeService` is registered.
   Listenable? _themeChanges;
 
-  // Seed the engine on the deep-linked theme so it paints right the first
-  // time; `selectDesign` corrects an in-session re-entry where the engine is
-  // already up. Both are no-throw and fall back to bundled defaults.
+  // Seed the engine on the intended theme — the deep-linked one, else the gym's
+  // saved design — so it paints right the first time; `selectDesign` corrects an
+  // in-session re-entry where the engine is already up. Both are no-throw and
+  // fall back to bundled defaults.
   Future<void> _bootstrap() async {
+    // The gym's persisted design (admin) or the deep-linked theme (either
+    // target) is what the engine should boot on; the standalone browser and an
+    // admin gym with no saved theme fall through to the constant seed.
+    final intended = _urlTheme ?? selectedGym.savedThemeDesignId;
     await ThemeRuntime.initialize(
       appId: _kAppId,
-      designId: _urlTheme ?? _kSeedDesignId,
+      designId: intended ?? _kSeedDesignId,
       expectedColors: ShowcaseSlots.expectedColors,
       expectedImages: ShowcaseSlots.expectedImages,
       expectedFonts: ShowcaseSlots.expectedFonts,
@@ -85,13 +91,13 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
       // `?v=` URLs pick up any asset edits.
       livePreview: true,
     );
-    final theme = _urlTheme;
-    if (theme != null && ThemeRuntime.activeDesignId != theme) {
-      await ThemeRuntime.selectDesign(theme);
+    if (intended != null && ThemeRuntime.activeDesignId != intended) {
+      await ThemeRuntime.selectDesign(intended);
     }
-    // No gym is seeded — selection is entirely driven by the admin's pick. A
-    // deep-linked theme (phone view on reload) is resolved to its gym by the
-    // side-pane's `reconcileFromCatalog` once the catalog loads.
+    // No gym is content-seeded here — the theme selection is decoupled from the
+    // content gym. A seeded/deep-linked theme (phone view on reload) is resolved
+    // to its showcase category by the side-pane's `reconcileFromCatalog` once
+    // the catalog loads.
     if (!mounted) return;
     // Engine registered now — safe to listen and to mirror the current state
     // into the URL. The listener keeps the URL in step on every later
@@ -134,13 +140,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     SystemNavigator.routeInformationUpdated(uri: uri, replace: true);
   }
 
-  // Gym identity, owned by the host (seeded from the shared mock). The Edit
-  // button under the phone updates the name; the logo is the in-memory asset.
-  String _gymName = kMockMemberAppPreview.gymName;
-  final ImageProvider _gymLogo = AssetImage(
-    kMockMemberAppPreview.gymLogoAsset,
-  );
-
   int _slide = 0;
   bool _forward = true;
   int get _count => ShowcaseScreen.values.length;
@@ -157,13 +156,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         _forward = i >= _slide;
         _slide = i;
       });
-
-  Future<void> _editBranding() async {
-    final name = await showEditBrandingDialog(context, _gymName);
-    if (name != null && name.trim().isNotEmpty) {
-      setState(() => _gymName = name.trim());
-    }
-  }
 
   void _openLibrary() {
     setState(() => _mode = _Mode.library);
@@ -183,21 +175,55 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _CenteredSpinner();
         }
-        return switch (_mode) {
-          _Mode.library => LibraryView(onPicked: _openPhone),
-          _Mode.phone => _PhonePreview(
-              engineReady: _engineReady,
-              slide: _slide,
-              forward: _forward,
-              gymName: _gymName,
-              gymLogo: _gymLogo,
-              onPrev: _prevSlide,
-              onNext: _nextSlide,
-              onSelectSlide: _selectSlide,
-              onEditBranding: _editBranding,
-              onBackToLibrary: _openLibrary,
-            ),
-        };
+        // Rebuild on gym changes (a just-saved name/logo, the admin gate) AND
+        // on a theme switch (ThemeRuntime.changes) — the public branch's name
+        // tracks the loaded design directly, not just a selectedGym pick.
+        return ListenableBuilder(
+          listenable: Listenable.merge([selectedGym, ThemeRuntime.changes]),
+          builder: (context, _) {
+            final isAdmin = selectedGym.gymId != null;
+            // Admin: ALWAYS the real gym identity. Public (no gym): the
+            // SELECTED THEME's own name — ThemeRuntime.activeDesignName reads
+            // the loaded design's `design_name` off the wire, so it's correct
+            // both on an explicit pick and on a seeded/deep-linked (`?theme=`)
+            // design with no pick yet (the engine is already booted on the
+            // intended design by the time this builds — see `_bootstrap`).
+            // The logo is NEVER a bundled asset here: the gym's uploaded logo
+            // when set, else null — the showcase topbar then falls through to
+            // the ACTIVE THEME's logo (themeTabPreview resolution order in
+            // showcase_topbar.dart), so switching themes re-logos the mock.
+            final gymName = isAdmin
+                ? (selectedGym.gymName ?? '')
+                : (ThemeRuntime.activeDesignName ?? '');
+            final ImageProvider? gymLogo =
+                isAdmin && (selectedGym.logoUrl?.isNotEmpty ?? false)
+                    ? NetworkImage(selectedGym.logoUrl!)
+                    : null;
+
+            // The Gym profile editor is ADMIN-ONLY: the phone preview's
+            // "Edit gym name / logo" button (under the mock) opens
+            // [GymProfileDialog]. The public standalone browser has no gym
+            // (gymId null) and no Supabase, so the button never renders and
+            // the dialog's bloc is never constructed there.
+            return switch (_mode) {
+              _Mode.library => LibraryView(onPicked: _openPhone),
+              _Mode.phone => _PhonePreview(
+                  engineReady: _engineReady,
+                  slide: _slide,
+                  forward: _forward,
+                  gymName: gymName,
+                  gymLogo: gymLogo,
+                  onPrev: _prevSlide,
+                  onNext: _nextSlide,
+                  onSelectSlide: _selectSlide,
+                  onBackToLibrary: _openLibrary,
+                  onEditBranding: isAdmin
+                      ? () => GymProfileDialog.show(context)
+                      : null,
+                ),
+            };
+          },
+        );
       },
     );
   }
@@ -213,20 +239,20 @@ class _PhonePreview extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelectSlide,
-    required this.onEditBranding,
     required this.onBackToLibrary,
+    this.onEditBranding,
   });
 
   final Future<void> engineReady;
   final int slide;
   final bool forward;
   final String gymName;
-  final ImageProvider gymLogo;
+  final ImageProvider? gymLogo;
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelectSlide;
-  final VoidCallback onEditBranding;
   final VoidCallback onBackToLibrary;
+  final VoidCallback? onEditBranding;
 
   @override
   Widget build(BuildContext context) {

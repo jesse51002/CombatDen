@@ -9,7 +9,7 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:theme_flutter/customization_runtime.dart';
-import 'package:crm/features/members/data/gyms_pager.dart';
+import 'package:theme_flutter/data/styles_pager.dart';
 
 // Web admin: bigger viewport than the phone picker, so 50 per page keeps
 // the side scroll snug and eager-loads the whole catalog quickly, so the
@@ -34,7 +34,7 @@ class ThemeGrid extends StatefulWidget {
 }
 
 class _ThemeGridState extends State<ThemeGrid> {
-  final GymsPager _pager = GymsPager(pageSize: _kWebPageSize);
+  final StylesPager _pager = StylesPager(pageSize: _kWebPageSize);
   final ItemScrollController _itemScroll = ItemScrollController();
   bool _didCenter = false;
 
@@ -116,7 +116,7 @@ class _ThemeGridState extends State<ThemeGrid> {
 class _ThemeListView extends StatelessWidget {
   const _ThemeListView({required this.pager, required this.itemScroll});
 
-  final GymsPager pager;
+  final StylesPager pager;
   final ItemScrollController itemScroll;
 
   @override
@@ -127,7 +127,7 @@ class _ThemeListView extends StatelessWidget {
     if (pager.items.isEmpty) {
       if (pager.errored) {
         return const _CatalogMessage(
-          'Could not reach the video service (the gym browser, port 8002). '
+          'Could not reach the theme service. '
           'Start it and reopen this tab to load the themes.',
         );
       }

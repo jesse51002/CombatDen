@@ -16,10 +16,20 @@ class ScheduleInitRequested extends ScheduleEvent {
   final String gymId;
   final DateTime weekStart;
 
-  const ScheduleInitRequested({required this.gymId, required this.weekStart});
+  /// False when the host never renders the week board — the dashboard's
+  /// Live Attendance card hosts this bloc only for its mutation/check-in
+  /// channels and the class catalog, so it skips the instances fetch on the
+  /// dashboard hot path (mutation reloads still refetch the week).
+  final bool loadBoard;
+
+  const ScheduleInitRequested({
+    required this.gymId,
+    required this.weekStart,
+    this.loadBoard = true,
+  });
 
   @override
-  List<Object?> get props => [gymId, weekStart];
+  List<Object?> get props => [gymId, weekStart, loadBoard];
 }
 
 /// Move the board to the week starting [weekStart] (prev/next navigation).

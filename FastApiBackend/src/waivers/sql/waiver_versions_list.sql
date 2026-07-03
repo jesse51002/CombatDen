@@ -5,6 +5,7 @@ SELECT
     v.version_number,
     v.body,
     v.content_hash,
+    v.requires_resign,
     v.created_at,
     (
         SELECT COUNT(*)

@@ -3,9 +3,12 @@
 /// The board renders the week as a row of day columns; each column holds that
 /// day's classes stacked vertically. These types are the rendered shape — a
 /// [ScheduleDayGroup] per visible day, each holding [ScheduleClassEntry] cards.
-/// They are derived from the backend `EffectiveClassInstance` feed by the board
-/// mapper (`schedule_screen.dart`); nothing here talks to the network.
+/// They are derived from the backend `EffectiveClassInstance` feed via
+/// [ScheduleClassEntry.fromInstance]; nothing here talks to the network.
 library;
+
+import 'package:crm/features/schedule/data/class_time_format.dart';
+import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
 /// One rendered class card in a day column. Built from one effective backend
 /// occurrence: [classId] + [originalDate] identify this occurrence — every
@@ -111,6 +114,36 @@ class ScheduleClassEntry {
     this.cancellingRangeId,
     this.maxCapacity,
   });
+
+  /// The ONE mapping from a backend occurrence to its rendered entry —
+  /// shared by the schedule board and the dashboard's Live Attendance card
+  /// so a pushed occurrence screen receives identical data from either
+  /// surface.
+  factory ScheduleClassEntry.fromInstance(EffectiveClassInstance i) =>
+      ScheduleClassEntry(
+        classId: i.classId,
+        classDate: i.classDate,
+        originalDate: i.originalDate,
+        originalTime: i.originalTime,
+        name: i.className,
+        timeLabel: classTimeRangeLabel(
+          i.resolvedClassTime,
+          i.resolvedDurationMinutes,
+        ),
+        instructorName: i.resolvedInstructorName,
+        imageUrl: i.imageUrl,
+        pointsWorth: i.pointsWorth,
+        attendeeCount: i.attendanceCount,
+        signupCount: i.signupCount,
+        occurredAt: i.occurredAt,
+        occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
+        isCancelled: i.isCancelled,
+        cancellingRangeId: i.cancellingRangeId,
+        resolvedClassTime: i.resolvedClassTime,
+        resolvedInstructorId: i.resolvedInstructorId,
+        resolvedDurationMinutes: i.resolvedDurationMinutes,
+        maxCapacity: i.maxCapacity,
+      );
 }
 
 /// One day column on the board: a labelled header above that day's cards.

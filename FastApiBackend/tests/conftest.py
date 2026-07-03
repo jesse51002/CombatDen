@@ -27,10 +27,12 @@ from tests.helpers.data_factory import (
     TestDiscount,
     TestMember,
     TestPlan,
+    TestReward,
     create_discount,
     create_member,
     create_payment_method,
     create_plan,
+    create_reward,
 )
 from tests.helpers.stripe_clock import create_test_clock, delete_test_clock
 from tests.seed_constants import SEEDED_GYM_ID
@@ -212,8 +214,11 @@ def make_reward_row(
     gym_id: str,
     title: str = "Free smoothie",
     point_cost: int = 50,
-    amount_off: str | None = None,
-    image_url: str | None = None,
+    # gym_rewards.price_label / image_url are NOT NULL — default to
+    # realistic non-null values so callers that don't care about these
+    # fields don't have to pass them.
+    price_label: str = "Free",
+    image_url: str = "https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg?auto=compress&cs=tinysrgb&w=1200",
     is_active: bool = True,
     created_at: datetime | None = None,
 ) -> dict:
@@ -222,7 +227,7 @@ def make_reward_row(
         "gym_id": gym_id,
         "title": title,
         "point_cost": point_cost,
-        "amount_off": amount_off,
+        "price_label": price_label,
         "image_url": image_url,
         "is_active": is_active,
         "created_at": created_at or datetime.now(UTC),
@@ -300,11 +305,13 @@ class CreatedResources:
 
     Two ways to register:
       * ``await created.member(...)`` / ``.plan(...)`` / ``.discount(...)``
-        / ``.test_clock(...)`` — thin wrappers over the data_factory /
-        stripe_clock helpers that create AND track in one call.
+        / ``.reward(...)`` / ``.test_clock(...)`` — thin wrappers over the
+        data_factory / stripe_clock helpers that create AND track in one
+        call.
       * ``created.track_customer(id)`` / ``track_product`` / ``track_price``
-        / ``track_coupon`` — for tests that drive services directly and
-        get Stripe ids back on the response.
+        / ``track_coupon`` / ``track_reward`` / ``track_redemption`` — for
+        tests that drive services directly (or call the live API) and get
+        ids back on the response.
     """
 
     db_pool: DirectDatabasePool
@@ -321,6 +328,10 @@ class CreatedResources:
     stripe_products: list[str] = field(default_factory=list)
     stripe_prices: list[str] = field(default_factory=list)
     stripe_coupons: list[str] = field(default_factory=list)
+    rewards: list[UUID] = field(default_factory=list)
+    # A redemption row FKs both a member and a reward — always deleted
+    # first in cleanup(), before either.
+    reward_redemptions: list[UUID] = field(default_factory=list)
 
     # ── create-and-track wrappers ──────────────────────────────
 
@@ -352,6 +363,11 @@ class CreatedResources:
         discount = await create_discount(self.db_pool, gym_id, **kwargs)
         self.discounts.append(discount.discount_id)
         return discount
+
+    async def reward(self, gym_id: UUID, **kwargs) -> TestReward:
+        reward = await create_reward(self.db_pool, gym_id, **kwargs)
+        self.rewards.append(reward.reward_id)
+        return reward
 
     async def payment_method(self) -> str:
         # Payment methods are intentionally not cleaned up (Stripe allows
@@ -396,18 +412,31 @@ class CreatedResources:
     def track_coupon(self, coupon_id: str) -> None:
         self.stripe_coupons.append(coupon_id)
 
+    def track_reward(self, reward_id: UUID) -> None:
+        self.rewards.append(reward_id)
+
+    def track_redemption(self, redemption_id: UUID) -> None:
+        self.reward_redemptions.append(redemption_id)
+
     # ── teardown ───────────────────────────────────────────────
 
     async def cleanup(self) -> None:
         """Delete everything tracked, FK-safe, best-effort.
 
         Order: Stripe clocks first (cascade their customers/subs/invoices)
-        → DB members → plans → discounts → remaining Stripe customers →
-        coupons → archive prices/products. Each step is isolated so one
-        failure never blocks the rest or masks the test result.
+        → redemption rows (FK both a member and a reward — must go before
+        either) → DB members → plans → discounts → rewards → remaining
+        Stripe customers → coupons → archive prices/products. Each step is
+        isolated so one failure never blocks the rest or masks the test
+        result.
         """
         for clock_id in self.clocks:
             await _safe(delete_test_clock(self.stripe_client, clock_id, self.connect_opts))
+
+        for redemption_id in self.reward_redemptions:
+            await _safe(
+                cleanup.delete_reward_redemption(self.db_pool, redemption_id)
+            )
 
         for member_id in self.members:
             await _safe(cleanup.delete_member_data(self.db_pool, member_id))
@@ -437,6 +466,9 @@ class CreatedResources:
                 )
         for discount_id in self.discounts:
             await _safe(cleanup.delete_discount_preset(self.db_pool, discount_id))
+
+        for reward_id in self.rewards:
+            await _safe(cleanup.delete_reward(self.db_pool, reward_id))
 
         for customer_id in self.stripe_customers:
             await _safe(

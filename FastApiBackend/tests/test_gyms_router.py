@@ -132,6 +132,141 @@ def test_update_gym_400_when_no_fields(client, auth_headers):
     assert response.status_code == 400
 
 
+def test_update_gym_theme_saves_and_echoes(client, db_pool_mock, auth_headers):
+    """PUT /{gym_id}/theme persists and echoes the saved design id."""
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={"gym_id": str(gym_id), "theme_design_id": "warm-stone"},
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}/theme",
+        json={"data": {"theme_design_id": "warm-stone"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gym_id"] == str(gym_id)
+    assert body["theme_design_id"] == "warm-stone"
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["theme_design_id"] == "warm-stone"
+    assert bound_params["gym_id"] == str(gym_id)
+
+
+def test_update_gym_theme_404_when_gym_not_found(
+    client, db_pool_mock, auth_headers
+):
+    """PUT /{gym_id}/theme 404s when the update matches no row."""
+    db_pool_mock.execute_with_retry = AsyncMock(return_value=None)
+
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}/theme",
+        json={"data": {"theme_design_id": "warm-stone"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_update_gym_theme_422_on_empty_value(client, auth_headers):
+    """An empty theme_design_id is rejected by validation (422)."""
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}/theme",
+        json={"data": {"theme_design_id": ""}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
+    """PUT /api/v1/gyms/{gym_id} with logo_url persists and echoes it back."""
+    gym_id = uuid4()
+    logo_url = "https://cdn.combatden.net/gym/abc123.png?v=deadbeef"
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "timezone": "America/Chicago",
+            "logo_url": logo_url,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"logo_url": logo_url}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["logo_url"] == logo_url
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["logo_url"] == logo_url
+
+
+def test_update_gym_clears_logo_url_with_explicit_null(
+    client, db_pool_mock, auth_headers
+):
+    """An explicit null for logo_url clears it back to NULL — unlike a
+    reward's image, a gym logo is optional and clearable."""
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "timezone": "America/Chicago",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"logo_url": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["logo_url"] is None
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert "logo_url" in bound_params
+    assert bound_params["logo_url"] is None
+
+
+def test_update_gym_explicit_null_gym_name_422(
+    client, db_pool_mock, auth_headers
+):
+    """gym_name is NOT NULL: explicit null must 422 at the schema (it
+    would otherwise reach the dynamic SET clause as a DB error / 500).
+    Omit the field to leave it unchanged."""
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}",
+        json={"data": {"gym_name": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    db_pool_mock.execute_with_retry.assert_not_called()
+
+
+def test_update_gym_explicit_null_timezone_422(
+    client, db_pool_mock, auth_headers
+):
+    """timezone is NOT NULL: explicit null must 422 at the schema, same
+    guard as gym_name (and it must never reach the tz remint hook)."""
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}",
+        json={"data": {"timezone": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    db_pool_mock.execute_with_retry.assert_not_called()
+
+
 def test_update_my_theme_saves_and_echoes(
     client, db_pool_mock, auth_headers
 ):

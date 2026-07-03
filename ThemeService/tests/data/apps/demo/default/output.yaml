@@ -1,6 +1,7 @@
 app: demo
 display_name: Demo App
 design_name: Demo App
+category: Modern
 image_set:
   images:
     hero:

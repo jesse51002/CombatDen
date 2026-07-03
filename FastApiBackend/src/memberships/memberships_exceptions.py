@@ -33,6 +33,28 @@ class MembershipStartReplayError(Exception):
         )
 
 
+class WaiverGateError(Exception):
+    """A start was attempted before every required waiver was signed.
+
+    Phase-A start validation requires, for each ``(member, plan)`` in the request,
+    that the member has signed a current-enough version of every waiver in the
+    plan's ``waiver_ids`` — a version at or above the waiver's re-sign floor (the
+    highest version whose ``requires_resign`` is true, so a minor edit does not
+    re-block prior signers). ``unsigned`` lists each offending
+    ``{member_id, waiver_id, name}`` so the router returns a structured 422 the
+    CRM can route straight to signing. This runs BEFORE any Stripe call, so a
+    rejected start writes nothing and charges nothing.
+    """
+
+    def __init__(self, unsigned: list[dict[str, str]]) -> None:
+        self.unsigned = unsigned
+        names = ", ".join(sorted({u["name"] for u in unsigned}))
+        super().__init__(
+            f"Cannot start: {len(unsigned)} required waiver signature(s) "
+            f"missing ({names}). Sign the waiver(s) before purchase.",
+        )
+
+
 class PartialCancelError(Exception):
     """A multi-payer cancel failed mid-batch — some payers were cancelled, one
     was not.

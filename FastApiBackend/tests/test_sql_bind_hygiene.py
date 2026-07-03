@@ -24,9 +24,7 @@ integration tests are not run.
 """
 
 import ast
-import io
 import re
-import tokenize
 from pathlib import Path
 
 # A bind param (``:name``) immediately followed by a Postgres cast (``::type``).
@@ -68,10 +66,10 @@ def test_no_bind_param_immediately_followed_by_cast() -> None:
     )
 
 
-def _docstring_lines(source: str) -> set[int]:
-    """Line numbers occupied by module/class/function docstrings."""
-    lines: set[int] = set()
-    tree = ast.parse(source)
+def _docstring_constant_ids(tree: ast.Module) -> set[int]:
+    """ids of the ``ast.Constant`` nodes that are docstrings (module /
+    class / function first-statement strings) — prose, never SQL."""
+    ids: set[int] = set()
     for node in ast.walk(tree):
         if not isinstance(
             node,
@@ -85,18 +83,43 @@ def _docstring_lines(source: str) -> set[int]:
             and isinstance(body[0].value, ast.Constant)
             and isinstance(body[0].value.value, str)
         ):
-            doc = body[0].value
-            lines.update(range(doc.lineno, (doc.end_lineno or doc.lineno) + 1))
-    return lines
+            ids.add(id(body[0].value))
+    return ids
 
 
-def _comment_starts(source: str) -> dict[int, int]:
-    """``{line_number: column}`` where a ``#`` comment begins."""
-    starts: dict[int, int] = {}
-    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
-        if tok.type == tokenize.COMMENT:
-            starts[tok.start[0]] = tok.start[1]
-    return starts
+def _stringish_segments(tree: ast.Module) -> list[tuple[int, str]]:
+    """Every runtime string in the file as ``(lineno, text)`` — plain
+    string constants plus f-strings rendered with each interpolation as a
+    ``{x}`` placeholder (so ``f":{col}::jsonb"`` scans as ``:{x}::jsonb``).
+    Docstrings and ``#`` comments never appear (comments aren't in the
+    AST; docstrings are excluded) — they may legitimately quote the
+    forbidden pattern in prose, exactly like ``--`` comments in ``.sql``.
+    """
+    docstrings = _docstring_constant_ids(tree)
+    joined_part_ids: set[int] = set()
+    segments: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.JoinedStr):
+            continue
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(
+                value.value, str
+            ):
+                parts.append(value.value)
+                joined_part_ids.add(id(value))
+            else:
+                parts.append("{x}")
+        segments.append((node.lineno, "".join(parts)))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstrings
+            and id(node) not in joined_part_ids
+        ):
+            segments.append((node.lineno, node.value))
+    return segments
 
 
 def test_no_python_string_builds_bind_then_cast() -> None:
@@ -105,23 +128,16 @@ def test_no_python_string_builds_bind_then_cast() -> None:
     Catches the dynamic recurrence the .sql scan can't see, such as
     ``f"{col} = :{col}::jsonb"``. Use ``CAST(:{col} AS JSONB)`` instead.
 
-    Docstrings and ``#`` comments are excluded before matching — like the
-    ``--`` stripping in the .sql scan, prose that legitimately spells out
-    the forbidden pattern ("never ``:param::jsonb``") can't reach the
-    SQLAlchemy parser. The scan stays over raw source text (not AST string
-    constants) so an f-string's ``:{col}::jsonb`` — split across fragments
-    in the AST — is still caught.
+    Scans actual runtime string constants (via ``ast``), so docstrings and
+    ``#`` comments that spell out the forbidden pattern in prose don't
+    false-positive — mirroring the ``--``-stripping in the .sql scan.
     """
     offenders: list[str] = []
     for py_file in _SRC_DIR.rglob("*.py"):
         text = py_file.read_text(encoding="utf-8")
-        skip_lines = _docstring_lines(text)
-        comment_starts = _comment_starts(text)
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if lineno in skip_lines:
-                continue
-            code = line[: comment_starts[lineno]] if lineno in comment_starts else line
-            for match in _PY_BIND_THEN_CAST.finditer(code):
+        tree = ast.parse(text, filename=str(py_file))
+        for lineno, segment in _stringish_segments(tree):
+            for match in _PY_BIND_THEN_CAST.finditer(segment):
                 rel = py_file.relative_to(_SRC_DIR.parent)
                 offenders.append(f"{rel}:{lineno}: {match.group(0)}")
 

@@ -8,17 +8,37 @@
 library;
 
 /// A starter the admin can add to their store from the "Add your own"
-/// grid. The subtitle hints at what the admin will configure.
+/// grid. Clicking one opens the reward create form pre-filled with
+/// [title], [suggestedPointCost], and [suggestedPriceLabel] — the reward
+/// image itself is never pre-filled; the form shows the platform default
+/// until the admin uploads their own.
+///
+/// [imageAsset] is the preset's showcase thumbnail in the grid (a photo
+/// matching the landing page). The **Custom** starter carries no
+/// [imageAsset] — [isCustom] is true and the card renders a gift-box icon
+/// treatment instead of a photo, so "make your own" reads distinctly from
+/// the photographic presets.
 class RewardTemplate {
   final String title;
   final String? subtitle;
-  final String imageAsset;
+  final String? imageAsset;
+
+  /// Suggested starting value for the point-cost field.
+  final int? suggestedPointCost;
+
+  /// Suggested badge label (e.g. 'Free', 'Free session').
+  final String? suggestedPriceLabel;
 
   const RewardTemplate({
     required this.title,
     this.subtitle,
-    required this.imageAsset,
+    this.imageAsset,
+    this.suggestedPointCost,
+    this.suggestedPriceLabel,
   });
+
+  /// The "make your own" starter: no photo, rendered as an icon treatment.
+  bool get isCustom => imageAsset == null;
 }
 
 /// A member redemption awaiting the admin's confirmation at the desk.
@@ -60,83 +80,28 @@ class PendingRedemption {
 
 const List<RewardTemplate> kMockRewardTemplates = [
   RewardTemplate(
-    title: 'Membership discount',
-    subtitle: '% off or \$ discount',
-    imageAsset: 'assets/images/reward_membership_discount.png',
-  ),
-  RewardTemplate(
     title: 'Gym branded gear',
     subtitle: 'Apparel or equipment',
-    imageAsset: 'assets/images/reward_gym_tshirt.png',
+    imageAsset: 'assets/images/reward_gear.jpg',
+    suggestedPointCost: 1500,
+    suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
-    title: 'Film and review session',
-    subtitle: 'Recorded rounds + coach notes',
-    imageAsset: 'assets/images/reward_film_review.png',
+    title: 'Personal training',
+    subtitle: 'A 1-on-1 coaching session',
+    imageAsset: 'assets/images/reward_training.jpg',
+    suggestedPointCost: 2500,
+    suggestedPriceLabel: 'Free session',
+  ),
+  RewardTemplate(
+    title: 'Bring a friend',
+    subtitle: 'A guest day pass',
+    imageAsset: 'assets/images/reward_friend.jpg',
+    suggestedPointCost: 1000,
+    suggestedPriceLabel: 'Free',
   ),
   RewardTemplate(
     title: 'Custom',
-    subtitle: 'Anything you want',
-    imageAsset: 'assets/images/reward_custom.png',
-  ),
-];
-
-/// Per-member redemption-history chrome for the member-detail page. The reward
-/// **identity** (art / title / points / price) is now pulled live from the
-/// selected gym's store — see `MemberRedemptionsSection`, which pairs each event
-/// with one of that gym's rewards so the history follows the selected style.
-/// What stays mock is the per-member flow the gym file can't carry: who
-/// redeemed, the desk code, when, and whether the desk has already confirmed it.
-class MemberRedemptionEvent {
-  final String memberName;
-
-  /// The code the member reads off their phone; the admin matches it.
-  final String code;
-
-  /// When the member requested it. Pre-formatted for the prototype.
-  final String requestedAt;
-
-  /// True once the desk has confirmed it — the card shows an "Approved" marker
-  /// instead of the Review & confirm action.
-  final bool approved;
-
-  const MemberRedemptionEvent({
-    required this.memberName,
-    required this.code,
-    required this.requestedAt,
-    this.approved = false,
-  });
-}
-
-/// One member's redemption history — a mix of pending (awaiting desk
-/// confirmation) and already-approved, shown together in a single grid.
-const List<MemberRedemptionEvent> kMemberRedemptionEvents = [
-  MemberRedemptionEvent(
-    memberName: 'Justin Stemmons',
-    code: 'QP7-M2L4',
-    requestedAt: 'Today, 5:48 PM',
-  ),
-  MemberRedemptionEvent(
-    memberName: 'Justin Stemmons',
-    code: 'TXR-3K9P',
-    requestedAt: 'Today, 6:12 PM',
-  ),
-  MemberRedemptionEvent(
-    memberName: 'Justin Stemmons',
-    code: 'BF1-A7K2',
-    requestedAt: 'Mar 2, 7:30 PM',
-    approved: true,
-  ),
-  MemberRedemptionEvent(
-    memberName: 'Justin Stemmons',
-    code: 'TS4-9QW1',
-    requestedAt: 'Feb 24, 6:05 PM',
-    approved: true,
-  ),
-  MemberRedemptionEvent(
-    memberName: 'Justin Stemmons',
-    code: 'GL8-2VK7',
-    requestedAt: 'Feb 18, 8:40 PM',
-    approved: true,
+    subtitle: 'Design your own reward',
   ),
 ];

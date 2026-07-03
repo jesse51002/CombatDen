@@ -106,6 +106,88 @@ class Auth:
                 detail="Not authorized to access this gym",
             ) from None
 
+    async def get_employee_id(
+        self,
+        gym_id: UUID,
+        user_payload: dict,
+    ) -> UUID:
+        """Resolve the authenticated staff principal's ``employee_id`` for a gym.
+
+        Used to stamp the operator/witness on records a staff member captures
+        (e.g. a waiver signature). Same authorization as ``verify_gym_employee``
+        — resolves to an owner/admin (trainers are not principals) — but returns
+        the ``employee_id`` instead of only asserting membership.
+
+        Raises:
+            HTTPException: 403 if the user is not an owner/admin of the gym.
+        """
+        auth_user_id = user_payload["sub"]
+
+        employee = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .eq("gym_id", str(gym_id))
+            .in_(
+                "employee_type",
+                [EmployeeType.owner.value, EmployeeType.admin.value],
+            )
+            .maybe_single()
+            .execute()
+        )
+
+        if not employee or not employee.data:
+            logger.warning(
+                "Unauthorized gym access attempt: user=%s, gym_id=%s",
+                auth_user_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this gym",
+            ) from None
+
+        return UUID(employee.data["employee_id"])
+
+    async def verify_staff_principal(
+        self,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is a STAFF PRINCIPAL (owner or
+        admin) of AT LEAST ONE gym.
+
+        The gym-agnostic staff gate, for endpoints that take no ``gym_id``
+        (e.g. the shared image-upload proxy). Same owner/admin bar as
+        ``verify_gym_employee`` — trainers are not principals — just without
+        the per-gym scope.
+
+        Raises:
+            HTTPException: 403 if the user is not an owner/admin of any gym.
+        """
+        auth_user_id = user_payload["sub"]
+
+        employee = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .in_(
+                "employee_type",
+                [EmployeeType.owner.value, EmployeeType.admin.value],
+            )
+            .limit(1)
+            .execute()
+        )
+
+        if not employee or not employee.data:
+            logger.warning(
+                "Unauthorized staff-only action attempt: user=%s",
+                auth_user_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized: gym staff only",
+            ) from None
+
     async def verify_gym_owner(
         self,
         gym_id: UUID,
@@ -252,22 +334,11 @@ class Auth:
             detail="Not authorized to view this member",
         ) from None
 
-    async def verify_gym_employee_for_member(
-        self,
-        member_id: UUID,
-        user_payload: dict,
-    ) -> None:
-        """Verify the authenticated user is a staff principal of this
-        member's gym.
-
-        Staff-only: unlike ``verify_can_view_member`` this does NOT grant the
-        member themselves access. Like every staff check, this resolves to
-        admin/owner — trainers are not principals (see
-        ``verify_gym_employee``).
+    async def _get_member_gym_id(self, member_id: UUID) -> UUID:
+        """Resolve a member's gym_id.
 
         Raises:
-            HTTPException: 404 if the member is not found, 403 if the user is
-                not a staff principal of the member's gym.
+            HTTPException: 404 if the member is not found.
         """
         member = await (
             self._supabase.client.from_("members")
@@ -287,6 +358,45 @@ class Auth:
                 detail="Member not found",
             ) from None
 
-        await self.verify_gym_employee(
-            UUID(member.data["gym_id"]), user_payload
-        )
+        return UUID(member.data["gym_id"])
+
+    async def verify_gym_employee_for_member(
+        self,
+        member_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is a staff principal (owner/admin) of
+        this member's gym.
+
+        Staff-only: unlike ``verify_can_view_member`` this does NOT grant the
+        member themselves access. Like every staff check it resolves to
+        admin/owner — trainers are not principals (see ``verify_gym_employee``).
+        Gates staff-managed billing writes — e.g. authorizing / de-authorizing a
+        payer — that a member must not self-serve.
+
+        Raises:
+            HTTPException: 404 if the member is not found, 403 if the user is
+                not a staff principal of the member's gym.
+        """
+        gym_id = await self._get_member_gym_id(member_id)
+        await self.verify_gym_employee(gym_id, user_payload)
+
+    async def get_employee_id_for_member(
+        self,
+        member_id: UUID,
+        user_payload: dict,
+    ) -> UUID:
+        """Resolve the authenticated staff member's ``employee_id`` for a
+        member's gym (the member-scoped variant of ``get_employee_id``).
+
+        Both authorizes (403 if the user is not an owner/admin of the member's
+        gym) and returns the ``employee_id`` — used to stamp the operator/witness
+        when staff capture a signature in a member-scoped flow (the
+        authorize-payer link flow).
+
+        Raises:
+            HTTPException: 404 if the member is not found, 403 if the user is
+                not a staff principal of the member's gym.
+        """
+        gym_id = await self._get_member_gym_id(member_id)
+        return await self.get_employee_id(gym_id, user_payload)

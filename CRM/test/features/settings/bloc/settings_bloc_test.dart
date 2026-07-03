@@ -28,6 +28,7 @@ void main() {
       displayName: 'Test Gym',
       role: EmployeeRole.owner,
       timezone: 'America/Chicago',
+      logoUrl: null,
     );
     themeController.setMode(ThemeMode.system);
   });
@@ -166,6 +167,92 @@ void main() {
           () => repository.updateGymTimezone(
             gymId: any(named: 'gymId'),
             timezone: any(named: 'timezone'),
+          ),
+        );
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'saves the gym profile, then updates selectedGym and bumps the '
+      'saved count (not optimistic)',
+      setUp: () {
+        when(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'New Name',
+            logoUrl: 'https://cdn.combatden.net/logo.png',
+          ),
+        ).thenAnswer((_) async {});
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) => bloc.add(
+        const GymProfileSaveRequested(
+          gymName: 'New Name',
+          logoUrl: 'https://cdn.combatden.net/logo.png',
+        ),
+      ),
+      expect: () => const [
+        SettingsState(savingGymProfile: true),
+        SettingsState(savingGymProfile: false, gymProfileSavedCount: 1),
+      ],
+      verify: (_) {
+        // selectedGym only updates AFTER the backend commit.
+        expect(selectedGym.gymName, 'New Name');
+        expect(selectedGym.logoUrl, 'https://cdn.combatden.net/logo.png');
+        verify(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'New Name',
+            logoUrl: 'https://cdn.combatden.net/logo.png',
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'surfaces an error and leaves selectedGym untouched when the '
+      'gym profile save fails',
+      setUp: () {
+        when(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'New Name',
+            logoUrl: null,
+          ),
+        ).thenThrow(Exception('save failed'));
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) => bloc.add(
+        const GymProfileSaveRequested(gymName: 'New Name', logoUrl: null),
+      ),
+      expect: () => [
+        const SettingsState(savingGymProfile: true),
+        isA<SettingsState>()
+            .having((s) => s.savingGymProfile, 'savingGymProfile', false)
+            .having((s) => s.gymProfileSavedCount, 'gymProfileSavedCount', 0)
+            .having((s) => s.error, 'error', isNotNull),
+      ],
+      verify: (_) {
+        // NOT optimistic: the failed save never touches selectedGym.
+        expect(selectedGym.gymName, 'Test Gym');
+        expect(selectedGym.logoUrl, isNull);
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'ignores a no-op gym profile save (unchanged name + logo) without '
+      'calling the backend',
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) => bloc.add(
+        const GymProfileSaveRequested(gymName: 'Test Gym', logoUrl: null),
+      ),
+      expect: () => const <SettingsState>[],
+      verify: (_) {
+        verifyNever(
+          () => repository.updateGymProfile(
+            gymId: any(named: 'gymId'),
+            gymName: any(named: 'gymName'),
+            logoUrl: any(named: 'logoUrl'),
           ),
         );
       },

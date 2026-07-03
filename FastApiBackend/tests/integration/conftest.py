@@ -30,8 +30,9 @@ _OWNER_PASSWORD = SEEDED_OWNER_PASSWORD
 # Fallback key used by the CRM flutter project (new-format publishable key).
 _FALLBACK_ANON_KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"
 
-# Overridable so a worktree can run the suite against its own backend
-# instance (e.g. :8002) while the main checkout's server keeps :8000.
+# Env-overridable so a worktree/branch can run the suite against its OWN
+# backend instance on a free port (:8000 usually serves another checkout's
+# backend / main's server).
 BACKEND_BASE_URL = os.environ.get("BACKEND_BASE_URL", "http://localhost:8000")
 
 

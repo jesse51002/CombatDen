@@ -25,6 +25,10 @@ enum StartMembershipsStep {
   /// memberships → discounts, names only, no prices).
   review,
 
+  /// Required-but-unsigned waivers for the selected members.
+  /// Reached when the start POST returns a 422 waiver gate.
+  signWaivers,
+
   /// The server-side charge preview (one-time / due now /
   /// recurring). Confirm = navigation only.
   preview,
@@ -46,8 +50,8 @@ enum StartMembershipsStepGroup {
   /// Group 1 — substep: payer.
   selectPayer('Select payer', 1),
 
-  /// Group 2 — substeps: who / plans / deals / review.
-  selectMemberships('Select memberships', 4),
+  /// Group 2 — substeps: who / plans / deals / review / sign.
+  selectMemberships('Select memberships', 5),
 
   /// Group 3 — substeps: preview / pay / done.
   confirmation('Confirmation', 3);
@@ -76,6 +80,7 @@ extension StartMembershipsStepGrouping
       case StartMembershipsStep.plans:
       case StartMembershipsStep.discounts:
       case StartMembershipsStep.review:
+      case StartMembershipsStep.signWaivers:
         return StartMembershipsStepGroup
             .selectMemberships;
       case StartMembershipsStep.preview:
@@ -100,6 +105,8 @@ extension StartMembershipsStepGrouping
         return 2;
       case StartMembershipsStep.review:
         return 3;
+      case StartMembershipsStep.signWaivers:
+        return 4;
     }
   }
 }

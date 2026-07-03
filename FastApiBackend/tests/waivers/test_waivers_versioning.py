@@ -12,7 +12,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverUpdateData,
     WaiverUpdateRequest,
 )
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 async def _delete_waiver_rows(db_pool, waiver_id) -> None:
@@ -76,8 +76,10 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
                 text(
                     "INSERT INTO member_waiver_signatures "
                     "(gym_id, member_id, waiver_id, waiver_version_id, "
-                    " signer_name, consent_acknowledged, content_hash) "
-                    "VALUES (:g, :m, :w, :v, :n, true, :h)",
+                    " signer_name, consent_acknowledged, rendered_body, "
+                    " content_hash, ip_address, user_agent) "
+                    "VALUES (:g, :m, :w, :v, :n, true, :b, :h, "
+                    " CAST('0.0.0.0' AS INET), 'test')",
                 ),
                 {
                     "g": str(gym_id),
@@ -85,6 +87,7 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
                     "w": str(waiver.waiver_id),
                     "v": str(v1.version_id),
                     "n": "Test Signer",
+                    "b": v1.body,
                     "h": v1.content_hash,
                 },
             )
@@ -106,5 +109,49 @@ async def test_edit_signed_waiver_mints_new_version(db_pool, gym_id, created):
         v1_after = next(v for v in versions if v.version_id == v1.version_id)
         assert v1_after.body == "# original"  # signed version untouched
         assert v1_after.signature_count == 1
+    finally:
+        await _delete_waiver_rows(db_pool, waiver.waiver_id)
+
+
+async def test_requires_resign_flip_and_inplace_apply(db_pool, gym_id):
+    """The save-time re-sign choice always lands: a flag-only update flips
+    the CURRENT version in place, and an in-place body edit applies the
+    provided flag (None keeps it)."""
+    svc = WaiversService(db_pool)
+    waiver = await svc.create_waiver(
+        WaiverCreateRequest(gym_id=gym_id, name="Flip Flag", body="# v1"),
+    )
+    try:
+        def current(versions):
+            return max(versions, key=lambda v: v.version_number)
+
+        # Version 1 defaults to requiring re-sign.
+        versions = await svc.list_versions(waiver.waiver_id, gym_id)
+        assert current(versions).requires_resign is True
+
+        # Flag-only update (no body): flips the current version in place.
+        await svc.update_waiver(
+            WaiverUpdateRequest(
+                waiver_id=waiver.waiver_id,
+                gym_id=gym_id,
+                data=WaiverUpdateData(requires_resign=False),
+            ),
+        )
+        versions = await svc.list_versions(waiver.waiver_id, gym_id)
+        assert len(versions) == 1  # no new version minted
+        assert current(versions).requires_resign is False
+
+        # An in-place body edit (unsigned) applies the provided flag.
+        await svc.update_waiver(
+            WaiverUpdateRequest(
+                waiver_id=waiver.waiver_id,
+                gym_id=gym_id,
+                data=WaiverUpdateData(body="# v1 edited", requires_resign=True),
+            ),
+        )
+        versions = await svc.list_versions(waiver.waiver_id, gym_id)
+        assert len(versions) == 1
+        assert current(versions).requires_resign is True
+        assert current(versions).body == "# v1 edited"
     finally:
         await _delete_waiver_rows(db_pool, waiver.waiver_id)
