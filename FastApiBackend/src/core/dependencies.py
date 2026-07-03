@@ -445,7 +445,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     # Theme: static, category-keyed demo showcase cards from a bundled YAML
     # file (no DB) for the public standalone theme browser.
-    theme_showcase_defaults_service = providers.Factory(
+    # Singleton, not Factory: the service caches the parsed + validated YAML
+    # on the instance for the process lifetime — a Factory would rebuild a
+    # fresh instance (and re-read + re-validate the YAML) on every request.
+    theme_showcase_defaults_service = providers.Singleton(
         ThemeShowcaseDefaultsService,
     )
     # Presets: template catalog reads (list, detail, feed ids).

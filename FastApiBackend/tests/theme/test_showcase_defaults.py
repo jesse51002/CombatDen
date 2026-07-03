@@ -19,6 +19,24 @@ from src.theme.schema.theme_schema import ShowcaseCategory
 from src.theme.service.theme_showcase_defaults_service import (
     ThemeShowcaseDefaultsService,
 )
+from src.videos.schema.videos_parent_gym_type import ParentGymType
+
+
+def test_showcase_category_mirrors_parent_gym_type() -> None:
+    """``ShowcaseCategory`` is documented (see its docstring in
+    ``src/theme/schema/theme_schema.py``) as a hand-synced mirror of
+    ``ParentGymType`` — the two value sets must never drift apart, or the
+    theme domain's demo vocabulary silently diverges from the videos
+    domain's real gym-type roll-up."""
+    showcase_values = {c.value for c in ShowcaseCategory}
+    parent_gym_type_values = {p.value for p in ParentGymType}
+
+    assert showcase_values == parent_gym_type_values, (
+        "ShowcaseCategory (src/theme/schema/theme_schema.py) has drifted "
+        "from ParentGymType (src/videos/schema/videos_parent_gym_type.py) "
+        "— these are hand-synced by the docstring on ShowcaseCategory; "
+        "update ShowcaseCategory to match."
+    )
 
 
 async def test_service_loads_every_category_non_empty() -> None:

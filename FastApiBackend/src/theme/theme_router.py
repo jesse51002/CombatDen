@@ -6,6 +6,7 @@
       class/reward cards for the standalone theme browser (PUBLIC).
 """
 
+import asyncio
 import logging
 from typing import Annotated
 from uuid import UUID
@@ -56,8 +57,10 @@ async def get_gym_showcase(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        classes = await theme_showcase_service.load_showcase_classes(gym_id)
-        rewards = await theme_showcase_service.load_showcase_rewards(gym_id)
+        classes, rewards = await asyncio.gather(
+            theme_showcase_service.load_showcase_classes(gym_id),
+            theme_showcase_service.load_showcase_rewards(gym_id),
+        )
     except Exception:
         logger.error(
             "Failed to load gym showcase for %s", gym_id, exc_info=True
