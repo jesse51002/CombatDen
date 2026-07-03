@@ -374,34 +374,60 @@ derivation across SQL files.
 `src/ranks/` owns the per-gym rank ladder (`gym_ranks`) and per-member
 rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
 
-- **Two member-rank endpoints, both atomic + audit-logged.**
-  `POST /api/v1/ranks/promote-member` advances a member one rung up the
-  ordered ladder (a rank-less member → the lowest rank; already at the top
-  → **409**). `POST /api/v1/ranks/set-member-rank` sets an explicit rank
-  (correction / demotion / assign), or `null` to unassign. Both run the
-  member UPDATE **and** a `member_activities` `rank_promoted` row in one
-  transaction (`set_member_rank.sql` + `insert_rank_activity.sql`). These
-  are the **canonical** rank-change paths — the CRM uses only these.
+- **Two member-rank endpoints, both atomic + audit-logged — and they are
+  the ONLY rank-change paths.** `POST /api/v1/ranks/promote-member`
+  advances a member one rung up the ordered ladder (a rank-less member →
+  the lowest rank; already at the top → **409**).
+  `POST /api/v1/ranks/set-member-rank` sets an explicit rank (correction /
+  demotion / assign), or `null` to unassign. Both run the member UPDATE
+  **and** a `member_activities` **`rank_changed`** row
+  (`RANK_CHANGED_ACTIVITY_TYPE` in `ranks_schema.py`) in one transaction
+  (`set_member_rank.sql` + `insert_rank_activity.sql`). The generic
+  `PUT /api/v1/members/{id}` deliberately does **not** accept
+  `current_rank_id` (removed from `MemberUpdateData`; also in the
+  `MEMBERS` immutable frozenset) — an unaudited rank write would silently
+  break the progress anchor below. `MemberCreateRequest` still takes an
+  initial rank (at create, anchor = `created_at` is already correct).
 - **The activity is the progress anchor, not just audit.** A member's
-  real progress toward the next rank is attendance since their last
-  promotion: `member_details.sql` counts `member_attendance` JOIN
-  `class_history` where `occurred_at > COALESCE(MAX(rank_promoted
-  activity.time), members.created_at)`, surfaced as
-  `BillingRank.classes_since_rank`. So logging a promotion is load-bearing.
-  `classes_till_rankup` is the gym-set **threshold** (the denominator), a
-  rank-row property — never a per-member counter.
-- **Reorder is two-phase.** `POST /api/v1/ranks/reorder` takes the full new
-  ordering and applies it in one transaction: shift every listed row's main
-  order out of range (`reorder_ranks_shift.sql`, +100000), then set finals
-  (`reorder_ranks_finalize.sql`). This is required because
-  `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
-  non-deferrable (checked per row); no migration needed.
-- **The CRM only ever changes a member's rank through the two endpoints
-  above.** `members.current_rank_id` is still a writable column on
-  `PUT /api/v1/members/{id}` (the composite FK `(current_rank_id, gym_id) →
-  gym_ranks` guards it at the DB), but that generic path is not how the UI
-  changes rank and gets no special-case handling — a wrong-gym id there
-  surfaces like any other constraint violation on that endpoint.
+  real progress toward the next rank is attendance since their last rank
+  change: `member_details.sql` counts `member_attendance` rows on the
+  denormalized `ma.occurred_at` (no join — `class_history` no longer
+  exists) where `occurred_at > COALESCE(MAX(rank_changed activity.time),
+  members.created_at)`, surfaced as `BillingRank.classes_since_rank`.
+  So logging a rank change is load-bearing. `classes_till_rankup` is the
+  gym-set **threshold** (the denominator), a rank-row property — never a
+  per-member counter.
+- **Backfills log; delete-reassign stays silent — both on purpose.** The
+  lowest-rank backfill (enable toggle, create, from-preset — all through
+  `_backfill_lowest_for_gym`) writes one `rank_changed` row per
+  backfilled member in the same statement
+  (`backfill_lowest_rank.sql`'s CTE), so a long-standing member starts at
+  0/N when ranks turn on instead of showing every class since join day.
+  Deleting a rank/group reassigns members **without** an activity — a
+  deletion is not a promotion, so their progress keeps accumulating from
+  the last real change.
+- **Reorder is two-phase, full-ladder, validated.** `POST
+  /api/v1/ranks/reorder` requires the gym's ENTIRE ladder — every rank
+  exactly once, target positions unique — validated up front
+  (`_validate_reorder_payload` → 400) and applied in one transaction:
+  shift every row's main order out of range (`reorder_ranks_shift.sql`,
+  +100000), then set finals (`reorder_ranks_finalize.sql`). Required
+  because `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
+  non-deferrable (checked per row). The order columns are
+  update-immutable (`GYM_RANKS` frozenset) — `/reorder` is the only
+  mover.
+- **Whole-group operations are atomic endpoints, never client fan-out.**
+  `main_name` is denormalized per row, so `PUT /api/v1/ranks/rename-group`
+  renames every row of a `(gym_id, main_rank_num_order)` group in one
+  UPDATE, and `DELETE /api/v1/ranks/group` reassigns members off all the
+  group's sub-ranks (nearest lower group's highest sub-rank, else higher
+  group's lowest, else NULL) then deletes the rows — one transaction.
+- **Rank belt images are generation-owned.** `gym_ranks.image_url` is not
+  accepted by the create/update requests and is update-immutable — belt
+  art is theme-styled generated imagery (spec:
+  `docs/Business/Office_Hours/` rank-belt-image build spec; the writer is
+  the Phase-2 image pipeline, not a user field). Preset art still copies
+  through `insert_ranks_from_preset.sql` directly.
 
 ## Security
 
@@ -463,10 +489,14 @@ rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
 
 ## Linting
 
-**IMPORTANT: Always run `make format` after making code changes**
-- Run `make format` before committing any changes
-- This auto-fixes lint issues and formats code
-- This ensures code quality and consistency across the project
+**`ruff check` is the gate; do NOT run `make format` / `ruff format`.**
+- The repo is not ruff-format-clean: a blanket format churns unrelated
+  pre-existing lines and pollutes diffs.
+- Run `.venv/bin/python -m ruff check src/ tests/` (broken venv shebangs —
+  always invoke via `python -m`) and fix what it reports; hand-format the
+  lines you touch to match the surrounding style.
+- `ruff check --fix` on the files you changed is fine; whole-repo
+  formatting is not.
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
 

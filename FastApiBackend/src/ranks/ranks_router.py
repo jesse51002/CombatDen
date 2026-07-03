@@ -20,6 +20,7 @@ from src.ranks.schema.ranks_schema import (
     RankMemberResponse,
     RankPresetListResponse,
     RankPromoteMemberRequest,
+    RankRenameGroupRequest,
     RankReorderRequest,
     RankResponse,
     RankSetMemberRequest,
@@ -36,8 +37,8 @@ ranks_router = APIRouter(
 )
 
 
-def _member_rank_http_error(exc: ValueError) -> HTTPException:
-    """Map a member-rank ValueError to its HTTP status.
+def _rank_http_error(exc: ValueError) -> HTTPException:
+    """Map a ranks-domain ValueError to its HTTP status.
 
     "highest rank" → 409 (state conflict), "not found" → 404,
     anything else → 400.
@@ -350,7 +351,7 @@ async def set_rank_enabled(
     description=(
         "Advances the member one step up the gym's ordered ladder. "
         "A rank-less member is assigned the lowest rank. Logs a "
-        "``rank_promoted`` activity. Fails with 409 if the member is "
+        "``rank_changed`` activity. Fails with 409 if the member is "
         "already at the highest rank."
     ),
     responses={
@@ -376,7 +377,7 @@ async def promote_member(
     try:
         return await ranks_service.promote_member(request)
     except ValueError as exc:
-        raise _member_rank_http_error(exc) from None
+        raise _rank_http_error(exc) from None
     except Exception:
         logger.error(
             "Failed to promote member: gym_id=%s, member_id=%s",
@@ -398,7 +399,7 @@ async def promote_member(
         "Sets the member to an explicit rank (correction / demotion "
         "/ assignment), or to no rank when ``rank_id`` is null. The "
         "target rank must belong to the member's gym. Logs a "
-        "``rank_promoted`` activity when the rank changes."
+        "``rank_changed`` activity when the rank changes."
     ),
     responses={
         200: {"description": "Member rank set"},
@@ -422,7 +423,7 @@ async def set_member_rank(
     try:
         return await ranks_service.set_member_rank(request)
     except ValueError as exc:
-        raise _member_rank_http_error(exc) from None
+        raise _rank_http_error(exc) from None
     except Exception:
         logger.error(
             "Failed to set member rank: gym_id=%s, member_id=%s",
@@ -441,9 +442,12 @@ async def set_member_rank(
     response_model=RankListResponse,
     summary="Reorder a gym's rank ladder",
     description=(
-        "Applies a full new ordering for the listed ranks in one "
+        "Applies a full new ordering for the gym's ENTIRE ladder — "
+        "every rank exactly once, target positions unique — in one "
         "atomic two-phase update, so the unique-order constraint is "
-        "never transiently violated. Returns the reordered ladder."
+        "never transiently violated. A payload that misses ranks, "
+        "names unknown ranks, or repeats a position is rejected with "
+        "400. Returns the reordered ladder."
     ),
     responses={
         200: {"description": "Ranks reordered; list returned"},
@@ -465,6 +469,8 @@ async def reorder_ranks(
 
     try:
         return await ranks_service.reorder_ranks(request)
+    except ValueError as exc:
+        raise _rank_http_error(exc) from None
     except Exception:
         logger.error(
             "Failed to reorder ranks: gym_id=%s",
@@ -474,6 +480,97 @@ async def reorder_ranks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to reorder ranks",
+        ) from None
+
+
+@ranks_router.put(
+    "/rename-group",
+    response_model=RankListResponse,
+    summary="Rename a whole main-rank group",
+    description=(
+        "Renames every sub-rank row sharing the group's "
+        "``main_rank_num_order`` in one atomic UPDATE "
+        "(``main_name`` is denormalized per row). Returns the "
+        "updated ladder."
+    ),
+    responses={
+        200: {"description": "Group renamed; ladder returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Rank group not found"},
+    },
+)
+@inject
+async def rename_group(
+    request: RankRenameGroupRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> RankListResponse:
+    """Rename a whole main-rank group atomically."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        return await ranks_service.rename_group(request)
+    except ValueError as exc:
+        raise _rank_http_error(exc) from None
+    except Exception:
+        logger.error(
+            "Failed to rename rank group: gym_id=%s, main_order=%s",
+            request.gym_id,
+            request.main_rank_num_order,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to rename rank group",
+        ) from None
+
+
+@ranks_router.delete(
+    "/group",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Hard-delete a whole main-rank group",
+    description=(
+        "Reassigns every member on any of the group's sub-ranks to "
+        "the nearest lower group's highest sub-rank (else the "
+        "nearest higher group's lowest, else NULL), then deletes "
+        "every row of the group — one transaction."
+    ),
+    responses={
+        204: {"description": "Group deleted"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Rank group not found"},
+    },
+)
+@inject
+async def delete_group(
+    gym_id: UUID,
+    main_rank_num_order: int,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> None:
+    """Hard-delete a main-rank group with downgrade-first semantics."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        await ranks_service.delete_group(gym_id, main_rank_num_order)
+    except ValueError as exc:
+        raise _rank_http_error(exc) from None
+    except Exception:
+        logger.error(
+            "Failed to delete rank group: gym_id=%s, main_order=%s",
+            gym_id,
+            main_rank_num_order,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete rank group",
         ) from None
 
 

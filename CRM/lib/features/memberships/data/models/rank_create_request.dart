@@ -3,7 +3,8 @@ import 'package:json_annotation/json_annotation.dart';
 part 'rank_create_request.g.dart';
 
 /// Body for `POST /api/v1/ranks/`. `color` is a `#RRGGBB` hex
-/// string; `imageUrl` is an optional belt-graphic URL.
+/// string. There is no image field — rank belt images are
+/// generation-owned (theme-styled art), never provided at create.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   includeIfNull: false,
@@ -16,7 +17,6 @@ class RankCreateRequest {
   final String mainName;
   final String subName;
   final int classesTillRankup;
-  final String? imageUrl;
   final String? color;
 
   const RankCreateRequest({
@@ -26,7 +26,6 @@ class RankCreateRequest {
     required this.mainName,
     required this.subName,
     required this.classesTillRankup,
-    this.imageUrl,
     this.color,
   });
 

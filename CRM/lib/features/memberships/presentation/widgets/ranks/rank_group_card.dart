@@ -48,11 +48,9 @@ class RankGroupCard extends StatelessWidget {
       confirmColor: DesignConstants.badRed,
     );
     if (!confirmed) return;
-    final highestFirst = [...group.subs]
-      ..sort((a, b) => b.subRankNumOrder.compareTo(a.subRankNumOrder));
     bloc.add(RankGroupDeleted(
       gymId: state.gymId,
-      rankIdsHighestSubFirst: highestFirst.map((s) => s.rankId).toList(),
+      mainRankNumOrder: group.mainOrder,
     ));
   }
 
@@ -137,7 +135,7 @@ class RankGroupCard extends StatelessWidget {
             bloc: context.read<RanksBloc>(),
             gymId: state.gymId,
             currentName: group.mainName,
-            rankIds: group.subs.map((s) => s.rankId).toList(),
+            mainRankNumOrder: group.mainOrder,
           ),
         ),
         IconButton(

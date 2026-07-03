@@ -85,32 +85,34 @@ class RanksReordered extends RanksEvent {
   List<Object?> get props => [gymId, ranks];
 }
 
-/// Rename a whole main-rank group (fan-out over its sub-rank rows).
+/// Rename a whole main-rank group (one atomic backend UPDATE).
 class RankGroupRenamed extends RanksEvent {
   final String gymId;
-  final List<String> rankIds;
+  final int mainRankNumOrder;
   final String newName;
 
   const RankGroupRenamed({
     required this.gymId,
-    required this.rankIds,
+    required this.mainRankNumOrder,
     required this.newName,
   });
 
   @override
-  List<Object?> get props => [gymId, rankIds, newName];
+  List<Object?> get props => [gymId, mainRankNumOrder, newName];
 }
 
-/// Delete a whole main-rank group (its sub-rank rows, highest first).
+/// Delete a whole main-rank group (one atomic backend transaction —
+/// members are reassigned to the neighbour group, then the group's
+/// rows are deleted).
 class RankGroupDeleted extends RanksEvent {
   final String gymId;
-  final List<String> rankIdsHighestSubFirst;
+  final int mainRankNumOrder;
 
   const RankGroupDeleted({
     required this.gymId,
-    required this.rankIdsHighestSubFirst,
+    required this.mainRankNumOrder,
   });
 
   @override
-  List<Object?> get props => [gymId, rankIdsHighestSubFirst];
+  List<Object?> get props => [gymId, mainRankNumOrder];
 }

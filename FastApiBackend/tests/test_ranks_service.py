@@ -22,6 +22,7 @@ from src.ranks.schema.ranks_schema import (
     RankCreateRequest,
     RankEnabledRequest,
     RankPromoteMemberRequest,
+    RankRenameGroupRequest,
     RankReorderItem,
     RankReorderRequest,
     RankSetMemberRequest,
@@ -803,19 +804,34 @@ async def test_set_member_rank_404_when_target_in_other_gym():
 # ---------- reorder_ranks ----------
 
 
+def _ladder_rows(gym_id, *rank_ids) -> list[dict]:
+    """A gym ladder with one main-rank row per given id, in order."""
+    return [
+        make_rank_row(
+            rank_id=str(rid),
+            gym_id=str(gym_id),
+            main_rank_num_order=i,
+            sub_rank_num_order=0,
+        )
+        for i, rid in enumerate(rank_ids)
+    ]
+
+
 @pytest.mark.asyncio
 async def test_reorder_ranks_shifts_before_finalizing():
-    """Reorder shifts every row out of the target space first, then
-    finalizes, then re-lists — all in one committed session."""
+    """Reorder validates against the ladder, shifts every row out of
+    the target space, finalizes, then re-lists — one committed
+    session."""
     gym_id = uuid4()
     rank_a = uuid4()
     rank_b = uuid4()
 
     session = _make_session_mock(
         [
+            _result(_ladder_rows(gym_id, rank_a, rank_b), many=True),
             _result(None),  # shift
             _result(None),  # finalize
-            _result([], many=True),  # list
+            _result([], many=True),  # final list
         ],
     )
     service = RanksService(_make_pool_mock(session))
@@ -839,9 +855,253 @@ async def test_reorder_ranks_shifts_before_finalizing():
     )
 
     sqls = _executed_sql_strings(session)
+    last_list_index = len(sqls) - 1 - sqls[::-1].index(_load("list_ranks.sql"))
     assert (
-        sqls.index(_load("reorder_ranks_shift.sql"))
+        sqls.index(_load("list_ranks.sql"))  # validation pre-read
+        < sqls.index(_load("reorder_ranks_shift.sql"))
         < sqls.index(_load("reorder_ranks_finalize.sql"))
-        < sqls.index(_load("list_ranks.sql"))
+        < last_list_index
     )
     session.commit.assert_awaited_once()
+
+
+def _reorder_request(gym_id, *items) -> RankReorderRequest:
+    return RankReorderRequest(
+        gym_id=gym_id,
+        ranks=[
+            RankReorderItem(
+                rank_id=rid,
+                main_rank_num_order=main,
+                sub_rank_num_order=sub,
+            )
+            for rid, main, sub in items
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_reorder_ranks_rejects_unknown_rank():
+    """A payload rank_id outside the gym's ladder is a ValueError —
+    never a silent no-op."""
+    gym_id = uuid4()
+    known = uuid4()
+
+    session = _make_session_mock(
+        [_result(_ladder_rows(gym_id, known), many=True)],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="not in this gym's ladder"):
+        await service.reorder_ranks(
+            _reorder_request(gym_id, (known, 0, 0), (uuid4(), 1, 0)),
+        )
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reorder_ranks_rejects_partial_payload():
+    """A payload that misses part of the ladder is a ValueError —
+    a partial apply could collide with unlisted rows."""
+    gym_id = uuid4()
+    rank_a = uuid4()
+    rank_b = uuid4()
+
+    session = _make_session_mock(
+        [_result(_ladder_rows(gym_id, rank_a, rank_b), many=True)],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="entire ladder"):
+        await service.reorder_ranks(
+            _reorder_request(gym_id, (rank_a, 0, 0)),
+        )
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reorder_ranks_rejects_duplicate_position():
+    """Two ranks aimed at the same (main, sub) target is a ValueError
+    — the unique-order constraint would 500 at finalize otherwise."""
+    gym_id = uuid4()
+    rank_a = uuid4()
+    rank_b = uuid4()
+
+    session = _make_session_mock(
+        [_result(_ladder_rows(gym_id, rank_a, rank_b), many=True)],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="Duplicate target position"):
+        await service.reorder_ranks(
+            _reorder_request(gym_id, (rank_a, 0, 0), (rank_b, 0, 0)),
+        )
+    session.commit.assert_not_awaited()
+
+
+# ---------- whole-group operations ----------
+
+
+@pytest.mark.asyncio
+async def test_rename_group_updates_rows_and_returns_ladder():
+    """rename_group runs the atomic group UPDATE, then re-lists."""
+    gym_id = uuid4()
+
+    session = _make_session_mock(
+        [
+            _result([{"rank_id": str(uuid4())}], many=True),  # rename
+            _result([], many=True),  # list
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.rename_group(
+        RankRenameGroupRequest(
+            gym_id=gym_id,
+            main_rank_num_order=1,
+            new_main_name="Blue",
+        ),
+    )
+
+    sqls = _executed_sql_strings(session)
+    assert sqls.index(_load("rename_rank_group.sql")) < sqls.index(
+        _load("list_ranks.sql"),
+    )
+    rename_params = session.execute.await_args_list[0].args[1]
+    assert rename_params["new_main_name"] == "Blue"
+    assert rename_params["main_rank_num_order"] == 1
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_rename_group_raises_when_group_missing():
+    """No rows renamed → the group doesn't exist → ValueError."""
+    session = _make_session_mock([_result([], many=True)])
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="not found"):
+        await service.rename_group(
+            RankRenameGroupRequest(
+                gym_id=uuid4(),
+                main_rank_num_order=9,
+                new_main_name="Blue",
+            ),
+        )
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_group_reassigns_members_before_deleting():
+    """delete_group resolves the neighbour, moves members off ALL of
+    the group's sub-ranks, then deletes the rows — one session."""
+    gym_id = uuid4()
+    lower = uuid4()
+
+    session = _make_session_mock(
+        [
+            _result(
+                {
+                    "gym_id": str(gym_id),
+                    "lower_rank_id": str(lower),
+                    "higher_rank_id": None,
+                },
+            ),
+            _result(None),  # reassign
+            _result(None),  # delete
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.delete_group(gym_id, 2)
+
+    sqls = _executed_sql_strings(session)
+    assert (
+        sqls.index(_load("get_group_neighbor_ranks.sql"))
+        < sqls.index(_load("reassign_members_group.sql"))
+        < sqls.index(_load("delete_rank_group.sql"))
+    )
+    reassign_params = session.execute.await_args_list[1].args[1]
+    assert reassign_params["new_rank_id"] == str(lower)
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_group_raises_when_group_missing():
+    """A neighbour read with NULL gym_id means no such group."""
+    session = _make_session_mock(
+        [
+            _result(
+                {"gym_id": None, "lower_rank_id": None, "higher_rank_id": None},
+            ),
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="not found"):
+        await service.delete_group(uuid4(), 3)
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_group_nulls_rank_when_group_is_only_one():
+    """No neighbour at all → members are unassigned (NULL), matching
+    the single-rank delete's semantics."""
+    gym_id = uuid4()
+
+    session = _make_session_mock(
+        [
+            _result(
+                {
+                    "gym_id": str(gym_id),
+                    "lower_rank_id": None,
+                    "higher_rank_id": None,
+                },
+            ),
+            _result(None),  # reassign
+            _result(None),  # delete
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.delete_group(gym_id, 0)
+
+    reassign_params = session.execute.await_args_list[1].args[1]
+    assert reassign_params["new_rank_id"] is None
+    session.commit.assert_awaited_once()
+
+
+# ---------- backfill audit logging ----------
+
+
+@pytest.mark.asyncio
+async def test_backfill_binds_rank_changed_activity_type():
+    """The backfill statement is passed the rank_changed activity
+    type — each backfilled member gets an audit row that anchors
+    their progress at the backfill moment."""
+    gym_id = uuid4()
+
+    session = _make_session_mock(
+        [
+            _result(
+                make_rank_row(rank_id=str(uuid4()), gym_id=str(gym_id)),
+            ),  # insert
+            _result({"is_rank_enabled": True}),  # enabled check
+            _result(None),  # backfill
+        ],
+    )
+    service = RanksService(_make_pool_mock(session))
+
+    await service.create_rank(
+        RankCreateRequest(
+            gym_id=gym_id,
+            main_rank_num_order=0,
+            sub_rank_num_order=0,
+            main_name="White",
+            sub_name="Belt",
+            classes_till_rankup=10,
+        ),
+    )
+
+    sqls = _executed_sql_strings(session)
+    backfill_index = sqls.index(_load("backfill_lowest_rank.sql"))
+    backfill_params = session.execute.await_args_list[backfill_index].args[1]
+    assert backfill_params["activity_type"] == "rank_changed"

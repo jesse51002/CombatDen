@@ -226,6 +226,7 @@ class _Grid extends StatelessWidget {
             rank: member.rank,
             gymId: member.gymId,
             memberId: member.memberId,
+            refreshKey: refreshToken,
           ),
           RetentionSection(
             retention: member.retention,

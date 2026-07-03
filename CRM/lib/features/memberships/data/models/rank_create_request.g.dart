@@ -14,6 +14,5 @@ Map<String, dynamic> _$RankCreateRequestToJson(RankCreateRequest instance) =>
       'main_name': instance.mainName,
       'sub_name': instance.subName,
       'classes_till_rankup': instance.classesTillRankup,
-      'image_url': ?instance.imageUrl,
       'color': ?instance.color,
     };

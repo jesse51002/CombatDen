@@ -1,4 +1,5 @@
--- Append a 'rank_promoted' audit row for a manual rank change.
+-- Append a 'rank_changed' audit row for a manual rank change
+-- (:activity_type is bound to RANK_CHANGED_ACTIVITY_TYPE).
 -- Rank names are resolved by LEFT JOIN so an unassigned (NULL) old or
 -- new rank simply yields a null name. The (SELECT 1) anchor keeps the
 -- single INSERT row even when both joins miss.
@@ -6,7 +7,7 @@ INSERT INTO member_activities (member_id, gym_id, activity_type, activity_info)
 SELECT
     CAST(:member_id AS UUID),
     CAST(:gym_id AS UUID),
-    'rank_promoted',
+    :activity_type,
     jsonb_build_object(
         'old_rank_id', old_r.rank_id,
         'new_rank_id', new_r.rank_id,

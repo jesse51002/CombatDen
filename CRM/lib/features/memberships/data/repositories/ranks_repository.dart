@@ -160,34 +160,39 @@ class RanksRepository {
         : RankFullResponse.fromJson(newRank as Map<String, dynamic>);
   }
 
-  // ----- Group-level helpers (client fan-out) -----
-  //
-  // `gym_ranks.main_name` is denormalised per row, so a main-group
-  // rename/delete spans rows. These fan out over the single-rank
-  // endpoints. (A future atomic bulk-group endpoint could replace
-  // them; see the rank ladder plan.)
+  // ----- Whole-group operations (atomic backend endpoints) -----
 
-  /// Rename every sub-rank in a main group by updating each row's
-  /// `main_name`. Parallel is safe — these are independent field
-  /// edits with no member-reassignment side effect.
-  Future<void> renameMainGroup(
-    List<String> rankIds,
+  /// `PUT /api/v1/ranks/rename-group` — renames every sub-rank row
+  /// sharing the group's `main_rank_num_order` in one atomic UPDATE
+  /// (`main_name` is denormalised per row); returns the updated
+  /// ladder.
+  Future<List<RankFullResponse>> renameMainGroup(
+    String gymId,
+    int mainRankNumOrder,
     String newMainName,
   ) async {
-    await Future.wait(
-      rankIds.map(
-        (id) => updateRank(id, RankUpdateData(mainName: newMainName)),
-      ),
+    final response = await _apiClient.put(
+      '/api/v1/ranks/rename-group',
+      data: {
+        'gym_id': gymId,
+        'main_rank_num_order': mainRankNumOrder,
+        'new_main_name': newMainName,
+      },
     );
+    return _items(response.data);
   }
 
-  /// Delete every sub-rank in a main group. Sequential, highest
-  /// sub-order first, so members cascade down to the group's lower
-  /// neighbour deterministically (each delete reassigns members).
-  Future<void> deleteMainGroup(List<String> rankIdsHighestSubFirst) async {
-    for (final id in rankIdsHighestSubFirst) {
-      await deleteRank(id);
-    }
+  /// `DELETE /api/v1/ranks/group` — the backend reassigns every
+  /// member on the group's sub-ranks to the neighbour group, then
+  /// deletes the whole group, in one transaction.
+  Future<void> deleteMainGroup(String gymId, int mainRankNumOrder) async {
+    await _apiClient.delete(
+      '/api/v1/ranks/group',
+      queryParameters: {
+        'gym_id': gymId,
+        'main_rank_num_order': mainRankNumOrder,
+      },
+    );
   }
 
   List<RankFullResponse> _items(dynamic data) {

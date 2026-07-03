@@ -15,10 +15,12 @@ import 'package:crm/shared/widgets/custom_text_field.dart';
 /// Create or edit a rank. Three entry points:
 /// - [showCreateGroup] — a brand-new main rank (its own group);
 /// - [showAddToGroup] — a sub-rank within an existing main group;
-/// - [showEdit] — edit a sub-rank's fields (name/classes/colour/image).
+/// - [showEdit] — edit a sub-rank's fields (name/classes/colour).
 ///
 /// Position (main/sub order) is derived here, not typed — drag-to-
-/// reorder on the ladder handles ordering after the fact.
+/// reorder on the ladder handles ordering after the fact. There is
+/// no image field: rank belt images are generation-owned
+/// (theme-styled art), never entered by hand.
 class EditRankDialog extends StatefulWidget {
   final RanksBloc bloc;
   final String gymId;
@@ -108,7 +110,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
   final _subNameController = TextEditingController();
   final _classesController = TextEditingController(text: '20');
   final _colorController = TextEditingController();
-  final _imageController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   bool get _isEdit => widget.rank != null;
@@ -122,7 +123,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
       _subNameController.text = r.subName;
       _classesController.text = r.classesTillRankup.toString();
       _colorController.text = r.color ?? '';
-      _imageController.text = r.imageUrl ?? '';
     }
   }
 
@@ -132,7 +132,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
     _subNameController.dispose();
     _classesController.dispose();
     _colorController.dispose();
-    _imageController.dispose();
     super.dispose();
   }
 
@@ -157,11 +156,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
     return text.isEmpty ? null : text;
   }
 
-  String? get _image {
-    final text = _imageController.text.trim();
-    return text.isEmpty ? null : text;
-  }
-
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final classes = int.parse(_classesController.text.trim());
@@ -174,7 +168,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
           subName: _subNameController.text.trim(),
           classesTillRankup: classes,
           color: _color,
-          imageUrl: _image,
         ),
       ));
     } else {
@@ -190,7 +183,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
         subName: _subNameController.text.trim(),
         classesTillRankup: classes,
         color: _color,
-        imageUrl: _image,
       )));
     }
 
@@ -245,12 +237,6 @@ class _EditRankDialogState extends State<EditRankDialog> {
             _ColorField(
               controller: _colorController,
               validator: _validateColor,
-            ),
-            CustomTextField(
-              controller: _imageController,
-              label: 'Belt image URL (optional)',
-              hintText: 'https://…',
-              keyboardType: TextInputType.url,
             ),
           ],
         ),

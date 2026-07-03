@@ -457,3 +457,34 @@ class TestGetMemberBilling:
         retention = resp.json().get("retention", {})
         for field in ("class_streak_weeks", "points_balance", "videos_watched"):
             assert field in retention, f"BillingRetention missing '{field}'"
+
+    def test_rank_progress_shape_when_200(
+        self, api: httpx.Client, member_id: str
+    ) -> None:
+        """The rank block carries the real progress numerator
+        (``classes_since_rank``) beside the gym-set threshold.
+
+        Regression lock: the numerator's attendance count in
+        ``member_details.sql`` must run against the LIVE schema — it
+        once joined the dropped ``class_history`` table, which 500'd
+        this whole endpoint and no mocked-DB unit test could catch.
+        """
+        resp = api.get(f"{BASE}/{member_id}/billing")
+        assert resp.status_code == 200, (
+            f"GET /{member_id}/billing returned {resp.status_code}: {resp.text}"
+        )
+        body = resp.json()
+        assert "rank" in body, "MemberBillingDetailResponse missing 'rank'"
+        rank = body["rank"]
+        if rank is None:
+            pytest.skip("Pulled member is unranked; numerator not observable")
+        for field in (
+            "rank_id",
+            "main_name",
+            "sub_name",
+            "classes_till_rankup",
+            "classes_since_rank",
+        ):
+            assert field in rank, f"BillingRank missing '{field}'"
+        assert isinstance(rank["classes_since_rank"], int)
+        assert rank["classes_since_rank"] >= 0

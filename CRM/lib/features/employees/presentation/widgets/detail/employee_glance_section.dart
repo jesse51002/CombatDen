@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/employees/data/mock_employees.dart';
-import 'package:crm/features/members/presentation/widgets/specific_member/rank_section/icon_stat_tile.dart';
+import 'package:crm/features/employees/presentation/widgets/detail/icon_stat_tile.dart';
 
 /// 2x2 grid of teaching stats for coaches — the retention-relevant numbers an
 /// owner glances at: weekly load, members reached, typical class size, and

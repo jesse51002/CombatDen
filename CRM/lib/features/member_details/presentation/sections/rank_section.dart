@@ -27,11 +27,17 @@ class RankSection extends StatefulWidget {
   final String gymId;
   final String memberId;
 
+  /// Bumped by the bloc on every member mutation (the member-detail
+  /// `refreshToken`). A change re-fetches the ladder + enabled flag,
+  /// like the other documented side-read sections.
+  final int refreshKey;
+
   const RankSection({
     super.key,
     required this.rank,
     required this.gymId,
     required this.memberId,
+    required this.refreshKey,
   });
 
   @override
@@ -45,7 +51,15 @@ class _RankLadder {
 }
 
 class _RankSectionState extends State<RankSection> {
-  late final Future<_RankLadder> _future = _load();
+  late Future<_RankLadder> _future = _load();
+
+  @override
+  void didUpdateWidget(covariant RankSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      setState(() => _future = _load());
+    }
+  }
 
   Future<_RankLadder> _load() async {
     final repo = RanksRepository(apiClient: ApiClient());

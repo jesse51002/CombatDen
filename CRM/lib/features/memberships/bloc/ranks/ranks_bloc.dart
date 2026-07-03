@@ -97,7 +97,11 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       _mutateAndReload(
         emit,
         event.gymId,
-        () => _repository.renameMainGroup(event.rankIds, event.newName),
+        () => _repository.renameMainGroup(
+          event.gymId,
+          event.mainRankNumOrder,
+          event.newName,
+        ),
       );
 
   Future<void> _onGroupDeleted(
@@ -107,7 +111,7 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       _mutateAndReload(
         emit,
         event.gymId,
-        () => _repository.deleteMainGroup(event.rankIdsHighestSubFirst),
+        () => _repository.deleteMainGroup(event.gymId, event.mainRankNumOrder),
       );
 
   /// Fetch the ladder + enabled flag together.

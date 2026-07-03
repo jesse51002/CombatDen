@@ -6,6 +6,10 @@ part 'rank_update_data.g.dart';
 /// under `{"data": …}`). Only the fields that change are included —
 /// `includeIfNull: false` omits the rest so an edit touches only
 /// what the user changed.
+///
+/// Order columns are deliberately absent (`POST /ranks/reorder` is
+/// the only mover), and so is `imageUrl` — rank belt images are
+/// generation-owned (theme-styled art), never set by hand.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   includeIfNull: false,
@@ -14,19 +18,13 @@ part 'rank_update_data.g.dart';
 class RankUpdateData {
   final String? mainName;
   final String? subName;
-  final int? mainRankNumOrder;
-  final int? subRankNumOrder;
   final int? classesTillRankup;
-  final String? imageUrl;
   final String? color;
 
   const RankUpdateData({
     this.mainName,
     this.subName,
-    this.mainRankNumOrder,
-    this.subRankNumOrder,
     this.classesTillRankup,
-    this.imageUrl,
     this.color,
   });
 

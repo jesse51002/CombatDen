@@ -292,7 +292,6 @@ class TestRankCRUDRoundTrip:
             "sub_name": "Integration Test Sub",
             "classes_till_rankup": 50,
             "color": "#ABCDEF",
-            "image_url": None,
         }
         resp = api.post(RANKS_BASE + "/", json=payload)
         assert resp.status_code == 201, (

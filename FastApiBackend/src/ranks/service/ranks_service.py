@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ranks import SQL_DIR
 from src.ranks.schema.ranks_schema import (
+    RANK_CHANGED_ACTIVITY_TYPE,
     AllPresetsGroupedResponse,
     FromPresetRequest,
     MainRankPresetGroup,
@@ -28,6 +29,7 @@ from src.ranks.schema.ranks_schema import (
     RankPresetListResponse,
     RankPresetResponse,
     RankPromoteMemberRequest,
+    RankRenameGroupRequest,
     RankReorderRequest,
     RankResponse,
     RankSetMemberRequest,
@@ -63,7 +65,6 @@ class RanksService:
                 "main_name": request.main_name,
                 "sub_name": request.sub_name,
                 "classes_till_rankup": request.classes_till_rankup,
-                "image_url": request.image_url,
                 "color": request.color,
             }
             row = (await session.execute(text(insert_sql), params)).mappings().fetchone()
@@ -245,10 +246,14 @@ class RanksService:
     ) -> RankListResponse:
         """Apply a full new ordering to a gym's ranks atomically.
 
-        Two-phase within one transaction: shift every listed rank's
-        main order into the +100000 space, then assign final orders.
-        This keeps the non-deferrable unique-order constraint
-        satisfied at every per-row check. Returns the reordered list.
+        The payload must cover the gym's ENTIRE ladder — every rank
+        exactly once, target positions unique — validated up front so
+        a bad payload is a clean ``ValueError`` (400) instead of a
+        silent partial apply or a unique-constraint 500. Then a
+        two-phase update in one transaction: shift every rank's main
+        order into the +100000 space, then assign final orders. This
+        keeps the non-deferrable unique-order constraint satisfied at
+        every per-row check. Returns the reordered list.
         """
         ranks_json = json.dumps(
             [
@@ -263,6 +268,9 @@ class RanksService:
         params = {"gym_id": str(request.gym_id), "ranks": ranks_json}
 
         async with self._db_pool.session() as session:
+            ladder = await self._list_ranks_in_session(session, request.gym_id)
+            self._validate_reorder_payload(ladder, request)
+
             shift_sql = load_sql(SQL_DIR / "reorder_ranks_shift.sql")
             await session.execute(text(shift_sql), params)
 
@@ -285,6 +293,125 @@ class RanksService:
         return RankListResponse(
             items=[RankResponse(**dict(row)) for row in rows],
         )
+
+    @staticmethod
+    def _validate_reorder_payload(
+        ladder: list[RankResponse],
+        request: RankReorderRequest,
+    ) -> None:
+        """Reject payloads that don't map the whole ladder cleanly."""
+        payload_ids = [str(item.rank_id) for item in request.ranks]
+        if len(set(payload_ids)) != len(payload_ids):
+            raise ValueError("Duplicate rank_id in reorder payload")
+
+        ladder_ids = {str(rank.rank_id) for rank in ladder}
+        if set(payload_ids) - ladder_ids:
+            raise ValueError(
+                "Reorder payload contains ranks not in this gym's ladder"
+            )
+        if ladder_ids - set(payload_ids):
+            raise ValueError(
+                "Reorder payload must cover the gym's entire ladder"
+            )
+
+        positions = {
+            (item.main_rank_num_order, item.sub_rank_num_order)
+            for item in request.ranks
+        }
+        if len(positions) != len(request.ranks):
+            raise ValueError("Duplicate target position in reorder payload")
+
+    # ---------- whole-group operations ----------
+
+    async def rename_group(
+        self,
+        request: RankRenameGroupRequest,
+    ) -> RankListResponse:
+        """Rename a main-rank group in one atomic UPDATE.
+
+        ``main_name`` is denormalized onto every sub-rank row, so the
+        rename spans all rows sharing the group's order — one
+        statement, never a per-row fan-out.
+        """
+        async with self._db_pool.session() as session:
+            sql = load_sql(SQL_DIR / "rename_rank_group.sql")
+            rows = (
+                (
+                    await session.execute(
+                        text(sql),
+                        {
+                            "gym_id": str(request.gym_id),
+                            "main_rank_num_order": request.main_rank_num_order,
+                            "new_main_name": request.new_main_name,
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if not rows:
+                raise ValueError("Rank group not found")
+
+            ladder = await self._list_ranks_in_session(session, request.gym_id)
+            await session.commit()
+        return RankListResponse(items=ladder)
+
+    async def delete_group(
+        self,
+        gym_id: UUID,
+        main_rank_num_order: int,
+    ) -> None:
+        """Downgrade affected members, then delete a whole main group.
+
+        Group-level twin of ``delete_rank``: the replacement for
+        members on any of the group's sub-ranks is the nearest lower
+        group's highest sub-rank, else the nearest higher group's
+        lowest, else NULL. Reassign, then delete every row of the
+        group, in one transaction. Deliberately activity-silent — a
+        rank deletion is not a promotion, so members' progress
+        anchors are left untouched.
+        """
+        async with self._db_pool.session() as session:
+            neighbor_sql = load_sql(SQL_DIR / "get_group_neighbor_ranks.sql")
+            neighbor = (
+                (
+                    await session.execute(
+                        text(neighbor_sql),
+                        {
+                            "gym_id": str(gym_id),
+                            "main_rank_num_order": main_rank_num_order,
+                        },
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+            if not neighbor or neighbor.get("gym_id") is None:
+                raise ValueError("Rank group not found")
+
+            replacement = neighbor.get("lower_rank_id") or neighbor.get(
+                "higher_rank_id"
+            )
+
+            reassign_sql = load_sql(SQL_DIR / "reassign_members_group.sql")
+            await session.execute(
+                text(reassign_sql),
+                {
+                    "gym_id": str(gym_id),
+                    "main_rank_num_order": main_rank_num_order,
+                    "new_rank_id": str(replacement) if replacement else None,
+                },
+            )
+
+            delete_sql = load_sql(SQL_DIR / "delete_rank_group.sql")
+            await session.execute(
+                text(delete_sql),
+                {
+                    "gym_id": str(gym_id),
+                    "main_rank_num_order": main_rank_num_order,
+                },
+            )
+            await session.commit()
 
     # ---------- member-rank helpers ----------
 
@@ -405,6 +532,7 @@ class RanksService:
                 "gym_id": str(gym_id),
                 "old_rank_id": str(old_rank_id) if old_rank_id else None,
                 "new_rank_id": str(new_rank_id) if new_rank_id else None,
+                "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
             },
         )
 
@@ -583,8 +711,16 @@ class RanksService:
     ) -> None:
         """Assign the lowest rank to every rank-less member of the gym.
 
-        No-op if no ranks exist (the SQL's ``EXISTS`` guard handles
-        the empty-ladder case).
+        Writes one ``rank_changed`` activity per backfilled member in
+        the same statement, so progress counts from the backfill
+        moment (not the member's join date). No-op if no ranks exist
+        (the SQL's empty ``lowest`` CTE handles the empty-ladder case).
         """
         sql = load_sql(SQL_DIR / "backfill_lowest_rank.sql")
-        await session.execute(text(sql), {"gym_id": str(gym_id)})
+        await session.execute(
+            text(sql),
+            {
+                "gym_id": str(gym_id),
+                "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
+            },
+        )

@@ -8,6 +8,11 @@ from schema.gym_rank import GymType
 
 HEX_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
 
+# member_activities.activity_type written on every member rank change
+# (promotion, demotion, assignment, unassignment, enable-backfill). The
+# member-detail progress anchor filters on this same value.
+RANK_CHANGED_ACTIVITY_TYPE = "rank_changed"
+
 
 class RankSummary(BaseModel):
     """Nested rank object returned inside member responses."""
@@ -44,19 +49,21 @@ class RankCreateRequest(BaseModel):
     main_name: str = Field(min_length=1)
     sub_name: str = Field(min_length=1)
     classes_till_rankup: int = Field(ge=0)
-    image_url: str | None = None
     color: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
 
 
 class RankUpdateData(BaseModel):
-    """Mutable fields on a gym_ranks row."""
+    """Mutable fields on a gym_ranks row.
 
-    main_rank_num_order: int | None = Field(default=None, ge=0)
-    sub_rank_num_order: int | None = Field(default=None, ge=0)
+    Order columns are deliberately absent — ``POST /ranks/reorder`` is
+    the only mover (they are update-immutable). ``image_url`` is also
+    absent: rank images are generation-owned (theme-styled belt art),
+    never set by hand.
+    """
+
     main_name: str | None = Field(default=None, min_length=1)
     sub_name: str | None = Field(default=None, min_length=1)
     classes_till_rankup: int | None = Field(default=None, ge=0)
-    image_url: str | None = None
     color: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
 
 
@@ -177,10 +184,24 @@ class RankReorderItem(BaseModel):
 class RankReorderRequest(BaseModel):
     """Body for POST /api/v1/ranks/reorder.
 
-    The full desired ordering for the affected ranks. Applied as a
-    two-phase update so the unique-order constraint is never
-    transiently violated.
+    The full desired ordering for the gym's ENTIRE ladder — every
+    rank exactly once, positions unique. Applied as a two-phase
+    update so the unique-order constraint is never transiently
+    violated.
     """
 
     gym_id: UUID
     ranks: list[RankReorderItem]
+
+
+class RankRenameGroupRequest(BaseModel):
+    """Body for PUT /api/v1/ranks/rename-group.
+
+    Renames a whole main-rank group (every sub-rank row sharing the
+    ``main_rank_num_order``) in one atomic UPDATE — ``main_name`` is
+    denormalized per row, so a per-row fan-out would be non-atomic.
+    """
+
+    gym_id: UUID
+    main_rank_num_order: int = Field(ge=0)
+    new_main_name: str = Field(min_length=1)

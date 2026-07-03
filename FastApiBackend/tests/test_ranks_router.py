@@ -631,6 +631,15 @@ def test_reorder_ranks_200_returns_list(client, db_pool_mock, auth_headers, fake
     the reordered ladder."""
     rank_a = str(uuid4())
     rank_b = str(uuid4())
+    ladder = [
+        make_rank_row(rank_id=rank_a, gym_id=fake_gym_id, main_name="Blue"),
+        make_rank_row(
+            rank_id=rank_b,
+            gym_id=fake_gym_id,
+            main_rank_num_order=1,
+            main_name="White",
+        ),
+    ]
     reordered = [
         make_rank_row(rank_id=rank_b, gym_id=fake_gym_id, main_name="White"),
         make_rank_row(
@@ -641,6 +650,8 @@ def test_reorder_ranks_200_returns_list(client, db_pool_mock, auth_headers, fake
         ),
     ]
 
+    ladder_result = MagicMock()
+    ladder_result.mappings.return_value.all.return_value = ladder
     shift_result = MagicMock()
     finalize_result = MagicMock()
     list_result = MagicMock()
@@ -648,7 +659,7 @@ def test_reorder_ranks_200_returns_list(client, db_pool_mock, auth_headers, fake
 
     session = db_pool_mock.session.return_value
     session.execute = AsyncMock(
-        side_effect=[shift_result, finalize_result, list_result],
+        side_effect=[ladder_result, shift_result, finalize_result, list_result],
     )
     session.commit = AsyncMock()
 
@@ -673,3 +684,127 @@ def test_reorder_ranks_200_returns_list(client, db_pool_mock, auth_headers, fake
     )
     assert response.status_code == 200
     assert len(response.json()["items"]) == 2
+
+
+def test_reorder_ranks_400_on_partial_payload(
+    client, db_pool_mock, auth_headers, fake_gym_id
+):
+    """A reorder payload that misses part of the ladder is a clean
+    400, not a constraint 500."""
+    rank_a = str(uuid4())
+    rank_b = str(uuid4())
+    ladder = [
+        make_rank_row(rank_id=rank_a, gym_id=fake_gym_id),
+        make_rank_row(
+            rank_id=rank_b,
+            gym_id=fake_gym_id,
+            main_rank_num_order=1,
+        ),
+    ]
+    ladder_result = MagicMock()
+    ladder_result.mappings.return_value.all.return_value = ladder
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[ladder_result])
+    session.commit = AsyncMock()
+
+    response = client.post(
+        "/api/v1/ranks/reorder",
+        json={
+            "gym_id": fake_gym_id,
+            "ranks": [
+                {
+                    "rank_id": rank_a,
+                    "main_rank_num_order": 0,
+                    "sub_rank_num_order": 0,
+                },
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    assert "entire ladder" in response.json()["detail"]
+
+
+# ---------- whole-group operations ----------
+
+
+def test_rename_group_200_returns_ladder(
+    client, db_pool_mock, auth_headers, fake_gym_id
+):
+    """PUT /api/v1/ranks/rename-group renames atomically and returns
+    the updated ladder."""
+    renamed = [
+        make_rank_row(rank_id=str(uuid4()), gym_id=fake_gym_id, main_name="Azul"),
+    ]
+    rename_result = MagicMock()
+    rename_result.mappings.return_value.all.return_value = [
+        {"rank_id": renamed[0]["rank_id"]},
+    ]
+    list_result = MagicMock()
+    list_result.mappings.return_value.all.return_value = renamed
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[rename_result, list_result])
+    session.commit = AsyncMock()
+
+    response = client.put(
+        "/api/v1/ranks/rename-group",
+        json={
+            "gym_id": fake_gym_id,
+            "main_rank_num_order": 0,
+            "new_main_name": "Azul",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["items"][0]["main_name"] == "Azul"
+
+
+def test_rename_group_404_when_missing(
+    client, db_pool_mock, auth_headers, fake_gym_id
+):
+    """Renaming a group with no rows is a 404."""
+    rename_result = MagicMock()
+    rename_result.mappings.return_value.all.return_value = []
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[rename_result])
+    session.commit = AsyncMock()
+
+    response = client.put(
+        "/api/v1/ranks/rename-group",
+        json={
+            "gym_id": fake_gym_id,
+            "main_rank_num_order": 9,
+            "new_main_name": "Azul",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_delete_group_204(client, db_pool_mock, auth_headers, fake_gym_id):
+    """DELETE /api/v1/ranks/group reassigns members then deletes the
+    whole group."""
+    neighbor_result = MagicMock()
+    neighbor_result.mappings.return_value.fetchone.return_value = {
+        "gym_id": fake_gym_id,
+        "lower_rank_id": str(uuid4()),
+        "higher_rank_id": None,
+    }
+    reassign_result = MagicMock()
+    delete_result = MagicMock()
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(
+        side_effect=[neighbor_result, reassign_result, delete_result],
+    )
+    session.commit = AsyncMock()
+
+    response = client.delete(
+        "/api/v1/ranks/group",
+        params={"gym_id": fake_gym_id, "main_rank_num_order": 2},
+        headers=auth_headers,
+    )
+    assert response.status_code == 204

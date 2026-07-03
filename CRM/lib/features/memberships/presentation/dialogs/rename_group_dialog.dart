@@ -6,20 +6,21 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 
-/// Rename a whole main-rank group. Applies the new name to every
-/// sub-rank in the group (the rows share a denormalised `main_name`).
+/// Rename a whole main-rank group. One atomic backend UPDATE renames
+/// every sub-rank in the group (the rows share a denormalised
+/// `main_name`).
 class RenameGroupDialog extends StatefulWidget {
   final RanksBloc bloc;
   final String gymId;
   final String currentName;
-  final List<String> rankIds;
+  final int mainRankNumOrder;
 
   const RenameGroupDialog({
     super.key,
     required this.bloc,
     required this.gymId,
     required this.currentName,
-    required this.rankIds,
+    required this.mainRankNumOrder,
   });
 
   static Future<void> show({
@@ -27,7 +28,7 @@ class RenameGroupDialog extends StatefulWidget {
     required RanksBloc bloc,
     required String gymId,
     required String currentName,
-    required List<String> rankIds,
+    required int mainRankNumOrder,
   }) {
     return showDialog<void>(
       context: context,
@@ -35,7 +36,7 @@ class RenameGroupDialog extends StatefulWidget {
         bloc: bloc,
         gymId: gymId,
         currentName: currentName,
-        rankIds: rankIds,
+        mainRankNumOrder: mainRankNumOrder,
       ),
     );
   }
@@ -61,7 +62,7 @@ class _RenameGroupDialogState extends State<RenameGroupDialog> {
     if (name != widget.currentName) {
       widget.bloc.add(RankGroupRenamed(
         gymId: widget.gymId,
-        rankIds: widget.rankIds,
+        mainRankNumOrder: widget.mainRankNumOrder,
         newName: name,
       ));
     }
