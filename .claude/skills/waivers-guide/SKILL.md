@@ -252,9 +252,13 @@ shows the UNION of required + ever-signed waivers (`MemberWaiverStatusRow`:
 the yellow tappable "Needs re-sign" chip; archived/payer-auth rows display
 without a sign action) plus a "Sign new waiver" picker over the gym's custom
 waivers (any custom waiver is signable, required or not). The waiver editor
-surfaces the
-available `{{placeholders}}` in an ALWAYS-VISIBLE legend + a "minor edit (don't
-require re-sign)" toggle (`requires_resign=false`). The payer-auth waiver is
+surfaces the available `{{placeholders}}` in an ALWAYS-VISIBLE legend; a BODY
+edit over a signed version asks at SAVE time via `RequireResignDialog` —
+"Don't require re-signing" is the PRIMARY action (small fixes are the common
+case), "Require re-signing" the secondary, dismiss aborts the save; the
+dialog explains what re-signing does. A rename or an unsigned-version edit
+saves without asking (`requires_resign` defaults true there — ignored for
+in-place edits, legal-safe if a concurrent signature forks the save). The payer-auth waiver is
 badged ("Payer agreement") in the waivers list + editor, its Delete and
 standalone "sign member" actions are hidden (signing it outside the link flow
 is meaningless — `{{payee_name}}` would render literally), and the plan form's

@@ -17,6 +17,7 @@ import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/presentation/dialogs/require_resign_dialog.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
@@ -83,7 +84,6 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   bool _loading = true;
   bool _saving = false;
   bool _dirty = false;
-  bool _minorEdit = false;
   String? _selectedVersionId; // null = editing the current version
 
   WaiverResponse? _waiver; // mutable: refreshed after each save
@@ -215,17 +215,20 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       return;
     }
 
-    // Editing a signed version mints a new one — confirm first.
-    if (_isEdit && _currentSigned > 0 && !_minorEdit) {
-      final go = await ConfirmationModal.show(
-        context: context,
-        title: 'Saving requires members to re-sign',
-        message: '$_currentSigned member(s) have signed this version. '
-            'Saving will publish a new version and ask them to re-sign. '
-            'To skip that, check "Minor edit — don\'t require re-sign" below.',
-        confirmLabel: 'Save and require re-sign',
+    // A BODY edit over a signed version mints a new one — ask whether prior
+    // signers must re-sign (dismissing aborts the save). A rename alone
+    // never mints, and an unsigned version is edited in place, so neither
+    // asks. When skipped, requireResign stays true: ignored for in-place
+    // edits, and the legal-safe default if a concurrent signature makes
+    // this save fork after all.
+    var requireResign = true;
+    if (_isEdit && _currentSigned > 0 && body != _originalBody) {
+      final choice = await RequireResignDialog.show(
+        context,
+        signedCount: _currentSigned,
       );
-      if (!go) return;
+      if (choice == null) return;
+      requireResign = choice;
     }
 
     setState(() => _saving = true);
@@ -237,7 +240,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
           data: WaiverUpdateData(
             name: name,
             body: body,
-            requiresResign: !_minorEdit,
+            requiresResign: requireResign,
           ),
         ));
       } else {
@@ -256,7 +259,6 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
         setState(() {
           _saving = false;
           _dirty = false;
-          _minorEdit = false;
         });
         _snack('Saved.');
       }
@@ -566,36 +568,10 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   }
 
   Widget _footer() {
-    final showMinorEdit = _isEdit && _currentSigned > 0 && _dirty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        if (showMinorEdit)
-          InkWell(
-            onTap: () => setState(() => _minorEdit = !_minorEdit),
-            borderRadius: BorderRadius.circular(
-              DesignConstants.radiusSmall,
-            ),
-            child: Row(
-              spacing: DesignConstants.spacingSmall,
-              children: [
-                Checkbox(
-                  value: _minorEdit,
-                  onChanged: (v) =>
-                      setState(() => _minorEdit = v ?? false),
-                ),
-                Expanded(
-                  child: Text(
-                    'Minor edit — don\'t require re-sign',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         AppPrimaryButton(
           text: _isEdit ? 'Save' : 'Create',
           onPressed: _saving ? null : _save,
