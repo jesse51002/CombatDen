@@ -168,6 +168,9 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.theme.service.theme_showcase_defaults_service import (
+    ThemeShowcaseDefaultsService,
+)
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
@@ -422,6 +425,11 @@ class DependencyInjector(containers.DeclarativeContainer):
     theme_showcase_service = providers.Factory(
         ThemeShowcaseService,
         db_pool=db_pool,
+    )
+    # Theme: static, category-keyed demo showcase cards from a bundled YAML
+    # file (no DB) for the public standalone theme browser.
+    theme_showcase_defaults_service = providers.Factory(
+        ThemeShowcaseDefaultsService,
     )
     # Presets: template catalog reads (list, detail, feed ids).
     presets_template_service = providers.Factory(

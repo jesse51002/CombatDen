@@ -1,0 +1,271 @@
+# Category-keyed demo showcase content for the standalone theme browser.
+#
+# Static, bundled sample class/reward cards shown when no real gym is selected
+# (the public theme browser has no login, so no gym data). Ported from the CRM's
+# bundled constants (CRM/lib/showcase/showcase_group_defaults.dart). Loaded and
+# validated into `ShowcaseDefaults` by `ThemeShowcaseDefaultsService`.
+#
+# Image hosts (kept as-is from the source):
+#   * Class photos  — images.pexels.com (activity/people-safe)
+#   * Reward photos — mix of images.pexels.com and upload.wikimedia.org
+#
+# The source constants carry only name / instructor_name / image_url per class
+# and title / image_url / price_label / points_cost per reward, so the optional
+# card fields (description, instructor_bio, instructor_image_url) are absent.
+
+categories:
+  Fighting:
+    classes:
+      - name: "Foundation"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/7991668/pexels-photo-7991668.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Heavy Bag Power"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/6296002/pexels-photo-6296002.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Defense & Footwork"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/4761788/pexels-photo-4761788.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Sparring Essentials"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/7991616/pexels-photo-7991616.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Boxing gloves"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/c/c8/Boxing_gloves_Bail_10-OZ_%281%29.jpg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Yoga:
+    classes:
+      - name: "Sunrise Flow"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/8436589/pexels-photo-8436589.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Power Vinyasa"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Slow Flow"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Core Flow"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/8436605/pexels-photo-8436605.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Yoga mat"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Pilates:
+    classes:
+      - name: "Foundational Order"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Core & Stability"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Box Series Mastery"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Advanced Stretches"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Grip socks"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Barre:
+    classes:
+      - name: "Barre Essentials"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/7319689/pexels-photo-7319689.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Rhythmic Fusion"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/7319749/pexels-photo-7319749.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Mindful Endurance"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/6311672/pexels-photo-6311672.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Precision Performance"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/6311718/pexels-photo-6311718.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Grip socks"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  HIIT:
+    classes:
+      - name: "Olympic Lifting Fundamentals"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/4662333/pexels-photo-4662333.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Core & Gymnastics Strength"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/9958667/pexels-photo-9958667.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Metabolic Conditioning"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Strength & Injury Prevention"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/8381747/pexels-photo-8381747.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Jump rope"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/f/fd/BeadedRope.jpg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Cardio:
+    classes:
+      - name: "Beat Drop Power"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/264084/pexels-photo-264084.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Endurance Flow"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/4162595/pexels-photo-4162595.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Interval Ignite"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/5851030/pexels-photo-5851030.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Fundamentals Ride"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/26655637/pexels-photo-26655637.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Cycling shoes"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/4/4d/Paar_wielerschoenen%2C_S-Phyre%2C_Annemiek_Van_Vleuten%2C_2020_-_overzicht-1_%28WU3762_-_collectie_KOERS._Museum_van_de_Wielersport%29.jpg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Dance:
+    classes:
+      - name: "Barre Foundations"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/12312/pexels-photo-12312.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Rhythm & Movement"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/3775566/pexels-photo-3775566.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "High Energy Cardio"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/8957645/pexels-photo-8957645.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Groove & Flow"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/12086690/pexels-photo-12086690.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Water bottle"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+
+  Wellness:
+    classes:
+      - name: "Foundational Breathing"
+        instructor_name: "Coach James Carter"
+        image_url: "https://images.pexels.com/photos/7596956/pexels-photo-7596956.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Nervous System Reset"
+        instructor_name: "Coach Sarah Mitchell"
+        image_url: "https://images.pexels.com/photos/8436490/pexels-photo-8436490.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Performance Breathing"
+        instructor_name: "Coach Daniel Brooks"
+        image_url: "https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - name: "Sleep & Recovery"
+        instructor_name: "Coach Maya Bennett"
+        image_url: "https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    rewards:
+      - title: "Bring a friend"
+        price_label: "Free"
+        points_cost: 1000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+      - title: "Club t-shirt"
+        price_label: "Free"
+        points_cost: 1500
+        image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+      - title: "Yoga mat"
+        price_label: "25% off"
+        points_cost: 2000
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg"
+      - title: "1-on-1 PT session"
+        price_label: "50% off"
+        points_cost: 2500
+        image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"

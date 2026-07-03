@@ -97,6 +97,30 @@ class EmployeeThemeResponse(BaseModel):
     theme_preference: ThemeMode
 
 
+class GymThemeUpdateData(BaseModel):
+    """Mutable field for PUT .../theme.
+
+    Per project convention, update requests separate identity (the
+    URL ``gym_id``) from a nested ``data`` model. ``theme_design_id``
+    is the one settable field here.
+    """
+
+    theme_design_id: str = Field(min_length=1, max_length=255)
+
+
+class GymThemeUpdateRequest(BaseModel):
+    """Body for PUT /api/v1/gyms/{gym_id}/theme."""
+
+    data: GymThemeUpdateData
+
+
+class GymThemeResponse(BaseModel):
+    """The gym's saved ThemeService design id (echoed back on update)."""
+
+    gym_id: UUID
+    theme_design_id: str
+
+
 class GymEmployeeResponse(BaseModel):
     """A single gym_employees row."""
 

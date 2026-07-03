@@ -1,6 +1,23 @@
 id: combatden
 display_name: CombatDen
 
+# The app-declared classification vocabulary: the closed set of values a
+# run's output.yaml `category` may carry (the 8 parent gym-type buckets —
+# mirrors ParentGymType in the FastApi backend / the CRM's showcase
+# groups). A run whose category is missing or outside this set is skipped
+# by GET /apps/{id}/styles. The category itself lives per-run in
+# output.yaml (stamped today; a pipeline classification step is the
+# README TODO).
+categories:
+  - Fighting
+  - Yoga
+  - Pilates
+  - Barre
+  - HIIT
+  - Cardio
+  - Dance
+  - Wellness
+
 images:
   # Shared (tenant-wide)
   - id: logo_primary

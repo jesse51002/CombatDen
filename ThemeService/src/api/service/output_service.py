@@ -27,12 +27,14 @@ import yaml
 from pydantic import ValidationError
 
 from schema import Output
+from schema.app_format import AppFormat
 from src.api.config import settings
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.style_list_response import StyleListResponse
 from src.api.schema.style_summary import StyleSummary
 from src.core.asset_urls import cdn_url, image_key
 from src.core.run_context import (
+    APP_FILENAME,
     FINAL_IMAGES_DIRNAME,
     ICONS_DIRNAME,
     OUTPUT_FILENAME,
@@ -77,15 +79,19 @@ class OutputService:
     def __init__(self, apps_root: Path) -> None:
         self._apps_root = apps_root
         # Cache for `list_styles`: the full sorted [StyleSummary] per
-        # app, keyed by app_id, with the captured directory mtime so a
-        # new / removed / renamed run dir invalidates the entry. Without
-        # this every page request would re-scan the apps tree and
-        # Pydantic-validate every output.yaml — fine for ~5 styles,
-        # painful for 80+. (In-place edits to an output.yaml don't bump
-        # the parent dir mtime, so a regen/edit_customization run wants
-        # an API process restart to be reflected — acceptable for the
-        # current admin-tool deployment.)
-        self._styles_cache: dict[str, tuple[int, list[StyleSummary]]] = {}
+        # app, keyed by app_id, with the captured directory mtime AND
+        # the app.yaml file mtime (an app.yaml category edit changes the
+        # file's mtime but not the dir's) so either kind of change
+        # invalidates the entry. Without this every page request would
+        # re-scan the apps tree and Pydantic-validate every output.yaml
+        # — fine for ~5 styles, painful for 80+. (In-place edits to an
+        # output.yaml don't bump the parent dir mtime, so a
+        # regen/edit_customization run wants an API process restart to
+        # be reflected — acceptable for the current admin-tool
+        # deployment.)
+        self._styles_cache: dict[
+            str, tuple[tuple[int, int], list[StyleSummary]]
+        ] = {}
 
     async def load(self, app_id: str, run_id: str) -> Output:
         """The run's validated ``output.yaml``.
@@ -229,15 +235,39 @@ class OutputService:
         self, app_id: str, app_dir: Path
     ) -> list[StyleSummary]:
         """Return the full sorted style list for ``app_id``, building
-        it on cache miss and reusing the cached copy when the apps dir
-        mtime is unchanged."""
-        mtime = (await asyncio.to_thread(app_dir.stat)).st_mtime_ns
+        it on cache miss and reusing the cached copy when neither the
+        apps dir mtime nor the app.yaml mtime has changed."""
+        dir_mtime = (await asyncio.to_thread(app_dir.stat)).st_mtime_ns
+        app_yaml = app_dir / APP_FILENAME
+        yaml_mtime = (
+            (await asyncio.to_thread(app_yaml.stat)).st_mtime_ns
+            if await asyncio.to_thread(app_yaml.is_file)
+            else 0
+        )
+        key = (dir_mtime, yaml_mtime)
         cached = self._styles_cache.get(app_id)
-        if cached is not None and cached[0] == mtime:
+        if cached is not None and cached[0] == key:
             return cached[1]
         built = await self._build_full_style_list(app_id, app_dir)
-        self._styles_cache[app_id] = (mtime, built)
+        self._styles_cache[app_id] = (key, built)
         return built
+
+    async def _declared_categories(self, app_dir: Path) -> set[str]:
+        """The app.yaml-declared classification vocabulary (the closed
+        set a run's ``output.yaml`` ``category`` must belong to).
+        ``set()`` when the app.yaml is absent, unparseable, or declares
+        no categories — the vocabulary check is then skipped (an app
+        with no classification concept still lists categorised runs
+        as-is), consistent with the skip-a-bad-preset rule above."""
+        app_yaml = app_dir / APP_FILENAME
+        if not await asyncio.to_thread(app_yaml.is_file):
+            return set()
+        try:
+            raw = await asyncio.to_thread(app_yaml.read_text)
+            app_format = AppFormat.model_validate(yaml.safe_load(raw))
+        except (yaml.YAMLError, ValidationError):
+            return set()
+        return set(app_format.categories)
 
     async def _build_full_style_list(
         self, app_id: str, app_dir: Path
@@ -252,22 +282,31 @@ class OutputService:
         candidates = await asyncio.to_thread(
             self._scan_candidate_dirs, app_dir, not cdn
         )
+        declared_categories = await self._declared_categories(app_dir)
         styles: list[StyleSummary] = []
         for run_id, celebration in candidates:
             try:
                 output = await self.load(app_id, run_id)
             except (NotFoundError, InvalidRunError):
                 continue
+            # Category is REQUIRED on the wire: an uncategorised run —
+            # or one whose category isn't in the app.yaml-declared
+            # vocabulary — is skipped, not listed unfilterable.
+            category = output.category
+            if category is None or (
+                declared_categories and category not in declared_categories
+            ):
+                continue
             # Card-art `?v=` cache-buster: prefer the stamped slot version from
             # output.yaml; locally fall back to hashing the on-disk PNG.
-            declared = output.image_set.images.get(CELEBRATION_SLOT)
+            celebration_slot = output.image_set.images.get(CELEBRATION_SLOT)
             # Under a CDN there is no on-disk PNG to fall back on, so the
             # celebration card art must be declared in output.yaml to qualify.
-            if cdn and declared is None:
+            if cdn and celebration_slot is None:
                 continue
             version = (
-                declared.version
-                if declared and declared.version
+                celebration_slot.version
+                if celebration_slot and celebration_slot.version
                 else _content_version(celebration)
             )
             if cdn:
@@ -285,6 +324,7 @@ class OutputService:
                     id=run_id,
                     display_name=output.design_name,
                     celebration_image=celebration_image,
+                    category=category,
                 )
             )
         styles.sort(key=lambda s: s.display_name)

@@ -23,6 +23,7 @@ dependencies = [
     "apscheduler (>=3.11.2,<4.0.0)",
     "pydantic-ai-slim[anthropic] (>=2.0.0,<3.0.0)",
     "litellm (>=1.90.0,<2.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)",
 ]
 
 [build-system]

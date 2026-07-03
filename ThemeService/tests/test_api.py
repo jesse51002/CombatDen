@@ -168,7 +168,12 @@ def test_styles_unknown_app_404() -> None:
 def test_list_styles_excludes_date_runs_and_imageless(tmp_path: Path) -> None:
     """A named style with a ``celebration_image`` PNG lists; a
     date-stamped run is skipped even if it has the image; a named dir
-    without the image is skipped."""
+    without the image is skipped.
+
+    The copied ``default/output.yaml`` already carries ``category:
+    Modern`` and no ``app.yaml`` is seeded into ``tmp_path/demo``, so
+    the vocabulary check is skipped (no declared categories) — only the
+    date-stamp / missing-image filters are under test here."""
     src_output = (FIXTURE_APPS / APP / "default" / "output.yaml").read_text()
     appdir = tmp_path / "demo"
     for name in ("ZenStyle", "20260518T131056Z", "noimg"):
@@ -196,17 +201,56 @@ def test_list_styles_excludes_date_runs_and_imageless(tmp_path: Path) -> None:
     )
 
 
-def _seed_named_styles(apps_root: Path, names: list[str]) -> None:
+def _seed_named_styles(
+    apps_root: Path,
+    names: list[str],
+    *,
+    category: str | None = "Modern",
+) -> None:
     """Stamp out ``apps_root/demo/<name>/`` style dirs with the demo
     output.yaml + a celebration_image PNG so ``list_styles`` picks
-    them up."""
-    src_output = (FIXTURE_APPS / APP / "default" / "output.yaml").read_text()
+    them up.
+
+    ``category`` (default ``"Modern"``, matching the demo app's
+    declared vocabulary — see ``tests/data/apps/demo/app.yaml``) is
+    stamped into each seeded run's ``output.yaml``, overriding whatever
+    the template carries. Pass a value outside the declared vocabulary
+    to simulate a stale/mismatched category, or ``None`` to simulate a
+    run with no category at all (both are skipped by the styles-list
+    category filter — see the dedicated tests below)."""
+    src_output = yaml.safe_load(
+        (FIXTURE_APPS / APP / "default" / "output.yaml").read_text()
+    )
     appdir = apps_root / "demo"
     for name in names:
         d = appdir / name / "final_images"
         d.mkdir(parents=True)
-        (appdir / name / "output.yaml").write_text(src_output)
+        run_output = dict(src_output)
+        if category is None:
+            run_output.pop("category", None)
+        else:
+            run_output["category"] = category
+        (appdir / name / "output.yaml").write_text(yaml.safe_dump(run_output))
         (d / "celebration_image.png").write_bytes(b"png")
+
+
+def _write_demo_app_yaml(
+    apps_root: Path, categories: list[str] | None
+) -> None:
+    """Write ``apps_root/demo/app.yaml`` declaring a classification
+    vocabulary, based on the committed fixture ``app.yaml``.
+
+    ``categories=None`` omits the ``categories`` key entirely — the
+    "app declares no classification concept" case, which skips the
+    vocabulary check (any non-null run category is accepted). Pass a
+    list (even empty) to declare an explicit closed vocabulary."""
+    app_format = yaml.safe_load((FIXTURE_APPS / APP / "app.yaml").read_text())
+    if categories is None:
+        app_format.pop("categories", None)
+    else:
+        app_format["categories"] = categories
+    (apps_root / "demo").mkdir(parents=True, exist_ok=True)
+    (apps_root / "demo" / "app.yaml").write_text(yaml.safe_dump(app_format))
 
 
 def test_list_styles_paginates(tmp_path: Path) -> None:
@@ -287,6 +331,71 @@ def test_list_styles_cache_invalidates_when_a_new_style_lands(
     resp = client.get(f"/apps/{APP}/run1/images/no_such_slot")
     assert resp.status_code == 404
     assert "not declared" in resp.json()["detail"]
+
+
+def test_list_styles_returns_category_on_the_wire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each style in the JSON response carries its ``category`` field —
+    exercised through the real HTTP endpoint, not just the internal
+    ``StyleSummary`` model."""
+    _write_demo_app_yaml(tmp_path, ["Modern", "Classic"])
+    _seed_named_styles(tmp_path, ["ZenStyle"], category="Modern")
+
+    monkeypatch.setattr(settings, "apps_root", tmp_path)
+    monkeypatch.setattr(
+        output_service, "_DEFAULT", OutputService(apps_root=tmp_path)
+    )
+
+    resp = client.get(f"/apps/{APP}/styles")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["category"] == "Modern"
+
+
+def test_list_styles_skips_run_without_category(tmp_path: Path) -> None:
+    """A named run whose ``output.yaml`` carries no ``category`` at
+    all is skipped — category is required on the wire, so an
+    uncategorised run is never listed."""
+    _seed_named_styles(tmp_path, ["Categorized"], category="Modern")
+    _seed_named_styles(tmp_path, ["Uncategorized"], category=None)
+
+    svc = OutputService(apps_root=tmp_path)
+    page = asyncio.run(svc.list_styles("demo"))
+
+    assert [s.id for s in page.items] == ["Categorized"]
+
+
+def test_list_styles_skips_category_outside_declared_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """When the app declares a closed vocabulary, a run whose
+    (non-null) category isn't one of the declared values is skipped,
+    even though a category is present."""
+    _write_demo_app_yaml(tmp_path, ["Modern", "Classic"])
+    _seed_named_styles(tmp_path, ["InVocab"], category="Modern")
+    _seed_named_styles(tmp_path, ["OutOfVocab"], category="Retro")
+
+    svc = OutputService(apps_root=tmp_path)
+    page = asyncio.run(svc.list_styles("demo"))
+
+    assert [s.id for s in page.items] == ["InVocab"]
+
+
+def test_list_styles_lists_categorised_runs_when_app_declares_no_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """An app whose ``app.yaml`` declares no ``categories`` at all
+    (the default for apps with no classification concept) skips the
+    vocabulary check entirely — any non-null category is accepted."""
+    _write_demo_app_yaml(tmp_path, None)
+    _seed_named_styles(tmp_path, ["AnyCategory"], category="Whatever")
+
+    svc = OutputService(apps_root=tmp_path)
+    page = asyncio.run(svc.list_styles("demo"))
+
+    assert [s.id for s in page.items] == ["AnyCategory"]
 
 
 def test_cdn_base_url_defaults_to_prod_cdn() -> None:
