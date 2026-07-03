@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
@@ -126,12 +127,13 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
   // fixed, and signer_name follows the live typed name (empty shows a ___
   // blank so the signer sees where their name will land).
   Map<String, String> _renderValues() => {
-        'member_name': widget.memberName,
-        'gym_name': selectedGym.displayName,
-        'date': waiverSignDateUtc(),
+        kWaiverParamMemberName: widget.memberName,
+        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.
-        'signer_name': _signerName.isEmpty ? r'\_\_\_' : _signerName,
+        kWaiverParamSignerName:
+            _signerName.isEmpty ? r'\_\_\_' : _signerName,
       };
 
   QuillController _buildController() =>

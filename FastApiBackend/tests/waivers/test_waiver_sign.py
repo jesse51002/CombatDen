@@ -286,6 +286,34 @@ def test_render_never_expands_tokens_inside_values() -> None:
     )
 
 
+def test_build_args_covers_the_placeholder_catalog() -> None:
+    """``_build_args`` must fill exactly the catalog's key set.
+
+    ``WaiverParameter`` (``Database/python_data/schema/waiver_parameters.py``)
+    is the single source of truth for which ``{{placeholder}}`` tokens exist.
+    This locks the backend's actual fill (auto-filled fields + this test's
+    caller-supplied ``payee_name`` extra) to that catalog, so adding a new
+    catalog token without either wiring an auto-fill in ``_build_args`` or
+    documenting it as a caller extra (passed here, as ``payee_name`` is)
+    fails this test loudly instead of silently drifting.
+    """
+    from schema.waiver_parameters import WAIVER_PARAMETERS, WaiverParameter
+
+    from src.waivers.service.waivers_signatures import WaiversSignatures
+
+    waiver_row = {
+        "member_first_name": "Jane",
+        "member_last_name": "Doe",
+        "gym_name": "Iron",
+    }
+    result = WaiversSignatures._build_args(
+        waiver_row,
+        "Typed Name",
+        {WaiverParameter.payee_name: "Kid Name"},
+    )
+    assert set(result) == set(WaiverParameter) == set(WAIVER_PARAMETERS)
+
+
 async def test_member_status_union_and_floor(db_pool, gym_id, created):
     """The by-member status is the UNION of required + ever-signed: a signed
     waiver attached to NO plan still shows (required=False, meets the floor);

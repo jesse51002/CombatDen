@@ -104,8 +104,15 @@ one first — editing an unsigned current version edits in place (no new row).
 
 ## Parametrization ({{placeholders}})
 
-Catalog: `Database/python_data/schema/waiver_parameters.py` (`WAIVER_PARAMETERS`),
-mirrored in `CRM/lib/core/constants/waiver_parameters.dart`.
+Catalog: `Database/python_data/schema/waiver_parameters.py` — the
+`WaiverParameter` StrEnum is the canonical key set (`WAIVER_PARAMETERS` maps
+enum → description); the backend's `_build_args` and the link flow's
+`waiver_args` key off the enum, never string literals, and
+`test_build_args_covers_the_placeholder_catalog` fails if the filled keys
+drift from the catalog. Hand-synced Dart mirror:
+`CRM/lib/core/constants/waiver_parameters.dart` (`kWaiverParam*` constants +
+`kWaiverParameters`) — the CRM `_renderValues()` builders key off those
+constants.
 A version `body` may contain `{{key}}` tokens; `WaiversSignatures._render`
 substitutes them at sign time. **Backend auto-fills** (in `sign_waiver`):
 `{{member_name}}` (the signing member's account name), `{{signer_name}}` (the

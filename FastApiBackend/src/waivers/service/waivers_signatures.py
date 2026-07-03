@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from schema.esign_disclosure import ESIGN_DISCLOSURE_VERSION
+from schema.waiver_parameters import WaiverParameter
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -299,10 +300,10 @@ class WaiversSignatures(WaiversBase):
                 f"{waiver['member_last_name']}"
             )
         args = {
-            "member_name": member_name,
-            "signer_name": signer_name,
-            "gym_name": waiver["gym_name"],
-            "date": datetime.now(UTC).date().isoformat(),
+            WaiverParameter.member_name: member_name,
+            WaiverParameter.signer_name: signer_name,
+            WaiverParameter.gym_name: waiver["gym_name"],
+            WaiverParameter.date: datetime.now(UTC).date().isoformat(),
         }
         if waiver_args:
             args.update(waiver_args)

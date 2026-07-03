@@ -28,6 +28,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from schema.waiver_parameters import WaiverParameter
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -143,7 +144,7 @@ class MemberMembershipsLinked:
                 ip_address=ip_address,
                 user_agent=user_agent,
                 operator_employee_id=operator_employee_id,
-                waiver_args={"payee_name": payee_name},
+                waiver_args={WaiverParameter.payee_name: payee_name},
             )
 
             insert_sql = load_sql(

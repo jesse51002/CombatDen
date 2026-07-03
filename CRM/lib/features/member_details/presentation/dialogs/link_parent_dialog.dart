@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
@@ -174,13 +175,14 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
   // payee_name is who they'll pay for, gym_name/date are fixed, and
   // signer_name follows the live typed name (empty stays literal).
   Map<String, String> _renderValues() => {
-        'member_name': _selected?.fullName ?? '',
-        'payee_name': widget.subjectName,
-        'gym_name': selectedGym.displayName,
-        'date': waiverSignDateUtc(),
+        kWaiverParamMemberName: _selected?.fullName ?? '',
+        kWaiverParamPayeeName: widget.subjectName,
+        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.
-        'signer_name': _signerName.isEmpty ? r'\_\_\_' : _signerName,
+        kWaiverParamSignerName:
+            _signerName.isEmpty ? r'\_\_\_' : _signerName,
       };
 
   QuillController _buildWaiverController() =>

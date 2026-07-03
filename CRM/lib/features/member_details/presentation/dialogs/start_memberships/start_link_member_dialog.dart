@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
@@ -166,13 +167,14 @@ class _StartLinkMemberDialogState
   // member, gym_name/date are fixed, signer_name follows the live typed
   // name (empty stays literal).
   Map<String, String> _renderValues() => {
-        'member_name': widget.payerName,
-        'payee_name': _selected?.fullName ?? '',
-        'gym_name': selectedGym.displayName,
-        'date': waiverSignDateUtc(),
+        kWaiverParamMemberName: widget.payerName,
+        kWaiverParamPayeeName: _selected?.fullName ?? '',
+        kWaiverParamGymName: selectedGym.displayName,
+        kWaiverParamDate: waiverSignDateUtc(),
         // Empty name -> a literal ___ blank (escaped so markdown never
         // reads it as a rule); fills live once the signer types.
-        'signer_name': _signerName.isEmpty ? r'\_\_\_' : _signerName,
+        kWaiverParamSignerName:
+            _signerName.isEmpty ? r'\_\_\_' : _signerName,
       };
 
   QuillController _buildWaiverController() =>
