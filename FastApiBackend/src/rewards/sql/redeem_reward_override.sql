@@ -46,8 +46,13 @@ inserted AS (
         now()
     FROM locked_member lm
     JOIN locked_reward lr ON lr.gym_id = lm.gym_id
+    -- Gate on the debit by consuming its RETURNING in the FROM clause (the
+    -- documented way to chain data-modifying CTEs). An EXISTS(SELECT FROM
+    -- debited) here evaluated FALSE on live Postgres even when the debit
+    -- happened — cross-referencing a data-modifying CTE from another one's
+    -- WHERE is not reliably ordered.
+    JOIN debited d ON TRUE
     WHERE lr.is_active = TRUE
-      AND EXISTS (SELECT 1 FROM debited)
     RETURNING
         redemption_id, member_id, reward_id, gym_id,
         point_cost, requested_at, status, resolved_at
