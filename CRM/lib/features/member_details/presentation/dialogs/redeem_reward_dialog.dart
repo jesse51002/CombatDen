@@ -17,17 +17,22 @@ import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 /// Fetches `GET /api/v1/rewards/?gym_id=<uuid>` via the
 /// [RewardsRepository] (the same reward-catalog client the
 /// Loyalty tab uses). On selection:
-/// - If the member's [pointsBalance] >= reward's point_cost,
-///   shows a standard confirmation then dispatches
+/// - If the member already has an OPEN PENDING redemption for
+///   the picked reward ([pendingRewardIds]), confirms an
+///   APPROVAL of that request — the backend's smart path
+///   fulfills the existing row instead of debiting again, so
+///   no low-balance warning applies.
+/// - Else if the member's [pointsBalance] >= reward's
+///   point_cost, shows a standard confirmation then dispatches
 ///   [RedeemRewardForMemberRequested] with override=false.
-/// - If balance < point_cost, shows an override warning
-///   and on confirm re-dispatches with override=true
-///   (drains balance to zero).
+/// - Else shows an override warning and on confirm
+///   re-dispatches with override=true (drains balance to zero).
 class RedeemRewardDialog extends StatefulWidget {
   final String gymId;
   final String memberId;
   final String memberName;
   final int pointsBalance;
+  final Set<String> pendingRewardIds;
 
   const RedeemRewardDialog({
     super.key,
@@ -35,6 +40,7 @@ class RedeemRewardDialog extends StatefulWidget {
     required this.memberId,
     required this.memberName,
     required this.pointsBalance,
+    required this.pendingRewardIds,
   });
 
   static Future<void> show({
@@ -43,6 +49,7 @@ class RedeemRewardDialog extends StatefulWidget {
     required String memberId,
     required String memberName,
     required int pointsBalance,
+    required Set<String> pendingRewardIds,
   }) {
     return showDialog<void>(
       context: context,
@@ -60,6 +67,7 @@ class RedeemRewardDialog extends StatefulWidget {
           memberId: memberId,
           memberName: memberName,
           pointsBalance: pointsBalance,
+          pendingRewardIds: pendingRewardIds,
         ),
       ),
     );
@@ -90,7 +98,39 @@ class _RedeemRewardDialogState
     final canAfford =
         widget.pointsBalance >= reward.pointCost;
 
-    if (canAfford) {
+    if (widget.pendingRewardIds.contains(reward.rewardId)) {
+      // The member already requested this reward: the backend's smart
+      // path APPROVES their pending row (points were debited at request
+      // time), so no new deduction and no low-balance warning applies.
+      final confirmed = await BillingConfirmationDialog.show(
+        context: context,
+        title: 'Approve pending request',
+        summary:
+            '${widget.memberName} already requested '
+            '${reward.title} — redeeming will approve that '
+            'pending request.',
+        confirmLabel: 'Approve request',
+        effects: [
+          BillingEffect(
+            icon: Symbols.redeem_sharp,
+            text: '${reward.title} marked as redeemed.',
+          ),
+          BillingEffect(
+            icon: Symbols.star_sharp,
+            text:
+                'No additional points deducted — their '
+                'request already paid for it.',
+          ),
+        ],
+      );
+      if (!confirmed || !mounted) return;
+      bloc.add(
+        RedeemRewardForMemberRequested(
+          rewardId: reward.rewardId,
+          memberId: widget.memberId,
+        ),
+      );
+    } else if (canAfford) {
       // Standard confirmation flow.
       final confirmed = await BillingConfirmationDialog.show(
         context: context,

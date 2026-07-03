@@ -251,6 +251,66 @@ class TestStaffOverrideAndRegressions:
         assert body["points_balance_after"] == 0
         assert (await get_points_balance(created.db_pool, member.member_id)) == 0
 
+    async def test_redeem_for_member_approves_existing_pending_no_double_debit(
+        self, api: httpx.Client, created: CreatedResources, gym_id: str
+    ) -> None:
+        """The SMART staff path: with an open pending redemption for the same
+        reward, redeem-for-member APPROVES that row (override included — the
+        points were debited at request time, so nothing drains) instead of
+        double-charging; with the pending gone, the same call falls through
+        to a fresh debit."""
+        member, reward = await _setup_member_and_reward(
+            gym_id, created, balance=1000, point_cost=300
+        )
+
+        # Member requests → pending, debited once (1000 → 700).
+        request_resp = await _req(
+            api.post,
+            f"{REWARDS_BASE}/{reward.reward_id}/redeem",
+            json={"member_id": str(member.member_id)},
+        )
+        assert request_resp.status_code == 201, request_resp.text
+        pending = request_resp.json()
+        created.track_redemption(UUID(pending["redemption_id"]))
+        assert pending["status"] == "pending"
+        assert pending["points_balance_after"] == 700
+
+        # Staff redeem-for-member (override=True, the aggressive path) must
+        # approve THAT row — same redemption_id, no drain, balance untouched.
+        smart = await _req(
+            api.post,
+            f"{REWARDS_BASE}/{reward.reward_id}/redeem-for-member",
+            json={"member_id": str(member.member_id), "override": True},
+        )
+        assert smart.status_code == 201, smart.text
+        fulfilled = smart.json()
+        assert fulfilled["redemption_id"] == pending["redemption_id"]
+        assert fulfilled["status"] == "approved"
+        assert fulfilled["resolved_at"] is not None
+        assert fulfilled["points_balance_after"] == 700
+        assert (await get_points_balance(created.db_pool, member.member_id)) == 700
+
+        # The fulfilled request left the queue: approving it again 409s.
+        re_approve = await _req(
+            api.post,
+            f"{REWARDS_BASE}/redemptions/{pending['redemption_id']}/approve",
+        )
+        assert re_approve.status_code == 409, re_approve.text
+
+        # No pending left → the same staff call now mints a FRESH debit
+        # (700 → 400) with a new redemption id.
+        fresh = await _req(
+            api.post,
+            f"{REWARDS_BASE}/{reward.reward_id}/redeem-for-member",
+            json={"member_id": str(member.member_id), "override": False},
+        )
+        assert fresh.status_code == 201, fresh.text
+        fresh_body = fresh.json()
+        created.track_redemption(UUID(fresh_body["redemption_id"]))
+        assert fresh_body["redemption_id"] != pending["redemption_id"]
+        assert fresh_body["points_balance_after"] == 400
+        assert (await get_points_balance(created.db_pool, member.member_id)) == 400
+
     async def test_deactivated_reward_blocks_both_redeem_paths(
         self, api: httpx.Client, created: CreatedResources, gym_id: str
     ) -> None:

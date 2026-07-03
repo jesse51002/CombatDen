@@ -278,9 +278,12 @@ async def redeem_reward(
     status_code=status.HTTP_201_CREATED,
     summary="Staff-initiated redemption for a member",
     description=(
-        "Staff endpoint. ``override=false`` → guarded debit, "
-        "``status='approved'``.  ``override=true`` → unguarded "
-        "debit (drains to zero), ``status='approved'``."
+        "Staff endpoint. If the member already has an OPEN PENDING "
+        "redemption for this reward, the oldest one is APPROVED instead "
+        "of debiting again (its points were taken at request time) — "
+        "``override`` included. Otherwise a fresh approved redemption: "
+        "``override=false`` → guarded debit; ``override=true`` → "
+        "unguarded debit (drains to zero)."
     ),
     responses={
         201: {"description": "Redemption recorded (approved)"},
@@ -304,12 +307,8 @@ async def redeem_reward_for_member(
     await auth.verify_gym_employee_for_member(request.member_id, user_payload)
 
     try:
-        if request.override:
-            return await redemption_service.redeem_override(
-                request.member_id, reward_id
-            )
-        return await redemption_service.redeem(
-            request.member_id, reward_id, auto_approve=True
+        return await redemption_service.redeem_for_member(
+            request.member_id, reward_id, override=request.override
         )
     except ValueError as exc:
         raise HTTPException(

@@ -59,6 +59,9 @@ class RetentionSection extends StatelessWidget {
             memberName: memberName,
             gymId: gymId,
             pointsBalance: retention.pointsBalance,
+            pendingRewardIds: {
+              for (final r in pendingRedemptions) r.rewardId,
+            },
           ),
           if (pendingRedemptions.isNotEmpty)
             PendingApprovalsSection(
@@ -96,12 +99,14 @@ class _RewardsActions extends StatelessWidget {
   final String memberName;
   final String gymId;
   final int pointsBalance;
+  final Set<String> pendingRewardIds;
 
   const _RewardsActions({
     required this.memberId,
     required this.memberName,
     required this.gymId,
     required this.pointsBalance,
+    required this.pendingRewardIds,
   });
 
   @override
@@ -122,6 +127,7 @@ class _RewardsActions extends StatelessWidget {
             memberId: memberId,
             memberName: memberName,
             pointsBalance: pointsBalance,
+            pendingRewardIds: pendingRewardIds,
           ),
         ),
         AppOutlineButton(

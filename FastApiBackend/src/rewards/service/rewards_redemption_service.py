@@ -77,6 +77,42 @@ class RewardsRedemptionService:
 
         return RedemptionResponse(**row)
 
+    async def redeem_for_member(
+        self,
+        member_id: UUID,
+        reward_id: UUID,
+        override: bool = False,
+    ) -> RedemptionResponse:
+        """Staff-initiated redemption — smart about open pending requests.
+
+        If the member already has an OPEN PENDING redemption for this
+        reward, the oldest one is APPROVED instead of minting a new
+        redemption: its points were already debited at request time, so a
+        fresh redeem here would double-charge the member for one grant
+        (this applies to the ``override`` path too — nothing to drain when
+        the request is already paid for). Only when nothing is pending does
+        the call fall through to a fresh always-approved redemption:
+        guarded debit normally, drain-to-zero when ``override``.
+        """
+        sql = load_sql(SQL_DIR / "approve_existing_pending.sql")
+        params = {
+            "member_id": str(member_id),
+            "reward_id": str(reward_id),
+        }
+        async with self._db_pool.session() as session:
+            row = (
+                (await session.execute(text(sql), params))
+                .mappings()
+                .fetchone()
+            )
+            await session.commit()
+        if row:
+            return RedemptionResponse(**row)
+
+        if override:
+            return await self.redeem_override(member_id, reward_id)
+        return await self.redeem(member_id, reward_id, auto_approve=True)
+
     async def redeem_override(
         self,
         member_id: UUID,

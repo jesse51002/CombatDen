@@ -136,12 +136,25 @@ silently-overwritten `resolved_at`.
 
 ---
 
-## 3. Staff redeem-for-member — auto-approved, with an `override` comp path
+## 3. Staff redeem-for-member — smart-fulfills a pending request, else auto-approved
 
 `POST /{reward_id}/redeem-for-member` (`RedeemForMemberRequest{member_id,
-override}`) is **always auto-approved** — the row lands as `status='approved'`
-with `resolved_at=now()` immediately, no pending stage, because staff acting
-in person are the approval.
+override}`) routes through `RewardsRedemptionService.redeem_for_member`,
+which is **smart about open pending requests**: if the member already has a
+PENDING redemption for this reward, the **oldest one is APPROVED**
+(`approve_existing_pending.sql` — one atomic statement, locked-CTE pattern
+like `reject_redemption.sql`) instead of minting a new redemption. The
+pending row already debited the points at request time, so a fresh redeem
+would double-charge the member for one grant — this applies to the
+`override` path too (nothing to drain when the request is already paid
+for). The response is the fulfilled row itself (same `redemption_id`,
+`points_balance_after` = the untouched current balance). The CRM's redeem
+dialog detects this case client-side (the member-detail pending list) and
+confirms it as "Approve pending request" with no deduction copy.
+
+Only when nothing is pending does the call mint a fresh redemption —
+**always auto-approved** (`status='approved'`, `resolved_at=now()`, no
+pending stage, because staff acting in person are the approval):
 
 - **`override=false`** → `redeem(auto_approve=True)` — same guarded debit as
   the member path (`redeem_reward.sql` with `status='approved'`): rejected if

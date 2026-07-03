@@ -387,6 +387,74 @@ def test_redeem_for_member_400_when_inactive(
     assert response.status_code == 400
 
 
+def test_redeem_for_member_approves_existing_pending(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
+):
+    """When the member has an open pending redemption for the reward, the
+    smart path approves it in ONE statement — no second debit SQL runs
+    (override included: nothing to drain when the request is already paid)."""
+    existing_id = str(uuid4())
+    row = make_redemption_row(
+        redemption_id=existing_id,
+        member_id=fake_member_id,
+        reward_id=fake_reward_id,
+        gym_id=fake_gym_id,
+        status="approved",
+        resolved_at=datetime.now(UTC),
+    )
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = row
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.post(
+        f"/api/v1/rewards/{fake_reward_id}/redeem-for-member",
+        json={"member_id": fake_member_id, "override": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["redemption_id"] == existing_id
+    # Exactly one statement: approve_existing_pending found the row, so
+    # neither redeem_reward.sql nor redeem_reward_override.sql ever ran.
+    assert session.execute.await_count == 1
+    executed_sql = str(session.execute.await_args_list[0].args[0])
+    assert "locked_pending" in executed_sql
+
+
+def test_redeem_for_member_falls_through_to_fresh_debit(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_member_id, fake_reward_id
+):
+    """With NO pending redemption for the reward, the smart lookup returns
+    0 rows and the call falls through to a fresh guarded debit."""
+    fresh_id = str(uuid4())
+    empty = MagicMock()
+    empty.mappings.return_value.fetchone.return_value = None
+    fresh = MagicMock()
+    fresh.mappings.return_value.fetchone.return_value = make_redemption_row(
+        redemption_id=fresh_id,
+        member_id=fake_member_id,
+        reward_id=fake_reward_id,
+        gym_id=fake_gym_id,
+        status="approved",
+        resolved_at=datetime.now(UTC),
+    )
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[empty, fresh])
+
+    response = client.post(
+        f"/api/v1/rewards/{fake_reward_id}/redeem-for-member",
+        json={"member_id": fake_member_id, "override": False},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["redemption_id"] == fresh_id
+    assert session.execute.await_count == 2
+
+
 # ─── approve / reject ────────────────────────────────────────────────────────
 
 def _setup_two_executes(db_pool_mock, first_row, second_row):
