@@ -7,6 +7,7 @@ src/sync/sql/mark_membership_deleted.sql, binding :item_ids as a list.
 
 Pure unit test — no DB, Stripe, or network (the db session is mocked).
 """
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -40,7 +41,7 @@ def _fake_session(execute_mock: AsyncMock) -> object:
         execute = execute_mock
         commit = AsyncMock()
 
-        async def __aenter__(self) -> "_Session":
+        async def __aenter__(self) -> _Session:
             return self
 
         async def __aexit__(self, *exc: object) -> bool:

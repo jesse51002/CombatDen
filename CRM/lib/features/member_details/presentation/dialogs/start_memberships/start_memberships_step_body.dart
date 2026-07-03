@@ -24,6 +24,8 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_preview_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_results_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_review_step.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_sign_waivers_step.dart';
+import 'package:crm/core/errors/exceptions.dart';
 
 /// The body of the Start Memberships wizard: the step
 /// indicator and the persistent payer/current-member
@@ -63,6 +65,16 @@ class StartMembershipsStepBody extends StatelessWidget {
   final CardOnFile? payerCardOnFile;
   final Map<String, String> memberNames;
   final Map<String, String> planNames;
+
+  /// The unsigned waiver items from the 422 waiver gate — non-null
+  /// only when [step] is [StartMembershipsStep.signWaivers].
+  final List<WaiverGateItem>? unsignedWaivers;
+  final VoidCallback? onWaiversSigned;
+
+  /// Raised by the preview step when its 422 surfaces an unsigned
+  /// waiver gate, so the wizard can route to [signWaivers] before
+  /// payment.
+  final ValueChanged<WaiverGateException> onWaiverGate;
 
   final ValueChanged<StartMembershipParticipant>
       onPayerSelected;
@@ -120,6 +132,9 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.payerCardOnFile,
     required this.memberNames,
     required this.planNames,
+    this.unsignedWaivers,
+    this.onWaiversSigned,
+    required this.onWaiverGate,
     required this.onPayerSelected,
     required this.onMemberToggle,
     required this.onLinkFirst,
@@ -236,6 +251,13 @@ class StartMembershipsStepBody extends StatelessWidget {
           onEditMember: onEditMember,
           onRemoveDraft: onRemoveDraft,
         );
+      case StartMembershipsStep.signWaivers:
+        return StartSignWaiversStep(
+          unsigned: unsignedWaivers ?? const [],
+          gymId: launchMember.gymId,
+          memberNames: memberNames,
+          onAllSigned: onWaiversSigned ?? () {},
+        );
       case StartMembershipsStep.preview:
         final req = previewRequest;
         if (req == null) {
@@ -254,6 +276,7 @@ class StartMembershipsStepBody extends StatelessWidget {
           // baseline for the recurring card's before→after.
           currentMonthly: payerDetail?.totalMonthlyRecurringPrice,
           onLoaded: onPreviewLoaded,
+          onWaiverGate: onWaiverGate,
           prorationBehavior: prorationBehavior,
           onProrationChanged: onProrationChanged,
           hasRecurring: hasRecurring,

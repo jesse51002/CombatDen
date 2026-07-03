@@ -300,6 +300,7 @@ class MemberDetailBloc
       action: () => _repository.linkMemberAccount(
         event.memberId,
         payerMemberId: event.payerMemberId,
+        waiverVersionId: event.waiverVersionId,
         signerName: event.signerName,
         consentAcknowledged: event.consentAcknowledged,
       ),
@@ -439,12 +440,21 @@ class MemberDetailBloc
       );
       final current = state;
       if (current is! MemberDetailLoaded) return;
-      emit(current.copyWith(
-        isStartingMemberships: false,
-        startError: e is ServerException
-            ? (e.detail ?? e.message)
-            : e.toString(),
-      ));
+      if (e is WaiverGateException) {
+        // 422 waiver gate — route the wizard to the sign-waivers step
+        // rather than showing a generic error.
+        emit(current.copyWith(
+          isStartingMemberships: false,
+          waiverGate: e,
+        ));
+      } else {
+        emit(current.copyWith(
+          isStartingMemberships: false,
+          startError: e is ServerException
+              ? (e.detail ?? e.message)
+              : e.toString(),
+        ));
+      }
     }
   }
 

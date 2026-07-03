@@ -198,6 +198,28 @@ class CheckinQueries:
             )
         return {row["plan_id"] for row in rows}
 
+    async def get_unsigned_waivers(
+        self,
+        member_id: UUID,
+        gym_id: UUID,
+    ) -> list[dict]:
+        """The member's required-but-unsigned waivers (id + name).
+
+        Required = the union of ``waiver_ids`` across the member's CURRENT
+        (active/frozen) memberships' plans; unsigned = no signature at a
+        version >= the waiver's ``requires_resign`` floor — the same
+        semantics as the membership-start gate and the member-detail Waivers
+        section. Empty when the member is fully signed (or holds no
+        memberships).
+        """
+        return await self._read_all(
+            SQL_DIR / "checkin_unsigned_waivers.sql",
+            {
+                "member_id": str(member_id),
+                "gym_id": str(gym_id),
+            },
+        )
+
     async def get_roster(
         self,
         class_id: UUID,

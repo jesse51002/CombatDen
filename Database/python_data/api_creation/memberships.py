@@ -260,18 +260,25 @@ def _link_child(
 ) -> bool:
     """Authorize the parent as a payer for the child. Runs BEFORE the family's
     start request (the start never authorizes, and a child's membership rides
-    the parent's subscription, so the authorization must already exist). The
-    link endpoint records the parent's signature on the gym's default
-    authorized-payer waiver + the authorization (member_authorized_payers) in
-    one transaction; it does NOT require the parent to be billing yet. Returns
-    False if unresolved.
+    the parent's subscription, so the authorization must already exist).
+
+    The link endpoint signs the gym's default authorized-payer waiver (as the
+    parent) + records the authorization in one request; it renders the parent's +
+    child's names into the waiver. We first GET the waiver to echo its
+    ``version_id`` (the version-lock token). Returns False if unresolved.
     """
     if child.member_id is None or parent.member_id is None:
+        return False
+    waiver = api.get(
+        f"/api/v1/members/{child.member_id}/authorized-payer-waiver",
+    )
+    if waiver is None:
         return False
     api.put(
         f"/api/v1/members/{child.member_id}/link",
         json={
             "payer_member_id": str(parent.member_id),
+            "waiver_version_id": waiver["version_id"],
             "signer_name": f"{parent.first_name} {parent.last_name}",
             "consent_acknowledged": True,
         },

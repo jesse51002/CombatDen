@@ -22,6 +22,11 @@ class WaiverVersionResponse extends Equatable {
   @JsonKey(defaultValue: 0)
   final int signatureCount;
 
+  /// Whether this version (as the highest such version) re-blocks prior
+  /// signers — the re-sign floor. Correctable on the current version.
+  @JsonKey(defaultValue: true)
+  final bool requiresResign;
+
   const WaiverVersionResponse({
     required this.versionId,
     required this.waiverId,
@@ -31,6 +36,7 @@ class WaiverVersionResponse extends Equatable {
     required this.contentHash,
     required this.createdAt,
     this.signatureCount = 0,
+    this.requiresResign = true,
   });
 
   factory WaiverVersionResponse.fromJson(
@@ -48,5 +54,6 @@ class WaiverVersionResponse extends Equatable {
         contentHash,
         createdAt,
         signatureCount,
+        requiresResign,
       ];
 }

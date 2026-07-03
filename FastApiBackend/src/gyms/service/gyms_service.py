@@ -32,7 +32,7 @@ from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectServic
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
-from src.waivers.service.waivers.waivers_service import WaiversService
+from src.waivers.service.waivers_service import WaiversService
 
 
 class GymsService:

@@ -10,3 +10,4 @@ class GymWaiverVersionCreate(SeedModel):
     version_number: int
     body: str
     content_hash: str
+    requires_resign: bool = True

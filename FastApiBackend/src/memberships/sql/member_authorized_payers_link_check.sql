@@ -5,6 +5,8 @@
 SELECT
     c.member_id,
     c.gym_id AS candidate_gym_id,
+    c.first_name AS candidate_first_name,
+    c.last_name AS candidate_last_name,
     p.member_id AS payer_member_id,
     p.gym_id AS payer_gym_id,
     EXISTS (

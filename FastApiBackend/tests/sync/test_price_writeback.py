@@ -32,6 +32,7 @@ from src.memberships.memberships_schema import (
 )
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_writes import authorize_payer
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -128,12 +129,7 @@ async def test_family_same_plan_each_row_holds_own_price(
     )
 
     try:
-        await memberships_service.link_account(
-            child.member_id,
-            parent.member_id,
-            signer_name="Test Payer",
-            consent_acknowledged=True,
-        )
+        await authorize_payer(db_pool, child.member_id, parent.member_id)
 
         # Parent starts first → qty=1, line total = 5000
         await memberships_service.start(
@@ -250,12 +246,7 @@ async def test_family_different_plans_per_row_totals(
     )
 
     try:
-        await memberships_service.link_account(
-            child.member_id,
-            parent.member_id,
-            signer_name="Test Payer",
-            consent_acknowledged=True,
-        )
+        await authorize_payer(db_pool, child.member_id, parent.member_id)
 
         await memberships_service.start(
             MemberMembershipsStartRequest(

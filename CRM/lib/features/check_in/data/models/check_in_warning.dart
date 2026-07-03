@@ -15,6 +15,7 @@ enum CheckInWarning {
   outOfClasses('out_of_classes', 'Out of classes'),
   ineligiblePlan('ineligible_plan', 'Not eligible for this class'),
   overCapacity('over_capacity', 'Class is full'),
+  unsignedWaiver('unsigned_waiver', 'Required waiver not signed'),
   unknown('unknown', 'Heads up');
 
   const CheckInWarning(this.value, this.displayLabel);

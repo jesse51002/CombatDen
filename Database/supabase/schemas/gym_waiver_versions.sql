@@ -16,6 +16,15 @@ CREATE TABLE gym_waiver_versions (
     version_number INTEGER NOT NULL CHECK (version_number > 0),
     body TEXT NOT NULL CHECK (body <> ''),
     content_hash VARCHAR NOT NULL CHECK (content_hash <> ''),
+    -- Whether publishing THIS version invalidates prior signatures for the
+    -- membership-purchase gate. true (default) = a material change whose
+    -- predecessors' signers must re-sign before their next purchase; false = a
+    -- minor edit (typo) that does NOT re-block prior signers. The gate's
+    -- compliance floor is the highest version_number among a waiver's versions
+    -- with requires_resign = true; a member is compliant if they signed a version
+    -- at or above that floor. Only meaningful on a FORK — editing an unsigned
+    -- current version happens in place, no new row.
+    requires_resign BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (version_id),
     UNIQUE (version_id, gym_id),

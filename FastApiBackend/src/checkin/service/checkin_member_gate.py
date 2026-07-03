@@ -19,6 +19,13 @@
   NULL ``plan_id`` / ``item_id``. Every condition that would have blocked a
   kiosk check-in is returned as a ``warnings`` entry instead of blocking.
 
+Both modes also run the **waiver gate**: a required waiver the member hasn't
+signed at a current-enough version (the union of their active/frozen
+memberships' plans' ``waiver_ids``, at the ``requires_resign`` floor — the
+same set the member-detail Waivers section shows) rejects a kiosk check-in
+and warns a staff one. Reservations (sign-ups) are deliberately NOT
+waiver-gated — only the check-in.
+
 Points are awarded on every newly-inserted attendance row regardless of
 membership (a no-membership staff check-in still earns the class's points).
 The gate evaluates the blocking conditions ONCE (relative to the attributed
@@ -60,10 +67,12 @@ from src.shared.database import DirectDatabasePool
 
 # Order a set of blocking reasons into a single primary ``skip_reason`` for a
 # rejected kiosk check-in: the room being full and a missing membership are the
-# hardest stops, then punch-card depletion, then plan ineligibility.
+# hardest stops, then the unsigned-waiver legal gate, then punch-card
+# depletion, then plan ineligibility.
 _REASON_PRIORITY: tuple[CheckinWarning, ...] = (
     CheckinWarning.over_capacity,
     CheckinWarning.no_membership,
+    CheckinWarning.unsigned_waiver,
     CheckinWarning.out_of_classes,
     CheckinWarning.ineligible_plan,
 )
@@ -136,7 +145,12 @@ class CheckinMemberGate:
             else set()
         )
         over_capacity = await self._is_over_capacity(resolved_class, member_id)
-        evaluation = self._evaluate(active, eligible, over_capacity)
+        unsigned_waivers = await self._queries.get_unsigned_waivers(
+            member_id, resolved_class.gym_id
+        )
+        evaluation = self._evaluate(
+            active, eligible, over_capacity, bool(unsigned_waivers)
+        )
 
         if is_member:
             return await self._checkin_kiosk(
@@ -267,6 +281,7 @@ class CheckinMemberGate:
         active: list[MembershipUsage],
         eligible: set[UUID],
         over_capacity: bool,
+        has_unsigned_waiver: bool,
     ) -> GateEvaluation:
         """Evaluate the blocking conditions ONCE for both modes.
 
@@ -276,10 +291,14 @@ class CheckinMemberGate:
         the kiosk block decision; the two diverge only when a clean covering
         membership exists but a higher-priority pack is the staff attribution
         target, in which case the staff path warns while the kiosk path admits.
+        The unsigned-waiver legal gate is membership-independent (flagged even
+        when occurrence coverage is empty — it describes the member NOW).
         """
         evaluation = GateEvaluation()
         if over_capacity:
             evaluation.reasons.add(CheckinWarning.over_capacity)
+        if has_unsigned_waiver:
+            evaluation.reasons.add(CheckinWarning.unsigned_waiver)
 
         if not active:
             evaluation.reasons.add(CheckinWarning.no_membership)

@@ -6,17 +6,21 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/data/models/waiver_create_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signatory_row.dart';
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/presentation/dialogs/require_resign_dialog.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
@@ -24,6 +28,7 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/hairline.dart';
+import 'package:crm/shared/widgets/sign_waiver_dialog.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
 /// Full-screen waiver editor: a rich-text (Markdown) body on the left, the
@@ -88,6 +93,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   List<WaiverSignatoryRow> _signatories = const [];
 
   bool get _isEdit => _waiver != null;
+
+  // The gym's one protected authorized-payer agreement: it can't be deleted
+  // (the backend rejects it) and isn't signed member-by-member from here (it's
+  // signed only in the link-payer flow). Only its name/body stay editable.
+  bool get _isPayerAuth => _waiver?.waiverType == WaiverType.payerAuth;
 
   // Signatures on the version being edited — derived from the versions list so
   // it stays accurate after a save mints a new (0-signature) version.
@@ -205,18 +215,19 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       return;
     }
 
-    // Editing a signed version mints a new one — confirm first.
-    if (_isEdit && _currentSigned > 0) {
-      final go = await ConfirmationModal.show(
-        context: context,
-        title: 'Saving creates a new version',
-        message: '$_currentSigned member(s) have already signed this version, '
-            'so saving creates a new one. If this change is legally meaningful, '
-            'email those members the update or have them re-sign — for a minor '
-            'wording fix that is usually not needed.',
-        confirmLabel: 'Save new version',
+    // A body edit over a SIGNED version forks a new one — ask whether prior
+    // signers must re-sign (dismissing aborts the save). With no signers
+    // the question is moot, so the save runs silently and requireResign
+    // stays null (the version's flag is untouched — the "Requires re-sign"
+    // switch on the current tile is the deliberate way to set it).
+    bool? requireResign;
+    if (_isEdit && _currentSigned > 0 && body != _originalBody) {
+      final choice = await RequireResignDialog.show(
+        context,
+        signedCount: _currentSigned,
       );
-      if (!go) return;
+      if (choice == null) return;
+      requireResign = choice;
     }
 
     setState(() => _saving = true);
@@ -225,7 +236,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
         await widget.repository.updateWaiver(WaiverUpdateRequest(
           waiverId: _waiver!.waiverId,
           gymId: widget.gymId,
-          data: WaiverUpdateData(name: name, body: body),
+          data: WaiverUpdateData(
+            name: name,
+            body: body,
+            requiresResign: requireResign,
+          ),
         ));
       } else {
         _waiver = await widget.repository.createWaiver(WaiverCreateRequest(
@@ -358,6 +373,11 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
           ),
         ),
         Text(_isEdit ? 'Edit Waiver' : 'New Waiver', style: DesignConstants.big2),
+        if (_isPayerAuth)
+          const InvoiceChip(
+            label: 'Payer agreement',
+            tone: InvoiceChipTone.brand,
+          ),
         const Spacer(),
         if (_dirty)
           Text(
@@ -384,7 +404,13 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
 
   Widget _editorPane() {
     if (_selectedVersionId == null || _view == null) {
-      return WaiverMarkdownEditor(controller: _edit!);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: WaiverMarkdownEditor(controller: _edit!)),
+          const _PlaceholderLegend(),
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,6 +437,42 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     );
   }
 
+  // The CURRENT version's requires_resign flag — the re-sign floor marker.
+  bool get _currentRequiresResign {
+    final cvId = _waiver?.currentVersionId;
+    for (final v in _versions) {
+      if (v.versionId == cvId) return v.requiresResign;
+    }
+    return true;
+  }
+
+  /// Flip requires_resign on the current version (mistake correction for
+  /// the save-time choice). Moving it moves the re-sign floor.
+  Future<void> _setRequiresResign(bool value) async {
+    setState(() => _saving = true);
+    try {
+      await widget.repository.updateWaiver(WaiverUpdateRequest(
+        waiverId: _waiver!.waiverId,
+        gymId: widget.gymId,
+        data: WaiverUpdateData(requiresResign: value),
+      ));
+      await _refresh();
+      if (mounted) {
+        setState(() => _saving = false);
+        _snack(
+          value
+              ? 'Prior signers must now re-sign this version.'
+              : 'Existing signatures count again.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _snack(e.toString(), isError: true);
+      }
+    }
+  }
+
   Widget _versionsPanel() {
     return Padding(
       padding: const EdgeInsets.only(left: DesignConstants.spacingLarge),
@@ -422,6 +484,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
             subtitle: '$_currentSigned signed',
             selected: _selectedVersionId == null,
             onTap: () => _selectVersion(null),
+            extra: _requiresResignRow(),
           ),
           for (final v in _versions)
             if (v.versionId != _waiver!.currentVersionId)
@@ -436,11 +499,34 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     );
   }
 
+  /// The current version's re-sign flag, editable in place so a wrong
+  /// save-time choice is correctable.
+  Widget _requiresResignRow() {
+    return Row(
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Expanded(
+          child: Text(
+            'Requires re-sign',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ),
+        Switch(
+          value: _currentRequiresResign,
+          onChanged: _saving ? null : _setRequiresResign,
+        ),
+      ],
+    );
+  }
+
   Widget _versionTile({
     required String label,
     required String subtitle,
     required bool selected,
     required VoidCallback onTap,
+    Widget? extra,
   }) {
     return InkWell(
       onTap: onTap,
@@ -465,6 +551,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
               style:
                   DesignConstants.pSmall.copyWith(color: DesignConstants.text2nd),
             ),
+            ?extra,
           ],
         ),
       ),
@@ -497,19 +584,24 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
                   s.versionNumber == null ? '—' : 'v${s.versionNumber}',
                   style: DesignConstants.p,
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppOutlineButton(
-                    text: 'Member Sign',
-                    onPressed: () => _openSignScreen(s),
-                    borderRadius: DesignConstants.radiusSmall,
-                    textStyle: DesignConstants.pSmall,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: DesignConstants.spacingMedium,
-                      vertical: DesignConstants.spacingSmall,
+                // The payer agreement is signed only in the link-payer flow,
+                // never member-by-member from here — so no Member Sign action.
+                if (_isPayerAuth)
+                  const SizedBox.shrink()
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppOutlineButton(
+                      text: 'Member Sign',
+                      onPressed: () => _openSignScreen(s),
+                      borderRadius: DesignConstants.radiusSmall,
+                      textStyle: DesignConstants.pSmall,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: DesignConstants.spacingMedium,
+                        vertical: DesignConstants.spacingSmall,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
         ],
@@ -522,10 +614,17 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     return s.signedCurrentVersion ? 'Signed' : 'Signed (older version)';
   }
 
-  // The member sign screen (front-desk capture) is not built yet — the button
-  // is present but inert for now.
   void _openSignScreen(WaiverSignatoryRow s) {
-    _snack('Member signing screen is coming soon.');
+    final waiverId = _waiver?.waiverId;
+    if (waiverId == null) return;
+    SignWaiverDialog.show(
+      context: context,
+      waiverId: waiverId,
+      gymId: widget.gymId,
+      memberId: s.memberId,
+      memberName: s.fullName,
+      onSigned: _refresh,
+    );
   }
 
   Widget _footer() {
@@ -539,7 +638,9 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
           isLoading: _saving,
           fullWidth: true,
         ),
-        if (_isEdit)
+        // The payer agreement is the gym's protected authorized-payer waiver —
+        // it can't be deleted (the backend rejects it), so hide the action.
+        if (_isEdit && !_isPayerAuth)
           AppOutlineButton(
             text: 'Delete',
             onPressed: _saving ? null : _delete,
@@ -547,6 +648,59 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
             borderColor: DesignConstants.badRed,
             textColor: DesignConstants.badRed,
             borderRadius: DesignConstants.radiusSmall,
+          ),
+      ],
+    );
+  }
+}
+
+/// Always-visible legend showing every {{placeholder}} the waiver body
+/// supports: a non-interactive caption above one row per token.
+class _PlaceholderLegend extends StatelessWidget {
+  const _PlaceholderLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: DesignConstants.spacingSmall,
+          ),
+          child: Text(
+            'Placeholders — type any of these in your text and they fill '
+            'in automatically when the waiver is signed. Only these work:',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ),
+        for (final e in kWaiverParameters.entries)
+          Padding(
+            padding: const EdgeInsets.only(
+              left: DesignConstants.spacingLarge,
+            ),
+            child: Row(
+              spacing: DesignConstants.spacingSmall,
+              children: [
+                Text(
+                  '{{${e.key}}}',
+                  style: DesignConstants.pSmall
+                      .merge(DesignConstants.monoFont)
+                      .copyWith(
+                        color: DesignConstants.primaryColor,
+                      ),
+                ),
+                Text(
+                  '— ${e.value}',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     );
