@@ -139,7 +139,7 @@ class GymsPager extends ChangeNotifier {
       displayName: _titleize((gym['gym_id'] as String?) ?? ''),
       celebrationImageUrl: raw.isEmpty ? '' : _resolve(raw),
       // The coarse parent bucket (Fighting/Yoga/…) is what the picker filters by.
-      gymType: gym['parent_gym_type'] as String?,
+      category: gym['parent_gym_type'] as String?,
       // The content key: stored on selection so videos / classes / rewards
       // fetch this gym's content, not just re-brand.
       gymId: gym['gym_id'] as String?,

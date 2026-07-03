@@ -138,7 +138,9 @@ class _AuthenticatedGateState
   /// and the VideoService `video_gym` id (a string like `boxing`) are
   /// separate id spaces with no mapping, so passing the real UUID 404s
   /// the VideoService and breaks every content surface. The real gym's
-  /// name shows in the chrome via [displayName]. The gym's saved
+  /// name shows in the admin chrome via `gymName` (the public theme
+  /// browser's preview name instead comes from
+  /// `ThemeRuntime.activeDesignName`). The gym's saved
   /// ThemeService design ([GymWithRole.themeDesignId]) is passed through
   /// so the Theme tab can boot on it; the theme itself isn't applied here
   /// (the theme runtime isn't initialized yet — the Theme tab does it).

@@ -65,9 +65,19 @@ class _SetAppThemeButtonView extends StatelessWidget {
               ? Listenable.merge([selectedGym, ThemeRuntime.changes])
               : selectedGym,
           builder: (context, _) {
-            final current = ThemeRuntime.isReady
-                ? ThemeRuntime.activeDesignId
-                : selectedGym.designId;
+            // The admin's PICK is authoritative here, not the engine's async
+            // fetch state: [selectedGym.designId] updates the instant a theme
+            // is tapped in the picker, while [ThemeRuntime.activeDesignId]
+            // only advances after selectDesign's fetch resolves (and never on
+            // a failed fetch) — reading the engine first showed a transient
+            // stale "Current app theme" checkmark right after picking a new
+            // design, and left the button stuck disabled with no retry on a
+            // silently-failed fetch. Falling back to the engine only covers
+            // the boot case, before any pick has happened this session.
+            final pickedId = selectedGym.designId;
+            final current = (pickedId != null && pickedId.isNotEmpty)
+                ? pickedId
+                : (ThemeRuntime.isReady ? ThemeRuntime.activeDesignId : null);
             if (current == null || current.isEmpty) {
               return const SizedBox.shrink();
             }
