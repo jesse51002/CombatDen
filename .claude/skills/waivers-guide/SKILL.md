@@ -229,8 +229,9 @@ clickwrap); only `typed` signatures (enum is extensible).
 ## CRM surface
 
 Reusable `SignWaiverPanel` / `SignWaiverDialog` in `CRM/lib/shared/widgets/`
-(renders the body read-only via `WaiverMarkdownEditor`, shows the ESIGN
-disclosure, captures typed name + consent) — used by the authorize-payer dialogs,
+(a prominent "Signing for <member>" banner — avatar + name + the
+member-or-parent/legal-guardian note — then the body read-only via
+`WaiverMarkdownEditor`, the ESIGN disclosure, typed name + consent) — used by the authorize-payer dialogs,
 the member-detail + editor "Sign" actions, and the purchase wizard. **Every sign
 surface pre-renders the `{{placeholders}}` for display** via
 `renderWaiverPlaceholders` (`lib/core/utils/waiver_render.dart`): member/payee

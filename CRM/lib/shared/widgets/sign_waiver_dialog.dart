@@ -15,6 +15,7 @@ import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_ed
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 import 'package:crm/shared/widgets/sign_waiver_panel.dart';
 
 enum _Phase { loading, form, submitting, success, stale, error }
@@ -215,13 +216,7 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingLarge,
           children: [
-            Text(
-              'Signing on behalf of ${widget.memberName}. '
-              'Read the waiver, then type your name and consent below.',
-              style: DesignConstants.p.copyWith(
-                color: DesignConstants.text,
-              ),
-            ),
+            _SignerBanner(memberName: widget.memberName),
             SignWaiverPanel(
               controller: _controller!,
               enabled: _phase == _Phase.form,
@@ -291,5 +286,59 @@ class _SignWaiverDialogState extends State<SignWaiverDialog> {
           primaryOnPressed: () => Navigator.of(context).pop(),
         );
     }
+  }
+}
+
+/// Prominent "who this signature is FOR" banner: the member's name front and
+/// center, plus who may sign — the member themselves, or their parent /
+/// legal guardian on their behalf (mirrors the ESIGN disclosure's
+/// guardian clause).
+class _SignerBanner extends StatelessWidget {
+  final String memberName;
+
+  const _SignerBanner({required this.memberName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+      decoration: BoxDecoration(
+        color: DesignConstants.primaryColor10,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          InstructorAvatar(name: memberName, diameter: 44),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Text(
+                  'Signing for',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+                Text(
+                  memberName,
+                  style: DesignConstants.h3.copyWith(
+                    color: DesignConstants.text,
+                  ),
+                ),
+                Text(
+                  'Signed by the member — or by their parent / legal '
+                  'guardian on their behalf.',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
