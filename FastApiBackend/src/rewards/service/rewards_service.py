@@ -36,7 +36,6 @@ class RewardsService:
             "gym_id": str(request.gym_id),
             "title": request.title,
             "point_cost": request.point_cost,
-            "amount_off": request.amount_off,
             "image_url": request.image_url,
             "price_label": request.price_label,
         }

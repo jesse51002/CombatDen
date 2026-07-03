@@ -2,8 +2,8 @@
 -- status is not 'pending'. Bind param: :redemption_id
 UPDATE member_reward_redemptions
 SET
-    status     = CAST('approved' AS reward_redemption_status),
-    decided_at = now()
+    status      = CAST('approved' AS reward_redemption_status),
+    resolved_at = now()
 WHERE redemption_id = CAST(:redemption_id AS UUID)
   AND status = CAST('pending' AS reward_redemption_status)
 RETURNING
@@ -13,4 +13,4 @@ RETURNING
     gym_id,
     point_cost,
     status,
-    decided_at
+    resolved_at

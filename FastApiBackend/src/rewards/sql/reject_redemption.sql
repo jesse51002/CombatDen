@@ -19,13 +19,13 @@ refunded AS (
 rejected AS (
     UPDATE member_reward_redemptions
     SET
-        status     = CAST('rejected' AS reward_redemption_status),
-        decided_at = now()
+        status      = CAST('rejected' AS reward_redemption_status),
+        resolved_at = now()
     WHERE redemption_id = CAST(:redemption_id AS UUID)
       AND status = CAST('pending' AS reward_redemption_status)
     RETURNING
         redemption_id, member_id, reward_id, gym_id,
-        point_cost, status, decided_at
+        point_cost, status, resolved_at
 )
 SELECT
     r.redemption_id,
@@ -34,7 +34,7 @@ SELECT
     r.gym_id,
     r.point_cost,
     r.status,
-    r.decided_at,
+    r.resolved_at,
     f.points_balance AS points_balance_after
 FROM rejected r
 JOIN refunded f ON TRUE

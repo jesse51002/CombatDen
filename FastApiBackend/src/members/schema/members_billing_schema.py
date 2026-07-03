@@ -188,7 +188,7 @@ class BillingRewardCard(BaseModel):
 
     reward_id: UUID
     title: str
-    amount_off: str | None = None
+    price_label: str | None = None
     image_url: str | None = None
     point_cost: int
 
@@ -198,17 +198,17 @@ class PendingRedemptionCard(BaseModel):
 
     Sourced from ``member_reward_redemptions`` with ``status = 'pending'``.
     Distinct from BillingRewardCard: carries the redemption's own
-    ``redemption_id`` and ``redeemed_at`` timestamp so staff can identify
+    ``redemption_id`` and ``requested_at`` timestamp so staff can identify
     and act on specific pending requests.
     """
 
     redemption_id: UUID
     reward_id: UUID
     title: str
-    amount_off: str | None = None
+    price_label: str | None = None
     image_url: str | None = None
     point_cost: int
-    redeemed_at: datetime
+    requested_at: datetime
 
 
 # ── Points adjustment request / response ─────────────────────────

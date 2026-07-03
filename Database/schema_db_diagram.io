@@ -222,10 +222,9 @@ Table gym_rewards {
   reward_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   title varchar [not null]
-  amount_off varchar
   image_url varchar
   point_cost integer [not null]
-  price_label varchar [note: 'nullable; display label for the reward price / value (e.g. "$50 off")']
+  price_label varchar [note: 'nullable; reward value label/badge, e.g. "Free", "30% off"']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
@@ -240,9 +239,9 @@ Table member_reward_redemptions {
   member_id uuid [not null]
   reward_id uuid [not null]
   point_cost integer [not null, note: 'snapshot at redemption time']
-  redeemed_at timestamptz [not null, default: `now()`]
+  requested_at timestamptz [not null, default: `now()`, note: 'when the member requested the redemption']
   status reward_redemption_status [not null, default: 'pending', note: 'backend-written']
-  decided_at timestamptz [note: 'backend-written; set when admin approves/rejects']
+  resolved_at timestamptz [note: 'backend-written; set when staff approves/rejects; NULL iff status=pending']
 }
 
 Table gym_waivers {

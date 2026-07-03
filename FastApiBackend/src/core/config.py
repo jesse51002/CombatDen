@@ -77,7 +77,11 @@ class Settings(BaseSettings):
     video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
 
-    # Asset storage (S3 + CloudFront CDN) — shared bucket used by ThemeService.
+    # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
+    # build-time asset pipeline populates (theme images, fonts, etc.). This
+    # backend is the only RUNTIME writer into it (the uploads domain, e.g.
+    # reward/member images uploaded live from the CRM); ThemeService only
+    # writes at build time via its own scripts.
     # AWS credentials are read from the standard boto3 credential chain
     # (env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, ~/.aws/credentials,
     # or an EC2/App Runner instance role). For local upload testing, add

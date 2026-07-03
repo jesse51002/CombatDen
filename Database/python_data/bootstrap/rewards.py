@@ -23,13 +23,13 @@ def create_redemptions(
     gym_id: uuid.UUID,
     members: list[MemberCreate],
     rewards: list[GymRewardCreate],
-    pending_ratio: float = 0.0,
+    pending_ratio: float = 0.3,
 ) -> None:
     """Seed reward redemptions for a gym.
 
     pending_ratio: fraction of rows to mint as 'pending' (for CRM approval
-    queue testing). Default 0.0 keeps all rows 'approved' — identical to
-    prior behavior when the parameter is omitted.
+    queue testing). Default 0.3 keeps a steady stream of pending rows in the
+    CRM approval queue's demo data.
     """
     rows = redemptions_generator.generate(gym_id, members, rewards, pending_ratio=pending_ratio)
     if rows:

@@ -89,7 +89,7 @@ class MembersBillingSupplementary:
             reward = BillingRewardCard(
                 reward_id=row["reward_id"],
                 title=row["title"],
-                amount_off=row["amount_off"],
+                price_label=row["price_label"],
                 image_url=row["image_url"],
                 point_cost=row["point_cost"],
             )
@@ -110,7 +110,7 @@ class MembersBillingSupplementary:
                 BillingRewardCard(
                     reward_id=row["reward_id"],
                     title=row["title"],
-                    amount_off=row["amount_off"],
+                    price_label=row["price_label"],
                     image_url=row["image_url"],
                     point_cost=row["point_cost"],
                 )
@@ -132,10 +132,10 @@ class MembersBillingSupplementary:
                     redemption_id=row["redemption_id"],
                     reward_id=row["reward_id"],
                     title=row["title"],
-                    amount_off=row["amount_off"],
+                    price_label=row["price_label"],
                     image_url=row["image_url"],
                     point_cost=row["point_cost"],
-                    redeemed_at=row["redeemed_at"],
+                    requested_at=row["requested_at"],
                 )
             )
         return pending

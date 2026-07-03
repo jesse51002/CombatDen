@@ -15,7 +15,6 @@ class RewardCreateRequest(BaseModel):
     gym_id: UUID
     title: str = Field(min_length=1)
     point_cost: int = Field(gt=0)
-    amount_off: str | None = None
     image_url: str | None = None
     price_label: str | None = None
 
@@ -25,7 +24,6 @@ class RewardUpdateData(BaseModel):
 
     title: str | None = None
     point_cost: int | None = Field(default=None, gt=0)
-    amount_off: str | None = None
     image_url: str | None = None
     price_label: str | None = None
     is_active: bool | None = None
@@ -44,7 +42,6 @@ class RewardResponse(BaseModel):
     gym_id: UUID
     title: str
     point_cost: int
-    amount_off: str | None
     image_url: str | None
     price_label: str | None = None
     is_active: bool
@@ -78,9 +75,9 @@ class RedemptionResponse(BaseModel):
     reward_id: UUID
     gym_id: UUID
     point_cost: int
-    redeemed_at: datetime
+    requested_at: datetime
     status: RewardRedemptionStatus
-    decided_at: datetime | None
+    resolved_at: datetime | None
     points_balance_after: int
 
 
@@ -89,7 +86,7 @@ class RedemptionTransitionResponse(BaseModel):
 
     redemption_id: UUID
     status: RewardRedemptionStatus
-    decided_at: datetime
+    resolved_at: datetime
     points_balance_after: int | None = None
 
 
@@ -100,9 +97,9 @@ class RedemptionHistoryItem(BaseModel):
     reward_id: UUID
     title: str
     image_url: str | None
-    amount_off: str | None
+    price_label: str | None
     point_cost: int
-    redeemed_at: datetime
+    requested_at: datetime
     status: RewardRedemptionStatus
 
 
@@ -121,10 +118,11 @@ class PendingRedemptionItem(BaseModel):
     reward_title: str
     reward_image_url: str | None
     point_cost: int
-    redeemed_at: datetime
+    requested_at: datetime
 
 
 class PendingRedemptionListResponse(BaseModel):
-    """Gym-wide pending redemption queue."""
+    """Gym-wide pending redemption queue (paginated)."""
 
     items: list[PendingRedemptionItem]
+    total: int

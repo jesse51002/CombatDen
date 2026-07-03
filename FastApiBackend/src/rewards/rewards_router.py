@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -348,13 +348,17 @@ async def list_pending_redemptions(
     redemption_service: RewardsRedemptionService = Depends(
         Provide[DependencyInjector.rewards_redemption_service]
     ),
+    limit: int = Query(default=100, le=200),
+    offset: int = Query(default=0),
 ) -> PendingRedemptionListResponse:
-    """List all pending redemptions for a gym."""
+    """List a page of pending redemptions for a gym."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        return await redemption_service.list_pending(gym_id)
+        return await redemption_service.list_pending(
+            gym_id, limit=limit, offset=offset
+        )
     except Exception:
         logger.error(
             "Failed to list pending redemptions: gym_id=%s",

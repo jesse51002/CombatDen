@@ -6,7 +6,6 @@ RETURNING
     gym_id,
     title,
     point_cost,
-    amount_off,
     image_url,
     price_label,
     is_active,

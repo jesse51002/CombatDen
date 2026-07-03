@@ -17,7 +17,7 @@ def make_redemption_row(
     gym_id: str,
     point_cost: int = 50,
     status: str = "pending",
-    decided_at=None,
+    resolved_at=None,
     points_balance_after: int = 50,
 ) -> dict:
     return {
@@ -26,9 +26,9 @@ def make_redemption_row(
         "reward_id": reward_id,
         "gym_id": gym_id,
         "point_cost": point_cost,
-        "redeemed_at": datetime.now(UTC),
+        "requested_at": datetime.now(UTC),
         "status": status,
-        "decided_at": decided_at,
+        "resolved_at": resolved_at,
         "points_balance_after": points_balance_after,
     }
 
@@ -42,7 +42,7 @@ def make_transition_row(
     return {
         "redemption_id": redemption_id,
         "status": status,
-        "decided_at": datetime.now(UTC),
+        "resolved_at": datetime.now(UTC),
         "points_balance_after": points_balance_after,
     }
 
@@ -213,7 +213,7 @@ def test_redeem_for_member_auto_approve(
         reward_id=fake_reward_id,
         gym_id=fake_gym_id,
         status="approved",
-        decided_at=datetime.now(UTC),
+        resolved_at=datetime.now(UTC),
     )
 
     result = MagicMock()
@@ -243,7 +243,7 @@ def test_redeem_for_member_override(
         reward_id=fake_reward_id,
         gym_id=fake_gym_id,
         status="approved",
-        decided_at=datetime.now(UTC),
+        resolved_at=datetime.now(UTC),
         points_balance_after=0,
     )
 
@@ -421,7 +421,8 @@ def test_list_pending_redemptions(
         "reward_title": "Free smoothie",
         "reward_image_url": None,
         "point_cost": 50,
-        "redeemed_at": datetime.now(UTC),
+        "requested_at": datetime.now(UTC),
+        "total": 1,
     }
 
     result = MagicMock()
@@ -437,9 +438,41 @@ def test_list_pending_redemptions(
     assert response.status_code == 200
     body = response.json()
     assert len(body["items"]) == 1
+    assert body["total"] == 1
     item = body["items"][0]
     assert item["member_name"] == "Ada Lovelace"
     assert item["reward_title"] == "Free smoothie"
+
+
+def test_list_pending_redemptions_empty_page_has_zero_total(
+    client, db_pool_mock, auth_headers, fake_gym_id
+):
+    """GET /redemptions/pending returns total=0 (not an error) for an empty page."""
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = []
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(return_value=result)
+
+    response = client.get(
+        f"/api/v1/rewards/redemptions/pending?gym_id={fake_gym_id}&limit=10&offset=1000",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 0
+
+
+def test_list_pending_redemptions_rejects_limit_over_200(
+    client, auth_headers, fake_gym_id
+):
+    """GET /redemptions/pending validates limit <= 200."""
+    response = client.get(
+        f"/api/v1/rewards/redemptions/pending?gym_id={fake_gym_id}&limit=201",
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
 
 
 # ─── redemption history ───────────────────────────────────────────────────────
@@ -451,9 +484,9 @@ def test_redemption_history_returns_items(client, db_pool_mock, auth_headers, fa
         "reward_id": str(uuid4()),
         "title": "Free smoothie",
         "image_url": None,
-        "amount_off": None,
+        "price_label": None,
         "point_cost": 50,
-        "redeemed_at": datetime.now(UTC),
+        "requested_at": datetime.now(UTC),
         "status": "pending",
     }
 

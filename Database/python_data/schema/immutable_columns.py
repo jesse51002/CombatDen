@@ -157,9 +157,9 @@ MEMBER_REWARD_REDEMPTIONS: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "reward_id",  # identity FK
-        "redeemed_at",  # auto-generated timestamp
+        "requested_at",  # auto-generated timestamp
         "status",  # backend-written approval lifecycle, never client-set
-        "decided_at",  # backend-written decision timestamp, never client-set
+        "resolved_at",  # backend-written decision timestamp, never client-set
     }
 )
 

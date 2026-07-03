@@ -532,7 +532,7 @@ def test_member_detail_includes_pending_redemptions(
                 reward_id=fake_reward_id,
                 title="Free T-Shirt",
                 point_cost=1500,
-                redeemed_at=now,
+                requested_at=now,
             )
         ],
     )

@@ -41,7 +41,7 @@ class RewardsRedemptionService:
 
         When ``auto_approve`` is False the row is inserted with
         ``status='pending'``; when True it is immediately ``status='approved'``
-        with ``decided_at=now()``.  Returns 0 rows (→ ValueError) if the member
+        with ``resolved_at=now()``.  Returns 0 rows (→ ValueError) if the member
         has insufficient points or the reward is inactive.
         """
         sql = load_sql(SQL_DIR / "redeem_reward.sql")
@@ -191,22 +191,34 @@ class RewardsRedemptionService:
             )
         return RedemptionTransitionResponse(**row)
 
-    async def list_pending(self, gym_id: UUID) -> PendingRedemptionListResponse:
-        """Return all pending redemptions for a gym, oldest first."""
+    async def list_pending(
+        self,
+        gym_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> PendingRedemptionListResponse:
+        """Return a page of pending redemptions for a gym, oldest first."""
         sql = load_sql(SQL_DIR / "list_pending_redemptions.sql")
         async with self._db_pool.session() as session:
             rows = (
                 (
                     await session.execute(
                         text(sql),
-                        {"gym_id": str(gym_id)},
+                        {"gym_id": str(gym_id), "limit": limit, "offset": offset},
                     )
                 )
                 .mappings()
                 .all()
             )
+        total = rows[0]["total"] if rows else 0
         return PendingRedemptionListResponse(
-            items=[PendingRedemptionItem(**dict(row)) for row in rows],
+            items=[
+                PendingRedemptionItem(
+                    **{k: v for k, v in dict(row).items() if k != "total"}
+                )
+                for row in rows
+            ],
+            total=total,
         )
 
     async def history(self, member_id: UUID) -> RedemptionHistoryResponse:

@@ -1,6 +1,6 @@
 -- Staff override redemption: no points guard, drains balance to zero.
 -- Debits LEAST(points_balance, point_cost) so balance never goes negative.
--- Always inserts status='approved', decided_at=now().
+-- Always inserts status='approved', resolved_at=now().
 -- Bind params: :member_id, :reward_id
 WITH locked_member AS (
     SELECT member_id, points_balance, gym_id
@@ -35,7 +35,7 @@ inserted AS (
         reward_id,
         point_cost,
         status,
-        decided_at
+        resolved_at
     )
     SELECT
         lm.member_id,
@@ -50,7 +50,7 @@ inserted AS (
       AND EXISTS (SELECT 1 FROM debited)
     RETURNING
         redemption_id, member_id, reward_id, gym_id,
-        point_cost, redeemed_at, status, decided_at
+        point_cost, requested_at, status, resolved_at
 )
 SELECT
     i.redemption_id,
@@ -58,9 +58,9 @@ SELECT
     i.reward_id,
     i.gym_id,
     i.point_cost,
-    i.redeemed_at,
+    i.requested_at,
     i.status,
-    i.decided_at,
+    i.resolved_at,
     d.points_balance AS points_balance_after
 FROM inserted i
 JOIN debited d ON TRUE

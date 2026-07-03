@@ -31,7 +31,7 @@ def _assert_reward_shape(item: dict) -> None:
     required_str_fields = {"title"}
     required_int_fields = {"point_cost"}
     required_bool_fields = {"is_active"}
-    required_nullable_str_fields = {"amount_off", "image_url"}
+    required_nullable_str_fields = {"price_label", "image_url"}
     required_datetime_fields = {"created_at"}
 
     for field in required_uuid_fields:

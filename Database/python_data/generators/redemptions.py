@@ -34,6 +34,11 @@ def generate(
                 if random.random() < pending_ratio
                 else RewardRedemptionStatus.approved
             )
+            requested_at = random_past_datetime(180)
+            # The DB's resolved_matches_status CHECK requires resolved_at to be
+            # NULL for pending rows and set for every decided row; the seed
+            # writes via the supabase client so it must satisfy the CHECK too.
+            resolved_at = None if status == RewardRedemptionStatus.pending else requested_at
             redemptions.append(
                 MemberRewardRedemptionCreate(
                     redemption_id=uuid.uuid4(),
@@ -41,8 +46,9 @@ def generate(
                     member_id=m.member_id,
                     reward_id=r.reward_id,
                     point_cost=r.point_cost,
-                    redeemed_at=random_past_datetime(180),
+                    requested_at=requested_at,
                     status=status,
+                    resolved_at=resolved_at,
                 )
             )
     return redemptions
