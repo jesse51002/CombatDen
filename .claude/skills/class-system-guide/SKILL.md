@@ -19,7 +19,7 @@ description: >-
   exact wall-clock slot survives; soft-delete wipes everything future; a gym
   timezone change re-mints per class), exceptions binding to original slots
   (reschedule-to-any-date, time-aware collision, attendance wipe-future /
-  keep-and-resync-past), the warn-first check-in gate (is_member kiosk-reject
+  keep-and-resync-past), the warn-first check-in gate (unsigned-waiver legal gate included; is_member kiosk-reject
   vs staff requires_confirmation; the 2h early window; points award + repeat
   echo), the SIGN-UPS/reservations model (class_signups ≠ member_attendance;
   the signed-up-or-attended capacity union; the combined roster), and the
@@ -300,13 +300,21 @@ rejects an occurrence starting >2h out. Retroactive any-date check-ins work
 `CheckinMemberGate.checkin_member(resolved_class, member_id, is_member,
 ignore_warnings)`:
 - **`is_member=True`** (kiosk / member self) — strict: a blocking condition
-  (`no_membership | out_of_classes | ineligible_plan | over_capacity`)
-  **rejects** (`skip_reason`, nothing written).
+  (`no_membership | out_of_classes | ineligible_plan | over_capacity |
+  unsigned_waiver`) **rejects** (`skip_reason`, nothing written).
 - **`is_member=False`** (staff, CRM default) — a clean check-in records, but
   a warned one is **NOT recorded**: `requires_confirmation=true` +
   `warnings`; resend with **`ignore_warnings=true`** to record
   (best-available / NULL attribution). Batch has a `needs_confirmation` item
   status.
+- **The waiver gate** (`unsigned_waiver`,
+  `checkin/sql/checkin_unsigned_waivers.sql`): a waiver required by any of
+  the member's CURRENT (active/frozen) memberships' plans that they haven't
+  signed at a version >= its `requires_resign` floor — the same set the
+  member-detail Waivers section shows (see the `waivers-guide` skill).
+  Evaluated for the member NOW, independent of the occurrence's coverage.
+  Sign-ups/reservations are deliberately NOT waiver-gated — only the
+  check-in.
 - **Points** awarded on a NEW attendance row (`plan_id`/`item_id` nullable
   together, `chk_attendance_membership_pair`). An idempotent **repeat echoes
   `points_worth`** (reports it, balance untouched, not 0).
@@ -404,6 +412,14 @@ builds `checkin_reverser` before all consumers; no import cycle.
 - **Member page**: a **"Check in / Reserve"** popup — Check-in section
   (in-session + ≤2h) + past-classes toggle + Reserve section (any future
   not-yet-started).
+- **Dashboard Live Attendance card** (`features/home/.../live_attendance_card/`
+  + `live_attendance_*` bloc): the IN-SESSION occurrence(s)' combined
+  signed-up ∪ attended roster (`/classes/instances` split by `occurredAt` +
+  duration, then `/checkin/attendees` per shown occurrence) — green Checked
+  In / red Not Here, falling forward to the next occurrence's reservations
+  (blue Reserved) when nothing is live; 60s silent poll. Hosts its own
+  loaded `ScheduleBloc` so its footer opens the REAL batch check-in dialog
+  (2h window) and occurrence screen for the shown occurrence.
 
 ## 9. Gotchas / operational
 

@@ -127,6 +127,7 @@ def test_no_python_string_builds_bind_then_cast() -> None:
 
     Catches the dynamic recurrence the .sql scan can't see, such as
     ``f"{col} = :{col}::jsonb"``. Use ``CAST(:{col} AS JSONB)`` instead.
+
     Scans actual runtime string constants (via ``ast``), so docstrings and
     ``#`` comments that spell out the forbidden pattern in prose don't
     false-positive — mirroring the ``--``-stripping in the .sql scan.

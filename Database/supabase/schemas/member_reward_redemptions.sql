@@ -1,12 +1,26 @@
+-- Approval lifecycle for a redemption request. 'pending' = awaiting admin
+-- decision; 'approved' = admin granted the reward; 'rejected' = admin denied.
+CREATE TYPE reward_redemption_status AS ENUM (
+    'pending',
+    'approved',
+    'rejected'
+);
+
 -- Log of point-based reward redemptions. point_cost is a snapshot at
 -- redemption time (the reward's current point_cost may change later).
+-- status and resolved_at are backend-written (the backend connects as the
+-- postgres role and bypasses the authenticated REVOKE UPDATE).
 CREATE TABLE member_reward_redemptions (
     redemption_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_redemption_gym REFERENCES gyms(gym_id),
     member_id UUID NOT NULL,
     reward_id UUID NOT NULL CONSTRAINT fk_redemption_reward REFERENCES gym_rewards(reward_id),
     point_cost INTEGER NOT NULL CHECK (point_cost >= 0),
-    redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- When the member requested the redemption.
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status reward_redemption_status NOT NULL DEFAULT 'pending',
+    -- When staff approved/rejected the redemption. NULL iff status='pending'.
+    resolved_at TIMESTAMPTZ,
 
     PRIMARY KEY (redemption_id),
 
@@ -16,8 +30,11 @@ CREATE TABLE member_reward_redemptions (
 
     CONSTRAINT fk_redemption_reward_gym
         FOREIGN KEY (reward_id, gym_id)
-        REFERENCES gym_rewards (reward_id, gym_id)
+        REFERENCES gym_rewards (reward_id, gym_id),
+
+    CONSTRAINT resolved_matches_status
+        CHECK ((status = 'pending') = (resolved_at IS NULL))
 );
 
 CREATE INDEX idx_member_reward_redemptions_member_gym_time
-    ON member_reward_redemptions (member_id, gym_id, redeemed_at DESC);
+    ON member_reward_redemptions (member_id, gym_id, requested_at DESC);

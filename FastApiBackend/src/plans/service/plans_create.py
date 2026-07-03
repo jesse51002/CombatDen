@@ -55,6 +55,7 @@ class MembershipPlansCreate(MembershipPlansBase):
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(
             request.gym_id,
         )
+        await self._validate_waiver_ids(request.gym_id, request.waiver_ids)
 
         # ── Step 1: DB insert (NULL stripe IDs) ──────────────────
         plan_row = await self._insert_plan(request)

@@ -79,6 +79,8 @@ def _gate(memberships: list[MembershipUsage]) -> CheckinMemberGate:
     gate._queries.get_signup_or_attended_members = AsyncMock(
         return_value=set()
     )
+    # The waiver gate: fully signed (these tests cover occurrence timing).
+    gate._queries.get_unsigned_waivers = AsyncMock(return_value=[])
     gate._cycle_counts = MagicMock()
     gate._cycle_counts.get_cycle_counts = AsyncMock(
         return_value=CheckinCycleCountsResponse(

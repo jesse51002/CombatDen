@@ -5,7 +5,6 @@ import 'package:crm/showcase/showcase_assets.dart';
 import 'package:crm/showcase/showcase_slots.dart';
 import 'package:crm/showcase/showcase_tokens.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
-import 'package:theme_flutter/theme/theme_text.dart';
 
 /// Clone of MobileApp's `AppTopbar` (+ header + gym header + info bar),
 /// flattened into one file. Preview-only: taps are no-ops.
@@ -146,8 +145,11 @@ class _GymNameLabel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       spacing: ShowcaseTokens.spacingSmall,
       children: [
+        // Gym identity is NOT a customization slot: the host-supplied
+        // [gymName] always renders as-is — a theme pick must never swap
+        // the mockup's gym name for the theme's design name.
         Text(
-          ThemeText.designName(fallback: gymName),
+          gymName,
           style: big ? ShowcaseTokens.h1 : ShowcaseTokens.h2,
         ),
         Icon(

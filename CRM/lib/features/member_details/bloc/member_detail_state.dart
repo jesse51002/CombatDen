@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/signup_response.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
@@ -54,6 +55,12 @@ class MemberDetailLoaded extends MemberDetailState {
   /// screen-level error dialog doesn't swallow it while
   /// the wizard is open.
   final String? startError;
+
+  /// Set when start-memberships (or its preview) returns a 422 waiver
+  /// gate — one or more required waivers are unsigned. The wizard routes
+  /// to its sign-waivers step when this is non-null; cleared alongside
+  /// [startResult] / [startError] via [clearStartOutcome].
+  final WaiverGateException? waiverGate;
 
   /// True while the cancel-memberships DELETE is in flight.
   /// Separate from [isMutating] so the cancel dialog owns its
@@ -172,6 +179,7 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isStartingMemberships = false,
     this.startResult,
     this.startError,
+    this.waiverGate,
     this.isCancellingMemberships = false,
     this.cancelOutcome,
     this.isRemovingAuthorization = false,
@@ -215,6 +223,7 @@ class MemberDetailLoaded extends MemberDetailState {
     bool? isStartingMemberships,
     MemberMembershipsStartResponse? startResult,
     String? startError,
+    WaiverGateException? waiverGate,
     bool clearStartOutcome = false,
     bool? isCancellingMemberships,
     CancelOutcome? cancelOutcome,
@@ -264,6 +273,9 @@ class MemberDetailLoaded extends MemberDetailState {
       startError: clearStartOutcome
           ? null
           : (startError ?? this.startError),
+      waiverGate: clearStartOutcome
+          ? null
+          : (waiverGate ?? this.waiverGate),
       isCancellingMemberships: isCancellingMemberships ??
           this.isCancellingMemberships,
       cancelOutcome: clearCancelOutcome
@@ -321,6 +333,7 @@ class MemberDetailLoaded extends MemberDetailState {
         isStartingMemberships,
         startResult,
         startError,
+        waiverGate,
         isCancellingMemberships,
         cancelOutcome,
         isRemovingAuthorization,

@@ -22,6 +22,7 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
+  logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
@@ -222,10 +223,9 @@ Table gym_rewards {
   reward_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   title varchar [not null]
-  amount_off varchar
-  image_url varchar
+  image_url varchar [not null, note: 'every reward has an image -- writers fill the platform default (wrapped-gift-box photo) when none is provided']
   point_cost integer [not null]
-  price_label varchar [note: 'nullable; display label for the reward price / value (e.g. "$50 off")']
+  price_label varchar [not null, note: 'reward value label/badge, e.g. "Free", "30% off" -- writers fill "Free" when none is provided']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
@@ -239,8 +239,10 @@ Table member_reward_redemptions {
   gym_id uuid [not null]
   member_id uuid [not null]
   reward_id uuid [not null]
-  point_cost integer [not null]
-  redeemed_at timestamptz [not null, default: `now()`]
+  point_cost integer [not null, note: 'snapshot at redemption time']
+  requested_at timestamptz [not null, default: `now()`, note: 'when the member requested the redemption']
+  status reward_redemption_status [not null, default: 'pending', note: 'backend-written']
+  resolved_at timestamptz [note: 'backend-written; set when staff approves/rejects; NULL iff status=pending']
 }
 
 Table gym_waivers {
@@ -249,7 +251,7 @@ Table gym_waivers {
   name varchar [not null]
   current_version_id uuid
   is_deleted boolean [not null, default: false]
-  is_default boolean [not null, default: false, note: 'undeletable default authorized-payer waiver; <=1 per gym']
+  waiver_type waiver_type [not null, default: 'custom', note: 'payer_auth = undeletable authorized-payer agreement (<=1 per gym, never plan-attachable); custom = normal gym waiver']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
@@ -265,6 +267,7 @@ Table gym_waiver_versions {
   version_number integer [not null]
   body text [not null]
   content_hash varchar [not null]
+  requires_resign boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -283,10 +286,15 @@ Table member_waiver_signatures {
   signer_name varchar [not null]
   signature_type waiver_signature_type [not null, default: 'typed']
   consent_acknowledged boolean [not null]
-  ip_address inet
-  user_agent varchar
+  ip_address inet [not null]
+  user_agent varchar [not null]
+  rendered_body text [not null]
   content_hash varchar [not null]
+  esign_disclosure_version varchar [not null, default: 'esign-v1']
+  operator_employee_id uuid
 }
+
+Ref: member_waiver_signatures.operator_employee_id > gym_employees.employee_id
 
 Table member_authorized_payers {
   member_id uuid [not null]

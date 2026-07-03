@@ -72,17 +72,21 @@ MULTI_SLOT_CLASS_CHANCE = 0.25
 _SLOT_HOUR_RANGE = (6, 20)
 _SLOT_MINUTES = (0, 15, 30, 45)
 
+# Every template carries an image_url: gym_classes.image_url is NOT NULL and
+# this seed inserts DIRECTLY into the table (no backend default-fill on this
+# path). Photos come from the same human-curated Pexels pool the VideoService
+# gym templates / CRM showcase use.
 CLASS_TEMPLATES = [
-    {"class_name": "Morning BJJ", "class_description": "Fundamentals and sparring for all levels.", "duration_minutes": 60},
-    {"class_name": "Evening MMA", "class_description": "Mixed martial arts striking and grappling.", "duration_minutes": 90},
-    {"class_name": "Kickboxing", "class_description": "High-energy kickboxing cardio and technique.", "duration_minutes": 60},
-    {"class_name": "Open Mat", "class_description": "Free training time with open sparring.", "duration_minutes": 120},
-    {"class_name": "Wrestling", "class_description": "Takedowns, control, and scrambles.", "duration_minutes": 60},
-    {"class_name": "Muay Thai", "class_description": "Traditional Thai boxing with pads and bags.", "duration_minutes": 75},
-    {"class_name": "No-Gi Grappling", "class_description": "Submission grappling without the gi.", "duration_minutes": 60},
-    {"class_name": "Kids Martial Arts", "class_description": "Fun and discipline-focused class for ages 6-12.", "duration_minutes": 45},
-    {"class_name": "Competition Team", "class_description": "Advanced training for competitors.", "duration_minutes": 90},
-    {"class_name": "Strength & Conditioning", "class_description": "Athletic performance training.", "duration_minutes": 60},
+    {"class_name": "Morning BJJ", "class_description": "Fundamentals and sparring for all levels.", "duration_minutes": 60, "image_url": "https://images.pexels.com/photos/8612009/pexels-photo-8612009.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Evening MMA", "class_description": "Mixed martial arts striking and grappling.", "duration_minutes": 90, "image_url": "https://images.pexels.com/photos/7991668/pexels-photo-7991668.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Kickboxing", "class_description": "High-energy kickboxing cardio and technique.", "duration_minutes": 60, "image_url": "https://images.pexels.com/photos/6296002/pexels-photo-6296002.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Open Mat", "class_description": "Free training time with open sparring.", "duration_minutes": 120, "image_url": "https://images.pexels.com/photos/29956727/pexels-photo-29956727.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Wrestling", "class_description": "Takedowns, control, and scrambles.", "duration_minutes": 60, "image_url": "https://images.pexels.com/photos/8612465/pexels-photo-8612465.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Muay Thai", "class_description": "Traditional Thai boxing with pads and bags.", "duration_minutes": 75, "image_url": "https://images.pexels.com/photos/4761788/pexels-photo-4761788.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "No-Gi Grappling", "class_description": "Submission grappling without the gi.", "duration_minutes": 60, "image_url": "https://images.pexels.com/photos/6765021/pexels-photo-6765021.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Kids Martial Arts", "class_description": "Fun and discipline-focused class for ages 6-12.", "duration_minutes": 45, "image_url": "https://images.pexels.com/photos/7045594/pexels-photo-7045594.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Competition Team", "class_description": "Advanced training for competitors.", "duration_minutes": 90, "image_url": "https://images.pexels.com/photos/7991616/pexels-photo-7991616.jpeg?auto=compress&cs=tinysrgb&w=1200"},
+    {"class_name": "Strength & Conditioning", "class_description": "Athletic performance training.", "duration_minutes": 60, "image_url": "https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200"},
 ]
 
 DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
@@ -141,6 +145,7 @@ def generate_classes(
                 gym_id=gym_id,
                 class_name=tmpl["class_name"],
                 class_description=tmpl["class_description"],
+                image_url=tmpl["image_url"],
                 max_capacity=max_capacity,
                 points_worth=random.choice([25, 50, 75, 100]),
                 is_active=is_active,

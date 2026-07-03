@@ -4,6 +4,7 @@ Builds the dispatcher + handlers from plain constructors and sets up
 the DB scaffolding (member, plan, price, synthetic membership row)
 needed to exercise the event handlers against real tables.
 """
+from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass

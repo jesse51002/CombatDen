@@ -22,6 +22,7 @@ void main() {
       displayName: 'Test Gym',
       role: EmployeeRole.owner,
       timezone: 'America/Chicago',
+      logoUrl: null,
       savedThemeDesignId: 'OldDesign',
     );
   });

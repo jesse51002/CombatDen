@@ -528,14 +528,20 @@ class MemberMembershipsRemoveDiscountsRequest(BaseModel):
 
 
 class MembersBillingLinkRequest(BaseModel):
-    """Authorize a payer for a member, signing the gym's default waiver.
+    """Authorize a payer for a member in ONE request (sign + authorize).
 
-    The payer (``payer_member_id``) is the signer: ``signer_name`` is their
-    typed legal name and ``consent_acknowledged`` must be True (a valid
-    e-signature). The signature + the authorization are recorded atomically.
+    The payer (``payer_member_id``) is the signer: ``signer_name`` is their typed
+    legal name, ``consent_acknowledged`` must be True, and ``waiver_version_id``
+    is the gym's default-waiver version the client displayed (echoed so the
+    backend version-locks before signing, 409 on a stale echo). The handler
+    builds the placeholder values (the payer's + the member-being-paid-for's
+    names) and calls the shared signing service, then records the authorization
+    referencing the new signature. The two are NOT atomic — a retry after a
+    failed authorize leaves a harmless extra (append-only) signature.
     """
 
     payer_member_id: UUID
+    waiver_version_id: UUID
     signer_name: str
     # Literal[True]: a false consent is not a valid e-signature, so reject it at
     # deserialization rather than relying on a downstream runtime guard.

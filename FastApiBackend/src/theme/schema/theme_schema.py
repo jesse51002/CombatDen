@@ -50,8 +50,13 @@ class ShowcaseClassCard(BaseModel):
 
 
 class ShowcaseRewardCard(BaseModel):
-    """One showcase reward card from a real gym's ``gym_rewards`` row. Lenient:
-    ``image_url`` / ``price_label`` are nullable in prod."""
+    """One showcase reward card from a real gym's ``gym_rewards`` row.
+
+    ``image_url`` / ``price_label`` are actually NOT NULL on ``gym_rewards``
+    (every reward has both); kept ``Optional`` here anyway as a defensive,
+    lenient parse for this read-only showcase surface, not because the
+    columns can be null.
+    """
 
     model_config = ConfigDict(extra="ignore")
 

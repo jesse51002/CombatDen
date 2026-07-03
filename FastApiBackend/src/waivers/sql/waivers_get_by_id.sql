@@ -2,6 +2,7 @@ SELECT
     w.waiver_id,
     w.gym_id,
     w.name,
+    w.waiver_type,
     w.current_version_id,
     w.is_deleted,
     w.created_at,
@@ -11,7 +12,12 @@ SELECT
         SELECT COUNT(*)
         FROM member_waiver_signatures s
         WHERE s.waiver_version_id = w.current_version_id
-    ) AS current_version_signed_count
+    ) AS current_version_signed_count,
+    (
+        SELECT COUNT(DISTINCT s.member_id)
+        FROM member_waiver_signatures s
+        WHERE s.waiver_id = w.waiver_id
+    ) AS total_signed_count
 FROM gym_waivers w
 LEFT JOIN gym_waiver_versions cv
        ON cv.version_id = w.current_version_id

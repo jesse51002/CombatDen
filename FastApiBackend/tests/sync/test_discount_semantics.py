@@ -38,6 +38,7 @@ from tests.helpers.db_reads import (
     get_active_membership_item_id,
     get_profile_stripe_ids,
 )
+from tests.helpers.db_writes import authorize_payer
 
 
 async def _fetch_total_price(db_pool, member_id: UUID, plan_id: UUID) -> int:
@@ -218,12 +219,7 @@ async def test_line_amount_is_total_for_quantity_not_per_unit(
     )
 
     try:
-        await memberships_service.link_account(
-            child.member_id,
-            parent.member_id,
-            signer_name="Test Payer",
-            consent_acknowledged=True,
-        )
+        await authorize_payer(db_pool, child.member_id, parent.member_id)
         await memberships_service.start(
             MemberMembershipsStartRequest(
                 payer_member_id=parent.member_id,

@@ -21,4 +21,7 @@ class MemberWaiverSignatureCreate(SeedModel):
     consent_acknowledged: bool
     ip_address: str | None = None
     user_agent: str | None = None
+    rendered_body: str
     content_hash: str
+    esign_disclosure_version: str = "esign-v1"
+    operator_employee_id: UUID | None = None

@@ -81,6 +81,7 @@ def _gate(
     attendance_count: int = 0,
     existing: dict | None = None,
     log_id: UUID | None = None,
+    unsigned_waivers: list[dict] | None = None,
 ) -> tuple[CheckinMemberGate, AsyncMock]:
     """A gate with mocked queries / writer / cycle-counts; pure selector kept.
 
@@ -100,6 +101,11 @@ def _gate(
     # the set (covered by its own dedicated tests below).
     gate._queries.get_signup_or_attended_members = AsyncMock(
         return_value={uuid4() for _ in range(attendance_count)}
+    )
+    # The waiver gate: default fully signed (empty). Pass rows to simulate a
+    # required-but-unsigned waiver.
+    gate._queries.get_unsigned_waivers = AsyncMock(
+        return_value=unsigned_waivers or []
     )
 
     gate._cycle_counts = MagicMock()
@@ -475,4 +481,87 @@ async def test_existing_attendance_is_idempotent_repeat() -> None:
     assert res.chosen_plan_id == plan
     # The repeat echoes the class's points (already in the balance), not 0.
     assert res.points_awarded == resolved_class.points_worth
+    writer.assert_not_awaited()
+
+
+# ── the waiver gate: unsigned required waiver blocks kiosk, warns staff ──
+
+
+def _unsigned_row() -> dict:
+    return {"waiver_id": uuid4(), "name": "Liability Waiver"}
+
+
+async def test_kiosk_unsigned_waiver_rejected() -> None:
+    """A kiosk check-in with an unsigned required waiver is rejected — even
+    with a clean covering membership — and nothing is written."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, writer = _gate(
+        memberships=[m],
+        eligible={plan},
+        unsigned_waivers=[_unsigned_row()],
+    )
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
+
+    assert res.log_id is None
+    assert res.skip_reason == CheckinWarning.unsigned_waiver
+    assert res.points_awarded == 0
+    writer.assert_not_awaited()
+
+
+async def test_staff_unsigned_waiver_needs_confirmation() -> None:
+    """A staff check-in with an unsigned waiver is held for confirmation —
+    the pop-up path: nothing written, the warning returned."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, writer = _gate(
+        memberships=[m],
+        eligible={plan},
+        unsigned_waivers=[_unsigned_row()],
+    )
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert CheckinWarning.unsigned_waiver in res.warnings
+    writer.assert_not_awaited()
+
+
+async def test_staff_unsigned_waiver_override_records() -> None:
+    """``ignore_warnings`` records through the unsigned-waiver warning,
+    attributing normally and echoing the warning on the recorded response."""
+    plan = uuid4()
+    m = _usage(plan, PlanType.recurring, class_count=None, classes_used=0)
+    gate, writer = _gate(
+        memberships=[m],
+        eligible={plan},
+        unsigned_waivers=[_unsigned_row()],
+    )
+
+    res = await gate.checkin_member(
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
+    )
+
+    assert res.log_id is not None
+    assert res.chosen_plan_id == plan
+    assert CheckinWarning.unsigned_waiver in res.warnings
+    writer.assert_awaited_once()
+
+
+async def test_unsigned_waiver_flagged_even_without_coverage() -> None:
+    """The waiver gate is membership-independent: with no covering
+    membership, BOTH no_membership and unsigned_waiver come back."""
+    gate, writer = _gate(
+        memberships=[],
+        eligible=set(),
+        unsigned_waivers=[_unsigned_row()],
+    )
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert CheckinWarning.no_membership in res.warnings
+    assert CheckinWarning.unsigned_waiver in res.warnings
     writer.assert_not_awaited()

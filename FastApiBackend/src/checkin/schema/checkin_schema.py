@@ -41,12 +41,18 @@ class CheckinWarning(StrEnum):
             ``allowed_plan_ids``.
         over_capacity: The room is at ``max_capacity`` for this occurrence (the
             headcount gate).
+        unsigned_waiver: The member has an unsigned required waiver — one of
+            their CURRENT (active/frozen) memberships' plans requires a waiver
+            they have not signed at a version >= its re-sign floor (the same
+            set the member-detail Waivers section shows). Reservations are
+            deliberately NOT gated — only the check-in.
     """
 
     no_membership = "no_membership"
     out_of_classes = "out_of_classes"
     ineligible_plan = "ineligible_plan"
     over_capacity = "over_capacity"
+    unsigned_waiver = "unsigned_waiver"
 
 
 class GateEvaluation(BaseModel):
@@ -73,11 +79,13 @@ class GateEvaluation(BaseModel):
     def blocked(self) -> bool:
         """Whether the strict kiosk gate rejects this member.
 
-        Blocked iff the room is full, the member has no membership, or no
-        eligible covering membership has remaining capacity (``strict`` None).
+        Blocked iff the room is full, a required waiver is unsigned, the
+        member has no membership, or no eligible covering membership has
+        remaining capacity (``strict`` None).
         """
         return (
             CheckinWarning.over_capacity in self.reasons
+            or CheckinWarning.unsigned_waiver in self.reasons
             or self.forced is None
             or self.strict is None
         )

@@ -36,6 +36,8 @@ class SelectedGym extends ChangeNotifier {
   String? _gymId;
   EmployeeRole? _role;
   String? _timezone;
+  String? _gymName;
+  String? _logoUrl;
 
   /// The gym's persisted ThemeService design id (`gyms.theme_design_id`),
   /// hydrated at login. The "Set as app theme" action compares the previewed
@@ -60,6 +62,19 @@ class SelectedGym extends ChangeNotifier {
 
   /// The caller's role at the active gym; null until [setActiveGym].
   EmployeeRole? get role => _role;
+
+  /// The active gym's **real name** (from `GET /api/v1/gyms/`); null until
+  /// [setActiveGym]. This is the authoritative gym name — distinct from
+  /// [displayName], which tracks the selected theme/content gym and drifts to
+  /// the picked theme's label after a Theme-tab pick. Updated in place by
+  /// [updateGymName] when the Gym profile save commits.
+  String? get gymName => _gymName;
+
+  /// The active gym's uploaded brand logo URL (a CDN URL); null means the gym
+  /// has no logo yet. Seeded by [setActiveGym], updated by [updateLogoUrl]
+  /// when the Gym profile save commits. Drives the nav chrome logo (falling
+  /// back to the CombatDen mark when null) and the Gym profile editor preview.
+  String? get logoUrl => _logoUrl;
 
   /// The active gym's IANA timezone (e.g. `America/Chicago`); null until
   /// [setActiveGym]. Class times, the schedule board, and check-in windows
@@ -91,8 +106,9 @@ class SelectedGym extends ChangeNotifier {
   bool get isLoading => _isLoading;
   Object? get error => _error;
 
-  /// Record the active admin gym: the real gym UUID, its display name, the
-  /// caller's [role], the gym's IANA [timezone], and the gym's persisted
+  /// Record the active admin gym: the real gym UUID, its name (also the
+  /// initial [displayName]), the caller's [role], the gym's IANA [timezone],
+  /// its uploaded [logoUrl] (null = no logo), and the gym's persisted
   /// ThemeService design id ([savedThemeDesignId]). Set once at sign-in / via
   /// the gym picker. Independent of the VideoService content selection and the
   /// live theme — it does not touch [videoGymId] or apply a theme (the theme
@@ -102,12 +118,15 @@ class SelectedGym extends ChangeNotifier {
     required String displayName,
     required EmployeeRole role,
     required String timezone,
+    required String? logoUrl,
     String? savedThemeDesignId,
   }) {
     _gymId = gymId;
+    _gymName = displayName;
     _displayName = displayName;
     _role = role;
     _timezone = timezone;
+    _logoUrl = logoUrl;
     _savedThemeDesignId = savedThemeDesignId;
     notifyListeners();
   }
@@ -123,6 +142,22 @@ class SelectedGym extends ChangeNotifier {
   /// theme" save commits (NOT optimistic — only called on success).
   void updateSavedThemeDesignId(String themeDesignId) {
     _savedThemeDesignId = themeDesignId;
+    notifyListeners();
+  }
+
+  /// Update the active gym's real name after the Gym profile save commits
+  /// (NOT optimistic — only called on success). Touches [gymName] only; the
+  /// content [displayName] is left to the theme/content selection.
+  void updateGymName(String gymName) {
+    _gymName = gymName;
+    notifyListeners();
+  }
+
+  /// Update the active gym's uploaded logo URL after the Gym profile save
+  /// commits (NOT optimistic — only called on success). A null [logoUrl]
+  /// clears the logo (the nav chrome then falls back to the CombatDen mark).
+  void updateLogoUrl(String? logoUrl) {
+    _logoUrl = logoUrl;
     notifyListeners();
   }
 
@@ -160,6 +195,8 @@ class SelectedGym extends ChangeNotifier {
     _gymId = null;
     _role = null;
     _timezone = null;
+    _gymName = null;
+    _logoUrl = null;
     _savedThemeDesignId = null;
     _videoGymId = null;
     _designId = null;

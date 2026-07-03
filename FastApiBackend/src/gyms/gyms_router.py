@@ -327,7 +327,11 @@ async def new_onboarding_link(
     "/{gym_id}",
     response_model=GymResponse,
     summary="Update a gym",
-    description="Updates the gym name, description, or timezone.",
+    description=(
+        "Updates the gym name, description, timezone, or logo. "
+        "``logo_url`` may be explicitly set to ``null`` to clear the "
+        "logo back to none uploaded."
+    ),
     responses={
         200: {"description": "Gym updated"},
         400: {"description": "Invalid update payload"},

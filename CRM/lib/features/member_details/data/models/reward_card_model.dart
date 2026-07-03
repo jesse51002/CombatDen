@@ -12,14 +12,14 @@ class RewardCardModel extends Equatable {
   final String rewardId;
   final String title;
   final int pointCost;
-  final String? amountOff;
+  final String? priceLabel;
   final String? imageUrl;
 
   const RewardCardModel({
     required this.rewardId,
     required this.title,
     required this.pointCost,
-    this.amountOff,
+    this.priceLabel,
     this.imageUrl,
   });
 
@@ -33,7 +33,7 @@ class RewardCardModel extends Equatable {
         rewardId,
         title,
         pointCost,
-        amountOff,
+        priceLabel,
         imageUrl,
       ];
 }

@@ -17,4 +17,5 @@ WaiverVersionResponse _$WaiverVersionResponseFromJson(
   contentHash: json['content_hash'] as String,
   createdAt: DateTime.parse(json['created_at'] as String),
   signatureCount: (json['signature_count'] as num?)?.toInt() ?? 0,
+  requiresResign: json['requires_resign'] as bool? ?? true,
 );

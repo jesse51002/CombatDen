@@ -15,6 +15,8 @@ from src.members.schema.members_billing_schema import (
     MemberBillingDetailResponse,
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
+    PointsAdjustRequest,
+    PointsAdjustResponse,
 )
 from src.members.schema.members_crm_members_list_schema import (
     CrmMembersListRequest,
@@ -60,10 +62,11 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import Auth, security
+from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     AuthorizedPayerWaiverResponse,
 )
-from src.waivers.service.waivers.waivers_service import (
+from src.waivers.service.waivers_service import (
     WaiversService,
 )
 
@@ -365,6 +368,58 @@ async def get_member_billing_detail(
         ) from None
 
 
+@members_router.post(
+    "/{member_id}/points",
+    response_model=PointsAdjustResponse,
+    summary="Manually adjust a member's points balance",
+    description=(
+        "Awards or corrects a member's points balance by a signed integer "
+        "``amount``. Positive values award points; negative values deduct "
+        "(correct) points. The adjustment is rejected when it would take "
+        "the balance below zero. Gym staff only."
+    ),
+    responses={
+        200: {"description": "Adjusted — new balance returned"},
+        400: {"description": "Member not found, or adjustment would go negative"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this member's gym"},
+    },
+)
+@inject
+async def adjust_member_points(
+    member_id: UUID,
+    request: PointsAdjustRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> PointsAdjustResponse:
+    """Award or correct a member's points balance. Gym staff only."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
+
+    try:
+        new_balance = await management_service.adjust_points(member_id, request.amount)
+        return PointsAdjustResponse(points_balance=new_balance)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to adjust points: member_id=%s amount=%s",
+            member_id,
+            request.amount,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to adjust points balance",
+        ) from None
+
+
 @members_router.put(
     "/{member_id}/card",
     response_model=MembersBillingProfileResponse,
@@ -490,19 +545,23 @@ async def unlink_member_payment(
     "/{member_id}/link",
     summary="Authorize a payer for a member",
     description=(
-        "Authorizes a payer (payer_member_id) to pay for this member. The payer "
-        "signs the gym's default authorized-payer waiver (signer_name + "
-        "consent_acknowledged), and the signature + the authorization are "
-        "recorded atomically. A member may have many authorized payers. This is "
-        "the authorization layer (who may pay for whom; billing is per payer via "
-        "paid_by_member_id) — no subscription is re-billed and no charges issue."
+        "Authorizes a payer (payer_member_id) to pay for this member in ONE "
+        "request: the payer signs the gym's payer-auth waiver "
+        "(signer_name + consent_acknowledged, version-locked on waiver_version_id "
+        "which the client echoes from GET /authorized-payer-waiver), the payer's "
+        "and member's names are rendered into the waiver, and the authorization "
+        "is recorded against the new signature. A member may have many authorized "
+        "payers. This is the authorization layer (who may pay for whom; billing "
+        "is per payer via paid_by_member_id) — no subscription is re-billed and "
+        "no charges issue."
     ),
     responses={
         200: {"description": "Payer authorized successfully"},
-        400: {"description": "Payer invalid / different gym / already authorized / no consent"},
+        400: {"description": "Payer invalid / wrong gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
+        409: {"description": "Waiver was updated — reload and re-sign"},
     },
 )
 @inject
@@ -518,22 +577,31 @@ async def link_member_account(
 ) -> None:
     """Link a member to a paying parent account (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(member_id, user_payload)
+    # get_employee_id_for_member both authorizes (staff of the member's gym) and
+    # resolves the operator/witness to stamp on the waiver signature.
+    operator_employee_id = await auth.get_employee_id_for_member(
+        member_id, user_payload
+    )
 
-    # Capture the signer's IP + user-agent for the waiver signature audit.
-    ip_address = http_request.client.host if http_request.client else None
-    user_agent = http_request.headers.get("user-agent")
     try:
         await memberships_service.link_account(
             member_id,
             request.payer_member_id,
+            waiver_version_id=request.waiver_version_id,
             signer_name=request.signer_name,
             consent_acknowledged=request.consent_acknowledged,
-            ip_address=ip_address,
-            user_agent=user_agent,
+            # Capture the signer's IP + user-agent for the audit (NOT NULL).
+            ip_address=capture_ip_address(http_request),
+            user_agent=capture_user_agent(http_request),
+            operator_employee_id=operator_employee_id,
         )
     except ValueError as exc:
         error_msg = str(exc)
+        if "reload" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_msg,
+            ) from None
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -781,9 +849,9 @@ async def remove_authorization(
 @members_router.get(
     "/{member_id}/authorized-payer-waiver",
     response_model=AuthorizedPayerWaiverResponse,
-    summary="Get the default authorized-payer waiver a payer must sign",
+    summary="Get the payer-auth waiver a payer must sign",
     description=(
-        "Returns the member's gym default authorized-payer waiver — its id, "
+        "Returns the member's gym payer-auth waiver — its id, "
         "current version id, name, and body — for the front-desk sign dialog to "
         "display before authorizing a payer. The link flow records the signature "
         "against this same current version, so the caller only echoes back the "
@@ -793,7 +861,7 @@ async def remove_authorization(
         200: {"description": "Default waiver returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
-        404: {"description": "Member or default waiver not found"},
+        404: {"description": "Member or payer-auth waiver not found"},
     },
 )
 @inject
@@ -805,12 +873,12 @@ async def get_authorized_payer_waiver(
         Provide[DependencyInjector.waivers_service]
     ),
 ) -> AuthorizedPayerWaiverResponse:
-    """Resolve the default authorized-payer waiver (with body) for a member."""
+    """Resolve the payer-auth waiver (with body) for a member."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await waivers_service.get_default_waiver_with_body_for_member(
+        return await waivers_service.get_payer_auth_waiver_with_body_for_member(
             member_id,
         )
     except ValueError as exc:

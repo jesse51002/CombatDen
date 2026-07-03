@@ -17,6 +17,8 @@ class GymCreate(SeedModel):
     gym_id: UUID
     gym_name: str
     gym_description: str | None = None
+    # The gym's uploaded logo (CDN URL). The seed never uploads one.
+    logo_url: str | None = None
     timezone: str = "America/Chicago"
     is_rank_enabled: bool = True
     # Stripe Connect account the backend creates products/customers/

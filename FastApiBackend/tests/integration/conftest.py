@@ -30,7 +30,9 @@ _OWNER_PASSWORD = SEEDED_OWNER_PASSWORD
 # Fallback key used by the CRM flutter project (new-format publishable key).
 _FALLBACK_ANON_KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"
 
-BACKEND_BASE_URL = "http://localhost:8000"
+# Env-overridable so a branch can run the suite against its OWN backend on a
+# free port (:8000 usually serves another checkout's backend).
+BACKEND_BASE_URL = os.environ.get("BACKEND_BASE_URL", "http://localhost:8000")
 
 
 def _load_env() -> tuple[str, str]:

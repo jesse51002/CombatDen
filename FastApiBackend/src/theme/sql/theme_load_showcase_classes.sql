@@ -5,6 +5,7 @@
 -- ('all' first — daily/monthly — then mon..sun), then slot order within the
 -- day (slots are stored time-sorted). Joined gym-scoped to gym_employees.
 -- LEFT JOINs throughout so an instructor-less class still gets a card.
+-- Soft-deleted / inactive classes are excluded.
 SELECT
     c.class_name AS name,
     c.image_url,

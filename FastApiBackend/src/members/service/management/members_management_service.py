@@ -82,6 +82,21 @@ class MembersManagementService:
         """Update a member's identity / contact fields (no Stripe write)."""
         return await self._update.update_member(member_id, data)
 
+    # ── Points ─────────────────────────────────────────────────
+
+    async def adjust_points(
+        self,
+        member_id: UUID,
+        amount: int,
+    ) -> int:
+        """Apply a signed points adjustment and return the new balance.
+
+        Raises:
+            ValueError: Member not found, or adjustment would make balance
+                negative.
+        """
+        return await self._update.adjust_points(member_id, amount)
+
     # ── Card ───────────────────────────────────────────────────
 
     async def update_card(

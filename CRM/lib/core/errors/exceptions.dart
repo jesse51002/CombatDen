@@ -100,3 +100,65 @@ class MembershipInTaskException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Thrown when the standalone sign endpoint returns 409 because the gym
+/// published a newer waiver version between the load and the sign.
+/// The caller should ask the user to close and re-open the sign dialog so
+/// they see and acknowledge the updated text.
+class WaiverStaleVersionException implements Exception {
+  const WaiverStaleVersionException();
+
+  @override
+  String toString() =>
+      'This waiver was updated. Please close and re-open to sign the latest version.';
+}
+
+/// One (member, waiver) pair that is missing a signature,
+/// returned in a [WaiverGateException].
+class WaiverGateItem {
+  final String memberId;
+  final String waiverId;
+  final String name;
+
+  const WaiverGateItem({
+    required this.memberId,
+    required this.waiverId,
+    required this.name,
+  });
+
+  factory WaiverGateItem.fromJson(Map<String, dynamic> json) {
+    return WaiverGateItem(
+      memberId: json['member_id'] as String,
+      waiverId: json['waiver_id'] as String,
+      name: json['name'] as String,
+    );
+  }
+}
+
+/// Thrown when the start-memberships POST (or its preview) returns 422
+/// because one or more required waivers are unsigned.
+///
+/// The CRM wizard intercepts this to route to the sign-waivers step instead
+/// of the results step.
+class WaiverGateException implements Exception {
+  final String message;
+  final List<WaiverGateItem> unsigned;
+
+  const WaiverGateException({
+    required this.message,
+    required this.unsigned,
+  });
+
+  @override
+  String toString() => message;
+}
+
+/// Thrown when an approve/reject on a redemption returns HTTP 409,
+/// meaning another staff member has already decided it.
+class RedemptionAlreadyDecidedException implements Exception {
+  const RedemptionAlreadyDecidedException();
+
+  @override
+  String toString() =>
+      'This redemption has already been decided by another staff member.';
+}

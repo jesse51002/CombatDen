@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from schema.gym_waiver import WaiverType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -68,6 +69,59 @@ class MembershipPlansBase:
         if not row:
             raise ValueError(f"Plan {plan_id} not found")
         return dict(row)
+
+    async def _validate_waiver_ids(
+        self,
+        gym_id: UUID,
+        waiver_ids: list[UUID],
+    ) -> None:
+        """Validate a plan's requested required-waiver ids at write time.
+
+        ``waiver_ids`` is JSONB with no FK, so this is the integrity check:
+        every id must exist in the gym, be non-archived, and be a ``custom``
+        waiver — special-purpose waivers (e.g. the payer-auth agreement) are
+        never plan-attachable.
+
+        Raises:
+            ValueError: Naming the offending waiver(s) (→ 400).
+        """
+        if not waiver_ids:
+            return
+
+        requested = {str(w) for w in waiver_ids}
+        sql = load_sql(SQL_DIR / "membership_plans_waiver_ids_validate.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "gym_id": str(gym_id),
+                    "waiver_ids": json.dumps(sorted(requested)),
+                },
+            )
+            rows = [dict(r) for r in result.mappings().all()]
+
+        missing = requested - {str(r["waiver_id"]) for r in rows}
+        if missing:
+            raise ValueError(
+                "Waiver(s) not found for this gym: "
+                + ", ".join(sorted(missing))
+            )
+        archived = sorted(r["name"] for r in rows if r["is_deleted"])
+        if archived:
+            raise ValueError(
+                "Archived waiver(s) cannot be required by a plan: "
+                + ", ".join(archived)
+            )
+        non_custom = sorted(
+            r["name"]
+            for r in rows
+            if r["waiver_type"] != WaiverType.custom
+        )
+        if non_custom:
+            raise ValueError(
+                "Special-purpose waiver(s) cannot be required by a plan: "
+                + ", ".join(non_custom)
+            )
 
     # ── Row → Response Mappers ─────────────────────────────────
 

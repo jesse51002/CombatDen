@@ -49,6 +49,9 @@ class GymApiClient:
     def __exit__(self, *args: Any) -> None:
         self.close()
 
+    def get(self, path: str, params: dict | None = None) -> dict | None:
+        return self._send("GET", path, params=params)
+
     def post(self, path: str, json: dict | None = None) -> dict | None:
         return self._send("POST", path, json=json)
 
