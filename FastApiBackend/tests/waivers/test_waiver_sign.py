@@ -262,3 +262,57 @@ def test_render_tolerates_markdown_escaped_tokens() -> None:
         )
         == "Hi Jo, {{nope}} stays"
     )
+
+
+async def test_member_status_union_and_floor(db_pool, gym_id, created):
+    """The by-member status is the UNION of required + ever-signed: a signed
+    waiver attached to NO plan still shows (required=False, meets the floor);
+    a later material edit flips it to needs-re-sign (meets_floor=False)."""
+    from src.waivers.schema.waivers_schema import (
+        WaiverUpdateData,
+        WaiverUpdateRequest,
+    )
+
+    svc = WaiversService(db_pool)
+    member = await created.member(gym_id)
+    operator_id = await _an_employee_id(db_pool, gym_id)
+    waiver = await svc.create_waiver(
+        WaiverCreateRequest(gym_id=gym_id, name="Union Status", body="v1"),
+    )
+    try:
+        await svc.sign_waiver(
+            gym_id=gym_id,
+            member_id=member.member_id,
+            waiver_id=waiver.waiver_id,
+            waiver_version_id=waiver.current_version.version_id,
+            signer_name="Jane Doe",
+            consent_acknowledged=True,
+            ip_address="0.0.0.0",
+            user_agent="test",
+            operator_employee_id=operator_id,
+        )
+
+        def row_for(rows):
+            return next(
+                r for r in rows if r.waiver_id == waiver.waiver_id
+            )
+
+        # Signed but attached to no plan: visible, not required, compliant.
+        row = row_for(await svc.list_member_status(member.member_id, gym_id))
+        assert row.required is False
+        assert row.signed is True
+        assert row.meets_floor is True
+
+        # A material edit raises the floor: still visible, needs re-sign.
+        await svc.update_waiver(
+            WaiverUpdateRequest(
+                waiver_id=waiver.waiver_id,
+                gym_id=gym_id,
+                data=WaiverUpdateData(body="v2 material", requires_resign=True),
+            ),
+        )
+        row = row_for(await svc.list_member_status(member.member_id, gym_id))
+        assert row.signed is True
+        assert row.meets_floor is False
+    finally:
+        await _delete_waiver_rows(db_pool, waiver.waiver_id)

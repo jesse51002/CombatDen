@@ -3,7 +3,9 @@ import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/member_details/presentation/dialogs/pick_waiver_to_sign_dialog.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
+import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -13,9 +15,11 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/sign_waiver_dialog.dart';
 
-/// Read-only Waivers section on the member-detail page: only the
-/// waivers this member must sign for the memberships they
-/// currently hold, with their sign status for each. Fetches
+/// Read-only Waivers section on the member-detail page. Its rows
+/// are the UNION of the waivers the member must sign for the
+/// memberships they currently hold and every waiver they have
+/// ever signed — a signature stays visible after the waiver stops
+/// being required or is archived (the legal record). Fetches
 /// directly (read-only) via [MembershipsRepository]. Refreshes
 /// automatically after each successful signature.
 class MemberWaiversSection extends StatefulWidget {
@@ -39,6 +43,11 @@ class _MemberWaiversSectionState
     extends State<MemberWaiversSection> {
   late Future<List<MemberWaiverStatus>> _future;
 
+  // Cached most-recent load, used to seed the "Sign new waiver"
+  // picker's already-signed hints. Populated during build; only
+  // read from the button's async callback (never drives layout).
+  List<MemberWaiverStatus> _lastLoaded = const [];
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +65,27 @@ class _MemberWaiversSectionState
 
   void _refresh() => setState(_load);
 
+  Future<void> _onSignNew(BuildContext context) async {
+    final signedIds = _lastLoaded
+        .where((w) => w.signed)
+        .map((w) => w.waiverId)
+        .toSet();
+    final waiverId = await PickWaiverToSignDialog.show(
+      context: context,
+      gymId: widget.gymId,
+      signedWaiverIds: signedIds,
+    );
+    if (waiverId == null || !context.mounted) return;
+    await SignWaiverDialog.show(
+      context: context,
+      waiverId: waiverId,
+      gymId: widget.gymId,
+      memberId: widget.memberId,
+      memberName: widget.memberName,
+      onSigned: _refresh,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SectionCard(
@@ -63,7 +93,23 @@ class _MemberWaiversSectionState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingBig,
         children: [
-          Text('Waivers', style: DesignConstants.h2),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Waivers', style: DesignConstants.h2),
+              ),
+              AppOutlineButton(
+                text: 'Sign new waiver',
+                borderRadius: DesignConstants.radiusSmall,
+                textStyle: DesignConstants.pSmall,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: DesignConstants.spacingSmall,
+                  vertical: DesignConstants.spacingTiny,
+                ),
+                onPressed: () => _onSignNew(context),
+              ),
+            ],
+          ),
           FutureBuilder<List<MemberWaiverStatus>>(
             future: _future,
             builder: (context, snapshot) {
@@ -77,9 +123,10 @@ class _MemberWaiversSectionState
                 );
               }
               final waivers = snapshot.data ?? const [];
+              _lastLoaded = waivers;
               if (waivers.isEmpty) {
                 return Text(
-                  'No waivers required for this member.',
+                  'No waivers on file for this member.',
                   style: DesignConstants.p.copyWith(
                     color: DesignConstants.text2nd,
                   ),
@@ -109,10 +156,13 @@ class _MemberWaiversSectionState
                   for (final w in waivers)
                     AppDataTableRow(
                       cells: [
-                        Text(w.name, style: DesignConstants.p),
+                        _WaiverNameCell(status: w),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: _StatusChip(status: w),
+                          child: _StatusChip(
+                            status: w,
+                            onResign: _resignAction(context, w),
+                          ),
                         ),
                         Text(
                           w.signedAt == null
@@ -141,22 +191,98 @@ class _MemberWaiversSectionState
       ),
     );
   }
+
+  // The tap action for a needs-re-sign chip — only actionable for a
+  // custom, non-archived waiver. A payer_auth re-sign runs through
+  // the authorize-payer link flow; an archived waiver can't be
+  // signed. Null otherwise (the chip renders without a tap).
+  VoidCallback? _resignAction(
+    BuildContext context,
+    MemberWaiverStatus w,
+  ) {
+    final needsResign = w.signed && !w.meetsFloor;
+    final actionable =
+        w.waiverType == WaiverType.custom && !w.isDeleted;
+    if (!needsResign || !actionable) return null;
+    return () => SignWaiverDialog.show(
+          context: context,
+          waiverId: w.waiverId,
+          gymId: widget.gymId,
+          memberId: widget.memberId,
+          memberName: widget.memberName,
+          onSigned: _refresh,
+        );
+  }
 }
 
-class _StatusChip extends StatelessWidget {
+/// Waiver name plus a dim caption when the row is only a record —
+/// "archived" (the waiver is deleted) and/or "not required" (not in
+/// the member's current required set). Both can apply at once.
+class _WaiverNameCell extends StatelessWidget {
   final MemberWaiverStatus status;
 
-  const _StatusChip({required this.status});
+  const _WaiverNameCell({required this.status});
+
+  String? get _caption {
+    final tags = <String>[
+      if (status.isDeleted) 'archived',
+      if (!status.required) 'not required',
+    ];
+    return tags.isEmpty ? null : tags.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
+    final caption = _caption;
+    if (caption == null) {
+      return Text(status.name, style: DesignConstants.p);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingTiny,
+      children: [
+        Text(status.name, style: DesignConstants.p),
+        Text(
+          caption,
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Status pill for a waiver row: red "Not signed" when unsigned,
+/// yellow "Needs re-sign" when the latest signature is below the
+/// re-sign floor, green "Signed" when compliant. The yellow chip is
+/// tappable (opens [SignWaiverDialog]) when [onResign] is non-null.
+class _StatusChip extends StatelessWidget {
+  final MemberWaiverStatus status;
+  final VoidCallback? onResign;
+
+  const _StatusChip({required this.status, this.onResign});
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = _chip;
+    if (onResign == null) return chip;
+    return InkWell(
+      onTap: onResign,
+      borderRadius:
+          BorderRadius.circular(DesignConstants.radiusBig),
+      child: chip,
+    );
+  }
+
+  InvoiceChip get _chip {
     if (!status.signed) {
       return const InvoiceChip(
         label: 'Not signed',
         tone: InvoiceChipTone.bad,
       );
     }
-    if (!status.signedCurrentVersion) {
+    if (!status.meetsFloor) {
       return const InvoiceChip(
         label: 'Needs re-sign',
         tone: InvoiceChipTone.warning,
@@ -169,8 +295,10 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-/// Per-row "Sign" action. Shown when the member still needs to
-/// sign (never signed, or the current version changed). Opens
+/// Per-row "Sign" action, shown only when the member has never
+/// signed this waiver (necessarily a required, custom waiver from
+/// the union semantics). Re-signing an existing signature is done
+/// through the tappable "Needs re-sign" chip instead. Opens
 /// [SignWaiverDialog] and triggers [onSigned] on success.
 class _SignButton extends StatelessWidget {
   final MemberWaiverStatus status;
@@ -187,12 +315,9 @@ class _SignButton extends StatelessWidget {
     required this.onSigned,
   });
 
-  bool get _needsSignature =>
-      !status.signed || !status.signedCurrentVersion;
-
   @override
   Widget build(BuildContext context) {
-    if (!_needsSignature) return const SizedBox.shrink();
+    if (status.signed) return const SizedBox.shrink();
     return AppOutlineButton(
       text: 'Sign',
       borderRadius: DesignConstants.radiusSmall,

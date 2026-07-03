@@ -246,7 +246,13 @@ names from the dialog's scope, `gym_name` from `selectedGym.displayName`,
 name (empty → a `___` blank, escaped so markdown can't read it as a rule). The membership-purchase wizard
 (`features/member_details/.../start_memberships/`) has a `signWaivers` step
 (after `review`, before `payment`) that blocks until every required waiver is
-signed; the backend 422 is the backstop. The waiver editor surfaces the
+signed; the backend 422 is the backstop. The member-detail Waivers section
+shows the UNION of required + ever-signed waivers (`MemberWaiverStatusRow`:
+`required`, `meets_floor`, `waiver_type`, `is_deleted` — signed-below-floor =
+the yellow tappable "Needs re-sign" chip; archived/payer-auth rows display
+without a sign action) plus a "Sign new waiver" picker over the gym's custom
+waivers (any custom waiver is signable, required or not). The waiver editor
+surfaces the
 available `{{placeholders}}` in an ALWAYS-VISIBLE legend + a "minor edit (don't
 require re-sign)" toggle (`requires_resign=false`). The payer-auth waiver is
 badged ("Payer agreement") in the waivers list + editor, its Delete and

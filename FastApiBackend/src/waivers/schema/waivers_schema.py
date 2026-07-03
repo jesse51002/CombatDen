@@ -132,11 +132,20 @@ class WaiverSignatoryRow(BaseModel):
 
 
 class MemberWaiverStatusRow(BaseModel):
-    """One row of a member's waiver status: a gym waiver + this member's latest
-    sign status for it (for the member-detail Waivers section)."""
+    """One row of a member's waiver status (the member-detail Waivers
+    section): the UNION of the waivers they must sign and the waivers they
+    have ever signed — a signature stays visible after the waiver stops
+    being required or is archived (the legal record).
+
+    ``meets_floor`` is the compliance verdict (latest signed version >= the
+    waiver's ``requires_resign`` floor — the same rule as the purchase +
+    check-in gates); ``signed and not meets_floor`` = needs re-signing."""
 
     waiver_id: UUID
     name: str
+    waiver_type: WaiverType
+    is_deleted: bool = False
+    required: bool = False
     current_version_id: UUID | None = None
     current_version_number: int | None = None
     signed: bool
@@ -144,6 +153,7 @@ class MemberWaiverStatusRow(BaseModel):
     signed_version_number: int | None = None
     signed_at: datetime | None = None
     signed_current_version: bool = False
+    meets_floor: bool = False
 
 
 class WaiverPayerAuthInfo(BaseModel):
