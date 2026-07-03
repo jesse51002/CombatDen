@@ -17,9 +17,10 @@ class StyleSummary(BaseModel):
     passes back to ``GET /apps/{app_id}/{id}``; ``display_name`` is the
     ``design_name`` from that run's ``output.yaml``; ``celebration_image``
     is a relative fetch URL (the client absolutises it, same convention
-    as ``OutputResponse.images``); ``category`` is the app-declared
-    classification bucket from the app.yaml ``style_categories`` map —
-    required on the wire (an unclassified style is never listed)."""
+    as ``OutputResponse.images``); ``category`` is the run's own
+    classification bucket from its ``output.yaml``, validated against
+    the app.yaml-declared ``categories`` vocabulary — required on the
+    wire (an unclassified style is never listed)."""
 
     model_config = ConfigDict(extra="forbid")
 
