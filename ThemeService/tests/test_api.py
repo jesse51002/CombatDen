@@ -285,6 +285,29 @@ def test_list_styles_search_is_substring_case_insensitive(
     assert sorted(s.id for s in page.items) == ["ZenBoxing", "ZenStyle"]
 
 
+def test_list_styles_serves_symlinked_run_dirs(tmp_path: Path) -> None:
+    """A named style whose run dir is a SYMLINK to data outside the
+    apps root is listed and loadable. Worktrees link the large
+    untracked run dirs from the root checkout (setup_worktree_env.sh),
+    so the run-dir guard must accept symlink targets — traversal stays
+    impossible because the id patterns admit no separators."""
+    external = tmp_path / "external_checkout"
+    _seed_named_styles(external, ["LinkedStyle"])
+
+    apps_root = tmp_path / "apps"
+    (apps_root / "demo").mkdir(parents=True)
+    (apps_root / "demo" / "LinkedStyle").symlink_to(
+        external / "demo" / "LinkedStyle", target_is_directory=True
+    )
+
+    svc = OutputService(apps_root=apps_root)
+    page = asyncio.run(svc.list_styles("demo"))
+    assert [s.id for s in page.items] == ["LinkedStyle"]
+
+    output = asyncio.run(svc.load("demo", "LinkedStyle"))
+    assert output.category == "Modern"
+
+
 def test_list_styles_caches_full_list_between_calls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

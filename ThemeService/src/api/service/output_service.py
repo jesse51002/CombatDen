@@ -359,16 +359,19 @@ class OutputService:
         return candidates
 
     def _safe_run_dir(self, app_id: str, run_id: str) -> Path:
-        """``apps_root/app_id/run_id``, but only if the ids are
-        well-formed and the resolved path stays inside ``apps_root``
-        (path-traversal guard)."""
+        """``apps_root/app_id/run_id`` for well-formed ids.
+
+        Path traversal is impossible by construction: both id patterns
+        admit only alphanumerics/underscores — no separators, no dots —
+        so the joined path cannot escape ``apps_root``. The path is
+        deliberately NOT resolve()-contained: a run dir may be a
+        SYMLINK to another checkout's data (worktrees link the large
+        untracked run dirs from the root checkout via
+        ``setup_worktree_env.sh``), and resolving would reject exactly
+        those links."""
         if not _ID_PATTERN.match(app_id) or not _RUN_ID_PATTERN.match(run_id):
             raise NotFoundError(f"no run {app_id}/{run_id}")
-        apps_root = self._apps_root.resolve()
-        run_dir = (apps_root / app_id / run_id).resolve()
-        if apps_root not in run_dir.parents:
-            raise NotFoundError(f"no run {app_id}/{run_id}")
-        return run_dir
+        return self._apps_root / app_id / run_id
 
 
 # Process-scoped singleton the router + FontService depend on. The
