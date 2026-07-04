@@ -173,12 +173,15 @@ flowchart TB
   rd_some -->|"~70%"| rd_approved["status=approved"]
   rd_some -->|"~30%"| rd_pending["status=pending (pending_ratio=0.3 default)"]
 
-  %% ── Activities ×500 · 5/member, by type (one type each — simple split) ──
+  %% ── Activities ×500 · 5/member random pool (one type each — simple split),
+  %% plus a `rank_changed` anchor row appended per RANKED member (not part of
+  %% the 5/member pool — every ranked member gets +1 on top, so a ranked
+  %% member's total activity count is 6, not 5).
   Activities["📝 Activities ×500 · 5/member"]
-  Activities -->|"~25%"| ac_attended["class_attended"]
-  Activities -->|"~25%"| ac_rank["rank_promoted"]
-  Activities -->|"~25%"| ac_reward["reward_redeemed"]
-  Activities -->|"~25%"| ac_checkin["check_in"]
+  Activities -->|"~33%"| ac_attended["class_attended"]
+  Activities -->|"~33%"| ac_reward["reward_redeemed"]
+  Activities -->|"~33%"| ac_checkin["check_in"]
+  Activities -.->|"+1 / ranked member"| ac_rank["rank_changed<br/>anchor row · not from the random pool"]
 
   %% ── Financials — every invoice's success charge carries a payment method
   %% (co-occurs); failed-attempt + refund are overlays on top.

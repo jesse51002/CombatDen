@@ -377,7 +377,8 @@ write-reduction.
   `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
   `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch
   config lives in `memberships-guide`)
-- **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
+- **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`,
+  `tests/reconciler/test_orphan_cleanup_sweep.py`
   (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
 ## Diagram

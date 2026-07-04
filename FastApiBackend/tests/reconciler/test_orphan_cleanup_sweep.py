@@ -5,9 +5,12 @@ A stranded ``not_added`` membership item may carry ``not_added`` applied-
 discount snapshot children; the FK ``fk_applied_discount_membership_gym``
 (``member_membership_applied_discounts_unfiltered`` -> ``member_memberships_unfiltered``)
 blocks the item's DELETE unless the children go first. These tests mock
-``db_pool`` / ``resource_lock`` entirely so no DB is touched — the real-DB
-coverage (an actual FK-blocked row cleaned up end to end against the shared
-local Supabase DB) lives in ``tests/reconciler/test_reconciler.py``.
+``db_pool`` / ``resource_lock`` entirely so no DB is touched — they assert
+the delete ORDER (children before the item row) and scoping (family-lock
+skip) against a mocked session, not against a real FK constraint. The
+real-DB orphan tests in ``tests/reconciler/test_reconciler.py`` cover a
+plain ``not_added`` membership row with no applied-discount child, so they
+do NOT yet exercise the FK-blocked case end to end.
 """
 
 from contextlib import asynccontextmanager

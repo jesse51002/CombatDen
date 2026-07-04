@@ -10,7 +10,7 @@ Endpoints under test (all new production rank paths):
   GET    /api/v1/members/{id}/billing    rank block + classes_since_rank
 
 These run against the live backend + the seeded DB (same pattern as
-tests/checkin/test_checkin_integration.py): suitable rows are DISCOVERED
+tests/integration/test_checkin_integration.py): suitable rows are DISCOVERED
 at run time, never hard-coded, and every test restores exactly the state
 it changed — member ranks are set back, created ranks are deleted, and
 the ``rank_changed`` activity rows each flow writes are deleted by id.
