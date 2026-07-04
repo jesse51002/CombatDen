@@ -8,6 +8,12 @@ acquire of that row's PAYER lock (its ``paid_by_member_id``): if the lock is
 held an op is in flight (leave it), if free it is a genuine orphan (delete it).
 The delete itself still guards ``stripe_item_id IS NULL`` so a row confirmed in
 the gap is never removed.
+
+An orphan may carry its own ``not_added`` applied-discount children (the
+discount snapshot never got its coupon resolved either); those rows FK-reference
+the membership item (``fk_applied_discount_membership_gym``), so they are
+deleted first, in the same transaction as the item row, mirroring the
+reprice-revert precedent (``applied_discounts/delete_copied_discounts.sql``).
 """
 
 import logging
@@ -79,11 +85,24 @@ class OrphanCleanupSweep:
             result.changed += 1
 
     async def _delete_orphan(self, item_id: UUID) -> None:
-        """Hard-delete one pending row (reuses the guarded delete SQL)."""
-        sql = load_sql(
+        """Delete one orphan's applied-discount children, then its item row.
+
+        Both deletes run on one shared session / one transaction: the
+        discount children must go first, or ``fk_applied_discount_membership_gym``
+        blocks the item delete (an orphan with applied-discount children would
+        otherwise never be cleaned).
+        """
+        discounts_sql = load_sql(
+            SQL_DIR / "reconciler_orphan_applied_discounts.sql",
+        )
+        item_sql = load_sql(
             MEMBERSHIPS_SQL_DIR / "member_memberships_delete_pending.sql",
         )
-        await self._db_pool.execute_with_retry(
-            sql,
-            {"item_ids": [str(item_id)]},
-        )
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(discounts_sql), {"item_id": str(item_id)}
+            )
+            await session.execute(
+                text(item_sql), {"item_ids": [str(item_id)]}
+            )
+            await session.commit()
