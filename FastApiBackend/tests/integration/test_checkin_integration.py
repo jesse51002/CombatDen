@@ -9,10 +9,9 @@ Endpoints under test:
 These run against the live backend + the seeded DB. Rather than hard-code seed
 ids (which drift every reseed), the suite DISCOVERS suitable rows from the DB at
 session start and skips gracefully when the DB isn't reachable / seeded. The
-``api`` fixture (re-exported in tests/checkin/conftest.py from the integration
-conftest) provides an authorised client; ``SEEDED_GYM_ID`` is the single seeded
-gym. The schedule board it reads (``GET /api/v1/classes/instances``) stays in
-the classes domain.
+``api`` fixture (this directory's own conftest.py) provides an authorised
+client; ``SEEDED_GYM_ID`` is the single seeded gym. The schedule board it reads
+(``GET /api/v1/classes/instances``) stays in the classes domain.
 
 ``occurrence_date`` (both requested and read off the board) is always the
 occurrence's ORIGINAL date (``EffectiveClassInstanceResponse.original_date``),
