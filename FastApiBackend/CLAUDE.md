@@ -380,17 +380,52 @@ created_at`; `UNIQUE (gym_id, main_rank_num_order)`) — no `color`, no
 `members.current_rank_id` (→ a main row) + `members.current_sub_index`.
 
 **Sub-rank type is one per-gym setting; labels are derived, never
-stored.** `gyms.sub_rank_type` (`stripes | div`, default `stripes`) picks
-the labeling scheme for every rank in the gym; each main row only carries
-the leaf **count** (`sub_rank_count`: `0` = the main rank IS the leaf,
-`N >= 1` = `N` leaf sub-positions, `current_sub_index ∈ [0, N-1]`). The
-ONE labeler used everywhere is `Database/python_data/schema/gym_rank.py`:
-`sub_rank_label(type, index)` (stripes: `0` → `None`/bare belt, `1` →
-`"1 Stripe"`, `k` → `"k Stripes"`; div: `i` → `"Div i+1"`) and
+stored.** `gyms.sub_rank_type` (`none | stripes | div`, **default
+`none`**) picks the labeling scheme for every rank in the gym; each main
+row only carries the leaf **count** (`sub_rank_count`: `0` = the main rank
+IS the leaf, `N >= 1` = `N` leaf sub-positions, `current_sub_index ∈ [0,
+N-1]`). The ONE labeler used everywhere is
+`Database/python_data/schema/gym_rank.py`: `sub_rank_label(type, index)`
+(none: always `None`; stripes: `0` → `None`/bare belt, `1` → `"1 Stripe"`,
+`k` → `"k Stripes"`; div: `i` → `"Div i+1"`) and
 `rank_display_name(name, type, index)` (`"Main"` when the label is
-`None`, else `"Main · SubLabel"`). **Invariant, service-enforced on every
-assign/promote path:** `sub_rank_count > 0 ⇒ current_sub_index NOT
-NULL`; `sub_rank_count = 0 ⇒ current_sub_index NULL`.
+`None`, else `"Main · SubLabel"`).
+
+**`'none'` = sub-ranks disabled gym-wide (the common case — most gyms
+have main belts with no sub-positions).** It is a **view/label state
+layered over the persisted per-rank counts, never a destructive wipe**:
+switching a gym TO `'none'` keeps every `sub_rank_count` /
+`sub_rank_image_overrides` on the rows (they reactivate on a switch back).
+The **EFFECTIVE** sub-rank count is `0` for ALL leaf math on a `'none'`
+gym — `RanksBase._effective_sub_count(rank, sub_rank_type)` returns `0`
+when `sub_rank_type == 'none'`, else the stored count. Every service path
+(`_next_leaf`, `_resolve_sub_index`, backfill base-leaf) and every SQL that
+reads `gr.sub_rank_count` for leaf math
+(`list_members_ready_to_promote.sql`, `list_members_in_rank.sql`,
+`backfill_lowest_rank.sql`, `reassign_members_rank.sql`) uses the effective
+count via `CASE WHEN g.sub_rank_type = 'none' THEN 0 ELSE gr.sub_rank_count
+END` (joining `gyms`). So a `'none'` gym's members carry
+`current_sub_index NULL`, promotions are main-to-main, and
+`step_denominator`/`classes_till_next_step` is the full major threshold.
+
+**Invariant, service-enforced on every assign/promote path** (using the
+EFFECTIVE count): `effective_count > 0 ⇒ current_sub_index NOT NULL`;
+`effective_count = 0 ⇒ current_sub_index NULL`.
+
+**Changing `sub_rank_type` reconciles members** (keeps the invariant
+valid, non-destructively). Both writers do it:
+`GymsService.update_gym` (the `gyms → ranks` DI edge — `ranks_members`
+injected) runs it after the gyms row commits, and `from_preset` runs it
+in-session. The reconcile
+(`RanksMembers.reconcile_sub_index_for_gym` own-session /
+`reconcile_sub_index_in_session` in-session →
+`reconcile_member_sub_index_for_gym.sql`): → `'none'` clears every
+`current_sub_index`; → stripes/div fills a NULL sub-index (coming from
+`'none'`) with the base leaf `0` on ranks that have sub-ranks, **preserves
+an already-valid index** (a pure stripes↔div switch is only a re-label,
+never a member move), and clears it on subless ranks. It never touches the
+persisted `sub_rank_count` / overrides and logs no `rank_changed` (a style
+toggle is a re-fit, not a promotion).
 
 **`classes_to_next_major`** is the headline threshold to the NEXT main
 rank (gym-set, a rank-row property). The per-sub-step denominator is
@@ -499,8 +534,11 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   mover.
 - **Two paginated member reads (`RanksReads`).**
   `GET /api/v1/ranks/ready-to-promote` — ranked, active-membership (not
-  frozen), not-top-of-ladder members, sorted by closeness to their next
-  leaf (`classes_since / step_denominator`).
+  frozen), not-top-of-ladder members, sorted by **classes REMAINING to the
+  next leaf, ascending (closest first)** — `ORDER BY (step_denominator -
+  classes_since) ASC, classes_since DESC, member_id ASC` (members at/over
+  the threshold sort to the very top; `member_id` is the deterministic
+  pagination tiebreaker).
   `GET /api/v1/ranks/{rank_id}/members` — the roster currently on one
   main rank, ordered by sub-index then name. Both are
   `start_index`/`count` query-paginated with a `COUNT(*) OVER()` total.
@@ -514,7 +552,10 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   `POST /api/v1/ranks/from-preset` bulk-clones a preset kind's rows into
   `gym_ranks` (`ON CONFLICT DO NOTHING`, idempotent) AND copies the
   kind's `implied_sub_rank_type` onto the gym
-  (`set_gym_sub_rank_type_from_preset.sql`), then runs the same backfill.
+  (`set_gym_sub_rank_type_from_preset.sql` — every kind implies a concrete
+  style now: `'none'` for plain belts / flat, `'stripes'` for the stripes
+  kind), then reconciles existing members' sub-index to that style, then
+  runs the same lowest-rank backfill.
 
 **Routes** (`/api/v1/ranks`, 15 total): `GET /` · `POST /` · `POST
 /from-preset` · `GET /presets` · `GET /presets/grouped` · `GET /enabled`

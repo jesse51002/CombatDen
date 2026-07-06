@@ -767,12 +767,15 @@ class DependencyInjector(containers.DeclarativeContainer):
     # classes_versions_service is the documented gyms -> classes edge: a gym
     # TIMEZONE change re-mints every live class's schedule version with the
     # new zone (wall-clock match keeps all future sign-ups / check-ins).
+    # ranks_members is the documented gyms -> ranks edge: a gym SUB_RANK_TYPE
+    # change reconciles every member's current_sub_index to stay leaf-valid.
     gyms_service = providers.Factory(
         GymsService,
         db_pool=db_pool,
         stripe_connect_service=gyms_stripe_connect_service,
         waivers_service=waivers_service,
         classes_versions_service=classes_versions_service,
+        ranks_members=ranks_members,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────

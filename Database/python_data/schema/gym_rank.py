@@ -21,8 +21,16 @@ class GymType(StrEnum):
 
 
 class SubRankType(StrEnum):
-    """Mirrors the Postgres `sub_rank_type` enum in gyms.sql."""
+    """Mirrors the Postgres `sub_rank_type` enum in gyms.sql.
 
+    `none` (the DB default) means the gym has main belts but NO sub-positions
+    — every rank behaves as its own leaf (effective sub_rank_count 0) and
+    members carry a NULL current_sub_index. `stripes` / `div` only change the
+    LABEL of the sub-positions; the type is a per-gym view state layered over
+    each rank's persisted sub_rank_count, never a destructive wipe.
+    """
+
+    none = "none"
     stripes = "stripes"
     div = "div"
 
@@ -36,9 +44,14 @@ class RankPresetKind(StrEnum):
 
 
 def sub_rank_label(sub_rank_type: SubRankType, sub_index: int | None) -> str | None:
-    """Derived sub-rank label. stripes: 0 -> None (bare belt), 1 -> '1 Stripe',
-    k -> 'k Stripes'. div: i -> 'Div {i+1}'. None when sub_index is None."""
-    if sub_index is None:
+    """Derived sub-rank label. `none`: always None (the gym has no sub-ranks).
+    stripes: 0 -> None (bare belt), 1 -> '1 Stripe', k -> 'k Stripes'. div:
+    i -> 'Div {i+1}'. None when sub_index is None.
+
+    A `none` gym never has a real sub-position (its members carry NULL
+    current_sub_index), so this returns None regardless of `sub_index` —
+    guarding against a stray index producing a phantom label."""
+    if sub_rank_type is SubRankType.none or sub_index is None:
         return None
     if sub_rank_type is SubRankType.stripes:
         if sub_index == 0:

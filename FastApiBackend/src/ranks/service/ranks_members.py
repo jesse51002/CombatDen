@@ -68,6 +68,7 @@ class RanksMembers(RanksBase):
                 ladder,
                 old_rank_id,
                 old_sub_index,
+                sub_rank_type,
             )
 
             await self._apply_member_rank(
@@ -128,6 +129,7 @@ class RanksMembers(RanksBase):
                 new_sub_index = self._resolve_sub_index(
                     new_rank,
                     request.sub_index,
+                    sub_rank_type,
                 )
 
             await self._apply_member_rank(
@@ -181,7 +183,11 @@ class RanksMembers(RanksBase):
         if ladder:
             sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
             lowest = ladder[0]
-            base_index = 0 if lowest.sub_rank_count > 0 else None
+            base_index = (
+                0
+                if self._effective_sub_count(lowest, sub_rank_type) > 0
+                else None
+            )
             new_rank_name = rank_display_name(
                 lowest.name,
                 sub_rank_type,
@@ -197,21 +203,75 @@ class RanksMembers(RanksBase):
             },
         )
 
+    async def reconcile_sub_index_for_gym(
+        self,
+        gym_id: UUID,
+        sub_rank_type: SubRankType,
+    ) -> None:
+        """Own-session reconcile of members after a gym sub_rank_type change.
+
+        Opens and commits its own session — the gym-update path
+        (``GymsService.update_gym``) calls this AFTER the gyms row is
+        already committed, mirroring how the timezone re-mint runs after
+        the gyms write. The in-session flows (``from_preset``) call
+        ``reconcile_sub_index_in_session`` directly instead.
+        """
+        async with self._db_pool.session() as session:
+            await self.reconcile_sub_index_in_session(
+                session,
+                gym_id,
+                sub_rank_type,
+            )
+            await session.commit()
+
+    async def reconcile_sub_index_in_session(
+        self,
+        session: AsyncSession,
+        gym_id: UUID,
+        sub_rank_type: SubRankType,
+    ) -> None:
+        """Re-fit every member's ``current_sub_index`` to the new style.
+
+        Keeps the leaf invariant valid without a destructive rewrite:
+        switching to ``'none'`` clears every sub-index; switching to
+        ``'stripes'`` / ``'div'`` fills a NULL sub-index (coming from
+        ``'none'``) with the base leaf ``0`` on a rank that has
+        sub-ranks, preserves an already-valid index (a pure
+        stripes↔div re-label never moves a member), and clears it on a
+        subless rank. Never touches the persisted ``sub_rank_count`` /
+        ``sub_rank_image_overrides``. No ``rank_changed`` activity — a
+        style toggle is a re-fit, not a promotion, so the progress
+        anchor must not reset.
+        """
+        sql = load_sql(SQL_DIR / "reconcile_member_sub_index_for_gym.sql")
+        await session.execute(
+            text(sql),
+            {
+                "gym_id": str(gym_id),
+                "sub_rank_type": sub_rank_type.value,
+            },
+        )
+
     @staticmethod
     def _resolve_sub_index(
         rank: RankResponse,
         sub_index: int | None,
+        sub_rank_type: SubRankType,
     ) -> int | None:
         """Validate / coerce a requested sub-index against the rank.
 
-        ``sub_rank_count > 0`` requires ``sub_index`` in range; a subless
-        rank forces ``None`` (a stray index is silently ignored).
+        Uses the EFFECTIVE sub-rank count (0 on a ``'none'`` gym): an
+        effective ``count > 0`` requires ``sub_index`` in range; an
+        effective-subless rank (including every rank on a ``'none'`` gym)
+        forces ``None`` (a stray index is silently ignored, matching the
+        subless-rank invariant style).
         """
-        if rank.sub_rank_count > 0:
-            if sub_index is None or not (0 <= sub_index <= rank.sub_rank_count - 1):
+        effective_count = RanksMembers._effective_sub_count(rank, sub_rank_type)
+        if effective_count > 0:
+            if sub_index is None or not (0 <= sub_index <= effective_count - 1):
                 raise ValueError(
                     "sub_index must be in "
-                    f"[0, {rank.sub_rank_count - 1}] for this rank"
+                    f"[0, {effective_count - 1}] for this rank"
                 )
             return sub_index
         return None

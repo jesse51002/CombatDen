@@ -87,18 +87,20 @@ _KIND_ROWS: dict[RankPresetKind, list[_PresetRow]] = {
     RankPresetKind.flat: _flat_rows(),
 }
 
-# The per-gym sub_rank_type a kind implies (NULL when the kind has no sub-ranks).
-# Applying a stripes preset stamps the gym's sub_rank_type; the plain-belt and
-# flat kinds leave it at the DB default.
-_IMPLIED_SUB_TYPE: dict[RankPresetKind, SubRankType | None] = {
-    RankPresetKind.bjj_belts: None,
+# The per-gym sub_rank_type a kind implies. Every kind implies a CONCRETE
+# gym-level style now: the plain-belt and flat kinds imply 'none' (main belts,
+# no sub-positions), only the stripes kind implies 'stripes'. from_preset
+# stamps this value onto the gym directly.
+_IMPLIED_SUB_TYPE: dict[RankPresetKind, SubRankType] = {
+    RankPresetKind.bjj_belts: SubRankType.none,
     RankPresetKind.bjj_belts_stripes: SubRankType.stripes,
-    RankPresetKind.flat: None,
+    RankPresetKind.flat: SubRankType.none,
 }
 
 
-def implied_sub_rank_type(kind: RankPresetKind) -> SubRankType | None:
-    """The `sub_rank_type` this kind stamps onto a gym (NULL = leave default)."""
+def implied_sub_rank_type(kind: RankPresetKind) -> SubRankType:
+    """The `sub_rank_type` this kind stamps onto a gym (always concrete —
+    'none' for plain belts / flat, 'stripes' for the stripes kind)."""
     return _IMPLIED_SUB_TYPE[kind]
 
 

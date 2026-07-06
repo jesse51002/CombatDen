@@ -457,6 +457,12 @@ class MembersBillingDetailService:
         per-step denominator is an even split of ``classes_to_next_major``
         across the sub-positions (else the full major threshold), and the
         image is the leaf-resolved belt (per-sub override or main image).
+        The EFFECTIVE sub-rank count is 0 whenever the gym's
+        ``sub_rank_type`` is ``'none'`` (sub-ranks disabled gym-wide), so a
+        ``'none'`` gym yields no sub-label, a leaf image = the main
+        ``image_url`` (the member's ``current_sub_index`` is NULL there,
+        so the SQL COALESCE already resolves to it), and a
+        ``classes_till_next_step`` equal to the full major threshold.
 
         Args:
             target_row: The queried member's profile row.
@@ -471,9 +477,14 @@ class MembersBillingDetailService:
         sub_index = target_row["rank_sub_index"]
         classes_to_next_major = target_row["rank_classes_to_next_major"]
         sub_rank_count = target_row["rank_sub_rank_count"]
-        if sub_rank_count and sub_rank_count > 0:
+        effective_count = (
+            0
+            if sub_rank_type is SubRankType.none
+            else (sub_rank_count or 0)
+        )
+        if effective_count > 0:
             classes_till_next_step = math.ceil(
-                classes_to_next_major / sub_rank_count
+                classes_to_next_major / effective_count
             )
         else:
             classes_till_next_step = classes_to_next_major

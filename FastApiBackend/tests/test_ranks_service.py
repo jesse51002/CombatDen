@@ -206,21 +206,23 @@ async def test_from_preset_runs_backfill_and_sets_type_when_enabled():
 
     insert_result = _result(None)
     type_result = _result(None)  # set_gym_sub_rank_type_from_preset.sql
+    reconcile_type = _sub_type_result()  # get_gym_sub_rank_type (reconcile read)
+    reconcile_result = _result(None)  # reconcile_member_sub_index_for_gym.sql
     enabled_result = _result({"gym_id": gym_id, "is_rank_enabled": True})
     backfill_list = _result([], many=True)  # backfill ladder read (empty)
     backfill_result = _result(None)
     response_list = _result([], many=True)  # response ladder
-    response_type = _sub_type_result()
 
     session = _make_session_mock(
         [
             insert_result,
             type_result,
+            reconcile_type,
+            reconcile_result,
             enabled_result,
             backfill_list,
             backfill_result,
             response_list,
-            response_type,
         ],
     )
     service = _make_service(_make_pool_mock(session))
@@ -232,6 +234,8 @@ async def test_from_preset_runs_backfill_and_sets_type_when_enabled():
     sqls = _executed_sql_strings(session)
     assert _load("insert_ranks_from_preset.sql") in sqls
     assert _load("set_gym_sub_rank_type_from_preset.sql") in sqls
+    # Existing members are reconciled to the preset's implied style.
+    assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
     assert _load("backfill_lowest_rank.sql") in sqls
     assert _load("list_ranks.sql") in sqls
 
@@ -244,9 +248,10 @@ async def test_from_preset_skips_backfill_when_disabled():
         [
             _result(None),  # insert_ranks_from_preset
             _result(None),  # set_gym_sub_rank_type_from_preset
+            _sub_type_result("none"),  # get_gym_sub_rank_type (reconcile read)
+            _result(None),  # reconcile_member_sub_index_for_gym
             _result({"gym_id": gym_id, "is_rank_enabled": False}),
             _result([], many=True),  # response ladder
-            _sub_type_result(),  # response sub_rank_type
         ],
     )
     service = _make_service(_make_pool_mock(session))
@@ -256,6 +261,8 @@ async def test_from_preset_skips_backfill_when_disabled():
     )
     sqls = _executed_sql_strings(session)
     assert _load("backfill_lowest_rank.sql") not in sqls
+    # Reconcile still runs even when the backfill is skipped.
+    assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
 
 
 # ---------- set_rank_enabled transitions ----------
@@ -1276,3 +1283,142 @@ async def test_reorder_ranks_rejects_target_in_shift_space():
             _reorder_request(gym_id, (rank_a, REORDER_SHIFT_OFFSET)),
         )
     session.commit.assert_not_awaited()
+
+
+# ---------- 'none' sub-rank style (sub-ranks disabled gym-wide) ----------
+
+
+@pytest.mark.asyncio
+async def test_promote_member_none_gym_is_main_to_main():
+    """On a 'none' gym every rank's EFFECTIVE sub-count is 0, so promotion
+    skips straight to the next main's base leaf (NULL sub_index) even though
+    the ranks STORE a sub_rank_count > 0 — the counts stay persisted, just
+    dormant."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    low_id, high_id, ladder = _two_main_ladder(gym_id, low_subs=5, high_subs=5)
+
+    session = _make_session_mock(
+        [
+            _current(low_id, None, gym_id),
+            _result(ladder, many=True),
+            _sub_type_result("none"),
+            _result({"updated": True}),  # set_member_rank (row must be truthy)
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    response = await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    assert str(response.new_rank.rank_id) == high_id
+    assert response.new_sub_index is None
+    assert response.new_sub_label is None
+    # No sub label on a 'none' gym — the display name is just the main name.
+    assert response.new_display_name == "Blue"
+    assert _params_for(session, "set_member_rank.sql")["new_sub_index"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_member_rank_none_gym_forces_sub_index_none():
+    """A 'none' gym forces current_sub_index to NULL even when the target rank
+    STORES sub_rank_count > 0 and a stray sub_index is supplied (effective
+    count 0 → subless-rank invariant)."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    target_id = str(uuid4())
+    ladder = [
+        make_rank_row(rank_id=target_id, gym_id=str(gym_id), sub_rank_count=3),
+    ]
+
+    session = _make_session_mock(
+        [
+            _current(None, None, gym_id),
+            _result(ladder, many=True),
+            _sub_type_result("none"),
+            _result({"updated": True}),  # set_member_rank (row must be truthy)
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    response = await service.set_member_rank(
+        RankSetMemberRequest(
+            gym_id=gym_id,
+            member_id=member_id,
+            rank_id=target_id,
+            sub_index=2,
+        ),
+    )
+
+    assert response.new_sub_index is None
+    assert response.new_sub_label is None
+    assert _params_for(session, "set_member_rank.sql")["new_sub_index"] is None
+
+
+@pytest.mark.asyncio
+async def test_backfill_none_gym_base_leaf_name_has_no_sub_label():
+    """On a 'none' gym the lowest rank's base leaf is NULL (not 0) despite a
+    stored sub_rank_count, so the derived backfill name carries no sub label."""
+    gym_id = uuid4()
+    lowest = make_rank_row(
+        rank_id=str(uuid4()),
+        gym_id=str(gym_id),
+        name="White",
+        sub_rank_count=4,
+    )
+
+    session = _make_session_mock(
+        [
+            _result(make_rank_row(rank_id=str(uuid4()), gym_id=str(gym_id))),
+            _result({"gym_id": gym_id, "is_rank_enabled": True}),
+            _result([lowest], many=True),  # backfill ladder read
+            _sub_type_result("none"),  # gym sub_rank_type
+            _result(None),  # backfill SQL
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.create_rank(
+        RankCreateRequest(
+            gym_id=gym_id,
+            main_rank_num_order=1,
+            name="Blue",
+            classes_to_next_major=10,
+        ),
+    )
+
+    assert _params_for(session, "backfill_lowest_rank.sql")["new_rank_name"] == "White"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_sub_index_for_gym_runs_reconcile_sql():
+    """The gym-update edge opens its own session, runs the reconcile SQL with
+    the new style, and commits."""
+    gym_id = uuid4()
+    session = _make_session_mock([_result(None)])
+    members = RanksMembers(_make_pool_mock(session))
+
+    await members.reconcile_sub_index_for_gym(gym_id, SubRankType.none)
+
+    sqls = _executed_sql_strings(session)
+    assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
+    params = _params_for(session, "reconcile_member_sub_index_for_gym.sql")
+    assert params["sub_rank_type"] == "none"
+    assert params["gym_id"] == str(gym_id)
+    session.commit.assert_awaited_once()
+
+
+# ---------- ready-to-promote proximity sort (SQL contract) ----------
+
+
+def test_ready_to_promote_sql_orders_by_remaining_ascending():
+    """The board sorts by classes REMAINING to the next leaf (closest first),
+    with a deterministic member_id tiebreaker — NOT by fraction-of-step-done."""
+    sql = _load("list_members_ready_to_promote.sql")
+    assert "(step_denominator - classes_since) ASC" in sql
+    assert "member_id ASC" in sql
+    # The old fraction-done DESC sort is gone.
+    assert "classes_since::numeric / step_denominator" not in sql

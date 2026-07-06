@@ -241,7 +241,10 @@ def test_update_gym_clears_logo_url_with_explicit_null(
 
 
 def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
-    """PUT /api/v1/gyms/{gym_id} with sub_rank_type persists and echoes it."""
+    """PUT /api/v1/gyms/{gym_id} with sub_rank_type persists, echoes it, AND
+    fires the member sub-index reconcile (the gyms -> ranks edge)."""
+    from src.ranks import SQL_DIR  # noqa: PLC0415
+
     gym_id = uuid4()
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
@@ -266,6 +269,18 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     assert body["sub_rank_type"] == "div"
     bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
     assert bound_params["sub_rank_type"] == "div"
+
+    # The style change reconciles members to stay leaf-valid.
+    reconcile_sql = (SQL_DIR / "reconcile_member_sub_index_for_gym.sql").read_text()
+    session = db_pool_mock.session.return_value
+    reconcile_call = next(
+        c
+        for c in session.execute.await_args_list
+        if c.args[0].text == reconcile_sql
+    )
+    assert reconcile_call.args[1]["sub_rank_type"] == "div"
+    assert reconcile_call.args[1]["gym_id"] == str(gym_id)
+    session.commit.assert_awaited()
 
 
 def test_update_gym_explicit_null_sub_rank_type_422(

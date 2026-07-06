@@ -39,11 +39,13 @@ class RanksPresets(RanksBase):
         self,
         request: FromPresetRequest,
     ) -> RankListResponse:
-        """Clone a preset ladder into a gym, set its type, then backfill.
+        """Clone a preset ladder into a gym, set its type, reconcile, backfill.
 
-        Runs three steps in one transaction: insert the preset's main
+        Runs four steps in one transaction: insert the preset's main
         rows (idempotent), copy the preset kind's implied sub-rank type
-        onto the gym (skipped for a subless preset), then backfill
+        onto the gym (every kind implies one now — ``'none'`` for plain
+        belts / flat), reconcile EXISTING members' ``current_sub_index``
+        to that style so the leaf invariant stays valid, then backfill
         rank-less members to the lowest leaf if ranks are enabled.
         """
         async with self._db_pool.session() as session:
@@ -67,6 +69,20 @@ class RanksPresets(RanksBase):
                 },
             )
 
+            # The preset just set the gym's style; reconcile existing
+            # members' sub-index to it (rank-less members are handled by
+            # the backfill below). Read the now-effective style once and
+            # reuse it for the reconcile AND the response.
+            sub_rank_type = await self._gym_sub_rank_type(
+                session,
+                request.gym_id,
+            )
+            await self._members.reconcile_sub_index_in_session(
+                session,
+                request.gym_id,
+                sub_rank_type,
+            )
+
             if await self._members.is_rank_enabled(session, request.gym_id):
                 await self._members.backfill_lowest_for_gym(
                     session,
@@ -74,10 +90,6 @@ class RanksPresets(RanksBase):
                 )
 
             items = await self._list_ranks_in_session(session, request.gym_id)
-            sub_rank_type = await self._gym_sub_rank_type(
-                session,
-                request.gym_id,
-            )
             await session.commit()
 
         return RankListResponse(items=items, sub_rank_type=sub_rank_type)

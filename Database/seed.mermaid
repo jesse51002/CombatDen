@@ -60,13 +60,15 @@ flowchart TB
 
   %% ── Ranks · presets ×15 (3 kinds keyed by rank_preset_kind, ONE row per
   %% MAIN rank — simple split). A gym clones ONE kind into its gym_ranks ladder
-  %% and takes that kind's implied sub_rank_type. Sub-rank labels are DERIVED
-  %% from sub_rank_type + index (never stored); a base rank has sub_rank_count
-  %% = 0 (it IS the leaf, current_sub_index NULL).
+  %% and takes that kind's implied sub_rank_type (every kind implies one now:
+  %% none for plain belts / flat, stripes for the stripes kind; gyms.sub_rank_type
+  %% defaults to 'none'). Sub-rank labels are DERIVED from sub_rank_type + index
+  %% (never stored); a base rank has sub_rank_count = 0 (it IS the leaf,
+  %% current_sub_index NULL), and a 'none' gym treats EVERY rank that way.
   Ranks["🥋 Ranks · presets ×15"]
   Ranks -->|"gym ladder (clones bjj_belts_stripes)"| r_applied["gym_ranks ×5 mains<br/>belts · sub_rank_count 5 (base + 4 stripes)<br/>sub_rank_type = stripes"]
-  Ranks -.->|"preset only"| r_belts["bjj_belts ×5 mains<br/>belts · sub_rank_count 0"]
-  Ranks -.->|"preset only"| r_flat["flat ×5 mains<br/>generic tiers · sub_rank_count 0"]
+  Ranks -.->|"preset only"| r_belts["bjj_belts ×5 mains<br/>belts · sub_rank_count 0<br/>implied sub_rank_type = none"]
+  Ranks -.->|"preset only"| r_flat["flat ×5 mains<br/>generic tiers · sub_rank_count 0<br/>implied sub_rank_type = none"]
 
   %% ── Plans ×7 by plan_type (one type each — simple split) ──
   Plans["🎟️ Membership plans ×7"]

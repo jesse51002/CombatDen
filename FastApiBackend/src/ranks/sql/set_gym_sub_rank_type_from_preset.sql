@@ -1,7 +1,10 @@
--- Copy the preset kind's implied sub_rank_type onto the gym. A stripes
--- preset carries implied_sub_rank_type = 'stripes' on its rows; a flat
--- preset carries NULL, in which case the gym's existing type is left
--- untouched (the outer guard MAX(...) IS NOT NULL).
+-- Copy the preset kind's implied sub_rank_type onto the gym. Every kind
+-- implies a concrete style now: the stripes preset carries
+-- implied_sub_rank_type = 'stripes', the plain-belts / flat presets carry
+-- 'none' (main belts, no sub-positions). So a plain-belts preset makes the
+-- gym read 'none'. The MAX(...) IS NOT NULL guard is a defensive no-clobber
+-- (never write a NULL into the NOT NULL column); it always passes for real
+-- preset rows since they all carry a concrete implied type.
 UPDATE gyms
 SET sub_rank_type = sub.t
 FROM (

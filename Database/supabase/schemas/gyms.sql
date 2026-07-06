@@ -9,7 +9,12 @@ CREATE TYPE stripe_onboarding_status AS ENUM (
 
 -- Per-gym sub-rank style. Consumed by gym_ranks (a main rank with
 -- sub_rank_count > 0) and mirrored onto rank_presets.implied_sub_rank_type.
-CREATE TYPE sub_rank_type AS ENUM ('stripes', 'div');
+-- 'none' (the default) = the gym has main belts but NO sub-positions: every
+-- rank behaves as its own leaf (effective sub_rank_count 0) and members carry
+-- a NULL current_sub_index. 'stripes' / 'div' only change the derived LABELS.
+-- Switching TO 'none' is persist-only — it never wipes a rank's stored
+-- sub_rank_count / sub_rank_image_overrides; they reactivate on a switch back.
+CREATE TYPE sub_rank_type AS ENUM ('none', 'stripes', 'div');
 
 CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -23,8 +28,11 @@ CREATE TABLE gyms (
     is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     -- Per-gym sub-rank style. Every main rank with sub_rank_count > 0 uses
     -- this. Sub-rank LABELS are derived from (sub_rank_type, sub_index),
-    -- never stored. Writable via the gym-update path; from_preset sets it.
-    sub_rank_type sub_rank_type NOT NULL DEFAULT 'stripes',
+    -- never stored. Default 'none' = no sub-ranks (most gyms). Writable via
+    -- the gym-update path; from_preset sets it. Changing it reconciles every
+    -- member's current_sub_index to stay leaf-valid (ranks domain), never
+    -- touching the persisted per-rank counts / image overrides.
+    sub_rank_type sub_rank_type NOT NULL DEFAULT 'none',
     -- Stripe Connect onboarding state (service_role-only writes; see access_rules/gyms.sql)
     stripe_account_id TEXT UNIQUE,
     stripe_onboarding_status stripe_onboarding_status NOT NULL DEFAULT 'not_started',

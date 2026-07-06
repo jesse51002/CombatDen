@@ -3,15 +3,21 @@
 -- same statement (:activity_type is bound to RANK_CHANGED_ACTIVITY_TYPE),
 -- so each member's progress anchor starts at the backfill moment rather
 -- than their join date. The member is pinned to the lowest rank's BASE
--- leaf: current_sub_index 0 when it has sub-ranks, else NULL. The leaf's
+-- leaf: current_sub_index 0 when it has sub-ranks, else NULL. The EFFECTIVE
+-- sub-rank count is 0 whenever the gym's sub_rank_type is 'none' (sub-ranks
+-- disabled gym-wide), so a 'none' gym pins the base leaf as NULL. The leaf's
 -- display name is Python-derived and bound as :new_rank_name (the gym's
 -- sub_rank_type drives the label). A gym with no ranks yields an empty
 -- `lowest` CTE, making the whole statement a no-op.
 WITH lowest AS (
-    SELECT rank_id, sub_rank_count
-    FROM gym_ranks
-    WHERE gym_id = CAST(:gym_id AS UUID)
-    ORDER BY main_rank_num_order ASC
+    SELECT
+        gr.rank_id,
+        CASE WHEN g.sub_rank_type = 'none'
+             THEN 0 ELSE gr.sub_rank_count END AS sub_rank_count
+    FROM gym_ranks gr
+    JOIN gyms g ON g.gym_id = gr.gym_id
+    WHERE gr.gym_id = CAST(:gym_id AS UUID)
+    ORDER BY gr.main_rank_num_order ASC
     LIMIT 1
 ),
 backfilled AS (

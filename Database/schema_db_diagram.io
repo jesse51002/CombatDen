@@ -25,7 +25,7 @@ Table gyms {
   logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
-  sub_rank_type sub_rank_type [not null, default: 'stripes', note: 'enum: stripes | div; per-gym sub-rank style; from_preset sets it']
+  sub_rank_type sub_rank_type [not null, default: 'none', note: 'enum: none | stripes | div; per-gym sub-rank style (none = no sub-ranks, the default); from_preset sets it; changing it reconciles members']
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
   stripe_onboarding_status stripe_onboarding_status [not null, default: 'not_started', note: 'enum: not_started | pending | complete | disabled']
   theme_design_id text [note: 'nullable; ThemeService design_id; written by presets import']
@@ -59,7 +59,7 @@ Table rank_presets {
   image_url varchar
   classes_to_next_major integer [not null, note: 'threshold to the NEXT main rank; per-sub steps derived (even split)']
   sub_rank_count integer [not null, default: 0, note: '0 = leaf; N>=1 = N leaf sub-positions']
-  implied_sub_rank_type sub_rank_type [note: 'nullable; enum: stripes | div; from_preset copies MAX onto the gym']
+  implied_sub_rank_type sub_rank_type [note: 'nullable; enum: none | stripes | div; every kind implies one (none for plain belts/flat, stripes for the stripes kind); from_preset copies MAX onto the gym']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {

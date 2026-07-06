@@ -238,11 +238,12 @@ def test_seed_from_preset_returns_seeded_list(client, db_pool_mock, auth_headers
         side_effect=[
             _one(None),  # insert_ranks_from_preset
             _one(None),  # set_gym_sub_rank_type_from_preset
+            _sub_type(),  # get_gym_sub_rank_type (reconcile read + response)
+            _one(None),  # reconcile_member_sub_index_for_gym
             _enabled(fake_gym_id, value=True),  # is_rank_enabled
             _many([]),  # backfill ladder read (empty)
             _one(None),  # backfill SQL
             _many(seeded_rows),  # response ladder
-            _sub_type(),  # response sub_rank_type
         ],
     )
     session.commit = AsyncMock()

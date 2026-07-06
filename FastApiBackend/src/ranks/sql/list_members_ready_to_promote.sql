@@ -1,11 +1,14 @@
 -- The "ready to promote" board: ranked, active-membership (not frozen),
--- not-top-of-ladder members ordered by how close they are to their next
--- leaf. classes_since is attendance since the member's last rank change
--- (the member_details.sql progress anchor, reused verbatim); the step
+-- not-top-of-ladder members ordered by classes REMAINING to the next leaf
+-- (closest first). classes_since is attendance since the member's last rank
+-- change (the member_details.sql progress anchor, reused verbatim); the step
 -- denominator is an even split of classes_to_next_major across the
 -- sub-positions (ceil), or the full major threshold when the rank has no
--- sub-ranks. The service derives each row's sub_label from the gym's
--- sub_rank_type + current_sub_index.
+-- sub-ranks. The EFFECTIVE sub-rank count is 0 whenever the gym's
+-- sub_rank_type is 'none' (sub-ranks disabled gym-wide), so a 'none' gym's
+-- promotions are main-to-main and every rank behaves as its own leaf. The
+-- service derives each row's sub_label from the gym's sub_rank_type +
+-- current_sub_index.
 WITH ready AS (
     SELECT
         m.member_id,
@@ -32,14 +35,21 @@ WITH ready AS (
               )
         ) AS classes_since,
         CASE
-            WHEN gr.sub_rank_count > 0
-                THEN CEIL(gr.classes_to_next_major::numeric / gr.sub_rank_count)::int
+            WHEN (CASE WHEN g.sub_rank_type = 'none'
+                       THEN 0 ELSE gr.sub_rank_count END) > 0
+                THEN CEIL(
+                    gr.classes_to_next_major::numeric
+                    / (CASE WHEN g.sub_rank_type = 'none'
+                            THEN 0 ELSE gr.sub_rank_count END)
+                )::int
             ELSE NULLIF(gr.classes_to_next_major, 0)
         END AS step_denominator
     FROM members m
     JOIN gym_ranks gr
         ON m.current_rank_id = gr.rank_id
         AND m.gym_id = gr.gym_id
+    JOIN gyms g
+        ON g.gym_id = m.gym_id
     WHERE m.gym_id = CAST(:gym_id AS UUID)
       AND m.current_rank_id IS NOT NULL
       AND EXISTS (
@@ -56,8 +66,12 @@ WITH ready AS (
               WHERE gym_id = CAST(:gym_id AS UUID)
           )
           AND (
-              gr.sub_rank_count = 0
-              OR m.current_sub_index = gr.sub_rank_count - 1
+              (CASE WHEN g.sub_rank_type = 'none'
+                    THEN 0 ELSE gr.sub_rank_count END) = 0
+              OR m.current_sub_index = (
+                  CASE WHEN g.sub_rank_type = 'none'
+                       THEN 0 ELSE gr.sub_rank_count END
+              ) - 1
           )
       )
 )
@@ -75,6 +89,7 @@ SELECT
 FROM ready
 WHERE step_denominator IS NOT NULL
 ORDER BY
-    (classes_since::numeric / step_denominator) DESC NULLS LAST,
-    classes_since DESC
+    (step_denominator - classes_since) ASC,
+    classes_since DESC,
+    member_id ASC
 LIMIT :count OFFSET :start_index

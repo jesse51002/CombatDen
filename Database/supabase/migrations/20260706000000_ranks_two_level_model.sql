@@ -10,8 +10,13 @@
 -- production rows exist, so the NOT NULL DEFAULT column adds are safe and no
 -- backfill of sub_rank_count / current_sub_index is needed.
 --
---   1. CREATE TYPE sub_rank_type ('stripes', 'div').
---   2. gyms: add sub_rank_type NOT NULL DEFAULT 'stripes'.
+--   1. CREATE TYPE sub_rank_type ('none', 'stripes', 'div'). 'none' (the
+--      first value + the default) = the gym has main belts but NO sub-ranks:
+--      every rank is its own leaf (effective sub_rank_count 0) and members
+--      carry NULL current_sub_index. 'stripes' / 'div' only change the derived
+--      labels. Switching to 'none' is persist-only (never wipes a rank's
+--      sub_rank_count / sub_rank_image_overrides).
+--   2. gyms: add sub_rank_type NOT NULL DEFAULT 'none'.
 --   3. members: add current_sub_index (nullable; >= 0 when set).
 --   4. gym_ranks: drop the old (gym_id, main, sub) composite unique; rename
 --      main_name -> name and classes_till_rankup -> classes_to_next_major;
@@ -32,12 +37,14 @@
 
 -- ── 1. sub_rank_type enum ───────────────────────────────────────────────────
 
-CREATE TYPE sub_rank_type AS ENUM ('stripes', 'div');
+-- 'none' is the FIRST value and the column default (see header) = sub-ranks
+-- disabled gym-wide; most gyms use it.
+CREATE TYPE sub_rank_type AS ENUM ('none', 'stripes', 'div');
 
 -- ── 2. gyms: per-gym sub-rank style ─────────────────────────────────────────
 
 ALTER TABLE gyms
-    ADD COLUMN sub_rank_type sub_rank_type NOT NULL DEFAULT 'stripes';
+    ADD COLUMN sub_rank_type sub_rank_type NOT NULL DEFAULT 'none';
 
 -- ── 3. members: leaf position within the current main rank ──────────────────
 
@@ -102,8 +109,11 @@ CREATE TABLE rank_presets (
     image_url VARCHAR,
     classes_to_next_major INTEGER NOT NULL CHECK (classes_to_next_major >= 0),
     sub_rank_count INTEGER NOT NULL DEFAULT 0 CHECK (sub_rank_count >= 0),
-    -- The gym sub_rank_type this preset implies; NULL when it has no
-    -- sub-ranks. from_preset copies MAX(implied_sub_rank_type) onto the gym.
+    -- The gym sub_rank_type this preset implies. Every kind implies a
+    -- concrete style now — 'none' for plain belts / flat, 'stripes' for the
+    -- stripes kind — so from_preset copies MAX(implied_sub_rank_type) onto the
+    -- gym (a plain-belts preset makes the gym read 'None'). Kept nullable for
+    -- forward flexibility, but the seed always populates it.
     implied_sub_rank_type sub_rank_type,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (preset_id),

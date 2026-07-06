@@ -55,25 +55,49 @@ class RanksBase:
         return SubRankType(row["sub_rank_type"])
 
     @staticmethod
+    def _effective_sub_count(
+        rank: RankResponse,
+        sub_rank_type: SubRankType,
+    ) -> int:
+        """The leaf count actually in effect for a rank.
+
+        ``0`` whenever the gym disables sub-ranks (``sub_rank_type ==
+        'none'``) — every rank then behaves as its own leaf — else the
+        rank's stored ``sub_rank_count``. All leaf math (promotion, the
+        leaf invariant, step denominators) reads THIS, never the raw
+        column, so switching a gym to ``'none'`` is a pure view change
+        over the persisted counts.
+        """
+        if sub_rank_type is SubRankType.none:
+            return 0
+        return rank.sub_rank_count
+
+    @staticmethod
     def _next_leaf(
         ladder: list[RankResponse],
         rank_id: UUID | None,
         sub_index: int | None,
+        sub_rank_type: SubRankType,
     ) -> tuple[RankResponse, int | None]:
         """The next leaf up the ladder from a member's current leaf.
 
-        Leaves per main rank: ``sub_rank_count == 0`` is a single leaf
-        (sub-index ``None``); otherwise ``0 .. sub_rank_count - 1``. A
-        rank-less member advances to the lowest leaf. From a non-top
-        sub-position, advance within the current main; from the top sub
-        (or a subless main), advance to the base leaf of the next main.
-        At the top main + top sub, raise ``ValueError("highest rank")``.
+        Leaves per main rank use the EFFECTIVE sub-rank count (0 on a
+        ``'none'`` gym): effective ``0`` is a single leaf (sub-index
+        ``None``); otherwise ``0 .. count - 1``. A rank-less member
+        advances to the lowest leaf. From a non-top sub-position, advance
+        within the current main; from the top sub (or a subless main),
+        advance to the base leaf of the next main. At the top main + top
+        sub, raise ``ValueError("highest rank")``. On a ``'none'`` gym
+        every rank is subless, so promotion is purely main-to-main.
         """
         if not ladder:
             raise ValueError("Gym has no ranks configured")
 
+        def eff(rank: RankResponse) -> int:
+            return RanksBase._effective_sub_count(rank, sub_rank_type)
+
         def base_leaf(rank: RankResponse) -> int | None:
-            return 0 if rank.sub_rank_count > 0 else None
+            return 0 if eff(rank) > 0 else None
 
         if rank_id is None:
             first = ladder[0]
@@ -94,11 +118,12 @@ class RanksBase:
             return first, base_leaf(first)
 
         current = ladder[index]
-        if current.sub_rank_count > 0:
+        current_count = eff(current)
+        if current_count > 0:
             # Defensive: a count>0 rank should never have a NULL sub_index
             # (the invariant), but treat NULL as "before the base leaf".
             cur = sub_index if sub_index is not None else -1
-            if cur < current.sub_rank_count - 1:
+            if cur < current_count - 1:
                 return current, cur + 1
 
         if index >= len(ladder) - 1:
