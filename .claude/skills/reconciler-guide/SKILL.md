@@ -161,7 +161,11 @@ deliberate:
   the same lock check — the reprice holds the family lock across its DB phase
   + converge and **reverts the successor itself on failure**, so a lock-free
   pending successor only exists after a process crash: a genuine orphan,
-  reaped like any other.
+  reaped like any other. Each orphan's delete is isolated in its own `try` —
+  a failure logs (`exc_info=True`), counts `errors`, and moves on to the next
+  orphan, mirroring `SubscriptionOrphanSweep`'s per-item `_cancel_orphan`
+  isolation described just below — so one bad row can't abort the rest of the
+  sweep or the reconciler steps that run after it.
 - **`PaymentPushSweep`** — lists the active billing members
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership, `member_id` only) and calls the existing

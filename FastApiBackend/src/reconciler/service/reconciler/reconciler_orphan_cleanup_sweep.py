@@ -72,7 +72,13 @@ class OrphanCleanupSweep:
         orphan: dict,
         result: SweepResult,
     ) -> None:
-        """Delete one orphan under its payer lock, or skip if the lock is held."""
+        """Delete one orphan under its payer lock, isolating any failure.
+
+        A held lock means an op is in flight (``skipped``, not a failure).
+        A free lock attempts the delete; any exception is caught here so one
+        orphan's failure can't abort the rest of the sweep (or the reconciler
+        steps that run after it) — mirrors ``SubscriptionOrphanSweep._cancel_orphan``.
+        """
         key = (
             f"{settings.paying_member_lock_prefix}:"
             f"{orphan['paid_by_member_id']}"
@@ -81,8 +87,16 @@ class OrphanCleanupSweep:
             if not acquired:
                 result.skipped += 1
                 return
-            await self._delete_orphan(orphan["item_id"])
-            result.changed += 1
+            try:
+                await self._delete_orphan(orphan["item_id"])
+                result.changed += 1
+            except Exception:
+                logger.error(
+                    "Failed to delete orphan membership %s; continuing",
+                    orphan["item_id"],
+                    exc_info=True,
+                )
+                result.errors += 1
 
     async def _delete_orphan(self, item_id: UUID) -> None:
         """Delete one orphan's applied-discount children, then its item row.

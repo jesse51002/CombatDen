@@ -111,3 +111,47 @@ async def test_try_cleanup_one_skips_when_lock_held() -> None:
     assert result.skipped == 1
     assert result.changed == 0
     session.execute.assert_not_awaited()
+
+
+async def test_try_cleanup_one_isolates_a_delete_failure() -> None:
+    """A raising delete is caught, counted as ``errors``, and swallowed."""
+    session = _mock_session()
+    session.execute.side_effect = RuntimeError("boom")
+    sweep = OrphanCleanupSweep(_mock_db_pool(session), _fake_lock(True))
+    result = SweepResult(name="orphan_cleanup")
+    orphan = {"item_id": uuid4(), "paid_by_member_id": uuid4()}
+
+    await sweep._try_cleanup_one(orphan, result)  # must not raise
+
+    assert result.errors == 1
+    assert result.changed == 0
+    assert result.skipped == 0
+
+
+# ── run: per-orphan isolation across the whole sweep ────────────
+
+
+async def test_run_continues_past_one_orphans_delete_failure() -> None:
+    """One orphan's delete failure doesn't stop the rest from being processed."""
+    session = _mock_session()
+    sweep = OrphanCleanupSweep(_mock_db_pool(session), _fake_lock(True))
+    good_id, bad_id = uuid4(), uuid4()
+    payer_a, payer_b = uuid4(), uuid4()
+    orphans = [
+        {"item_id": bad_id, "paid_by_member_id": payer_a},
+        {"item_id": good_id, "paid_by_member_id": payer_b},
+    ]
+
+    async def _fake_delete_orphan(item_id: object) -> None:
+        if item_id == bad_id:
+            raise RuntimeError("boom")
+
+    sweep._delete_orphan = _fake_delete_orphan  # type: ignore[method-assign]
+    sweep._list_orphans = AsyncMock(return_value=orphans)  # type: ignore[method-assign]
+
+    result = await sweep.run()  # must not raise
+
+    assert result.processed == 2
+    assert result.changed == 1
+    assert result.errors == 1
+    assert result.skipped == 0
