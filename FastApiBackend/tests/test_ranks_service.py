@@ -1411,14 +1411,77 @@ async def test_reconcile_sub_index_for_gym_runs_reconcile_sql():
     session.commit.assert_awaited_once()
 
 
-# ---------- ready-to-promote proximity sort (SQL contract) ----------
+# ---------- proximity sort (SQL contract) ----------
 
 
-def test_ready_to_promote_sql_orders_by_remaining_ascending():
-    """The board sorts by classes REMAINING to the next leaf (closest first),
-    with a deterministic member_id tiebreaker — NOT by fraction-of-step-done."""
+def test_ready_to_promote_sql_orders_by_percentage_descending():
+    """The board sorts by PERCENTAGE complete toward the next leaf
+    (proportionally closest first — a 30/40 member outranks a 1/10 member),
+    with a deterministic member_id tiebreaker. NULLIF guards a 0
+    denominator."""
     sql = _load("list_members_ready_to_promote.sql")
-    assert "(step_denominator - classes_since) ASC" in sql
+    assert "(classes_since::numeric / NULLIF(step_denominator, 0)) DESC" in sql
     assert "member_id ASC" in sql
-    # The old fraction-done DESC sort is gone.
-    assert "classes_since::numeric / step_denominator" not in sql
+    # The old absolute-remaining ascending sort is gone.
+    assert "(step_denominator - classes_since) ASC" not in sql
+
+
+def test_members_in_rank_sql_orders_by_percentage_all_members():
+    """members-in-rank mirrors the ready board's percentage-descending sort
+    (a 30/40 member outranks a 1/10 member) but returns EVERY member on the
+    rank — no membership / top-of-ladder filter and NO step_denominator
+    filter (NULL steps sort last via NULLS LAST)."""
+    sql = _load("list_members_in_rank.sql")
+    assert (
+        "(classes_since::numeric / NULLIF(step_denominator, 0)) DESC NULLS LAST"
+        in sql
+    )
+    assert "member_id ASC" in sql
+    # The old sub-index / name sort is gone.
+    assert "m.current_sub_index ASC NULLS FIRST" not in sql
+    # Unlike the ready board, no rows are dropped by a step filter.
+    assert "WHERE step_denominator IS NOT NULL" not in sql
+
+
+# ---------- per-sub-index counts ----------
+
+
+@pytest.mark.asyncio
+async def test_count_members_by_sub_index_sums_total():
+    """The per-sub-index breakdown is returned in order and total_count is
+    the Python sum of the per-slot counts."""
+    gym_id = uuid4()
+    rank_id = uuid4()
+    rows = [
+        {"sub_index": 0, "count": 3},
+        {"sub_index": 1, "count": 2},
+    ]
+    session = _make_session_mock([_result(rows, many=True)])
+    service = _make_service(_make_pool_mock(session))
+
+    response = await service.count_members_by_sub_index(gym_id, rank_id)
+
+    assert response.total_count == 5
+    assert [(c.sub_index, c.count) for c in response.counts] == [(0, 3), (1, 2)]
+
+    params = _params_for(session, "count_members_by_sub_index.sql")
+    assert params["gym_id"] == str(gym_id)
+    assert params["rank_id"] == str(rank_id)
+
+
+@pytest.mark.asyncio
+async def test_count_members_by_sub_index_none_gym_single_null_row():
+    """On a 'none' gym members carry a NULL sub-index, so the read returns a
+    single {null, total} row and total_count is that count."""
+    gym_id = uuid4()
+    rank_id = uuid4()
+    rows = [{"sub_index": None, "count": 7}]
+    session = _make_session_mock([_result(rows, many=True)])
+    service = _make_service(_make_pool_mock(session))
+
+    response = await service.count_members_by_sub_index(gym_id, rank_id)
+
+    assert response.total_count == 7
+    assert len(response.counts) == 1
+    assert response.counts[0].sub_index is None
+    assert response.counts[0].count == 7

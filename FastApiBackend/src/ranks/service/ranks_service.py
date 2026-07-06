@@ -40,6 +40,7 @@ from src.ranks.schema.ranks_schema import (
     RankReorderRequest,
     RankResponse,
     RankSetMemberRequest,
+    RankSubRankCountsResponse,
     RankUpdateData,
 )
 from src.ranks.service.ranks_base import RanksBase
@@ -284,6 +285,14 @@ class RanksService(RanksBase):
     ) -> MembersInRankResponse:
         """Members currently on one main rank, paginated."""
         return await self._reads.list_members_in_rank(request)
+
+    async def count_members_by_sub_index(
+        self,
+        gym_id: UUID,
+        rank_id: UUID,
+    ) -> RankSubRankCountsResponse:
+        """Member counts per sub-position for one main rank."""
+        return await self._reads.count_members_by_sub_index(gym_id, rank_id)
 
     # ---------- gyms.is_rank_enabled toggle ----------
 

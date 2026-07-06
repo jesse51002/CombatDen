@@ -1,7 +1,8 @@
 -- The "ready to promote" board: ranked, active-membership (not frozen),
--- not-top-of-ladder members ordered by classes REMAINING to the next leaf
--- (closest first). classes_since is attendance since the member's last rank
--- change (the member_details.sql progress anchor, reused verbatim); the step
+-- not-top-of-ladder members ordered by PERCENTAGE complete toward the next
+-- leaf (proportionally closest first — 30/40 outranks 1/10). classes_since
+-- is attendance since the member's last rank change (the member_details.sql
+-- progress anchor, reused verbatim); the step
 -- denominator is an even split of classes_to_next_major across the
 -- sub-positions (ceil), or the full major threshold when the rank has no
 -- sub-ranks. The EFFECTIVE sub-rank count is 0 whenever the gym's
@@ -89,7 +90,7 @@ SELECT
 FROM ready
 WHERE step_denominator IS NOT NULL
 ORDER BY
-    (step_denominator - classes_since) ASC,
+    (classes_since::numeric / NULLIF(step_denominator, 0)) DESC NULLS LAST,
     classes_since DESC,
     member_id ASC
 LIMIT :count OFFSET :start_index

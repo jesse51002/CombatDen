@@ -1,11 +1,17 @@
-"""Ranks read concern: the two paginated member-board reads.
+"""Ranks read concern: the paginated member-board reads + the
+per-sub-index count.
 
 ``list_ready_to_promote`` powers the Ranks-tab proximity board (ranked,
-active-membership, not-top-of-ladder members sorted by closeness to their
-next leaf); ``list_members_in_rank`` powers the rank-detail roster. Both
-are DB-paginated (``COUNT(*) OVER()`` total + ``start_index`` / ``count``)
-and derive each row's sub-rank label from the gym's ``sub_rank_type``.
+active-membership, not-top-of-ladder members sorted by percentage complete
+toward their next leaf); ``list_members_in_rank`` powers the rank-detail
+roster (the same percentage order, all members). Both are DB-paginated
+(``COUNT(*) OVER()`` total + ``start_index`` / ``count``) and derive each
+row's sub-rank label from the gym's ``sub_rank_type``.
+``count_members_by_sub_index`` is the rank-detail per-sub-position
+breakdown (total on the rank + a sparse count per sub-index).
 """
+
+from uuid import UUID
 
 from schema.gym_rank import SubRankType, sub_rank_label
 from sqlalchemy import text
@@ -18,6 +24,8 @@ from src.ranks.schema.ranks_schema import (
     MembersReadyToPromoteRequest,
     MembersReadyToPromoteResponse,
     MembersReadyToPromoteRow,
+    RankSubRankCount,
+    RankSubRankCountsResponse,
 )
 from src.ranks.service.ranks_base import RanksBase
 from src.shared.sql_loader import load_sql
@@ -62,7 +70,12 @@ class RanksReads(RanksBase):
         self,
         request: MembersInRankRequest,
     ) -> MembersInRankResponse:
-        """Members currently on one main rank, paginated by sub-index."""
+        """Members on one main rank, paginated, percentage-sorted.
+
+        Ordered by percentage complete toward the next leaf
+        (proportionally closest first), the same order as the
+        ready-to-promote board; every member on the rank is returned.
+        """
         sql = load_sql(SQL_DIR / "list_members_in_rank.sql")
         async with self._db_pool.session() as session:
             sub_rank_type = await self._gym_sub_rank_type(
@@ -90,6 +103,43 @@ class RanksReads(RanksBase):
         ]
         total = rows[0]["total_count"] if rows else 0
         return MembersInRankResponse(items=items, total_count=total)
+
+    async def count_members_by_sub_index(
+        self,
+        gym_id: UUID,
+        rank_id: UUID,
+    ) -> RankSubRankCountsResponse:
+        """Member counts per sub-position for one main rank.
+
+        Returns the total on the rank plus a SPARSE per-sub-index
+        breakdown (only sub-indices with at least one member — the CRM
+        fills 0 for empty slots from the rank's ``sub_rank_count``). On a
+        ``'none'`` gym members carry a NULL sub-index, so ``counts`` is a
+        single ``{null, total}`` row. ``total_count`` is summed in Python
+        from the fetched rows.
+        """
+        sql = load_sql(SQL_DIR / "count_members_by_sub_index.sql")
+        async with self._db_pool.session() as session:
+            rows = (
+                (
+                    await session.execute(
+                        text(sql),
+                        {
+                            "gym_id": str(gym_id),
+                            "rank_id": str(rank_id),
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+        counts = [
+            RankSubRankCount(sub_index=row["sub_index"], count=row["count"])
+            for row in rows
+        ]
+        total = sum(item.count for item in counts)
+        return RankSubRankCountsResponse(total_count=total, counts=counts)
 
     @staticmethod
     def _ready_row(

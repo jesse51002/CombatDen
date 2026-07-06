@@ -259,7 +259,38 @@ class MembersInRankRow(BaseModel):
 
 
 class MembersInRankResponse(BaseModel):
-    """Paginated members on one main rank (ordered by sub-index)."""
+    """Paginated members on one main rank.
+
+    Ordered by PERCENTAGE complete toward the next leaf (proportionally
+    closest first — 30/40 outranks 1/10), the same order as the
+    ready-to-promote board; every member on the rank is returned.
+    """
 
     items: list[MembersInRankRow]
     total_count: int
+
+
+# ---------- per-sub-index member counts (rank-detail breakdown) ----------
+
+
+class RankSubRankCount(BaseModel):
+    """Member count at one sub-position of a main rank.
+
+    ``sub_index`` is ``None`` on a ``'none'`` gym (members carry a NULL
+    sub-index there), otherwise the leaf index.
+    """
+
+    sub_index: int | None = None
+    count: int
+
+
+class RankSubRankCountsResponse(BaseModel):
+    """Total members on a main rank + a sparse per-sub-index breakdown.
+
+    ``counts`` holds only sub-indices with at least one member; the CRM
+    fills 0 for empty slots from the rank's ``sub_rank_count``.
+    ``total_count`` is the sum of the counts.
+    """
+
+    total_count: int
+    counts: list[RankSubRankCount]

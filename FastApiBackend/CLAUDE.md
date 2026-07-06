@@ -532,16 +532,28 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   still-shifted row mid-transaction. `main_rank_num_order` is
   update-immutable (`GYM_RANKS` frozenset) — `/reorder` is the only
   mover.
-- **Two paginated member reads (`RanksReads`).**
+- **Two paginated member reads + a per-sub-index count (`RanksReads`).**
   `GET /api/v1/ranks/ready-to-promote` — ranked, active-membership (not
-  frozen), not-top-of-ladder members, sorted by **classes REMAINING to the
-  next leaf, ascending (closest first)** — `ORDER BY (step_denominator -
-  classes_since) ASC, classes_since DESC, member_id ASC` (members at/over
-  the threshold sort to the very top; `member_id` is the deterministic
-  pagination tiebreaker).
+  frozen), not-top-of-ladder members, sorted by **percentage complete
+  toward the next leaf, descending (proportionally closest first — a 30/40
+  member outranks a 1/10 member)** — `ORDER BY (classes_since::numeric /
+  NULLIF(step_denominator, 0)) DESC NULLS LAST, classes_since DESC,
+  member_id ASC` (`NULLIF` guards divide-by-zero; `member_id` is the
+  deterministic pagination tiebreaker).
   `GET /api/v1/ranks/{rank_id}/members` — the roster currently on one
-  main rank, ordered by sub-index then name. Both are
-  `start_index`/`count` query-paginated with a `COUNT(*) OVER()` total.
+  main rank, the **same percentage-descending order** but returning EVERY
+  member on the rank (no membership / top-of-ladder filter, no
+  `step_denominator IS NOT NULL` filter — NULL steps sort last via `NULLS
+  LAST`; the computation is CTE-wrapped so the percentage expression can
+  reference the aliases). Both are `start_index`/`count` query-paginated
+  with a `COUNT(*) OVER()` total.
+  `GET /api/v1/ranks/{rank_id}/sub-rank-counts?gym_id=...` — the
+  rank-detail per-sub-position breakdown: `RankSubRankCountsResponse
+  { total_count, counts: [{sub_index, count}] }`, a SPARSE per-sub-index
+  count (only sub-indices with ≥1 member; the CRM fills 0 for empty slots
+  from `sub_rank_count`) plus the Python-summed total on the rank. On a
+  `'none'` gym members carry a NULL sub-index → a single `{null, total}`
+  row.
 - **Presets are re-keyed on `rank_preset_kind`, not `gym_type`.**
   `rank_presets` mirrors the main-row shape (`preset_id, preset_kind,
   main_rank_num_order, name, image_url, classes_to_next_major,
@@ -557,13 +569,15 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   kind), then reconciles existing members' sub-index to that style, then
   runs the same lowest-rank backfill.
 
-**Routes** (`/api/v1/ranks`, 15 total): `GET /` · `POST /` · `POST
+**Routes** (`/api/v1/ranks`, 16 total): `GET /` · `POST /` · `POST
 /from-preset` · `GET /presets` · `GET /presets/grouped` · `GET /enabled`
 · `PUT /enabled` · `POST /promote-member` · `POST /set-member-rank` ·
 `POST /reorder` · `GET /ready-to-promote` · `GET /{rank_id}/members` ·
-`GET /{rank_id}` · `PUT /{rank_id}` · `DELETE /{rank_id}`. **Removed:**
-`PUT /rename-group` and `DELETE /group` — with one row per main rank,
-those ops collapsed onto plain `update_rank`/`delete_rank`.
+`GET /{rank_id}/sub-rank-counts` · `GET /{rank_id}` · `PUT /{rank_id}` ·
+`DELETE /{rank_id}`. The `/{rank_id}/...` routes are declared before the
+bare `/{rank_id}`. **Removed:** `PUT /rename-group` and `DELETE /group` —
+with one row per main rank, those ops collapsed onto plain
+`update_rank`/`delete_rank`.
 
 ## Security
 

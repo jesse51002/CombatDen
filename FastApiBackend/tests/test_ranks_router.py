@@ -690,3 +690,50 @@ def test_members_in_rank_404_when_rank_missing(client, db_pool_mock, auth_header
         headers=auth_headers,
     )
     assert response.status_code == 404
+
+
+# ---------- per-sub-index counts ----------
+
+
+def test_sub_rank_counts_200(client, db_pool_mock, auth_headers, fake_gym_id, fake_rank_id):
+    """GET /api/v1/ranks/{rank_id}/sub-rank-counts returns the total on the
+    rank plus a sparse per-sub-index breakdown (the total is summed)."""
+    rows = [
+        {"sub_index": 0, "count": 3},
+        {"sub_index": 1, "count": 2},
+    ]
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[_many(rows)])
+
+    response = client.get(
+        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts?gym_id={fake_gym_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 5
+    assert body["counts"] == [
+        {"sub_index": 0, "count": 3},
+        {"sub_index": 1, "count": 2},
+    ]
+
+
+def test_sub_rank_counts_none_gym_single_null_row(
+    client, db_pool_mock, auth_headers, fake_gym_id, fake_rank_id
+):
+    """On a 'none' gym members carry a NULL sub-index, so the breakdown is a
+    single {null, total} row."""
+    rows = [{"sub_index": None, "count": 7}]
+
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[_many(rows)])
+
+    response = client.get(
+        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts?gym_id={fake_gym_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 7
+    assert body["counts"] == [{"sub_index": None, "count": 7}]

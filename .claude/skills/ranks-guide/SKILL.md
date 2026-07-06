@@ -238,14 +238,26 @@ demo/showcase `PresetsService` (that importer never touches ranks).
   guard against the non-deferrable `UNIQUE (gym_id, main_rank_num_order)`). There is
   no more group rename/delete (a "group" is now a main rank → plain update/delete).
 - **`RanksReads`** — the two paginated member reads (`COUNT(*) OVER()` +
-  `start_index`/`count`): `list_ready_to_promote` (active, ranked, not
-  top-of-ladder members sorted by classes **REMAINING** to the next leaf,
-  ascending — `ORDER BY (step_denominator - classes_since) ASC, classes_since
-  DESC, member_id ASC`, so the closest-to-promotion members come first and
-  at/over-threshold members sort to the very top; `member_id` is the
-  deterministic pagination tiebreaker — the promotion board) and
-  `list_members_in_rank` (the roster for one main rank). Both compute the step
-  denominator from the EFFECTIVE count.
+  `start_index`/`count`) plus the per-sub-index count: `list_ready_to_promote`
+  (active, ranked, not top-of-ladder members sorted by **percentage complete
+  toward the next leaf, descending** — proportionally closest first, so a
+  30/40 member outranks a 1/10 member — `ORDER BY (classes_since::numeric /
+  NULLIF(step_denominator, 0)) DESC NULLS LAST, classes_since DESC, member_id
+  ASC`; `NULLIF` guards divide-by-zero, `member_id` is the deterministic
+  pagination tiebreaker — the promotion board) and `list_members_in_rank` (the
+  roster for one main rank — the **same** percentage-descending order but
+  returning EVERY member on the rank: no membership / top-of-ladder filter,
+  no `step_denominator IS NOT NULL` filter, NULL steps last via `NULLS LAST`.
+  The query is CTE-wrapped so the percentage expression can reference the
+  `classes_since` / `step_denominator` aliases — a flat SELECT can't order by
+  an expression over output aliases). Both compute the step denominator from
+  the EFFECTIVE count. `count_members_by_sub_index(gym_id, rank_id)` is the
+  rank-detail per-sub-position breakdown — a SPARSE `GROUP BY current_sub_index`
+  (only sub-indices with ≥1 member; the CRM fills 0 for empty slots from
+  `sub_rank_count`) returned as `RankSubRankCountsResponse
+  { total_count, counts: [{sub_index, count}] }` with the total summed in
+  Python. On a `'none'` gym members carry a NULL sub-index → one `{null,
+  total}` row.
 - **`RanksPresets`** — `from_preset` (also sets the gym `sub_rank_type`), plus the
   preset list/grouped reads.
 
@@ -258,7 +270,9 @@ CRUD (`GET /`, `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`) ·
 `POST /from-preset` (`preset_kind`) · `GET /presets` + `GET /presets/grouped` ·
 `GET /enabled` + `PUT /enabled` · `POST /promote-member` · `POST /set-member-rank`
 (`rank_id?` + `sub_index?`) · `POST /reorder` (main-only) · **`GET /ready-to-promote`**
-· **`GET /{rank_id}/members`**. The static routes are declared before `/{rank_id}`.
+· **`GET /{rank_id}/members`** · **`GET /{rank_id}/sub-rank-counts`** (`gym_id`
+query param → the per-sub-position count breakdown). The static routes and the
+`/{rank_id}/...` routes are declared before the bare `/{rank_id}`.
 **Removed:** `PUT /rename-group`, `DELETE /group`. `_rank_http_error` maps
 `"highest rank"`→409, `"not found"`→404, else 400.
 

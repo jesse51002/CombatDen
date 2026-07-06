@@ -27,6 +27,7 @@ from src.ranks.schema.ranks_schema import (
     RankReorderRequest,
     RankResponse,
     RankSetMemberRequest,
+    RankSubRankCountsResponse,
     RankUpdateRequest,
 )
 from src.ranks.service.ranks_service import RanksService
@@ -548,7 +549,9 @@ async def list_ready_to_promote(
     summary="Members currently on a rank",
     description=(
         "Paginated roster of members whose current rank is this one, "
-        "ordered by sub-index (base leaf first) then name."
+        "ordered by percentage complete toward the next leaf "
+        "(proportionally closest first); every member on the rank is "
+        "returned."
     ),
     responses={
         200: {"description": "Members returned"},
@@ -597,6 +600,50 @@ async def list_members_in_rank(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list members in rank",
+        ) from None
+
+
+@ranks_router.get(
+    "/{rank_id}/sub-rank-counts",
+    response_model=RankSubRankCountsResponse,
+    summary="Member counts per sub-position for a rank",
+    description=(
+        "Total members currently on this main rank plus a SPARSE "
+        "per-sub-index breakdown (only sub-positions with at least one "
+        "member — the CRM fills 0 for empty slots from the rank's "
+        "``sub_rank_count``). On a ``'none'`` gym members carry a NULL "
+        "sub-index, so the breakdown is a single ``{null, total}`` row."
+    ),
+    responses={
+        200: {"description": "Counts returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def count_members_by_sub_index(
+    rank_id: UUID,
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> RankSubRankCountsResponse:
+    """Member counts per sub-position for a main rank."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await ranks_service.count_members_by_sub_index(gym_id, rank_id)
+    except Exception:
+        logger.error(
+            "Failed to count members by sub-index: rank_id=%s, gym_id=%s",
+            rank_id,
+            gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to count members by sub-rank",
         ) from None
 
 
