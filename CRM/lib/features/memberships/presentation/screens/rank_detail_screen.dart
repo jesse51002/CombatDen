@@ -12,22 +12,31 @@ import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_bloc.dart'
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_event.dart';
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_state.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
-import 'package:crm/features/memberships/presentation/widgets/ranks/rank_progress_bar.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/promotable_member_row.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
-import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/promotion_dialog.dart';
 import 'package:crm/shared/widgets/rank_belt_image.dart';
 
-/// A single main rank's detail page — its belt hero plus the roster of
-/// members currently on it, sectioned by sub-position, each promotable
-/// through the shared [PromotionDialog]. Deep-linkable by rank id
+/// Fixed column widths for the "On this rank" counts ledger, so every
+/// position's distribution bar starts and ends on the same x across
+/// rows (the label + count columns are pinned, the bar flexes between).
+const double _kCountLabelWidth = 88;
+const double _kCountValueWidth = 32;
+
+/// A single main rank's detail page — its belt hero, an "On this rank"
+/// counts summary (total + per-sub-position headcount), the per-step
+/// progression breakdown, and a flat, proximity-sorted roster of the
+/// members currently on it (closest to their next leaf first — the same
+/// order and row as the ready-to-promote board), each promotable inline
+/// or through the shared [PromotionDialog]. Deep-linkable by rank id
 /// (`/memberships/ranks/detail/<id>`), self-provides its repository +
 /// [RankDetailBloc].
 class RankDetailScreen extends StatelessWidget {
@@ -144,6 +153,18 @@ class _LoadedState extends State<_Loaded> {
         ladder.last.rankId == widget.state.rank.rankId;
   }
 
+  /// One-tap Promote: advance the member one leaf (the next sub-position,
+  /// else the base of the next rank) — mirrors the ready-to-promote
+  /// board's quick action.
+  void _quickPromote(RankMemberRow member) {
+    context.read<RankDetailBloc>().add(RankDetailPromoteRequested(
+          memberId: member.memberId,
+          choice: const PromoteNextSub(),
+        ));
+  }
+
+  /// The overflow action: open the full [PromotionDialog] for any other
+  /// move (skip to next major, set an explicit leaf).
   Future<void> _promote(RankMemberRow member) async {
     final bloc = context.read<RankDetailBloc>();
     final choice = await PromotionDialog.show(
@@ -214,33 +235,20 @@ class _LoadedState extends State<_Loaded> {
     }
   }
 
-  /// Flattens the roster into hero + section headers + member rows so the
-  /// whole page is a single lazily-built, paginating scroll view.
-  List<Object> _items() {
-    final items = <Object>[];
-    int? group;
-    var started = false;
-    for (final m in widget.state.members) {
-      if (!started || m.currentSubIndex != group) {
-        items.add(_Header(_headerLabel(m.currentSubIndex)));
-        group = m.currentSubIndex;
-        started = true;
-      }
-      items.add(m);
-    }
-    return items;
-  }
-
-  String _headerLabel(int? subIndex) {
-    if (subIndex == null) return 'No sub-rank';
-    final label = widget.state.subRankType.subLabel(subIndex);
-    return label.isEmpty ? 'Base position' : label;
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
-    final items = _items();
+    final members = state.members;
+    final hasMembers = members.isNotEmpty;
+    // Leading blocks: hero, counts summary, progression, then either the
+    // roster title (when populated) or the empty state — followed by the
+    // flat, backend-proximity-sorted member rows and an optional trailing
+    // load-more spinner. The list order is exactly as received; never
+    // re-sorted or grouped here.
+    const leadingCount = 4;
+    final itemCount = leadingCount +
+        (hasMembers ? members.length : 0) +
+        (state.isLoadingMore ? 1 : 0);
 
     return Stack(
       children: [
@@ -248,28 +256,30 @@ class _LoadedState extends State<_Loaded> {
           controller: _controller,
           physics: const ClampingScrollPhysics(),
           padding: const EdgeInsets.all(DesignConstants.paddingBig),
-          itemCount: 3 + items.length + (state.isLoadingMore ? 1 : 0),
+          itemCount: itemCount,
           itemBuilder: (context, index) {
-            if (index == 0) {
-              return _Hero(
-                rank: state.rank,
-                isTop: _isTop,
-                memberCount: state.totalCount,
-                onEdit: _edit,
-                onDelete: _delete,
-              );
+            switch (index) {
+              case 0:
+                return _Hero(
+                  rank: state.rank,
+                  isTop: _isTop,
+                  onEdit: _edit,
+                  onDelete: _delete,
+                );
+              case 1:
+                return _RankCounts(state: state);
+              case 2:
+                return _SubRankBreakdown(
+                  rank: state.rank,
+                  subRankType: state.subRankType,
+                );
+              case 3:
+                return hasMembers
+                    ? const _RosterTitle()
+                    : const _EmptyRoster();
             }
-            if (index == 1) {
-              return _SubRankBreakdown(
-                rank: state.rank,
-                subRankType: state.subRankType,
-              );
-            }
-            if (index == 2) {
-              return items.isEmpty ? const _EmptyRoster() : const SizedBox.shrink();
-            }
-            final itemIndex = index - 3;
-            if (itemIndex >= items.length) {
+            final rowIndex = index - leadingCount;
+            if (rowIndex >= members.length) {
               return const Padding(
                 padding: EdgeInsets.all(DesignConstants.paddingSmall),
                 child: Center(
@@ -277,11 +287,25 @@ class _LoadedState extends State<_Loaded> {
                 ),
               );
             }
-            final item = items[itemIndex];
-            if (item is _Header) return item;
-            return _MemberRow(
-              member: item as RankMemberRow,
-              onPromote: () => _promote(item),
+            final member = members[rowIndex];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Hairline between rows (not above the first) — the row's
+                // own vertical padding centres it, matching the ready
+                // board's separated list.
+                if (rowIndex > 0) const Hairline(),
+                PromotableMemberRow(
+                  imageUrl: _beltFor(state.rank, member),
+                  avatarUrl: member.avatarUrl,
+                  name: member.name,
+                  rankLabel: _subLabelFor(state.subRankType, state.rank, member),
+                  classesSince: member.classesSince,
+                  stepDenominator: member.stepDenominator,
+                  onQuickPromote: () => _quickPromote(member),
+                  onOpenDialog: () => _promote(member),
+                ),
+              ],
             );
           },
         ),
@@ -298,19 +322,17 @@ class _LoadedState extends State<_Loaded> {
 }
 
 /// The belt hero: a top bar (back affordance + Edit / Delete actions),
-/// then the big belt, name, threshold, and the count of members
-/// currently on the rank.
+/// then the big belt, name, and threshold. The member headcount lives in
+/// the [_RankCounts] summary just below, not here.
 class _Hero extends StatelessWidget {
   final MainRank rank;
   final bool isTop;
-  final int memberCount;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _Hero({
     required this.rank,
     required this.isTop,
-    required this.memberCount,
     required this.onEdit,
     required this.onDelete,
   });
@@ -383,13 +405,6 @@ class _Hero extends StatelessWidget {
                       color: DesignConstants.text2nd,
                     ),
                   ),
-                  Text(
-                    '$memberCount ${memberCount == 1 ? 'member' : 'members'} '
-                    'on this rank',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text3rd,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -400,10 +415,163 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  final String label;
+/// The belt art for [member]'s current leaf: its per-sub image (an
+/// override, else the main belt) when the member carries a sub-index,
+/// else the rank's own belt. All members on a rank share the belt, so
+/// this is derived from the rank, not the row.
+String? _beltFor(MainRank rank, RankMemberRow member) {
+  final sub = member.currentSubIndex;
+  return sub != null ? rank.imageForSub(sub) : rank.imageUrl;
+}
 
-  const _Header(this.label);
+/// The trailing rank label for a roster row — just the sub-position
+/// ("Base", "1 Stripe", "Div 2"), since every row here is on the same
+/// main rank. `null` for a sub-less gym (no label to show).
+String? _subLabelFor(RankSubType type, MainRank rank, RankMemberRow member) {
+  if (type == RankSubType.none || rank.subRankCount == 0) return null;
+  final label = type.subLabel(member.currentSubIndex ?? 0);
+  return label.isEmpty ? 'Base' : label;
+}
+
+/// The "On this rank" counts summary: the total headcount and, when the
+/// rank has sub-positions, a per-position distribution — one row per
+/// position (`0..subRankCount-1`) with its label, a max-normalized bar,
+/// and its count. A sub-less rank (or a gym with sub-positions off) shows
+/// only the total. When the counts read is unavailable the total falls
+/// back to the loaded member total and the breakdown is omitted.
+class _RankCounts extends StatelessWidget {
+  final RankDetailLoaded state;
+
+  const _RankCounts({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = state.rank;
+    final type = state.subRankType;
+    final counts = state.subRankCounts;
+    final total = counts?.totalCount ?? state.totalCount;
+    final hasSubs = type != RankSubType.none && rank.subRankCount > 0;
+    final showBreakdown = hasSubs && counts != null;
+
+    final byIndex = counts?.countBySubIndex() ?? const <int, int>{};
+    final maxCount =
+        byIndex.values.fold<int>(0, (m, v) => v > m ? v : m);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: DesignConstants.spacingBig),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Row(
+            children: [
+              Text('On this rank', style: DesignConstants.h2),
+              const Spacer(),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$total ',
+                      style: DesignConstants.h2Bold,
+                    ),
+                    TextSpan(
+                      text: total == 1 ? 'member' : 'members',
+                      style: DesignConstants.h2.copyWith(
+                        color: DesignConstants.text2nd,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (showBreakdown)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingLarge,
+              children: [
+                for (var i = 0; i < rank.subRankCount; i++)
+                  _CountRow(
+                    label: _positionLabel(type, i),
+                    count: byIndex[i] ?? 0,
+                    maxCount: maxCount,
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _positionLabel(RankSubType type, int index) {
+    final label = type.subLabel(index);
+    return label.isEmpty ? 'Base' : label;
+  }
+}
+
+/// One position row of the counts distribution: a fixed label column, a
+/// flexible max-normalized bar, and the count (muted when zero, so empty
+/// positions recede).
+class _CountRow extends StatelessWidget {
+  final String label;
+  final int count;
+  final int maxCount;
+
+  const _CountRow({
+    required this.label,
+    required this.count,
+    required this.maxCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final has = count > 0;
+    final factor =
+        maxCount > 0 ? (count / maxCount).clamp(0.0, 1.0) : 0.0;
+    final valueColor =
+        has ? DesignConstants.text : DesignConstants.text3rd;
+
+    return Row(
+      spacing: DesignConstants.spacingLarge,
+      children: [
+        SizedBox(
+          width: _kCountLabelWidth,
+          child: Text(
+            label,
+            style: DesignConstants.h3.copyWith(color: valueColor),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius:
+                BorderRadius.circular(DesignConstants.radiusSmall),
+            child: LinearProgressIndicator(
+              value: factor,
+              minHeight: DesignConstants.spacingMedium,
+              color: DesignConstants.primaryColor,
+              backgroundColor: DesignConstants.primaryColor10,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: _kCountValueWidth,
+          child: Text(
+            '$count',
+            textAlign: TextAlign.end,
+            style: DesignConstants.pSemibold.copyWith(color: valueColor),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The roster's section title, naming the list and its ordering (the
+/// backend returns members closest-to-promotion first).
+class _RosterTitle extends StatelessWidget {
+  const _RosterTitle();
 
   @override
   Widget build(BuildContext context) {
@@ -412,59 +580,16 @@ class _Header extends StatelessWidget {
         top: DesignConstants.spacingBig,
         bottom: DesignConstants.spacingMedium,
       ),
-      child: Text(
-        label,
-        style: DesignConstants.h3.copyWith(color: DesignConstants.text2nd),
-      ),
-    );
-  }
-}
-
-class _MemberRow extends StatelessWidget {
-  final RankMemberRow member;
-  final VoidCallback onPromote;
-
-  const _MemberRow({required this.member, required this.onPromote});
-
-  @override
-  Widget build(BuildContext context) {
-    final denom = member.stepDenominator;
-    final eligible = denom != null && denom > 0 && member.classesSince >= denom;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: DesignConstants.spacingMedium,
-      ),
-      child: Row(
-        spacing: DesignConstants.spacingLarge,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingSmall,
         children: [
-          InstructorAvatar(
-            photoUrl: member.avatarUrl,
-            name: member.name,
-            diameter: 32,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingSmall,
-              children: [
-                Text(
-                  member.name,
-                  style: DesignConstants.p,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                RankProgressBar(
-                  done: member.classesSince,
-                  target: denom,
-                  eligible: eligible,
-                ),
-              ],
+          Text('Members', style: DesignConstants.h2),
+          Text(
+            'Ordered by who is closest to their next promotion.',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
             ),
-          ),
-          AppOutlineButton(
-            text: 'Promote',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: onPromote,
           ),
         ],
       ),

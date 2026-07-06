@@ -8,6 +8,7 @@ import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_state.dart
 import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/rank_ladder.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_rank_counts.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
 /// Manages one rank's detail view: header + the gym's ladder +
@@ -31,6 +32,17 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
   ) async {
     emit(const RankDetailLoading());
     try {
+      // The counts read is guarded on its own so a missing/failing
+      // sub-rank-counts endpoint degrades to "total only" instead of
+      // failing the whole page — it rides alongside the core reads,
+      // never gating them.
+      final countsFuture = _repository
+          .subRankCounts(event.gymId, event.rankId)
+          .then<RankSubRankCounts?>((v) => v)
+          .catchError((Object e, StackTrace st) {
+        log('Failed to load sub-rank counts', error: e, stackTrace: st);
+        return null;
+      });
       final results = await Future.wait([
         _repository.getRank(event.rankId),
         _repository.listRanks(event.gymId),
@@ -40,12 +52,14 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       final ladder = results[1] as RankLadder;
       final page =
           results[2] as (List<RankMemberRow> items, int totalCount);
+      final counts = await countsFuture;
       emit(RankDetailLoaded(
         gymId: event.gymId,
         rank: rank,
         ladder: ladder.ranks,
         subRankType: ladder.subRankType,
         members: page.$1,
+        subRankCounts: counts,
         totalCount: page.$2,
         hasReachedEnd: page.$1.length < AppConstants.defaultPageSize,
       ));

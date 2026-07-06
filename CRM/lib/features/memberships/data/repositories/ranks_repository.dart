@@ -11,6 +11,7 @@ import 'package:crm/features/memberships/data/models/rank_preset_kind.dart';
 import 'package:crm/features/memberships/data/models/rank_preset_response.dart';
 import 'package:crm/features/memberships/data/models/rank_ready_row.dart';
 import 'package:crm/features/memberships/data/models/rank_reorder_item.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_rank_counts.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
 /// Repository for the gym's two-level rank ladder + per-member rank
@@ -213,6 +214,21 @@ class RanksRepository {
         .map((e) => RankMemberRow.fromJson(e as Map<String, dynamic>))
         .toList();
     return (items, data['total_count'] as int);
+  }
+
+  /// `GET /api/v1/ranks/{rank_id}/sub-rank-counts?gym_id=…` — the
+  /// member headcount on [rankId] broken down by sub-position (total +
+  /// a sparse per-`sub_index` list). Drives the rank-detail counts
+  /// summary.
+  Future<RankSubRankCounts> subRankCounts(
+    String gymId,
+    String rankId,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/ranks/$rankId/sub-rank-counts',
+      queryParameters: {'gym_id': gymId},
+    );
+    return RankSubRankCounts.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// `GET /api/v1/ranks/ready-to-promote` — the proximity-sorted

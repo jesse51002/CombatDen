@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_rank_counts.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
 sealed class RankDetailState extends Equatable {
@@ -34,8 +35,17 @@ class RankDetailLoaded extends RankDetailState {
   final RankSubType subRankType;
 
   /// Members currently on this rank, loaded so far (across pages),
-  /// ordered by sub-index then name.
+  /// **proximity-sorted** by the backend (closest to their next leaf
+  /// first — the same order as the ready-to-promote board). Rendered
+  /// as a single flat list; never re-sorted or grouped client-side.
   final List<RankMemberRow> members;
+
+  /// The member headcount on this rank broken down by sub-position
+  /// (total + per-`sub_index`), for the counts summary. `null` when
+  /// the counts read failed or is unavailable — the summary then falls
+  /// back to the total alone (from [totalCount]) and drops the
+  /// per-position breakdown.
+  final RankSubRankCounts? subRankCounts;
 
   final int totalCount;
   final int startIndex;
@@ -58,6 +68,7 @@ class RankDetailLoaded extends RankDetailState {
     required this.ladder,
     required this.subRankType,
     required this.members,
+    this.subRankCounts,
     this.totalCount = 0,
     this.startIndex = 0,
     this.hasReachedEnd = false,
@@ -72,6 +83,7 @@ class RankDetailLoaded extends RankDetailState {
     List<MainRank>? ladder,
     RankSubType? subRankType,
     List<RankMemberRow>? members,
+    RankSubRankCounts? subRankCounts,
     int? totalCount,
     int? startIndex,
     bool? hasReachedEnd,
@@ -87,6 +99,7 @@ class RankDetailLoaded extends RankDetailState {
       ladder: ladder ?? this.ladder,
       subRankType: subRankType ?? this.subRankType,
       members: members ?? this.members,
+      subRankCounts: subRankCounts ?? this.subRankCounts,
       totalCount: totalCount ?? this.totalCount,
       startIndex: startIndex ?? this.startIndex,
       hasReachedEnd: hasReachedEnd ?? this.hasReachedEnd,
@@ -105,6 +118,7 @@ class RankDetailLoaded extends RankDetailState {
         ladder,
         subRankType,
         members,
+        subRankCounts,
         totalCount,
         startIndex,
         hasReachedEnd,
