@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
@@ -22,10 +23,12 @@ import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
+import 'package:crm/features/memberships/presentation/screens/rank_presets_screen.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/ranks_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/waivers_tab.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
@@ -159,6 +162,21 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
     }
   }
 
+  /// Ranks-tab-only secondary action: seed the ladder from a preset. The
+  /// preset screen rides the shared [RanksBloc] down (a bare route, so it
+  /// keeps the Ranks tab's URL) so Apply reloads the ladder on return.
+  void _openPresets() {
+    final bloc = context.read<RanksBloc>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: RankPresetsScreen(gymId: widget.gymId),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -184,6 +202,23 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
                 children: [
                   Text(_tabs[_tabIndex], style: DesignConstants.big2),
                   const Spacer(),
+                  // Ranks tab pairs "Seed from preset" beside the primary
+                  // "Add New Rank" so a gym can build its ladder from a
+                  // template or by hand from the same place.
+                  if (_tabIndex == 3) ...[
+                    AppOutlineButton(
+                      text: 'Seed from preset',
+                      borderRadius: DesignConstants.radiusBig,
+                      icon: Icon(
+                        Symbols.auto_awesome_sharp,
+                        size: DesignConstants.iconSizeSmall,
+                        color: DesignConstants.text,
+                        weight: DesignConstants.iconWeight,
+                      ),
+                      onPressed: _openPresets,
+                    ),
+                    const SizedBox(width: DesignConstants.spacingMedium),
+                  ],
                   AppPrimaryButton(
                     text: _addLabels[_tabIndex],
                     onPressed: _openAddDialog,

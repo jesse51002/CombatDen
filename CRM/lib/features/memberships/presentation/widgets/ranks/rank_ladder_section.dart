@@ -7,14 +7,14 @@ import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
 import 'package:crm/features/memberships/data/models/rank_reorder_item.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/main_rank_card.dart';
-import 'package:crm/features/memberships/presentation/widgets/ranks/sub_rank_strip.dart';
 import 'package:crm/shared/widgets/warning_message.dart';
 
 /// The gym's rank ladder — a vertical, MAIN-rank-only reorderable list.
-/// Sub-ranks are no longer rows; each main rank is a prominent card with
-/// its sub-positions shown as a strip beneath it. A drag reorders the
-/// main ranks and dispatches one [RanksReordered] with the full new
-/// main-order (sub-positions carry no order of their own now).
+/// Sub-ranks are no longer rows; each main rank is a prominent centered
+/// [MainRankCard] that folds its own sub-position strip onto the same
+/// surface. A drag reorders the main ranks and dispatches one
+/// [RanksReordered] with the full new main-order (sub-positions carry no
+/// order of their own now).
 class RankLadderSection extends StatelessWidget {
   final RanksLoaded state;
 
@@ -41,8 +41,8 @@ class RankLadderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (state.ranks.isEmpty) {
       return const WarningMessage(
-        message: 'No ranks yet. Use "Add New Rank" above to create the '
-            'first one, or seed a preset below.',
+        message: 'No ranks yet. Use "Add New Rank" or "Seed from preset" '
+            'above to build your first belts.',
       );
     }
     return ReorderableListView(
@@ -58,27 +58,12 @@ class RankLadderSection extends StatelessWidget {
             padding: const EdgeInsets.only(
               bottom: DesignConstants.spacingLarge,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingLarge,
-              children: [
-                MainRankCard(
-                  rank: state.ranks[i],
-                  gymId: state.gymId,
-                  index: i,
-                  isTop: i == state.ranks.length - 1,
-                ),
-                if (state.ranks[i].subRankCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      left: DesignConstants.paddingSmall,
-                    ),
-                    child: SubRankStrip(
-                      rank: state.ranks[i],
-                      subRankType: state.subRankType,
-                    ),
-                  ),
-              ],
+            child: MainRankCard(
+              rank: state.ranks[i],
+              gymId: state.gymId,
+              subRankType: state.subRankType,
+              index: i,
+              isTop: i == state.ranks.length - 1,
             ),
           ),
       ],

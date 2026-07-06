@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -11,11 +13,15 @@ import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_event.dart
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_state.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/rank_progress_bar.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/promotion_dialog.dart';
 import 'package:crm/shared/widgets/rank_belt_image.dart';
 
@@ -106,6 +112,10 @@ class _Loaded extends StatefulWidget {
 class _LoadedState extends State<_Loaded> {
   final ScrollController _controller = ScrollController();
 
+  /// True while a repository-direct delete is in flight (the promote
+  /// path has its own `state.isMutating`); both drive the scrim overlay.
+  bool _deleting = false;
+
   @override
   void initState() {
     super.initState();
@@ -150,6 +160,60 @@ class _LoadedState extends State<_Loaded> {
     ));
   }
 
+  /// Opens the full-screen rank editor for this rank, then reloads the
+  /// detail so the hero + breakdown reflect any saved change.
+  Future<void> _edit() async {
+    final bloc = context.read<RankDetailBloc>();
+    await Navigator.of(context).pushNamed(
+      AppRoutes.membershipsRankEditor,
+      arguments: widget.state.rank,
+    );
+    bloc.add(RankDetailInitRequested(
+      gymId: widget.state.gymId,
+      rankId: widget.state.rank.rankId,
+    ));
+  }
+
+  /// Confirms, then deletes this rank (the backend reassigns its members
+  /// to a neighbour rank first) and pops back to the ladder. Repository-
+  /// direct — the delete is a one-shot that ends this screen, mirroring
+  /// the repository-direct editor.
+  Future<void> _delete() async {
+    final rank = widget.state.rank;
+    final repository = context.read<RanksRepository>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: 'Delete ${rank.name}',
+      message: 'Members on this rank move to a neighbouring rank. Its '
+          '${rank.subRankCount} sub-position(s) go with it. This cannot '
+          'be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed) return;
+    setState(() => _deleting = true);
+    try {
+      await repository.deleteRank(rank.rankId);
+      navigator.pop();
+    } catch (e, st) {
+      log('Failed to delete rank', error: e, stackTrace: st);
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not delete the rank. Please try again.',
+            style:
+                DesignConstants.p.copyWith(color: DesignConstants.onAccent),
+          ),
+          backgroundColor: DesignConstants.badRed,
+        ),
+      );
+    }
+  }
+
   /// Flattens the roster into hero + section headers + member rows so the
   /// whole page is a single lazily-built, paginating scroll view.
   List<Object> _items() {
@@ -184,19 +248,27 @@ class _LoadedState extends State<_Loaded> {
           controller: _controller,
           physics: const ClampingScrollPhysics(),
           padding: const EdgeInsets.all(DesignConstants.paddingBig),
-          itemCount: 2 + items.length + (state.isLoadingMore ? 1 : 0),
+          itemCount: 3 + items.length + (state.isLoadingMore ? 1 : 0),
           itemBuilder: (context, index) {
             if (index == 0) {
               return _Hero(
                 rank: state.rank,
                 isTop: _isTop,
                 memberCount: state.totalCount,
+                onEdit: _edit,
+                onDelete: _delete,
               );
             }
             if (index == 1) {
+              return _SubRankBreakdown(
+                rank: state.rank,
+                subRankType: state.subRankType,
+              );
+            }
+            if (index == 2) {
               return items.isEmpty ? const _EmptyRoster() : const SizedBox.shrink();
             }
-            final itemIndex = index - 2;
+            final itemIndex = index - 3;
             if (itemIndex >= items.length) {
               return const Padding(
                 padding: EdgeInsets.all(DesignConstants.paddingSmall),
@@ -213,7 +285,7 @@ class _LoadedState extends State<_Loaded> {
             );
           },
         ),
-        if (state.isMutating)
+        if (state.isMutating || _deleting)
           Positioned.fill(
             child: ColoredBox(
               color: DesignConstants.text.withValues(alpha: 0.08),
@@ -225,17 +297,22 @@ class _LoadedState extends State<_Loaded> {
   }
 }
 
-/// The belt hero: back affordance, big belt, name, threshold, and the
-/// count of members currently on the rank.
+/// The belt hero: a top bar (back affordance + Edit / Delete actions),
+/// then the big belt, name, threshold, and the count of members
+/// currently on the rank.
 class _Hero extends StatelessWidget {
   final MainRank rank;
   final bool isTop;
   final int memberCount;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _Hero({
     required this.rank,
     required this.isTop,
     required this.memberCount,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -247,28 +324,43 @@ class _Hero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingBig,
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: InkWell(
-            onTap: () => Navigator.of(context).pop(),
-            borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-            child: Padding(
-              padding: const EdgeInsets.all(DesignConstants.spacingSmall),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: DesignConstants.spacingSmall,
-                children: [
-                  Icon(
-                    Symbols.arrow_back_sharp,
-                    size: DesignConstants.iconSizeMedium,
-                    weight: DesignConstants.iconWeight,
-                    color: DesignConstants.text,
-                  ),
-                  Text('Ranks', style: DesignConstants.h3),
-                ],
+        Row(
+          children: [
+            InkWell(
+              onTap: () => Navigator.of(context).pop(),
+              borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+              child: Padding(
+                padding: const EdgeInsets.all(DesignConstants.spacingSmall),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: DesignConstants.spacingSmall,
+                  children: [
+                    Icon(
+                      Symbols.arrow_back_sharp,
+                      size: DesignConstants.iconSizeMedium,
+                      weight: DesignConstants.iconWeight,
+                      color: DesignConstants.text,
+                    ),
+                    Text('Ranks', style: DesignConstants.h3),
+                  ],
+                ),
               ),
             ),
-          ),
+            const Spacer(),
+            AppOutlineButton(
+              text: 'Edit',
+              borderRadius: DesignConstants.radiusSmall,
+              onPressed: onEdit,
+            ),
+            const SizedBox(width: DesignConstants.spacingMedium),
+            AppOutlineButton(
+              text: 'Delete',
+              borderRadius: DesignConstants.radiusSmall,
+              borderColor: DesignConstants.badRed,
+              textColor: DesignConstants.badRed,
+              onPressed: onDelete,
+            ),
+          ],
         ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -336,12 +428,14 @@ class _MemberRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final denom = member.stepDenominator;
+    final eligible = denom != null && denom > 0 && member.classesSince >= denom;
     return Padding(
       padding: const EdgeInsets.symmetric(
         vertical: DesignConstants.spacingMedium,
       ),
       child: Row(
-        spacing: DesignConstants.spacingMedium,
+        spacing: DesignConstants.spacingLarge,
         children: [
           InstructorAvatar(
             photoUrl: member.avatarUrl,
@@ -351,7 +445,7 @@ class _MemberRow extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingTiny,
+              spacing: DesignConstants.spacingSmall,
               children: [
                 Text(
                   member.name,
@@ -359,15 +453,10 @@ class _MemberRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  member.stepDenominator == null ||
-                          member.stepDenominator == 0
-                      ? '${member.classesSince} classes attended'
-                      : '${member.classesSince} / ${member.stepDenominator} '
-                          'classes to next step',
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text3rd,
-                  ),
+                RankProgressBar(
+                  done: member.classesSince,
+                  target: denom,
+                  eligible: eligible,
                 ),
               ],
             ),
@@ -376,6 +465,121 @@ class _MemberRow extends StatelessWidget {
             text: 'Promote',
             borderRadius: DesignConstants.radiusSmall,
             onPressed: onPromote,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The rank's per-step progression: one row per sub-position with its
+/// label + the classes to advance through it, else a single row with the
+/// main rank's own threshold when the belt has no sub-positions.
+///
+/// The per-step threshold is derived client-side as
+/// `ceil(classesToNextMajor / subRankCount)`, matching how the backend
+/// derives each member's `step_denominator` (an even ceil split of the
+/// major threshold across the belt's positions).
+class _SubRankBreakdown extends StatelessWidget {
+  final MainRank rank;
+  final RankSubType subRankType;
+
+  const _SubRankBreakdown({required this.rank, required this.subRankType});
+
+  int get _stepThreshold {
+    final count = rank.subRankCount;
+    if (count <= 0) return rank.classesToNextMajor;
+    return (rank.classesToNextMajor + count - 1) ~/ count;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSubs =
+        subRankType != RankSubType.none && rank.subRankCount > 0;
+
+    final rows = <Widget>[];
+    if (hasSubs) {
+      final step = _stepThreshold;
+      for (var i = 0; i < rank.subRankCount; i++) {
+        final label = subRankType.subLabel(i);
+        rows.add(_BreakdownRow(
+          imageUrl: rank.imageForSub(i),
+          label: label.isEmpty ? 'Base position' : label,
+          threshold: step,
+        ));
+      }
+    } else {
+      rows.add(_BreakdownRow(
+        imageUrl: rank.imageUrl,
+        label: 'Advance to next rank',
+        threshold: rank.classesToNextMajor,
+      ));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: DesignConstants.spacingBig),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Text('Progression', style: DesignConstants.h2),
+          Text(
+            hasSubs
+                ? 'Classes to earn each position within this belt.'
+                : 'Classes to reach the next belt.',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) const Hairline(),
+                rows[i],
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreakdownRow extends StatelessWidget {
+  final String? imageUrl;
+  final String label;
+  final int threshold;
+
+  const _BreakdownRow({
+    required this.imageUrl,
+    required this.label,
+    required this.threshold,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: DesignConstants.spacingMedium,
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          RankBeltImage(imageUrl: imageUrl, size: 40),
+          Expanded(
+            child: Text(
+              label,
+              style: DesignConstants.h3,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '$threshold classes',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
           ),
         ],
       ),

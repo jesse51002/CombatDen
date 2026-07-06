@@ -15,9 +15,10 @@ import 'package:crm/core/constants/design_constants.dart';
 /// an intentional, neutral belt glyph rather than a broken box or a bare
 /// gap. There is deliberately **no** colour swatch fallback.
 ///
-/// The tile is a square of [size] with a hairline border. Loading and
-/// error both resolve to the same calm neutral placeholder so the layout
-/// never jumps between states.
+/// The tile is a square of [size] with rounded corners and no border —
+/// the belt art sits flush, not boxed in an outlined container. Loading
+/// and error both resolve to the same calm neutral placeholder so the
+/// layout never jumps between states.
 class RankBeltImage extends StatelessWidget {
   /// The belt art URL (already leaf-resolved by the caller — a per-sub
   /// override or the main rank's image). Null / empty renders the
@@ -49,7 +50,6 @@ class RankBeltImage extends StatelessWidget {
       decoration: BoxDecoration(
         color: DesignConstants.backgroundAlt,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: DesignConstants.line),
       ),
       child: _hasImage
           ? Image.network(

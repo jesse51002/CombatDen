@@ -213,6 +213,11 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       key: const ValueKey('main-belt'),
                       label: 'Belt image',
                       category: 'rank',
+                      // Belts are square art — preview 1:1 and contained so
+                      // the image never crops or stretches (matches how
+                      // RankBeltImage renders it on the ladder + detail).
+                      aspectRatio: 1,
+                      previewFit: BoxFit.contain,
                       imageUrl: _mainImageUrl,
                       onUploaded: (url) =>
                           setState(() => _mainImageUrl = url),
@@ -245,6 +250,8 @@ class _EditRankScreenState extends State<EditRankScreen> {
                           key: ValueKey('sub-$i'),
                           label: _subLabel(subRankType, i),
                           category: 'rank',
+                          aspectRatio: 1,
+                          previewFit: BoxFit.contain,
                           imageUrl: _overrides[i.toString()],
                           defaultImageUrl: _mainImageUrl,
                           onUploaded: (url) => setState(

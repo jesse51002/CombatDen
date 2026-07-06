@@ -9,6 +9,7 @@ import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/models/rank_ready_row.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/rank_progress_bar.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 import 'package:crm/shared/widgets/promotion_dialog.dart';
@@ -87,6 +88,7 @@ class ReadyToPromoteRow extends StatelessWidget {
                       diameter: 24,
                     ),
                     Expanded(
+                      flex: 3,
                       child: Text(
                         row.name,
                         style: DesignConstants.pSemibold,
@@ -94,15 +96,23 @@ class ReadyToPromoteRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(
-                      _rankLabel,
-                      style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text2nd,
+                    // The member's belt — enlarged from a muted caption to a
+                    // legible label so their current rank + division reads at
+                    // a glance. Flexible so a long "White · 4 Stripes" ellipsizes
+                    // instead of overflowing.
+                    Flexible(
+                      flex: 2,
+                      child: Text(
+                        _rankLabel,
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DesignConstants.h3,
                       ),
                     ),
                   ],
                 ),
-                _Progress(
+                RankProgressBar(
                   done: row.classesSince,
                   target: denom,
                   eligible: eligible,
@@ -134,63 +144,6 @@ class ReadyToPromoteRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Attendance progress toward the next leaf: "X / Y classes" over a thin
-/// bar, green once the member has met the threshold.
-class _Progress extends StatelessWidget {
-  final int done;
-  final int? target;
-  final bool eligible;
-
-  const _Progress({
-    required this.done,
-    required this.target,
-    required this.eligible,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final target = this.target;
-    final hasTarget = target != null && target > 0;
-    final ratio = hasTarget ? (done / target).clamp(0.0, 1.0) : 1.0;
-    final color =
-        eligible ? DesignConstants.goodGreen : DesignConstants.primaryColor;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Row(
-          children: [
-            Text(
-              hasTarget ? '$done / $target classes' : '$done classes',
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-            const Spacer(),
-            if (eligible)
-              Text(
-                'Eligible',
-                style: DesignConstants.pSmallSemibold.copyWith(
-                  color: DesignConstants.goodGreen,
-                ),
-              ),
-          ],
-        ),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-          child: LinearProgressIndicator(
-            value: ratio,
-            minHeight: DesignConstants.progressBarThickness,
-            color: color,
-            backgroundColor: DesignConstants.text3rd.withValues(alpha: 0.2),
-          ),
-        ),
-      ],
     );
   }
 }

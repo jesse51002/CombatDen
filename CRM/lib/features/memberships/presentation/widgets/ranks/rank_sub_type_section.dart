@@ -7,10 +7,13 @@ import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
-/// Chooses how a belt's sub-positions are labelled — **Stripes**
+/// Chooses whether belts have sub-positions and how they're labelled —
+/// **None** (belts only, no stripes/divisions), **Stripes**
 /// (`1 Stripe`, `2 Stripes`, …) or **Divisions** (`Div 1`, `Div 2`, …).
 /// The choice drives every sub-rank label across the ladder, member
 /// detail, and the promotion dialog; it never stores a label per row.
+/// Picking **None** turns sub-positions off gym-wide (members drop to no
+/// sub-index server-side).
 class RankSubTypeSection extends StatelessWidget {
   final RanksLoaded state;
 
@@ -43,7 +46,8 @@ class RankSubTypeSection extends StatelessWidget {
                 children: [
                   Text('Sub-rank style', style: DesignConstants.h2),
                   Text(
-                    'How positions within a belt are labelled.',
+                    'Whether belts have positions inside them, and how '
+                    'they are labelled.',
                     style: DesignConstants.pSmall.copyWith(
                       color: DesignConstants.text2nd,
                     ),
@@ -88,6 +92,12 @@ class _Segmented extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingTiny,
           children: [
+            _Option(
+              label: 'None',
+              selected: current == RankSubType.none,
+              enabled: enabled,
+              onTap: () => onSelected(RankSubType.none),
+            ),
             _Option(
               label: 'Stripes',
               selected: current == RankSubType.stripes,

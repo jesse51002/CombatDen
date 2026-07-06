@@ -117,8 +117,10 @@ class RanksRepository {
   ///
   /// Rides the ordinary gym-update path: `PUT /api/v1/gyms/{gym_id}`'s
   /// `GymUpdateData` accepts `sub_rank_type` (a mutable gym column).
-  /// Send a concrete `stripes`/`div` value — the field rejects an
-  /// explicit null server-side (it is `NOT NULL DEFAULT 'stripes'`).
+  /// Send a concrete `none`/`stripes`/`div` value (`type.toJson()`),
+  /// never an explicit null — the column is `NOT NULL DEFAULT 'stripes'`.
+  /// `none` turns sub-positions off gym-wide (the backend drops members
+  /// to no sub-index).
   Future<void> setSubRankType(String gymId, RankSubType type) async {
     await _apiClient.put(
       '/api/v1/gyms/$gymId',

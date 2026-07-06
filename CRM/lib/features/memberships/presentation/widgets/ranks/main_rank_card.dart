@@ -7,19 +7,26 @@ import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
-import 'package:crm/shared/widgets/confirmation_modal.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/rank_belt_image.dart';
 
-/// One main rank on the ladder — the PROMINENT half of the inversion: a
-/// large belt, the rank name, its classes-to-next-belt threshold, and
-/// reorder / edit / delete affordances. The whole card is tappable and
-/// opens the rank's detail (its members + promotion).
+/// One main rank on the ladder — a centered belt "object card": a large
+/// belt image on top, the rank name and its classes-to-next-belt caption
+/// below, and (when the belt has sub-positions and the gym uses them) a
+/// quiet folded strip of its stripes / divisions on the same surface.
 ///
-/// The sub-rank strip is rendered separately, beneath this card, by
-/// [RankLadderSection] — this card is the belt itself.
+/// The whole card taps into the rank's detail (its members, promotion,
+/// and the Edit / Delete actions). A single unobtrusive drag handle in
+/// the top corner reorders the ladder; there are deliberately no
+/// per-card edit / delete affordances (those live on the detail page).
 class MainRankCard extends StatelessWidget {
   final MainRank rank;
   final String gymId;
+
+  /// The gym's sub-rank type — labels the folded sub strip, and hides it
+  /// entirely when the gym has sub-positions turned off ([RankSubType.none]).
+  final RankSubType subRankType;
 
   /// Position in the ladder — drives the drag handle and the "top of the
   /// ladder" copy on the highest rank (which has no belt above it).
@@ -30,40 +37,23 @@ class MainRankCard extends StatelessWidget {
     super.key,
     required this.rank,
     required this.gymId,
+    required this.subRankType,
     required this.index,
     required this.isTop,
   });
 
-  Future<void> _delete(BuildContext context) async {
+  Future<void> _openDetail(BuildContext context) async {
     final bloc = context.read<RanksBloc>();
-    final confirmed = await ConfirmationModal.show(
-      context: context,
-      title: 'Delete ${rank.name}',
-      message: 'Members on this rank move to a neighbouring rank. Its '
-          '${rank.subRankCount} sub-position(s) go with it. This cannot '
-          'be undone.',
-      confirmLabel: 'Delete',
-      confirmColor: DesignConstants.badRed,
-    );
-    if (!confirmed) return;
-    bloc.add(RankDeleted(rankId: rank.rankId, gymId: gymId));
-  }
-
-  void _openDetail(BuildContext context) {
-    Navigator.of(context)
+    await Navigator.of(context)
         .pushNamed(AppRoutes.membershipsRankDetailPath(rank.rankId));
-  }
-
-  Future<void> _edit(BuildContext context) async {
-    final bloc = context.read<RanksBloc>();
-    await Navigator.of(context).pushNamed(
-      AppRoutes.membershipsRankEditor,
-      arguments: rank,
-    );
-    // Repository-direct editor — reload the ladder on return so a saved
-    // change shows (mirrors the plan / waiver editors).
+    // The detail page hosts Edit + Delete now; reload the ladder on
+    // return so a rename, new belt image, new threshold, or a deletion
+    // shows (mirrors how the editor return reloaded it before).
     bloc.add(RanksInitRequested(gymId));
   }
+
+  bool get _showSubs =>
+      subRankType != RankSubType.none && rank.subRankCount > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -83,69 +73,126 @@ class MainRankCard extends StatelessWidget {
         child: InkWell(
           onTap: () => _openDetail(context),
           borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
-          child: Padding(
-            padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-            child: Row(
-              spacing: DesignConstants.spacingLarge,
-              children: [
-                ReorderableDragStartListener(
-                  index: index,
-                  child: Icon(
-                    Symbols.drag_indicator_sharp,
-                    size: DesignConstants.iconSizeMedium,
-                    color: DesignConstants.text3rd,
-                    weight: DesignConstants.iconWeight,
-                  ),
-                ),
-                RankBeltImage(
-                  imageUrl: rank.imageUrl,
-                  size: 76,
-                  radius: DesignConstants.radiusBig,
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: DesignConstants.spacingTiny,
-                    children: [
-                      Text(
-                        rank.name,
-                        style: DesignConstants.h1,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    RankBeltImage(
+                      imageUrl: rank.imageUrl,
+                      size: DesignConstants.rankBeltHeight,
+                      radius: DesignConstants.radiusBig,
+                    ),
+                    const SizedBox(height: DesignConstants.spacingLarge),
+                    Text(
+                      rank.name,
+                      textAlign: TextAlign.center,
+                      style: DesignConstants.h1,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: DesignConstants.spacingTiny),
+                    Text(
+                      caption,
+                      textAlign: TextAlign.center,
+                      style: DesignConstants.pSmall.copyWith(
+                        color: DesignConstants.text2nd,
                       ),
-                      Text(
-                        caption,
-                        style: DesignConstants.pSmall.copyWith(
-                          color: DesignConstants.text2nd,
-                        ),
-                      ),
+                    ),
+                    if (_showSubs) ...[
+                      const SizedBox(height: DesignConstants.spacingLarge),
+                      const Hairline(),
+                      const SizedBox(height: DesignConstants.spacingLarge),
+                      _SubStrip(rank: rank, subRankType: subRankType),
                     ],
+                  ],
+                ),
+              ),
+              Positioned(
+                top: DesignConstants.spacingMedium,
+                right: DesignConstants.spacingMedium,
+                child: ReorderableDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(DesignConstants.spacingSmall),
+                    child: Icon(
+                      Symbols.drag_indicator_sharp,
+                      size: DesignConstants.iconSizeMedium,
+                      color: DesignConstants.text3rd,
+                      weight: DesignConstants.iconWeight,
+                    ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Edit rank',
-                  onPressed: () => _edit(context),
-                  icon: Icon(
-                    Symbols.edit_sharp,
-                    size: DesignConstants.iconSizeMedium,
-                    color: DesignConstants.text2nd,
-                    weight: DesignConstants.iconWeight,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Delete rank',
-                  onPressed: () => _delete(context),
-                  icon: Icon(
-                    Symbols.delete_sharp,
-                    size: DesignConstants.iconSizeMedium,
-                    color: DesignConstants.badRed,
-                    weight: DesignConstants.iconWeight,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The folded strip of a main rank's sub-positions, centered on the card
+/// — one small belt per leaf `0..subRankCount-1`, labelled from the
+/// gym's [RankSubType]. Deliberately quiet and subordinate to the big
+/// main belt above it (the ladder's two-level inversion).
+class _SubStrip extends StatelessWidget {
+  final MainRank rank;
+  final RankSubType subRankType;
+
+  const _SubStrip({required this.rank, required this.subRankType});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: DesignConstants.spacingLarge,
+      runSpacing: DesignConstants.spacingMedium,
+      children: [
+        for (var i = 0; i < rank.subRankCount; i++)
+          _SubTile(
+            imageUrl: rank.imageForSub(i),
+            label: _label(i),
+          ),
+      ],
+    );
+  }
+
+  String _label(int index) {
+    final label = subRankType.subLabel(index);
+    return label.isEmpty ? 'Base' : label;
+  }
+}
+
+class _SubTile extends StatelessWidget {
+  final String? imageUrl;
+  final String label;
+
+  const _SubTile({required this.imageUrl, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          RankBeltImage(imageUrl: imageUrl, size: 44),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ],
       ),
     );
   }

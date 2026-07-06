@@ -10,22 +10,25 @@ import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_event.dart';
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_state.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
-import 'package:crm/features/memberships/presentation/screens/rank_presets_screen.dart';
 import 'package:crm/features/memberships/presentation/widgets/memberships_tab_scaffold.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/rank_enabled_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/rank_ladder_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/rank_sub_type_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/ready_to_promote_row.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
-/// Ranks tab of the Gym screen — an internal view switcher over two
-/// surfaces: the editable **Rank ladder** (toggle, sub-rank style, the
-/// reorderable main-rank ladder, seed-from-preset) and the
-/// **Ready to promote** board (a proximity-sorted roster of members
-/// closest to their next belt, with one-tap promote).
+const List<String> _kRankViews = ['Rank ladder', 'Ready to promote'];
+
+/// Ranks tab of the Gym screen.
+///
+/// The rank-system on/off toggle, the sub-rank style selector, and the
+/// ladder/board view switcher sit at the top of the tab and **scroll with
+/// the content** (nothing is pinned) — the whole tab is one scroll. When
+/// the system is **off**, everything but the toggle is hidden; the ladder
+/// is persisted server-side and reappears on re-enable, so nothing is
+/// lost.
 class RanksTab extends StatefulWidget {
   final String gymId;
 
@@ -36,47 +39,7 @@ class RanksTab extends StatefulWidget {
 }
 
 class _RanksTabState extends State<RanksTab> {
-  static const _views = ['Rank ladder', 'Ready to promote'];
   int _view = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: DesignConstants.screenHorizontalPadding,
-          ),
-          child: ViewSwitcher(
-            labels: _views,
-            selectedIndex: _view,
-            onSelected: (i) => setState(() => _view = i),
-          ),
-        ),
-        Expanded(
-          child: IndexedStack(
-            index: _view,
-            children: [
-              const _LadderView(),
-              BlocProvider<ReadyToPromoteBloc>(
-                create: (ctx) => ReadyToPromoteBloc(
-                  repository: ctx.read<RanksRepository>(),
-                )..add(ReadyToPromoteInitRequested(widget.gymId)),
-                child: const _ReadyView(),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The editable ladder surface.
-class _LadderView extends StatelessWidget {
-  const _LadderView();
 
   @override
   Widget build(BuildContext context) {
@@ -97,71 +60,119 @@ class _LadderView extends StatelessWidget {
                   .read<RanksBloc>()
                   .add(RanksInitRequested(state.gymId)),
             ),
-          RanksLoaded() => _LadderBody(state: state),
+          RanksLoaded() => _loaded(context, state),
         };
       },
     );
   }
+
+  Widget _loaded(BuildContext context, RanksLoaded state) {
+    // Off: only the toggle, in a scroll for a consistent, non-jumpy tab.
+    if (!state.isRankEnabled) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: DesignConstants.screenHorizontalPadding,
+        ).copyWith(bottom: DesignConstants.paddingBig),
+        child: RankEnabledSection(state: state),
+      );
+    }
+
+    // On: the header rides the TOP of whichever view is active so the
+    // whole tab scrolls as one page (nothing pinned). Both views stay
+    // alive in an IndexedStack so the board keeps its scroll position
+    // across switches.
+    final header = _TabHeader(
+      state: state,
+      selectedIndex: _view,
+      onSelected: (i) => setState(() => _view = i),
+    );
+    return IndexedStack(
+      index: _view,
+      children: [
+        _LadderBody(state: state, header: header),
+        BlocProvider<ReadyToPromoteBloc>(
+          create: (ctx) => ReadyToPromoteBloc(
+            repository: ctx.read<RanksRepository>(),
+          )..add(ReadyToPromoteInitRequested(widget.gymId)),
+          child: _ReadyView(header: header),
+        ),
+      ],
+    );
+  }
 }
 
-class _LadderBody extends StatelessWidget {
+/// The always-at-the-top header: the on/off toggle, the sub-rank style
+/// selector, and the ladder/board view switcher. Rendered inside each
+/// view's scroll so it scrolls away with the content instead of pinning.
+class _TabHeader extends StatelessWidget {
   final RanksLoaded state;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
 
-  const _LadderBody({required this.state});
+  const _TabHeader({
+    required this.state,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
 
-  void _openPresets(BuildContext context) {
-    final bloc = context.read<RanksBloc>();
-    // A bare MaterialPageRoute (no name) so the preset screen keeps the
-    // parent Ranks tab's URL; the shared RanksBloc rides down so Apply
-    // reloads the ladder the user returns to.
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => BlocProvider.value(
-          value: bloc,
-          child: RankPresetsScreen(gymId: state.gymId),
-        ),
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: DesignConstants.screenHorizontalPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          RankEnabledSection(state: state),
+          RankSubTypeSection(state: state),
+          ViewSwitcher(
+            labels: _kRankViews,
+            selectedIndex: selectedIndex,
+            onSelected: onSelected,
+          ),
+        ],
       ),
     );
   }
+}
+
+/// The editable ladder surface — the header then the reorderable
+/// main-rank ladder, all in one scroll.
+class _LadderBody extends StatelessWidget {
+  final RanksLoaded state;
+  final Widget header;
+
+  const _LadderBody({required this.state, required this.header});
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: DesignConstants.paddingBig),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignConstants.screenHorizontalPadding,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: DesignConstants.spacingLarge,
-          children: [
-            RankEnabledSection(state: state),
-            RankSubTypeSection(state: state),
-            RankLadderSection(state: state),
-            Center(
-              child: AppOutlineButton(
-                text: 'Seed from preset',
-                borderRadius: DesignConstants.radiusSmall,
-                icon: Icon(
-                  Symbols.auto_awesome_sharp,
-                  size: DesignConstants.iconSizeSmall,
-                  color: DesignConstants.text,
-                  weight: DesignConstants.iconWeight,
-                ),
-                onPressed: () => _openPresets(context),
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingBig,
+        children: [
+          header,
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: DesignConstants.screenHorizontalPadding,
             ),
-          ],
-        ),
+            child: RankLadderSection(state: state),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// The ready-to-promote board.
+/// The ready-to-promote board — the header rides the top of the roster so
+/// it scrolls with it.
 class _ReadyView extends StatelessWidget {
-  const _ReadyView();
+  final Widget header;
+
+  const _ReadyView({required this.header});
 
   @override
   Widget build(BuildContext context) {
@@ -190,26 +201,39 @@ class _ReadyView extends StatelessWidget {
       },
       builder: (context, state) {
         return switch (state) {
-          ReadyToPromoteInitial() ||
-          ReadyToPromoteLoading() =>
-            const TabLoading(),
-          ReadyToPromoteError() => TabError(
-              message: state.message,
-              onRetry: () => context
-                  .read<ReadyToPromoteBloc>()
-                  .add(ReadyToPromoteInitRequested(state.gymId)),
+          ReadyToPromoteInitial() || ReadyToPromoteLoading() =>
+            _headerThen(const TabLoading()),
+          ReadyToPromoteError() => _headerThen(
+              TabError(
+                message: state.message,
+                onRetry: () => context
+                    .read<ReadyToPromoteBloc>()
+                    .add(ReadyToPromoteInitRequested(state.gymId)),
+              ),
             ),
-          ReadyToPromoteLoaded() => _ReadyList(state: state),
+          ReadyToPromoteLoaded() => _ReadyList(state: state, header: header),
         };
       },
+    );
+  }
+
+  /// Loading / error: header at the top, the transient state filling the
+  /// rest (there's nothing to scroll in those states yet).
+  Widget _headerThen(Widget body) {
+    return Column(
+      children: [
+        header,
+        Expanded(child: body),
+      ],
     );
   }
 }
 
 class _ReadyList extends StatefulWidget {
   final ReadyToPromoteLoaded state;
+  final Widget header;
 
-  const _ReadyList({required this.state});
+  const _ReadyList({required this.state, required this.header});
 
   @override
   State<_ReadyList> createState() => _ReadyListState();
@@ -245,27 +269,57 @@ class _ReadyListState extends State<_ReadyList> {
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
-    if (state.rows.isEmpty) return const _ReadyEmpty();
 
+    // Empty: header + the empty message, scrollable as one page.
+    if (state.rows.isEmpty) {
+      return ListView(
+        controller: _controller,
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: DesignConstants.paddingBig),
+        children: [
+          widget.header,
+          const SizedBox(height: DesignConstants.spacingBig),
+          const _ReadyEmpty(),
+        ],
+      );
+    }
+
+    // header (item 0) + roster rows + an optional trailing spinner.
+    final rowCount = state.rows.length + (state.isLoadingMore ? 1 : 0);
     return ListView.separated(
       controller: _controller,
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.screenHorizontalPadding,
-      ).copyWith(bottom: DesignConstants.paddingBig),
-      itemCount: state.rows.length + (state.isLoadingMore ? 1 : 0),
-      separatorBuilder: (_, _) => const Hairline(),
+      padding: const EdgeInsets.only(bottom: DesignConstants.paddingBig),
+      itemCount: 1 + rowCount,
+      separatorBuilder: (_, index) => index == 0
+          // No divider between the header and the first row.
+          ? const SizedBox(height: DesignConstants.spacingBig)
+          : const Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: DesignConstants.screenHorizontalPadding,
+              ),
+              child: Hairline(),
+            ),
       itemBuilder: (context, index) {
-        if (index == state.rows.length) {
+        if (index == 0) return widget.header;
+        final rowIndex = index - 1;
+        if (rowIndex == state.rows.length) {
           return const Padding(
             padding: EdgeInsets.all(DesignConstants.paddingSmall),
-            child: Center(child: AppSpinner(size: DesignConstants.spinnerSizeSmall)),
+            child: Center(
+              child: AppSpinner(size: DesignConstants.spinnerSizeSmall),
+            ),
           );
         }
-        return ReadyToPromoteRow(
-          row: state.rows[index],
-          ladder: state.ladder,
-          subRankType: state.subRankType,
+        return Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: DesignConstants.screenHorizontalPadding,
+          ),
+          child: ReadyToPromoteRow(
+            row: state.rows[rowIndex],
+            ladder: state.ladder,
+            subRankType: state.subRankType,
+          ),
         );
       },
     );
