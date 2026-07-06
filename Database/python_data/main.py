@@ -229,7 +229,7 @@ def seed() -> None:
         bs_rewards.create_redemptions(client, gym_id, members, gym_rewards)
 
         progress.log("Creating activities...")
-        bs_activities.create(client, gym_id, members, ranks)
+        bs_activities.create(client, gym_id, members, ranks, attendance)
 
         # Invoice + charge history (direct DB, synthetic Stripe IDs). Guarded
         # like the membership history above so re-runs don't duplicate.
