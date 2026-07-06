@@ -20,10 +20,10 @@ from schema.gym_rank import (
 )
 
 # placeholder belt art; the founder uploads the real PNGs to
-# s3://combatden-assets/ranks/presets/{white,blue}.png (CDN cdn.combatden.net);
+# s3://combatden-assets/rank/presets/{white,blue}.png (CDN cdn.combatden.net);
 # alternating white/blue until real art is supplied.
-_BELT_IMG_EVEN = "https://cdn.combatden.net/ranks/presets/white.png"
-_BELT_IMG_ODD = "https://cdn.combatden.net/ranks/presets/blue.png"
+_BELT_IMG_EVEN = "https://cdn.combatden.net/rank/presets/white.png"
+_BELT_IMG_ODD = "https://cdn.combatden.net/rank/presets/blue.png"
 
 
 @dataclass(frozen=True)

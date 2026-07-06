@@ -266,9 +266,9 @@ neutral belt-glyph fallback; **no color swatch** — color was removed). The
 People-tab members filter gained a rank dimension (`rank_ids`, filtering
 `members.current_rank_id`). See `CRM/CLAUDE.md` for the full CRM wiring.
 
-**Belt image upload** currently reuses the backend `class` `UploadCategory` (the
-`UploadCategory` enum has no `rank` value yet) — a dedicated `rank` category +
-`ranks/` S3 prefix is a small backend follow-up.
+**Belt image upload** uses the backend `rank` `UploadCategory` (S3 `rank/`
+prefix); the preset placeholder art lives under `rank/presets/` in the same
+`combatden-assets` bucket / `cdn.combatden.net` CDN.
 
 ---
 

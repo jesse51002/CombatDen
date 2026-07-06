@@ -30,9 +30,8 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///
 /// Per-sub overrides are **write-only**: shrinking the count never
 /// prunes the map, so a dormant sub image survives a count change and
-/// revives if the count grows back. Uploads use the `class` image
-/// category (see the screen's note — a dedicated `rank` category is a
-/// backend follow-up).
+/// revives if the count grows back. Uploads use the `rank` image
+/// category (S3 `rank/` prefix).
 class EditRankScreen extends StatefulWidget {
   /// The rank being edited, or null to create a new one.
   final MainRank? rank;
@@ -213,7 +212,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
                     ImageUploadPickerField(
                       key: const ValueKey('main-belt'),
                       label: 'Belt image',
-                      category: 'class',
+                      category: 'rank',
                       imageUrl: _mainImageUrl,
                       onUploaded: (url) =>
                           setState(() => _mainImageUrl = url),
@@ -245,7 +244,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
                         ImageUploadPickerField(
                           key: ValueKey('sub-$i'),
                           label: _subLabel(subRankType, i),
-                          category: 'class',
+                          category: 'rank',
                           imageUrl: _overrides[i.toString()],
                           defaultImageUrl: _mainImageUrl,
                           onUploaded: (url) => setState(
