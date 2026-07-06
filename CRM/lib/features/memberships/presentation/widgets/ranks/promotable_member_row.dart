@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -12,17 +13,20 @@ import 'package:crm/shared/widgets/rank_belt_image.dart';
 
 /// One promotable member, rendered identically wherever staff act on a
 /// member's rank: their belt, avatar, name, a **current → next**
-/// progression label, the shared [RankProgressBar], and a single
-/// **Promote** button (green once eligible) that opens the full
-/// promotion dialog.
+/// progression label, the shared [RankProgressBar], then two trailing
+/// affordances — the primary **Promote** button (green once eligible)
+/// that opens the full promotion dialog, and a quiet chevron that opens
+/// the member's detail page.
 ///
 /// Deliberately **bloc-agnostic** — it takes the row's display fields,
 /// the gym ladder + sub-rank type, and the member's current leaf, then
 /// derives the current → next label itself (via [RankLadderPosition], the
 /// same resolver the [PromotionDialog] uses) so both the ready-to-promote
 /// board ([ReadyToPromoteRow]) and the rank-detail roster share the exact
-/// same row. The single [onPromote] callback opens the dialog; there is
-/// no quick one-tap path. Eligibility (whether [classesSince] has met
+/// same row. The [onPromote] callback opens the dialog (there is no quick
+/// one-tap promote); the [onViewMember] callback navigates to the member's
+/// detail page. Each caller wires both, so the row itself never
+/// navigates. Eligibility (whether [classesSince] has met
 /// [stepDenominator]) is derived here so the Promote affordance and the
 /// bar read the same on both.
 class PromotableMemberRow extends StatelessWidget {
@@ -56,8 +60,13 @@ class PromotableMemberRow extends StatelessWidget {
   /// Classes needed to reach the next leaf, or null at the top.
   final int? stepDenominator;
 
-  /// Open the full promotion dialog (the row's only affordance).
+  /// Open the full promotion dialog (the row's primary affordance).
   final VoidCallback onPromote;
+
+  /// Navigate to this member's detail page (the quiet chevron). Wired by
+  /// each caller with the member id it already holds, so the row stays
+  /// bloc-agnostic and never navigates itself.
+  final VoidCallback onViewMember;
 
   const PromotableMemberRow({
     super.key,
@@ -71,6 +80,7 @@ class PromotableMemberRow extends StatelessWidget {
     required this.classesSince,
     required this.stepDenominator,
     required this.onPromote,
+    required this.onViewMember,
   });
 
   @override
@@ -149,7 +159,41 @@ class PromotableMemberRow extends StatelessWidget {
             ),
             onPressed: onPromote,
           ),
+          _ViewMemberButton(onTap: onViewMember),
         ],
+      ),
+    );
+  }
+}
+
+/// The quiet, secondary affordance: a muted chevron that opens the
+/// member's detail page. Deliberately a tier below the bordered Promote
+/// button — the house "drill into detail" glyph (used by the schedule
+/// chooser, the membership carousel, and the rank cards), muted ink and
+/// icon-only so it reads as navigation without competing with Promote or
+/// adding a second sapphire voice down the roster. A [Tooltip] labels it
+/// for hover discoverability and accessibility.
+class _ViewMemberButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ViewMemberButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'View member',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+        child: Padding(
+          padding: const EdgeInsets.all(DesignConstants.spacingSmall),
+          child: Icon(
+            Symbols.chevron_right_sharp,
+            size: DesignConstants.iconSizeLarge,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.text2nd,
+          ),
+        ),
       ),
     );
   }

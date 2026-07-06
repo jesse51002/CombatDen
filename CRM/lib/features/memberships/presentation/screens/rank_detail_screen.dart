@@ -295,6 +295,10 @@ class _LoadedState extends State<_Loaded> {
                   classesSince: member.classesSince,
                   stepDenominator: member.stepDenominator,
                   onPromote: () => _promote(member),
+                  onViewMember: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.memberDetailPath(member.memberId),
+                  ),
                 ),
               ],
             );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_bloc.dart';
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_event.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -54,6 +55,10 @@ class ReadyToPromoteRow extends StatelessWidget {
       classesSince: row.classesSince,
       stepDenominator: row.stepDenominator,
       onPromote: () => _openDialog(context),
+      onViewMember: () => Navigator.pushNamed(
+        context,
+        AppRoutes.memberDetailPath(row.memberId),
+      ),
     );
   }
 }
