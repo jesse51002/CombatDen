@@ -41,12 +41,18 @@ class RanksPresets(RanksBase):
     ) -> RankListResponse:
         """Clone a preset ladder into a gym, set its type, reconcile, backfill.
 
-        Runs four steps in one transaction: insert the preset's main
-        rows (idempotent), copy the preset kind's implied sub-rank type
+        Runs four steps in one transaction: UPSERT the preset's main
+        rows (create missing ladder positions AND overwrite existing
+        ones' name / image_url / sub_rank_count to match the preset —
+        classes_to_next_major and per-sub overrides preserved, never
+        deletes a rank), copy the preset kind's implied sub-rank type
         onto the gym (every kind implies one now — ``'none'`` for plain
         belts / flat), reconcile EXISTING members' ``current_sub_index``
-        to that style so the leaf invariant stays valid, then backfill
-        rank-less members to the lowest leaf if ranks are enabled.
+        to that style AND to the new per-rank counts so the leaf
+        invariant stays valid (a shrunk ``sub_rank_count`` clamps members
+        down to the new top leaf), then backfill rank-less members to the
+        lowest leaf if ranks are enabled. The reconcile runs AFTER the
+        upsert, so it sees the new counts.
         """
         async with self._db_pool.session() as session:
             insert_sql = load_sql(SQL_DIR / "insert_ranks_from_preset.sql")

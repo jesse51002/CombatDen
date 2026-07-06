@@ -45,6 +45,20 @@ def _load(name: str) -> str:
     return (SQL_DIR / name).read_text()
 
 
+def _sql_body(name: str) -> str:
+    """The SQL file with its ``--`` comment lines stripped.
+
+    Lets a contract test assert a token is absent from the executable
+    STATEMENT without a mention in the header comment (which deliberately
+    names the preserved / never-touched columns) tripping the check.
+    """
+    return "\n".join(
+        line
+        for line in _load(name).splitlines()
+        if not line.lstrip().startswith("--")
+    )
+
+
 def _result(value: object, *, many: bool = False) -> MagicMock:
     """A session.execute() result whose mappings() yields `value`."""
     result = MagicMock()
@@ -238,6 +252,14 @@ async def test_from_preset_runs_backfill_and_sets_type_when_enabled():
     assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
     assert _load("backfill_lowest_rank.sql") in sqls
     assert _load("list_ranks.sql") in sqls
+    # The upsert can SHRINK a rank's sub_rank_count, so the member reconcile
+    # must run AFTER the upsert (to see the new counts) and after the type
+    # set — otherwise a clamped-down member would be missed.
+    assert (
+        sqls.index(_load("insert_ranks_from_preset.sql"))
+        < sqls.index(_load("set_gym_sub_rank_type_from_preset.sql"))
+        < sqls.index(_load("reconcile_member_sub_index_for_gym.sql"))
+    )
 
 
 @pytest.mark.asyncio
@@ -263,6 +285,63 @@ async def test_from_preset_skips_backfill_when_disabled():
     assert _load("backfill_lowest_rank.sql") not in sqls
     # Reconcile still runs even when the backfill is skipped.
     assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
+
+
+# ---------- from_preset upsert + clamp (SQL contract) ----------
+
+
+def test_from_preset_sql_upserts_name_image_and_count():
+    """from_preset's insert is an UPSERT: an existing ladder position is
+    overwritten with the preset's name / image_url / sub_rank_count (via
+    EXCLUDED), so re-applying a preset onto a gym that already has ranks
+    RENAMES them + re-images + re-counts every position it shares — it no
+    longer silently skips existing rows."""
+    sql = _load("insert_ranks_from_preset.sql")
+    assert "ON CONFLICT (gym_id, main_rank_num_order) DO UPDATE SET" in sql
+    assert "name = EXCLUDED.name" in sql
+    assert "image_url = EXCLUDED.image_url" in sql
+    assert "sub_rank_count = EXCLUDED.sub_rank_count" in sql
+    # The old skip-on-conflict behavior is gone.
+    assert "DO NOTHING" not in sql
+
+
+def test_from_preset_sql_preserves_threshold_and_overrides():
+    """The upsert deliberately does NOT overwrite classes_to_next_major (the
+    gym keeps its own threshold to the next major) and never touches
+    sub_rank_image_overrides (persist-only — not even in the column list).
+    Checked against the statement body so the header comment's mention of
+    the preserved columns doesn't mask a real regression."""
+    body = _sql_body("insert_ranks_from_preset.sql")
+    assert "classes_to_next_major = EXCLUDED" not in body
+    assert "sub_rank_image_overrides" not in body
+
+
+def test_from_preset_sql_never_deletes_a_rank():
+    """The seed-from-preset insert only ever inserts/updates rank rows — a
+    rank the gym has beyond the preset's length is left untouched (there is
+    no DELETE anywhere in the executable statement)."""
+    body = _sql_body("insert_ranks_from_preset.sql")
+    assert "DELETE" not in body.upper()
+
+
+def test_reconcile_sql_clamps_members_to_post_upsert_count():
+    """Because the upsert can SHRINK a rank's sub_rank_count, the SAME
+    reconcile step (run AFTER the upsert, unconditionally) keeps every member
+    at a valid leaf by reading the NEW per-rank count from gym_ranks
+    (gr.sub_rank_count): a NULL sub_index (coming from 'none') fills to the
+    base leaf 0, an in-range/over-range index is LEAST-clamped to count-1,
+    and an effective count of 0 ('none' gym or a subless rank) becomes NULL.
+    Post-condition for every member: effective count > 0 =>
+    current_sub_index = LEAST(current_sub_index_or_0, count-1); effective
+    count 0 => NULL."""
+    sql = _load("reconcile_member_sub_index_for_gym.sql")
+    # Clamp reads the POST-upsert count from gym_ranks and floors at the top leaf.
+    assert "LEAST(m.current_sub_index, gr.sub_rank_count - 1)" in sql
+    # NULL (coming from 'none') fills to the base leaf 0.
+    assert "WHEN m.current_sub_index IS NULL THEN 0" in sql
+    # Effective count 0 / 'none' gym => NULL.
+    assert "= 'none' THEN NULL" in sql
+    assert "WHEN gr.sub_rank_count = 0 THEN NULL" in sql
 
 
 # ---------- set_rank_enabled transitions ----------

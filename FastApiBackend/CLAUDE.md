@@ -423,9 +423,15 @@ in-session. The reconcile
 `current_sub_index`; → stripes/div fills a NULL sub-index (coming from
 `'none'`) with the base leaf `0` on ranks that have sub-ranks, **preserves
 an already-valid index** (a pure stripes↔div switch is only a re-label,
-never a member move), and clears it on subless ranks. It never touches the
-persisted `sub_rank_count` / overrides and logs no `rank_changed` (a style
-toggle is a re-fit, not a promotion).
+never a member move), and **clamps a now-out-of-range index down to the
+new top leaf** via `LEAST(current_sub_index, sub_rank_count - 1)` reading
+the CURRENT (post-write) per-rank `sub_rank_count` from `gym_ranks`, and
+clears it on subless ranks. Because it reads the live `gym_ranks` count
+and `from_preset` runs it AFTER the upsert, the same statement also
+re-fits members when the `from_preset` upsert **shrinks** a
+`sub_rank_count` — no separate clamp step is needed there. It never
+touches the persisted `sub_rank_count` / overrides and logs no
+`rank_changed` (a style toggle / re-fit is not a promotion).
 
 **`classes_to_next_major`** is the headline threshold to the NEXT main
 rank (gym-set, a rank-row property). The per-sub-step denominator is
@@ -561,13 +567,23 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   enum (`bjj_belts | bjj_belts_stripes | flat`) — the old Postgres
   `gym_type` enum was dropped (the Python `GymType` StrEnum survives only
   as the video/presets discipline vocabulary, unrelated to ranks now).
-  `POST /api/v1/ranks/from-preset` bulk-clones a preset kind's rows into
-  `gym_ranks` (`ON CONFLICT DO NOTHING`, idempotent) AND copies the
-  kind's `implied_sub_rank_type` onto the gym
+  `POST /api/v1/ranks/from-preset` **upserts** a preset kind's rows into
+  `gym_ranks` (`insert_ranks_from_preset.sql` — `ON CONFLICT (gym_id,
+  main_rank_num_order) DO UPDATE SET name / image_url / sub_rank_count =
+  EXCLUDED`): it creates missing ladder positions AND overwrites the
+  `name` / `image_url` / `sub_rank_count` of positions the gym already
+  has, so re-applying a preset re-syncs those three fields to the preset.
+  `classes_to_next_major` (the gym's own threshold) and
+  `sub_rank_image_overrides` (persist-only) are deliberately **preserved**,
+  and it **never deletes** a rank — positions beyond the preset's length
+  stay. It then copies the kind's `implied_sub_rank_type` onto the gym
   (`set_gym_sub_rank_type_from_preset.sql` — every kind implies a concrete
   style now: `'none'` for plain belts / flat, `'stripes'` for the stripes
-  kind), then reconciles existing members' sub-index to that style, then
-  runs the same lowest-rank backfill.
+  kind), then **reconciles** existing members' sub-index to that style AND
+  to the new per-rank counts (the reconcile runs AFTER the upsert, so a
+  `sub_rank_count` the upsert shrank clamps every affected member down to
+  the new top leaf via `LEAST` — see the reconcile note below), then runs
+  the same lowest-rank backfill.
 
 **Routes** (`/api/v1/ranks`, 16 total): `GET /` · `POST /` · `POST
 /from-preset` · `GET /presets` · `GET /presets/grouped` · `GET /enabled`

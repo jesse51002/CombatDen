@@ -189,12 +189,19 @@ Per-sub images live in `sub_rank_image_overrides`, a sparse `{sub_index: url}` m
 ## 6. The three presets (`rank_preset_kind`)
 
 `rank_presets` mirrors the main-row shape, keyed by a `rank_preset_kind` enum
-(the old Postgres `gym_type` enum was dropped). Applying a preset clones its main
-rows into `gym_ranks` (`from_preset` / `insert_ranks_from_preset.sql`, idempotent
-`ON CONFLICT (gym_id, main_rank_num_order) DO NOTHING`), sets the gym's
-`sub_rank_type` to the preset's implied style (every kind implies a **concrete**
-style now — see below), then reconciles existing members' sub-index to it and
-runs the lowest-rank backfill.
+(the old Postgres `gym_type` enum was dropped). Applying a preset **upserts** its
+main rows into `gym_ranks` (`from_preset` / `insert_ranks_from_preset.sql`,
+`ON CONFLICT (gym_id, main_rank_num_order) DO UPDATE SET name / image_url /
+sub_rank_count = EXCLUDED`): it creates missing ladder positions AND overwrites
+the `name` / `image_url` / `sub_rank_count` of positions the gym already has, so
+re-applying a preset re-syncs those three columns to the preset. It deliberately
+**preserves** `classes_to_next_major` (the gym keeps its own threshold) and
+`sub_rank_image_overrides` (persist-only — not in the column list), and **never
+deletes** a rank (positions the gym has beyond the preset's length stay). It then
+sets the gym's `sub_rank_type` to the preset's implied style (every kind implies a
+**concrete** style now — see below), reconciles existing members' sub-index to it
+(this also **clamps** members down to any `sub_rank_count` the upsert shrank —
+§10), and runs the lowest-rank backfill.
 
 - **`bjj_belts`** — White→Black, `sub_rank_count = 0` (flat belts),
   `implied_sub_rank_type = none`.
@@ -315,10 +322,20 @@ the rank-detail screen, and the ready-to-promote board.
 - **change `gyms.sub_rank_type`** → members are reconciled to stay leaf-valid
   (`reconcile_member_sub_index_for_gym.sql`, run by BOTH the gym-update path and
   `from_preset`, no `rank_changed` logged): **stripes ↔ div** is a pure re-label,
-  members are NOT moved (an already-valid index is preserved); **→ `'none'`**
-  clears every `current_sub_index`; **`'none'` → stripes/div** fills a NULL
-  sub-index with the base leaf `0` on ranks that have sub-ranks. The persisted
-  `sub_rank_count` / `sub_rank_image_overrides` are never touched.
+  members are NOT moved (an already-valid index is preserved), **but an
+  out-of-range index is clamped down** to the current top leaf via
+  `LEAST(current_sub_index, gr.sub_rank_count - 1)` reading the live `gym_ranks`
+  count; **→ `'none'`** clears every `current_sub_index`; **`'none'` →
+  stripes/div** fills a NULL sub-index with the base leaf `0` on ranks that have
+  sub-ranks. The persisted `sub_rank_count` / `sub_rank_image_overrides` are never
+  touched.
+- **`from_preset` upsert SHRINKS a rank's `sub_rank_count`** → because the
+  reconcile above reads the live `gym_ranks` count and runs AFTER the upsert in
+  the same transaction, the very same `LEAST(...)` clamp re-fits every member on
+  that rank down to the new top leaf — no separate clamp step. Post-condition for
+  every member of the gym after `from_preset`: effective count > 0 ⇒
+  `current_sub_index = LEAST(current_sub_index_or_0, sub_rank_count - 1)`
+  (NULL→0); effective count 0 / `'none'` gym ⇒ `current_sub_index IS NULL`.
 
 ## 11. CRM surface (brief)
 
