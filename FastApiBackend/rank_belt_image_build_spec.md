@@ -1,5 +1,20 @@
 # Rank Belt Image Generation — Build Spec (Phase-2 handoff)
 
+> **SUPERSEDED (2026-07-06) — kept as a possible future, not the current
+> design.** The Rank System v2 rebuild rejected the generation-owned-image
+> premise this whole spec is built on: `gym_ranks.image_url` is now a
+> plain **user-writable field** (a preset default at ladder creation, with
+> manual upload/override in the CRM edit page — same as any other image
+> field), not a column the pipeline below exclusively writes. AI/
+> ThemeService belt generation (this spec's `POST /ranks/generate` /
+> `/ranks/regenerate`, the `RankImageSweep` reconciler step, the
+> `image_gen` provenance column) is **deferred** — nothing here is built,
+> and none of it reverses anything currently shipped. This doc is
+> preserved as a possible future direction if/when generation gets
+> prioritized again; do not treat anything below as the current design of
+> `src/ranks/`. See `FastApiBackend/CLAUDE.md`'s "Ranks domain" section
+> for how belt images actually work today.
+
 **Status:** design locked 2026-07-02; build = Phase 2, its own branch/PR.
 **Decision record:** the pivot doc in the docs vault —
 `docs/Business/pivots/2026-07-02-20-rank-belt-images-theme-generated.md`.

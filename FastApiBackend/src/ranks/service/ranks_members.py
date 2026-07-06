@@ -1,16 +1,21 @@
 """Ranks member-rank concern: promote / set / unassign + backfill.
 
 Owns the two audit-logged member-rank endpoints and the lowest-rank
-backfill — the only paths that write a member's rank alongside a
-``rank_changed`` activity. The create / from-preset / enable-toggle
-flows all lean on the same backfill, so ``is_rank_enabled`` and
-``backfill_lowest_for_gym`` are session-scoped helpers the facade and
-the presets concern compose (they run inside the caller's open
-transaction, never opening one of their own).
+backfill — the only paths that write a member's leaf (``current_rank_id``
++ ``current_sub_index``) alongside a ``rank_changed`` activity. The
+create / from-preset / enable-toggle flows all lean on the same backfill,
+so ``is_rank_enabled`` and ``backfill_lowest_for_gym`` are session-scoped
+helpers the facade and the presets concern compose (they run inside the
+caller's open transaction, never opening one of their own).
 """
 
 from uuid import UUID
 
+from schema.gym_rank import (
+    SubRankType,
+    rank_display_name,
+    sub_rank_label,
+)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,15 +38,17 @@ class RanksMembers(RanksBase):
         self,
         request: RankPromoteMemberRequest,
     ) -> RankMemberResponse:
-        """Advance a member one step up the gym's ordered ladder.
+        """Advance a member one leaf up the gym's ordered ladder.
 
-        A rank-less member is assigned the lowest rank (consistent
-        with the enable-backfill). Promoting a member already at the
-        top rank raises ``ValueError("highest rank")``. The rank
-        update and the audit activity share one transaction.
+        The next sub-position within the current main rank, else the
+        base leaf of the next main rank. A rank-less member is assigned
+        the lowest leaf (consistent with the enable-backfill). A member
+        already at the top main + top sub raises
+        ``ValueError("highest rank")``. The rank update and the audit
+        activity share one transaction.
         """
         async with self._db_pool.session() as session:
-            old_rank_id, _ = await self._read_member_rank(
+            old_rank_id, old_sub_index, _ = await self._read_member_rank(
                 session,
                 request.member_id,
                 request.gym_id,
@@ -50,44 +57,77 @@ class RanksMembers(RanksBase):
             ladder = await self._list_ranks_in_session(session, request.gym_id)
             if not ladder:
                 raise ValueError("Gym has no ranks configured")
+            sub_rank_type = await self._gym_sub_rank_type(
+                session,
+                request.gym_id,
+            )
+            by_id = {str(rank.rank_id): rank for rank in ladder}
+            old_rank = by_id.get(str(old_rank_id)) if old_rank_id else None
 
-            new_rank = self._next_rank(ladder, old_rank_id)
+            new_rank, new_sub_index = self._next_leaf(
+                ladder,
+                old_rank_id,
+                old_sub_index,
+            )
 
             await self._apply_member_rank(
                 session,
                 member_id=request.member_id,
                 gym_id=request.gym_id,
                 old_rank_id=old_rank_id,
+                old_sub_index=old_sub_index,
                 new_rank_id=new_rank.rank_id,
+                new_sub_index=new_sub_index,
+                sub_rank_type=sub_rank_type,
+                old_rank_name=old_rank.name if old_rank else None,
+                new_rank_name=new_rank.name,
             )
             await session.commit()
 
-        return RankMemberResponse(member_id=request.member_id, new_rank=new_rank)
+        return self._member_response(
+            request.member_id,
+            new_rank,
+            new_sub_index,
+            sub_rank_type,
+        )
 
     async def set_member_rank(
         self,
         request: RankSetMemberRequest,
     ) -> RankMemberResponse:
-        """Set a member to an explicit rank, or to no rank.
+        """Set a member to an explicit leaf, or to no rank.
 
         Used for corrections, demotions, and assigning a rank-less
-        member. A ``rank_id`` of ``None`` unassigns the member. The
-        target rank must belong to the member's gym. The rank update
-        and the audit activity share one transaction.
+        member. A ``rank_id`` of ``None`` unassigns (both columns NULL).
+        The target rank must belong to the member's gym; when it has
+        sub-ranks, ``sub_index`` must be in ``[0, sub_rank_count - 1]``
+        (else ``ValueError`` → 400); when it has none, ``sub_index`` is
+        forced to ``None``. The rank update and the audit activity share
+        one transaction.
         """
         async with self._db_pool.session() as session:
-            old_rank_id, _ = await self._read_member_rank(
+            old_rank_id, old_sub_index, _ = await self._read_member_rank(
                 session,
                 request.member_id,
                 request.gym_id,
             )
+            ladder = await self._list_ranks_in_session(session, request.gym_id)
+            sub_rank_type = await self._gym_sub_rank_type(
+                session,
+                request.gym_id,
+            )
+            by_id = {str(rank.rank_id): rank for rank in ladder}
+            old_rank = by_id.get(str(old_rank_id)) if old_rank_id else None
 
             new_rank: RankResponse | None = None
+            new_sub_index: int | None = None
             if request.rank_id is not None:
-                new_rank = await self._read_rank_in_gym(
-                    session,
-                    request.rank_id,
-                    request.gym_id,
+                new_rank = by_id.get(str(request.rank_id))
+                if new_rank is None:
+                    raise ValueError("Rank not found")
+                new_sub_index = self._resolve_sub_index(
+                    new_rank,
+                    request.sub_index,
                 )
 
             await self._apply_member_rank(
@@ -95,11 +135,21 @@ class RanksMembers(RanksBase):
                 member_id=request.member_id,
                 gym_id=request.gym_id,
                 old_rank_id=old_rank_id,
+                old_sub_index=old_sub_index,
                 new_rank_id=request.rank_id,
+                new_sub_index=new_sub_index,
+                sub_rank_type=sub_rank_type,
+                old_rank_name=old_rank.name if old_rank else None,
+                new_rank_name=new_rank.name if new_rank else None,
             )
             await session.commit()
 
-        return RankMemberResponse(member_id=request.member_id, new_rank=new_rank)
+        return self._member_response(
+            request.member_id,
+            new_rank,
+            new_sub_index,
+            sub_rank_type,
+        )
 
     async def is_rank_enabled(
         self,
@@ -118,20 +168,74 @@ class RanksMembers(RanksBase):
         session: AsyncSession,
         gym_id: UUID,
     ) -> None:
-        """Assign the lowest rank to every rank-less member of the gym.
+        """Assign the lowest leaf to every rank-less member of the gym.
 
-        Writes one ``rank_changed`` activity per backfilled member in
-        the same statement, so progress counts from the backfill
-        moment (not the member's join date). No-op if no ranks exist
-        (the SQL's empty ``lowest`` CTE handles the empty-ladder case).
+        Pins each backfilled member to the lowest rank's base leaf
+        (sub-index 0 when it has sub-ranks, else NULL) and writes one
+        ``rank_changed`` activity per member with the Python-derived
+        display name, so progress counts from the backfill moment (not
+        the member's join date). No-op when the gym has no ranks.
         """
+        ladder = await self._list_ranks_in_session(session, gym_id)
+        new_rank_name: str | None = None
+        if ladder:
+            sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
+            lowest = ladder[0]
+            base_index = 0 if lowest.sub_rank_count > 0 else None
+            new_rank_name = rank_display_name(
+                lowest.name,
+                sub_rank_type,
+                base_index,
+            )
         sql = load_sql(SQL_DIR / "backfill_lowest_rank.sql")
         await session.execute(
             text(sql),
             {
                 "gym_id": str(gym_id),
                 "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
+                "new_rank_name": new_rank_name,
             },
+        )
+
+    @staticmethod
+    def _resolve_sub_index(
+        rank: RankResponse,
+        sub_index: int | None,
+    ) -> int | None:
+        """Validate / coerce a requested sub-index against the rank.
+
+        ``sub_rank_count > 0`` requires ``sub_index`` in range; a subless
+        rank forces ``None`` (a stray index is silently ignored).
+        """
+        if rank.sub_rank_count > 0:
+            if sub_index is None or not (0 <= sub_index <= rank.sub_rank_count - 1):
+                raise ValueError(
+                    "sub_index must be in "
+                    f"[0, {rank.sub_rank_count - 1}] for this rank"
+                )
+            return sub_index
+        return None
+
+    @staticmethod
+    def _member_response(
+        member_id: UUID,
+        new_rank: RankResponse | None,
+        new_sub_index: int | None,
+        sub_rank_type: SubRankType,
+    ) -> RankMemberResponse:
+        """Build the promote / set response with derived sub labels."""
+        if new_rank is None:
+            return RankMemberResponse(member_id=member_id)
+        return RankMemberResponse(
+            member_id=member_id,
+            new_rank=new_rank,
+            new_sub_index=new_sub_index,
+            new_sub_label=sub_rank_label(sub_rank_type, new_sub_index),
+            new_display_name=rank_display_name(
+                new_rank.name,
+                sub_rank_type,
+                new_sub_index,
+            ),
         )
 
     async def _read_member_rank(
@@ -139,8 +243,8 @@ class RanksMembers(RanksBase):
         session: AsyncSession,
         member_id: UUID,
         gym_id: UUID,
-    ) -> tuple[UUID | None, UUID]:
-        """Read a member's current rank id, asserting gym ownership."""
+    ) -> tuple[UUID | None, int | None, UUID]:
+        """Read a member's current leaf, asserting gym ownership."""
         sql = load_sql(SQL_DIR / "get_member_current_rank.sql")
         row = (
             (await session.execute(text(sql), {"member_id": str(member_id)}))
@@ -151,48 +255,7 @@ class RanksMembers(RanksBase):
             raise ValueError("Member not found")
         if str(row["gym_id"]) != str(gym_id):
             raise ValueError("Member not found in this gym")
-        return row["current_rank_id"], row["gym_id"]
-
-    async def _read_rank_in_gym(
-        self,
-        session: AsyncSession,
-        rank_id: UUID,
-        gym_id: UUID,
-    ) -> RankResponse:
-        """Read one rank, asserting it belongs to the given gym."""
-        sql = load_sql(SQL_DIR / "get_rank.sql")
-        row = (
-            (await session.execute(text(sql), {"rank_id": str(rank_id)}))
-            .mappings()
-            .fetchone()
-        )
-        if not row or str(row["gym_id"]) != str(gym_id):
-            raise ValueError("Rank not found")
-        return RankResponse(**dict(row))
-
-    @staticmethod
-    def _next_rank(
-        ladder: list[RankResponse],
-        current_rank_id: UUID | None,
-    ) -> RankResponse:
-        """The next rank up the ladder, or raise if already at top."""
-        if current_rank_id is None:
-            return ladder[0]
-        index = next(
-            (
-                i
-                for i, rank in enumerate(ladder)
-                if str(rank.rank_id) == str(current_rank_id)
-            ),
-            None,
-        )
-        # A current rank that isn't in the ladder (e.g. just deleted)
-        # falls back to the lowest rank rather than failing.
-        if index is None:
-            return ladder[0]
-        if index >= len(ladder) - 1:
-            raise ValueError("Member is already at the highest rank")
-        return ladder[index + 1]
+        return row["current_rank_id"], row["current_sub_index"], row["gym_id"]
 
     async def _apply_member_rank(
         self,
@@ -201,12 +264,20 @@ class RanksMembers(RanksBase):
         member_id: UUID,
         gym_id: UUID,
         old_rank_id: UUID | None,
+        old_sub_index: int | None,
         new_rank_id: UUID | None,
+        new_sub_index: int | None,
+        sub_rank_type: SubRankType,
+        old_rank_name: str | None,
+        new_rank_name: str | None,
     ) -> None:
-        """Set a member's rank and log the change, in one session.
+        """Set a member's leaf and log the change, in one session.
 
-        The audit activity is written only when the rank actually
-        changes, so a no-op set leaves no row.
+        The audit activity is written whenever the leaf actually moves —
+        a sub-only promotion logs too. Only a no-op (BOTH rank_id AND
+        sub_index unchanged) leaves no row. Both display names are
+        derived here via ``rank_display_name`` (NULL for an unassigned
+        old / new leaf).
         """
         set_sql = load_sql(SQL_DIR / "set_member_rank.sql")
         updated = (
@@ -215,6 +286,7 @@ class RanksMembers(RanksBase):
                     text(set_sql),
                     {
                         "new_rank_id": str(new_rank_id) if new_rank_id else None,
+                        "new_sub_index": new_sub_index,
                         "member_id": str(member_id),
                         "gym_id": str(gym_id),
                     },
@@ -226,8 +298,19 @@ class RanksMembers(RanksBase):
         if not updated:
             raise ValueError("Member not found")
 
-        if str(old_rank_id) == str(new_rank_id):
+        if str(old_rank_id) == str(new_rank_id) and old_sub_index == new_sub_index:
             return
+
+        old_display = (
+            rank_display_name(old_rank_name, sub_rank_type, old_sub_index)
+            if old_rank_name is not None
+            else None
+        )
+        new_display = (
+            rank_display_name(new_rank_name, sub_rank_type, new_sub_index)
+            if new_rank_name is not None
+            else None
+        )
 
         activity_sql = load_sql(SQL_DIR / "insert_rank_activity.sql")
         await session.execute(
@@ -237,6 +320,8 @@ class RanksMembers(RanksBase):
                 "gym_id": str(gym_id),
                 "old_rank_id": str(old_rank_id) if old_rank_id else None,
                 "new_rank_id": str(new_rank_id) if new_rank_id else None,
+                "old_rank_name": old_display,
+                "new_rank_name": new_display,
                 "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
             },
         )

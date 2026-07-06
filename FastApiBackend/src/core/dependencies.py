@@ -102,6 +102,7 @@ from src.presets.service.presets_template_service import PresetsTemplateService
 from src.ranks.service.ranks_groups import RanksGroups
 from src.ranks.service.ranks_members import RanksMembers
 from src.ranks.service.ranks_presets import RanksPresets
+from src.ranks.service.ranks_reads import RanksReads
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -387,12 +388,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         members=ranks_members,
     )
+    ranks_reads = providers.Factory(RanksReads, db_pool=db_pool)
     ranks_service = providers.Factory(
         RanksService,
         db_pool=db_pool,
         members=ranks_members,
         groups=ranks_groups,
         presets=ranks_presets,
+        reads=ranks_reads,
     )
 
     # Waivers: plain gym config (versioned documents + read-only e-sign

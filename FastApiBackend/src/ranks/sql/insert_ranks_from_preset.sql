@@ -1,22 +1,22 @@
+-- Clone every MAIN row of a preset ladder into a gym's gym_ranks.
+-- ON CONFLICT (gym_id, main_rank_num_order) DO NOTHING makes re-running
+-- on the same gym idempotent. sub_rank_image_overrides starts empty
+-- (presets carry only the main image_url).
 INSERT INTO gym_ranks (
     gym_id,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color
+    classes_to_next_major,
+    sub_rank_count
 )
 SELECT
-    :gym_id,
+    CAST(:gym_id AS UUID),
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color
+    classes_to_next_major,
+    sub_rank_count
 FROM rank_presets
-WHERE gym_type = :gym_type
-ON CONFLICT (gym_id, main_rank_num_order, sub_rank_num_order) DO NOTHING
+WHERE preset_kind = CAST(:preset_kind AS rank_preset_kind)
+ON CONFLICT (gym_id, main_rank_num_order) DO NOTHING

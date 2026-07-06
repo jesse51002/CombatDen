@@ -328,9 +328,9 @@ async def new_onboarding_link(
     response_model=GymResponse,
     summary="Update a gym",
     description=(
-        "Updates the gym name, description, timezone, or logo. "
-        "``logo_url`` may be explicitly set to ``null`` to clear the "
-        "logo back to none uploaded."
+        "Updates the gym name, description, timezone, sub-rank style "
+        "(``sub_rank_type``), or logo. ``logo_url`` may be explicitly "
+        "set to ``null`` to clear the logo back to none uploaded."
     ),
     responses={
         200: {"description": "Gym updated"},

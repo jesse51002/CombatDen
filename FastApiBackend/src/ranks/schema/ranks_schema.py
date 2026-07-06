@@ -1,12 +1,16 @@
-"""Pydantic models for the ranks domain."""
+"""Pydantic models for the ranks domain.
+
+Two-level rank model: ``gym_ranks`` holds ONE row per MAIN rank; a member
+is pinned to a leaf via ``current_rank_id`` + ``current_sub_index``. The
+gym's ``sub_rank_type`` (stripes | div) + the index derive every sub-rank
+LABEL — labels are never stored (see ``schema.gym_rank`` helpers).
+"""
 
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from schema.gym_rank import GymType
-
-HEX_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
+from schema.gym_rank import RankPresetKind, SubRankType
 
 # member_activities.activity_type written on every member rank change
 # (promotion, demotion, assignment, unassignment, enable-backfill). The
@@ -14,30 +18,36 @@ HEX_COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
 RANK_CHANGED_ACTIVITY_TYPE = "rank_changed"
 
 
-class RankSummary(BaseModel):
-    """Nested rank object returned inside member responses."""
+class RankResponse(BaseModel):
+    """A single ``gym_ranks`` row — one MAIN rank.
+
+    ``sub_rank_count == 0`` means this main rank is itself the leaf
+    (a member on it has ``current_sub_index`` NULL); ``N >= 1`` means
+    ``N`` leaf sub-positions (``current_sub_index`` in ``[0, N-1]``).
+    Sub-rank labels are derived from the gym's ``sub_rank_type`` + the
+    index, so they are not carried on this row.
+    """
 
     rank_id: UUID
-    main_name: str
-    sub_name: str
-    color: str | None
-    image_url: str | None
-    main_rank_num_order: int
-    sub_rank_num_order: int
-
-
-class RankResponse(RankSummary):
-    """A single gym_ranks row."""
-
     gym_id: UUID
-    classes_till_rankup: int
+    main_rank_num_order: int
+    name: str
+    image_url: str | None = None
+    classes_to_next_major: int
+    sub_rank_count: int
+    sub_rank_image_overrides: dict = Field(default_factory=dict)
     created_at: datetime
 
 
 class RankListResponse(BaseModel):
-    """List of ranks for a gym."""
+    """A gym's ladder plus its ``sub_rank_type``.
+
+    ``sub_rank_type`` is returned once so the client can render every
+    row's sub-rank labels without a second call.
+    """
 
     items: list[RankResponse]
+    sub_rank_type: SubRankType
 
 
 class RankCreateRequest(BaseModel):
@@ -45,26 +55,30 @@ class RankCreateRequest(BaseModel):
 
     gym_id: UUID
     main_rank_num_order: int = Field(ge=0)
-    sub_rank_num_order: int = Field(ge=0)
-    main_name: str = Field(min_length=1)
-    sub_name: str = Field(min_length=1)
-    classes_till_rankup: int = Field(ge=0)
-    color: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    name: str = Field(min_length=1)
+    classes_to_next_major: int = Field(ge=0)
+    sub_rank_count: int = Field(ge=0, default=0)
+    image_url: str | None = None
+    sub_rank_image_overrides: dict = Field(default_factory=dict)
 
 
 class RankUpdateData(BaseModel):
-    """Mutable fields on a gym_ranks row.
+    """Mutable fields on a ``gym_ranks`` row.
 
-    Order columns are deliberately absent — ``POST /ranks/reorder`` is
-    the only mover (they are update-immutable). ``image_url`` is also
-    absent: rank images are generation-owned (theme-styled belt art),
-    never set by hand.
+    ``main_rank_num_order`` is deliberately absent — ``POST
+    /ranks/reorder`` is the only mover of ladder positions (it is
+    update-immutable). ``image_url`` and ``sub_rank_image_overrides``
+    ARE writable now: the belt image is a user field (preset default
+    plus manual override in the edit UI), and the per-sub overrides map
+    is persist-only (never pruned — shrinking ``sub_rank_count`` clamps
+    members but leaves dormant overrides intact).
     """
 
-    main_name: str | None = Field(default=None, min_length=1)
-    sub_name: str | None = Field(default=None, min_length=1)
-    classes_till_rankup: int | None = Field(default=None, ge=0)
-    color: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    name: str | None = Field(default=None, min_length=1)
+    classes_to_next_major: int | None = Field(default=None, ge=0)
+    sub_rank_count: int | None = Field(default=None, ge=0)
+    image_url: str | None = None
+    sub_rank_image_overrides: dict | None = None
 
 
 class RankUpdateRequest(BaseModel):
@@ -74,55 +88,35 @@ class RankUpdateRequest(BaseModel):
 
 
 class RankPresetResponse(BaseModel):
-    """A single rank_presets row."""
+    """A single ``rank_presets`` row — one MAIN rank of a preset ladder."""
 
     preset_id: UUID
-    gym_type: GymType
+    preset_kind: RankPresetKind
     main_rank_num_order: int
-    sub_rank_num_order: int
-    main_name: str
-    sub_name: str
-    classes_till_rankup: int
-    image_url: str | None
-    color: str | None
+    name: str
+    image_url: str | None = None
+    classes_to_next_major: int
+    sub_rank_count: int
+    implied_sub_rank_type: SubRankType | None = None
 
 
 class RankPresetListResponse(BaseModel):
-    """Flat preset list for a single gym_type."""
+    """Flat preset list for a single ``preset_kind``."""
 
     items: list[RankPresetResponse]
 
 
-class SubRankPreset(BaseModel):
-    """Leaf node — one sub-rank within a main-rank group."""
-
-    preset_id: UUID
-    sub_rank_num_order: int
-    sub_name: str
-    classes_till_rankup: int
-    image_url: str | None
-    color: str | None
-
-
-class MainRankPresetGroup(BaseModel):
-    """A main rank with its ordered list of sub-ranks."""
-
-    main_rank_num_order: int
-    main_name: str
-    sub_ranks: list[SubRankPreset]
-
-
 class AllPresetsGroupedResponse(BaseModel):
-    """All preset ladders, keyed by gym_type, nested main → sub."""
+    """Every preset ladder, keyed by ``preset_kind`` (flat main rows)."""
 
-    presets: dict[GymType, list[MainRankPresetGroup]]
+    presets: dict[RankPresetKind, list[RankPresetResponse]]
 
 
 class FromPresetRequest(BaseModel):
     """Body for POST /api/v1/ranks/from-preset."""
 
     gym_id: UUID
-    gym_type: GymType
+    preset_kind: RankPresetKind
 
 
 class RankEnabledRequest(BaseModel):
@@ -142,19 +136,26 @@ class RankEnabledResponse(BaseModel):
 class RankMemberResponse(BaseModel):
     """Result of a manual member rank change (promote / set).
 
-    ``new_rank`` is the member's rank after the change, or ``None``
-    when the member was unassigned (set to no rank).
+    ``new_rank`` is the member's MAIN rank after the change (``None``
+    when unassigned). ``new_sub_index`` is the leaf position within it
+    (``None`` when the rank has no sub-ranks, or when unassigned);
+    ``new_sub_label`` / ``new_display_name`` are the derived labels.
     """
 
     member_id: UUID
     new_rank: RankResponse | None = None
+    new_sub_index: int | None = None
+    new_sub_label: str | None = None
+    new_display_name: str | None = None
 
 
 class RankPromoteMemberRequest(BaseModel):
     """Body for POST /api/v1/ranks/promote-member.
 
-    Advances the member one step up the gym's ordered ladder. A
-    rank-less member is assigned the lowest rank.
+    Advances the member one leaf up the gym's ordered ladder — the
+    next sub-position within the current main rank, else the base leaf
+    of the next main rank. A rank-less member is assigned the lowest
+    leaf.
     """
 
     gym_id: UUID
@@ -164,21 +165,24 @@ class RankPromoteMemberRequest(BaseModel):
 class RankSetMemberRequest(BaseModel):
     """Body for POST /api/v1/ranks/set-member-rank.
 
-    Sets the member to an explicit rank (correction / demotion /
-    assignment), or to no rank when ``rank_id`` is ``None``.
+    Sets the member to an explicit leaf (correction / demotion /
+    assignment), or to no rank when ``rank_id`` is ``None``. When the
+    target rank has sub-ranks, ``sub_index`` must be in
+    ``[0, sub_rank_count - 1]``; when it has none, ``sub_index`` is
+    forced to ``None``.
     """
 
     gym_id: UUID
     member_id: UUID
     rank_id: UUID | None = None
+    sub_index: int | None = None
 
 
 class RankReorderItem(BaseModel):
-    """One rank's target position in a bulk reorder."""
+    """One rank's target main position in a bulk reorder."""
 
     rank_id: UUID
     main_rank_num_order: int = Field(ge=0)
-    sub_rank_num_order: int = Field(ge=0)
 
 
 class RankReorderRequest(BaseModel):
@@ -186,22 +190,76 @@ class RankReorderRequest(BaseModel):
 
     The full desired ordering for the gym's ENTIRE ladder — every
     rank exactly once, positions unique. Applied as a two-phase
-    update so the unique-order constraint is never transiently
-    violated.
+    update so the ``UNIQUE (gym_id, main_rank_num_order)`` constraint
+    is never transiently violated.
     """
 
     gym_id: UUID
     ranks: list[RankReorderItem]
 
 
-class RankRenameGroupRequest(BaseModel):
-    """Body for PUT /api/v1/ranks/rename-group.
+# ---------- paginated member reads (ready-to-promote / in-rank) ----------
 
-    Renames a whole main-rank group (every sub-rank row sharing the
-    ``main_rank_num_order``) in one atomic UPDATE — ``main_name`` is
-    denormalized per row, so a per-row fan-out would be non-atomic.
-    """
+
+class MembersReadyToPromoteRequest(BaseModel):
+    """Query for GET /api/v1/ranks/ready-to-promote."""
 
     gym_id: UUID
-    main_rank_num_order: int = Field(ge=0)
-    new_main_name: str = Field(min_length=1)
+    start_index: int = Field(ge=0, default=0)
+    count: int = Field(ge=1, default=25)
+
+
+class MembersReadyToPromoteRow(BaseModel):
+    """One member on the ready-to-promote board.
+
+    ``classes_since`` is attendance since the member's last rank change
+    (the progress anchor); ``step_denominator`` is the classes needed to
+    reach the next leaf (an even split of ``classes_to_next_major`` when
+    the rank has sub-ranks, else the full major threshold).
+    """
+
+    member_id: UUID
+    name: str
+    avatar_url: str | None = None
+    main_rank_id: UUID
+    main_name: str
+    current_sub_index: int | None = None
+    sub_label: str | None = None
+    image_url: str | None = None
+    classes_since: int
+    step_denominator: int | None = None
+
+
+class MembersReadyToPromoteResponse(BaseModel):
+    """Paginated ready-to-promote board (proximity-sorted)."""
+
+    items: list[MembersReadyToPromoteRow]
+    total_count: int
+
+
+class MembersInRankRequest(BaseModel):
+    """Query for GET /api/v1/ranks/{rank_id}/members."""
+
+    gym_id: UUID
+    rank_id: UUID
+    start_index: int = Field(ge=0, default=0)
+    count: int = Field(ge=1, default=25)
+
+
+class MembersInRankRow(BaseModel):
+    """One member currently on a given main rank."""
+
+    member_id: UUID
+    name: str
+    avatar_url: str | None = None
+    current_sub_index: int | None = None
+    sub_label: str | None = None
+    classes_since: int
+    step_denominator: int | None = None
+
+
+class MembersInRankResponse(BaseModel):
+    """Paginated members on one main rank (ordered by sub-index)."""
+
+    items: list[MembersInRankRow]
+    total_count: int

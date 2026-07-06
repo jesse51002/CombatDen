@@ -162,6 +162,11 @@ class GymsService:
     ) -> GymResponse:
         """Update mutable fields on a gym row.
 
+        ``sub_rank_type`` (stripes vs div) rides the same dynamic SET
+        clause as every other mutable field here; it is NOT NULL on the
+        gyms row, so ``GymUpdateData`` rejects an explicit ``null`` for
+        it the same way it does for ``gym_name`` / ``timezone``.
+
         A save that carries a TIMEZONE additionally re-mints every live
         class's schedule version with that zone (see the constructor note)
         AFTER the gym row commits. The re-mint runs on EVERY

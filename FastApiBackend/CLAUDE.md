@@ -371,89 +371,158 @@ derivation across SQL files.
 
 ## Ranks domain
 
-`src/ranks/` owns the per-gym rank ladder (`gym_ranks`) and per-member
-rank changes.
+`src/ranks/` owns the per-gym rank ladder. **Two-level model:**
+`gym_ranks` holds **one row per MAIN rank**
+(`rank_id, gym_id, main_rank_num_order, name, image_url,
+classes_to_next_major, sub_rank_count, sub_rank_image_overrides JSONB,
+created_at`; `UNIQUE (gym_id, main_rank_num_order)`) — no `color`, no
+`sub_name`, no per-sub row. A member is pinned to a **leaf** via
+`members.current_rank_id` (→ a main row) + `members.current_sub_index`.
 
-**Service layout — a facade over three concern services, flat in
+**Sub-rank type is one per-gym setting; labels are derived, never
+stored.** `gyms.sub_rank_type` (`stripes | div`, default `stripes`) picks
+the labeling scheme for every rank in the gym; each main row only carries
+the leaf **count** (`sub_rank_count`: `0` = the main rank IS the leaf,
+`N >= 1` = `N` leaf sub-positions, `current_sub_index ∈ [0, N-1]`). The
+ONE labeler used everywhere is `Database/python_data/schema/gym_rank.py`:
+`sub_rank_label(type, index)` (stripes: `0` → `None`/bare belt, `1` →
+`"1 Stripe"`, `k` → `"k Stripes"`; div: `i` → `"Div i+1"`) and
+`rank_display_name(name, type, index)` (`"Main"` when the label is
+`None`, else `"Main · SubLabel"`). **Invariant, service-enforced on every
+assign/promote path:** `sub_rank_count > 0 ⇒ current_sub_index NOT
+NULL`; `sub_rank_count = 0 ⇒ current_sub_index NULL`.
+
+**`classes_to_next_major`** is the headline threshold to the NEXT main
+rank (gym-set, a rank-row property). The per-sub-step denominator is
+DERIVED, not stored — an even split
+(`ceil(classes_to_next_major / sub_rank_count)`) computed both in
+`members_billing_detail_service.py::_build_rank` and the ranks-reads SQL.
+
+**`sub_rank_image_overrides`** is a sparse `{sub_index: url}` JSONB map,
+**PERSIST-ONLY** — `update_rank` never prunes it, even when
+`sub_rank_count` shrinks or the gym's `sub_rank_type` changes (overrides
+for now-hidden indices go dormant and reactivate if the count grows back
+or the gym re-adopts them). Effective sub image = `override[idx]` if
+present, else the main row's `image_url`.
+
+**`image_url` is a normal user-writable field.** It is NOT in the
+`GYM_RANKS` immutable frozenset and carries no `REVOKE` in
+`access_rules/gym_ranks.sql` — a gym sets a preset default or uploads its
+own belt art via the CRM edit page like any other image field.
+AI/ThemeService-generated belt art is a **deferred** future direction,
+not the current design — see the superseded banner atop
+`FastApiBackend/rank_belt_image_build_spec.md`.
+
+**Service layout — a facade over four concern services, flat in
 `service/`.** `RanksService` (`ranks_service.py`) is a thin facade that
 keeps only the small self-contained concerns — single-rank CRUD and the
-`is_rank_enabled` toggle — and delegates everything else. The three
-concerns share a lean `RanksBase` (`ranks_base.py` — the `db_pool` plus
-the one read they all need, the in-session ordered ladder):
-`RanksMembers` (`ranks_members.py` — the two audit-logged member-rank
-endpoints plus the session-scoped `is_rank_enabled` / `backfill_lowest_for_gym`
-helpers the create / from-preset / enable flows compose),
-`RanksGroups` (`ranks_groups.py` — the full-ladder reorder and the
-whole-group rename / delete), and `RanksPresets` (`ranks_presets.py` —
-seed-from-preset plus the preset-catalog reads, composing `RanksMembers`
-for the shared lowest-rank backfill). DI (`core/dependencies.py`) wires
-the three concerns into the facade via the `ranks_members` /
-`ranks_groups` / `ranks_presets` providers; the router injects only the
+`is_rank_enabled` toggle — and delegates everything else. The four
+concerns share a lean `RanksBase` (`ranks_base.py` — the `db_pool`, the
+in-session ordered ladder read, the gym's `sub_rank_type` read, and the
+pure `_next_leaf` leaf-advance rule): `RanksMembers` (`ranks_members.py`
+— the two audit-logged member-rank endpoints (leaf invariant validation
+included) plus the session-scoped `is_rank_enabled` /
+`backfill_lowest_for_gym` helpers the create / from-preset / enable
+flows compose), `RanksGroups` (`ranks_groups.py` — now JUST the
+full-ladder two-phase reorder; with one row per main rank a rename is
+`update_rank(name)` and a delete is `delete_rank`, so there is no
+separate group op anymore), `RanksPresets` (`ranks_presets.py` —
+seed-from-preset, which also copies the preset kind's implied sub-rank
+type onto the gym, plus the preset-catalog reads; composes
+`RanksMembers` for the shared lowest-rank backfill), and **`RanksReads`**
+(`ranks_reads.py` — the two paginated member-board reads,
+`list_ready_to_promote` / `list_members_in_rank`, each
+`COUNT(*) OVER()`-paginated and deriving their rows' sub-labels from the
+gym's `sub_rank_type`). DI (`core/dependencies.py`) wires all four
+concerns into the facade via the `ranks_members` / `ranks_groups` /
+`ranks_presets` / `ranks_reads` providers; the router injects only the
 facade.
 
 Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
 
-- **Two member-rank endpoints, both atomic + audit-logged — and they are
-  the ONLY rank-change paths.** `POST /api/v1/ranks/promote-member`
-  advances a member one rung up the ordered ladder (a rank-less member →
-  the lowest rank; already at the top → **409**).
-  `POST /api/v1/ranks/set-member-rank` sets an explicit rank (correction /
-  demotion / assign), or `null` to unassign. Both run the member UPDATE
-  **and** a `member_activities` **`rank_changed`** row
+- **Two member-rank endpoints, both leaf-aware, atomic + audit-logged —
+  and they are the ONLY rank-change paths.**
+  `POST /api/v1/ranks/promote-member` advances a member one LEAF up the
+  ordered ladder — the next sub-position within the current main rank,
+  else the base leaf of the next main rank; a rank-less member → the
+  lowest leaf; already at the top main's top sub → **409**.
+  `POST /api/v1/ranks/set-member-rank` sets an explicit leaf (`rank_id?`
+  + `sub_index?`) for correction/demotion/assignment, or a `null`
+  `rank_id` to unassign — a `sub_rank_count > 0` target requires
+  `sub_index` in `[0, count-1]` (else 400), a `count = 0` target forces
+  `sub_index` to `None`. Both run the member UPDATE **and** a
+  `member_activities` **`rank_changed`** row
   (`RANK_CHANGED_ACTIVITY_TYPE` in `ranks_schema.py`) in one transaction
-  (`set_member_rank.sql` + `insert_rank_activity.sql`). The generic
-  `PUT /api/v1/members/{id}` deliberately does **not** accept
-  `current_rank_id` (removed from `MemberUpdateData`; also in the
-  `MEMBERS` immutable frozenset) — an unaudited rank write would silently
-  break the progress anchor below. `MemberCreateRequest` still takes an
-  initial rank (at create, anchor = `created_at` is already correct).
+  (`set_member_rank.sql` + `insert_rank_activity.sql`), naming the
+  activity with Python-derived `"Main · SubLabel"` display names via
+  `rank_display_name`. The generic `PUT /api/v1/members/{id}`
+  deliberately does **not** accept `current_rank_id` or
+  `current_sub_index` (both in the `MEMBERS` immutable frozenset) — an
+  unaudited rank write would silently break the progress anchor below.
+  `MemberCreateRequest` still takes an initial rank (at create, anchor =
+  `created_at` is already correct).
 - **The activity is the progress anchor, not just audit.** A member's
-  real progress toward the next rank is attendance since their last rank
-  change: `member_details.sql` counts `member_attendance` rows on the
-  denormalized `ma.occurred_at` (no join — `class_history` no longer
-  exists) where `occurred_at > COALESCE(MAX(rank_changed activity.time),
-  members.created_at)`, surfaced as `BillingRank.classes_since_rank`.
-  So logging a rank change is load-bearing. `classes_till_rankup` is the
-  gym-set **threshold** (the denominator), a rank-row property — never a
+  real progress toward their next leaf is attendance since their last
+  rank change: `member_details.sql` counts `member_attendance` rows on
+  the denormalized `ma.occurred_at` where `occurred_at >
+  COALESCE(MAX(rank_changed activity.time), members.created_at)`,
+  surfaced as `BillingRank.classes_since_rank`. So logging a rank change
+  is load-bearing. `BillingRank.classes_till_next_step` is the gym-set
+  major threshold or its even sub-split (see above) — never a
   per-member counter.
 - **Backfills log; delete-reassign stays silent — both on purpose.** The
   lowest-rank backfill (enable toggle, create, from-preset — all through
-  `_backfill_lowest_for_gym`) writes one `rank_changed` row per
-  backfilled member in the same statement
-  (`backfill_lowest_rank.sql`'s CTE), so a long-standing member starts at
-  0/N when ranks turn on instead of showing every class since join day.
-  Deleting a rank/group reassigns members **without** an activity — a
-  deletion is not a promotion, so their progress keeps accumulating from
-  the last real change.
-- **Reorder is two-phase, full-ladder, validated.** `POST
-  /api/v1/ranks/reorder` requires the gym's ENTIRE ladder — every rank
-  exactly once, target positions unique, and no target `main_rank_num_order`
-  at/above the shift offset — validated up front
-  (`RanksGroups._validate_reorder_payload` → 400) and applied in one
-  transaction: shift every row's main order out of range
+  `RanksMembers.backfill_lowest_for_gym`) writes one `rank_changed` row
+  per backfilled member, pinned to the lowest rank's base leaf (sub-index
+  `0` when it has sub-ranks, else `None`), with the Python-derived
+  display name (`backfill_lowest_rank.sql`'s CTE), so a long-standing
+  member starts at 0/N when ranks turn on instead of showing every class
+  since join day. Deleting a rank reassigns members **without** an
+  activity — a deletion is not a promotion, so their progress keeps
+  accumulating from the last real change.
+- **Reorder is two-phase, main-only, validated.** `POST
+  /api/v1/ranks/reorder` requires the gym's ENTIRE ladder of main
+  ranks — every rank exactly once, target positions unique, and no
+  target `main_rank_num_order` at/above the shift offset — validated up
+  front (`RanksGroups._validate_reorder_payload` → 400) and applied in
+  one transaction: shift every row's main order out of range
   (`reorder_ranks_shift.sql`, `+REORDER_SHIFT_OFFSET` = +100000), then set
   finals (`reorder_ranks_finalize.sql`). Required because
-  `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
-  non-deferrable (checked per row). The shift offset is the single
-  named constant `REORDER_SHIFT_OFFSET` (module-level in
-  `ranks_groups.py`); the `+100000` literal in `reorder_ranks_shift.sql`
-  carries a comment that it MUST stay in sync, and the guard rejects any
-  payload target `>= REORDER_SHIFT_OFFSET` so a target can never collide
-  with a still-shifted row mid-transaction. The order columns are
+  `UNIQUE (gym_id, main_rank_num_order)` is non-deferrable (checked per
+  row). The shift offset is the single named constant
+  `REORDER_SHIFT_OFFSET` (module-level in `ranks_groups.py`); the
+  `+100000` literal in `reorder_ranks_shift.sql` carries a comment that
+  it MUST stay in sync, and the guard rejects any payload target `>=
+  REORDER_SHIFT_OFFSET` so a target can never collide with a
+  still-shifted row mid-transaction. `main_rank_num_order` is
   update-immutable (`GYM_RANKS` frozenset) — `/reorder` is the only
   mover.
-- **Whole-group operations are atomic endpoints, never client fan-out.**
-  `main_name` is denormalized per row, so `PUT /api/v1/ranks/rename-group`
-  renames every row of a `(gym_id, main_rank_num_order)` group in one
-  UPDATE, and `DELETE /api/v1/ranks/group` reassigns members off all the
-  group's sub-ranks (nearest lower group's highest sub-rank, else higher
-  group's lowest, else NULL) then deletes the rows — one transaction.
-- **Rank belt images are generation-owned.** `gym_ranks.image_url` is not
-  accepted by the create/update requests and is update-immutable — belt
-  art is theme-styled generated imagery (full Phase-2 build spec:
-  `FastApiBackend/rank_belt_image_build_spec.md`; the writer is the image
-  pipeline, not a user field). Preset art still copies through
-  `insert_ranks_from_preset.sql` directly.
+- **Two paginated member reads (`RanksReads`).**
+  `GET /api/v1/ranks/ready-to-promote` — ranked, active-membership (not
+  frozen), not-top-of-ladder members, sorted by closeness to their next
+  leaf (`classes_since / step_denominator`).
+  `GET /api/v1/ranks/{rank_id}/members` — the roster currently on one
+  main rank, ordered by sub-index then name. Both are
+  `start_index`/`count` query-paginated with a `COUNT(*) OVER()` total.
+- **Presets are re-keyed on `rank_preset_kind`, not `gym_type`.**
+  `rank_presets` mirrors the main-row shape (`preset_id, preset_kind,
+  main_rank_num_order, name, image_url, classes_to_next_major,
+  sub_rank_count, implied_sub_rank_type`), keyed by the `RankPresetKind`
+  enum (`bjj_belts | bjj_belts_stripes | flat`) — the old Postgres
+  `gym_type` enum was dropped (the Python `GymType` StrEnum survives only
+  as the video/presets discipline vocabulary, unrelated to ranks now).
+  `POST /api/v1/ranks/from-preset` bulk-clones a preset kind's rows into
+  `gym_ranks` (`ON CONFLICT DO NOTHING`, idempotent) AND copies the
+  kind's `implied_sub_rank_type` onto the gym
+  (`set_gym_sub_rank_type_from_preset.sql`), then runs the same backfill.
+
+**Routes** (`/api/v1/ranks`, 15 total): `GET /` · `POST /` · `POST
+/from-preset` · `GET /presets` · `GET /presets/grouped` · `GET /enabled`
+· `PUT /enabled` · `POST /promote-member` · `POST /set-member-rank` ·
+`POST /reorder` · `GET /ready-to-promote` · `GET /{rank_id}/members` ·
+`GET /{rank_id}` · `PUT /{rank_id}` · `DELETE /{rank_id}`. **Removed:**
+`PUT /rename-group` and `DELETE /group` — with one row per main rank,
+those ops collapsed onto plain `update_rank`/`delete_rank`.
 
 ## Security
 

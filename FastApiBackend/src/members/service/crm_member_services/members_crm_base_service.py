@@ -52,13 +52,14 @@ class CrmBaseViewService:
         Each filter dimension narrows the result independently
         (the dimensions are AND-combined). Within the status
         dimension the selected statuses widen it (OR-combined),
-        and plan_ids likewise matches members holding any of the
-        given plans.
+        and plan_ids / rank_ids likewise match members holding
+        any of the given plans / currently at any of the given
+        ranks.
 
         Args:
             gym_id: The gym to filter by.
-            filters: Filters object with status, plans, date
-                range, and name.
+            filters: Filters object with status, plans, ranks,
+                date range, and name.
 
         Returns:
             Tuple of (WHERE clause string, params dict).
@@ -94,6 +95,12 @@ class CrmBaseViewService:
                 params[f"plan_{j}"] = str(plan_id)
             for j, live_status in enumerate(LIVE_DB_STATUSES):
                 params[f"plan_live_{j}"] = live_status.value
+
+        if filters.rank_ids:
+            clauses.append(
+                "p.current_rank_id = ANY(CAST(:rank_ids AS UUID[]))"
+            )
+            params["rank_ids"] = [str(rank_id) for rank_id in filters.rank_ids]
 
         if filters.date_range:
             if filters.date_range.start_date:

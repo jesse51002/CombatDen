@@ -1,9 +1,11 @@
 """Service for fetching full member billing detail data."""
 
+import math
 from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
+from schema.gym_rank import SubRankType, sub_rank_label
 from schema.member_membership import MembershipDbStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
@@ -448,7 +450,13 @@ class MembersBillingDetailService:
         )
 
     def _build_rank(self, target_row: dict) -> BillingRank | None:
-        """Build the BillingRank for the queried member.
+        """Build the BillingRank leaf for the queried member.
+
+        The member's leaf = their main rank (``rank_name``) + sub-index;
+        the sub label is derived from the gym's ``sub_rank_type``, the
+        per-step denominator is an even split of ``classes_to_next_major``
+        across the sub-positions (else the full major threshold), and the
+        image is the leaf-resolved belt (per-sub override or main image).
 
         Args:
             target_row: The queried member's profile row.
@@ -458,13 +466,26 @@ class MembersBillingDetailService:
         """
         if target_row["rank_id"] is None:
             return None
+
+        sub_rank_type = SubRankType(target_row["gym_sub_rank_type"])
+        sub_index = target_row["rank_sub_index"]
+        classes_to_next_major = target_row["rank_classes_to_next_major"]
+        sub_rank_count = target_row["rank_sub_rank_count"]
+        if sub_rank_count and sub_rank_count > 0:
+            classes_till_next_step = math.ceil(
+                classes_to_next_major / sub_rank_count
+            )
+        else:
+            classes_till_next_step = classes_to_next_major
+
         return BillingRank(
             rank_id=target_row["rank_id"],
-            main_name=target_row["rank_main_name"],
-            sub_name=target_row["rank_sub_name"],
-            image_url=target_row["rank_image_url"],
-            color=target_row["rank_color"],
-            classes_till_rankup=target_row["rank_classes_till_rankup"],
+            name=target_row["rank_name"],
+            sub_index=sub_index,
+            sub_label=sub_rank_label(sub_rank_type, sub_index),
+            image_url=target_row["rank_leaf_image_url"],
+            classes_to_next_major=classes_to_next_major,
+            classes_till_next_step=classes_till_next_step,
             classes_since_rank=target_row["rank_classes_since"],
         )
 

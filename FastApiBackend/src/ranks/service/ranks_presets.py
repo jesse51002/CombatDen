@@ -1,23 +1,22 @@
 """Ranks preset concern: seed-from-preset + preset catalog reads.
 
-Cloning a preset ladder into a gym runs the same lowest-rank backfill as
+Cloning a preset ladder into a gym also copies the preset kind's implied
+sub-rank type onto the gym, then runs the same lowest-rank backfill as
 the other rank-enabling flows, so this concern composes ``RanksMembers``
 for that shared step (its backfill runs inside the seed's own
 transaction).
 """
 
-from schema.gym_rank import GymType
+from schema.gym_rank import RankPresetKind
 from sqlalchemy import text
 
 from src.ranks import SQL_DIR
 from src.ranks.schema.ranks_schema import (
     AllPresetsGroupedResponse,
     FromPresetRequest,
-    MainRankPresetGroup,
     RankListResponse,
     RankPresetListResponse,
     RankPresetResponse,
-    SubRankPreset,
 )
 from src.ranks.service.ranks_base import RanksBase
 from src.ranks.service.ranks_members import RanksMembers
@@ -40,14 +39,31 @@ class RanksPresets(RanksBase):
         self,
         request: FromPresetRequest,
     ) -> RankListResponse:
-        """Bulk-clone a preset ladder into a gym, then backfill."""
+        """Clone a preset ladder into a gym, set its type, then backfill.
+
+        Runs three steps in one transaction: insert the preset's main
+        rows (idempotent), copy the preset kind's implied sub-rank type
+        onto the gym (skipped for a subless preset), then backfill
+        rank-less members to the lowest leaf if ranks are enabled.
+        """
         async with self._db_pool.session() as session:
             insert_sql = load_sql(SQL_DIR / "insert_ranks_from_preset.sql")
             await session.execute(
                 text(insert_sql),
                 {
                     "gym_id": str(request.gym_id),
-                    "gym_type": request.gym_type.value,
+                    "preset_kind": request.preset_kind.value,
+                },
+            )
+
+            type_sql = load_sql(
+                SQL_DIR / "set_gym_sub_rank_type_from_preset.sql"
+            )
+            await session.execute(
+                text(type_sql),
+                {
+                    "gym_id": str(request.gym_id),
+                    "preset_kind": request.preset_kind.value,
                 },
             )
 
@@ -58,64 +74,45 @@ class RanksPresets(RanksBase):
                 )
 
             items = await self._list_ranks_in_session(session, request.gym_id)
+            sub_rank_type = await self._gym_sub_rank_type(
+                session,
+                request.gym_id,
+            )
             await session.commit()
 
-        return RankListResponse(items=items)
+        return RankListResponse(items=items, sub_rank_type=sub_rank_type)
 
     async def list_presets(
         self,
-        gym_type: GymType,
+        preset_kind: RankPresetKind,
     ) -> RankPresetListResponse:
-        """Flat preset list for a single gym_type."""
+        """Flat preset list for a single preset kind."""
         sql = load_sql(SQL_DIR / "list_presets.sql")
         async with self._db_pool.session() as session:
             rows = (
-                (await session.execute(text(sql), {"gym_type": gym_type.value})).mappings().all()
+                (await session.execute(text(sql), {"preset_kind": preset_kind.value}))
+                .mappings()
+                .all()
             )
         return RankPresetListResponse(
             items=[RankPresetResponse(**dict(row)) for row in rows],
         )
 
     async def get_all_presets_grouped(self) -> AllPresetsGroupedResponse:
-        """All preset ladders, keyed by gym_type, nested main → sub.
+        """All preset ladders, keyed by preset kind (flat main rows).
 
-        Single SQL pass; rows arrive sorted by gym_type, main, sub.
-        Build the nested structure in one O(n) iteration, opening a
-        new ``MainRankPresetGroup`` whenever ``(gym_type, main)``
-        changes.
+        Single SQL pass; rows arrive sorted by preset_kind then main
+        order. Bucket them into one list per kind in one O(n) pass.
         """
         sql = load_sql(SQL_DIR / "list_all_presets.sql")
         async with self._db_pool.session() as session:
             rows = (await session.execute(text(sql))).mappings().all()
 
-        presets: dict[GymType, list[MainRankPresetGroup]] = {}
-        current_key: tuple[GymType, int] | None = None
-        current_group: MainRankPresetGroup | None = None
-
+        presets: dict[RankPresetKind, list[RankPresetResponse]] = {}
         for row in rows:
-            gym_type = GymType(row["gym_type"])
-            main_order = row["main_rank_num_order"]
-            key = (gym_type, main_order)
-
-            if key != current_key:
-                current_group = MainRankPresetGroup(
-                    main_rank_num_order=main_order,
-                    main_name=row["main_name"],
-                    sub_ranks=[],
-                )
-                presets.setdefault(gym_type, []).append(current_group)
-                current_key = key
-
-            assert current_group is not None  # noqa: S101 — invariant
-            current_group.sub_ranks.append(
-                SubRankPreset(
-                    preset_id=row["preset_id"],
-                    sub_rank_num_order=row["sub_rank_num_order"],
-                    sub_name=row["sub_name"],
-                    classes_till_rankup=row["classes_till_rankup"],
-                    image_url=row["image_url"],
-                    color=row["color"],
-                )
+            preset_kind = RankPresetKind(row["preset_kind"])
+            presets.setdefault(preset_kind, []).append(
+                RankPresetResponse(**dict(row))
             )
 
         return AllPresetsGroupedResponse(presets=presets)

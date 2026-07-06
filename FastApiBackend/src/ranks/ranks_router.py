@@ -7,12 +7,16 @@ from uuid import UUID
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
-from schema.gym_rank import GymType
+from schema.gym_rank import RankPresetKind
 
 from src.core.dependencies import DependencyInjector
 from src.ranks.schema.ranks_schema import (
     AllPresetsGroupedResponse,
     FromPresetRequest,
+    MembersInRankRequest,
+    MembersInRankResponse,
+    MembersReadyToPromoteRequest,
+    MembersReadyToPromoteResponse,
     RankCreateRequest,
     RankEnabledRequest,
     RankEnabledResponse,
@@ -20,7 +24,6 @@ from src.ranks.schema.ranks_schema import (
     RankMemberResponse,
     RankPresetListResponse,
     RankPromoteMemberRequest,
-    RankRenameGroupRequest,
     RankReorderRequest,
     RankResponse,
     RankSetMemberRequest,
@@ -74,7 +77,7 @@ async def list_ranks(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
 ) -> RankListResponse:
-    """List all ranks for a gym, ordered by main then sub."""
+    """List a gym's ladder (one row per main rank) plus its sub_rank_type."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
@@ -98,7 +101,7 @@ async def list_ranks(
     status_code=status.HTTP_201_CREATED,
     summary="Create a rank",
     description=(
-        "Inserts a new rank. If the gym has ``is_rank_enabled`` "
+        "Inserts a new main rank. If the gym has ``is_rank_enabled`` "
         "set, every rank-less member is backfilled to the lowest "
         "rank in the gym (which may be the rank just created)."
     ),
@@ -148,7 +151,8 @@ async def create_rank(
     summary="Seed gym ranks from a preset ladder",
     description=(
         "Bulk-clones every ``rank_presets`` row of the given "
-        "``gym_type`` into ``gym_ranks`` for the target gym. Uses "
+        "``preset_kind`` into ``gym_ranks`` for the target gym and "
+        "copies the preset's implied sub-rank type onto the gym. Uses "
         "``ON CONFLICT DO NOTHING`` so re-running on the same gym "
         "is idempotent. Triggers the lowest-rank backfill if the "
         "gym has ``is_rank_enabled`` set."
@@ -174,9 +178,9 @@ async def seed_from_preset(
         return await ranks_service.from_preset(request)
     except Exception:
         logger.error(
-            "Failed to seed from preset: gym_id=%s, gym_type=%s",
+            "Failed to seed from preset: gym_id=%s, preset_kind=%s",
             request.gym_id,
-            request.gym_type,
+            request.preset_kind,
             exc_info=True,
         )
         raise HTTPException(
@@ -188,7 +192,7 @@ async def seed_from_preset(
 @ranks_router.get(
     "/presets",
     response_model=RankPresetListResponse,
-    summary="Flat preset list for one gym_type",
+    summary="Flat preset list for one preset kind",
     responses={
         200: {"description": "Presets listed"},
         401: {"description": "Not authenticated"},
@@ -196,20 +200,20 @@ async def seed_from_preset(
 )
 @inject
 async def list_presets(
-    gym_type: GymType,
+    preset_kind: RankPresetKind,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
 ) -> RankPresetListResponse:
-    """List rank presets for a single gym_type."""
+    """List rank presets for a single preset kind."""
     auth.get_current_user(credentials)
 
     try:
-        return await ranks_service.list_presets(gym_type)
+        return await ranks_service.list_presets(preset_kind)
     except Exception:
         logger.error(
-            "Failed to list presets: gym_type=%s",
-            gym_type,
+            "Failed to list presets: preset_kind=%s",
+            preset_kind,
             exc_info=True,
         )
         raise HTTPException(
@@ -221,10 +225,10 @@ async def list_presets(
 @ranks_router.get(
     "/presets/grouped",
     response_model=AllPresetsGroupedResponse,
-    summary="All presets grouped by gym_type and main rank",
+    summary="All presets grouped by preset kind",
     description=(
-        "Returns every ``rank_presets`` row, keyed by ``gym_type``, "
-        "with sub-ranks nested under their main rank in order."
+        "Returns every ``rank_presets`` row, keyed by ``preset_kind``, "
+        "as a flat list of main ranks in ladder order."
     ),
     responses={
         200: {"description": "Grouped presets returned"},
@@ -237,7 +241,7 @@ async def get_presets_grouped(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
 ) -> AllPresetsGroupedResponse:
-    """Return all presets grouped by gym_type and main rank."""
+    """Return all presets grouped by preset kind."""
     auth.get_current_user(credentials)
 
     try:
@@ -347,12 +351,13 @@ async def set_rank_enabled(
 @ranks_router.post(
     "/promote-member",
     response_model=RankMemberResponse,
-    summary="Promote a member to the next rank",
+    summary="Promote a member to the next leaf",
     description=(
-        "Advances the member one step up the gym's ordered ladder. "
-        "A rank-less member is assigned the lowest rank. Logs a "
-        "``rank_changed`` activity. Fails with 409 if the member is "
-        "already at the highest rank."
+        "Advances the member one leaf up the gym's ordered ladder — "
+        "the next sub-position within their current main rank, else "
+        "the base leaf of the next main rank. A rank-less member is "
+        "assigned the lowest leaf. Logs a ``rank_changed`` activity. "
+        "Fails with 409 if the member is already at the highest leaf."
     ),
     responses={
         200: {"description": "Member promoted"},
@@ -370,7 +375,7 @@ async def promote_member(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
 ) -> RankMemberResponse:
-    """Promote a member one step up the ladder."""
+    """Promote a member one leaf up the ladder."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
 
@@ -396,10 +401,12 @@ async def promote_member(
     response_model=RankMemberResponse,
     summary="Set a member's rank explicitly",
     description=(
-        "Sets the member to an explicit rank (correction / demotion "
+        "Sets the member to an explicit leaf (correction / demotion "
         "/ assignment), or to no rank when ``rank_id`` is null. The "
-        "target rank must belong to the member's gym. Logs a "
-        "``rank_changed`` activity when the rank changes."
+        "target rank must belong to the member's gym; a rank with "
+        "sub-ranks requires a ``sub_index`` in range, a subless rank "
+        "forces it to null. Logs a ``rank_changed`` activity when the "
+        "leaf changes."
     ),
     responses={
         200: {"description": "Member rank set"},
@@ -483,94 +490,113 @@ async def reorder_ranks(
         ) from None
 
 
-@ranks_router.put(
-    "/rename-group",
-    response_model=RankListResponse,
-    summary="Rename a whole main-rank group",
+# ---------- paginated member reads (declared before /{rank_id}) ----------
+
+
+@ranks_router.get(
+    "/ready-to-promote",
+    response_model=MembersReadyToPromoteResponse,
+    summary="Members closest to their next promotion",
     description=(
-        "Renames every sub-rank row sharing the group's "
-        "``main_rank_num_order`` in one atomic UPDATE "
-        "(``main_name`` is denormalized per row). Returns the "
-        "updated ladder."
+        "Paginated board of ranked, active-membership (not frozen), "
+        "not-top-of-ladder members, ordered by how close they are to "
+        "their next leaf (attendance since their last rank change over "
+        "the per-step threshold)."
     ),
     responses={
-        200: {"description": "Group renamed; ladder returned"},
+        200: {"description": "Board returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Rank group not found"},
     },
 )
 @inject
-async def rename_group(
-    request: RankRenameGroupRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
-) -> RankListResponse:
-    """Rename a whole main-rank group atomically."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
-
-    try:
-        return await ranks_service.rename_group(request)
-    except ValueError as exc:
-        raise _rank_http_error(exc) from None
-    except Exception:
-        logger.error(
-            "Failed to rename rank group: gym_id=%s, main_order=%s",
-            request.gym_id,
-            request.main_rank_num_order,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to rename rank group",
-        ) from None
-
-
-@ranks_router.delete(
-    "/group",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Hard-delete a whole main-rank group",
-    description=(
-        "Reassigns every member on any of the group's sub-ranks to "
-        "the nearest lower group's highest sub-rank (else the "
-        "nearest higher group's lowest, else NULL), then deletes "
-        "every row of the group — one transaction."
-    ),
-    responses={
-        204: {"description": "Group deleted"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized for this gym"},
-        404: {"description": "Rank group not found"},
-    },
-)
-@inject
-async def delete_group(
+async def list_ready_to_promote(
     gym_id: UUID,
-    main_rank_num_order: int,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    start_index: int = 0,
+    count: int = 25,
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
-) -> None:
-    """Hard-delete a main-rank group with downgrade-first semantics."""
+) -> MembersReadyToPromoteResponse:
+    """List members closest to their next promotion."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await ranks_service.delete_group(gym_id, main_rank_num_order)
-    except ValueError as exc:
-        raise _rank_http_error(exc) from None
+        return await ranks_service.list_ready_to_promote(
+            MembersReadyToPromoteRequest(
+                gym_id=gym_id,
+                start_index=start_index,
+                count=count,
+            )
+        )
     except Exception:
         logger.error(
-            "Failed to delete rank group: gym_id=%s, main_order=%s",
+            "Failed to list ready-to-promote: gym_id=%s",
             gym_id,
-            main_rank_num_order,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete rank group",
+            detail="Failed to list ready-to-promote members",
+        ) from None
+
+
+@ranks_router.get(
+    "/{rank_id}/members",
+    response_model=MembersInRankResponse,
+    summary="Members currently on a rank",
+    description=(
+        "Paginated roster of members whose current rank is this one, "
+        "ordered by sub-index (base leaf first) then name."
+    ),
+    responses={
+        200: {"description": "Members returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Rank not found"},
+    },
+)
+@inject
+async def list_members_in_rank(
+    rank_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    start_index: int = 0,
+    count: int = 25,
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
+) -> MembersInRankResponse:
+    """List members currently on a given main rank."""
+    user_payload = auth.get_current_user(credentials)
+
+    try:
+        rank = await ranks_service.get_rank(rank_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rank not found",
+        ) from None
+
+    await auth.verify_gym_employee(rank.gym_id, user_payload)
+
+    try:
+        return await ranks_service.list_members_in_rank(
+            MembersInRankRequest(
+                gym_id=rank.gym_id,
+                rank_id=rank_id,
+                start_index=start_index,
+                count=count,
+            )
+        )
+    except Exception:
+        logger.error(
+            "Failed to list members in rank: rank_id=%s",
+            rank_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list members in rank",
         ) from None
 
 
@@ -674,8 +700,9 @@ async def update_rank(
     summary="Hard-delete a rank",
     description=(
         "Reassigns every member with this rank to the next-lower "
-        "rank if one exists, else the next-higher rank, else NULL. "
-        "Then hard-deletes the row from ``gym_ranks``."
+        "rank if one exists, else the next-higher rank, else NULL "
+        "(pinned to the replacement's base leaf). Then hard-deletes "
+        "the row from ``gym_ranks``."
     ),
     responses={
         204: {"description": "Rank deleted"},
