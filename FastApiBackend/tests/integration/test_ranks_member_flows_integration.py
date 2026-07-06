@@ -71,6 +71,17 @@ _MEMBER_RANK_SQL = """
 SELECT current_rank_id FROM members WHERE member_id = $1
 """
 
+_RANKLESS_MEMBERS_SQL = """
+SELECT member_id
+FROM members
+WHERE gym_id = $1
+  AND current_rank_id IS NULL
+"""
+
+_RESTORE_NULL_RANK_SQL = """
+UPDATE members SET current_rank_id = NULL WHERE member_id = $1
+"""
+
 
 def _get_db_url() -> str:
     env = dotenv_values(_ENV_PATH)
@@ -152,6 +163,51 @@ class _ActivityJanitor:
         added = after - self.before
         if added:
             _run_async(_execute(_DELETE_ACTIVITIES_SQL, list(added)))
+
+
+class _CollateralBackfillJanitor:
+    """Cleanup for the members a gym-wide enable-backfill touches BESIDES
+    the one under test.
+
+    Flipping ``is_rank_enabled`` false→true backfills the lowest rank to
+    EVERY rank-less member of the gym and writes each a ``rank_changed``
+    row — not just ``flow_member``. This snapshots those other rank-less
+    members (all currently NULL-ranked) plus their existing rank_changed
+    activity ids up front; on close it restores each to rank-less (a direct
+    UPDATE, so the restore itself writes no new activity) and deletes
+    exactly the audit rows the backfill added for them. The member under
+    test is excluded — the test restores that one to its seed rank itself.
+    """
+
+    def __init__(self, exclude: UUID) -> None:
+        self.members = [
+            r["member_id"]
+            for r in _run_async(_fetch(_RANKLESS_MEMBERS_SQL, UUID(GYM_ID)))
+            if r["member_id"] != exclude
+        ]
+        self.before = {
+            member_id: {
+                r["activity_id"]
+                for r in _run_async(
+                    _fetch(_RANK_ACTIVITY_IDS_SQL, member_id, UUID(GYM_ID)),
+                )
+            }
+            for member_id in self.members
+        }
+
+    def clean(self) -> None:
+        added: list = []
+        for member_id in self.members:
+            after = {
+                r["activity_id"]
+                for r in _run_async(
+                    _fetch(_RANK_ACTIVITY_IDS_SQL, member_id, UUID(GYM_ID)),
+                )
+            }
+            added.extend(after - self.before[member_id])
+            _run_async(_execute(_RESTORE_NULL_RANK_SQL, member_id))
+        if added:
+            _run_async(_execute(_DELETE_ACTIVITIES_SQL, added))
 
 
 def _next_rank_id(ladder: list[dict], current_rank_id) -> str:
@@ -394,6 +450,12 @@ class TestEnableBackfillAudit:
         lowest = str(ladder[0]["rank_id"])
 
         janitor = _ActivityJanitor(member_id)
+        # The false→true toggle backfills EVERY rank-less member of the gym,
+        # not just flow_member. Snapshot the collateral ones now (flow_member
+        # excluded — it's restored explicitly below) so their backfilled rank
+        # and audit rows are undone in teardown too, leaving the shared gym
+        # exactly as this test found it.
+        collateral = _CollateralBackfillJanitor(exclude=member_id)
         try:
             assert _set_member_rank(api, member_id, None).status_code == 200
 
@@ -418,10 +480,12 @@ class TestEnableBackfillAudit:
             )
         finally:
             # Re-assert the seed's enabled state, restore the member's
-            # rank, and drop every audit row this flow added.
+            # rank, and drop every audit row this flow added — for
+            # flow_member and for every other member the backfill touched.
             api.put(
                 f"{RANKS_BASE}/enabled",
                 json={"gym_id": GYM_ID, "is_rank_enabled": True},
             )
             _set_member_rank(api, member_id, original)
             janitor.clean()
+            collateral.clean()

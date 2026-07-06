@@ -48,7 +48,10 @@ flowchart TB
     payment_sync_one_time["PaymentSyncOneTime — src/sync/ · one-shot one-time engine<br/>ONE consolidated invoice for pending one_time/trial memberships<br/>(start's non-recurring path) · reuses Discounts.resolve · NOT a converge"]
     payer_resolver["PayerResolver<br/>shared payer resolution (paid_by_member_id)"]
     membership_plans_service["MembershipPlansService<br/>src/plans/"]
-    ranks_service["RanksService"]
+    ranks_service["RanksService<br/>src/ranks/ · facade over the rank concerns (keeps single-rank CRUD + the is_rank_enabled toggle)"]
+    ranks_members["RanksMembers<br/>src/ranks/ · member-rank changes (promote/set, audit-logged) + the lowest-rank backfill helpers"]
+    ranks_groups["RanksGroups<br/>src/ranks/ · full-ladder two-phase reorder + atomic whole-group rename/delete"]
+    ranks_presets["RanksPresets<br/>src/ranks/ · seed-from-preset + preset catalog reads (composes RanksMembers for the shared backfill)"]
     rewards_redemption_service["RewardsRedemptionService"]
     rewards_service["RewardsService"]
     streak_service["StreakService<br/>src/checkin/"]
@@ -134,6 +137,10 @@ flowchart TB
     classes_undo_service --> checkin_reverser
     gyms_service -->|"gym tz change: re-mint per live class"| classes_versions_service
     r_rank --> ranks_service
+    ranks_service --> ranks_members
+    ranks_service --> ranks_groups
+    ranks_service --> ranks_presets
+    ranks_presets --> ranks_members
     r_rew --> rewards_redemption_service
     r_rew --> rewards_service
     r_waiver --> waivers_service
@@ -231,7 +238,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe,YouTube,LLMProvider,CDN ext;
   class r_mem,r_gym,r_cls,r_chk,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme,r_upl route;
-  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,theme_showcase_defaults_service,uploads_s3_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
+  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,ranks_members,ranks_groups,ranks_presets,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,theme_showcase_defaults_service,uploads_s3_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_agent_service svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

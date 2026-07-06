@@ -4,6 +4,11 @@
 -- UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order) constraint
 -- (which is non-deferrable, so it is checked per row). Two shifted rows
 -- never collide because their original (main, sub) pairs are unique.
+--
+-- The +100000 offset MUST stay in sync with REORDER_SHIFT_OFFSET in
+-- src/ranks/service/ranks_groups.py — the reorder guard rejects any
+-- payload target main order >= that constant so this shift can never
+-- collide with a valid target. Change one, change the other.
 UPDATE gym_ranks
 SET main_rank_num_order = main_rank_num_order + 100000
 WHERE gym_id = CAST(:gym_id AS UUID)

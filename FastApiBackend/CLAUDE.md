@@ -372,7 +372,26 @@ derivation across SQL files.
 ## Ranks domain
 
 `src/ranks/` owns the per-gym rank ladder (`gym_ranks`) and per-member
-rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
+rank changes.
+
+**Service layout — a facade over three concern services, flat in
+`service/`.** `RanksService` (`ranks_service.py`) is a thin facade that
+keeps only the small self-contained concerns — single-rank CRUD and the
+`is_rank_enabled` toggle — and delegates everything else. The three
+concerns share a lean `RanksBase` (`ranks_base.py` — the `db_pool` plus
+the one read they all need, the in-session ordered ladder):
+`RanksMembers` (`ranks_members.py` — the two audit-logged member-rank
+endpoints plus the session-scoped `is_rank_enabled` / `backfill_lowest_for_gym`
+helpers the create / from-preset / enable flows compose),
+`RanksGroups` (`ranks_groups.py` — the full-ladder reorder and the
+whole-group rename / delete), and `RanksPresets` (`ranks_presets.py` —
+seed-from-preset plus the preset-catalog reads, composing `RanksMembers`
+for the shared lowest-rank backfill). DI (`core/dependencies.py`) wires
+the three concerns into the facade via the `ranks_members` /
+`ranks_groups` / `ranks_presets` providers; the router injects only the
+facade.
+
+Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
 
 - **Two member-rank endpoints, both atomic + audit-logged — and they are
   the ONLY rank-change paths.** `POST /api/v1/ranks/promote-member`
@@ -408,12 +427,19 @@ rank changes. Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   the last real change.
 - **Reorder is two-phase, full-ladder, validated.** `POST
   /api/v1/ranks/reorder` requires the gym's ENTIRE ladder — every rank
-  exactly once, target positions unique — validated up front
-  (`_validate_reorder_payload` → 400) and applied in one transaction:
-  shift every row's main order out of range (`reorder_ranks_shift.sql`,
-  +100000), then set finals (`reorder_ranks_finalize.sql`). Required
-  because `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
-  non-deferrable (checked per row). The order columns are
+  exactly once, target positions unique, and no target `main_rank_num_order`
+  at/above the shift offset — validated up front
+  (`RanksGroups._validate_reorder_payload` → 400) and applied in one
+  transaction: shift every row's main order out of range
+  (`reorder_ranks_shift.sql`, `+REORDER_SHIFT_OFFSET` = +100000), then set
+  finals (`reorder_ranks_finalize.sql`). Required because
+  `UNIQUE (gym_id, main_rank_num_order, sub_rank_num_order)` is
+  non-deferrable (checked per row). The shift offset is the single
+  named constant `REORDER_SHIFT_OFFSET` (module-level in
+  `ranks_groups.py`); the `+100000` literal in `reorder_ranks_shift.sql`
+  carries a comment that it MUST stay in sync, and the guard rejects any
+  payload target `>= REORDER_SHIFT_OFFSET` so a target can never collide
+  with a still-shifted row mid-transaction. The order columns are
   update-immutable (`GYM_RANKS` frozenset) — `/reorder` is the only
   mover.
 - **Whole-group operations are atomic endpoints, never client fan-out.**

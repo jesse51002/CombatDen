@@ -28,6 +28,9 @@ from src.ranks.schema.ranks_schema import (
     RankSetMemberRequest,
     RankUpdateData,
 )
+from src.ranks.service.ranks_groups import REORDER_SHIFT_OFFSET, RanksGroups
+from src.ranks.service.ranks_members import RanksMembers
+from src.ranks.service.ranks_presets import RanksPresets
 from src.ranks.service.ranks_service import RanksService
 from tests.conftest import make_rank_row
 
@@ -61,6 +64,19 @@ def _make_pool_mock(session: MagicMock) -> MagicMock:
     pool.session.return_value = session
     pool.execute_with_retry = AsyncMock()
     return pool
+
+
+def _make_service(pool: MagicMock) -> RanksService:
+    """The facade wired over its concern services, all sharing one pool.
+
+    Mirrors the DI wiring in ``src/core/dependencies.py``: every concern
+    reads/writes through the same ``db_pool``, so the mocked session flows
+    through the delegated calls exactly as it did before the split.
+    """
+    members = RanksMembers(pool)
+    groups = RanksGroups(pool)
+    presets = RanksPresets(pool, members)
+    return RanksService(pool, members, groups, presets)
 
 
 def _executed_sql_strings(session: MagicMock) -> list[str]:
@@ -99,7 +115,7 @@ async def test_create_rank_runs_backfill_when_enabled():
 
     session = _make_session_mock([insert_result, enabled_result, backfill_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     request = RankCreateRequest(
         gym_id=gym_id,
@@ -144,7 +160,7 @@ async def test_create_rank_skips_backfill_when_disabled():
 
     session = _make_session_mock([insert_result, enabled_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     request = RankCreateRequest(
         gym_id=gym_id,
@@ -181,7 +197,7 @@ async def test_from_preset_runs_backfill_when_enabled():
         [insert_result, enabled_result, backfill_result, list_result],
     )
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     from schema.gym_rank import GymType  # noqa: PLC0415
 
@@ -209,7 +225,7 @@ async def test_from_preset_skips_backfill_when_disabled():
 
     session = _make_session_mock([insert_result, enabled_result, list_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     from schema.gym_rank import GymType  # noqa: PLC0415
 
@@ -240,7 +256,7 @@ async def test_set_rank_enabled_false_to_true_runs_backfill():
 
     session = _make_session_mock([current_result, update_result, backfill_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.set_rank_enabled(
         RankEnabledRequest(gym_id=gym_id, is_rank_enabled=True),
@@ -265,7 +281,7 @@ async def test_set_rank_enabled_true_to_false_skips_backfill():
 
     session = _make_session_mock([current_result, update_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.set_rank_enabled(
         RankEnabledRequest(gym_id=gym_id, is_rank_enabled=False),
@@ -290,7 +306,7 @@ async def test_set_rank_enabled_true_to_true_skips_backfill():
     }
     session = _make_session_mock([current_result, update_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.set_rank_enabled(
         RankEnabledRequest(gym_id=gym_id, is_rank_enabled=True),
@@ -306,7 +322,7 @@ async def test_set_rank_enabled_404_when_gym_missing():
     current_result.mappings.return_value.fetchone.return_value = None
     session = _make_session_mock([current_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     with pytest.raises(ValueError, match="Gym not found"):
         await service.set_rank_enabled(
@@ -339,7 +355,7 @@ async def test_delete_rank_uses_lower_neighbor_when_present():
         [neighbor_result, reassign_result, delete_result],
     )
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.delete_rank(rank_id)
 
@@ -374,7 +390,7 @@ async def test_delete_rank_falls_back_to_higher_when_no_lower():
         [neighbor_result, reassign_result, delete_result],
     )
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.delete_rank(rank_id)
 
@@ -400,7 +416,7 @@ async def test_delete_rank_sets_null_when_only_rank():
         [neighbor_result, reassign_result, delete_result],
     )
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.delete_rank(rank_id)
 
@@ -416,7 +432,7 @@ async def test_delete_rank_404_when_missing():
     neighbor_result.mappings.return_value.fetchone.return_value = None
     session = _make_session_mock([neighbor_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     with pytest.raises(ValueError, match="Rank not found"):
         await service.delete_rank(rank_id)
@@ -442,7 +458,7 @@ async def test_delete_rank_runs_reassign_and_delete_in_same_session():
         [neighbor_result, reassign_result, delete_result],
     )
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     await service.delete_rank(rank_id)
 
@@ -473,7 +489,7 @@ def test_immutable_columns_guard_fires_on_rank_id_or_gym_id():
 async def test_update_rank_400_when_no_fields():
     """Empty update data raises a clear 'no fields' error."""
     pool = _make_pool_mock(_make_session_mock([]))
-    service = RanksService(pool)
+    service = _make_service(pool)
     with pytest.raises(ValueError, match="No fields"):
         await service.update_rank(uuid4(), RankUpdateData())
 
@@ -483,7 +499,7 @@ async def test_update_rank_404_when_returning_empty():
     """A successful UPDATE that matched zero rows raises Rank not found."""
     pool = _make_pool_mock(_make_session_mock([]))
     pool.execute_with_retry = AsyncMock(return_value=None)
-    service = RanksService(pool)
+    service = _make_service(pool)
     with pytest.raises(ValueError, match="Rank not found"):
         await service.update_rank(uuid4(), RankUpdateData(main_name="X"))
 
@@ -545,7 +561,7 @@ async def test_get_all_presets_grouped_handles_boundaries():
     list_result.mappings.return_value.all.return_value = rows
     session = _make_session_mock([list_result])
     pool = _make_pool_mock(session)
-    service = RanksService(pool)
+    service = _make_service(pool)
 
     response = await service.get_all_presets_grouped()
 
@@ -597,7 +613,7 @@ async def test_promote_member_null_rank_assigns_lowest():
             _result(None),  # insert_rank_activity
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     response = await service.promote_member(
         RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
@@ -623,7 +639,7 @@ async def test_promote_member_advances_one_step():
             _result(None),
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     response = await service.promote_member(
         RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
@@ -645,7 +661,7 @@ async def test_promote_member_raises_at_top_rank():
             _result(ladder, many=True),
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="highest rank"):
         await service.promote_member(
@@ -659,7 +675,7 @@ async def test_promote_member_404_when_member_missing():
     gym_id = uuid4()
     member_id = uuid4()
     session = _make_session_mock([_result(None)])
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="Member not found"):
         await service.promote_member(
@@ -676,7 +692,7 @@ async def test_promote_member_404_when_wrong_gym():
     session = _make_session_mock(
         [_result({"current_rank_id": None, "gym_id": other_gym})],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="not found"):
         await service.promote_member(
@@ -700,7 +716,7 @@ async def test_promote_member_logs_activity_in_same_session():
             _result(None),
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.promote_member(
         RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
@@ -733,7 +749,7 @@ async def test_set_member_rank_to_explicit_rank_logs_change():
             _result(None),  # insert_rank_activity
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     response = await service.set_member_rank(
         RankSetMemberRequest(
@@ -762,7 +778,7 @@ async def test_set_member_rank_unassign_writes_null_and_no_target_read():
             _result(None),  # insert_rank_activity (rank changed → logged)
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     response = await service.set_member_rank(
         RankSetMemberRequest(gym_id=gym_id, member_id=member_id, rank_id=None),
@@ -789,7 +805,7 @@ async def test_set_member_rank_404_when_target_in_other_gym():
             _result(target_row),
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="Rank not found"):
         await service.set_member_rank(
@@ -834,7 +850,7 @@ async def test_reorder_ranks_shifts_before_finalizing():
             _result([], many=True),  # final list
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.reorder_ranks(
         RankReorderRequest(
@@ -889,7 +905,7 @@ async def test_reorder_ranks_rejects_unknown_rank():
     session = _make_session_mock(
         [_result(_ladder_rows(gym_id, known), many=True)],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="not in this gym's ladder"):
         await service.reorder_ranks(
@@ -909,7 +925,7 @@ async def test_reorder_ranks_rejects_partial_payload():
     session = _make_session_mock(
         [_result(_ladder_rows(gym_id, rank_a, rank_b), many=True)],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="entire ladder"):
         await service.reorder_ranks(
@@ -929,11 +945,32 @@ async def test_reorder_ranks_rejects_duplicate_position():
     session = _make_session_mock(
         [_result(_ladder_rows(gym_id, rank_a, rank_b), many=True)],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="Duplicate target position"):
         await service.reorder_ranks(
             _reorder_request(gym_id, (rank_a, 0, 0), (rank_b, 0, 0)),
+        )
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reorder_ranks_rejects_target_in_shift_space():
+    """A target main order at/above the phase-1 shift offset is a
+    ValueError (→400): it could collide with a still-shifted row during
+    phase 2 and trip the non-deferrable unique-order constraint. The
+    guard must fire before any shift/finalize runs."""
+    gym_id = uuid4()
+    rank_a = uuid4()
+
+    session = _make_session_mock(
+        [_result(_ladder_rows(gym_id, rank_a), many=True)],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match=f"below {REORDER_SHIFT_OFFSET}"):
+        await service.reorder_ranks(
+            _reorder_request(gym_id, (rank_a, REORDER_SHIFT_OFFSET, 0)),
         )
     session.commit.assert_not_awaited()
 
@@ -952,7 +989,7 @@ async def test_rename_group_updates_rows_and_returns_ladder():
             _result([], many=True),  # list
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.rename_group(
         RankRenameGroupRequest(
@@ -976,7 +1013,7 @@ async def test_rename_group_updates_rows_and_returns_ladder():
 async def test_rename_group_raises_when_group_missing():
     """No rows renamed → the group doesn't exist → ValueError."""
     session = _make_session_mock([_result([], many=True)])
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="not found"):
         await service.rename_group(
@@ -1009,7 +1046,7 @@ async def test_delete_group_reassigns_members_before_deleting():
             _result(None),  # delete
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.delete_group(gym_id, 2)
 
@@ -1034,7 +1071,7 @@ async def test_delete_group_raises_when_group_missing():
             ),
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     with pytest.raises(ValueError, match="not found"):
         await service.delete_group(uuid4(), 3)
@@ -1060,7 +1097,7 @@ async def test_delete_group_nulls_rank_when_group_is_only_one():
             _result(None),  # delete
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.delete_group(gym_id, 0)
 
@@ -1088,7 +1125,7 @@ async def test_backfill_binds_rank_changed_activity_type():
             _result(None),  # backfill
         ],
     )
-    service = RanksService(_make_pool_mock(session))
+    service = _make_service(_make_pool_mock(session))
 
     await service.create_rank(
         RankCreateRequest(
