@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/promotion_choice.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder_position.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -73,43 +74,28 @@ class _PromotionDialogState extends State<PromotionDialog> {
   /// The belt chosen in the pick-main step, awaiting a sub-position.
   MainRank? _pickedMain;
 
-  bool get _isAssign => widget.currentMainRankId == null;
+  /// The shared resolver over the loaded ladder — the single source of
+  /// the current-main / next-major / next-sub walk (also used by the
+  /// promotable member row). Rebuilt per access; cheap and immutable.
+  RankLadderPosition get _position => RankLadderPosition(
+        ladder: widget.ladder,
+        subRankType: widget.subRankType,
+        currentMainRankId: widget.currentMainRankId,
+        currentSubIndex: widget.currentSubIndex,
+      );
 
-  MainRank? get _currentMain {
-    for (final r in widget.ladder) {
-      if (r.rankId == widget.currentMainRankId) return r;
-    }
-    return null;
-  }
+  bool get _isAssign => _position.isUnranked;
 
-  /// The next belt above the current one, or null at the top. Mirrors
-  /// `RanksRepository.applyPromotion`'s own resolution so the enabled
-  /// state matches what the backend will actually do.
-  MainRank? get _nextMajor {
-    if (widget.ladder.isEmpty) return null;
-    if (widget.currentMainRankId == null) return widget.ladder.first;
-    final index = widget.ladder
-        .indexWhere((r) => r.rankId == widget.currentMainRankId);
-    if (index < 0) return widget.ladder.first;
-    if (index >= widget.ladder.length - 1) return null;
-    return widget.ladder[index + 1];
-  }
+  MainRank? get _currentMain => _position.currentMain;
 
-  bool get _nextSubEnabled {
-    final main = _currentMain;
-    final sub = widget.currentSubIndex;
-    return main != null &&
-        main.subRankCount > 0 &&
-        sub != null &&
-        sub < main.subRankCount - 1;
-  }
+  MainRank? get _nextMajor => _position.nextMajor;
 
-  /// "Blue" or "Blue · 2 Stripes" for leaf [index] of [rank].
-  String _leafLabel(MainRank rank, int? index) {
-    if (index == null) return rank.name;
-    final label = widget.subRankType.subLabel(index);
-    return label.isEmpty ? rank.name : '${rank.name} · $label';
-  }
+  bool get _nextSubEnabled => _position.nextSubEnabled;
+
+  /// "Blue" or "Blue · 2 Stripes" for leaf [index] of [rank]. The
+  /// menu keeps the plain belt name on a base leaf (no "· Base").
+  String _leafLabel(MainRank rank, int? index) =>
+      _position.leafLabel(RankLeaf(rank, index));
 
   void _pop(PromotionChoice choice) => Navigator.of(context).pop(choice);
 

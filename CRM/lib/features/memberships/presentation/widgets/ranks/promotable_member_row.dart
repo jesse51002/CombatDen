@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder_position.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/rank_leaf_progression.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/rank_progress_bar.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 import 'package:crm/shared/widgets/rank_belt_image.dart';
 
 /// One promotable member, rendered identically wherever staff act on a
-/// member's rank: their belt, avatar, name, a rank/sub label, the shared
-/// [RankProgressBar], a one-tap **Promote** (green once eligible), and an
-/// overflow that opens the full promotion dialog.
+/// member's rank: their belt, avatar, name, a **current → next**
+/// progression label, the shared [RankProgressBar], and a single
+/// **Promote** button (green once eligible) that opens the full
+/// promotion dialog.
 ///
-/// Deliberately **bloc-agnostic** — it takes the row's display fields and
-/// an [onQuickPromote] / [onOpenDialog] callback pair, so both the
-/// ready-to-promote board ([ReadyToPromoteRow]) and the rank-detail
-/// roster share the exact same row without either owning the other's
-/// bloc. Eligibility (whether [classesSince] has met [stepDenominator])
-/// is derived here so the Promote affordance reads the same on both.
+/// Deliberately **bloc-agnostic** — it takes the row's display fields,
+/// the gym ladder + sub-rank type, and the member's current leaf, then
+/// derives the current → next label itself (via [RankLadderPosition], the
+/// same resolver the [PromotionDialog] uses) so both the ready-to-promote
+/// board ([ReadyToPromoteRow]) and the rank-detail roster share the exact
+/// same row. The single [onPromote] callback opens the dialog; there is
+/// no quick one-tap path. Eligibility (whether [classesSince] has met
+/// [stepDenominator]) is derived here so the Promote affordance and the
+/// bar read the same on both.
 class PromotableMemberRow extends StatelessWidget {
   /// The belt art for this member's current leaf (already resolved by
   /// the caller — a per-sub override or the main rank's image). Null /
@@ -29,10 +36,19 @@ class PromotableMemberRow extends StatelessWidget {
 
   final String name;
 
-  /// The trailing rank/sub label, e.g. "White · 1 Stripe" on the board
-  /// (where rows span ranks) or just "1 Stripe" / "Base" on a single
-  /// rank's roster. Null / empty hides the label (a sub-less gym).
-  final String? rankLabel;
+  /// The gym's ladder, in order — used to resolve the next leaf.
+  final List<MainRank> ladder;
+
+  /// The gym's sub-rank type (drives the derived sub-position labels).
+  final RankSubType subRankType;
+
+  /// The member's current MAIN rank id (both surfaces show ranked
+  /// members, so this is non-null here).
+  final String mainRankId;
+
+  /// The member's current leaf within that rank, or null when the rank
+  /// has no sub-positions.
+  final int? currentSubIndex;
 
   /// Classes attended since the member's last rank change.
   final int classesSince;
@@ -40,30 +56,42 @@ class PromotableMemberRow extends StatelessWidget {
   /// Classes needed to reach the next leaf, or null at the top.
   final int? stepDenominator;
 
-  /// Advance the member one leaf (the quick Promote action).
-  final VoidCallback onQuickPromote;
-
-  /// Open the full promotion dialog (the overflow action).
-  final VoidCallback onOpenDialog;
+  /// Open the full promotion dialog (the row's only affordance).
+  final VoidCallback onPromote;
 
   const PromotableMemberRow({
     super.key,
     required this.imageUrl,
     required this.avatarUrl,
     required this.name,
-    required this.rankLabel,
+    required this.ladder,
+    required this.subRankType,
+    required this.mainRankId,
+    required this.currentSubIndex,
     required this.classesSince,
     required this.stepDenominator,
-    required this.onQuickPromote,
-    required this.onOpenDialog,
+    required this.onPromote,
   });
 
   @override
   Widget build(BuildContext context) {
     final denom = stepDenominator;
     final eligible = denom != null && denom > 0 && classesSince >= denom;
-    final label = rankLabel;
-    final hasLabel = label != null && label.isNotEmpty;
+
+    final position = RankLadderPosition(
+      ladder: ladder,
+      subRankType: subRankType,
+      currentMainRankId: mainRankId,
+      currentSubIndex: currentSubIndex,
+    );
+    final currentLeaf = position.currentLeaf;
+    final nextLeaf = position.nextLeaf;
+    final currentLabel = currentLeaf == null
+        ? name
+        : position.leafLabel(currentLeaf, showBase: true);
+    final nextLabel = nextLeaf == null
+        ? null
+        : position.leafLabel(nextLeaf, showBase: true);
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -87,7 +115,6 @@ class PromotableMemberRow extends StatelessWidget {
                       diameter: 24,
                     ),
                     Expanded(
-                      flex: 3,
                       child: Text(
                         name,
                         style: DesignConstants.pSemibold,
@@ -95,22 +122,13 @@ class PromotableMemberRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // The member's current belt + position — a legible
-                    // label so their rank reads at a glance. Flexible so
-                    // a long "White · 4 Stripes" ellipsizes instead of
-                    // overflowing.
-                    if (hasLabel)
-                      Flexible(
-                        flex: 2,
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.end,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: DesignConstants.h3,
-                        ),
-                      ),
                   ],
+                ),
+                // Where they are now → where a Promote lands them; the
+                // destination reads as the emphasized token.
+                RankLeafProgression(
+                  currentLabel: currentLabel,
+                  nextLabel: nextLabel,
                 ),
                 RankProgressBar(
                   done: classesSince,
@@ -129,17 +147,7 @@ class PromotableMemberRow extends StatelessWidget {
               color:
                   eligible ? DesignConstants.goodGreen : DesignConstants.text,
             ),
-            onPressed: onQuickPromote,
-          ),
-          IconButton(
-            tooltip: 'More options',
-            onPressed: onOpenDialog,
-            icon: Icon(
-              Symbols.more_vert_sharp,
-              size: DesignConstants.iconSizeMedium,
-              color: DesignConstants.text2nd,
-              weight: DesignConstants.iconWeight,
-            ),
+            onPressed: onPromote,
           ),
         ],
       ),

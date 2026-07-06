@@ -12,7 +12,6 @@ import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_bloc.dart'
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_event.dart';
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_state.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
-import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
@@ -35,8 +34,8 @@ const double _kCountValueWidth = 32;
 /// counts summary (total + per-sub-position headcount), the per-step
 /// progression breakdown, and a flat, proximity-sorted roster of the
 /// members currently on it (closest to their next leaf first — the same
-/// order and row as the ready-to-promote board), each promotable inline
-/// or through the shared [PromotionDialog]. Deep-linkable by rank id
+/// order and row as the ready-to-promote board), each promotable through
+/// the shared [PromotionDialog]. Deep-linkable by rank id
 /// (`/memberships/ranks/detail/<id>`), self-provides its repository +
 /// [RankDetailBloc].
 class RankDetailScreen extends StatelessWidget {
@@ -153,18 +152,8 @@ class _LoadedState extends State<_Loaded> {
         ladder.last.rankId == widget.state.rank.rankId;
   }
 
-  /// One-tap Promote: advance the member one leaf (the next sub-position,
-  /// else the base of the next rank) — mirrors the ready-to-promote
-  /// board's quick action.
-  void _quickPromote(RankMemberRow member) {
-    context.read<RankDetailBloc>().add(RankDetailPromoteRequested(
-          memberId: member.memberId,
-          choice: const PromoteNextSub(),
-        ));
-  }
-
-  /// The overflow action: open the full [PromotionDialog] for any other
-  /// move (skip to next major, set an explicit leaf).
+  /// Open the full [PromotionDialog] for [member] and dispatch the
+  /// picked move (next sub, skip to next major, or an explicit leaf).
   Future<void> _promote(RankMemberRow member) async {
     final bloc = context.read<RankDetailBloc>();
     final choice = await PromotionDialog.show(
@@ -299,11 +288,13 @@ class _LoadedState extends State<_Loaded> {
                   imageUrl: _beltFor(state.rank, member),
                   avatarUrl: member.avatarUrl,
                   name: member.name,
-                  rankLabel: _subLabelFor(state.subRankType, state.rank, member),
+                  ladder: state.ladder,
+                  subRankType: state.subRankType,
+                  mainRankId: state.rank.rankId,
+                  currentSubIndex: member.currentSubIndex,
                   classesSince: member.classesSince,
                   stepDenominator: member.stepDenominator,
-                  onQuickPromote: () => _quickPromote(member),
-                  onOpenDialog: () => _promote(member),
+                  onPromote: () => _promote(member),
                 ),
               ],
             );
@@ -422,15 +413,6 @@ class _Hero extends StatelessWidget {
 String? _beltFor(MainRank rank, RankMemberRow member) {
   final sub = member.currentSubIndex;
   return sub != null ? rank.imageForSub(sub) : rank.imageUrl;
-}
-
-/// The trailing rank label for a roster row — just the sub-position
-/// ("Base", "1 Stripe", "Div 2"), since every row here is on the same
-/// main rank. `null` for a sub-less gym (no label to show).
-String? _subLabelFor(RankSubType type, MainRank rank, RankMemberRow member) {
-  if (type == RankSubType.none || rank.subRankCount == 0) return null;
-  final label = type.subLabel(member.currentSubIndex ?? 0);
-  return label.isEmpty ? 'Base' : label;
 }
 
 /// The "On this rank" counts summary: the total headcount and, when the

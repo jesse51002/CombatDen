@@ -24,15 +24,15 @@ class ReadyToPromoteNextPageRequested extends ReadyToPromoteEvent {
   const ReadyToPromoteNextPageRequested();
 }
 
-/// Staff quick-promotes [memberId] straight from the board via
-/// [choice]. Reloads page one on success (the promoted member drops
-/// off the board once they're no longer closest-to-promotion, or
-/// simply re-sorts).
-class ReadyQuickPromoteRequested extends ReadyToPromoteEvent {
+/// Staff promotes [memberId] from the board via [choice] (picked in the
+/// shared promotion dialog). Reloads page one on success (the promoted
+/// member drops off the board once they're no longer closest-to-
+/// promotion, or simply re-sorts).
+class ReadyPromoteRequested extends ReadyToPromoteEvent {
   final String memberId;
   final PromotionChoice choice;
 
-  const ReadyQuickPromoteRequested({
+  const ReadyPromoteRequested({
     required this.memberId,
     required this.choice,
   });

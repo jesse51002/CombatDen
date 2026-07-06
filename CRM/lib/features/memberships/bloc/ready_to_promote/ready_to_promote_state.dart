@@ -39,14 +39,13 @@ class ReadyToPromoteLoaded extends ReadyToPromoteState {
   final bool hasReachedEnd;
   final bool isLoadingMore;
 
-  /// True while a quick-promote is in flight.
+  /// True while a promote is in flight.
   final bool isMutating;
 
-  /// Set when the last quick-promote failed; cleared on the next
-  /// load.
+  /// Set when the last promote failed; cleared on the next load.
   final String? actionError;
 
-  /// Monotonic token bumped on every successful quick-promote, so a
+  /// Monotonic token bumped on every successful promote, so a
   /// listener can show a one-shot confirmation.
   final int actionSuccessCount;
 

@@ -81,6 +81,11 @@ class MainRankCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Pin the column to the card's full width so the
+                    // centered content stays centered even when the sub
+                    // strip (which otherwise widens the column) is hidden
+                    // — e.g. when the gym's sub-rank style is None.
+                    const SizedBox(width: double.infinity),
                     RankBeltImage(
                       imageUrl: rank.imageUrl,
                       size: DesignConstants.rankBeltHeight,

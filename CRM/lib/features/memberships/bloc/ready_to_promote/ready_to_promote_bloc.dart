@@ -9,9 +9,9 @@ import 'package:crm/features/memberships/data/models/rank_ladder.dart';
 import 'package:crm/features/memberships/data/models/rank_ready_row.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
-/// Manages the ready-to-promote board: the gym's ladder (to resolve
-/// a `PromoteNextMajor` quick-promote) plus a paginated,
-/// proximity-sorted roster of members closest to their next leaf.
+/// Manages the ready-to-promote board: the gym's ladder (to resolve a
+/// dialog-picked promotion) plus a paginated, proximity-sorted roster of
+/// members closest to their next leaf.
 class ReadyToPromoteBloc
     extends Bloc<ReadyToPromoteEvent, ReadyToPromoteState> {
   final RanksRepository _repository;
@@ -21,7 +21,7 @@ class ReadyToPromoteBloc
         super(const ReadyToPromoteInitial()) {
     on<ReadyToPromoteInitRequested>(_onInitRequested);
     on<ReadyToPromoteNextPageRequested>(_onNextPageRequested);
-    on<ReadyQuickPromoteRequested>(_onQuickPromoteRequested);
+    on<ReadyPromoteRequested>(_onPromoteRequested);
   }
 
   Future<void> _onInitRequested(
@@ -89,8 +89,8 @@ class ReadyToPromoteBloc
     }
   }
 
-  Future<void> _onQuickPromoteRequested(
-    ReadyQuickPromoteRequested event,
+  Future<void> _onPromoteRequested(
+    ReadyPromoteRequested event,
     Emitter<ReadyToPromoteState> emit,
   ) async {
     final current = state;
@@ -120,7 +120,7 @@ class ReadyToPromoteBloc
         actionSuccessCount: afterState.actionSuccessCount + 1,
       ));
     } catch (e, stackTrace) {
-      log('Ready-to-promote quick-promote failed',
+      log('Ready-to-promote promote failed',
           error: e, stackTrace: stackTrace);
       final afterState = state;
       if (afterState is ReadyToPromoteLoaded) {
