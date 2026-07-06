@@ -122,3 +122,13 @@ CREATE POLICY "Authenticated can view rank presets"
     USING (true);
 
 -- Writes go through service_role only (this is curated reference data).
+
+-- Re-grant the role privileges. Supabase's platform default privileges grant
+-- ALL to anon/authenticated/service_role on every table (RLS then governs),
+-- but a raw DROP TABLE + CREATE TABLE in a migration does NOT re-inherit them
+-- (only fresh-created tables do), so the recreated rank_presets would have no
+-- grants and the service_role seed 42501s ("permission denied for table
+-- rank_presets"). Re-grant explicitly to restore the original posture.
+GRANT ALL ON TABLE rank_presets TO anon;
+GRANT ALL ON TABLE rank_presets TO authenticated;
+GRANT ALL ON TABLE rank_presets TO service_role;
