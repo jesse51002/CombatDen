@@ -231,33 +231,39 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       ],
                       validator: _validateClasses,
                     ),
-                    _SubCountStepper(
-                      count: _subRankCount,
-                      onChanged: (v) => setState(() => _subRankCount = v),
-                    ),
-                    if (_subRankCount > 0) ...[
-                      const Hairline(),
-                      Text('Sub-rank belts', style: DesignConstants.h2),
-                      Text(
-                        'Each position defaults to the main belt image. '
-                        'Upload a distinct image to override it.',
-                        style: DesignConstants.pSmall.copyWith(
-                          color: DesignConstants.text2nd,
-                        ),
+                    // Sub-positions only exist when the gym uses a sub-rank
+                    // style; a 'none' gym has no stripes/divisions, so hide
+                    // the whole section. The rank's stored sub_rank_count is
+                    // left as-is (persist-only) — hiding never zeroes it.
+                    if (subRankType != RankSubType.none) ...[
+                      _SubCountStepper(
+                        count: _subRankCount,
+                        onChanged: (v) => setState(() => _subRankCount = v),
                       ),
-                      for (var i = 0; i < _subRankCount; i++)
-                        ImageUploadPickerField(
-                          key: ValueKey('sub-$i'),
-                          label: _subLabel(subRankType, i),
-                          category: 'rank',
-                          aspectRatio: 1,
-                          previewFit: BoxFit.contain,
-                          imageUrl: _overrides[i.toString()],
-                          defaultImageUrl: _mainImageUrl,
-                          onUploaded: (url) => setState(
-                            () => _overrides[i.toString()] = url,
+                      if (_subRankCount > 0) ...[
+                        const Hairline(),
+                        Text('Sub-rank belts', style: DesignConstants.h2),
+                        Text(
+                          'Each position defaults to the main belt image. '
+                          'Upload a distinct image to override it.',
+                          style: DesignConstants.pSmall.copyWith(
+                            color: DesignConstants.text2nd,
                           ),
                         ),
+                        for (var i = 0; i < _subRankCount; i++)
+                          ImageUploadPickerField(
+                            key: ValueKey('sub-$i'),
+                            label: _subLabel(subRankType, i),
+                            category: 'rank',
+                            aspectRatio: 1,
+                            previewFit: BoxFit.contain,
+                            imageUrl: _overrides[i.toString()],
+                            defaultImageUrl: _mainImageUrl,
+                            onUploaded: (url) => setState(
+                              () => _overrides[i.toString()] = url,
+                            ),
+                          ),
+                      ],
                     ],
                     if (_error != null) ErrorMessage(message: _error!),
                     Row(
