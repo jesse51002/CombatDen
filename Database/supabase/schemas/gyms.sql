@@ -7,6 +7,10 @@ CREATE TYPE stripe_onboarding_status AS ENUM (
     'not_started', 'pending', 'complete', 'disabled'
 );
 
+-- Per-gym sub-rank style. Consumed by gym_ranks (a main rank with
+-- sub_rank_count > 0) and mirrored onto rank_presets.implied_sub_rank_type.
+CREATE TYPE sub_rank_type AS ENUM ('stripes', 'div');
+
 CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
@@ -17,6 +21,10 @@ CREATE TABLE gyms (
     timezone TEXT NOT NULL DEFAULT 'America/Chicago'
         CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
     is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Per-gym sub-rank style. Every main rank with sub_rank_count > 0 uses
+    -- this. Sub-rank LABELS are derived from (sub_rank_type, sub_index),
+    -- never stored. Writable via the gym-update path; from_preset sets it.
+    sub_rank_type sub_rank_type NOT NULL DEFAULT 'stripes',
     -- Stripe Connect onboarding state (service_role-only writes; see access_rules/gyms.sql)
     stripe_account_id TEXT UNIQUE,
     stripe_onboarding_status stripe_onboarding_status NOT NULL DEFAULT 'not_started',

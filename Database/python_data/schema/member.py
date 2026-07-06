@@ -29,6 +29,9 @@ class MemberCreate(SeedModel):
     email: str | None = None
     points_balance: int = 0
     current_rank_id: UUID | None = None
+    # Leaf position within current_rank_id's main rank (NULL when that rank has
+    # sub_rank_count = 0). Only the ranks endpoints write it after creation.
+    current_sub_index: int | None = None
 
     # Contact / freeze / linkage / Stripe billing (service_role-written only;
     # NULL for engagement-only members).

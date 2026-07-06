@@ -64,10 +64,29 @@ from faker import Faker
 from generators import invoices as gen_invoices
 from generators import members as members_generator
 from generators import memberships as gen_memberships
-from schema.gym_rank import GymType
+from schema.gym_rank import GymType, RankPresetKind
 
-# Cycle through the three presets across seeded gyms so all paths get exercised.
+# Cycle through the disciplines across seeded gyms so all paths get exercised.
 _GYM_TYPE_CYCLE = [GymType.bjj, GymType.mma, GymType.generic]
+
+
+def _kind_for_gym(gym_type: GymType, bjj_seen: int) -> RankPresetKind:
+    """Derive the rank preset kind from the gym's discipline (its GymType).
+
+    BJJ gyms alternate between the two belt presets so BOTH the stripes and the
+    plain-belt kinds get exercised across seeded gyms; every non-BJJ discipline
+    (mma / generic) uses the flat tier. With more than a few gyms this yields at
+    least one gym of each of the three RankPresetKinds. `bjj_seen` is how many
+    BJJ gyms have already been assigned (0-based), so the first BJJ gym gets the
+    richer stripes preset.
+    """
+    if gym_type is GymType.bjj:
+        return (
+            RankPresetKind.bjj_belts_stripes
+            if bjj_seen % 2 == 0
+            else RankPresetKind.bjj_belts
+        )
+    return RankPresetKind.flat
 
 
 def seed() -> None:
@@ -90,16 +109,24 @@ def seed() -> None:
     bs_ranks.create_presets(client)
 
     # Phase 3: per-gym data.
+    bjj_seen = 0
     for i, bundle in enumerate(bundles):
         gym_id = bundle.gym_id
         gym_type = _GYM_TYPE_CYCLE[i % len(_GYM_TYPE_CYCLE)]
-        progress.log(f"\n=== {bundle.gym_name} ({gym_id}) — {gym_type.value} ===")
+        kind = _kind_for_gym(gym_type, bjj_seen)
+        if gym_type is GymType.bjj:
+            bjj_seen += 1
+        progress.log(
+            f"\n=== {bundle.gym_name} ({gym_id}) — {gym_type.value} / {kind.value} ==="
+        )
         gym_start = time.perf_counter()
 
         with login_gym_owner(bundle.owner_email, DEFAULT_PASSWORD) as api:
-            # Ranks (clone from preset, direct DB).
+            # Ranks (clone from preset, direct DB). Also stamps the gym's
+            # sub_rank_type when the kind implies one; returns the effective
+            # sub_rank_type for per-member leaf labeling below.
             progress.log("Creating gym ranks...")
-            ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
+            ranks, sub_rank_type = bs_ranks.create_gym_ranks(client, gym_id, kind)
             progress.log(f"  {len(ranks)} ranks")
 
             # Payer-auth authorized-payer waiver (undeletable, direct DB).
@@ -229,7 +256,7 @@ def seed() -> None:
         bs_rewards.create_redemptions(client, gym_id, members, gym_rewards)
 
         progress.log("Creating activities...")
-        bs_activities.create(client, gym_id, members, ranks, attendance)
+        bs_activities.create(client, gym_id, members, ranks, attendance, sub_rank_type)
 
         # Invoice + charge history (direct DB, synthetic Stripe IDs). Guarded
         # like the membership history above so re-runs don't duplicate.
