@@ -12,9 +12,9 @@ import 'package:crm/features/memberships/bloc/plans/plans_bloc.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
-import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
-import 'package:crm/features/memberships/data/models/rank_full_response.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
+// The rank create/edit form is a full-screen route
+// (AppRoutes.membershipsRankEditor), pushed via the shared onGenerateRoute.
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
@@ -22,7 +22,6 @@ import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
-import 'package:crm/features/memberships/presentation/dialogs/edit_rank_dialog.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/ranks_tab.dart';
@@ -151,20 +150,13 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
             .pushNamed(AppRoutes.membershipsWaiverEditor);
         waiversBloc.add(WaiversInitRequested(widget.gymId));
       case 3:
-        EditRankDialog.showCreateGroup(
-          context: context,
-          bloc: context.read<RanksBloc>(),
-          gymId: widget.gymId,
-          existingRanks: _currentRanks(context),
-        );
+        // Create lives on its own full-screen editor; reload the ladder
+        // on return so a newly created rank shows.
+        final ranksBloc = context.read<RanksBloc>();
+        await Navigator.of(context)
+            .pushNamed(AppRoutes.membershipsRankEditor);
+        ranksBloc.add(RanksInitRequested(widget.gymId));
     }
-  }
-
-  /// The ladder as currently loaded — lets the create dialog default a
-  /// new rank's position above the existing ones.
-  List<RankFullResponse> _currentRanks(BuildContext context) {
-    final state = context.read<RanksBloc>().state;
-    return state is RanksLoaded ? state.ranks : const [];
   }
 
   @override
@@ -204,11 +196,11 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
         Expanded(
           child: IndexedStack(
             index: _tabIndex,
-            children: const [
-              PlansTab(),
-              DiscountsTab(),
-              WaiversTab(),
-              RanksTab(),
+            children: [
+              const PlansTab(),
+              const DiscountsTab(),
+              const WaiversTab(),
+              RanksTab(gymId: widget.gymId),
             ],
           ),
         ),

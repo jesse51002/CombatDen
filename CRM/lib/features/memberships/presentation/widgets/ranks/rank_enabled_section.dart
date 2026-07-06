@@ -21,7 +21,7 @@ class RankEnabledSection extends StatelessWidget {
           ? 'Your ladder is empty. Add at least one rank before '
               'enabling, or every member stays unranked.'
           : 'Enabling ranks assigns every unranked member to your '
-              'lowest rank (${state.ranks.first.displayLabel}). '
+              'lowest rank (${state.ranks.first.name}). '
               'This cannot be undone.';
       final confirmed = await ConfirmationModal.show(
         context: context,

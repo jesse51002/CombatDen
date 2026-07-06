@@ -1,35 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/rank.dart';
-import 'package:crm/features/member_details/presentation/dialogs/set_rank_dialog.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/rank_enabled_response.dart';
-import 'package:crm/features/memberships/data/models/rank_full_response.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
-import 'package:crm/features/memberships/presentation/widgets/ranks/rank_color.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
+import 'package:crm/shared/widgets/promotion_dialog.dart';
+import 'package:crm/shared/widgets/rank_belt_image.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
-/// Member's rank: belt + real progress toward the next rank
-/// (classes attended since the last promotion / the gym threshold),
-/// with Promote / Change / Assign actions. The current rank comes
-/// from the member payload; the ladder + enabled flag are a
-/// read-only side fetch (per the documented member-detail pattern).
+/// Member's rank: their belt image + real attendance progress toward the
+/// next step (classes since their last promotion vs the leaf threshold),
+/// with a single action that opens the shared [PromotionDialog].
+///
+/// The current rank comes from the member payload; the gym's ladder,
+/// sub-rank type, and enabled flag are a read-only side fetch (the
+/// documented member-detail side-read pattern — re-run whenever the
+/// bloc's `refreshToken` changes).
 class RankSection extends StatefulWidget {
   final Rank? rank;
   final String gymId;
   final String memberId;
 
-  /// Bumped by the bloc on every member mutation (the member-detail
-  /// `refreshToken`). A change re-fetches the ladder + enabled flag,
-  /// like the other documented side-read sections.
+  /// The member-detail `refreshToken`. A change re-fetches the ladder +
+  /// enabled flag, like the other side-read sections.
   final int refreshKey;
 
   const RankSection({
@@ -44,14 +48,21 @@ class RankSection extends StatefulWidget {
   State<RankSection> createState() => _RankSectionState();
 }
 
-class _RankLadder {
-  final List<RankFullResponse> ladder;
+/// The gym-level rank context needed to render + drive the section.
+class _RankData {
+  final List<MainRank> ladder;
+  final RankSubType subRankType;
   final bool enabled;
-  const _RankLadder({required this.ladder, required this.enabled});
+
+  const _RankData({
+    required this.ladder,
+    required this.subRankType,
+    required this.enabled,
+  });
 }
 
 class _RankSectionState extends State<RankSection> {
-  late Future<_RankLadder> _future = _load();
+  late Future<_RankData> _future = _load();
 
   @override
   void didUpdateWidget(covariant RankSection oldWidget) {
@@ -61,48 +72,63 @@ class _RankSectionState extends State<RankSection> {
     }
   }
 
-  Future<_RankLadder> _load() async {
+  Future<_RankData> _load() async {
     final repo = RanksRepository(apiClient: ApiClient());
     final results = await Future.wait([
       repo.listRanks(widget.gymId),
       repo.getRankEnabled(widget.gymId),
     ]);
-    return _RankLadder(
-      ladder: results[0] as List<RankFullResponse>,
-      enabled: (results[1] as RankEnabledResponse).isRankEnabled,
+    final ladder = results[0] as RankLadder;
+    final enabled = results[1] as RankEnabledResponse;
+    return _RankData(
+      ladder: ladder.ranks,
+      subRankType: ladder.subRankType,
+      enabled: enabled.isRankEnabled,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_RankLadder>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _card(
-            const ErrorMessage(message: 'Could not load rank data.'),
-          );
-        }
-        final data = snapshot.data;
-        if (data == null) {
-          // Loading: don't flash an empty card for an unranked member.
-          if (widget.rank == null) return const SizedBox.shrink();
-          return _card(const Center(child: AppSpinner()));
-        }
-        if (widget.rank == null) {
-          if (!data.enabled || data.ladder.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return _card(_UnrankedBody(ladder: data.ladder));
-        }
-        return _card(
-          _RankedBody(
-            rank: widget.rank!,
-            ladder: data.ladder,
-            enabled: data.enabled,
+    return BlocListener<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (prev, curr) =>
+          prev is MemberDetailLoaded &&
+          curr is MemberDetailLoaded &&
+          prev.rankChangeSuccessCount != curr.rankChangeSuccessCount,
+      listener: (context, _) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Rank updated.',
+              style:
+                  DesignConstants.p.copyWith(color: DesignConstants.onAccent),
+            ),
+            backgroundColor: DesignConstants.goodGreen,
           ),
         );
       },
+      child: FutureBuilder<_RankData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _card(
+              const ErrorMessage(message: 'Could not load rank data.'),
+            );
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            // Loading: don't flash an empty card for an unranked member.
+            if (widget.rank == null) return const SizedBox.shrink();
+            return _card(const Center(child: AppSpinner()));
+          }
+          if (widget.rank == null) {
+            if (!data.enabled || data.ladder.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            return _card(_UnrankedBody(data: data));
+          }
+          return _card(_RankedBody(rank: widget.rank!, data: data));
+        },
+      ),
     );
   }
 
@@ -120,63 +146,60 @@ class _RankSectionState extends State<RankSection> {
   }
 }
 
-/// The member has a rank: belt + progress + actions.
+/// The member has a rank: belt + progress + a single manage action.
 class _RankedBody extends StatelessWidget {
   final Rank rank;
-  final List<RankFullResponse> ladder;
-  final bool enabled;
+  final _RankData data;
 
-  const _RankedBody({
-    required this.rank,
-    required this.ladder,
-    required this.enabled,
-  });
+  const _RankedBody({required this.rank, required this.data});
 
-  RankFullResponse? get _nextRank {
-    final index = ladder.indexWhere((r) => r.rankId == rank.rankId);
-    if (index < 0 || index >= ladder.length - 1) return null;
-    return ladder[index + 1];
+  /// True when the member is on the last leaf of the last belt — nothing
+  /// higher to promote to (correction/demotion is still possible).
+  bool get _atTop {
+    final ladder = data.ladder;
+    if (ladder.isEmpty || ladder.last.rankId != rank.rankId) return false;
+    final main = _mainRank;
+    if (main == null) return false;
+    return main.subRankCount == 0 || rank.subIndex == main.subRankCount - 1;
+  }
+
+  MainRank? get _mainRank {
+    for (final r in data.ladder) {
+      if (r.rankId == rank.rankId) return r;
+    }
+    return null;
+  }
+
+  Future<void> _manage(BuildContext context) async {
+    final bloc = context.read<MemberDetailBloc>();
+    final choice = await PromotionDialog.show(
+      context: context,
+      ladder: data.ladder,
+      subRankType: data.subRankType,
+      currentMainRankId: rank.rankId,
+      currentSubIndex: rank.subIndex,
+    );
+    if (choice == null) return;
+    bloc.add(MemberRankChangeRequested(choice));
   }
 
   @override
   Widget build(BuildContext context) {
-    final next = _nextRank;
+    final atTop = _atTop;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
         _BeltRow(rank: rank),
-        _RankProgress(rank: rank, atTop: next == null),
-        if (enabled) ...[
+        _RankProgress(rank: rank, atTop: atTop),
+        if (data.enabled)
           AppOutlineButton(
             fullWidth: true,
             borderRadius: DesignConstants.radiusSmall,
-            text: next == null
-                ? 'Highest rank achieved'
-                : 'Promote to ${next.displayLabel}',
-            onPressed: next == null
-                ? null
-                : () => context
-                    .read<MemberDetailBloc>()
-                    .add(const MemberRankChangeRequested(promote: true)),
-          ),
-          Center(
-            child: TextButton(
-              onPressed: () => SetRankDialog.show(
-                context: context,
-                bloc: context.read<MemberDetailBloc>(),
-                ladder: ladder,
-                currentRankId: rank.rankId,
-              ),
-              child: Text(
-                'Change rank',
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.primaryColor,
-                ),
-              ),
-            ),
-          ),
-        ] else
+            text: atTop ? 'Change rank' : 'Promote',
+            onPressed: () => _manage(context),
+          )
+        else
           Text(
             'Rank system is disabled.',
             style: DesignConstants.pSmall.copyWith(
@@ -190,9 +213,22 @@ class _RankedBody extends StatelessWidget {
 
 /// No rank yet (gym ranks enabled, ladder non-empty): assign one.
 class _UnrankedBody extends StatelessWidget {
-  final List<RankFullResponse> ladder;
+  final _RankData data;
 
-  const _UnrankedBody({required this.ladder});
+  const _UnrankedBody({required this.data});
+
+  Future<void> _assign(BuildContext context) async {
+    final bloc = context.read<MemberDetailBloc>();
+    final choice = await PromotionDialog.show(
+      context: context,
+      ladder: data.ladder,
+      subRankType: data.subRankType,
+      currentMainRankId: null,
+      currentSubIndex: null,
+    );
+    if (choice == null) return;
+    bloc.add(MemberRankChangeRequested(choice));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -208,19 +244,14 @@ class _UnrankedBody extends StatelessWidget {
           fullWidth: true,
           text: 'Assign rank',
           borderRadius: DesignConstants.radiusSmall,
-          onPressed: () => SetRankDialog.show(
-            context: context,
-            bloc: context.read<MemberDetailBloc>(),
-            ladder: ladder,
-            currentRankId: null,
-          ),
+          onPressed: () => _assign(context),
         ),
       ],
     );
   }
 }
 
-/// Belt glyph + main/sub name.
+/// Belt image + main/sub name.
 class _BeltRow extends StatelessWidget {
   final Rank rank;
 
@@ -228,25 +259,20 @@ class _BeltRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = parseRankColor(rank.color) ?? DesignConstants.primaryColor;
+    final sub = rank.subLabel;
     return Row(
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Icon(
-          Symbols.workspace_premium_sharp,
-          color: color,
-          size: DesignConstants.iconSizeBig,
-          weight: DesignConstants.iconWeight,
-        ),
+        RankBeltImage(imageUrl: rank.imageUrl, size: 64),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: DesignConstants.spacingTiny,
             children: [
-              Text(rank.mainName, style: DesignConstants.h2),
-              if (rank.subName != rank.mainName)
+              Text(rank.name, style: DesignConstants.h2),
+              if (sub != null && sub.isNotEmpty)
                 Text(
-                  rank.subName,
+                  sub,
                   style: DesignConstants.h3.copyWith(
                     color: DesignConstants.text2nd,
                   ),
@@ -259,8 +285,8 @@ class _BeltRow extends StatelessWidget {
   }
 }
 
-/// Real attendance progress toward the next rank: "X / Y classes"
-/// (classes since the last promotion vs the gym-set threshold).
+/// Real attendance progress toward the next leaf: "X / Y classes"
+/// (classes since the last promotion vs the leaf threshold).
 class _RankProgress extends StatelessWidget {
   final Rank rank;
   final bool atTop;
@@ -269,7 +295,7 @@ class _RankProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (atTop || rank.classesTillRankup == 0) {
+    if (atTop || rank.classesTillNextStep == 0) {
       return Text(
         atTop ? 'Top of the ladder.' : 'No further progression.',
         style: DesignConstants.pSmall.copyWith(
@@ -278,7 +304,7 @@ class _RankProgress extends StatelessWidget {
       );
     }
     final done = rank.classesSinceRank;
-    final target = rank.classesTillRankup;
+    final target = rank.classesTillNextStep;
     final ratio = (done / target).clamp(0.0, 1.0);
     final eligible = done >= target;
     return Column(
@@ -287,10 +313,7 @@ class _RankProgress extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              '$done / $target classes',
-              style: DesignConstants.h3,
-            ),
+            Text('$done / $target classes', style: DesignConstants.h3),
             const Spacer(),
             Text(
               eligible ? 'Eligible to promote' : 'To next rank',
@@ -309,8 +332,7 @@ class _RankProgress extends StatelessWidget {
             color: eligible
                 ? DesignConstants.goodGreen
                 : DesignConstants.primaryColor,
-            backgroundColor:
-                DesignConstants.text3rd.withValues(alpha: 0.2),
+            backgroundColor: DesignConstants.text3rd.withValues(alpha: 0.2),
           ),
         ),
       ],

@@ -14,12 +14,17 @@ import 'package:crm/features/members_list/data/models/members_list_total_counts.
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
 class _MockListRepo extends Mock implements MembersListRepository {}
 
 class _MockMembershipsRepo extends Mock
     implements MembershipsRepository {}
+
+class _MockRanksRepo extends Mock implements RanksRepository {}
 
 class _FakeRequest extends Fake implements CrmMembersListRequest {}
 
@@ -55,23 +60,30 @@ CrmMembersListResponse _echo(Invocation inv) {
 void main() {
   late _MockListRepo listRepo;
   late _MockMembershipsRepo membershipsRepo;
+  late _MockRanksRepo ranksRepo;
 
   setUpAll(() => registerFallbackValue(_FakeRequest()));
 
   setUp(() {
     listRepo = _MockListRepo();
     membershipsRepo = _MockMembershipsRepo();
+    ranksRepo = _MockRanksRepo();
     when(() => listRepo.getMembersList(any()))
         .thenAnswer((inv) async => _echo(inv));
     when(() => listRepo.getTotalCounts(any()))
         .thenAnswer((_) async => _counts);
     when(() => membershipsRepo.listPlans(any()))
         .thenAnswer((_) async => [_plan]);
+    when(() => ranksRepo.listRanks(any())).thenAnswer(
+      (_) async =>
+          const RankLadder(ranks: [], subRankType: RankSubType.stripes),
+    );
   });
 
   MembersListBloc build() => MembersListBloc(
         repository: listRepo,
         membershipsRepository: membershipsRepo,
+        ranksRepository: ranksRepo,
       );
 
   MembersListLoaded loaded({

@@ -10,5 +10,4 @@ Map<String, dynamic> _$RankReorderItemToJson(RankReorderItem instance) =>
     <String, dynamic>{
       'rank_id': instance.rankId,
       'main_rank_num_order': instance.mainRankNumOrder,
-      'sub_rank_num_order': instance.subRankNumOrder,
     };

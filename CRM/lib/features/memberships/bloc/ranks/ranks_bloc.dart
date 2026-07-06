@@ -5,12 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
 import 'package:crm/features/memberships/data/models/rank_enabled_response.dart';
-import 'package:crm/features/memberships/data/models/rank_full_response.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
-/// Manages the gym's rank ladder: list + enabled flag, plus
-/// create / update / delete / reorder / seed-from-preset / toggle,
-/// each reloading the ladder.
+/// Manages the gym's rank ladder: main ranks + sub-rank type +
+/// enabled flag, plus create / update / delete / reorder /
+/// seed-from-preset / toggle / sub-type-change, each reloading the
+/// ladder.
 class RanksBloc extends Bloc<RanksEvent, RanksState> {
   final RanksRepository _repository;
 
@@ -24,8 +25,7 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
     on<RankEnabledToggled>(_onEnabledToggled);
     on<RankPresetSeeded>(_onPresetSeeded);
     on<RanksReordered>(_onReordered);
-    on<RankGroupRenamed>(_onGroupRenamed);
-    on<RankGroupDeleted>(_onGroupDeleted);
+    on<RankSubTypeChanged>(_onSubTypeChanged);
   }
 
   Future<void> _onInitRequested(
@@ -80,7 +80,7 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       _mutateAndReload(
         emit,
         event.gymId,
-        () => _repository.seedFromPreset(event.gymId, event.gymType),
+        () => _repository.seedFromPreset(event.gymId, event.presetKind),
       );
 
   Future<void> _onReordered(RanksReordered event, Emitter<RanksState> emit) =>
@@ -90,41 +90,28 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
         () => _repository.reorderRanks(event.gymId, event.ranks),
       );
 
-  Future<void> _onGroupRenamed(
-    RankGroupRenamed event,
+  Future<void> _onSubTypeChanged(
+    RankSubTypeChanged event,
     Emitter<RanksState> emit,
   ) =>
       _mutateAndReload(
         emit,
         event.gymId,
-        () => _repository.renameMainGroup(
-          event.gymId,
-          event.mainRankNumOrder,
-          event.newName,
-        ),
+        () => _repository.setSubRankType(event.gymId, event.type),
       );
 
-  Future<void> _onGroupDeleted(
-    RankGroupDeleted event,
-    Emitter<RanksState> emit,
-  ) =>
-      _mutateAndReload(
-        emit,
-        event.gymId,
-        () => _repository.deleteMainGroup(event.gymId, event.mainRankNumOrder),
-      );
-
-  /// Fetch the ladder + enabled flag together.
+  /// Fetch the ladder (+ sub-rank type) + enabled flag together.
   Future<RanksLoaded> _load(String gymId) async {
     final results = await Future.wait([
       _repository.listRanks(gymId),
       _repository.getRankEnabled(gymId),
     ]);
-    final ranks = results[0] as List<RankFullResponse>;
+    final ladder = results[0] as RankLadder;
     final enabled = results[1] as RankEnabledResponse;
     return RanksLoaded(
       gymId: gymId,
-      ranks: ranks,
+      ranks: ladder.ranks,
+      subRankType: ladder.subRankType,
       isRankEnabled: enabled.isRankEnabled,
     );
   }

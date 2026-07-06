@@ -1,14 +1,22 @@
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/memberships/data/models/rank_create_request.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/main_rank_create_request.dart';
+import 'package:crm/features/memberships/data/models/main_rank_update_data.dart';
+import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/models/rank_enabled_response.dart';
-import 'package:crm/features/memberships/data/models/rank_full_response.dart';
-import 'package:crm/features/memberships/data/models/rank_preset_group.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder.dart';
+import 'package:crm/features/memberships/data/models/rank_member_response.dart';
+import 'package:crm/features/memberships/data/models/rank_member_row.dart';
+import 'package:crm/features/memberships/data/models/rank_preset_kind.dart';
+import 'package:crm/features/memberships/data/models/rank_preset_response.dart';
+import 'package:crm/features/memberships/data/models/rank_ready_row.dart';
 import 'package:crm/features/memberships/data/models/rank_reorder_item.dart';
-import 'package:crm/features/memberships/data/models/rank_update_data.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
-/// Repository for the gym's rank ladder + per-member rank changes —
-/// the `/api/v1/ranks` backend domain. Every call goes through
-/// [ApiClient]; paths/shapes match `FastApiBackend/src/ranks`.
+/// Repository for the gym's two-level rank ladder + per-member rank
+/// changes — the `/api/v1/ranks` backend domain. Every call goes
+/// through [ApiClient]; paths/shapes match
+/// `FastApiBackend/src/ranks`.
 class RanksRepository {
   final ApiClient _apiClient;
 
@@ -16,38 +24,55 @@ class RanksRepository {
 
   // ----- Ladder CRUD -----
 
-  /// `GET /api/v1/ranks/?gym_id=…` — the ordered ladder.
-  Future<List<RankFullResponse>> listRanks(String gymId) async {
+  /// `GET /api/v1/ranks/?gym_id=…` — the ordered main-rank ladder
+  /// plus the gym's [RankSubType].
+  Future<RankLadder> listRanks(String gymId) async {
     final response = await _apiClient.get(
       '/api/v1/ranks/',
       queryParameters: {'gym_id': gymId},
     );
-    return _items(response.data);
+    final data = response.data as Map<String, dynamic>;
+    return RankLadder(
+      ranks: _mainRanks(data['items']),
+      subRankType: RankSubType.fromJson(data['sub_rank_type'] as String),
+    );
+  }
+
+  /// `GET /api/v1/ranks/{rank_id}` — a single main rank (the rank
+  /// detail screen's header read).
+  Future<MainRank> getRank(String rankId) async {
+    final response = await _apiClient.get('/api/v1/ranks/$rankId');
+    return MainRank.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// `POST /api/v1/ranks/`.
-  Future<RankFullResponse> createRank(RankCreateRequest req) async {
+  Future<MainRank> createRank(MainRankCreateRequest req) async {
     final response = await _apiClient.post(
       '/api/v1/ranks/',
       data: req.toJson(),
     );
-    return RankFullResponse.fromJson(response.data as Map<String, dynamic>);
+    return MainRank.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// `PUT /api/v1/ranks/{rank_id}` (mutable fields nested under `data`).
-  Future<RankFullResponse> updateRank(
+  /// `PUT /api/v1/ranks/{rank_id}` (mutable fields nested under
+  /// `data`). Also the fold-target for what used to be the
+  /// stand-alone whole-group rename (a group is just one row now —
+  /// renaming it is an ordinary update).
+  Future<MainRank> updateRank(
     String rankId,
-    RankUpdateData data,
+    MainRankUpdateData data,
   ) async {
     final response = await _apiClient.put(
       '/api/v1/ranks/$rankId',
       data: {'data': data.toJson()},
     );
-    return RankFullResponse.fromJson(response.data as Map<String, dynamic>);
+    return MainRank.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// `DELETE /api/v1/ranks/{rank_id}` — backend reassigns affected
-  /// members to a neighbour rank, then deletes.
+  /// `DELETE /api/v1/ranks/{rank_id}` — the backend reassigns
+  /// affected members to a neighbour rank's base leaf, then deletes.
+  /// Also the fold-target for what used to be the stand-alone
+  /// whole-group delete.
   Future<void> deleteRank(String rankId) async {
     await _apiClient.delete('/api/v1/ranks/$rankId');
   }
@@ -76,41 +101,76 @@ class RanksRepository {
     return RankEnabledResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
+  // ----- Sub-rank type -----
+
+  /// The gym's current [RankSubType]. There is no dedicated read
+  /// endpoint for this alone — it rides along on every
+  /// `GET /api/v1/ranks/` response, so this is a thin convenience
+  /// over [listRanks] for a caller that only wants the type.
+  Future<RankSubType> getSubRankType(String gymId) async {
+    final ladder = await listRanks(gymId);
+    return ladder.subRankType;
+  }
+
+  /// Sets the gym's [RankSubType] directly (independent of seeding a
+  /// stripes/div preset, which also sets it as a side effect).
+  ///
+  /// Rides the ordinary gym-update path: `PUT /api/v1/gyms/{gym_id}`'s
+  /// `GymUpdateData` accepts `sub_rank_type` (a mutable gym column).
+  /// Send a concrete `stripes`/`div` value — the field rejects an
+  /// explicit null server-side (it is `NOT NULL DEFAULT 'stripes'`).
+  Future<void> setSubRankType(String gymId, RankSubType type) async {
+    await _apiClient.put(
+      '/api/v1/gyms/$gymId',
+      data: {
+        'data': {'sub_rank_type': type.toJson()},
+      },
+    );
+  }
+
   // ----- Presets + reorder -----
 
-  /// `POST /api/v1/ranks/from-preset` — idempotent merge; returns the
-  /// gym's full ladder afterwards.
-  Future<List<RankFullResponse>> seedFromPreset(
+  /// `POST /api/v1/ranks/from-preset` — idempotent merge; also
+  /// copies the preset's implied sub-rank type onto the gym. Returns
+  /// the gym's full ladder afterwards.
+  Future<RankLadder> seedFromPreset(
     String gymId,
-    String gymType,
+    RankPresetKind presetKind,
   ) async {
     final response = await _apiClient.post(
       '/api/v1/ranks/from-preset',
-      data: {'gym_id': gymId, 'gym_type': gymType},
+      data: {'gym_id': gymId, 'preset_kind': presetKind.toJson()},
     );
-    return _items(response.data);
+    final data = response.data as Map<String, dynamic>;
+    return RankLadder(
+      ranks: _mainRanks(data['items']),
+      subRankType: RankSubType.fromJson(data['sub_rank_type'] as String),
+    );
   }
 
-  /// `GET /api/v1/ranks/presets/grouped` — preset ladders keyed by
-  /// gym type, each main rank with its sub-ranks nested.
-  Future<Map<String, List<RankPresetGroup>>> listPresetsGrouped() async {
+  /// `GET /api/v1/ranks/presets/grouped` — every preset ladder
+  /// (flat main rows), keyed by [RankPresetKind].
+  Future<Map<RankPresetKind, List<RankPresetResponse>>>
+      listPresetsGrouped() async {
     final response = await _apiClient.get('/api/v1/ranks/presets/grouped');
     final presets =
         (response.data as Map<String, dynamic>)['presets']
             as Map<String, dynamic>;
     return presets.map(
-      (gymType, groups) => MapEntry(
-        gymType,
-        (groups as List<dynamic>)
-            .map((e) => RankPresetGroup.fromJson(e as Map<String, dynamic>))
+      (kind, rows) => MapEntry(
+        RankPresetKind.fromJson(kind),
+        (rows as List<dynamic>)
+            .map(
+              (e) => RankPresetResponse.fromJson(e as Map<String, dynamic>),
+            )
             .toList(),
       ),
     );
   }
 
-  /// `POST /api/v1/ranks/reorder` — applies a full new ordering
-  /// atomically; returns the reordered ladder.
-  Future<List<RankFullResponse>> reorderRanks(
+  /// `POST /api/v1/ranks/reorder` — applies a full new main-rank
+  /// ordering atomically; returns the reordered ladder.
+  Future<RankLadder> reorderRanks(
     String gymId,
     List<RankReorderItem> ranks,
   ) async {
@@ -121,14 +181,71 @@ class RanksRepository {
         'ranks': ranks.map((e) => e.toJson()).toList(),
       },
     );
-    return _items(response.data);
+    final data = response.data as Map<String, dynamic>;
+    return RankLadder(
+      ranks: _mainRanks(data['items']),
+      subRankType: RankSubType.fromJson(data['sub_rank_type'] as String),
+    );
+  }
+
+  // ----- Paginated member reads -----
+
+  /// `GET /api/v1/ranks/{rank_id}/members` — members currently on
+  /// [rankId], ordered by sub-index then name.
+  Future<(List<RankMemberRow> items, int totalCount)> membersInRank(
+    String gymId,
+    String rankId, {
+    int startIndex = 0,
+    int count = 25,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/v1/ranks/$rankId/members',
+      queryParameters: {
+        'gym_id': gymId,
+        'start_index': startIndex,
+        'count': count,
+      },
+    );
+    final data = response.data as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>)
+        .map((e) => RankMemberRow.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return (items, data['total_count'] as int);
+  }
+
+  /// `GET /api/v1/ranks/ready-to-promote` — the proximity-sorted
+  /// board of members closest to their next leaf.
+  Future<(List<RankReadyRow> items, int totalCount)> readyToPromote(
+    String gymId, {
+    int startIndex = 0,
+    int count = 25,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/v1/ranks/ready-to-promote',
+      queryParameters: {
+        'gym_id': gymId,
+        'start_index': startIndex,
+        'count': count,
+      },
+    );
+    final data = response.data as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>)
+        .map((e) => RankReadyRow.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return (items, data['total_count'] as int);
   }
 
   // ----- Per-member rank changes -----
 
-  /// `POST /api/v1/ranks/promote-member` — advance one rung; returns
-  /// the member's new rank.
-  Future<RankFullResponse> promoteMember(
+  /// `POST /api/v1/ranks/promote-member` — advances the member one
+  /// leaf up the ordered ladder (the next sub-position within their
+  /// current main rank, else the base leaf of the next main rank; a
+  /// rank-less member is assigned the lowest leaf). NOTE: the real
+  /// backend request carries only `gym_id` + `member_id` — there is
+  /// no `kind` parameter; "promote to next major, skipping remaining
+  /// subs" is not a single backend call, so it's resolved client-side
+  /// in [applyPromotion] via [setMemberRank] instead.
+  Future<RankMemberResponse> promoteMember(
     String gymId,
     String memberId,
   ) async {
@@ -136,69 +253,92 @@ class RanksRepository {
       '/api/v1/ranks/promote-member',
       data: {'gym_id': gymId, 'member_id': memberId},
     );
-    return RankFullResponse.fromJson(
-      (response.data as Map<String, dynamic>)['new_rank']
-          as Map<String, dynamic>,
-    );
+    return RankMemberResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// `POST /api/v1/ranks/set-member-rank` — set an explicit rank (or
-  /// `null` to unassign). Returns the new rank, or `null` when
-  /// unassigned.
-  Future<RankFullResponse?> setMemberRank(
+  /// `POST /api/v1/ranks/set-member-rank` — sets an explicit leaf
+  /// (correction / demotion / assignment), or `null` [rankId] to
+  /// unassign.
+  Future<RankMemberResponse> setMemberRank(
     String gymId,
-    String memberId,
+    String memberId, {
     String? rankId,
-  ) async {
+    int? subIndex,
+  }) async {
     final response = await _apiClient.post(
       '/api/v1/ranks/set-member-rank',
-      data: {'gym_id': gymId, 'member_id': memberId, 'rank_id': rankId},
-    );
-    final newRank = (response.data as Map<String, dynamic>)['new_rank'];
-    return newRank == null
-        ? null
-        : RankFullResponse.fromJson(newRank as Map<String, dynamic>);
-  }
-
-  // ----- Whole-group operations (atomic backend endpoints) -----
-
-  /// `PUT /api/v1/ranks/rename-group` — renames every sub-rank row
-  /// sharing the group's `main_rank_num_order` in one atomic UPDATE
-  /// (`main_name` is denormalised per row); returns the updated
-  /// ladder.
-  Future<List<RankFullResponse>> renameMainGroup(
-    String gymId,
-    int mainRankNumOrder,
-    String newMainName,
-  ) async {
-    final response = await _apiClient.put(
-      '/api/v1/ranks/rename-group',
       data: {
         'gym_id': gymId,
-        'main_rank_num_order': mainRankNumOrder,
-        'new_main_name': newMainName,
+        'member_id': memberId,
+        'rank_id': rankId,
+        'sub_index': subIndex,
       },
     );
-    return _items(response.data);
+    return RankMemberResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// `DELETE /api/v1/ranks/group` — the backend reassigns every
-  /// member on the group's sub-ranks to the neighbour group, then
-  /// deletes the whole group, in one transaction.
-  Future<void> deleteMainGroup(String gymId, int mainRankNumOrder) async {
-    await _apiClient.delete(
-      '/api/v1/ranks/group',
-      queryParameters: {
-        'gym_id': gymId,
-        'main_rank_num_order': mainRankNumOrder,
-      },
-    );
+  /// Applies a staff-picked [PromotionChoice] via whichever real
+  /// endpoint it maps to:
+  ///  - [PromoteNextSub] → [promoteMember] directly.
+  ///  - [PromoteExplicit] → [setMemberRank] with its ids as given.
+  ///  - [PromoteNextMajor] → there is no backend "skip to next major"
+  ///    call, so this resolves the target itself: the next main rank
+  ///    after [currentMainRankId] in [ladder] (ordered by
+  ///    `main_rank_num_order`, exactly as the backend returns it),
+  ///    then [setMemberRank]s to that rank's base leaf (sub-index `0`
+  ///    when it has sub-ranks, else `null` — mirrors the backend's
+  ///    own base-leaf rule). A `null` [currentMainRankId] (a
+  ///    rank-less member) resolves to the ladder's lowest rank,
+  ///    mirroring [promoteMember]'s rank-less behaviour. Throws
+  ///    [StateError] when [currentMainRankId] is already the top of
+  ///    [ladder] (mirrors the backend's own "highest rank" 409).
+  Future<RankMemberResponse> applyPromotion({
+    required String gymId,
+    required String memberId,
+    required PromotionChoice choice,
+    String? currentMainRankId,
+    List<MainRank> ladder = const [],
+  }) {
+    switch (choice) {
+      case PromoteNextSub():
+        return promoteMember(gymId, memberId);
+      case PromoteExplicit(:final mainRankId, :final subIndex):
+        return setMemberRank(
+          gymId,
+          memberId,
+          rankId: mainRankId,
+          subIndex: subIndex,
+        );
+      case PromoteNextMajor():
+        final next = _nextMainRank(ladder, currentMainRankId);
+        return setMemberRank(
+          gymId,
+          memberId,
+          rankId: next.rankId,
+          subIndex: next.subRankCount > 0 ? 0 : null,
+        );
+    }
   }
 
-  List<RankFullResponse> _items(dynamic data) {
-    final items = (data as Map<String, dynamic>)['items'] as List<dynamic>;
-    return items
-        .map((e) => RankFullResponse.fromJson(e as Map<String, dynamic>))
+  /// The next main rank after [currentMainRankId] in the ordered
+  /// [ladder] — the lowest rank when [currentMainRankId] is `null`
+  /// (rank-less) or not found in the ladder.
+  MainRank _nextMainRank(List<MainRank> ladder, String? currentMainRankId) {
+    if (ladder.isEmpty) {
+      throw StateError('Gym has no ranks configured');
+    }
+    if (currentMainRankId == null) return ladder.first;
+    final index = ladder.indexWhere((r) => r.rankId == currentMainRankId);
+    if (index < 0) return ladder.first;
+    if (index >= ladder.length - 1) {
+      throw StateError('Member is already at the highest main rank');
+    }
+    return ladder[index + 1];
+  }
+
+  List<MainRank> _mainRanks(dynamic items) {
+    return (items as List<dynamic>)
+        .map((e) => MainRank.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 }

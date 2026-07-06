@@ -1,58 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
-import 'package:crm/features/memberships/presentation/widgets/ranks/rank_group.dart';
-import 'package:crm/features/memberships/presentation/widgets/ranks/rank_group_card.dart';
+import 'package:crm/features/memberships/data/models/rank_reorder_item.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/main_rank_card.dart';
+import 'package:crm/features/memberships/presentation/widgets/ranks/sub_rank_strip.dart';
 import 'package:crm/shared/widgets/warning_message.dart';
 
-/// The gym's rank ladder as nested, indented, draggable groups. The
-/// section owns reorder maths: a group drag or a sub drag rebuilds
-/// the full ordering and dispatches one [RanksReordered].
+/// The gym's rank ladder — a vertical, MAIN-rank-only reorderable list.
+/// Sub-ranks are no longer rows; each main rank is a prominent card with
+/// its sub-positions shown as a strip beneath it. A drag reorders the
+/// main ranks and dispatches one [RanksReordered] with the full new
+/// main-order (sub-positions carry no order of their own now).
 class RankLadderSection extends StatelessWidget {
   final RanksLoaded state;
 
   const RankLadderSection({super.key, required this.state});
 
-  void _dispatch(BuildContext context, List<RankGroup> groups) {
+  void _onReorder(BuildContext context, int oldIndex, int newIndex) {
+    // `onReorderItem` already adjusts newIndex for the removed item at
+    // oldIndex, so no off-by-one correction is needed.
+    final reordered = [...state.ranks];
+    reordered.insert(newIndex, reordered.removeAt(oldIndex));
     context.read<RanksBloc>().add(RanksReordered(
           gymId: state.gymId,
-          ranks: flattenToReorderItems(groups),
+          ranks: [
+            for (var i = 0; i < reordered.length; i++)
+              RankReorderItem(
+                rankId: reordered[i].rankId,
+                mainRankNumOrder: i,
+              ),
+          ],
         ));
-  }
-
-  void _onGroupReorder(
-    BuildContext context,
-    List<RankGroup> groups,
-    int oldIndex,
-    int newIndex,
-  ) {
-    _dispatch(context, reorderIndex(groups, oldIndex, newIndex));
-  }
-
-  void _onSubReorder(
-    BuildContext context,
-    List<RankGroup> groups,
-    int groupIndex,
-    int oldIndex,
-    int newIndex,
-  ) {
-    final group = groups[groupIndex];
-    final next = [...groups];
-    next[groupIndex] = RankGroup(
-      mainOrder: group.mainOrder,
-      mainName: group.mainName,
-      subs: reorderIndex(group.subs, oldIndex, newIndex),
-    );
-    _dispatch(context, next);
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = groupRanks(state.ranks);
-    if (groups.isEmpty) {
+    if (state.ranks.isEmpty) {
       return const WarningMessage(
         message: 'No ranks yet. Use "Add New Rank" above to create the '
             'first one, or seed a preset below.',
@@ -63,16 +50,36 @@ class RankLadderSection extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
       onReorderItem: (oldIndex, newIndex) =>
-          _onGroupReorder(context, groups, oldIndex, newIndex),
+          _onReorder(context, oldIndex, newIndex),
       children: [
-        for (var gi = 0; gi < groups.length; gi++)
-          RankGroupCard(
-            key: ValueKey('group-${groups[gi].mainName}-${groups[gi].mainOrder}'),
-            group: groups[gi],
-            groupIndex: gi,
-            state: state,
-            onSubReorder: (oldIndex, newIndex) =>
-                _onSubReorder(context, groups, gi, oldIndex, newIndex),
+        for (var i = 0; i < state.ranks.length; i++)
+          Padding(
+            key: ValueKey(state.ranks[i].rankId),
+            padding: const EdgeInsets.only(
+              bottom: DesignConstants.spacingLarge,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingLarge,
+              children: [
+                MainRankCard(
+                  rank: state.ranks[i],
+                  gymId: state.gymId,
+                  index: i,
+                  isTop: i == state.ranks.length - 1,
+                ),
+                if (state.ranks[i].subRankCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: DesignConstants.paddingSmall,
+                    ),
+                    child: SubRankStrip(
+                      rank: state.ranks[i],
+                      subRankType: state.subRankType,
+                    ),
+                  ),
+              ],
+            ),
           ),
       ],
     );

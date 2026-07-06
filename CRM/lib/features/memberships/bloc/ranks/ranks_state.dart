@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-import 'package:crm/features/memberships/data/models/rank_full_response.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
 sealed class RanksState extends Equatable {
   const RanksState();
@@ -20,8 +21,11 @@ class RanksLoading extends RanksState {
 class RanksLoaded extends RanksState {
   final String gymId;
 
-  /// The ordered ladder (main then sub).
-  final List<RankFullResponse> ranks;
+  /// The ordered main-rank ladder.
+  final List<MainRank> ranks;
+
+  /// The gym's sub-rank type — derives every row's sub-rank labels.
+  final RankSubType subRankType;
 
   /// Whether the gym's rank system is on.
   final bool isRankEnabled;
@@ -35,13 +39,15 @@ class RanksLoaded extends RanksState {
   const RanksLoaded({
     required this.gymId,
     required this.ranks,
+    required this.subRankType,
     required this.isRankEnabled,
     this.isMutating = false,
     this.actionError,
   });
 
   RanksLoaded copyWith({
-    List<RankFullResponse>? ranks,
+    List<MainRank>? ranks,
+    RankSubType? subRankType,
     bool? isRankEnabled,
     bool? isMutating,
     String? actionError,
@@ -49,6 +55,7 @@ class RanksLoaded extends RanksState {
     return RanksLoaded(
       gymId: gymId,
       ranks: ranks ?? this.ranks,
+      subRankType: subRankType ?? this.subRankType,
       isRankEnabled: isRankEnabled ?? this.isRankEnabled,
       isMutating: isMutating ?? this.isMutating,
       actionError: actionError,
@@ -59,6 +66,7 @@ class RanksLoaded extends RanksState {
   List<Object?> get props => [
         gymId,
         ranks,
+        subRankType,
         isRankEnabled,
         isMutating,
         actionError,

@@ -20,6 +20,8 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
@@ -1268,7 +1270,14 @@ class MemberDetailBloc
 
   /// Apply a rank change (promote / set / unassign) via the ranks
   /// domain, then reload member detail in place — new rank + real
-  /// progress, bumping refreshToken, same shape as a mutation.
+  /// progress, bumping refreshToken + rankChangeSuccessCount, same
+  /// shape as a mutation.
+  ///
+  /// [PromotionChoice] maps onto the two real ranks endpoints via
+  /// [RanksRepository.applyPromotion] — [PromoteNextMajor] needs the
+  /// gym's full ladder to resolve "the next main rank after this
+  /// one", so it's fetched here only for that choice (the common
+  /// [PromoteNextSub] / [PromoteExplicit] paths need no extra read).
   Future<void> _onRankChange(
     MemberRankChangeRequested event,
     Emitter<MemberDetailState> emit,
@@ -1279,11 +1288,16 @@ class MemberDetailBloc
     final gymId = current.member.gymId;
     final memberId = current.member.memberId;
     try {
-      if (event.promote) {
-        await _ranksRepository.promoteMember(gymId, memberId);
-      } else {
-        await _ranksRepository.setMemberRank(gymId, memberId, event.rankId);
-      }
+      final ladder = event.choice is PromoteNextMajor
+          ? (await _ranksRepository.listRanks(gymId)).ranks
+          : const <MainRank>[];
+      await _ranksRepository.applyPromotion(
+        gymId: gymId,
+        memberId: memberId,
+        choice: event.choice,
+        currentMainRankId: current.member.rank?.rankId,
+        ladder: ladder,
+      );
       final refreshed = await _repository.getMemberDetail(memberId);
       final latest = state;
       if (latest is MemberDetailLoaded) {
@@ -1291,6 +1305,7 @@ class MemberDetailBloc
           member: refreshed,
           isMutating: false,
           refreshToken: latest.refreshToken + 1,
+          rankChangeSuccessCount: latest.rankChangeSuccessCount + 1,
         ));
       }
     } catch (e, stackTrace) {

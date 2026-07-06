@@ -8,10 +8,11 @@ part of 'rank.dart';
 
 Rank _$RankFromJson(Map<String, dynamic> json) => Rank(
   rankId: json['rank_id'] as String,
-  mainName: json['main_name'] as String,
-  subName: json['sub_name'] as String,
+  name: json['name'] as String,
+  subIndex: (json['sub_index'] as num?)?.toInt(),
+  subLabel: json['sub_label'] as String?,
   imageUrl: json['image_url'] as String?,
-  color: json['color'] as String?,
-  classesTillRankup: (json['classes_till_rankup'] as num).toInt(),
+  classesToNextMajor: (json['classes_to_next_major'] as num).toInt(),
+  classesTillNextStep: (json['classes_till_next_step'] as num).toInt(),
   classesSinceRank: (json['classes_since_rank'] as num?)?.toInt() ?? 0,
 );

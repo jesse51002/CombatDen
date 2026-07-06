@@ -1,8 +1,10 @@
 import 'package:equatable/equatable.dart';
 
-import 'package:crm/features/memberships/data/models/rank_create_request.dart';
+import 'package:crm/features/memberships/data/models/main_rank_create_request.dart';
+import 'package:crm/features/memberships/data/models/main_rank_update_data.dart';
+import 'package:crm/features/memberships/data/models/rank_preset_kind.dart';
 import 'package:crm/features/memberships/data/models/rank_reorder_item.dart';
-import 'package:crm/features/memberships/data/models/rank_update_data.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 
 sealed class RanksEvent extends Equatable {
   const RanksEvent();
@@ -11,7 +13,8 @@ sealed class RanksEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Load (or reload) the gym's rank ladder + enabled flag.
+/// Load (or reload) the gym's rank ladder + sub-rank type + enabled
+/// flag.
 class RanksInitRequested extends RanksEvent {
   final String gymId;
 
@@ -22,7 +25,7 @@ class RanksInitRequested extends RanksEvent {
 }
 
 class RankCreated extends RanksEvent {
-  final RankCreateRequest request;
+  final MainRankCreateRequest request;
 
   const RankCreated(this.request);
 
@@ -30,9 +33,12 @@ class RankCreated extends RanksEvent {
   List<Object?> get props => [request];
 }
 
+/// Updates a rank's mutable fields. A whole-group rename (one main
+/// rank IS the group now) is just a name-only update through this
+/// same event.
 class RankUpdated extends RanksEvent {
   final String rankId;
-  final RankUpdateData data;
+  final MainRankUpdateData data;
   final String gymId;
 
   const RankUpdated({
@@ -45,6 +51,9 @@ class RankUpdated extends RanksEvent {
   List<Object?> get props => [rankId, gymId];
 }
 
+/// Deletes a rank (the backend reassigns its members to a neighbour
+/// rank's base leaf first). Also the fold-target for what used to
+/// be the stand-alone whole-group delete.
 class RankDeleted extends RanksEvent {
   final String rankId;
   final String gymId;
@@ -67,12 +76,12 @@ class RankEnabledToggled extends RanksEvent {
 
 class RankPresetSeeded extends RanksEvent {
   final String gymId;
-  final String gymType;
+  final RankPresetKind presetKind;
 
-  const RankPresetSeeded({required this.gymId, required this.gymType});
+  const RankPresetSeeded({required this.gymId, required this.presetKind});
 
   @override
-  List<Object?> get props => [gymId, gymType];
+  List<Object?> get props => [gymId, presetKind];
 }
 
 class RanksReordered extends RanksEvent {
@@ -85,34 +94,14 @@ class RanksReordered extends RanksEvent {
   List<Object?> get props => [gymId, ranks];
 }
 
-/// Rename a whole main-rank group (one atomic backend UPDATE).
-class RankGroupRenamed extends RanksEvent {
+/// Changes the gym's sub-rank type (stripes/div) directly,
+/// independent of seeding a stripes/div preset.
+class RankSubTypeChanged extends RanksEvent {
   final String gymId;
-  final int mainRankNumOrder;
-  final String newName;
+  final RankSubType type;
 
-  const RankGroupRenamed({
-    required this.gymId,
-    required this.mainRankNumOrder,
-    required this.newName,
-  });
+  const RankSubTypeChanged({required this.gymId, required this.type});
 
   @override
-  List<Object?> get props => [gymId, mainRankNumOrder, newName];
-}
-
-/// Delete a whole main-rank group (one atomic backend transaction —
-/// members are reassigned to the neighbour group, then the group's
-/// rows are deleted).
-class RankGroupDeleted extends RanksEvent {
-  final String gymId;
-  final int mainRankNumOrder;
-
-  const RankGroupDeleted({
-    required this.gymId,
-    required this.mainRankNumOrder,
-  });
-
-  @override
-  List<Object?> get props => [gymId, mainRankNumOrder];
+  List<Object?> get props => [gymId, type];
 }

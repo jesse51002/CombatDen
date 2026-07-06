@@ -68,6 +68,7 @@ class MembersListBody extends StatelessWidget {
               MembersListFilterBar(
                 filters: state.filters,
                 plans: state.plans,
+                ranks: state.ranks,
               ),
             ],
           ),

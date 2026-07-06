@@ -4,6 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/members/presentation/dialogs/members_list_filter_date_field.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/shared/widgets/multi_select_pills.dart';
 
 /// Statuses offered in the filter dialog. The resilient
@@ -25,10 +26,13 @@ class MembersListFilterSections extends StatelessWidget {
   final Set<MembershipStatus> statuses;
   final List<MembershipPlanResponse> plans;
   final Set<String> planIds;
+  final List<MainRank> ranks;
+  final Set<String> rankIds;
   final DateTime? startDate;
   final DateTime? endDate;
   final ValueChanged<MembershipStatus> onToggleStatus;
   final ValueChanged<String> onTogglePlan;
+  final ValueChanged<String> onToggleRank;
   final void Function(DateTime? start, DateTime? end) onDatesChanged;
 
   const MembersListFilterSections({
@@ -36,10 +40,13 @@ class MembersListFilterSections extends StatelessWidget {
     required this.statuses,
     required this.plans,
     required this.planIds,
+    required this.ranks,
+    required this.rankIds,
     required this.startDate,
     required this.endDate,
     required this.onToggleStatus,
     required this.onTogglePlan,
+    required this.onToggleRank,
     required this.onDatesChanged,
   });
 
@@ -71,6 +78,18 @@ class MembersListFilterSections extends StatelessWidget {
                   if (planIds.contains(plans[i].planId)) i,
               },
               onToggled: (i) => onTogglePlan(plans[i].planId),
+            ),
+          ),
+        if (ranks.isNotEmpty)
+          _Section(
+            title: 'Rank',
+            child: MultiSelectPills(
+              labels: ranks.map((r) => r.name).toList(),
+              selectedIndices: {
+                for (var i = 0; i < ranks.length; i++)
+                  if (rankIds.contains(ranks[i].rankId)) i,
+              },
+              onToggled: (i) => onToggleRank(ranks[i].rankId),
             ),
           ),
         _Section(
