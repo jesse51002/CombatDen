@@ -471,116 +471,36 @@ how-to-work-here facts belong here:
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
 
-## `videos` domain — LLM spec and agent surface
+## `videos` domain (`src/videos/`)
 
-The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
-agent. Three gym-employee-gated routes cover the spec/agent surface:
+Hosts the LLM-authored video spec + the conversational agent. The **full model** —
+append-only versioned spec (readers use the `gym_video_spec_latest` view, never the raw
+table), the three version `source`s, the zero-tool agent and its deterministic
+accept → diff-guard → query-gen → save path, the litellm-vs-Pydantic-AI split, the
+endpoints, schemas, SQL, and key files — lives in the **`video-spec-guide` skill**. Read it
+before touching this domain.
 
-| Route | What it does |
-|---|---|
-| `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
-| `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
-| `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
+How-to-work-here that isn't (only) in the skill:
 
-**Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
-
-The agent has **zero tools**. It converses to propose a spec; its proposal output
-(`SpecProposal`) **always** pairs a short chat `message` with the criteria `draft` (criteria
-only: disciplines + keep/avoid descriptions), so a proposal is never silent — the message is
-appended to the chat while the criteria show in the highlighted panel. When the owner presses Accept, the frontend sends
-`accepted_spec` in the next `AgentTurnRequest` and the backend commits it deterministically:
-diff guard → query generation → save. The agent is then run on a short outcome note so it can
-acknowledge and invite further changes (the conversation stays open, `saved=True`).
-
-**Services (flat in `service/`):**
-
-- **`VideoSpecService`** (`video_spec_service.py`) — spec DB read/write: `load_latest`,
-  `save_version(gym_id, draft, queries, *, source)`. `queries` is a separate arg — never in the draft.
-- **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`.
-- **`VideoSpecAuthoring`** (`video_spec_authoring.py`) — shared deterministic commit: diff guard → query gen → save.
-  `commit(gym_id, criteria, *, source) -> VideoSpecView | None`. Returns `None` when criteria are unchanged.
-- **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
-
-**`VideosService` (`videos_service.py`) is the domain FACADE** — composes `VideoFeedService`,
-`VideoSpecService`, `VideoSpecAuthoring`, and `VideoFeedRefiner`. Exposes: `load_latest_spec`,
-`save_accepted_spec` (→ authoring.commit), `refine_from_feed`, plus all feed operations
-(`load_feed_ids`, `load_pool_videos`, owner add/remove/keep). The conversational agent uses it for
-the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
-in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
-
-The agent wrapper lives in `service/video_agent/`:
-
-- **`VideoAgentService`** (`video_agent_service.py`) — `agent_turn` only. No tools registered.
-  Accept-path calls `videos_service.save_accepted_spec`; normal first turn seeds current-spec
-  context by prepending it to the user message.
-
-**Schemas:**
-- `schema/video_spec_schema.py`: `VideoSpecDraft` (criteria only — no `queries` field),
-  `VideoSpecView` (read, includes queries/source/created_at), `QueriesResult`.
-- `schema/video_agent_schema.py`: `AgentTurnRequest` (`message`, `history`, `accepted_spec`),
-  `AgentTurnResponse` (`reply`, `draft`, `question`, `history`, `saved`, `usage`).
-  `AgentQuestion` (`question`, `options` 2–6, `multi_select`) — the agent can ask a
-  multiple-choice question rendered as selectable chips in the CRM. `SpecProposal`
-  (`message` + criteria `draft`) — the agent's finished-proposal output; a proposed draft
-  **always** carries a `message` (mapped to `AgentTurnResponse.reply`, appended to the chat).
-
-**SQL:** `sql/video_spec_load_latest.sql`, `video_spec_insert_version.sql`, `video_feed_signals.sql`.
-
-**Prompts live in `src/videos/prompts/*.md`** (per the monorepo no-inline-prompt rule). Code holds
-the file path, never the prompt text.
-
-**LLM stack — litellm for regular calls; Pydantic AI for the conversational agent.**
-
-The backend runs **Python 3.13** (`requires-python = ">=3.13,<3.14"`). litellm can't install on
-3.14, so the backend moved to 3.13 to get both LLM frameworks.
-
-- **Regular single-shot structured calls** (`VideoQueryGenerator`, `VideoFeedRefiner`) go through
-  **litellm** via `src/shared/litellm_client.py` (`LiteLLMClient.complete_structured(prompt, schema,
-  model)`). Model string is `settings.video_llm_model` in litellm's `provider/name` format (e.g.
-  `anthropic/claude-sonnet-4-6`); the `provider/` prefix selects which API key to use.
-- **The conversational agent** (`VideoAgentService`) uses **Pydantic AI** (`pydantic-ai-slim[anthropic]`)
-  with an explicit `AnthropicModel` constructed from `settings.video_agent_model` (bare model name,
-  e.g. `claude-sonnet-4-6`) and `settings.anthropic_api_key`. No env-variable writing,
-  no `video_agent_llm.py` (that file was removed — all provider wiring is in `video_agent_service.py`).
-
-**One-way layering rule:** `VideoAgentService` → `VideosService` (facade) → the regular services
-(`VideoSpecService`, `VideoQueryGenerator`, `VideoFeedRefiner`, `VideoSpecAuthoring`). The regular
-services **never** call `VideoAgentService`.
-
-Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare model name),
-`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`.
-
-**Versioned spec — readers always use the view, not the table.**
-`gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
-Three writers append new version rows, each stamped with a `gym_video_spec_source` enum value:
-
-- Agent accept / admin save → `admin_update` (via `POST /api/v1/gyms/{id}/video-agent` with `accepted_spec`)
-- Preset import (`PresetsService`) → `system_update`
-- Feed refiner → `feed_update` (via `POST /api/v1/gyms/{id}/video-agent/refine-from-feed`)
-
-Read paths (including the `GET` endpoint) **always** query the `gym_video_spec_latest` view, which
-surfaces the single most-recent version per gym. Do not `SELECT` directly from the raw
-`gym_video_spec` table in a read path. Queries are stored in the spec's `queries JSONB` column (the
-separate `gym_video_query` table was dropped when versioned spec shipped).
-
-**DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
-`video_spec_authoring`, `video_feed_refiner`, `video_agent_service`, `videos_service`.
-
-**DI providers (presets domain):** `presets_service`, `presets_template_service`.
-
-**DI providers (theme domain):** `theme_showcase_service`, `theme_showcase_defaults_service`.
-
-There is NO separate `video_config` router or module.
+- The backend pins **Python 3.13** (`requires-python = ">=3.13,<3.14"`) because litellm won't
+  install on 3.14 — this constrains the whole backend env, not just videos.
+- **One-way layering:** `VideoAgentService` → `VideosService` (facade) → the regular services;
+  the regular services never call the agent back.
+- **Ownership guardrail:** the template catalog lives in the **presets** domain
+  (`PresetsTemplateService`), showcase reads in the **theme** domain — NOT in videos. Don't add
+  either here.
 
 ## Image upload domain (`src/uploads/`)
 
-`POST /api/v1/uploads/image` accepts a multipart image plus a `category` **form field** (`reward`, `member`, `class`, `gym`, or `rank` — not a query parameter), stores it in the `combatden-assets` S3 bucket (under a key prefix matching the `category` value), and returns a CDN URL (`cdn.combatden.net/...?v=<content-hash>`). The bucket and CDN are the same infrastructure ThemeService uses for theme asset uploads; the uploads domain is the backend's own proxy into that same bucket. Used by the CRM's `ImageUploadPickerField` (reward catalog images, member photos, class photos, gym logos, rank/sub-rank belt images) via `ImageUploadRepository.uploadImage`.
+`POST /api/v1/uploads/image` — a multipart image plus a `category` **form field** (`reward`,
+`member`, `class`, `gym`, `rank`; not a query param) → stored in the `combatden-assets` S3
+bucket under a `category`-named key prefix → returns a CDN URL
+(`cdn.combatden.net/...?v=<content-hash>`). Used by the CRM's `ImageUploadPickerField`. Gated by
+`Auth.verify_staff_principal` (owner/admin of ≥1 gym; no `gym_id` to scope). The 5 MB cap is
+enforced before and after the body is read.
 
-Gated by `Auth.verify_staff_principal` — the gym-agnostic staff bar (owner/admin of **at least one** gym; same bar as `verify_gym_employee`, just without a `gym_id` to scope against, since this endpoint takes none). The 5 MB cap is enforced twice: first cheaply on the parsed multipart part's `file.size` **before** the body is read into memory, then again on the actual byte count read as a backstop for a missing `file.size`.
-
-**Dependencies:** `boto3` (PyPI — S3 client) and `python-multipart` (FastAPI multipart form parser).
-
-**Required `Settings` fields** (`src/core/config.py`): `assets_bucket`, `aws_region`, `assets_cdn_base_url`. AWS credentials (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) must be present in the runtime environment — they are read by the standard boto3 credential chain, not via `Settings` fields.
+**Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
+`aws_region`, `assets_cdn_base_url` (AWS creds via the boto3 env credential chain, not `Settings`).
 
 ## Database
 
