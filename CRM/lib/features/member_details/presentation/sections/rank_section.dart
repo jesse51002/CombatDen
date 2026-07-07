@@ -265,7 +265,7 @@ class _BeltRow extends StatelessWidget {
       children: [
         RankBeltImage(
           imageUrl: rank.imageUrl,
-          size: DesignConstants.rankBeltProfile,
+          size: DesignConstants.rankBeltMedium,
         ),
         Expanded(
           child: Column(

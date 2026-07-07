@@ -297,7 +297,7 @@ class _OptionTile extends StatelessWidget {
           )
         : RankBeltImage(
             imageUrl: imageUrl,
-            size: DesignConstants.rankBeltCompact,
+            size: DesignConstants.rankBeltXSmall,
           );
 
     return Opacity(
@@ -399,7 +399,7 @@ class _PickRow extends StatelessWidget {
           )
         : RankBeltImage(
             imageUrl: imageUrl,
-            size: DesignConstants.rankBeltPick,
+            size: DesignConstants.rankBeltXSmall,
           );
 
     return InkWell(

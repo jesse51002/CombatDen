@@ -670,7 +670,7 @@ class _BreakdownRow extends StatelessWidget {
         children: [
           RankBeltImage(
             imageUrl: imageUrl,
-            size: DesignConstants.rankBeltBreakdown,
+            size: DesignConstants.rankBeltXSmall,
           ),
           Expanded(
             child: Text(

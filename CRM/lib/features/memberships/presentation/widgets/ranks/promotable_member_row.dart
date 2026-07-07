@@ -112,7 +112,7 @@ class PromotableMemberRow extends StatelessWidget {
         children: [
           RankBeltImage(
             imageUrl: imageUrl,
-            size: DesignConstants.rankBeltRoster,
+            size: DesignConstants.rankBeltSmall,
           ),
           Expanded(
             child: Column(

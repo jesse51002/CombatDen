@@ -261,7 +261,7 @@ class _BeltPreview extends StatelessWidget {
         children: [
           RankBeltImage(
             imageUrl: imageUrl,
-            size: DesignConstants.rankBeltPreset,
+            size: DesignConstants.rankBeltMedium,
           ),
           Text(
             name,
