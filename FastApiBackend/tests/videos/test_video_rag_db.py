@@ -155,7 +155,8 @@ async def test_recs_returns_served_video_and_records(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
     """recs=false → the seeded video appears in its bucket, nothing recorded;
-    recs=true → member_video_recs.times_recommended increments per serve."""
+    recs=true → a new member_video_recs row is appended per serve (the log
+    grows 0 → 1 → 2; count is derived, not a stored counter)."""
     member_id = await _insert_member(db_pool, gym_id)
     video_id = "ragvid_0001"
     await _seed_served_rag_video(db_pool, gym_id, video_id)
@@ -168,13 +169,13 @@ async def test_recs_returns_served_video_and_records(
         assert set(buckets) == {"teach", "enjoy", "inform", "human", "peak"}
         teach_ids = [v["url"] for v in buckets["teach"]["videos"]]
         assert any(video_id in u for u in teach_ids)
-        assert await _times_recommended(db_pool, member_id, video_id) is None
+        assert await _rec_count(db_pool, member_id, video_id) == 0
 
-        # Record twice: times_recommended goes 1 → 2.
+        # Record twice: the append-only log grows 1 → 2 rows for this video.
         await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
-        assert await _times_recommended(db_pool, member_id, video_id) == 1
+        assert await _rec_count(db_pool, member_id, video_id) == 1
         await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
-        assert await _times_recommended(db_pool, member_id, video_id) == 2
+        assert await _rec_count(db_pool, member_id, video_id) == 2
     finally:
         await _delete_rag_seed(db_pool, member_id, video_id)
 
@@ -258,16 +259,16 @@ async def test_recs_forbidden_for_non_viewer(
             )
 
 
-async def _times_recommended(
+async def _rec_count(
     db_pool: DirectDatabasePool, member_id: UUID, video_id: str
-) -> int | None:
-    """member_video_recs.times_recommended for (member, video), or None."""
+) -> int:
+    """How many times (member, video) has been served — COUNT of log rows."""
     async with db_pool.session() as session:
         row = (
             (
                 await session.execute(
                     text(
-                        "SELECT times_recommended FROM member_video_recs "
+                        "SELECT COUNT(*) AS n FROM member_video_recs "
                         "WHERE member_id = :m AND video_id = :v"
                     ),
                     {"m": str(member_id), "v": video_id},
@@ -276,4 +277,4 @@ async def _times_recommended(
             .mappings()
             .fetchone()
         )
-    return None if row is None else int(row["times_recommended"])
+    return int(row["n"])

@@ -142,8 +142,8 @@ class VideoRecsService:
     async def _record_served(
         self, gym_id: UUID, member_id: UUID, served: list[dict]
     ) -> None:
-        """Upsert every served row into the member's rec history."""
-        sql = load_sql(SQL_DIR / "video_recs_record_upsert.sql")
+        """Append every served row to the member's rec history (event log)."""
+        sql = load_sql(SQL_DIR / "video_recs_record_insert.sql")
         params = [
             {
                 "member_id": str(member_id),

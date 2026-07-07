@@ -870,23 +870,21 @@ Table member_video_profile {
   }
 }
 
-// Rec-serve history: freshness partition (never-recommended first). One row
-// per (member, video) — re-serves bump last_recommended_at/times_recommended.
-// Written only when record=true (CRM previews leave no trace).
+// Rec-serve history: freshness partition (never-recommended first). Append-only
+// event log — one row PER SERVE (re-serves INSERT another row; times=COUNT,
+// last serve=MAX(recommended_at)). Written only when record=true (previews leave
+// no trace).
 Table member_video_recs {
   rec_id uuid [primary key, default: `gen_random_uuid()`]
   member_id uuid [not null, note: 'FK to members.member_id']
   gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
   video_id text [not null, note: 'FK to video.video_id']
-  bucket mood_bucket [not null, note: 'the bucket it was served under']
-  score float8 [not null, note: 'composite score at (last) serve time']
-  first_recommended_at timestamptz [not null, default: `now()`]
-  last_recommended_at timestamptz [not null, default: `now()`]
-  times_recommended int [not null, default: 1]
+  bucket mood_bucket [not null, note: 'the bucket it was served under at this event']
+  score float8 [not null, note: 'composite score at this serve']
+  recommended_at timestamptz [not null, default: `now()`, note: 'append-only serve log; times=COUNT, last serve=MAX(recommended_at)']
 
   indexes {
-    (member_id, video_id) [unique, note: 'seen is global per member, not per-bucket']
-    member_id
+    (member_id, video_id) [note: 'already-recommended anti-join + per-video MAX(recommended_at)']
   }
 }
 

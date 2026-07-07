@@ -580,11 +580,9 @@ MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "video_id",  # identity FK
-        "bucket",  # bucket served under
-        "score",  # composite score at (last) serve time
-        "first_recommended_at",  # backend-stamped
-        "last_recommended_at",  # backend-stamped
-        "times_recommended",  # backend-managed counter
+        "bucket",  # bucket served under at this event
+        "score",  # composite score at this serve
+        "recommended_at",  # backend-stamped; append-only serve log
     }
 )
 

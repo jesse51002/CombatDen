@@ -518,9 +518,10 @@ serialized to pgvector text form (`'[0.1,0.2,...]'`) and bound with `CAST(:x AS 
   `videos_load_feed_ids`) JOIN `video_rag`, filtered to the bucket's genres (the deterministic
   `video_mood_bucket` genre→bucket map). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
   w_views*min(ln(1+views)/20,1)` (weights from `video_rec_weight_*` settings). ORDER BY hard-partitions
-  UNRECOMMENDED first, then within-unrecommended score DESC, within-recommended `last_recommended_at`
-  ASC then score DESC. `record=True` upserts served rows into `member_video_recs` (bumps
-  `times_recommended` / `last_recommended_at`); `record=False` (CRM preview) writes nothing.
+  UNRECOMMENDED first, then within-unrecommended score DESC, within-recommended by last serve
+  (`MAX(recommended_at)`, pre-aggregated per video from the append-only log) ASC then score DESC.
+  `record=True` APPENDS one `member_video_recs` row per served video (event log — no upsert, no
+  counter); `record=False` (CRM preview) writes nothing.
 - **`VideoSearchService`** (`video_search_service.py`) — `search(gym_id, q, limit)`: embeds `q` once,
   ranks the same served feed by cosine similarity (no bucket filter), most-similar first.
 
@@ -529,7 +530,7 @@ The genre→bucket map lives in `schema/video_mood_bucket.py` (`GENRE_TO_BUCKET`
 `schema/video_recs_schema.py` (`RecommendedVideoCard(GymVideoCard)` + score/already_recommended,
 `RecBucket`, `MemberVideoRecsResponse`) and `schema/video_search_schema.py`
 (`SearchResultCard(GymVideoCard)` + similarity, `VideoSearchResponse`). SQL in `sql/member_profile_*.sql`,
-`video_recs_candidates.sql`, `video_recs_record_upsert.sql`, `video_search_candidates.sql`.
+`video_recs_candidates.sql`, `video_recs_record_insert.sql`, `video_search_candidates.sql`.
 
 The agent wrapper lives in `service/video_agent/`:
 

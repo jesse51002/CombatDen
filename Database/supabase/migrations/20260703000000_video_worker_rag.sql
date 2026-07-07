@@ -186,18 +186,16 @@ CREATE TABLE member_video_recs (
             REFERENCES video(video_id) ON DELETE CASCADE,
     bucket mood_bucket NOT NULL,
     score DOUBLE PRECISION NOT NULL,
-    first_recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    times_recommended INTEGER NOT NULL DEFAULT 1
-        CONSTRAINT member_video_recs_times_positive
-            CHECK (times_recommended > 0),
-    CONSTRAINT uq_member_video_recs_member_video UNIQUE (member_id, video_id),
+    recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT fk_member_video_recs_member_gym
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id)
 );
 
-CREATE INDEX idx_member_video_recs_member ON member_video_recs (member_id);
+-- Append-only event log: one row per serve. "Already recommended" anti-join +
+-- per-video MAX(recommended_at) last-serve aggregate both key on (member, video).
+CREATE INDEX idx_member_video_recs_member_video
+    ON member_video_recs (member_id, video_id);
 
 ALTER TABLE member_video_recs ENABLE ROW LEVEL SECURITY;
 

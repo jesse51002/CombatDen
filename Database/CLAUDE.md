@@ -127,9 +127,11 @@ backend (a wrong-width vector raises rather than writes).
   ENUM ('teach','enjoy','inform','human','peak')`). PK `(member_id, bucket)`; composite FK
   `(member_id, gym_id)` → `members`; `profile_text TEXT`, `embedding vector(1536)`, `embedding_model`,
   `built_at`. Lazily (re)built by the backend from deterministic v1 template text.
-- **`member_video_recs`** — per-member rec history (the freshness partition): `rec_id UUID` PK,
-  `(member_id, gym_id, video_id, bucket)`, `score`, `first_recommended_at` / `last_recommended_at`,
-  `times_recommended INTEGER` (CHECK `> 0`). **UNIQUE `(member_id, video_id)`** anchors the record upsert
+- **`member_video_recs`** — per-member rec history (the freshness partition), an **append-only event
+  log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, bucket)`, `score`,
+  `recommended_at`. **No stored counters and no UNIQUE** — a re-serve INSERTs another row; "times
+  recommended" = `COUNT(*)` and "last recommended" = `MAX(recommended_at)`, derived by aggregate. Index
+  `(member_id, video_id)` backs the already-recommended anti-join + the per-video MAX aggregate
   ("already recommended" is global per member, not per bucket). No vector column.
 - **`video_worker_queue`** — the backend→worker hand-off. PK `gym_id` (a gym is queued at most once), FK →
   `gyms`; `reason video_worker_reason` (`CREATE TYPE … AS ENUM ('spec_update','manual')`), `requested_at`

@@ -16,9 +16,20 @@
 --                + w_views*min(ln(1+views)/20, 1)
 -- ORDER BY hard-partitions UNRECOMMENDED videos first (freshness), then:
 --   within unrecommended  → score DESC
---   within recommended    → last_recommended_at ASC (oldest first), score DESC
+--   within recommended    → last serve ASC (oldest first), score DESC
 -- so a member never sees the same video re-pushed while unseen ones remain.
-WITH scored AS (
+--
+-- member_video_recs is an append-only serve log (one row per serve), so the
+-- per-video last-serve time is MAX(recommended_at), pre-aggregated per video in
+-- the `member_recs` CTE below; its presence in the LEFT JOIN is what flags
+-- already_recommended.
+WITH member_recs AS (
+    SELECT video_id, MAX(recommended_at) AS last_recommended_at
+    FROM member_video_recs
+    WHERE member_id = CAST(:member_id AS UUID)
+    GROUP BY video_id
+),
+scored AS (
     SELECT
         v.video_id,
         v.url,
@@ -31,15 +42,13 @@ WITH scored AS (
         v.duration_seconds,
         v.tag,
         v.relevance_index,
-        (mvr.video_id IS NOT NULL) AS already_recommended,
-        mvr.last_recommended_at AS last_recommended_at,
+        (mr.video_id IS NOT NULL) AS already_recommended,
+        mr.last_recommended_at AS last_recommended_at,
         (1 - (r.embedding <=> CAST(:profile_embedding AS vector))) AS similarity
     FROM gym_video_feed f
     JOIN video v ON v.video_id = f.video_id
     JOIN video_rag r ON r.video_id = v.video_id
-    LEFT JOIN member_video_recs mvr
-        ON mvr.member_id = CAST(:member_id AS UUID)
-        AND mvr.video_id = v.video_id
+    LEFT JOIN member_recs mr ON mr.video_id = v.video_id
     WHERE f.gym_id = CAST(:gym_id AS UUID)
       AND f.scan_status = 'accepted'
       AND (
