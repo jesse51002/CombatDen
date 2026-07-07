@@ -25,6 +25,7 @@ Table gyms {
   logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
+  sub_rank_type sub_rank_type [not null, default: 'none', note: 'enum: none | stripes | div; per-gym sub-rank style (none = no sub-ranks, the default); from_preset sets it; changing it reconciles members']
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
   stripe_onboarding_status stripe_onboarding_status [not null, default: 'not_started', note: 'enum: not_started | pending | complete | disabled']
   theme_design_id text [note: 'nullable; ThemeService design_id; written by presets import']
@@ -52,18 +53,17 @@ Table gym_employees {
 
 Table rank_presets {
   preset_id uuid [primary key, default: `uuid_generate_v4()`]
-  gym_type varchar [not null, note: 'enum: bjj, mma, generic']
+  preset_kind rank_preset_kind [not null, note: 'enum: bjj_belts | bjj_belts_stripes | flat']
   main_rank_num_order integer [not null]
-  sub_rank_num_order integer [not null]
-  main_name varchar [not null]
-  sub_name varchar [not null]
-  classes_till_rankup integer [not null]
+  name varchar [not null]
   image_url varchar
-  color varchar [note: 'hex like #1F6FEB, optional']
+  classes_to_next_major integer [not null, note: 'threshold to the NEXT main rank; per-sub steps derived (even split)']
+  sub_rank_count integer [not null, default: 0, note: '0 = leaf; N>=1 = N leaf sub-positions']
+  implied_sub_rank_type sub_rank_type [note: 'nullable; enum: none | stripes | div; every kind implies one (none for plain belts/flat, stripes for the stripes kind); from_preset copies MAX onto the gym']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (gym_type, main_rank_num_order, sub_rank_num_order) [unique]
+    (preset_kind, main_rank_num_order) [unique]
   }
 }
 
@@ -71,17 +71,16 @@ Table gym_ranks {
   rank_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   main_rank_num_order integer [not null]
-  sub_rank_num_order integer [not null]
-  main_name varchar [not null]
-  sub_name varchar [not null]
-  classes_till_rankup integer [not null]
-  image_url varchar
-  color varchar [note: 'hex like #1F6FEB, optional']
+  name varchar [not null]
+  image_url varchar [note: 'user-writable; preset default + manual override']
+  classes_to_next_major integer [not null, note: 'threshold to the NEXT main rank; per-sub steps derived (even split)']
+  sub_rank_count integer [not null, default: 0, note: '0 = this main rank IS the leaf (current_sub_index NULL); N>=1 = N leaf sub-positions']
+  sub_rank_image_overrides jsonb [not null, default: '{}', note: 'sparse {sub_index: url}; PERSIST-ONLY (never pruned); effective sub image = override[idx] else image_url']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
     (rank_id, gym_id) [unique]
-    (gym_id, main_rank_num_order, sub_rank_num_order) [unique]
+    (gym_id, main_rank_num_order) [unique]
   }
 }
 
@@ -96,6 +95,7 @@ Table members {
   email varchar
   points_balance integer [not null, default: 0]
   current_rank_id uuid [note: 'nullable, FK to gym_ranks (composite with gym_id)']
+  current_sub_index integer [note: 'nullable; leaf position within current_rank_id (NULL when sub_rank_count=0); written only by ranks endpoints']
   // --- merged billing/contact/Stripe (service_role-written; NULL for engagement-only members) ---
   photo_url varchar
   phone varchar

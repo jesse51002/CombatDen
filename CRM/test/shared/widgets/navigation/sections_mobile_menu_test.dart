@@ -40,11 +40,12 @@ void main() {
       expect(tester.takeException(), isNull);
       // The Members + Employees sections are now one combined "People" entry.
       expect(find.text('People'), findsOneWidget);
-      expect(find.text('Memberships'), findsOneWidget);
+      // The Memberships section is now labelled "Gym" (route unchanged).
+      expect(find.text('Gym'), findsOneWidget);
       expect(find.text('Logout'), findsOneWidget);
 
       // A section row fires onSelect with that section.
-      await tester.tap(find.text('Memberships'));
+      await tester.tap(find.text('Gym'));
       expect(selected?.route, AppRoutes.memberships);
 
       // The Logout row fires onLogout.

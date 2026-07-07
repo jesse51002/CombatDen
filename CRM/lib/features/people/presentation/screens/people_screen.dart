@@ -13,6 +13,7 @@ import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/features/members_list/bloc/members_list_state.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
@@ -51,11 +52,15 @@ class PeopleScreen extends StatelessWidget {
         RepositoryProvider<MembershipsRepository>(
           create: (_) => MembershipsRepository(apiClient: ApiClient()),
         ),
+        RepositoryProvider<RanksRepository>(
+          create: (_) => RanksRepository(apiClient: ApiClient()),
+        ),
       ],
       child: BlocProvider<MembersListBloc>(
         create: (ctx) => MembersListBloc(
           repository: ctx.read<MembersListRepository>(),
           membershipsRepository: ctx.read<MembershipsRepository>(),
+          ranksRepository: ctx.read<RanksRepository>(),
         )..add(MembersListInitRequested(selectedGym.gymId ?? '')),
         child: AppShell(
           // Pinned to /members so the single "People" rail item stays lit on

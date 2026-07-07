@@ -35,6 +35,11 @@ MEMBERS: frozenset[str] = frozenset(
         "created_at",  # auto-generated timestamp
         "last_class",  # set by check-in service, never by client
         "points_balance",  # managed by rewards system, never by client
+        # After creation, rank changes ONLY via the ranks domain's
+        # promote-member / set-member-rank endpoints (they log the
+        # rank_changed audit activity the progress anchor depends on).
+        "current_rank_id",
+        "current_sub_index",  # leaf position — written only by the ranks endpoints
         # Merged billing columns (was member_billing_profile) — managed by the
         # backend / Stripe, never by the client. Contact fields (photo_url,
         # phone, address, emergency_contact_*) are client-editable and are
@@ -130,7 +135,7 @@ CLASS_SIGNUPS: frozenset[str] = frozenset(
 RANK_PRESETS: frozenset[str] = frozenset(
     {
         "preset_id",  # PK, auto-generated UUID
-        "gym_type",  # part of UNIQUE constraint
+        "preset_kind",  # part of UNIQUE constraint
         "created_at",  # auto-generated timestamp
     }
 )
@@ -140,6 +145,12 @@ GYM_RANKS: frozenset[str] = frozenset(
         "rank_id",  # PK, auto-generated UUID
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
+        # POST /ranks/reorder is the ONLY mover of ladder positions —
+        # a single-rank position update could collide with the
+        # UNIQUE (gym_id, main_rank_num_order) order constraint.
+        "main_rank_num_order",
+        # image_url is intentionally NOT listed — it is now a user-writable
+        # field (preset default plus manual override in the edit UI).
     }
 )
 

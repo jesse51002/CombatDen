@@ -98,3 +98,18 @@ void showTabActionError(BuildContext context, String message) {
     ),
   );
 }
+
+/// Surfaces a committed catalog mutation as a green success snackbar.
+void showTabActionSuccess(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        message,
+        style: DesignConstants.p.copyWith(
+          color: DesignConstants.onFill(DesignConstants.goodGreen),
+        ),
+      ),
+      backgroundColor: DesignConstants.goodGreen,
+    ),
+  );
+}

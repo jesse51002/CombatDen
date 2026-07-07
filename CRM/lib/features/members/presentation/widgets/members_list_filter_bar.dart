@@ -9,6 +9,7 @@ import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/features/members_list/data/models/date_range_filter.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/shared/widgets/filter_bar.dart';
 
 /// Filter bar for the members list: an "Add Filter +" button plus a
@@ -21,11 +22,13 @@ import 'package:crm/shared/widgets/filter_bar.dart';
 class MembersListFilterBar extends StatelessWidget {
   final MembersListFilters filters;
   final List<MembershipPlanResponse> plans;
+  final List<MainRank> ranks;
 
   const MembersListFilterBar({
     super.key,
     required this.filters,
     required this.plans,
+    required this.ranks,
   });
 
   @override
@@ -52,6 +55,12 @@ class MembersListFilterBar extends StatelessWidget {
           type: 'plan',
           value: id,
         ),
+      for (final id in filters.rankIds)
+        ActiveFilter(
+          label: 'Rank: ${_rankName(id)}',
+          type: 'rank',
+          value: id,
+        ),
     ];
     final range = filters.dateRange;
     if (range != null) {
@@ -71,6 +80,13 @@ class MembersListFilterBar extends StatelessWidget {
     return 'Plan';
   }
 
+  String _rankName(String id) {
+    for (final r in ranks) {
+      if (r.rankId == id) return r.name;
+    }
+    return 'Rank';
+  }
+
   String _rangeLabel(DateRangeFilter range) {
     final fmt = DateFormat('MMM d, yyyy');
     final start = range.startDate;
@@ -88,6 +104,7 @@ class MembersListFilterBar extends StatelessWidget {
       context: context,
       initial: filters,
       plans: plans,
+      ranks: ranks,
     );
     if (result == null) return;
     bloc.add(MembersListFiltersApplied(result));
@@ -102,6 +119,10 @@ class MembersListFilterBar extends StatelessWidget {
         ));
       case 'plan':
         bloc.add(MembersListPlanFilterRemoved(
+          chip.value as String,
+        ));
+      case 'rank':
+        bloc.add(MembersListRankFilterRemoved(
           chip.value as String,
         ));
       case 'date':

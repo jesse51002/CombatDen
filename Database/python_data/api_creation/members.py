@@ -10,9 +10,14 @@ member we:
   1. POST the member (identity + contact, plus `pm_card_visa` for non-children)
      → the backend creates the Stripe customer and, for non-children, attaches
      the default card in the same call. Capture the backend member_id.
-  2. service-role UPDATE `members` to set `points_balance` only — it is
-     rewards-managed and immutable to the API, so the create endpoint won't
-     accept it.
+  2. service-role UPDATE `members` to set the columns the create endpoint
+     won't accept: `points_balance` (rewards-managed, immutable to the API)
+     and `current_sub_index` (the member's leaf within its main rank — written
+     only by the audited ranks endpoints, so POST /members leaves it NULL).
+     The seed persists the ladder's pick here so members spread across
+     sub-ranks; a NULL sub-index (a 'none' gym or a subless rank) needs no
+     write. This is the same service-role bypass bootstrap/ranks.py uses to
+     write gym_ranks / gyms.sub_rank_type.
 
 Linked children POST with a card only when they SELF-PAY (own subscription);
 a parent-paid child POSTs cardless (they still get a Stripe customer, but the
@@ -103,9 +108,15 @@ def _create_one(
     if existing is not None:
         member.member_id = uuid.UUID(existing["member_id"])
 
-        # points_balance is rewards-managed (immutable to the API) and the
-        # user_id backfill is identity — both go direct via service-role.
-        direct = {"points_balance": member.points_balance}
+        # points_balance is rewards-managed (immutable to the API), the user_id
+        # backfill is identity, and current_sub_index is written only by the
+        # audited ranks endpoints (the create/update API refuses it) — all go
+        # direct via service-role. diff_update no-ops any field already matching
+        # (so a NULL-vs-NULL sub-index on a 'none' gym writes nothing).
+        direct: dict = {
+            "points_balance": member.points_balance,
+            "current_sub_index": member.current_sub_index,
+        }
         if member.auth_user_id is not None and existing.get("user_id") is None:
             direct["user_id"] = str(member.auth_user_id)
         diff_update(client, "members", "member_id", str(member.member_id), direct, existing)
@@ -139,12 +150,24 @@ def _create_one(
     assert resp is not None, "POST /members returned no body"
     member.member_id = uuid.UUID(resp["member_id"])
 
-    # points_balance is rewards-managed — the create endpoint won't accept
-    # it, so set it directly via service-role.
+    # Two columns the create endpoint won't accept, set directly via
+    # service-role (the same bypass bootstrap/ranks.py uses for gym_ranks /
+    # gyms.sub_rank_type):
+    #   - points_balance — rewards-managed, immutable to the API.
+    #   - current_sub_index — the leaf the gym's ladder picked; written only by
+    #     the audited ranks endpoints, so POST /members leaves it NULL. Persist
+    #     it so members spread across sub-ranks instead of all collapsing onto
+    #     the base leaf. NULL (a 'none' gym / subless rank) needs no write — the
+    #     freshly-created row is already NULL.
+    direct: dict = {}
     if member.points_balance:
-        client.table("members").update(
-            {"points_balance": member.points_balance}
-        ).eq("member_id", str(member.member_id)).execute()
+        direct["points_balance"] = member.points_balance
+    if member.current_sub_index is not None:
+        direct["current_sub_index"] = member.current_sub_index
+    if direct:
+        client.table("members").update(direct).eq(
+            "member_id", str(member.member_id)
+        ).execute()
 
     return True
 

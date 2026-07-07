@@ -6,6 +6,7 @@ import 'package:crm/features/members/presentation/dialogs/members_list_filter_se
 import 'package:crm/features/members_list/data/models/date_range_filter.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
@@ -16,23 +17,27 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 class MembersListFilterDialog extends StatefulWidget {
   final MembersListFilters initial;
   final List<MembershipPlanResponse> plans;
+  final List<MainRank> ranks;
 
   const MembersListFilterDialog({
     super.key,
     required this.initial,
     required this.plans,
+    required this.ranks,
   });
 
   static Future<MembersListFilters?> show({
     required BuildContext context,
     required MembersListFilters initial,
     required List<MembershipPlanResponse> plans,
+    required List<MainRank> ranks,
   }) {
     return showDialog<MembersListFilters>(
       context: context,
       builder: (_) => MembersListFilterDialog(
         initial: initial,
         plans: plans,
+        ranks: ranks,
       ),
     );
   }
@@ -46,6 +51,7 @@ class _MembersListFilterDialogState
     extends State<MembersListFilterDialog> {
   late Set<MembershipStatus> _statuses;
   late Set<String> _planIds;
+  late Set<String> _rankIds;
   DateTime? _startDate;
   DateTime? _endDate;
 
@@ -54,6 +60,7 @@ class _MembersListFilterDialogState
     super.initState();
     _statuses = widget.initial.membershipStatus.toSet();
     _planIds = widget.initial.planIds.toSet();
+    _rankIds = widget.initial.rankIds.toSet();
     _startDate = _parse(widget.initial.dateRange?.startDate);
     _endDate = _parse(widget.initial.dateRange?.endDate);
   }
@@ -73,10 +80,17 @@ class _MembersListFilterDialogState
     });
   }
 
+  void _toggleRank(String id) {
+    setState(() {
+      if (!_rankIds.remove(id)) _rankIds.add(id);
+    });
+  }
+
   void _clearAll() {
     setState(() {
       _statuses = {};
       _planIds = {};
+      _rankIds = {};
       _startDate = null;
       _endDate = null;
     });
@@ -89,6 +103,7 @@ class _MembersListFilterDialogState
       widget.initial.copyWith(
         membershipStatus: _statuses.toList(),
         planIds: _planIds.toList(),
+        rankIds: _rankIds.toList(),
         dateRange: hasDates
             ? DateRangeFilter(
                 startDate: _startDate == null
@@ -112,10 +127,13 @@ class _MembersListFilterDialogState
         statuses: _statuses,
         plans: widget.plans,
         planIds: _planIds,
+        ranks: widget.ranks,
+        rankIds: _rankIds,
         startDate: _startDate,
         endDate: _endDate,
         onToggleStatus: _toggleStatus,
         onTogglePlan: _togglePlan,
+        onToggleRank: _toggleRank,
         onDatesChanged: (start, end) => setState(() {
           _startDate = start;
           _endDate = end;

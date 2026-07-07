@@ -147,14 +147,25 @@ deliberate:
 - **`OrphanCleanupSweep`** — lists orphaned `not_added` rows
   (`stripe_item_id IS NULL`, from `reconciler_orphan_memberships.sql`). Per row:
   resolve the paying parent, **non-blocking** `ResourceLock.try_lock` on the
-  family key `paying_member_lock:{parent}` → if free, delete (reusing the guarded
-  `member_memberships_delete_pending.sql`) and count `changed`; if held, an op is
-  in flight → `skipped`. The delete's own `stripe_item_id IS NULL` guard means a
-  row confirmed in the gap is never removed. The reprice's in-flight successor
-  is covered by the same lock check — the reprice holds the family lock across
-  its DB phase + converge and **reverts the successor itself on failure**, so a
-  lock-free pending successor only exists after a process crash: a genuine
-  orphan, reaped like any other.
+  family key `paying_member_lock:{parent}` → if free, delete and count
+  `changed`; if held, an op is in flight → `skipped`. The delete itself is
+  **two statements in one transaction**: first the orphan's `not_added`
+  applied-discount children (`reconciler_orphan_applied_discounts.sql`, scoped
+  to that `item_id`) — otherwise `fk_applied_discount_membership_gym`
+  (`member_membership_applied_discounts_unfiltered` →
+  `member_memberships_unfiltered`) blocks the item delete and the orphan can
+  never be cleaned — then the item row itself (reusing the guarded
+  `member_memberships_delete_pending.sql`), one `session.commit()` for both.
+  The item delete's own `stripe_item_id IS NULL` guard means a row confirmed
+  in the gap is never removed. The reprice's in-flight successor is covered by
+  the same lock check — the reprice holds the family lock across its DB phase
+  + converge and **reverts the successor itself on failure**, so a lock-free
+  pending successor only exists after a process crash: a genuine orphan,
+  reaped like any other. Each orphan's delete is isolated in its own `try` —
+  a failure logs (`exc_info=True`), counts `errors`, and moves on to the next
+  orphan, mirroring `SubscriptionOrphanSweep`'s per-item `_cancel_orphan`
+  isolation described just below — so one bad row can't abort the rest of the
+  sweep or the reconciler steps that run after it.
 - **`PaymentPushSweep`** — lists the active billing members
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership, `member_id` only) and calls the existing
@@ -351,8 +362,10 @@ write-reduction.
   (shared by reconciler + memberships engine; lives in `shared` to avoid a `memberships → reconciler` import edge)
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
 - **SQL:** `src/reconciler/sql/` (`reconciler_orphan_memberships.sql`,
-  `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`,
-  `reconciler_linked_item_ids.sql` — the subscription-orphan linkage read)
+  `reconciler_orphan_applied_discounts.sql` — the orphan's discount-child
+  delete, run before the item delete, `reconciler_active_billing_members.sql`,
+  `reconciler_gyms_with_connect.sql`, `reconciler_linked_item_ids.sql` — the
+  subscription-orphan linkage read)
 - **Shared lock:** `src/shared/resource_lock.py`
 - **The fetch+apply engine (in memberships, owned by `memberships-guide`):**
   `src/memberships/service/memberships_invoice_fetch.py` (`MemberMembershipsInvoiceFetch`) —
@@ -368,7 +381,8 @@ write-reduction.
   `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
   `reconciler_orphan_min_age_seconds` — all `Settings` fields; on-demand fetch
   config lives in `memberships-guide`)
-- **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
+- **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`,
+  `tests/reconciler/test_orphan_cleanup_sweep.py`
   (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
 ## Diagram

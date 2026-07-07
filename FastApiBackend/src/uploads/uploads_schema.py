@@ -17,6 +17,7 @@ class UploadCategory(StrEnum):
     member = "member"
     class_ = "class"
     gym = "gym"
+    rank = "rank"
 
 
 class ImageUploadResponse(BaseModel):

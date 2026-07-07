@@ -16,6 +16,10 @@ CREATE TABLE members (
     email VARCHAR,
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
     current_rank_id UUID,
+    -- Leaf position within current_rank_id's main rank. NULL when that rank
+    -- has sub_rank_count = 0. Enforced non-null-when-count>0 by the ranks
+    -- service on every assign/promote path (only the ranks endpoints write it).
+    current_sub_index INTEGER CHECK (current_sub_index IS NULL OR current_sub_index >= 0),
 
     -- Contact / freeze / Stripe billing (service_role-written only;
     -- NULL for engagement-only members).

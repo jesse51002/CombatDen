@@ -9,6 +9,7 @@ Handles:
 from uuid import UUID
 
 from schema.gym_employee import ThemeMode
+from schema.gym_rank import SubRankType
 from schema.immutable_columns import GYMS as GYMS_IMMUTABLE
 from sqlalchemy import text
 
@@ -30,6 +31,7 @@ from src.gyms.schema.gyms_schema import (
 from src.gyms.service.gyms_create_service import GymsCreateService
 from src.gyms.service.gyms_onboarding_service import GymsOnboardingService
 from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
+from src.ranks.service.ranks_members import RanksMembers
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -57,6 +59,12 @@ class GymsService:
             the gym going forward while every existing version (the past)
             stays untouched. The wall-clock exact-slot match keeps every
             future sign-up / check-in — nothing is wiped.
+        ranks_members: Injected ranks member-rank concern — the documented
+            ``gyms -> ranks`` edge: a gym ``sub_rank_type`` change reconciles
+            every member's ``current_sub_index`` so the leaf invariant stays
+            valid (→ ``'none'`` clears all sub-indices; → stripes/div fills
+            the base leaf where a rank has sub-ranks), never touching the
+            persisted per-rank counts / image overrides.
     """
 
     def __init__(
@@ -65,9 +73,11 @@ class GymsService:
         stripe_connect_service: GymsStripeConnectService,
         waivers_service: WaiversService,
         classes_versions_service: ClassesVersionsService,
+        ranks_members: RanksMembers,
     ) -> None:
         self._db_pool = db_pool
         self._classes_versions_service = classes_versions_service
+        self._ranks_members = ranks_members
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
@@ -162,6 +172,19 @@ class GymsService:
     ) -> GymResponse:
         """Update mutable fields on a gym row.
 
+        ``sub_rank_type`` (none / stripes / div) rides the same dynamic
+        SET clause as every other mutable field here; it is NOT NULL on
+        the gyms row, so ``GymUpdateData`` rejects an explicit ``null``
+        for it the same way it does for ``gym_name`` / ``timezone``. A
+        save that CHANGES it additionally reconciles every member's
+        ``current_sub_index`` to the new style (the ``gyms -> ranks``
+        edge) AFTER the gyms row commits — → ``'none'`` clears all
+        sub-indices, → stripes/div fills the base leaf on ranks that have
+        sub-ranks — never touching the persisted per-rank counts /
+        overrides. It runs on EVERY sub_rank_type-carrying save (not
+        gated on "did it change"): the reconcile is idempotent, so a
+        re-save is a cheap self-heal, exactly like the timezone re-mint.
+
         A save that carries a TIMEZONE additionally re-mints every live
         class's schedule version with that zone (see the constructor note)
         AFTER the gym row commits. The re-mint runs on EVERY
@@ -189,6 +212,7 @@ class GymsService:
         validate_mutable_columns(GYMS_IMMUTABLE, set(update_fields.keys()))
 
         new_timezone = update_fields.get("timezone")
+        new_sub_rank_type = update_fields.get("sub_rank_type")
 
         set_clause = ", ".join(f"{col} = :{col}" for col in update_fields)
         sql = load_sql(
@@ -205,6 +229,11 @@ class GymsService:
         if new_timezone is not None:
             await self._classes_versions_service.remint_timezone(
                 gym_id, new_timezone
+            )
+
+        if new_sub_rank_type is not None:
+            await self._ranks_members.reconcile_sub_index_for_gym(
+                gym_id, SubRankType(new_sub_rank_type)
             )
 
         return GymResponse(**row)

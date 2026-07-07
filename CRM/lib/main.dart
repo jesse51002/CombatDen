@@ -20,9 +20,12 @@ import 'package:crm/features/login/presentation/screens/auth_gate.dart';
 import 'package:crm/features/members/presentation/screens/member_app_screen.dart';
 import 'package:crm/features/members/presentation/screens/specific_member_screen.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
+import 'package:crm/features/memberships/presentation/screens/edit_rank_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/membership_details_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/memberships_screen.dart';
+import 'package:crm/features/memberships/presentation/screens/rank_detail_screen.dart';
 import 'package:crm/features/memberships/presentation/screens/waiver_editor_screen.dart';
 import 'package:crm/features/people/presentation/screens/people_screen.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -190,17 +193,39 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: RouteSettings(name: settings.name, arguments: memberId),
     );
   }
-  // The Memberships screen's three tabs are each addressable by URL,
+  // The Gym screen's four tabs are each addressable by URL,
   // mapped to the tab the screen opens on.
   const membershipsTabIndex = {
     AppRoutes.memberships: 0,
     AppRoutes.membershipsDiscounts: 1,
     AppRoutes.membershipsWaivers: 2,
+    AppRoutes.membershipsRanks: 3,
   };
   final membershipsTab = membershipsTabIndex[path];
   if (membershipsTab != null) {
     return MaterialPageRoute<dynamic>(
       builder: (_) => MembershipsScreen(initialTab: membershipsTab),
+      settings: settings,
+    );
+  }
+  // A single main rank's detail page is deep-linkable by id:
+  // `/memberships/ranks/detail/<id>`. Parse the id off the path and hand
+  // it to RankDetailScreen as the route argument (mirrors member detail);
+  // the path-with-id stays the route name so the URL + UrlSyncObserver
+  // stay correct.
+  final rankId = AppRoutes.mainRankIdFromPath(path);
+  if (rankId != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => const RankDetailScreen(),
+      settings: RouteSettings(name: settings.name, arguments: rankId),
+    );
+  }
+  // The rank create / edit form carries the rank (or null for create)
+  // as a route argument; not deep-linkable.
+  if (path == AppRoutes.membershipsRankEditor) {
+    final rank = settings.arguments as MainRank?;
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => EditRankScreen(rank: rank),
       settings: settings,
     );
   }

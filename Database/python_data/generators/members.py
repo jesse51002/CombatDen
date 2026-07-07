@@ -103,6 +103,9 @@ class MemberPlan:
     emergency_contact_email: str
     points_balance: int
     current_rank_id: uuid.UUID | None
+    # Leaf position within current_rank_id's main rank: an index in
+    # [0, sub_rank_count-1] when that rank has sub-ranks, else None.
+    current_sub_index: int | None = None
     photo_url: str | None = None
     auth_user_id: uuid.UUID | None = None
     # Linked-account family: a child references its parent's handle; the
@@ -138,7 +141,11 @@ def _random_phone() -> str:
     return f"+1{random.randint(2000000000, 9999999999)}"
 
 
-def _demographics(handle: str, current_rank_id: uuid.UUID | None) -> MemberPlan:
+def _demographics(
+    handle: str,
+    current_rank_id: uuid.UUID | None,
+    current_sub_index: int | None,
+) -> MemberPlan:
     return MemberPlan(
         local_handle=handle,
         first_name=fake.first_name(),
@@ -151,15 +158,25 @@ def _demographics(handle: str, current_rank_id: uuid.UUID | None) -> MemberPlan:
         emergency_contact_email=fake.email(),
         points_balance=random.randint(0, 500),
         current_rank_id=current_rank_id,
+        current_sub_index=current_sub_index,
     )
 
 
-def _pick_rank_id(ranks: list[GymRankCreate]) -> uuid.UUID | None:
+def _pick_leaf(ranks: list[GymRankCreate]) -> tuple[uuid.UUID | None, int | None]:
+    """Pick a valid leaf: a main rank (triangular skew toward the lowest rank),
+    then a sub-index within it (None when that rank has no sub-ranks, else a
+    random index in [0, sub_rank_count-1]). Rank-less gym -> (None, None)."""
     if not ranks:
-        return None
-    sorted_ranks = sorted(ranks, key=lambda r: (r.main_rank_num_order, r.sub_rank_num_order))
+        return None, None
+    sorted_ranks = sorted(ranks, key=lambda r: r.main_rank_num_order)
     idx = int(random.triangular(0, len(sorted_ranks) - 1, 0))
-    return sorted_ranks[idx].rank_id
+    chosen = sorted_ranks[idx]
+    sub_index = (
+        random.randint(0, chosen.sub_rank_count - 1)
+        if chosen.sub_rank_count > 0
+        else None
+    )
+    return chosen.rank_id, sub_index
 
 
 # --------------------------------------------------------------------------
@@ -442,7 +459,7 @@ def build_plans(
     linked/family discounts are no longer seeded.
     """
     members: list[MemberPlan] = [
-        _demographics(f"{gym_handle}/member{i}", _pick_rank_id(ranks))
+        _demographics(f"{gym_handle}/member{i}", *_pick_leaf(ranks))
         for i in range(MEMBERS_PER_GYM)
     ]
 
@@ -479,4 +496,5 @@ def to_member_create(gym_id: uuid.UUID, plan: MemberPlan) -> MemberCreate:
         email=plan.email,
         points_balance=plan.points_balance,
         current_rank_id=plan.current_rank_id,
+        current_sub_index=plan.current_sub_index,
     )

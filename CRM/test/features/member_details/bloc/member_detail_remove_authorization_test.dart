@@ -7,6 +7,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,8 @@ class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
 class MockRewardsRepository extends Mock implements RewardsRepository {}
+
+class MockRanksRepository extends Mock implements RanksRepository {}
 
 /// RemoveAuthorizationRequested must thread the EXACT (payee, payer) pair to
 /// the repository — the backend cancel is pair-scoped, so a swapped or wrong
@@ -65,8 +68,7 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization passes the exact (payee, payer) pair through',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
-        rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -86,8 +88,7 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization refetches member detail after the mutation',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
-        rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -109,8 +110,7 @@ void main() {
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization surfaces the cancel outcome + in-flight flag '
     '(Feature B completion screen)',
-    build: () => MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
-        rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -143,8 +143,7 @@ void main() {
     build: () {
       when(() => repo.removeAuthorization(any(), any(), any()))
           .thenThrow(Exception('stripe down'));
-      return MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
-        rewardsRepository: rewardsRepo);
+      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),

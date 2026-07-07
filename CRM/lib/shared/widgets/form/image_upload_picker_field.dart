@@ -9,7 +9,9 @@ import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/uploads/image_upload_repository.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
-/// Enforced aspect ratio + max width for the upload preview.
+/// Default aspect ratio + max width for the upload preview. Landscape
+/// photos (reward / member / class / gym) preview at 16:9; square art
+/// (a rank belt) overrides [ImageUploadPickerField.aspectRatio] to 1.
 const double _kAspect = 16 / 9;
 const double _kMaxWidth = 360;
 
@@ -17,9 +19,9 @@ const double _kMaxWidth = 360;
 ///
 /// On tap: opens the system file picker, uploads the chosen
 /// image to the CDN via [category] (`'reward'`, `'member'`,
-/// `'class'`, or `'gym'`), shows a loading spinner during the upload, then
-/// calls [onUploaded] with the returned CDN URL and shows the
-/// uploaded preview.  Inline error text is shown on failure.
+/// `'class'`, `'gym'`, or `'rank'`), shows a loading spinner during the
+/// upload, then calls [onUploaded] with the returned CDN URL and shows
+/// the uploaded preview.  Inline error text is shown on failure.
 ///
 /// An optional current [imageUrl] or bundled [imageAsset] is
 /// displayed as the initial preview before any upload. When
@@ -30,11 +32,23 @@ const double _kMaxWidth = 360;
 class ImageUploadPickerField extends StatefulWidget {
   final String label;
 
-  /// Backend upload category: `'reward'`, `'member'`, `'class'`, or `'gym'`.
+  /// Backend upload category: `'reward'`, `'member'`, `'class'`, `'gym'`,
+  /// or `'rank'`.
   final String category;
 
   /// Called with the CDN URL after a successful upload.
   final void Function(String url) onUploaded;
+
+  /// Preview box aspect ratio (width / height). Defaults to 16:9 for the
+  /// landscape photo call sites; the rank belt fields pass `1` so a
+  /// square belt image previews un-cropped and un-distorted.
+  final double aspectRatio;
+
+  /// How the preview image fits its box. Defaults to [BoxFit.cover]
+  /// (fill + crop) for photos; the belt fields pass [BoxFit.contain] so
+  /// the whole square belt stays visible with no crop or stretch,
+  /// matching how `RankBeltImage` renders it everywhere else.
+  final BoxFit previewFit;
 
   /// Optional current image URL shown as the initial preview.
   final String? imageUrl;
@@ -65,6 +79,8 @@ class ImageUploadPickerField extends StatefulWidget {
     this.imageAsset,
     this.defaultImageUrl,
     this.prominentUpload = false,
+    this.aspectRatio = _kAspect,
+    this.previewFit = BoxFit.cover,
   });
 
   @override
@@ -167,7 +183,7 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
               spacing: DesignConstants.spacingSmall,
               children: [
                 AspectRatio(
-                  aspectRatio: _kAspect,
+                  aspectRatio: widget.aspectRatio,
                   child: InkWell(
                     onTap: _isUploading ? null : _onTap,
                     borderRadius: BorderRadius.circular(
@@ -191,10 +207,12 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                               ? _Preview(
                                   imageUrl: _effectiveUrl,
                                   asset: widget.imageAsset,
+                                  fit: widget.previewFit,
                                 )
                               : _showDefault
                                   ? _Preview(
                                       imageUrl: widget.defaultImageUrl,
+                                      fit: widget.previewFit,
                                     )
                                   : const _UploadPrompt(),
                     ),
@@ -269,14 +287,15 @@ class _UploadPrompt extends StatelessWidget {
 class _Preview extends StatelessWidget {
   final String? imageUrl;
   final String? asset;
+  final BoxFit fit;
 
-  const _Preview({this.imageUrl, this.asset});
+  const _Preview({this.imageUrl, this.asset, this.fit = BoxFit.cover});
 
   Widget _image() {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
       return Image.network(
         imageUrl!,
-        fit: BoxFit.cover,
+        fit: fit,
         errorBuilder: (_, _, _) => _fallback(),
       );
     }
@@ -285,7 +304,7 @@ class _Preview extends StatelessWidget {
 
   Widget _fallback() {
     if (asset != null) {
-      return Image.asset(asset!, fit: BoxFit.cover);
+      return Image.asset(asset!, fit: fit);
     }
     return ColoredBox(color: DesignConstants.card);
   }

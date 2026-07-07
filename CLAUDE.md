@@ -100,6 +100,11 @@ Pick the sub-agent/workflow model by the TASK, not by habit:
 - **Opus — design work and well-defined substantial tasks.** UI/UX design passes (e.g. an `impeccable` redesign), and any single meaty task whose spec is clear but whose execution quality matters more than throughput. One well-scoped Opus agent beats a Sonnet agent that ships something functional-but-rough.
 - **Fable — complex, many-layered, uncertain work.** Tasks that span several systems, carry ambiguity the agent must resolve itself, or where a wrong architectural judgment is expensive. Reserve it for the few agents that genuinely need the deepest reasoning; everything below that bar goes to Opus or Sonnet.
 
+## Impeccable before UI/visual changes
+Before making **any** UI/visual change, run the `impeccable` design pass first — ideally in a **dedicated subagent** (Opus, per the model defaults) so it can focus on the design without carrying the whole task's context. This is the default for anything that changes what a screen looks like: new screens, redesigns, new widgets, layout/hierarchy changes, restyles.
+
+**Exception:** a small, targeted tweak whose visual goal is *completely unambiguous* (a copy fix, a one-value spacing/color correction, wiring an already-designed component) can be done directly. Any ambiguity, or any non-trivial size, → use `impeccable`. When unsure which side of the line you're on, use `impeccable`.
+
 ## Calling the FastApi Backend
 - The authoritative request/response contract is the backend's Pydantic schemas in `FastApiBackend/src/<domain>/<domain>_schema.py`. Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching schema there and include every field listed under `required`.
 - `Database/openapi.json` is an **optional, gitignored** local convenience dump. It is never committed, never expected to exist, and must never be flagged as missing or stale. To regenerate it locally from a running backend: `curl localhost:8000/openapi.json > Database/openapi.json`.

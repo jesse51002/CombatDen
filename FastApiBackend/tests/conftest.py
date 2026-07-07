@@ -185,25 +185,34 @@ def make_rank_row(
     rank_id: str,
     gym_id: str,
     main_rank_num_order: int = 0,
-    sub_rank_num_order: int = 0,
-    main_name: str = "White",
-    sub_name: str = "0 stripes",
-    classes_till_rankup: int = 15,
+    name: str = "White",
     image_url: str | None = None,
-    color: str | None = "#FFFFFF",
+    classes_to_next_major: int = 15,
+    sub_rank_count: int = 0,
+    sub_rank_image_overrides: dict | None = None,
     created_at: datetime | None = None,
 ) -> dict:
-    """A gym_ranks-row dict shaped to match SQL RETURNING clauses."""
+    """A gym_ranks-row dict shaped to match SQL RETURNING clauses.
+
+    One row per MAIN rank (two-level model): a single ``name`` plus the
+    per-gym sub-rank machinery (``sub_rank_count`` + the persist-only
+    ``sub_rank_image_overrides`` map). Sub-rank labels are derived from
+    the gym's ``sub_rank_type`` at read time, so no sub name/order/color
+    is carried here. Matches ``RankResponse``.
+    """
     return {
         "rank_id": rank_id,
         "gym_id": gym_id,
         "main_rank_num_order": main_rank_num_order,
-        "sub_rank_num_order": sub_rank_num_order,
-        "main_name": main_name,
-        "sub_name": sub_name,
-        "classes_till_rankup": classes_till_rankup,
+        "name": name,
         "image_url": image_url,
-        "color": color,
+        "classes_to_next_major": classes_to_next_major,
+        "sub_rank_count": sub_rank_count,
+        "sub_rank_image_overrides": (
+            sub_rank_image_overrides
+            if sub_rank_image_overrides is not None
+            else {}
+        ),
         "created_at": created_at or datetime.now(UTC),
     }
 

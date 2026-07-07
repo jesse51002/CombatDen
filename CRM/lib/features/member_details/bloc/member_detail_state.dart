@@ -168,6 +168,11 @@ class MemberDetailLoaded extends MemberDetailState {
   /// returns stale data).
   final int refreshToken;
 
+  /// Monotonic token bumped once a rank change (promote / set)
+  /// succeeds, so the rank section can show a one-shot confirmation
+  /// (mirrors [chargeCardSuccess] / [upgradeSuccess]).
+  final int rankChangeSuccessCount;
+
   const MemberDetailLoaded({
     required this.member,
     required this.allMembers,
@@ -200,6 +205,7 @@ class MemberDetailLoaded extends MemberDetailState {
     this.reserveResult,
     this.reserveError,
     this.refreshToken = 0,
+    this.rankChangeSuccessCount = 0,
   });
 
   MembershipInfo? get currentMembership {
@@ -252,6 +258,7 @@ class MemberDetailLoaded extends MemberDetailState {
     String? reserveError,
     bool clearReserveOutcome = false,
     int? refreshToken,
+    int? rankChangeSuccessCount,
   }) {
     return MemberDetailLoaded(
       member: member ?? this.member,
@@ -318,6 +325,8 @@ class MemberDetailLoaded extends MemberDetailState {
           ? null
           : (reserveError ?? this.reserveError),
       refreshToken: refreshToken ?? this.refreshToken,
+      rankChangeSuccessCount:
+          rankChangeSuccessCount ?? this.rankChangeSuccessCount,
     );
   }
 
@@ -354,6 +363,7 @@ class MemberDetailLoaded extends MemberDetailState {
         reserveResult,
         reserveError,
         refreshToken,
+        rankChangeSuccessCount,
       ];
 }
 

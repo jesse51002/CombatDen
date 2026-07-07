@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
+import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 
 /// Events for the MemberDetailBloc.
 sealed class MemberDetailEvent extends Equatable {
@@ -58,6 +59,19 @@ class EditMemberRequested extends MemberDetailEvent {
 
   @override
   List<Object?> get props => [request];
+}
+
+/// Change the member's rank through the ranks domain via a staff-picked
+/// [PromotionChoice] (next sub-position, next major rank, or an explicit
+/// leaf/unassign). Reloads member detail in place so the rank + real
+/// progress refresh.
+class MemberRankChangeRequested extends MemberDetailEvent {
+  final PromotionChoice choice;
+
+  const MemberRankChangeRequested(this.choice);
+
+  @override
+  List<Object?> get props => [choice];
 }
 
 class UpdateCardRequested extends MemberDetailEvent {

@@ -5,6 +5,7 @@ import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_total_counts.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 
 /// States for the MembersListBloc.
 sealed class MembersListState extends Equatable {
@@ -39,6 +40,12 @@ class MembersListLoaded extends MembersListState {
   /// for resolving plan-filter chip labels (plan id → name).
   final List<MembershipPlanResponse> plans;
 
+  /// The gym's main ranks, for the filter picker and for resolving
+  /// rank-filter chip labels (rank id → name). Best-effort — loaded
+  /// like [plans]; a failure just leaves this empty rather than
+  /// failing the whole members list.
+  final List<MainRank> ranks;
+
   /// All rows loaded so far (across pages).
   final List<MemberRow> allRows;
 
@@ -66,6 +73,7 @@ class MembersListLoaded extends MembersListState {
     required this.activeView,
     required this.filters,
     this.plans = const [],
+    this.ranks = const [],
     required this.allRows,
     required this.displayedRows,
     this.searchQuery = '',
@@ -80,6 +88,7 @@ class MembersListLoaded extends MembersListState {
     MembersListView? activeView,
     MembersListFilters? filters,
     List<MembershipPlanResponse>? plans,
+    List<MainRank>? ranks,
     List<MemberRow>? allRows,
     List<MemberRow>? displayedRows,
     String? searchQuery,
@@ -93,6 +102,7 @@ class MembersListLoaded extends MembersListState {
       activeView: activeView ?? this.activeView,
       filters: filters ?? this.filters,
       plans: plans ?? this.plans,
+      ranks: ranks ?? this.ranks,
       allRows: allRows ?? this.allRows,
       displayedRows:
           displayedRows ?? this.displayedRows,
@@ -112,6 +122,7 @@ class MembersListLoaded extends MembersListState {
         activeView,
         filters,
         plans,
+        ranks,
         allRows,
         displayedRows,
         searchQuery,
