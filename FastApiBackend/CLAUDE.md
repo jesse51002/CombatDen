@@ -325,6 +325,7 @@ src/
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
   - This applies to `.sql` files **and** any SET/VALUES clause built dynamically in Python (e.g. an f-string `f"{col} = CAST(:{col} AS JSONB)"`, never `f"{col} = :{col}::jsonb"`). This bug has recurred — it bit the membership-plans update path.
+- **NEVER write a bare `:word` placeholder inside a SQL `--` comment.** `text()` scans the WHOLE statement — comment lines included — for `:name` bind markers, so a generic placeholder (`:col`, `:param`, `:x`) in a comment becomes an orphan bind param no code supplies, and the query 500s with `A value is required for bind parameter '<word>'`. Describe params in prose or a non-colon form (`the col column`, `<col>`) instead. (A real, always-bound param name in a comment is fine because it's supplied; `:col::type` is also safe — the trailing `::` suppresses it — but a standalone `:col` in a comment is not.) This bit `update_rank.sql`, whose comment used `:col` as a placeholder.
 
 **Repository Pattern**
 - Separate data access from business logic

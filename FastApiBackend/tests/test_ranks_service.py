@@ -20,6 +20,7 @@ from uuid import uuid4
 
 import pytest
 from schema.gym_rank import RankPresetKind, SubRankType
+from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.ranks import SQL_DIR
@@ -38,6 +39,7 @@ from src.ranks.service.ranks_members import RanksMembers
 from src.ranks.service.ranks_presets import RanksPresets
 from src.ranks.service.ranks_reads import RanksReads
 from src.ranks.service.ranks_service import RanksService
+from src.shared.sql_loader import load_sql
 from tests.conftest import make_rank_row
 
 
@@ -699,6 +701,32 @@ async def test_update_rank_overrides_use_cast_and_skip_clamp():
     assert "CAST(:sub_rank_image_overrides AS JSONB)" in update_call.args[0].text
     assert ":sub_rank_image_overrides::jsonb" not in update_call.args[0].text
     assert update_call.args[1]["sub_rank_image_overrides"] == json.dumps(overrides)
+
+
+def test_update_rank_sql_binds_only_real_params():
+    """update_rank.sql runs through text(), which scans the WHOLE statement
+    — comments included — for :name bind markers. A generic placeholder like
+    :col in the header comment becomes an orphan bind param no code supplies,
+    so every rank edit 500s ("A value is required for bind parameter 'col'").
+    Guard: the templated statement binds ONLY the real columns + rank_id.
+    (Regression: a 'col' orphan was hiding in the comment; the mocked update
+    tests build text(sql) but never compile it against params, so they
+    couldn't catch it.)"""
+    set_clause = (
+        "name = :name, classes_to_next_major = :classes_to_next_major, "
+        "sub_rank_count = :sub_rank_count, image_url = :image_url, "
+        "sub_rank_image_overrides = CAST(:sub_rank_image_overrides AS JSONB)"
+    )
+    sql = load_sql(SQL_DIR / "update_rank.sql", {"set_clause": set_clause})
+    binds = set(text(sql)._bindparams.keys())
+    assert binds == {
+        "name",
+        "classes_to_next_major",
+        "sub_rank_count",
+        "image_url",
+        "sub_rank_image_overrides",
+        "rank_id",
+    }, f"unexpected bind params (comment placeholder leaked?): {binds}"
 
 
 # ---------- get_all_presets_grouped grouping logic ----------
