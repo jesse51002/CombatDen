@@ -36,7 +36,10 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       emit(loaded);
     } catch (e, stackTrace) {
       log('Failed to load ranks', error: e, stackTrace: stackTrace);
-      emit(RanksError(e.toString(), gymId: event.gymId));
+      emit(RanksError(
+        "Couldn't load ranks. Please try again.",
+        gymId: event.gymId,
+      ));
     }
   }
 
@@ -48,6 +51,7 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
         emit,
         event.gymId,
         () => _repository.setRankEnabled(event.gymId, event.isEnabled),
+        errorMessage: "Couldn't update the rank toggle. Please try again.",
       );
 
   Future<void> _onPresetSeeded(
@@ -58,6 +62,8 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
         emit,
         event.gymId,
         () => _repository.seedFromPreset(event.gymId, event.presetKind),
+        errorMessage:
+            "Couldn't seed ranks from the preset. Please try again.",
       );
 
   Future<void> _onReordered(RanksReordered event, Emitter<RanksState> emit) =>
@@ -65,6 +71,7 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
         emit,
         event.gymId,
         () => _repository.reorderRanks(event.gymId, event.ranks),
+        errorMessage: "Couldn't reorder ranks. Please try again.",
       );
 
   Future<void> _onSubTypeChanged(
@@ -75,6 +82,8 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
         emit,
         event.gymId,
         () => _repository.setSubRankType(event.gymId, event.type),
+        errorMessage:
+            "Couldn't update the sub-rank type. Please try again.",
       );
 
   /// Fetch the ladder (+ sub-rank type) + enabled flag together.
@@ -95,12 +104,15 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
 
   /// Runs [action], then reloads. Surfaces a failed mutation via
   /// [RanksLoaded.actionError] without dropping the list (or as
-  /// [RanksError] if there is no list yet).
+  /// [RanksError] if there is no list yet). [errorMessage] is the
+  /// friendly, action-specific copy shown to the user on failure — the
+  /// raw error still goes to [log] below, never to the UI.
   Future<void> _mutateAndReload(
     Emitter<RanksState> emit,
     String gymId,
-    Future<void> Function() action,
-  ) async {
+    Future<void> Function() action, {
+    required String errorMessage,
+  }) async {
     final current = state;
     final nextMutationCount =
         current is RanksLoaded ? current.mutationCount + 1 : 1;
@@ -113,9 +125,9 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
     } catch (e, stackTrace) {
       log('Rank mutation failed', error: e, stackTrace: stackTrace);
       if (current is RanksLoaded) {
-        emit(current.copyWith(isMutating: false, actionError: e.toString()));
+        emit(current.copyWith(isMutating: false, actionError: errorMessage));
       } else {
-        emit(RanksError(e.toString(), gymId: gymId));
+        emit(RanksError(errorMessage, gymId: gymId));
       }
     }
   }

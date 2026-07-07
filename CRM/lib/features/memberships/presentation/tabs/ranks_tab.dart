@@ -47,29 +47,22 @@ class _RanksTabState extends State<RanksTab> {
       // Surface a failed mutation as an error, and every committed
       // mutation (seed / enable toggle / sub-type / reorder — each bumps
       // mutationCount) as a green confirmation, so no ladder change ends
-      // with just a spinner that quietly disappears.
+      // with just a spinner that quietly disappears. Both clauses are
+      // transition checks (not just an absolute `actionError != null`)
+      // so an unrelated later emit that happens to carry the same
+      // actionError forward never re-fires the SnackBar.
       listenWhen: (prev, curr) =>
+          prev is RanksLoaded &&
           curr is RanksLoaded &&
-          (curr.actionError != null ||
-              (prev is RanksLoaded &&
-                  curr.mutationCount != prev.mutationCount)),
+          ((curr.actionError != null && curr.actionError != prev.actionError) ||
+              curr.mutationCount != prev.mutationCount),
       listener: (context, state) {
         if (state is! RanksLoaded) return;
         final error = state.actionError;
         if (error != null) {
           showTabActionError(context, error);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Ranks updated.',
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.onFill(DesignConstants.goodGreen),
-                ),
-              ),
-              backgroundColor: DesignConstants.goodGreen,
-            ),
-          );
+          showTabActionSuccess(context, 'Ranks updated.');
         }
       },
       builder: (context, state) {

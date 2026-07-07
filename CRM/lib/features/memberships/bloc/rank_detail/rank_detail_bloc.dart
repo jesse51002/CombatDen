@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/app_constants.dart';
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_event.dart';
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_state.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -67,7 +68,7 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
     } catch (e, stackTrace) {
       log('Failed to load rank detail', error: e, stackTrace: stackTrace);
       emit(RankDetailError(
-        e.toString(),
+        "Couldn't load this rank. Please try again.",
         gymId: event.gymId,
         rankId: event.rankId,
       ));
@@ -146,9 +147,16 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       log('Rank detail promote failed', error: e, stackTrace: stackTrace);
       final afterState = state;
       if (afterState is RankDetailLoaded) {
+        // A 409 here means the member is already at the highest rank — a
+        // permanent, non-retryable state (see FastApiBackend's
+        // `_rank_http_error`), so it gets its own message instead of the
+        // generic retry copy, which would be misleading.
+        final message = (e is ServerException && e.statusCode == 409)
+            ? 'This member is already at the highest rank.'
+            : "Couldn't promote the member. Please try again.";
         emit(afterState.copyWith(
           isMutating: false,
-          actionError: "Couldn't promote the member. Please try again.",
+          actionError: message,
         ));
       }
     }

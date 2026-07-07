@@ -13,6 +13,7 @@ import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/models/rank_member_row.dart';
 import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
+import 'package:crm/features/memberships/presentation/widgets/memberships_tab_scaffold.dart';
 import 'package:crm/features/memberships/presentation/widgets/ranks/promotable_member_row.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
@@ -78,26 +79,26 @@ class _RankDetailView extends StatelessWidget {
           curr.deleteSuccessCount != prev.deleteSuccessCount,
       listener: (context, _) => Navigator.of(context).pop(),
       child: BlocConsumer<RankDetailBloc, RankDetailState>(
+        // Both clauses are transition checks (not just an absolute
+        // `actionError != null`) so an unrelated later emit that happens
+        // to carry the same actionError forward never re-fires the
+        // SnackBar — `_onPromoteRequested`/`_onDeleteRequested` both emit
+        // `clearActionError: true` at mutation start, so a genuinely new
+        // error always differs from prev's null.
         listenWhen: (prev, curr) =>
+            prev is RankDetailLoaded &&
             curr is RankDetailLoaded &&
-            (curr.actionError != null ||
-                (prev is RankDetailLoaded &&
-                    curr.actionSuccessCount != prev.actionSuccessCount)),
+            ((curr.actionError != prev.actionError &&
+                    curr.actionError != null) ||
+                curr.actionSuccessCount != prev.actionSuccessCount),
         listener: (context, state) {
           if (state is! RankDetailLoaded) return;
           final error = state.actionError;
-          final fill =
-              error != null ? DesignConstants.badRed : DesignConstants.goodGreen;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                error ?? 'Member promoted.',
-                style: DesignConstants.p
-                    .copyWith(color: DesignConstants.onFill(fill)),
-              ),
-              backgroundColor: fill,
-            ),
-          );
+          if (error != null) {
+            showTabActionError(context, error);
+          } else {
+            showTabActionSuccess(context, 'Member promoted.');
+          }
         },
         builder: (context, state) {
           return switch (state) {
