@@ -295,7 +295,7 @@ pass the rank-derived `gym_id` down (the service still takes `(gym_id, rank_id)`
 but the router supplies gym from the resolved rank). The static routes and the
 `/{rank_id}/...` routes are declared before the bare `/{rank_id}`.
 **Removed:** `PUT /rename-group`, `DELETE /group`. `_rank_http_error` maps
-`"highest rank"`→409, `"not found"`→404, else 400.
+`"highest rank"` and `"already taken"` → 409, `"not found"` → 404, else 400.
 
 ## 9. Promotion semantics
 

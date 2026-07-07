@@ -735,6 +735,34 @@ async def test_update_rank_grown_count_reconciles_members():
 
 
 @pytest.mark.asyncio
+async def test_update_rank_none_gym_skips_reconcile():
+    """On a 'none'-type gym, a sub_rank_count change does NOT run the
+    reconcile SQL: every member already carries a NULL sub_index there
+    (_effective_sub_count treats a 'none' gym as always-0 regardless of the
+    stored count), so running it would be a guaranteed full-gym no-op
+    write. The sub_rank_type is still read once to make that call."""
+    rank_id = uuid4()
+    gym_id = uuid4()
+    updated_row = make_rank_row(
+        rank_id=str(rank_id),
+        gym_id=str(gym_id),
+        sub_rank_count=5,
+    )
+
+    session = _make_session_mock(
+        [_result(updated_row), _sub_type_result("none")],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.update_rank(rank_id, RankUpdateData(sub_rank_count=5))
+
+    sqls = _executed_sql_strings(session)
+    assert _load("get_gym_sub_rank_type.sql") in sqls
+    assert _load("reconcile_member_sub_index_for_gym.sql") not in sqls
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_update_rank_overrides_use_cast_and_skip_reconcile():
     """Updating only the overrides map binds it as CAST(:col AS JSONB)
     over a json.dumps'd value and runs NO reconcile (count unchanged)."""

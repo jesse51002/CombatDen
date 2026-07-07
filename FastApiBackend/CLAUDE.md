@@ -379,13 +379,16 @@ invariant, the reconcile matrix, the `rank_changed` anchor, presets, and the
 reads' internals. Read it before touching anything rank-shaped.** Only the
 how-to-work-here facts belong here:
 
-- **Facade + concerns.** `RanksService` (`ranks_service.py`, pure delegation)
-  over concerns sharing a lean `RanksBase`: `RanksMembers` (the only
-  member-writing paths), `RanksReorder` (`ranks_reorder.py` — main-only
-  two-phase reorder), `RanksPresets` (seed-from-preset + preset reads), and
-  `RanksReads` (the paginated boards). DI (`core/dependencies.py`) wires them
-  via `ranks_members` / `ranks_reorder` / `ranks_presets` / `ranks_reads`;
-  the router injects only the facade.
+- **Facade + concerns.** `RanksService` (`ranks_service.py`) keeps
+  single-rank CRUD (`create`/`update`/`get`/`list`/`delete`) and the
+  `is_rank_enabled` toggle itself; everything member / reorder / preset /
+  read shaped is pure delegation to concerns sharing a lean `RanksBase`:
+  `RanksMembers` (the only member-writing paths), `RanksReorder`
+  (`ranks_reorder.py` — main-only two-phase reorder), `RanksPresets`
+  (seed-from-preset + preset reads), and `RanksReads` (the paginated
+  boards). DI (`core/dependencies.py`) wires them via `ranks_members` /
+  `ranks_reorder` / `ranks_presets` / `ranks_reads`; the router injects
+  only the facade.
 - **Immutable vs. writable.** `main_rank_num_order` is update-immutable
   (`GYM_RANKS` frozenset) — `POST /reorder` is its only mover;
   `current_rank_id` / `current_sub_index` are `MEMBERS`-immutable (ranks

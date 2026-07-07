@@ -68,7 +68,7 @@ class RanksBase:
         column, so switching a gym to ``'none'`` is a pure view change
         over the persisted counts. Delegates to the shared
         ``schema.gym_rank.effective_sub_count`` — the single source of the
-        rule, also used by the member-details service and the seed.
+        rule, also used by the member-details service.
         """
         return effective_sub_count(sub_rank_type, rank.sub_rank_count)
 

@@ -18,7 +18,7 @@ never dangles.
 import json
 from uuid import UUID
 
-from schema.gym_rank import RankPresetKind
+from schema.gym_rank import RankPresetKind, SubRankType
 from schema.immutable_columns import GYM_RANKS as GYM_RANKS_IMMUTABLE
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -84,40 +84,49 @@ class RanksService(RanksBase):
         """Insert a rank and backfill rank-less members if enabled.
 
         A duplicate ``(gym_id, main_rank_num_order)`` violates the ladder-
-        position UNIQUE constraint, surfacing as an ``IntegrityError``; it
-        is caught and re-raised as a clean ValueError the router maps to
-        409 (position already taken) rather than a generic 500.
+        position UNIQUE constraint, surfacing as an ``IntegrityError`` from
+        the INSERT itself; the try/except wraps ONLY that INSERT
+        execute+fetch, catching it and re-raising a clean ValueError the
+        router maps to 409 (position already taken). The backfill call and
+        the commit run OUTSIDE that narrow try, in the same session/
+        transaction — so a failure there surfaces as its own uncaught
+        exception (the router's generic 500), never mislabeled as a
+        position conflict.
         """
-        try:
-            async with self._db_pool.session() as session:
-                insert_sql = load_sql(SQL_DIR / "insert_rank.sql")
-                params = {
-                    "gym_id": str(request.gym_id),
-                    "main_rank_num_order": request.main_rank_num_order,
-                    "name": request.name,
-                    "image_url": request.image_url,
-                    "classes_to_next_major": request.classes_to_next_major,
-                    "sub_rank_count": request.sub_rank_count,
-                    "sub_rank_image_overrides": json.dumps(
-                        request.sub_rank_image_overrides
-                    ),
-                }
-                row = (await session.execute(text(insert_sql), params)).mappings().fetchone()
-                if not row:
-                    raise RuntimeError("INSERT did not return a row")
+        async with self._db_pool.session() as session:
+            insert_sql = load_sql(SQL_DIR / "insert_rank.sql")
+            params = {
+                "gym_id": str(request.gym_id),
+                "main_rank_num_order": request.main_rank_num_order,
+                "name": request.name,
+                "image_url": request.image_url,
+                "classes_to_next_major": request.classes_to_next_major,
+                "sub_rank_count": request.sub_rank_count,
+                "sub_rank_image_overrides": json.dumps(
+                    request.sub_rank_image_overrides
+                ),
+            }
+            try:
+                row = (
+                    (await session.execute(text(insert_sql), params))
+                    .mappings()
+                    .fetchone()
+                )
+            except IntegrityError as exc:
+                raise ValueError(
+                    "That ladder position is already taken"
+                ) from exc
+            if not row:
+                raise RuntimeError("INSERT did not return a row")
 
-                if await self._members.is_rank_enabled(session, request.gym_id):
-                    await self._members.backfill_lowest_for_gym(
-                        session,
-                        request.gym_id,
-                    )
+            if await self._members.is_rank_enabled(session, request.gym_id):
+                await self._members.backfill_lowest_for_gym(
+                    session,
+                    request.gym_id,
+                )
 
-                await session.commit()
-                return RankResponse(**dict(row))
-        except IntegrityError as exc:
-            raise ValueError(
-                "That ladder position is already taken"
-            ) from exc
+            await session.commit()
+            return RankResponse(**dict(row))
 
     async def update_rank(
         self,
@@ -129,14 +138,20 @@ class RanksService(RanksBase):
         The SET clause is built with PER-COLUMN casts — the JSONB
         overrides map as ``CAST(:col AS JSONB)`` over a json.dumps'd
         value, every other column as a plain ``:col`` (never
-        ``:col::type``). When ``sub_rank_count`` is in the payload, every
-        member of the gym is re-fitted in the SAME transaction via the
-        shared reconcile (``RanksMembers.reconcile_sub_index_in_session``),
-        which reads the live per-rank counts to fill a NULL sub-index up to
-        the base leaf when the count GROWS across the 0 boundary,
-        ``LEAST``-clamp a now-too-high index down when it SHRINKS, and NULL
-        it on a subless / ``'none'`` rank — so the leaf invariant holds in
-        both directions. The overrides map is never pruned (persist-only).
+        ``:col::type``). When ``sub_rank_count`` is in the payload AND the
+        gym's ``sub_rank_type`` isn't ``'none'``, every member of the gym is
+        re-fitted in the SAME transaction via the shared reconcile
+        (``RanksMembers.reconcile_sub_index_in_session``), which reads the
+        live per-rank counts to fill a NULL sub-index up to the base leaf
+        when the count GROWS across the 0 boundary, ``LEAST``-clamp a
+        now-too-high index down when it SHRINKS, and NULL it on a subless
+        rank — so the leaf invariant holds in both directions. On a
+        ``'none'`` gym the reconcile is skipped entirely: every member
+        already carries a NULL sub-index there
+        (``_effective_sub_count`` treats a ``'none'`` gym as always-0
+        regardless of the stored count), so running it would be a
+        guaranteed full-gym no-op write. The overrides map is never pruned
+        (persist-only).
         """
         update_fields = data.model_dump(exclude_unset=True)
         if not update_fields:
@@ -170,11 +185,12 @@ class RanksService(RanksBase):
             if "sub_rank_count" in update_fields:
                 gym_id = row["gym_id"]
                 sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
-                await self._members.reconcile_sub_index_in_session(
-                    session,
-                    gym_id,
-                    sub_rank_type,
-                )
+                if sub_rank_type is not SubRankType.none:
+                    await self._members.reconcile_sub_index_in_session(
+                        session,
+                        gym_id,
+                        sub_rank_type,
+                    )
 
             await session.commit()
             return RankResponse(**dict(row))
