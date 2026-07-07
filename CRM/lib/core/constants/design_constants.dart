@@ -326,9 +326,21 @@ class DesignConstants {
   // both width and height).
   static const double heroChartHeight = 200.0;
   static const double rewardThumbnailHeight = 80.0;
-  static const double rankBeltHeight = 99.0;
   static const double rewardAvatarSize = 72.0;
   static const double qrThumbnailSize = 120.0;
+
+  // Rank belt art sizes (square, width == height). One token per distinct
+  // render size across the ranks surface, named by the belt's role.
+  static const double rankBeltHero = 120.0; // rank detail page hero
+  static const double rankBeltCard = 99.0; // ladder main-rank card belt
+  static const double rankBeltProfile = 64.0; // member-detail rank section
+  static const double rankBeltPreset = 60.0; // seed-from-preset preview tile
+  static const double rankBeltRoster = 48.0; // promotable roster row
+  static const double rankBeltCompact =
+      44.0; // ladder sub-tile + promote dialog option row
+  static const double rankBeltBreakdown =
+      40.0; // rank detail sub-rank breakdown row
+  static const double rankBeltPick = 36.0; // promotion dialog pick row
 
   // Small glyph-scale boxes — deliberately distinct from iconSize* (reserved
   // for Icon()). Loading spinners and the legend swatch dot.

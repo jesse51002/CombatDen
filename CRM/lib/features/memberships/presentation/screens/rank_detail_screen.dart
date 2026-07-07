@@ -382,7 +382,7 @@ class _Hero extends StatelessWidget {
           children: [
             RankBeltImage(
               imageUrl: rank.imageUrl,
-              size: 120,
+              size: DesignConstants.rankBeltHero,
               radius: DesignConstants.radiusCard,
             ),
             Expanded(
@@ -668,7 +668,10 @@ class _BreakdownRow extends StatelessWidget {
       child: Row(
         spacing: DesignConstants.spacingLarge,
         children: [
-          RankBeltImage(imageUrl: imageUrl, size: 40),
+          RankBeltImage(
+            imageUrl: imageUrl,
+            size: DesignConstants.rankBeltBreakdown,
+          ),
           Expanded(
             child: Text(
               label,

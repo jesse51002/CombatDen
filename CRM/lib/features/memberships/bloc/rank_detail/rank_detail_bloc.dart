@@ -148,7 +148,7 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       if (afterState is RankDetailLoaded) {
         emit(afterState.copyWith(
           isMutating: false,
-          actionError: e.toString(),
+          actionError: "Couldn't promote the member. Please try again.",
         ));
       }
     }
@@ -179,7 +179,7 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       if (afterState is RankDetailLoaded) {
         emit(afterState.copyWith(
           isMutating: false,
-          actionError: e.toString(),
+          actionError: "Couldn't delete the rank. Please try again.",
         ));
       }
     }

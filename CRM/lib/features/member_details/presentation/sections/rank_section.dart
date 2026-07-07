@@ -263,7 +263,10 @@ class _BeltRow extends StatelessWidget {
     return Row(
       spacing: DesignConstants.spacingLarge,
       children: [
-        RankBeltImage(imageUrl: rank.imageUrl, size: 64),
+        RankBeltImage(
+          imageUrl: rank.imageUrl,
+          size: DesignConstants.rankBeltProfile,
+        ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

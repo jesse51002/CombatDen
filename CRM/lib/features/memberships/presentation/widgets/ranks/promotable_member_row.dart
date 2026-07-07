@@ -110,7 +110,10 @@ class PromotableMemberRow extends StatelessWidget {
       child: Row(
         spacing: DesignConstants.spacingLarge,
         children: [
-          RankBeltImage(imageUrl: imageUrl, size: 48),
+          RankBeltImage(
+            imageUrl: imageUrl,
+            size: DesignConstants.rankBeltRoster,
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

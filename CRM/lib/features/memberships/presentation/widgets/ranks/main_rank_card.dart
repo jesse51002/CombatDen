@@ -95,7 +95,7 @@ class MainRankCard extends StatelessWidget {
                       children: [
                         RankBeltImage(
                           imageUrl: rank.imageUrl,
-                          size: DesignConstants.rankBeltHeight,
+                          size: DesignConstants.rankBeltCard,
                           radius: DesignConstants.radiusBig,
                         ),
                         Column(
@@ -194,7 +194,10 @@ class _SubTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          RankBeltImage(imageUrl: imageUrl, size: 44),
+          RankBeltImage(
+            imageUrl: imageUrl,
+            size: DesignConstants.rankBeltCompact,
+          ),
           Text(
             label,
             textAlign: TextAlign.center,

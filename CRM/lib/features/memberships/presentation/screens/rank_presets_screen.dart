@@ -259,7 +259,10 @@ class _BeltPreview extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          RankBeltImage(imageUrl: imageUrl, size: 60),
+          RankBeltImage(
+            imageUrl: imageUrl,
+            size: DesignConstants.rankBeltPreset,
+          ),
           Text(
             name,
             textAlign: TextAlign.center,
