@@ -68,7 +68,9 @@ class _RankSectionState extends State<RankSection> {
   void didUpdateWidget(covariant RankSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshKey != widget.refreshKey) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     }
   }
 
