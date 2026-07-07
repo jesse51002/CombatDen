@@ -1,11 +1,15 @@
 """The worker orchestrator: one ``run_tick`` = at most one gym's pipeline run.
 
 A tick takes the global TTL-lease lock (returns quietly if another holder has
-it), recovers any runs orphaned by a dead process, pops the oldest queued gym,
-opens a run, and drives the six stages under a heartbeat that renews the lease.
-On success the run is completed; on any exception it is failed with a truncated
-error and NOT re-enqueued (a deterministic failure needs a manual re-trigger; a
-crash orphan is recovered on the next tick). The lock is always released.
+it), fails any run orphaned by a dead process, and — unless the system-wide
+rolling run cap is already reached — DERIVES the single highest-priority gym that
+is due (``worker_select_due_gym.sql``), opens a run, and drives the six stages
+under a heartbeat that renews the lease. There is no queue: due-ness is computed
+each tick from run / spec / curation timestamps, tier-sorted, under per-gym and
+system rolling run caps. On success the run is completed; on any exception it is
+failed with a truncated error — a failed run still advances the gym's last-run
+watermark, so a deterministic failure does not hot-loop (it waits for a new
+trigger or the weekly floor). The lock is always released.
 """
 
 from __future__ import annotations
@@ -65,8 +69,8 @@ class WorkerService:
         self._cost_log = cost_log
 
     async def run_tick(self) -> None:
-        """Process at most one queued gym. No-op when the lock is held elsewhere
-        or the queue is empty."""
+        """Process at most one due gym. No-op when the lock is held elsewhere,
+        the system run cap is reached, or nothing is due."""
         token = uuid4()
         acquired = await self._lock.acquire_once(
             LOCK_KEY, token, ttl_seconds=settings.worker_lock_ttl_seconds
@@ -75,7 +79,10 @@ class WorkerService:
             return
         try:
             await self._recover_orphans()
-            gym_id = await self._pop_gym()
+            if await self._system_cap_reached():
+                logger.info("system run cap reached — skipping tick")
+                return
+            gym_id = await self._select_gym()
             if gym_id is None:
                 return
             await self._process_gym(gym_id, token)
@@ -141,30 +148,40 @@ class WorkerService:
                 return
 
     async def _recover_orphans(self) -> None:
-        """Fail every 'running' run (dead — we hold the exclusive lock) and
-        re-enqueue its gym, all in one transaction."""
-        reenqueue_sql = text(load_sql(SQL_DIR / "worker_reenqueue.sql"))
+        """Fail every 'running' run — dead, since we hold the exclusive lock. No
+        re-enqueue: the derivation re-selects the gym when it is next due (subject
+        to the run caps); this just clears the stuck 'running' row so the state
+        stays truthful and the run-cap counts stay accurate."""
         async with self._db.session() as session:
             result = await session.execute(
                 text(load_sql(SQL_DIR / "worker_fail_orphans.sql"))
             )
             orphans = result.mappings().all()
-            for row in orphans:
-                await session.execute(
-                    reenqueue_sql,
-                    {
-                        "gym_id": str(row["gym_id"]),
-                        "requested_at": row["created_at"],
-                    },
-                )
             await session.commit()
         if orphans:
             logger.warning("recovered %d orphaned run(s)", len(orphans))
 
-    async def _pop_gym(self) -> str | None:
-        """Pop the oldest queued gym, or None when the queue is empty."""
+    async def _system_cap_reached(self) -> bool:
+        """True when runs started across all gyms in the rolling window already
+        reach the system-wide cap (the global Apify/quota budget guard)."""
         row = await self._db.execute_with_retry(
-            load_sql(SQL_DIR / "worker_pop_queue.sql"), {}
+            load_sql(SQL_DIR / "worker_system_run_count.sql"),
+            {"cap_window_hours": settings.worker_cap_window_hours},
+        )
+        count = int(row["runs_in_window"]) if row else 0
+        return count >= settings.worker_system_run_cap
+
+    async def _select_gym(self) -> str | None:
+        """Derive the highest-priority DUE gym under its per-gym run cap, or None
+        when nothing is due (see worker_select_due_gym.sql)."""
+        row = await self._db.execute_with_retry(
+            load_sql(SQL_DIR / "worker_select_due_gym.sql"),
+            {
+                "cap_window_hours": settings.worker_cap_window_hours,
+                "gym_run_cap": settings.worker_gym_run_cap,
+                "curation_batch_hours": settings.worker_curation_batch_hours,
+                "weekly_days": settings.worker_weekly_refresh_days,
+            },
         )
         return str(row["gym_id"]) if row else None
 

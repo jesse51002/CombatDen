@@ -109,11 +109,11 @@ versioned spec. Do not reference or recreate `gym_video_query`.
 `python_data/schema/` as a Python `StrEnum`. Update `immutable_columns.py` if `spec_id` or `source`
 are columns that must be guarded (they are immutable once written).
 
-## Video worker + RAG schema (`video_rag`, `member_video_*`, `video_worker_queue`)
+## Video worker + RAG schema (`video_rag`, `member_video_*`)
 
 The VideoService background **worker** (a separate process; see `VideoService/src/worker/`) regenerates
 each gym's feed and, in the same pass, builds the RAG layer the backend serves per-member recs and
-semantic search from. Four new tables + two altered `video_*` tables support it. **pgvector** is enabled
+semantic search from. Three new tables + two altered `video_*` tables support it. **pgvector** is enabled
 in `schemas/_extensions.sql` (`CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`); embedding
 columns are `vector(1536)`, a **cross-service contract** pinned to `settings.video_embedding_dim` in the
 backend (a wrong-width vector raises rather than writes).
@@ -133,10 +133,15 @@ backend (a wrong-width vector raises rather than writes).
   recommended" = `COUNT(*)` and "last recommended" = `MAX(recommended_at)`, derived by aggregate. Index
   `(member_id, video_id)` backs the already-recommended anti-join + the per-video MAX aggregate
   ("already recommended" is global per member, not per bucket). No vector column.
-- **`video_worker_queue`** — the backend→worker hand-off. PK `gym_id` (a gym is queued at most once), FK →
-  `gyms`; `reason video_worker_reason` (`CREATE TYPE … AS ENUM ('spec_update','manual')`), `requested_at`
-  (index for oldest-first pop). The backend enqueues on every spec save (`spec_update`) or the manual
-  run route (`manual`); the worker pops it under a TTL lock.
+
+**No worker queue table.** The worker is not enqueued — each tick it *derives* which gym to run from
+timestamps already in these tables (`VideoService/src/worker/sql/worker_select_due_gym.sql`): a gym is
+DUE when its latest `gym_video_spec` **`admin_update`** version (tier 1), its latest **manual**
+`gym_video_feed.curated_at` settled ≥ 1h ago (tier 2), or its last run ≥ 7 days ago (tier 3) is newer
+than its last `video_run`. Tier-sorted, one gym per tick, under a per-gym **2 / 24h** and system-wide
+**5 / 24h** rolling run cap (both counting runs of any status — the poison-loop guard, since a failed run
+still advances the last-run watermark). A committed spec change no longer enqueues anything; the worker
+notices the new `admin_update` version on its next tick.
 
 **`video_run` gains a status lifecycle.** New `CREATE TYPE video_run_status AS ENUM
 ('running','completed','failed')`; `status` (DEFAULT `'completed'` so every pre-existing run and the
@@ -152,10 +157,9 @@ NULL`) attributes each cost row to its run. The stage enum `video_execution_type
 **`embed`** (full set now `search | transcript | tag | enrich | embed | scan`), added via transaction-safe
 `ALTER TYPE … ADD VALUE IF NOT EXISTS`.
 
-All of the above are mirrored in `python_data/schema/video.py` (`VideoRunStatus`, `VideoWorkerReason`,
-`MoodBucket` StrEnums; `VideoExecutionType` gains `enrich`/`embed`) and `immutable_columns.py` (new
-`VIDEO_RAG` / `MEMBER_VIDEO_PROFILE` / `MEMBER_VIDEO_RECS` frozensets; `video_worker_queue` is
-intentionally omitted, like `resource_locks`, since it has no client SELECT path).
+All of the above are mirrored in `python_data/schema/video.py` (`VideoRunStatus`, `MoodBucket` StrEnums;
+`VideoExecutionType` gains `enrich`/`embed`) and `immutable_columns.py` (new `VIDEO_RAG` /
+`MEMBER_VIDEO_PROFILE` / `MEMBER_VIDEO_RECS` frozensets).
 
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, constraints, indexes, triggers)

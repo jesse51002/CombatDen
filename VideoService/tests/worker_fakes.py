@@ -16,12 +16,12 @@ from typing import Any, Callable
 def route(sql: str) -> str:
     """The logical name for a worker SQL string, by a unique token in it."""
     checks = [
-        ("SKIP LOCKED", "pop_queue"),
+        ("count(*) AS runs_in_window", "system_count"),
+        ("WITH spec_gyms AS", "select_due_gym"),
         ("'orphaned'", "fail_orphans"),
         ("error = :error", "fail_run"),
         ("SET status = 'completed'", "complete_run"),
         ("INSERT INTO video_run", "insert_run"),
-        ("ON CONFLICT (gym_id)", "reenqueue"),
         ("gym_video_spec_latest", "spec_latest"),
         ("SELECT run_id, created_at", "prev_run"),
         ("created_at <= :as_of", "spec_as_of"),

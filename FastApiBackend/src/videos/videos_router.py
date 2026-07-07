@@ -19,10 +19,9 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent``        — one conversational turn.
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
-    * ``POST /api/v1/gyms/{gym_id}/video-worker/run`` — manually enqueue a
-      worker run (202).
     * ``GET /api/v1/gyms/{gym_id}/video-worker/status`` — the gym's worker
-      state (last refresh / queued / running / last run status).
+      state (last refresh / running / last run status). Read-only: there is no
+      manual run — the worker derives its own work.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-recs`` — a member's
       mood-bucketed RAG recommendations (``verify_can_view_member``).
     * ``GET /api/v1/gyms/{gym_id}/videos/search`` — semantic search over the
@@ -51,10 +50,7 @@ from src.videos.schema.video_agent_schema import (
 from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
 from src.videos.schema.video_search_schema import VideoSearchResponse
 from src.videos.schema.video_spec_schema import VideoSpecView
-from src.videos.schema.video_worker_schema import (
-    VideoWorkerStatusResponse,
-    WorkerRunQueuedResponse,
-)
+from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymFeedPreview,
@@ -598,46 +594,7 @@ async def refine_video_spec_from_feed(
     return result
 
 
-# ── Video worker control (enqueue + status) ──────────────────
-
-
-@videos_router.post(
-    "/api/v1/gyms/{gym_id}/video-worker/run",
-    response_model=WorkerRunQueuedResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Manually enqueue a video-worker run for a gym",
-    responses={
-        202: {"description": "The gym was queued for a worker run"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not an employee of this gym"},
-    },
-)
-@inject
-async def run_video_worker(
-    gym_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    videos_service: VideosService = Depends(
-        Provide[DependencyInjector.videos_service]
-    ),
-) -> WorkerRunQueuedResponse:
-    """Enqueue a manual worker run for the gym (idempotent — a gym is queued at
-    most once; re-queueing keeps the oldest pending request)."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
-
-    try:
-        await videos_service.enqueue_worker_run(gym_id)
-    except Exception:
-        logger.error(
-            "Failed to enqueue video-worker run for %s", gym_id, exc_info=True
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to enqueue the video-worker run",
-        ) from None
-
-    return WorkerRunQueuedResponse(queued=True)
+# ── Video worker status (read-only) ──────────────────────────
 
 
 @videos_router.get(
@@ -660,7 +617,7 @@ async def get_video_worker_status(
     ),
 ) -> VideoWorkerStatusResponse:
     """Return the gym's video-worker state: last feed refresh, whether a run is
-    queued or running, and the most-recent run's status."""
+    running, and the most-recent run's status."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 

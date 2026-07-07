@@ -88,11 +88,11 @@ flowchart TD
     maker --> gym[("gyms/&lt;id&gt;.yaml<br/>gym_type · theme · spec · queries")]
     gym -->|make sync-gyms| tmpl[("video_gym* templates<br/>+ video pool (Postgres)")]
 
-    backend(["FastApiBackend<br/>spec save / manual run"]) -->|enqueue| queue[("video_worker_queue")]
-    queue --> worker["worker (src/worker)<br/>scrape → funnel → enrich → scan → feed-write"]
+    backend(["FastApiBackend<br/>spec save (admin_update)"]) -->|writes| real[("gym_video_spec · video pool · video_rag<br/>gym_video_feed · video_run (Postgres)")]
+    real -.->|"derive due gym from timestamps (no queue)"| worker["worker (src/worker)<br/>scrape → funnel → enrich → scan → feed-write"]
     apify(["Apify youtube-scraper"]) -.-> worker
     llm(["enrich · scan · embed LLMs"]) -.-> worker
-    worker -->|writes| real[("video pool · video_rag<br/>gym_video_feed · video_run (Postgres)")]
+    worker -->|writes| real
 
     tmpl --> api["read-only API (src/api)<br/>MobileApp — transitional"]
     real --> fb["FastApiBackend videos domain<br/>feed · RAG recs · search"]
@@ -100,12 +100,15 @@ flowchart TD
 
 - **gym_maker** (operator) authors a gym file; `make sync-gyms` loads the template
   catalog + pool the read API serves. Its guide is `references/gym_maker.md`.
-- **the worker** (`src/worker`, backend-triggered via `video_worker_queue`) runs the
-  scrape → funnel → enrich → scan → feed-write pipeline — writing the shared `video`
-  pool, per-video `video_rag`, and each real gym's `gym_video_feed` runs (the content
-  the FastApiBackend serves: feed + RAG member-recs/search). It absorbed the old
-  `scripts/scraper` + `scripts/scan` scripts. Its guides are `references/scraper.md`
-  (ingest) + `references/scan.md` (judgment) in the `videoservice` skill.
+- **the worker** (`src/worker`, self-scheduling — no queue, no backend trigger) derives
+  the single highest-priority "due" gym each tick straight from timestamps already in
+  the schema (a fresh `admin_update` spec version, a settled manual feed curation, or a
+  weekly refresh floor), then runs the scrape → funnel → enrich → scan → feed-write
+  pipeline — writing the shared `video` pool, per-video `video_rag`, and each real gym's
+  `gym_video_feed` runs (the content the FastApiBackend serves: feed + RAG
+  member-recs/search). It absorbed the old `scripts/scraper` + `scripts/scan` scripts.
+  Its guides are `references/scraper.md` (ingest) + `references/scan.md` (judgment) in
+  the `videoservice` skill.
 
 > **One gym at a time.** The worker holds a global `"video_worker_run"` lock and
 > processes one gym per tick; never run two pipelines at once.
@@ -173,9 +176,9 @@ make worker                        # run the background pipeline (scrape → fun
 `gym-check` / `sync-gyms` / `import-yaml` pick their DB via the `ENV_FILE` flag
 (default `.env`; `ENV_FILE=.env.prod make sync-gyms GYM_ID=all`, or the
 `make sync-gyms-prod` helper — prod secrets in the gitignored `.env.prod`).
-`make worker` is a long-running loop against `.env`; the FastApiBackend enqueues
-gyms for it via `video_worker_queue` (locally, run it while the backend is up, or
-enqueue by saving a spec).
+`make worker` is a long-running loop against `.env` — it self-schedules (no queue, no
+backend trigger): run it locally alongside the backend and it picks up a gym on its own
+next tick once a spec save / feed curation / weekly floor makes that gym due.
 
 Env in `.env`: `DATABASE_URL` (the API + scripts + worker), plus `APIFY_TOKEN`
 (worker scrape) and the model keys (`GEMINI_API_KEY` for enrich/scan,

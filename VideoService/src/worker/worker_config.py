@@ -38,6 +38,25 @@ class WorkerSettings(BaseSettings):
     # Heartbeat interval — renew the lease this often while a run is in flight.
     worker_heartbeat_seconds: int = 300
 
+    # --- scheduling / run caps ----------------------------------------------
+    # There is no queue: each tick derives the highest-priority DUE gym from
+    # run / spec / curation timestamps (worker_select_due_gym.sql). These knobs
+    # tune that derivation.
+    # Rolling window (hours) over which BOTH run caps below are counted.
+    worker_cap_window_hours: int = 24
+    # Max runs per gym within the window (a 3rd waits for the window to roll).
+    worker_gym_run_cap: int = 2
+    # Max runs across ALL gyms within the window — the global Apify/quota budget
+    # guard, separate from the per-gym cap.
+    worker_system_run_cap: int = 5
+    # Tier-2 batch settle: a manual curation triggers a run only once the most
+    # recent manual curation is at least this old (owners curate in bursts, so
+    # the delay batches a burst into a single run).
+    worker_curation_batch_hours: int = 1
+    # Tier-3 refresh floor: a gym whose last run is at least this many days old
+    # is re-run even with no pending edit or curation.
+    worker_weekly_refresh_days: int = 7
+
     # --- concurrency ---------------------------------------------------------
     worker_scrape_concurrency: int = 4
     worker_enrich_concurrency: int = 8

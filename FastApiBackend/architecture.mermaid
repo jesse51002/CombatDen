@@ -14,7 +14,7 @@ flowchart TB
     r_plan["<b>plans</b> · /api/v1/membership_plans · 7 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>GET /{plan_id}/prices<br/>POST /price"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
-    r_vid["<b>videos</b> · /api/v1/gyms/{id}/videos + /video-spec + /video-agent + /video-worker + /members/{mid}/video-recs · 14 routes<br/>GET /gyms/{id}/videos<br/>POST /gyms/{id}/videos/lookup<br/>POST /gyms/{id}/videos<br/>DELETE /gyms/{id}/videos/{video_id}<br/>POST /gyms/{id}/videos/{video_id}/keep<br/>GET /gyms/{id}/videos/preview<br/>GET /gyms/{id}/videos/spec<br/>GET /gyms/{id}/video-spec<br/>POST /gyms/{id}/video-agent (accept via accepted_spec)<br/>POST /gyms/{id}/video-agent/refine-from-feed<br/>POST /gyms/{id}/video-worker/run (202)<br/>GET /gyms/{id}/video-worker/status<br/>GET /gyms/{id}/members/{member_id}/video-recs (verify_can_view_member)<br/>GET /gyms/{id}/videos/search"]
+    r_vid["<b>videos</b> · /api/v1/gyms/{id}/videos + /video-spec + /video-agent + /video-worker + /members/{mid}/video-recs · 13 routes<br/>GET /gyms/{id}/videos<br/>POST /gyms/{id}/videos/lookup<br/>POST /gyms/{id}/videos<br/>DELETE /gyms/{id}/videos/{video_id}<br/>POST /gyms/{id}/videos/{video_id}/keep<br/>GET /gyms/{id}/videos/preview<br/>GET /gyms/{id}/videos/spec<br/>GET /gyms/{id}/video-spec<br/>POST /gyms/{id}/video-agent (accept via accepted_spec)<br/>POST /gyms/{id}/video-agent/refine-from-feed<br/>GET /gyms/{id}/video-worker/status (read-only, no queue)<br/>GET /gyms/{id}/members/{member_id}/video-recs (verify_can_view_member)<br/>GET /gyms/{id}/videos/search"]
     r_pres["<b>presets</b> · /api/v1/gyms/{id}/presets + /api/v1/presets/templates · 5 routes<br/>POST /gyms/{id}/presets/import (owner + email-allowlist gated)<br/>GET /presets/templates<br/>GET /presets/templates/{video_gym_id}<br/>GET /presets/templates/{video_gym_id}/videos<br/>GET /presets/templates/{video_gym_id}/videos/preview"]
     r_theme["<b>theme</b> · /api/v1/gyms/{id}/showcase · 1 route<br/>GET /gyms/{id}/showcase (gym-employee gated)"]
     checkin_class_resolver["CheckinClassResolver<br/>src/checkin/ · resolve one occurrence against the class's schedule versions + exceptions (pure read)<br/>(the one-way checkin → classes dependency)"]
@@ -62,8 +62,8 @@ flowchart TB
     litellm_client["LiteLLMClient — src/shared/litellm_client.py<br/>complete_structured(prompt, schema, model) · model=provider/name<br/>resolves provider key from settings · Singleton"]
     video_spec_service["VideoSpecService — src/videos/service/<br/>spec DB read/write · load_latest · save_version · no LLM"]
     video_query_generator["VideoQueryGenerator — src/videos/service/<br/>litellm TWO-CALL query gen: landscape (LandscapeResult) → queries<br/>~⅓ name-targeted · count = video_query_count · called by VideoSpecAuthoring.commit"]
-    video_spec_authoring["VideoSpecAuthoring — src/videos/service/<br/>deterministic commit gate: diff guard → query gen → save → enqueue worker<br/>commit(gym_id, criteria, *, source) → VideoSpecView | None"]
-    videos_worker_control["VideosWorkerControl — src/videos/service/<br/>enqueue + status seam for the VideoService worker<br/>upserts video_worker_queue (keeps oldest requested_at)<br/>serve reads filter status='completed'"]
+    video_spec_authoring["VideoSpecAuthoring — src/videos/service/<br/>deterministic commit gate: diff guard → query gen → save (no enqueue — worker self-derives)<br/>commit(gym_id, criteria, *, source) → VideoSpecView | None"]
+    videos_worker_status_service["VideosWorkerStatusService — src/videos/service/<br/>read-only status seam for the VideoService worker<br/>(no queue — the worker derives its own due gym from timestamps)<br/>serve reads filter status='completed'"]
     member_video_profile_service["MemberVideoProfileService — src/videos/service/<br/>lazily builds a member's 5 mood-bucket profiles<br/>(deterministic v1 template text → litellm embeddings)"]
     video_recs_service["VideoRecsService — src/videos/service/<br/>mood-bucket member recs over the served feed ∩ video_rag<br/>blended score + freshness partition (never-recommended first) · records member_video_recs"]
     video_search_service["VideoSearchService — src/videos/service/<br/>semantic search over the served feed ∩ video_rag (cosine · q embedded once)"]
@@ -155,10 +155,9 @@ flowchart TB
     video_feed_refiner --> video_spec_authoring
     litellm_client --> video_query_generator
     litellm_client --> video_feed_refiner
-    videos_service --> videos_worker_control
+    videos_service --> videos_worker_status_service
     videos_service --> video_recs_service
     videos_service --> video_search_service
-    video_spec_authoring --> videos_worker_control
     video_recs_service --> member_video_profile_service
     litellm_client --> member_video_profile_service
     litellm_client --> video_search_service
@@ -217,12 +216,12 @@ flowchart TB
     reconciler_service --> payer_resolver
     stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end
-  Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB) · pgvector<br/>member_membership_applied_discounts (sync writes back stripe_coupon_id + status)<br/>video_rag · member_video_profile · member_video_recs · video_worker_queue"]
+  Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB) · pgvector<br/>member_membership_applied_discounts (sync writes back stripe_coupon_id + status)<br/>video_rag · member_video_profile · member_video_recs"]
   Stripe["Stripe — payments · Connect · webhooks"]
   YouTube["📺 YouTube Data API v3<br/>video metadata for owner-added videos"]
   LLMProvider["🤖 LLM Provider (Anthropic)<br/>agent: Pydantic AI · AnthropicModel · settings.video_agent_model<br/>regular calls: litellm · settings.video_llm_model<br/>keys: anthropic_api_key / openai_api_key / gemini_api_key"]
   CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
-  FastApiBackend -->|"read/write · JWT auth · applied-discount rows · RAG (pgvector) · enqueue video_worker_queue"| Supabase
+  FastApiBackend -->|"read/write · JWT auth · applied-discount rows · RAG (pgvector)"| Supabase
   FastApiBackend -->|"via Payments core · compute coupons at sync, write back stripe_coupon_id"| Stripe
   Stripe -.->|"webhooks → /api/v1/stripe/webhooks"| FastApiBackend
   FastApiBackend -->|"videos: owner-add fetches video title/channel/thumbnail/views"| YouTube
@@ -235,7 +234,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe,YouTube,LLMProvider ext;
   class r_mem,r_gym,r_cls,r_chk,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme route;
-  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,videos_worker_control,member_video_profile_service,video_recs_service,video_search_service,video_agent_service svc;
+  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,videos_worker_status_service,member_video_profile_service,video_recs_service,video_search_service,video_agent_service svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

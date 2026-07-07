@@ -439,7 +439,7 @@ derivation across SQL files.
 ## `videos` domain — LLM spec and agent surface
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
-agent plus the RAG read surface. Seven routes cover the spec/agent + worker-control + RAG surface
+agent plus the RAG read surface. Six routes cover the spec/agent + worker-status + RAG surface
 (all `verify_gym_employee`-gated EXCEPT the member recs route, which is `verify_can_view_member`):
 
 | Route | What it does |
@@ -447,8 +447,7 @@ agent plus the RAG read surface. Seven routes cover the spec/agent + worker-cont
 | `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
 | `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
-| `POST /api/v1/gyms/{id}/video-worker/run` | Manually enqueue a worker run (`reason=manual`) → 202 `{queued: true}` |
-| `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state: `last_updated` / `queued` / `running` / `last_run_status` |
+| `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state, read-only: `last_updated` / `running` / `last_run_status` (no queue — there is nothing to enqueue) |
 | `GET /api/v1/gyms/{id}/members/{member_id}/video-recs` | A member's mood-bucketed RAG recs (`verify_can_view_member`; `per_bucket` cap 20, `record` bool) |
 | `GET /api/v1/gyms/{id}/videos/search` | Semantic search over the gym's served feed (`q` min-len 2, `limit` default `video_search_limit`, cap 50) |
 
@@ -469,22 +468,22 @@ acknowledge and invite further changes (the conversation stays open, `saved=True
 - **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`. A **two-call** flow: call 1 researches the niche's content landscape (`LandscapeResult` — channels / creators / series, hallucination tolerated, never validated), call 2 turns criteria + that rendered landscape into queries (roughly one third landscape-targeted, the 5-cluster spread still governs the whole set). `count` is required — `VideoSpecAuthoring` injects `settings.video_query_count`.
 - **`VideoSpecAuthoring`** (`video_spec_authoring.py`) — shared deterministic commit: diff guard → query gen → save.
   `commit(gym_id, criteria, *, source) -> VideoSpecView | None`. Returns `None` when criteria are unchanged.
-  After a successful `save_version` it **enqueues** the gym for a feed-regeneration worker run via
-  `VideosWorkerControl.enqueue(gym_id, spec_update)` — the diff-guard `None` path never enqueues, and the
-  preset import (`src/presets/`) never enqueues.
+  It only saves the new version — there is no enqueue step. An `admin_update` version it just saved is
+  picked up by the VideoService worker on its own next tick (the worker derives the due gym from
+  timestamps; see the VideoService CLAUDE.md).
 - **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
-- **`VideosWorkerControl`** (`videos_worker_control.py`) — the enqueue + status seam for the VideoService
-  background worker (the backend owns the control surface; the worker process runs in VideoService and pops
-  the Postgres `video_worker_queue`). `enqueue(gym_id, reason)` upserts the queue row keeping the OLDEST
-  `requested_at` on conflict (anti-self-starvation); `status(gym_id)` reads last-refresh / queued / running /
-  last-run-status in one query. **Serve-path invariant:** every "latest run" subselect filters
-  `AND status = 'completed'` so a mid-flight `running` run never becomes latest and blanks the feed —
-  including the owner keep/reject curation writes, which target the run currently being served.
+- **`VideosWorkerStatusService`** (`videos_worker_status_service.py`) — read-only status seam for the
+  VideoService background worker (the backend has no control surface over the worker anymore — the
+  worker derives its own due gym from timestamps already in the schema; there is nothing to enqueue).
+  `status(gym_id)` reads last-refresh / running / last-run-status in one query. **Serve-path invariant:**
+  every "latest run" subselect filters `AND status = 'completed'` so a mid-flight `running` run never
+  becomes latest and blanks the feed — including the owner keep/reject curation writes, which target
+  the run currently being served.
 
 **`VideosService` (`videos_service.py`) is the domain FACADE** — composes `VideoFeedService`,
-`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`, `VideosWorkerControl`, `VideoRecsService`,
+`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`, `VideosWorkerStatusService`, `VideoRecsService`,
 and `VideoSearchService`. Exposes: `load_latest_spec`,
-`save_accepted_spec` (→ authoring.commit), `refine_from_feed`, `enqueue_worker_run` (→ `enqueue(manual)`),
+`save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
 `load_worker_status`, `get_video_recs`, `search_videos`, plus all feed operations
 (`load_feed_ids`, `load_pool_videos`, owner add/remove/keep). The conversational agent uses it for
 the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
@@ -596,7 +595,7 @@ surfaces the single most-recent version per gym. Do not `SELECT` directly from t
 separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
-`videos_worker_control`, `video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`,
+`videos_worker_status_service`, `video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`,
 `video_recs_service`, `video_search_service`, `video_agent_service`, `videos_service`.
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.

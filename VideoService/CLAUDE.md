@@ -198,9 +198,12 @@ worker:
 A standalone long-running process — `python -m src.worker.run` (`make worker`) — that
 regenerates gym feeds and builds the RAG layer. **Not a web server, no port.** It is the
 video half of the combined `deploy/` container (the other half is FastApiBackend's
-uvicorn); the FastApiBackend owns the *control surface* (enqueue + status routes), the
-worker owns the *execution*. The two never call each other — the Postgres
-`video_worker_queue` table is the hand-off.
+uvicorn). **There is no job queue and no control surface** — the worker is fully
+self-scheduling: each tick derives the single highest-priority "due" gym straight from
+timestamps already in the schema (`video_run`, `gym_video_spec`, `gym_video_feed`). The
+FastApiBackend never triggers a run; its only involvement is a read-only status endpoint
+(`GET …/video-worker/status`) that reads the same run rows the worker writes. The two
+never call each other.
 
 ### The tick
 
@@ -213,21 +216,41 @@ Each `WorkerService.run_tick`:
    `worker_heartbeat_seconds` (300s); a lost heartbeat aborts the run mid-pipeline. So
    only one gym is ever processed at a time across every worker instance.
 2. **Recovers orphans** — under the exclusive lock, any `video_run` still `status='running'`
-   must be from a dead process: it is marked `failed` (`error='orphaned'`) and its gym is
-   re-enqueued (`reason='manual'`, at its original queue position). This is the ONLY
-   auto-re-enqueue.
-3. **Pops the oldest queued gym** — `DELETE … WHERE gym_id = (SELECT … ORDER BY
-   requested_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING gym_id`. The queue is
-   drain-on-pop; empty → the tick ends.
+   must be from a dead process: it is marked `failed` (`error='orphaned'`). There is no
+   re-enqueue — the run's `created_at` still counts as that gym's last-run watermark, and
+   the next tick's derivation step (below) re-selects the gym once it is next due (subject
+   to the run caps). This just clears the stuck `running` row so the state stays truthful.
+3. **Checks the system-wide run cap** — if runs of ANY status across ALL gyms in the
+   rolling `worker_cap_window_hours` (24h) window already reach `worker_system_run_cap`
+   (5), the tick skips selection entirely (the global Apify/quota budget guard).
+4. **Derives the single due gym** (`worker_select_due_gym.sql`) — see *Scheduling* below.
+   Nothing due → the tick ends with no run.
 
-### The queue contract with the backend
+### Scheduling: due-gym derivation + the run caps
 
-`video_worker_queue` is PK `gym_id` (a gym is queued at most once), `reason`
-(`spec_update | manual`), `requested_at`. The **FastApiBackend enqueues** it —
-`spec_update` after every successful spec save (`VideoSpecAuthoring.commit`), `manual`
-from `POST …/video-worker/run` — via an upsert that keeps the OLDEST `requested_at` on
-conflict (anti-self-starvation). The worker pops it. `GET …/video-worker/status` reads the
-queue + the gym's runs (queued / running / last-run-status / last-completed timestamp).
+No queue, no enqueue call from anywhere — the worker computes its own work every tick
+from timestamps already in the schema. A gym (one with a video spec) is **due** when a
+trigger is newer than its last run's **start** (`MAX(video_run.created_at)`, ANY status —
+a failed run still advances this watermark, so a deterministic failure does not hot-loop;
+it waits for a new trigger or the weekly floor). The trigger decides the priority **tier**
+(lower tier wins; ties go to the oldest-waiting trigger first):
+
+- **tier 1** — the gym's latest `gym_video_spec` version with `source='admin_update'`
+  (an owner/agent edit) is newer than the last run start.
+- **tier 2** — the gym's latest MANUAL `gym_video_feed` curation (`curated_at`, any
+  reject/keep/re-add) is newer than the last run AND has settled at least
+  `worker_curation_batch_hours` (1h) ago — so a burst of curations batches into one run.
+- **tier 3** — the gym's last run is at least `worker_weekly_refresh_days` (7) old
+  (periodic refresh). A never-run gym qualifies only via tier 1/2 — a preset-only gym
+  that was never edited is NOT auto-run (matches the old "preset import does not
+  enqueue" behavior).
+
+Two rolling-`worker_cap_window_hours` run caps, both counting runs of ANY status (the
+poison-loop guard): **per-gym** — `worker_gym_run_cap` (2), enforced inside the
+derivation query itself; **system-wide** — `worker_system_run_cap` (5), checked by the
+tick (step 3 above) before the derivation query runs at all. `GET …/video-worker/status`
+reads the gym's runs (running / last-run-status / last-completed timestamp) — there is no
+`queued` field to report.
 
 ### The pipeline (six stages, per gym)
 
@@ -260,18 +283,22 @@ queue + the gym's runs (queued / running / last-run-status / last-completed time
    what makes it the served run.
 
 Each stage's spend is logged to `video_cost_log` as `search` / `enrich` / `embed` / `scan`
-rows, each stamped with `gym_id` + `video_run_id`. **A failed stage marks the run `failed`
-with no auto re-enqueue** (a deterministic failure needs a manual CRM re-trigger — poison
-guard); only crash-orphans (step 2) are recovered.
+rows, each stamped with `gym_id` + `video_run_id`. **A failed stage marks the run `failed`**
+— its `created_at` still counts as the gym's last-run watermark, so a deterministic failure
+does not hot-loop; the gym simply waits for a new tier-1/2 trigger or the tier-3 weekly
+floor to become due again (poison guard — no manual re-trigger exists).
 
 ### Settings + the embedding contract
 
 Worker knobs live in `src/worker/worker_config.py` (`WorkerSettings`) — the models above,
-budgets (`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
-`enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop timers,
-and `apify_token`. It reads `DATABASE_URL` from `src/api/config.py` and the LLM provider keys
-(`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from `src/core/config.py` — three
-`Settings` classes over the one `.env`.
+scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
+`worker_system_run_cap` (5), `worker_curation_batch_hours` (1),
+`worker_weekly_refresh_days` (7) — see *Scheduling* above), budgets (`scan_budget_per_run`,
+`scan_batch_size`, `rag_probe_top_k`, `enrich_transcript_char_budget`), concurrency
+(`worker_*_concurrency`), the lock/loop timers, and `apify_token`. It reads `DATABASE_URL`
+from `src/api/config.py` and the LLM provider keys (`gemini_api_key`, `openai_api_key`,
+`anthropic_api_key`) from `src/core/config.py` — three `Settings` classes over the one
+`.env`.
 
 The **embedding contract is cross-service.** The worker embeds with
 `embedding_model` (`openai/text-embedding-3-small`) into `video_rag.embedding` typed

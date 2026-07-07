@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from schema.video import GymVideoSpecSource, VideoWorkerReason
+from schema.video import GymVideoSpecSource
 
 from src.videos.schema.video_spec_schema import (
     VideoSpecDraft,
@@ -18,7 +18,6 @@ from src.videos.schema.video_spec_schema import (
 )
 from src.videos.service.video_query_generator import VideoQueryGenerator
 from src.videos.service.video_spec_service import VideoSpecService
-from src.videos.service.videos_worker_control import VideosWorkerControl
 
 
 class VideoSpecAuthoring:
@@ -37,12 +36,10 @@ class VideoSpecAuthoring:
         *,
         spec_service: VideoSpecService,
         query_generator: VideoQueryGenerator,
-        worker_control: VideosWorkerControl,
         query_count: int,
     ) -> None:
         self._spec_service = spec_service
         self._query_generator = query_generator
-        self._worker_control = worker_control
         self._query_count = query_count
 
     async def commit(
@@ -84,12 +81,9 @@ class VideoSpecAuthoring:
         view = await self._spec_service.save_version(
             gym_id, criteria, queries, source=source
         )
-        # A committed spec change queues the gym for a feed-regeneration worker
-        # run. The diff-guard early return above means an unchanged spec never
-        # enqueues.
-        await self._worker_control.enqueue(
-            gym_id, VideoWorkerReason.spec_update
-        )
+        # No enqueue: the VideoService worker derives which gym to run from
+        # run / spec / curation timestamps, so this newly-saved admin_update
+        # version is picked up on the worker's next tick (subject to run caps).
         return view
 
     @staticmethod

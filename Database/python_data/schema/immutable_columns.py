@@ -585,7 +585,3 @@ MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
         "recommended_at",  # backend-stamped; append-only serve log
     }
 )
-
-# video_worker_queue is intentionally NOT listed here: like resource_locks, it
-# has no client SELECT policy at all (REVOKE ALL FROM authenticated) — pure
-# service-internal queue infrastructure, not a client-readable data model.

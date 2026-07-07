@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from schema.video import GymVideoSpecSource, VideoWorkerReason
+from schema.video import GymVideoSpecSource
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
 from src.shared.litellm_client import LiteLLMClient
@@ -38,7 +38,6 @@ from src.videos.service.video_query_generator import VideoQueryGenerator
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
-from src.videos.service.videos_worker_control import VideosWorkerControl
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -115,13 +114,6 @@ def _make_spec_service_stub() -> VideoSpecService:
     """Build a VideoSpecService whose db is a stub."""
     db_stub = MagicMock()
     return VideoSpecService(db_pool=db_stub)
-
-
-def _make_worker_control() -> MagicMock:
-    """A VideosWorkerControl double whose ``enqueue`` is an AsyncMock."""
-    wc = MagicMock(spec=VideosWorkerControl)
-    wc.enqueue = AsyncMock()
-    return wc
 
 
 def _make_litellm_client() -> LiteLLMClient:
@@ -458,7 +450,6 @@ async def test_authoring_commit_no_change_returns_none() -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=query_gen,
-        worker_control=_make_worker_control(),
         query_count=_QUERY_COUNT,
     )
 
@@ -490,7 +481,6 @@ async def test_authoring_commit_changed_generates_and_saves() -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=query_gen,
-        worker_control=_make_worker_control(),
         query_count=_QUERY_COUNT,
     )
 
@@ -524,7 +514,6 @@ async def test_authoring_commit_discipline_reorder_triggers_change() -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=query_gen,
-        worker_control=_make_worker_control(),
         query_count=_QUERY_COUNT,
     )
 
@@ -564,7 +553,6 @@ async def test_authoring_commit_summary_only_reuses_queries() -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=query_gen,
-        worker_control=_make_worker_control(),
         query_count=_QUERY_COUNT,
     )
 
@@ -600,7 +588,6 @@ async def test_authoring_commit_no_current_spec_always_saves() -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=query_gen,
-        worker_control=_make_worker_control(),
         query_count=_QUERY_COUNT,
     )
 
@@ -644,7 +631,6 @@ async def test_authoring_commit_uses_settings_query_count(monkeypatch) -> None:
     authoring = VideoSpecAuthoring(
         spec_service=spec_service,
         query_generator=gen,
-        worker_control=_make_worker_control(),
         query_count=settings.video_query_count,
     )
     draft = VideoSpecDraft(
@@ -663,104 +649,6 @@ async def test_authoring_commit_uses_settings_query_count(monkeypatch) -> None:
     assert mock_acompletion.call_count == 2
     second_prompt = mock_acompletion.call_args_list[1].kwargs["messages"][0]["content"]
     assert "17" in second_prompt
-
-
-# ---------------------------------------------------------------------------
-# 6b. VideoSpecAuthoring.commit — worker enqueue seam
-# ---------------------------------------------------------------------------
-
-
-async def test_authoring_commit_enqueues_after_successful_save() -> None:
-    """A committed spec change enqueues the gym with reason ``spec_update``."""
-    spec_service = _make_spec_service_stub()
-    query_gen = MagicMock(spec=VideoQueryGenerator)
-    query_gen.generate = AsyncMock(return_value=["q1", "q2"])
-    worker_control = _make_worker_control()
-    authoring = VideoSpecAuthoring(
-        spec_service=spec_service,
-        query_generator=query_gen,
-        worker_control=worker_control,
-        query_count=_QUERY_COUNT,
-    )
-
-    current = _make_current_view()
-    spec_service.load_latest = AsyncMock(return_value=current)  # type: ignore[method-assign]
-    spec_service.save_version = AsyncMock(return_value=current)  # type: ignore[method-assign]
-
-    draft = VideoSpecDraft(
-        disciplines=[GymType.MMA],
-        videos_desc="CHANGED keep criteria — this is different",
-        avoid_desc=current.avoid_desc,
-    )
-
-    await authoring.commit(GYM_ID, draft, source=GymVideoSpecSource.admin_update)
-
-    worker_control.enqueue.assert_awaited_once_with(
-        GYM_ID, VideoWorkerReason.spec_update
-    )
-
-
-async def test_authoring_commit_no_change_does_not_enqueue() -> None:
-    """The diff-guard None path must NOT enqueue (nothing was saved)."""
-    spec_service = _make_spec_service_stub()
-    query_gen = MagicMock(spec=VideoQueryGenerator)
-    worker_control = _make_worker_control()
-    authoring = VideoSpecAuthoring(
-        spec_service=spec_service,
-        query_generator=query_gen,
-        worker_control=worker_control,
-        query_count=_QUERY_COUNT,
-    )
-
-    current = _make_current_view()
-    spec_service.load_latest = AsyncMock(return_value=current)  # type: ignore[method-assign]
-
-    draft = VideoSpecDraft(
-        disciplines=[GymType(d) for d in current.disciplines],
-        videos_desc=current.videos_desc,
-        avoid_desc=current.avoid_desc,
-        short_videos_desc=current.short_videos_desc,
-        short_avoid_desc=current.short_avoid_desc,
-    )
-
-    result = await authoring.commit(
-        GYM_ID, draft, source=GymVideoSpecSource.admin_update
-    )
-
-    assert result is None
-    worker_control.enqueue.assert_not_called()
-
-
-async def test_authoring_commit_does_not_enqueue_when_save_fails() -> None:
-    """When save_version raises, the error propagates and no enqueue happens."""
-    spec_service = _make_spec_service_stub()
-    query_gen = MagicMock(spec=VideoQueryGenerator)
-    query_gen.generate = AsyncMock(return_value=["q1"])
-    worker_control = _make_worker_control()
-    authoring = VideoSpecAuthoring(
-        spec_service=spec_service,
-        query_generator=query_gen,
-        worker_control=worker_control,
-        query_count=_QUERY_COUNT,
-    )
-
-    spec_service.load_latest = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    spec_service.save_version = AsyncMock(  # type: ignore[method-assign]
-        side_effect=RuntimeError("db down")
-    )
-
-    draft = VideoSpecDraft(
-        disciplines=[GymType.MMA],
-        videos_desc="brand new gym",
-        avoid_desc="nothing bad",
-    )
-
-    with pytest.raises(RuntimeError):
-        await authoring.commit(
-            GYM_ID, draft, source=GymVideoSpecSource.admin_update
-        )
-
-    worker_control.enqueue.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

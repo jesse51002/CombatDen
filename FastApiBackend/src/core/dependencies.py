@@ -182,7 +182,9 @@ from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
-from src.videos.service.videos_worker_control import VideosWorkerControl
+from src.videos.service.videos_worker_status_service import (
+    VideosWorkerStatusService,
+)
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers_service import WaiversService
 
@@ -413,17 +415,16 @@ class DependencyInjector(containers.DeclarativeContainer):
         litellm_client=litellm_client,
         model=settings.video_llm_model,
     )
-    # Enqueue seam + status for the VideoService background worker (the backend
-    # owns the control surface; the worker process runs elsewhere).
-    videos_worker_control = providers.Singleton(
-        VideosWorkerControl,
+    # Read-only status of the VideoService background worker (the worker runs
+    # elsewhere and derives its own work — no enqueue seam).
+    videos_worker_status_service = providers.Singleton(
+        VideosWorkerStatusService,
         db_pool=db_pool,
     )
     video_spec_authoring = providers.Singleton(
         VideoSpecAuthoring,
         spec_service=video_spec_service,
         query_generator=video_query_generator,
-        worker_control=videos_worker_control,
         query_count=settings.video_query_count,
     )
     video_feed_refiner = providers.Singleton(
@@ -467,8 +468,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         embedding_model=settings.video_embedding_model,
         embedding_dim=settings.video_embedding_dim,
     )
-    # Facade: composes feed + spec + worker + RAG sub-services. Template catalog
-    # reads are in PresetsTemplateService; showcase reads are in
+    # Facade: composes feed + spec + worker-status + RAG sub-services. Template
+    # catalog reads are in PresetsTemplateService; showcase reads are in
     # ThemeShowcaseService.
     videos_service = providers.Factory(
         VideosService,
@@ -476,7 +477,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         spec_service=video_spec_service,
         authoring=video_spec_authoring,
         feed_refiner=video_feed_refiner,
-        worker_control=videos_worker_control,
+        worker_status=videos_worker_status_service,
         recs_service=video_recs_service,
         search_service=video_search_service,
     )

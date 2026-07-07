@@ -31,7 +31,7 @@ flowchart TB
     VSc_skill["videoservice skill<br/>gym authoring"]
     VSc_gym["gym_maker → gym YAML"]
     VSc_sync["sync_gyms · import_yaml → templates + pool"]
-    VSc_worker["worker (src/worker) · queue-driven loop<br/>scrape → funnel → enrich → scan → feed-write<br/>writes video pool · video_rag · gym_video_feed runs"]
+    VSc_worker["worker (src/worker) · self-scheduling loop<br/>derives due gym from timestamps (no queue)<br/>scrape → funnel → enrich → scan → feed-write<br/>writes video pool · video_rag · gym_video_feed runs"]
     VSc_skill -. "drives" .-> VSc_gym
     VSc_gym --> VSc_sync
     VSc_sync -. "seeds pool" .-> VSc_worker
@@ -46,13 +46,13 @@ flowchart TB
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + spec/agent authoring + worker control + RAG recs/search)<br/>presets (template catalog + import) · theme (gym showcase)<br/>uploads (S3 image proxy)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner<br/>VideosWorkerControl · VideoRecsService · VideoSearchService · MemberVideoProfileService<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService · UploadsService"]
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks<br/>videos (real-gym feed + spec/agent authoring + worker status + RAG recs/search)<br/>presets (template catalog + import) · theme (gym showcase)<br/>uploads (S3 image proxy)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner<br/>VideosWorkerStatusService · VideoRecsService · VideoSearchService · MemberVideoProfileService<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService · ThemeShowcaseService · UploadsService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
   end
-  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract · pgvector<br/>tables: member · gym · rank/reward · membership/billing · class<br/>video_* · gym_video_* · video_rag · member_video_* · video_worker_queue"]
+  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract · pgvector<br/>tables: member · gym · rank/reward · membership/billing · class<br/>video_* · gym_video_* · video_rag · member_video_*"]
   Deploy["📦 <b>deploy/</b> — combined image<br/>FastApiBackend API + VideoService worker<br/>always-on (ECS Express), NOT App Runner"]
 
   %% ---------- EXTERNAL ----------
@@ -83,9 +83,9 @@ flowchart TB
   VS_create --> Apify
   VS_create --> LiteLLM
   VS_create --> Gemini
-  VS_create -->|"pop video_worker_queue · write video / video_rag / gym_video_feed"| Database
+  VS_create -->|"derive due gym from timestamps · write video / video_rag / gym_video_feed"| Database
   VS_api -->|"read video_* tables"| Database
-  FastApiBackend -->|"read/write · Supabase Auth · enqueue video_worker_queue"| Database
+  FastApiBackend -->|"read/write · Supabase Auth"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
   FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
   FastApiBackend -.->|"packaged into"| Deploy

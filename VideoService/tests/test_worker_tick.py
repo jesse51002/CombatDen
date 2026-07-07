@@ -1,15 +1,15 @@
 """WorkerService tick control flow — no DB, no network.
 
-Covers: lock miss is a no-op; empty queue returns; orphan recovery marks running
-runs failed + re-enqueues; a stage exception fails the run and does NOT
-re-enqueue; success completes the run; the heartbeat sets the abort flag on a
-lost lease; and the pipeline aborts between stages once the flag is set.
+Covers: lock miss is a no-op; nothing-due returns; the system run cap short-
+circuits before selection; orphan recovery marks running runs failed WITHOUT
+re-enqueue (there is no queue); a stage exception fails the run; success
+completes the run; the heartbeat sets the abort flag on a lost lease; and the
+pipeline aborts between stages once the flag is set.
 """
 
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 
 import pytest
 
@@ -21,7 +21,7 @@ from src.worker.worker_scanner import ScanResult
 from src.worker.worker_scraper import ScrapeResult
 from src.worker.worker_service import WorkerAborted, WorkerService
 from src.worker.worker_spec import SpecData
-from tests.worker_fakes import FakeLLM, FakeLock, RoutingFakeDb
+from tests.worker_fakes import FakeLock, RoutingFakeDb
 
 SPEC = SpecData(
     gym_id="gym-1",
@@ -95,24 +95,37 @@ def test_lock_miss_is_noop() -> None:
     assert stages["spec"].calls == []
 
 
-def test_empty_queue_returns_and_releases() -> None:
-    db = RoutingFakeDb()  # pop_queue → None (default)
+def test_nothing_due_returns_and_releases() -> None:
+    db = RoutingFakeDb()  # system_count → None (→0), select_due_gym → None
     lock = FakeLock()
     service, stages = _service(db, lock)
 
     asyncio.run(service.run_tick())
 
-    assert "pop_queue" in db.write_names()
+    assert "select_due_gym" in db.write_names()  # derivation was consulted
     assert "insert_run" not in db.write_names()  # no run opened
     assert stages["spec"].calls == []
     assert len(lock.released) == 1  # released on the way out
 
 
-def test_orphan_recovery_marks_failed_and_reenqueues() -> None:
+def test_system_cap_reached_skips_selection() -> None:
     db = RoutingFakeDb()
-    db.session_rows["fail_orphans"] = [
-        {"gym_id": "g-orphan", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
-    ]
+    db.ones["system_count"] = {"runs_in_window": 5}  # == default cap of 5
+    lock = FakeLock()
+    service, stages = _service(db, lock)
+
+    asyncio.run(service.run_tick())
+
+    # Orphan recovery still runs, but the cap short-circuits BEFORE selection.
+    assert "select_due_gym" not in db.write_names()
+    assert "insert_run" not in db.write_names()
+    assert stages["spec"].calls == []
+    assert len(lock.released) == 1
+
+
+def test_orphan_recovery_marks_failed_without_reenqueue() -> None:
+    db = RoutingFakeDb()
+    db.session_rows["fail_orphans"] = [{"gym_id": "g-orphan"}]
     lock = FakeLock()
     service, _ = _service(db, lock)
 
@@ -120,14 +133,14 @@ def test_orphan_recovery_marks_failed_and_reenqueues() -> None:
 
     names = db.execute_names()
     assert names.count("fail_orphans") == 1
-    assert names.count("reenqueue") == 1
-    reenqueue_params = [p for n, _, p in db.executes if n == "reenqueue"]
-    assert reenqueue_params[0]["gym_id"] == "g-orphan"
+    # There is no queue: an orphan is NOT re-enqueued (the derivation re-selects
+    # it when next due). No re-enqueue SQL exists to be routed.
+    assert "reenqueue" not in names
 
 
 def test_success_completes_run_and_runs_all_stages() -> None:
     db = RoutingFakeDb()
-    db.ones["pop_queue"] = {"gym_id": "gym-1"}
+    db.ones["select_due_gym"] = {"gym_id": "gym-1"}
     db.ones["insert_run"] = {"run_id": "run-1"}
     lock = FakeLock()
     service, stages = _service(db, lock)
@@ -145,9 +158,9 @@ def test_success_completes_run_and_runs_all_stages() -> None:
     assert len(lock.released) == 1
 
 
-def test_stage_exception_fails_run_without_reenqueue() -> None:
+def test_stage_exception_fails_run() -> None:
     db = RoutingFakeDb()
-    db.ones["pop_queue"] = {"gym_id": "gym-1"}
+    db.ones["select_due_gym"] = {"gym_id": "gym-1"}
     db.ones["insert_run"] = {"run_id": "run-1"}
     lock = FakeLock()
     boom = RecordingStage("scrape", None, raises=RuntimeError("apify down"))
@@ -157,9 +170,8 @@ def test_stage_exception_fails_run_without_reenqueue() -> None:
 
     assert "fail_run" in db.write_names()
     assert "complete_run" not in db.write_names()
-    # a deterministic failure does NOT re-enqueue the gym.
-    assert "reenqueue" not in db.execute_names()
-    # later stages never ran.
+    # A failed run still advances the last-run watermark, so the derivation will
+    # not immediately re-select the gym (no hot-loop). Later stages never ran.
     assert stages["funnel"].calls == [] and stages["scanner"].calls == []
     assert stages["cost_log"].calls == []
     fail_params = [p for n, _, p in db.writes if n == "fail_run"][0]

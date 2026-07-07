@@ -202,8 +202,9 @@ read API keeps serving the MobileApp until it's repointed).
 
 **What runs inside** (exactly two processes, supervised by `entrypoint.sh`):
 1. **FastApiBackend** — `uvicorn src.main:app` on `:8000` (the CRM-facing API).
-2. **VideoService worker** — `python -m src.worker.run`, a background loop that pops
-   the `video_worker_queue` and regenerates gym feeds (no listening port).
+2. **VideoService worker** — `python -m src.worker.run`, a self-scheduling background
+   loop (no job queue) that derives the due gym from timestamps already in the
+   schema and regenerates gym feeds (no listening port).
 
 Each app installs into its own poetry venv inside the image (the two projects pin
 different fastapi/uvicorn versions). If either process exits, the container exits

@@ -1,12 +1,13 @@
 -- HAND-AUTHORED migration (not `supabase db diff` output).
 -- Adds the video-worker RAG surface: pgvector, a run status lifecycle on
--- video_run, two new video_cost_log execution types + a per-run FK, and four
--- new tables (video_rag, member_video_profile, member_video_recs,
--- video_worker_queue).
+-- video_run, two new video_cost_log execution types + a per-run FK, and three
+-- new tables (video_rag, member_video_profile, member_video_recs).
+-- The worker has no queue table — it derives which gym to run from run/spec/
+-- curation timestamps (see VideoService/src/worker/sql/worker_select_due_gym.sql).
 -- Mirrors schemas/_extensions.sql, video_rag.sql, member_video_profile.sql,
--- member_video_recs.sql, video_worker_queue.sql, video_run.sql (edited),
+-- member_video_recs.sql, video_run.sql (edited),
 -- video_cost_log.sql (edited) and access_rules/video_rag.sql,
--- member_video_profile.sql, member_video_recs.sql, video_worker_queue.sql.
+-- member_video_profile.sql, member_video_recs.sql.
 --
 -- Existing live tables touched: video_run, video_cost_log (video_cost_log
 -- already has legacy rows attributed to TEXT video_gym template slugs).
@@ -212,25 +213,3 @@ CREATE POLICY "Members and gym staff can view rec history"
     );
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE member_video_recs FROM authenticated;
-
--- ============================================================
--- 8. New table: video_worker_queue (declares video_worker_reason)
--- ============================================================
-
-CREATE TYPE video_worker_reason AS ENUM ('spec_update', 'manual');
-
-CREATE TABLE video_worker_queue (
-    gym_id UUID NOT NULL
-        CONSTRAINT pk_video_worker_queue PRIMARY KEY
-        CONSTRAINT fk_video_worker_queue_gym
-            REFERENCES gyms(gym_id) ON DELETE CASCADE,
-    reason video_worker_reason NOT NULL,
-    requested_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_video_worker_queue_requested
-    ON video_worker_queue (requested_at);
-
-ALTER TABLE video_worker_queue ENABLE ROW LEVEL SECURITY;
-
-REVOKE ALL ON TABLE video_worker_queue FROM authenticated;

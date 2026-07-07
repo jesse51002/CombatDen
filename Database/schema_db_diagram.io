@@ -888,15 +888,10 @@ Table member_video_recs {
   }
 }
 
-// The video worker's job queue (Postgres IS the queue): backend enqueues
-// (spec commit + CRM manual run), VideoService worker pops oldest-first under
-// the global video-worker resource lock. gym_id PK = a gym queued at most once;
-// enqueue upsert keeps the OLDEST requested_at (anti-self-starvation).
-Table video_worker_queue {
-  gym_id uuid [primary key, note: 'FK to gyms.gym_id']
-  reason video_worker_reason [not null, note: 'enum: spec_update | manual']
-  requested_at timestamptz [not null, default: `now()`]
-}
+// No worker queue table: the VideoService worker derives which gym to run each
+// tick from run/spec/curation timestamps (last run vs last admin_update spec vs
+// last manual curation), tier-sorted, under per-gym (2/24h) + system (5/24h)
+// rolling caps. See VideoService/src/worker/sql/worker_select_due_gym.sql.
 
 Ref: gym_video_spec.gym_id > gyms.gym_id
 Ref: video_run.gym_id > gyms.gym_id
@@ -907,4 +902,3 @@ Ref: video_rag.video_id - video.video_id
 Ref: member_video_profile.member_id > members.member_id
 Ref: member_video_recs.member_id > members.member_id
 Ref: member_video_recs.video_id > video.video_id
-Ref: video_worker_queue.gym_id - gyms.gym_id

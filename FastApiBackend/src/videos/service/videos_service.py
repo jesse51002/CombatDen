@@ -2,8 +2,8 @@
 
 Composes: ``VideoFeedService`` (live gym feed + pool reads), ``VideoSpecService``
 (spec DB read/write), ``VideoSpecAuthoring`` (deterministic commit gate),
-``VideoFeedRefiner`` (feed-learning refiner), ``VideosWorkerControl`` (worker
-enqueue + status), ``VideoRecsService`` (member RAG recommendations), and
+``VideoFeedRefiner`` (feed-learning refiner), ``VideosWorkerStatusService``
+(read-only worker state), ``VideoRecsService`` (member RAG recommendations), and
 ``VideoSearchService`` (semantic feed search).
 
 The router injects this facade for every non-agent video operation; the
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from schema.video import GymVideoSpecSource, VideoGenre, VideoWorkerReason
+from schema.video import GymVideoSpecSource, VideoGenre
 
 from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
 from src.videos.schema.video_search_schema import SearchResultCard
@@ -38,7 +38,9 @@ from src.videos.service.video_recs_service import VideoRecsService
 from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
-from src.videos.service.videos_worker_control import VideosWorkerControl
+from src.videos.service.videos_worker_status_service import (
+    VideosWorkerStatusService,
+)
 
 
 class VideosService:
@@ -54,7 +56,7 @@ class VideosService:
         spec_service: VideoSpecService,
         authoring: VideoSpecAuthoring,
         feed_refiner: VideoFeedRefiner,
-        worker_control: VideosWorkerControl,
+        worker_status: VideosWorkerStatusService,
         recs_service: VideoRecsService,
         search_service: VideoSearchService,
     ) -> None:
@@ -62,7 +64,7 @@ class VideosService:
         self._spec_service = spec_service
         self._authoring = authoring
         self._feed_refiner = feed_refiner
-        self._worker_control = worker_control
+        self._worker_status = worker_status
         self._recs = recs_service
         self._search = search_service
 
@@ -178,19 +180,13 @@ class VideosService:
     async def refine_from_feed(self, gym_id: UUID) -> VideoSpecView | None:
         return await self._feed_refiner.refine_from_feed(gym_id)
 
-    # ── worker control (enqueue + status) ─────────────────────────
-
-    async def enqueue_worker_run(self, gym_id: UUID) -> None:
-        """Enqueue a MANUAL worker run for the gym (the CRM 'run now' button)."""
-        return await self._worker_control.enqueue(
-            gym_id, VideoWorkerReason.manual
-        )
+    # ── worker status (read-only) ─────────────────────────────────
 
     async def load_worker_status(
         self, gym_id: UUID
     ) -> VideoWorkerStatusResponse:
-        """The gym's video-worker state (last refresh, queued, running, last run)."""
-        return await self._worker_control.status(gym_id)
+        """The gym's video-worker state (last refresh, running, last run)."""
+        return await self._worker_status.status(gym_id)
 
     # ── member recs + semantic search (RAG read surface) ──────────
 

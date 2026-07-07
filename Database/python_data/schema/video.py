@@ -90,14 +90,6 @@ class VideoRunStatus(StrEnum):
     failed = "failed"
 
 
-class VideoWorkerReason(StrEnum):
-    """Mirrors the Postgres `video_worker_reason` enum in
-    schemas/video_worker_queue.sql — why a gym was queued for a worker run."""
-
-    spec_update = "spec_update"
-    manual = "manual"
-
-
 class MoodBucket(StrEnum):
     """Mirrors the Postgres `mood_bucket` enum in schemas/member_video_profile.sql
     — the five mood clusters (teach / enjoy / inform / human / peak) that member

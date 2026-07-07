@@ -1,11 +1,13 @@
 # Worker ingest — scrape → funnel → enrich
 
 The first half of the background **worker** (`src/worker`): turn a gym's spec into
-enriched, scanned-ready candidates. This is no longer an operator script — the
-FastApiBackend enqueues a gym on `video_worker_queue` (on every spec save, or the
-manual run route) and the worker pops the oldest and runs the whole pipeline under
-a global lock. Run it locally with `make worker`. This guide covers the three
-ingest stages; the scan + feed-write half is `scan.md`.
+enriched, scanned-ready candidates. This is no longer an operator script — it is a
+self-scheduling loop with no job queue: each tick derives the single
+highest-priority "due" gym straight from timestamps already in the schema (a fresh
+`admin_update` spec version, a settled manual feed curation, or a weekly refresh
+floor) and runs the whole pipeline under a global lock. Run it locally with
+`make worker`. This guide covers the three ingest stages; the scan + feed-write
+half is `scan.md`.
 
 ## Where it runs
 
@@ -13,8 +15,11 @@ ingest stages; the scan + feed-write half is `scan.md`.
 tick, then wait `worker_poll_seconds` (60). Each tick acquires the global
 `"video_worker_run"` lock on the shared `resource_locks` table (TTL 900s, heartbeat
 300s → one gym at a time across every instance), recovers any orphaned `running`
-run (mark `failed` + re-enqueue), then pops the oldest queued gym (`ORDER BY
-requested_at`, `FOR UPDATE SKIP LOCKED`, drain-on-pop).
+run (mark `failed`, no re-enqueue — the derivation re-selects the gym once it's
+next due), checks the system-wide rolling run cap, then derives the due gym
+(tier 1 = newer `admin_update` spec version, tier 2 = settled manual feed
+curation, tier 3 = weekly refresh floor; per-gym + system run caps apply) — see
+`CLAUDE.md`'s *Scheduling* section for the full tier/cap rules.
 
 ## Stage 1 — spec
 

@@ -20,9 +20,11 @@ docker build -f deploy/Dockerfile -t combatden-backend-worker .
 ## What runs inside (exactly 2 processes, see `entrypoint.sh`)
 
 1. **FastApiBackend** — `uvicorn src.main:app` on `:8000` (the CRM-facing API).
-2. **VideoService worker** — `python -m src.worker.run`, a background job loop
-   that pops the `video_worker_queue` and runs each gym's scrape → funnel →
-   enrich → scan → feed-write pipeline (not a web server, no exposed port).
+2. **VideoService worker** — `python -m src.worker.run`, a self-scheduling
+   background loop (no job queue) that derives the highest-priority due gym
+   from timestamps already in the schema each tick and runs its scrape →
+   funnel → enrich → scan → feed-write pipeline (not a web server, no exposed
+   port).
 
 Each app installs into its **own** poetry venv inside the image (different
 fastapi/uvicorn version pins between the two projects), and the entrypoint

@@ -33,10 +33,12 @@ A `scan` `video_cost_log` row is written for the run (stamped `gym_id` +
 
 ## Failure semantics
 
-Any stage exception marks the run `failed` (with the error) and does **NOT**
-auto-re-enqueue — a deterministic failure needs a manual CRM re-trigger (a poison
-guard). Only a crash that leaves a run stuck `running` is recovered (marked failed +
-re-enqueued) by the next tick's orphan sweep.
+Any stage exception marks the run `failed` (with the error). There is no
+re-enqueue — a failed run's `created_at` still counts as the gym's last-run
+watermark, so a deterministic failure does not hot-loop (poison guard): the gym
+simply waits for a new tier-1/2 trigger or the tier-3 weekly floor to become due
+again. A crash that leaves a run stuck `running` is recovered (marked `failed`,
+same no-re-enqueue rule) by the next tick's orphan sweep.
 
 ## Sequential by design
 
