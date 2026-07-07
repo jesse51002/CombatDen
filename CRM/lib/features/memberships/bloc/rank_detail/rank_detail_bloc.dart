@@ -38,7 +38,7 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       // failing the whole page — it rides alongside the core reads,
       // never gating them.
       final countsFuture = _repository
-          .subRankCounts(event.gymId, event.rankId)
+          .subRankCounts(event.rankId)
           .then<RankSubRankCounts?>((v) => v)
           .catchError((Object e, StackTrace st) {
         log('Failed to load sub-rank counts', error: e, stackTrace: st);

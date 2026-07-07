@@ -229,8 +229,8 @@ class _PromotionDialogState extends State<PromotionDialog> {
   }
 
   String _subRowLabel(MainRank rank, int index) {
-    final label = widget.subRankType.subLabel(index);
-    return label.isEmpty ? '${rank.name} (base)' : label;
+    final sub = widget.subRankType.subLabel(index);
+    return sub.isEmpty ? '${rank.name} (${RankSubType.baseLabel})' : sub;
   }
 
   // ----- Footer -----

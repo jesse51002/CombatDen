@@ -173,15 +173,10 @@ class _SubStrip extends StatelessWidget {
         for (var i = 0; i < rank.subRankCount; i++)
           _SubTile(
             imageUrl: rank.imageForSub(i),
-            label: _label(i),
+            label: subRankType.subLabel(i, showBase: true),
           ),
       ],
     );
-  }
-
-  String _label(int index) {
-    final label = subRankType.subLabel(index);
-    return label.isEmpty ? 'Base' : label;
   }
 }
 

@@ -253,7 +253,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
                         for (var i = 0; i < _subRankCount; i++)
                           ImageUploadPickerField(
                             key: ValueKey('sub-$i'),
-                            label: _subLabel(subRankType, i),
+                            label: subRankType.subLabel(i, showBase: true),
                             category: 'rank',
                             aspectRatio: 1,
                             previewFit: BoxFit.contain,
@@ -297,10 +297,6 @@ class _EditRankScreenState extends State<EditRankScreen> {
         );
   }
 
-  String _subLabel(RankSubType subRankType, int index) {
-    final label = subRankType.subLabel(index);
-    return label.isEmpty ? 'Base position' : label;
-  }
 }
 
 /// A +/- stepper for the sub-position count (min 0). Shrinking never

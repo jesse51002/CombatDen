@@ -216,17 +216,13 @@ class RanksRepository {
     return (items, data['total_count'] as int);
   }
 
-  /// `GET /api/v1/ranks/{rank_id}/sub-rank-counts?gym_id=…` — the
-  /// member headcount on [rankId] broken down by sub-position (total +
-  /// a sparse per-`sub_index` list). Drives the rank-detail counts
-  /// summary.
-  Future<RankSubRankCounts> subRankCounts(
-    String gymId,
-    String rankId,
-  ) async {
+  /// `GET /api/v1/ranks/{rank_id}/sub-rank-counts` — the member
+  /// headcount on [rankId] broken down by sub-position (total + a sparse
+  /// per-`sub_index` list). Drives the rank-detail counts summary. Gym
+  /// is derived from the rank server-side, so no `gym_id` query param.
+  Future<RankSubRankCounts> subRankCounts(String rankId) async {
     final response = await _apiClient.get(
       '/api/v1/ranks/$rankId/sub-rank-counts',
-      queryParameters: {'gym_id': gymId},
     );
     return RankSubRankCounts.fromJson(response.data as Map<String, dynamic>);
   }

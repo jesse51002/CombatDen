@@ -40,20 +40,33 @@ enum RankSubType {
   /// Converts to a JSON string.
   String toJson() => value;
 
+  /// The canonical word for a belt's base (zeroth) leaf — the single
+  /// source for the empty-sub → "Base" substitution, so no caller
+  /// re-derives it with its own `label.isEmpty ? 'Base' : label`. Used
+  /// by [subLabel] (via `showBase`) and by the promotion dialog's
+  /// `${rank.name} (Base)` parenthetical.
+  static const String baseLabel = 'Base';
+
   /// The derived label for leaf [index] under this sub-rank type.
   ///
-  /// None: always `''` — a `none` gym has no sub-positions, so this is
-  /// a guard against a stray call (callers gate the sub-rank UI on the
-  /// type first and never render a labelled sub for a `none` gym).
-  /// Stripes: `0` -> `''` (the bare belt name, no suffix), `1` ->
+  /// When [showBase] is set, the bare base leaf (which otherwise renders
+  /// as `''`) returns [baseLabel] instead — the single home of the
+  /// base-position substitution policy; callers that want a named base
+  /// pass `showBase: true` rather than substituting the empty string
+  /// themselves.
+  ///
+  /// None: `''` (or [baseLabel] when [showBase]) — a `none` gym has no
+  /// sub-positions, so this is a guard against a stray call (callers gate
+  /// the sub-rank UI on the type first and never render a labelled sub
+  /// for a `none` gym). Stripes: `0` -> `''`/[baseLabel], `1` ->
   /// `'1 Stripe'`, `k` -> `'k Stripes'`. Div: `i` -> `'Div ${i + 1}'`
   /// (1-indexed display over a 0-indexed `sub_index`). `unknown`
   /// falls back to the stripes rule so a forward-compatible gym type
   /// still renders something sensible.
-  String subLabel(int index) {
-    if (this == RankSubType.none) return '';
+  String subLabel(int index, {bool showBase = false}) {
+    if (this == RankSubType.none) return showBase ? baseLabel : '';
     if (this == RankSubType.div) return 'Div ${index + 1}';
-    if (index == 0) return '';
+    if (index == 0) return showBase ? baseLabel : '';
     return index == 1 ? '1 Stripe' : '$index Stripes';
   }
 

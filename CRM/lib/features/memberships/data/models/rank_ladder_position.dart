@@ -105,17 +105,16 @@ class RankLadderPosition {
   /// The display label for [leaf]: `"Blue Belt"` on a subless leaf,
   /// `"Blue Belt · 2 Stripes"` on a labelled sub-position, and — when
   /// [showBase] is set — `"Blue Belt · Base"` on the bare base leaf of a
-  /// sub-using belt (the stripes base renders an empty sub-label, which
-  /// the row substitutes with "Base" so a promotion target always shows
-  /// its position; the dialog leaves [showBase] off, so its menu keeps
-  /// the plain belt name there).
+  /// sub-using belt (the base word comes from [RankSubType.subLabel]'s
+  /// own `showBase` path, so "Base" has a single source; the dialog
+  /// leaves [showBase] off, so its menu keeps the plain belt name there).
   String leafLabel(RankLeaf leaf, {bool showBase = false}) {
     if (leaf.subIndex == null || !_hasSubs(leaf.rank)) {
       return leaf.rank.name;
     }
-    final sub = subRankType.subLabel(leaf.subIndex!);
+    final sub = subRankType.subLabel(leaf.subIndex!, showBase: showBase);
     if (sub.isEmpty) {
-      return showBase ? '${leaf.rank.name} · Base' : leaf.rank.name;
+      return leaf.rank.name;
     }
     return '${leaf.rank.name} · $sub';
   }

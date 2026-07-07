@@ -475,7 +475,7 @@ class _RankCounts extends StatelessWidget {
               children: [
                 for (var i = 0; i < rank.subRankCount; i++)
                   _CountRow(
-                    label: _positionLabel(type, i),
+                    label: type.subLabel(i, showBase: true),
                     count: byIndex[i] ?? 0,
                     maxCount: maxCount,
                   ),
@@ -484,11 +484,6 @@ class _RankCounts extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _positionLabel(RankSubType type, int index) {
-    final label = type.subLabel(index);
-    return label.isEmpty ? 'Base' : label;
   }
 }
 
@@ -609,10 +604,9 @@ class _SubRankBreakdown extends StatelessWidget {
     if (hasSubs) {
       final step = _stepThreshold;
       for (var i = 0; i < rank.subRankCount; i++) {
-        final label = subRankType.subLabel(i);
         rows.add(_BreakdownRow(
           imageUrl: rank.imageForSub(i),
-          label: label.isEmpty ? 'Base position' : label,
+          label: subRankType.subLabel(i, showBase: true),
           threshold: step,
         ));
       }
