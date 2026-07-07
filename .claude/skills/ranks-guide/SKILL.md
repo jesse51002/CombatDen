@@ -176,9 +176,11 @@ Per-sub images live in `sub_rank_image_overrides`, a sparse `{sub_index: url}` m
 - **The override map is PERSIST-ONLY.** Shrinking `sub_rank_count`, switching the
   gym's `sub_rank_type`, or any other "revert" **never prunes the map** — overrides
   for now-hidden indices go dormant and reactivate if the count grows back.
-  `update_rank`'s count-shrink path clamps *member* sub-indices
-  (`clamp_member_sub_index.sql`) but never touches the overrides JSONB. The CRM edit
-  UI only ever *writes* overrides, never deletes a key.
+  `update_rank`'s count-change path re-fits *member* sub-indices through the
+  shared reconcile (`reconcile_member_sub_index_for_gym.sql` — fills NULL→0 on a
+  grow, `LEAST`-clamps on a shrink, NULLs on a subless / `'none'` rank) but never
+  touches the overrides JSONB. The CRM edit UI only ever *writes* overrides, never
+  deletes a key.
 
 > **Reversed rule:** the pre-v2 design treated belt art as "generation-owned"
 > (a deferred ThemeService/AI pipeline) and forbade a manual image field. That is
@@ -223,11 +225,14 @@ demo/showcase `PresetsService` (that importer never touches ranks).
 `core/dependencies.py`, container `DependencyInjector`):
 
 - **`RanksService`** (facade, `RanksBase`) — single-rank CRUD (`create`/`update`/
-  `get`/`list`/`delete`) + the enable toggle; delegates the rest. `update_rank`
-  builds the dynamic SET with **per-column casts** (`CAST(:sub_rank_image_overrides
-  AS JSONB)` — never `:x::jsonb`) and runs `clamp_member_sub_index.sql` when
-  `sub_rank_count` changes (overrides untouched). `list_ranks` also returns the
-  gym's `sub_rank_type` on `RankListResponse`.
+  `get`/`list`/`delete`) + the enable toggle; delegates the rest. `create_rank`
+  catches the ladder-position `UNIQUE` violation (`IntegrityError`) and raises a
+  clean "already taken" ValueError the router maps to 409 (not a generic 500).
+  `update_rank` builds the dynamic SET with **per-column casts**
+  (`CAST(:sub_rank_image_overrides AS JSONB)` — never `:x::jsonb`) and, when
+  `sub_rank_count` changes, runs the shared
+  `RanksMembers.reconcile_sub_index_in_session` (overrides untouched — see §5/§10).
+  `list_ranks` also returns the gym's `sub_rank_type` on `RankListResponse`.
 - **`RanksBase`** — shared reads: `_list_ranks_in_session`, `_gym_sub_rank_type`,
   `_effective_sub_count(rank, sub_rank_type)` (`0` on a `'none'` gym, else the
   stored count — the single source of the effective-count rule), and `_next_leaf`
@@ -237,10 +242,13 @@ demo/showcase `PresetsService` (that importer never touches ranks).
 - **`RanksMembers`** — the only member-writing paths: `promote_member`,
   `set_member_rank` (validates the leaf invariant against the effective count),
   `_apply_member_rank` (writes + logs `rank_changed` with derived names),
-  `backfill_lowest_for_gym`, and the sub-index **reconcile** for a gym
-  `sub_rank_type` change — `reconcile_sub_index_for_gym` (own-session, the gyms
-  edge) / `reconcile_sub_index_in_session` (in-session, `from_preset`) →
-  `reconcile_member_sub_index_for_gym.sql`.
+  `backfill_lowest_for_gym`, `reassign_members_to_neighbor_in_session` (the
+  delete-rank downgrade the facade's `delete_rank` calls — so even the deletion
+  member write routes through here, never the facade directly), and the sub-index
+  **reconcile** for a gym `sub_rank_type` OR per-rank count change —
+  `reconcile_sub_index_for_gym` (own-session, the gyms edge) /
+  `reconcile_sub_index_in_session` (in-session, both `from_preset` AND
+  `update_rank`'s count change) → `reconcile_member_sub_index_for_gym.sql`.
 - **`RanksGroups`** — only the main-only two-phase `reorder_ranks` (+`REORDER_SHIFT_OFFSET`
   guard against the non-deferrable `UNIQUE (gym_id, main_rank_num_order)`). There is
   no more group rename/delete (a "group" is now a main rank → plain update/delete).
@@ -307,9 +315,13 @@ the rank-detail screen, and the ready-to-promote board.
 
 ## 10. Edge cases (and where they're handled)
 
-- **count shrinks below a member's sub_index** → `clamp_member_sub_index.sql` runs
-  inside `update_rank` (`LEAST(current_sub_index, count-1)`); the override map is
-  NOT pruned.
+- **count changes (grow or shrink)** → the shared reconcile
+  (`reconcile_member_sub_index_for_gym.sql`) runs inside `update_rank`, re-fitting
+  every member of the gym to the live per-rank counts: a grow across the 0 boundary
+  fills a NULL sub-index up to the base leaf 0 (the leaf invariant would otherwise
+  break), a shrink `LEAST`-clamps a now-too-high index down
+  (`LEAST(current_sub_index, count-1)`), a subless / `'none'` rank NULLs it. The
+  override map is NOT pruned.
 - **promote at top sub of a main** → advance to the next main's base leaf.
 - **promote at top main + top sub** → `ValueError("highest rank")` → 409.
 - **unassign** (`set-member-rank rank_id=null`) → both columns null, logs `rank_changed`.

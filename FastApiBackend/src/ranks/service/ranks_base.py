@@ -8,7 +8,7 @@ already-open session so they share the caller's transaction.
 
 from uuid import UUID
 
-from schema.gym_rank import SubRankType
+from schema.gym_rank import SubRankType, effective_sub_count
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,11 +66,11 @@ class RanksBase:
         rank's stored ``sub_rank_count``. All leaf math (promotion, the
         leaf invariant, step denominators) reads THIS, never the raw
         column, so switching a gym to ``'none'`` is a pure view change
-        over the persisted counts.
+        over the persisted counts. Delegates to the shared
+        ``schema.gym_rank.effective_sub_count`` — the single source of the
+        rule, also used by the member-details service and the seed.
         """
-        if sub_rank_type is SubRankType.none:
-            return 0
-        return rank.sub_rank_count
+        return effective_sub_count(sub_rank_type, rank.sub_rank_count)
 
     @staticmethod
     def _next_leaf(

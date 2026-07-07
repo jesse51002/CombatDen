@@ -66,6 +66,21 @@ def rank_display_name(name: str, sub_rank_type: SubRankType, sub_index: int | No
     return name if label is None else f"{name} · {label}"
 
 
+def effective_sub_count(sub_rank_type: SubRankType, sub_rank_count: int) -> int:
+    """The leaf count actually in effect for a rank.
+
+    0 whenever the gym disables sub-ranks (`sub_rank_type == 'none'`) — every
+    rank then behaves as its own leaf — else the stored `sub_rank_count`. All
+    leaf math (promotion, the leaf invariant, step denominators) reads THIS,
+    never the raw column, so switching a gym to 'none' is a pure view change
+    over the persisted counts. Single source of the effective-count rule,
+    shared by the backend's ranks services (RanksBase._effective_sub_count)
+    and the member-details billing service."""
+    if sub_rank_type is SubRankType.none:
+        return 0
+    return sub_rank_count
+
+
 class RankPresetCreate(SeedModel):
     preset_id: UUID
     preset_kind: RankPresetKind

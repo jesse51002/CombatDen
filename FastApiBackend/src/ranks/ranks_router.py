@@ -44,12 +44,12 @@ ranks_router = APIRouter(
 def _rank_http_error(exc: ValueError) -> HTTPException:
     """Map a ranks-domain ValueError to its HTTP status.
 
-    "highest rank" → 409 (state conflict), "not found" → 404,
-    anything else → 400.
+    "highest rank" and "already taken" → 409 (state conflict),
+    "not found" → 404, anything else → 400.
     """
     message = str(exc)
     lowered = message.lower()
-    if "highest rank" in lowered:
+    if "highest rank" in lowered or "already taken" in lowered:
         code = status.HTTP_409_CONFLICT
     elif "not found" in lowered:
         code = status.HTTP_404_NOT_FOUND
@@ -111,6 +111,7 @@ async def list_ranks(
         400: {"description": "Invalid request"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
+        409: {"description": "Ladder position already taken"},
     },
 )
 @inject
@@ -127,10 +128,7 @@ async def create_rank(
     try:
         return await ranks_service.create_rank(request)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from None
+        raise _rank_http_error(exc) from None
     except Exception:
         logger.error(
             "Failed to create rank: gym_id=%s",

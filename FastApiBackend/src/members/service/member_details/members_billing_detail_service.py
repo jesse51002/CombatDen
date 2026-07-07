@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
-from schema.gym_rank import SubRankType, sub_rank_label
+from schema.gym_rank import SubRankType, effective_sub_count, sub_rank_label
 from schema.member_membership import MembershipDbStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
@@ -477,11 +477,7 @@ class MembersBillingDetailService:
         sub_index = target_row["rank_sub_index"]
         classes_to_next_major = target_row["rank_classes_to_next_major"]
         sub_rank_count = target_row["rank_sub_rank_count"]
-        effective_count = (
-            0
-            if sub_rank_type is SubRankType.none
-            else (sub_rank_count or 0)
-        )
+        effective_count = effective_sub_count(sub_rank_type, sub_rank_count or 0)
         if effective_count > 0:
             classes_till_next_step = math.ceil(
                 classes_to_next_major / effective_count

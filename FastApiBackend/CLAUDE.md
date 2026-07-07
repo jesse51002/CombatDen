@@ -464,8 +464,12 @@ in-session ordered ladder read, the gym's `sub_rank_type` read, and the
 pure `_next_leaf` leaf-advance rule): `RanksMembers` (`ranks_members.py`
 — the two audit-logged member-rank endpoints (leaf invariant validation
 included) plus the session-scoped `is_rank_enabled` /
-`backfill_lowest_for_gym` helpers the create / from-preset / enable
-flows compose), `RanksGroups` (`ranks_groups.py` — now JUST the
+`backfill_lowest_for_gym` helpers and the delete-rank
+`reassign_members_to_neighbor_in_session` the create / from-preset /
+enable / delete flows compose — so EVERY member write, including the
+delete downgrade and `update_rank`'s count-change reconcile, routes
+through this one service, never the facade directly), `RanksGroups`
+(`ranks_groups.py` — now JUST the
 full-ladder two-phase reorder; with one row per main rank a rename is
 `update_rank(name)` and a delete is `delete_rank`, so there is no
 separate group op anymore), `RanksPresets` (`ranks_presets.py` —
@@ -519,9 +523,11 @@ Beyond plain CRUD + presets + the `is_rank_enabled` toggle:
   `0` when it has sub-ranks, else `None`), with the Python-derived
   display name (`backfill_lowest_rank.sql`'s CTE), so a long-standing
   member starts at 0/N when ranks turn on instead of showing every class
-  since join day. Deleting a rank reassigns members **without** an
-  activity — a deletion is not a promotion, so their progress keeps
-  accumulating from the last real change.
+  since join day. Deleting a rank reassigns members (through
+  `RanksMembers.reassign_members_to_neighbor_in_session`, the single
+  member-writing path) **without** an activity — a deletion is not a
+  promotion, so their progress keeps accumulating from the last real
+  change.
 - **Reorder is two-phase, main-only, validated.** `POST
   /api/v1/ranks/reorder` requires the gym's ENTIRE ladder of main
   ranks — every rank exactly once, target positions unique, and no

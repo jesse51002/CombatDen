@@ -378,7 +378,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
-    # Ranks: a thin facade over three concern services. RanksPresets
+    # Ranks: a thin facade over four concern services. RanksPresets
     # composes RanksMembers for the shared lowest-rank backfill (seeding a
     # preset runs the same backfill as create / enable-toggle).
     ranks_members = providers.Factory(RanksMembers, db_pool=db_pool)

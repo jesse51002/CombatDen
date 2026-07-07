@@ -21,6 +21,7 @@ from uuid import uuid4
 import pytest
 from schema.gym_rank import RankPresetKind, SubRankType
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.ranks import SQL_DIR
@@ -211,6 +212,28 @@ async def test_create_rank_binds_jsonb_overrides_via_cast():
     insert_params = _params_for(session, "insert_rank.sql")
     assert insert_params["sub_rank_image_overrides"] == json.dumps(overrides)
     assert insert_params["sub_rank_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_create_rank_duplicate_position_raises_already_taken():
+    """A duplicate (gym_id, main_rank_num_order) hits the ladder-position
+    UNIQUE constraint → IntegrityError, surfaced as a clean 'already taken'
+    ValueError the router maps to 409 (not a generic 500)."""
+    gym_id = uuid4()
+    session = _make_session_mock(
+        [IntegrityError("INSERT", {}, Exception("unique violation"))],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    with pytest.raises(ValueError, match="already taken"):
+        await service.create_rank(
+            RankCreateRequest(
+                gym_id=gym_id,
+                main_rank_num_order=0,
+                name="White",
+                classes_to_next_major=15,
+            ),
+        )
 
 
 # ---------- from_preset ----------
@@ -639,10 +662,12 @@ async def test_update_rank_404_when_returning_empty():
 
 
 @pytest.mark.asyncio
-async def test_update_rank_shrunk_count_clamps_members_and_keeps_overrides():
-    """When sub_rank_count is in the payload, members on the rank are
-    re-clamped in the SAME transaction — but the overrides map is never
-    pruned (persist-only), so it is not part of the SET clause here."""
+async def test_update_rank_shrunk_count_reconciles_members_and_keeps_overrides():
+    """When sub_rank_count is in the payload, every member of the gym is
+    re-fitted in the SAME transaction via the shared reconcile (which reads
+    the live per-rank counts to clamp down / fill up / NULL) — but the
+    overrides map is never pruned (persist-only), so it is not part of the
+    SET clause here."""
     rank_id = uuid4()
     gym_id = uuid4()
     updated_row = make_rank_row(
@@ -652,32 +677,67 @@ async def test_update_rank_shrunk_count_clamps_members_and_keeps_overrides():
     )
 
     session = _make_session_mock(
-        [_result(updated_row), _result(None)],  # update, then clamp
+        # update, then the gym sub_rank_type read, then the reconcile
+        [_result(updated_row), _sub_type_result("stripes"), _result(None)],
     )
     service = _make_service(_make_pool_mock(session))
 
     await service.update_rank(rank_id, RankUpdateData(sub_rank_count=2))
 
     sqls = _executed_sql_strings(session)
-    assert _load("clamp_member_sub_index.sql") in sqls
+    assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
 
     # update_rank.sql is templated ({set_clause}), so grab the first execute
     # (the UPDATE) by position rather than by raw file content.
     update_params = session.execute.await_args_list[0].args[1]
     assert update_params["sub_rank_count"] == 2
-    # Persist-only: the overrides map is NOT rewritten on a count shrink.
+    # Persist-only: the overrides map is NOT rewritten on a count change.
     assert "sub_rank_image_overrides" not in update_params
 
-    clamp_params = _params_for(session, "clamp_member_sub_index.sql")
-    assert clamp_params["new_count"] == 2
-    assert clamp_params["rank_id"] == str(rank_id)
-    assert clamp_params["gym_id"] == str(gym_id)
+    reconcile_params = _params_for(
+        session, "reconcile_member_sub_index_for_gym.sql"
+    )
+    assert reconcile_params["sub_rank_type"] == "stripes"
+    assert reconcile_params["gym_id"] == str(gym_id)
 
 
 @pytest.mark.asyncio
-async def test_update_rank_overrides_use_cast_and_skip_clamp():
+async def test_update_rank_grown_count_reconciles_members():
+    """Growing sub_rank_count across the 0 boundary on a stripes gym routes
+    through the shared reconcile (NOT a down-only clamp): a member stranded
+    at a NULL sub_index while the effective count is now > 0 would violate
+    the leaf invariant, so the reconcile must run to fill NULL→0 by reading
+    the live per-rank count. Regression for the leaf-invariant GROW gap the
+    deleted clamp_member_sub_index.sql left open (it only clamped DOWN and
+    filtered current_sub_index IS NOT NULL)."""
+    rank_id = uuid4()
+    gym_id = uuid4()
+    updated_row = make_rank_row(
+        rank_id=str(rank_id),
+        gym_id=str(gym_id),
+        sub_rank_count=5,
+    )
+
+    session = _make_session_mock(
+        [_result(updated_row), _sub_type_result("stripes"), _result(None)],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.update_rank(rank_id, RankUpdateData(sub_rank_count=5))
+
+    sqls = _executed_sql_strings(session)
+    assert _load("reconcile_member_sub_index_for_gym.sql") in sqls
+    reconcile_params = _params_for(
+        session, "reconcile_member_sub_index_for_gym.sql"
+    )
+    assert reconcile_params["sub_rank_type"] == "stripes"
+    assert reconcile_params["gym_id"] == str(gym_id)
+
+
+@pytest.mark.asyncio
+async def test_update_rank_overrides_use_cast_and_skip_reconcile():
     """Updating only the overrides map binds it as CAST(:col AS JSONB)
-    over a json.dumps'd value and runs NO clamp (count unchanged)."""
+    over a json.dumps'd value and runs NO reconcile (count unchanged)."""
     rank_id = uuid4()
     overrides = {"1": "https://cdn/white-1.png"}
     updated_row = make_rank_row(
@@ -695,7 +755,7 @@ async def test_update_rank_overrides_use_cast_and_skip_clamp():
     )
 
     sqls = _executed_sql_strings(session)
-    assert _load("clamp_member_sub_index.sql") not in sqls
+    assert _load("reconcile_member_sub_index_for_gym.sql") not in sqls
 
     update_call = session.execute.await_args_list[0]
     assert "CAST(:sub_rank_image_overrides AS JSONB)" in update_call.args[0].text

@@ -41,7 +41,7 @@ class GymUpdateData(BaseModel):
     gym_name: str | None = None
     gym_description: str | None = None
     timezone: str | None = None
-    # NOT NULL on the gyms row (DEFAULT 'stripes'), same as gym_name /
+    # NOT NULL on the gyms row (DEFAULT 'none'), same as gym_name /
     # timezone below — explicit null is rejected, not a valid "clear".
     sub_rank_type: SubRankType | None = None
     # Nullable, unlike a reward's image: explicit null clears the logo

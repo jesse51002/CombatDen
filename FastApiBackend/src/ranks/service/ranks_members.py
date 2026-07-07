@@ -203,6 +203,34 @@ class RanksMembers(RanksBase):
             },
         )
 
+    async def reassign_members_to_neighbor_in_session(
+        self,
+        session: AsyncSession,
+        *,
+        old_rank_id: UUID,
+        new_rank_id: UUID | None,
+        gym_id: UUID,
+    ) -> None:
+        """Move every member off a deleted rank onto its replacement.
+
+        Pins them to the replacement's BASE leaf (sub-index 0 when it has
+        sub-ranks, else NULL — reading the EFFECTIVE count), or NULL when
+        the deleted rank was the gym's only rank. Silent — a deletion is
+        not a promotion, so no ``rank_changed`` activity is written. Runs
+        inside the caller's open transaction (the same one that then
+        deletes the rank row), so a rollback undoes both. This keeps the
+        member write on ``RanksMembers`` — the single member-writing path.
+        """
+        sql = load_sql(SQL_DIR / "reassign_members_rank.sql")
+        await session.execute(
+            text(sql),
+            {
+                "old_rank_id": str(old_rank_id),
+                "new_rank_id": str(new_rank_id) if new_rank_id else None,
+                "gym_id": str(gym_id),
+            },
+        )
+
     async def reconcile_sub_index_for_gym(
         self,
         gym_id: UUID,

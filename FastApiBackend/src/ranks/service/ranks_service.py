@@ -21,6 +21,7 @@ from uuid import UUID
 from schema.gym_rank import RankPresetKind
 from schema.immutable_columns import GYM_RANKS as GYM_RANKS_IMMUTABLE
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from src.ranks import SQL_DIR
 from src.ranks.schema.ranks_schema import (
@@ -80,32 +81,43 @@ class RanksService(RanksBase):
         self,
         request: RankCreateRequest,
     ) -> RankResponse:
-        """Insert a rank and backfill rank-less members if enabled."""
-        async with self._db_pool.session() as session:
-            insert_sql = load_sql(SQL_DIR / "insert_rank.sql")
-            params = {
-                "gym_id": str(request.gym_id),
-                "main_rank_num_order": request.main_rank_num_order,
-                "name": request.name,
-                "image_url": request.image_url,
-                "classes_to_next_major": request.classes_to_next_major,
-                "sub_rank_count": request.sub_rank_count,
-                "sub_rank_image_overrides": json.dumps(
-                    request.sub_rank_image_overrides
-                ),
-            }
-            row = (await session.execute(text(insert_sql), params)).mappings().fetchone()
-            if not row:
-                raise RuntimeError("INSERT did not return a row")
+        """Insert a rank and backfill rank-less members if enabled.
 
-            if await self._members.is_rank_enabled(session, request.gym_id):
-                await self._members.backfill_lowest_for_gym(
-                    session,
-                    request.gym_id,
-                )
+        A duplicate ``(gym_id, main_rank_num_order)`` violates the ladder-
+        position UNIQUE constraint, surfacing as an ``IntegrityError``; it
+        is caught and re-raised as a clean ValueError the router maps to
+        409 (position already taken) rather than a generic 500.
+        """
+        try:
+            async with self._db_pool.session() as session:
+                insert_sql = load_sql(SQL_DIR / "insert_rank.sql")
+                params = {
+                    "gym_id": str(request.gym_id),
+                    "main_rank_num_order": request.main_rank_num_order,
+                    "name": request.name,
+                    "image_url": request.image_url,
+                    "classes_to_next_major": request.classes_to_next_major,
+                    "sub_rank_count": request.sub_rank_count,
+                    "sub_rank_image_overrides": json.dumps(
+                        request.sub_rank_image_overrides
+                    ),
+                }
+                row = (await session.execute(text(insert_sql), params)).mappings().fetchone()
+                if not row:
+                    raise RuntimeError("INSERT did not return a row")
 
-            await session.commit()
-            return RankResponse(**dict(row))
+                if await self._members.is_rank_enabled(session, request.gym_id):
+                    await self._members.backfill_lowest_for_gym(
+                        session,
+                        request.gym_id,
+                    )
+
+                await session.commit()
+                return RankResponse(**dict(row))
+        except IntegrityError as exc:
+            raise ValueError(
+                "That ladder position is already taken"
+            ) from exc
 
     async def update_rank(
         self,
@@ -117,9 +129,14 @@ class RanksService(RanksBase):
         The SET clause is built with PER-COLUMN casts — the JSONB
         overrides map as ``CAST(:col AS JSONB)`` over a json.dumps'd
         value, every other column as a plain ``:col`` (never
-        ``:col::type``). When ``sub_rank_count`` is in the payload,
-        members on this rank are re-clamped in the SAME transaction, but
-        the overrides map is never pruned (persist-only).
+        ``:col::type``). When ``sub_rank_count`` is in the payload, every
+        member of the gym is re-fitted in the SAME transaction via the
+        shared reconcile (``RanksMembers.reconcile_sub_index_in_session``),
+        which reads the live per-rank counts to fill a NULL sub-index up to
+        the base leaf when the count GROWS across the 0 boundary,
+        ``LEAST``-clamp a now-too-high index down when it SHRINKS, and NULL
+        it on a subless / ``'none'`` rank — so the leaf invariant holds in
+        both directions. The overrides map is never pruned (persist-only).
         """
         update_fields = data.model_dump(exclude_unset=True)
         if not update_fields:
@@ -151,14 +168,12 @@ class RanksService(RanksBase):
                 raise ValueError("Rank not found")
 
             if "sub_rank_count" in update_fields:
-                clamp_sql = load_sql(SQL_DIR / "clamp_member_sub_index.sql")
-                await session.execute(
-                    text(clamp_sql),
-                    {
-                        "gym_id": str(row["gym_id"]),
-                        "rank_id": str(rank_id),
-                        "new_count": update_fields["sub_rank_count"],
-                    },
+                gym_id = row["gym_id"]
+                sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
+                await self._members.reconcile_sub_index_in_session(
+                    session,
+                    gym_id,
+                    sub_rank_type,
                 )
 
             await session.commit()
@@ -188,7 +203,8 @@ class RanksService(RanksBase):
         The composite FK ``(current_rank_id, gym_id)`` on members
         means a naive DELETE would fail if any member is on this
         rank. Find the best replacement (lower first, else higher,
-        else NULL), reassign members to its base leaf, then DELETE.
+        else NULL), reassign members to its base leaf (through
+        ``RanksMembers`` — the single member-writing path), then DELETE.
         """
         async with self._db_pool.session() as session:
             neighbor_sql = load_sql(SQL_DIR / "get_neighbor_ranks.sql")
@@ -208,14 +224,11 @@ class RanksService(RanksBase):
             gym_id = neighbor["gym_id"]
             replacement = neighbor.get("lower_rank_id") or neighbor.get("higher_rank_id")
 
-            reassign_sql = load_sql(SQL_DIR / "reassign_members_rank.sql")
-            await session.execute(
-                text(reassign_sql),
-                {
-                    "old_rank_id": str(rank_id),
-                    "new_rank_id": str(replacement) if replacement else None,
-                    "gym_id": str(gym_id),
-                },
+            await self._members.reassign_members_to_neighbor_in_session(
+                session,
+                old_rank_id=rank_id,
+                new_rank_id=replacement,
+                gym_id=gym_id,
             )
 
             delete_sql = load_sql(SQL_DIR / "delete_rank.sql")
