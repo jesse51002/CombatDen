@@ -125,12 +125,14 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
     Future<void> Function() action,
   ) async {
     final current = state;
+    final nextMutationCount =
+        current is RanksLoaded ? current.mutationCount + 1 : 1;
     if (current is RanksLoaded) {
       emit(current.copyWith(isMutating: true));
     }
     try {
       await action();
-      emit(await _load(gymId));
+      emit((await _load(gymId)).copyWith(mutationCount: nextMutationCount));
     } catch (e, stackTrace) {
       log('Rank mutation failed', error: e, stackTrace: stackTrace);
       if (current is RanksLoaded) {

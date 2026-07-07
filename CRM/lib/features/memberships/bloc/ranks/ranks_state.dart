@@ -36,6 +36,12 @@ class RanksLoaded extends RanksState {
   /// Set when the last mutation failed; cleared on the next load.
   final String? actionError;
 
+  /// Monotonic counter bumped on every successful mutation-reload
+  /// (create / update / delete / reorder / toggle / sub-type / seed). Lets
+  /// sibling surfaces — the ready-to-promote board — reload when the ladder
+  /// changes under them.
+  final int mutationCount;
+
   const RanksLoaded({
     required this.gymId,
     required this.ranks,
@@ -43,6 +49,7 @@ class RanksLoaded extends RanksState {
     required this.isRankEnabled,
     this.isMutating = false,
     this.actionError,
+    this.mutationCount = 0,
   });
 
   RanksLoaded copyWith({
@@ -51,6 +58,7 @@ class RanksLoaded extends RanksState {
     bool? isRankEnabled,
     bool? isMutating,
     String? actionError,
+    int? mutationCount,
   }) {
     return RanksLoaded(
       gymId: gymId,
@@ -59,6 +67,7 @@ class RanksLoaded extends RanksState {
       isRankEnabled: isRankEnabled ?? this.isRankEnabled,
       isMutating: isMutating ?? this.isMutating,
       actionError: actionError,
+      mutationCount: mutationCount ?? this.mutationCount,
     );
   }
 
@@ -70,6 +79,7 @@ class RanksLoaded extends RanksState {
         isRankEnabled,
         isMutating,
         actionError,
+        mutationCount,
       ];
 }
 

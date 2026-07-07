@@ -17,6 +17,7 @@ import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/horizontal_scroller.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/rank_belt_image.dart';
 import 'package:crm/shared/widgets/warning_message.dart';
 
@@ -25,9 +26,11 @@ import 'package:crm/shared/widgets/warning_message.dart';
 /// user returns to) and keeps the parent tab's URL. Previews each preset
 /// ladder — belt art, names, and sub-position counts — before applying.
 ///
-/// The merge is idempotent server-side (positions that already exist are
-/// skipped), and seeding a stripes / division preset also copies that
-/// preset's sub-rank type onto the gym.
+/// Applying a preset upserts the ladder server-side — it creates missing
+/// positions AND overwrites existing ranks' name / belt image / sub-count to
+/// match the preset (classes-to-next-rank and per-sub image overrides are
+/// preserved), never deletes a rank, and copies the preset's sub-rank type
+/// onto the gym.
 class RankPresetsScreen extends StatefulWidget {
   final String gymId;
 
@@ -48,7 +51,22 @@ class _RankPresetsScreenState extends State<RankPresetsScreen> {
         RanksRepository(apiClient: ApiClient()).listPresetsGrouped();
   }
 
-  void _apply(RankPresetKind kind) {
+  Future<void> _apply(RankPresetKind kind) async {
+    final ranksState = context.read<RanksBloc>().state;
+    final hasExisting =
+        ranksState is RanksLoaded && ranksState.ranks.isNotEmpty;
+    if (hasExisting) {
+      // Applying now overwrites existing ranks — confirm before wiping.
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Overwrite your ranks?',
+        message: 'This overwrites your ranks to match the preset. Members '
+            'are moved to a valid position automatically.',
+        confirmLabel: 'Apply',
+      );
+      if (!confirmed) return;
+      if (!mounted) return;
+    }
     context
         .read<RanksBloc>()
         .add(RankPresetSeeded(gymId: widget.gymId, presetKind: kind));
@@ -80,9 +98,7 @@ class _RankPresetsScreenState extends State<RankPresetsScreen> {
                   children: [
                     Text('Seed from a preset', style: DesignConstants.h1),
                     Text(
-                      'Start from a ready-made ladder, then tune it. '
-                      'Existing ranks are kept; only missing positions '
-                      'are added.',
+                      'Start from a ready-made ladder, then tune it.',
                       style: DesignConstants.p.copyWith(
                         color: DesignConstants.text2nd,
                       ),
@@ -91,9 +107,7 @@ class _RankPresetsScreenState extends State<RankPresetsScreen> {
                 ),
                 if (hasExisting)
                   const WarningMessage(
-                    message: 'You already have a ladder. Applying a preset '
-                        'merges its belts in; positions you already have '
-                        'are skipped.',
+                    message: 'This will overwrite your ranks.',
                   ),
                 FutureBuilder<Map<RankPresetKind, List<RankPresetResponse>>>(
                   future: _presetsFuture,

@@ -86,17 +86,30 @@ class _RanksTabState extends State<RanksTab> {
       selectedIndex: _view,
       onSelected: (i) => setState(() => _view = i),
     );
-    return IndexedStack(
-      index: _view,
-      children: [
-        _LadderBody(state: state, header: header),
-        BlocProvider<ReadyToPromoteBloc>(
-          create: (ctx) => ReadyToPromoteBloc(
-            repository: ctx.read<RanksRepository>(),
-          )..add(ReadyToPromoteInitRequested(widget.gymId)),
-          child: _ReadyView(header: header),
+    // The ready-to-promote board runs on its own bloc; lift its provider
+    // above the stack and reload it whenever the ladder mutates (seed /
+    // create / delete / reorder / sub-type change) so its paginated list
+    // never goes stale under a ladder change.
+    return BlocProvider<ReadyToPromoteBloc>(
+      create: (ctx) => ReadyToPromoteBloc(
+        repository: ctx.read<RanksRepository>(),
+      )..add(ReadyToPromoteInitRequested(widget.gymId)),
+      child: BlocListener<RanksBloc, RanksState>(
+        listenWhen: (prev, curr) =>
+            prev is RanksLoaded &&
+            curr is RanksLoaded &&
+            curr.mutationCount != prev.mutationCount,
+        listener: (ctx, _) => ctx
+            .read<ReadyToPromoteBloc>()
+            .add(ReadyToPromoteInitRequested(widget.gymId)),
+        child: IndexedStack(
+          index: _view,
+          children: [
+            _LadderBody(state: state, header: header),
+            _ReadyView(header: header),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
