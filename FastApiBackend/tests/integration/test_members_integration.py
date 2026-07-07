@@ -457,3 +457,51 @@ class TestGetMemberBilling:
         retention = resp.json().get("retention", {})
         for field in ("class_streak_weeks", "points_balance", "videos_watched"):
             assert field in retention, f"BillingRetention missing '{field}'"
+
+    def test_rank_progress_shape_when_200(
+        self, api: httpx.Client, member_id: str
+    ) -> None:
+        """The rank block carries the real progress numerator
+        (``classes_since_rank``) beside the gym-set threshold.
+
+        Regression lock: the numerator's attendance count in
+        ``member_details.sql`` must run against the LIVE schema — it
+        once joined the dropped ``class_history`` table, which 500'd
+        this whole endpoint and no mocked-DB unit test could catch.
+        """
+        resp = api.get(f"{BASE}/{member_id}/billing")
+        assert resp.status_code == 200, (
+            f"GET /{member_id}/billing returned {resp.status_code}: {resp.text}"
+        )
+        body = resp.json()
+        assert "rank" in body, "MemberBillingDetailResponse missing 'rank'"
+        rank = body["rank"]
+        if rank is None:
+            pytest.skip("Pulled member is unranked; numerator not observable")
+        # Two-level BillingRank: one main ``name`` + the leaf sub-index /
+        # derived sub-label + the leaf-resolved belt image, the headline
+        # ``classes_to_next_major`` beside the per-step denominator, and the
+        # real progress numerator ``classes_since_rank``.
+        for field in (
+            "rank_id",
+            "name",
+            "sub_index",
+            "sub_label",
+            "image_url",
+            "classes_to_next_major",
+            "classes_till_next_step",
+            "classes_since_rank",
+        ):
+            assert field in rank, f"BillingRank missing '{field}'"
+        # The retired flat-model fields must be gone.
+        for gone in ("main_name", "sub_name", "color", "classes_till_rankup"):
+            assert gone not in rank, f"BillingRank still carries retired '{gone}'"
+        assert isinstance(rank["name"], str) and rank["name"]
+        assert isinstance(rank["classes_to_next_major"], int)
+        assert isinstance(rank["classes_till_next_step"], int)
+        assert isinstance(rank["classes_since_rank"], int)
+        assert rank["classes_since_rank"] >= 0
+        # sub_index is None for a subless rank, else an in-range leaf index.
+        if rank["sub_index"] is not None:
+            assert isinstance(rank["sub_index"], int)
+            assert rank["sub_index"] >= 0

@@ -25,7 +25,7 @@ class LibraryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gymType = (style.gymType ?? '').trim();
+    final category = (style.category ?? '').trim();
     return DecoratedBox(
       decoration: BoxDecoration(
         color: DesignConstants.card,
@@ -67,9 +67,9 @@ class LibraryCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (gymType.isNotEmpty)
+                        if (category.isNotEmpty)
                           Text(
-                            gymType.toUpperCase(),
+                            category.toUpperCase(),
                             style: DesignConstants.h3.copyWith(
                               color: DesignConstants.text2nd,
                               letterSpacing:

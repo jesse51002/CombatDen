@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,8 @@ class MockMemberRepository extends Mock implements MemberRepository {}
 
 class MockScheduleRepository extends Mock implements ScheduleRepository {}
 class MockRewardsRepository extends Mock implements RewardsRepository {}
+
+class MockRanksRepository extends Mock implements RanksRepository {}
 
 /// No real timers (upgrade triggers the invoice poll; the schedule itself
 /// is proven in `invoice_poller_test.dart`).
@@ -79,8 +82,7 @@ void main() {
   });
 
   MemberDetailBloc build() =>
-      MemberDetailBloc(repository: repo, scheduleRepository: scheduleRepo,
-        rewardsRepository: rewardsRepo, poller: FakeInvoicePoller());
+      MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo, poller: FakeInvoicePoller());
 
   group('upgrade channel', () {
     blocTest<MemberDetailBloc, MemberDetailState>(

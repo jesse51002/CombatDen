@@ -1,10 +1,13 @@
 -- One work unit of a task (see tasks.sql): one membership-level operation,
 -- tracked individually — status, attempts, error, and the old-row → new-row
 -- linkage the operation produced. The reprice executor stamps new_item_id
--- inside the same transaction that cancels the old row and inserts its
--- successor, so a non-NULL new_item_id is the durable "DB phase done" marker
--- (a crashed/retried item with new_item_id set skips straight to the
--- convergent sync).
+-- only AFTER the reprice op fully converges (the successor is synced to
+-- Stripe and marked applied), in a separate post-reprice transaction — so
+-- a non-NULL new_item_id marks a fully-completed item (a retried item that
+-- already carries one has nothing left to do). A reprice that crashes or
+-- fails mid-op leaves new_item_id NULL and its partial not_added successor
+-- reverted, so a not_added successor is never referenced by a task_items
+-- row.
 --
 -- Op parameters are TYPED columns (not JSONB): membership_reprice uses
 -- target_price_id + proration_behavior. A future task_type adds its own
@@ -34,7 +37,8 @@ CREATE TABLE task_items (
     old_item_id UUID,
 
     -- The successor membership row the operation produced. Stamped by the
-    -- executor in the operation's DB transaction.
+    -- executor only after the reprice fully converges (a separate
+    -- post-reprice transaction), so it is set only on a completed item.
     new_item_id UUID,
 
     -- membership_reprice parameters.
@@ -71,8 +75,8 @@ CREATE TABLE task_items (
 CREATE INDEX idx_task_items_task ON task_items (task_id);
 
 -- The in-task guard ("is this membership referenced by an unfinished item?")
--- and the reconciler's orphan-sweep exclusion both probe by membership row id
--- on unfinished/failed items.
+-- probes by membership row id on pending/running items
+-- (task_items_active_for_memberships.sql).
 CREATE INDEX idx_task_items_old_membership ON task_items (old_item_id)
     WHERE old_item_id IS NOT NULL;
 CREATE INDEX idx_task_items_new_membership ON task_items (new_item_id)

@@ -50,19 +50,23 @@ class MembersListFilters(BaseModel):
 
     Each dimension narrows the result independently (they are
     AND-combined); multiple values within a dimension widen it
-    (membership_status and plan_ids are OR-combined internally).
+    (membership_status, plan_ids, and rank_ids are OR-combined
+    internally).
 
     Attributes:
         membership_status: Statuses to include.
         plan_ids: Membership plans to include — members with a
             LIVE (active or frozen) membership on any of these
             plans; cancelled/ended memberships do not match.
+        rank_ids: Ranks to include — members whose current rank
+            (``members.current_rank_id``) is any of these.
         date_range: Optional date range filter.
         name: Optional name search string.
     """
 
     membership_status: list[CrmMemberStatus] = []
     plan_ids: list[UUID] = []
+    rank_ids: list[UUID] = []
     date_range: DateRangeFilter | None = None
     name: str | None = None
 

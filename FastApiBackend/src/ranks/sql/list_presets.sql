@@ -1,13 +1,12 @@
 SELECT
     preset_id,
-    gym_type,
+    preset_kind,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color
+    classes_to_next_major,
+    sub_rank_count,
+    implied_sub_rank_type
 FROM rank_presets
-WHERE gym_type = :gym_type
-ORDER BY main_rank_num_order ASC, sub_rank_num_order ASC
+WHERE preset_kind = CAST(:preset_kind AS rank_preset_kind)
+ORDER BY main_rank_num_order ASC

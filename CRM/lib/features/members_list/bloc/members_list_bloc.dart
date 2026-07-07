@@ -15,7 +15,9 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_total_counts.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
 EventTransformer<E> _debounce<E>(Duration duration) {
   return (events, mapper) =>
@@ -32,14 +34,17 @@ class MembersListBloc
     extends Bloc<MembersListEvent, MembersListState> {
   final MembersListRepository _repository;
   final MembershipsRepository _membershipsRepository;
+  final RanksRepository _ranksRepository;
 
   int _searchSeq = 0;
 
   MembersListBloc({
     required MembersListRepository repository,
     required MembershipsRepository membershipsRepository,
+    required RanksRepository ranksRepository,
   })  : _repository = repository,
         _membershipsRepository = membershipsRepository,
+        _ranksRepository = ranksRepository,
         super(const MembersListInitial()) {
     on<MembersListInitRequested>(_onInitRequested);
     on<MembersListViewChanged>(_onViewChanged);
@@ -51,6 +56,9 @@ class MembersListBloc
     );
     on<MembersListPlanFilterRemoved>(
       _onPlanFilterRemoved,
+    );
+    on<MembersListRankFilterRemoved>(
+      _onRankFilterRemoved,
     );
     on<MembersListDateRangeFilterSet>(
       _onDateRangeFilterSet,
@@ -82,9 +90,11 @@ class MembersListBloc
         view: MembersListView.all,
       );
 
-      // Plans back the filter picker; their load is best-effort
-      // and must not fail the list, so it resolves separately.
+      // Plans + ranks back the filter picker; their loads are
+      // best-effort and must not fail the list, so they resolve
+      // separately.
       final plansFuture = _loadPlans(event.gymId);
+      final ranksFuture = _loadRanks(event.gymId);
 
       final results = await Future.wait([
         _repository.getMembersList(request),
@@ -96,12 +106,14 @@ class MembersListBloc
       final totalCounts =
           results[1] as MembersListTotalCounts;
       final plans = await plansFuture;
+      final ranks = await ranksFuture;
 
       emit(MembersListLoaded(
         gymId: event.gymId,
         activeView: MembersListView.all,
         filters: listResponse.filters,
         plans: plans,
+        ranks: ranks,
         allRows: List<MemberRow>.from(
           listResponse.data,
         ),
@@ -141,6 +153,7 @@ class MembersListBloc
       view: event.newView,
       filters: currentState.filters,
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -166,6 +179,7 @@ class MembersListBloc
         membershipStatus: newStatuses,
       ),
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -191,6 +205,7 @@ class MembersListBloc
         membershipStatus: newStatuses,
       ),
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -215,6 +230,32 @@ class MembersListBloc
         planIds: newPlanIds,
       ),
       plans: currentState.plans,
+      ranks: currentState.ranks,
+      totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
+    );
+  }
+
+  Future<void> _onRankFilterRemoved(
+    MembersListRankFilterRemoved event,
+    Emitter<MembersListState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! MembersListLoaded) return;
+
+    final newRankIds = currentState.filters.rankIds
+        .where((id) => id != event.rankId)
+        .toList();
+
+    await _fetchFreshPage(
+      emit: emit,
+      gymId: currentState.gymId,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        rankIds: newRankIds,
+      ),
+      plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -235,6 +276,7 @@ class MembersListBloc
         dateRange: event.dateRange,
       ),
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -253,6 +295,7 @@ class MembersListBloc
       view: currentState.activeView,
       filters: event.filters,
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -273,6 +316,7 @@ class MembersListBloc
         clearDateRange: true,
       ),
       plans: currentState.plans,
+      ranks: currentState.ranks,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -403,13 +447,14 @@ class MembersListBloc
   }
 
   /// Fetches a fresh first page after a view or filter
-  /// change. Resets pagination; keeps the loaded plans.
+  /// change. Resets pagination; keeps the loaded plans + ranks.
   Future<void> _fetchFreshPage({
     required Emitter<MembersListState> emit,
     required String gymId,
     required MembersListView view,
     required MembersListFilters filters,
     required List<MembershipPlanResponse> plans,
+    required List<MainRank> ranks,
     required MembersListTotalCounts totalCounts,
     String searchQuery = '',
   }) async {
@@ -433,6 +478,7 @@ class MembersListBloc
         activeView: view,
         filters: response.filters,
         plans: plans,
+        ranks: ranks,
         allRows: rows,
         displayedRows: rows,
         searchQuery: searchQuery,
@@ -465,6 +511,24 @@ class MembersListBloc
     } catch (e, stackTrace) {
       log(
         'Failed to load plans for members filter',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return const [];
+    }
+  }
+
+  /// Loads the gym's main ranks for the filter picker. Best-effort:
+  /// a failure degrades to an empty list (the rank filter section
+  /// just won't show) rather than failing the whole members list —
+  /// mirrors [_loadPlans].
+  Future<List<MainRank>> _loadRanks(String gymId) async {
+    try {
+      final ladder = await _ranksRepository.listRanks(gymId);
+      return ladder.ranks;
+    } catch (e, stackTrace) {
+      log(
+        'Failed to load ranks for members filter',
         error: e,
         stackTrace: stackTrace,
       );

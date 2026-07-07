@@ -35,12 +35,18 @@ class MemberCreateRequest(BaseModel):
 
 
 class MemberUpdateData(BaseModel):
-    """Mutable fields on a member row."""
+    """Mutable fields on a member row.
+
+    ``current_rank_id`` is deliberately absent: after creation, a
+    member's rank changes ONLY through the ranks domain's
+    promote-member / set-member-rank endpoints, which log the
+    ``rank_changed`` audit activity the progress anchor depends on.
+    A generic update path here would be an unaudited side door.
+    """
 
     first_name: str | None = None
     last_name: str | None = None
     email: EmailStr | None = None
-    current_rank_id: UUID | None = None
     phone: str | None = None
     address: str | None = None
     emergency_contact_name: str | None = None

@@ -1,14 +1,12 @@
 SELECT
     preset_id,
-    gym_type,
+    preset_kind,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color
+    classes_to_next_major,
+    sub_rank_count,
+    implied_sub_rank_type
 FROM rank_presets
-ORDER BY gym_type ASC,
-         main_rank_num_order ASC,
-         sub_rank_num_order ASC
+ORDER BY preset_kind ASC,
+         main_rank_num_order ASC

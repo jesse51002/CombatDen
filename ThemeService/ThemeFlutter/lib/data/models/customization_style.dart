@@ -3,9 +3,10 @@ import 'package:equatable/equatable.dart';
 /// One selectable style returned by the ThemeService's
 /// `GET /apps/{appId}/styles` endpoint. App-agnostic: just the run
 /// [id] to switch to, the human [displayName] to show, an absolute
-/// [celebrationImageUrl] for the card art, and an optional
-/// [gymType] bucket (`Fighting`, `Yoga`, `Pilates`, `Barre`, `HIIT`,
-/// `Cardio`, `Dance`, `Wellness`) used to filter the style picker.
+/// [celebrationImageUrl] for the card art, and the [category]
+/// classification bucket (the app-declared vocabulary, e.g.
+/// `Fighting`, `Yoga`, `Pilates`, `Barre`, `HIIT`, `Cardio`, `Dance`,
+/// `Wellness` for CombatDen) used to filter the style picker.
 ///
 /// Parsing is resilient (mirrors [ThemeConfig.fromJson]): missing
 /// fields degrade to empty strings / null rather than throwing.
@@ -13,7 +14,7 @@ class ThemeStyle extends Equatable {
   final String id;
   final String displayName;
   final String celebrationImageUrl;
-  final String? gymType;
+  final String? category;
 
   /// The VideoService gym id this style belongs to, when the catalog is the
   /// gym browser (AppManagement). The content key — the host stores it on
@@ -25,7 +26,7 @@ class ThemeStyle extends Equatable {
     required this.id,
     required this.displayName,
     required this.celebrationImageUrl,
-    this.gymType,
+    this.category,
     this.gymId,
   });
 
@@ -41,7 +42,7 @@ class ThemeStyle extends Equatable {
       id: (json['id'] as String?) ?? '',
       displayName: (json['display_name'] as String?) ?? '',
       celebrationImageUrl: raw.isEmpty ? '' : resolveUrl(raw),
-      gymType: json['gym_type'] as String?,
+      category: json['category'] as String?,
       gymId: json['gym_id'] as String?,
     );
   }
@@ -51,7 +52,7 @@ class ThemeStyle extends Equatable {
         id,
         displayName,
         celebrationImageUrl,
-        gymType,
+        category,
         gymId,
       ];
 }

@@ -168,19 +168,30 @@ class BillingRetention(BaseModel):
 
 
 class BillingRank(BaseModel):
-    """Member's current rank (belt) for the rank block.
+    """Member's current rank (belt leaf) for the rank block.
 
-    Sourced from the member's ``current_rank_id`` row in
-    ``gym_ranks``. ``None`` on the response when the member has no
-    rank assigned (or the gym has ranks disabled).
+    Sourced from the member's ``current_rank_id`` (main rank) +
+    ``current_sub_index`` (leaf). ``None`` on the response when the
+    member has no rank assigned (or the gym has ranks disabled).
+    ``sub_index`` / ``sub_label`` are ``None`` when the rank has no
+    sub-ranks; ``image_url`` is the leaf-resolved belt image (per-sub
+    override if present, else the main image).
     """
 
     rank_id: UUID
-    main_name: str
-    sub_name: str
+    name: str
+    sub_index: int | None = None
+    sub_label: str | None = None
     image_url: str | None = None
-    color: str | None = None
-    classes_till_rankup: int
+    # Headline threshold to the next MAJOR rank (gym-set).
+    classes_to_next_major: int
+    # Classes needed to reach the next LEAF (an even split of
+    # classes_to_next_major across sub-positions, else the full major
+    # threshold when the rank has no sub-ranks).
+    classes_till_next_step: int
+    # Classes attended since the member's last promotion — the real
+    # numerator for "classes_since_rank / classes_till_next_step" progress.
+    classes_since_rank: int = 0
 
 
 class BillingRewardCard(BaseModel):

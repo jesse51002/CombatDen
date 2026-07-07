@@ -1,31 +1,28 @@
 INSERT INTO gym_ranks (
     gym_id,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color
+    classes_to_next_major,
+    sub_rank_count,
+    sub_rank_image_overrides
 )
 VALUES (
-    :gym_id,
+    CAST(:gym_id AS UUID),
     :main_rank_num_order,
-    :sub_rank_num_order,
-    :main_name,
-    :sub_name,
-    :classes_till_rankup,
+    :name,
     :image_url,
-    :color
+    :classes_to_next_major,
+    :sub_rank_count,
+    CAST(:sub_rank_image_overrides AS JSONB)
 )
 RETURNING
     rank_id,
     gym_id,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color,
+    classes_to_next_major,
+    sub_rank_count,
+    sub_rank_image_overrides,
     created_at

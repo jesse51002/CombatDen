@@ -68,6 +68,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
             "employee_type": "owner",
             "theme_preference": "dark",
         },
@@ -76,6 +77,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
             "timezone": "America/New_York",
+            "sub_rank_type": "div",
             "employee_type": "admin",
             "theme_preference": "system",
         },
@@ -132,6 +134,51 @@ def test_update_gym_400_when_no_fields(client, auth_headers):
     assert response.status_code == 400
 
 
+def test_update_gym_theme_saves_and_echoes(client, db_pool_mock, auth_headers):
+    """PUT /{gym_id}/theme persists and echoes the saved design id."""
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={"gym_id": str(gym_id), "theme_design_id": "warm-stone"},
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}/theme",
+        json={"data": {"theme_design_id": "warm-stone"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gym_id"] == str(gym_id)
+    assert body["theme_design_id"] == "warm-stone"
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["theme_design_id"] == "warm-stone"
+    assert bound_params["gym_id"] == str(gym_id)
+
+
+def test_update_gym_theme_404_when_gym_not_found(
+    client, db_pool_mock, auth_headers
+):
+    """PUT /{gym_id}/theme 404s when the update matches no row."""
+    db_pool_mock.execute_with_retry = AsyncMock(return_value=None)
+
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}/theme",
+        json={"data": {"theme_design_id": "warm-stone"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_update_gym_theme_422_on_empty_value(client, auth_headers):
+    """An empty theme_design_id is rejected by validation (422)."""
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}/theme",
+        json={"data": {"theme_design_id": ""}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
 def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
     """PUT /api/v1/gyms/{gym_id} with logo_url persists and echoes it back."""
     gym_id = uuid4()
@@ -142,6 +189,7 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
             "logo_url": logo_url,
             "theme_design_id": None,
         }
@@ -172,6 +220,7 @@ def test_update_gym_clears_logo_url_with_explicit_null(
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
             "logo_url": None,
             "theme_design_id": None,
         }
@@ -189,6 +238,64 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
     assert "logo_url" in bound_params
     assert bound_params["logo_url"] is None
+
+
+def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
+    """PUT /api/v1/gyms/{gym_id} with sub_rank_type persists, echoes it, AND
+    fires the member sub-index reconcile (the gyms -> ranks edge)."""
+    from src.ranks import SQL_DIR  # noqa: PLC0415
+
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "timezone": "America/Chicago",
+            "sub_rank_type": "div",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"sub_rank_type": "div"}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sub_rank_type"] == "div"
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["sub_rank_type"] == "div"
+
+    # The style change reconciles members to stay leaf-valid.
+    reconcile_sql = (SQL_DIR / "reconcile_member_sub_index_for_gym.sql").read_text()
+    session = db_pool_mock.session.return_value
+    reconcile_call = next(
+        c
+        for c in session.execute.await_args_list
+        if c.args[0].text == reconcile_sql
+    )
+    assert reconcile_call.args[1]["sub_rank_type"] == "div"
+    assert reconcile_call.args[1]["gym_id"] == str(gym_id)
+    session.commit.assert_awaited()
+
+
+def test_update_gym_explicit_null_sub_rank_type_422(
+    client, db_pool_mock, auth_headers
+):
+    """sub_rank_type is NOT NULL: explicit null must 422 at the schema,
+    same guard as gym_name / timezone."""
+    response = client.put(
+        f"/api/v1/gyms/{uuid4()}",
+        json={"data": {"sub_rank_type": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    db_pool_mock.execute_with_retry.assert_not_called()
 
 
 def test_update_gym_explicit_null_gym_name_422(

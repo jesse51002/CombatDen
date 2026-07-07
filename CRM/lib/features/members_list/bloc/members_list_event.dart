@@ -67,6 +67,16 @@ class MembersListPlanFilterRemoved
   List<Object?> get props => [planId];
 }
 
+/// User removed a rank filter (by main rank id).
+class MembersListRankFilterRemoved extends MembersListEvent {
+  final String rankId;
+
+  const MembersListRankFilterRemoved(this.rankId);
+
+  @override
+  List<Object?> get props => [rankId];
+}
+
 /// Scroll reached the 80% threshold — load next page.
 class MembersListNextPageRequested
     extends MembersListEvent {

@@ -109,12 +109,12 @@ When a task builds or heavily reshapes a domain (tables + services + routes):
 - Bad: `pool_size=10` buried inside a function or constructor; `LOCK_TTL_SECONDS: Final[int] = 60` at module level in `config.py`
 
 **Enums**
-- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
+- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `StrEnum` classes (`from enum import StrEnum`, Python 3.11+; ruff's `UP042` enforces this over `(str, Enum)` on this codebase's Python 3.13)
 - **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
 - **ALWAYS reuse enums and schemas from the Database package** (`../Database/python_data/schema/`) when they exist — import via `from schema.<module> import <Enum>` (available through `src/shared/db_schema_path.py`). Never redefine enums that already exist in the Database package.
 - Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
 - Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
-- Good: `value: list[MemberStatus]` with `class MemberStatus(str, Enum): active = "active"`
+- Good: `value: list[MemberStatus]` with `class MemberStatus(StrEnum): active = "active"`
 - Bad: `value: list[str]` with hardcoded `"active"`, `"trial"` scattered through the code
 
 **PEP 8 Naming**
@@ -325,6 +325,7 @@ src/
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
   - This applies to `.sql` files **and** any SET/VALUES clause built dynamically in Python (e.g. an f-string `f"{col} = CAST(:{col} AS JSONB)"`, never `f"{col} = :{col}::jsonb"`). This bug has recurred — it bit the membership-plans update path.
+- **NEVER write a bare `:word` placeholder inside a SQL `--` comment.** `text()` scans the WHOLE statement — comment lines included — for `:name` bind markers, so a generic placeholder (`:col`, `:param`, `:x`) in a comment becomes an orphan bind param no code supplies, and the query 500s with `A value is required for bind parameter '<word>'`. Describe params in prose or a non-colon form (`the col column`, `<col>`) instead. (A real, always-bound param name in a comment is fine because it's supplied; `:col::type` is also safe — the trailing `::` suppresses it — but a standalone `:col` in a comment is not.) This bit `update_rank.sql`, whose comment used `:col` as a placeholder.
 
 **Repository Pattern**
 - Separate data access from business logic
@@ -368,6 +369,39 @@ NOT stored on `members` — there is no `member_status` column or table.
 When you add a similar derived field, prefer extending an existing
 `*_status` view or adding a new view — never duplicate the
 derivation across SQL files.
+
+## Ranks domain
+
+`src/ranks/` owns the per-gym rank ladder. **The full model lives in the
+`ranks-guide` skill (the source of truth) — the two-level `gym_ranks` shape,
+`sub_rank_type` (`none`/`stripes`/`div`), the effective-count rule, the leaf
+invariant, the reconcile matrix, the `rank_changed` anchor, presets, and the
+reads' internals. Read it before touching anything rank-shaped.** Only the
+how-to-work-here facts belong here:
+
+- **Facade + concerns.** `RanksService` (`ranks_service.py`) keeps
+  single-rank CRUD (`create`/`update`/`get`/`list`/`delete`) and the
+  `is_rank_enabled` toggle itself; everything member / reorder / preset /
+  read shaped is pure delegation to concerns sharing a lean `RanksBase`:
+  `RanksMembers` (the only member-writing paths), `RanksReorder`
+  (`ranks_reorder.py` — main-only two-phase reorder), `RanksPresets`
+  (seed-from-preset + preset reads), and `RanksReads` (the paginated
+  boards). DI (`core/dependencies.py`) wires them via `ranks_members` /
+  `ranks_reorder` / `ranks_presets` / `ranks_reads`; the router injects
+  only the facade.
+- **Immutable vs. writable.** `main_rank_num_order` is update-immutable
+  (`GYM_RANKS` frozenset) — `POST /reorder` is its only mover;
+  `current_rank_id` / `current_sub_index` are `MEMBERS`-immutable (ranks
+  endpoints are the only rank-change path). `image_url` and
+  `sub_rank_image_overrides` are ordinary user-writable fields.
+- **SQL + DI edge.** Every query is its own `.sql` (`load_sql`), bound
+  `CAST(:x AS T)` never `:x::t` (`update_rank` builds a dynamic SET of
+  per-column casts). The `gyms → ranks_members` edge: `GymsService.update_gym`
+  reconciles members on a `sub_rank_type` change (mirrored by `from_preset`).
+- **Reads.** `GET /ready-to-promote`, `GET /{rank_id}/members`, and
+  `GET /{rank_id}/sub-rank-counts` — the two `/{rank_id}/...` reads **derive
+  the gym from the rank** (`get_rank` first → 404 if missing → verify the
+  employee on the rank's gym), never a client `gym_id`.
 
 ## Security
 
@@ -429,14 +463,18 @@ derivation across SQL files.
 
 ## Linting
 
-**IMPORTANT: Always run `make format` after making code changes**
-- Run `make format` before committing any changes
-- This auto-fixes lint issues and formats code
-- This ensures code quality and consistency across the project
+**`ruff check` is the gate; do NOT run `make format` / `ruff format`.**
+- The repo is not ruff-format-clean: a blanket format churns unrelated
+  pre-existing lines and pollutes diffs.
+- Run `.venv/bin/python -m ruff check src/ tests/` (broken venv shebangs —
+  always invoke via `python -m`) and fix what it reports; hand-format the
+  lines you touch to match the surrounding style.
+- `ruff check --fix` on the files you changed is fine; whole-repo
+  formatting is not.
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
 
-## `videos` domain — LLM spec and agent surface
+## `videos` domain (`src/videos/`)
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
 agent plus the RAG read surface. Six routes cover the spec/agent + worker-status + RAG surface
@@ -606,13 +644,15 @@ There is NO separate `video_config` router or module.
 
 ## Image upload domain (`src/uploads/`)
 
-`POST /api/v1/uploads/image` accepts a multipart image plus a `category` **form field** (`reward`, `member`, `class`, or `gym` — not a query parameter), stores it in the `combatden-assets` S3 bucket (under a key prefix matching the `category` value), and returns a CDN URL (`cdn.combatden.net/...?v=<content-hash>`). The bucket and CDN are the same infrastructure ThemeService uses for theme asset uploads; the uploads domain is the backend's own proxy into that same bucket. Used by the CRM's `ImageUploadPickerField` (reward catalog images, member photos, class photos, gym logos) via `ImageUploadRepository.uploadImage`.
+`POST /api/v1/uploads/image` — a multipart image plus a `category` **form field** (`reward`,
+`member`, `class`, `gym`, `rank`; not a query param) → stored in the `combatden-assets` S3
+bucket under a `category`-named key prefix → returns a CDN URL
+(`cdn.combatden.net/...?v=<content-hash>`). Used by the CRM's `ImageUploadPickerField`. Gated by
+`Auth.verify_staff_principal` (owner/admin of ≥1 gym; no `gym_id` to scope). The 5 MB cap is
+enforced before and after the body is read.
 
-Gated by `Auth.verify_staff_principal` — the gym-agnostic staff bar (owner/admin of **at least one** gym; same bar as `verify_gym_employee`, just without a `gym_id` to scope against, since this endpoint takes none). The 5 MB cap is enforced twice: first cheaply on the parsed multipart part's `file.size` **before** the body is read into memory, then again on the actual byte count read as a backstop for a missing `file.size`.
-
-**Dependencies:** `boto3` (PyPI — S3 client) and `python-multipart` (FastAPI multipart form parser).
-
-**Required `Settings` fields** (`src/core/config.py`): `assets_bucket`, `aws_region`, `assets_cdn_base_url`. AWS credentials (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) must be present in the runtime environment — they are read by the standard boto3 credential chain, not via `Settings` fields.
+**Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
+`aws_region`, `assets_cdn_base_url` (AWS creds via the boto3 env credential chain, not `Settings`).
 
 ## Database
 

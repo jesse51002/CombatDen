@@ -99,6 +99,10 @@ from src.plans.service.plans_service import (
 )
 from src.presets.service.presets_service import PresetsService
 from src.presets.service.presets_template_service import PresetsTemplateService
+from src.ranks.service.ranks_members import RanksMembers
+from src.ranks.service.ranks_presets import RanksPresets
+from src.ranks.service.ranks_reads import RanksReads
+from src.ranks.service.ranks_reorder import RanksReorder
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -168,6 +172,9 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.theme.service.theme_showcase_defaults_service import (
+    ThemeShowcaseDefaultsService,
+)
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
 from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.videos.service.member_video_profile_service import (
@@ -379,7 +386,25 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
-    ranks_service = providers.Factory(RanksService, db_pool=db_pool)
+    # Ranks: a thin facade over four concern services. RanksPresets
+    # composes RanksMembers for the shared lowest-rank backfill (seeding a
+    # preset runs the same backfill as create / enable-toggle).
+    ranks_members = providers.Factory(RanksMembers, db_pool=db_pool)
+    ranks_reorder = providers.Factory(RanksReorder, db_pool=db_pool)
+    ranks_presets = providers.Factory(
+        RanksPresets,
+        db_pool=db_pool,
+        members=ranks_members,
+    )
+    ranks_reads = providers.Factory(RanksReads, db_pool=db_pool)
+    ranks_service = providers.Factory(
+        RanksService,
+        db_pool=db_pool,
+        members=ranks_members,
+        reorder=ranks_reorder,
+        presets=ranks_presets,
+        reads=ranks_reads,
+    )
 
     # Waivers: plain gym config (versioned documents + read-only e-sign
     # tracking), no Stripe.
@@ -485,6 +510,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     theme_showcase_service = providers.Factory(
         ThemeShowcaseService,
         db_pool=db_pool,
+    )
+    # Theme: static, category-keyed demo showcase cards from a bundled YAML
+    # file (no DB) for the public standalone theme browser.
+    # Singleton, not Factory: the service caches the parsed + validated YAML
+    # on the instance for the process lifetime — a Factory would rebuild a
+    # fresh instance (and re-read + re-validate the YAML) on every request.
+    theme_showcase_defaults_service = providers.Singleton(
+        ThemeShowcaseDefaultsService,
     )
     # Presets: template catalog reads (list, detail, feed ids).
     presets_template_service = providers.Factory(
@@ -780,12 +813,15 @@ class DependencyInjector(containers.DeclarativeContainer):
     # classes_versions_service is the documented gyms -> classes edge: a gym
     # TIMEZONE change re-mints every live class's schedule version with the
     # new zone (wall-clock match keeps all future sign-ups / check-ins).
+    # ranks_members is the documented gyms -> ranks edge: a gym SUB_RANK_TYPE
+    # change reconciles every member's current_sub_index to stay leaf-valid.
     gyms_service = providers.Factory(
         GymsService,
         db_pool=db_pool,
         stripe_connect_service=gyms_stripe_connect_service,
         waivers_service=waivers_service,
         classes_versions_service=classes_versions_service,
+        ranks_members=ranks_members,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────

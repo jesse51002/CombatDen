@@ -98,6 +98,26 @@ def test_plan_ids_filter_is_anded_in_and_scoped_to_live() -> None:
     }
 
 
+def test_rank_ids_filter_is_ored_via_any() -> None:
+    rank_a, rank_b = uuid4(), uuid4()
+    where, params = _build(MembersListFilters(rank_ids=[rank_a, rank_b]))
+    # A rank filter matches any member currently at one of the given
+    # ranks, via a single ANY(CAST(... AS UUID[])) array bind.
+    assert where == (
+        "WHERE p.gym_id = :gym_id AND "
+        "p.current_rank_id = ANY(CAST(:rank_ids AS UUID[]))"
+    )
+    assert params["rank_ids"] == [str(rank_a), str(rank_b)]
+
+
+def test_rank_ids_empty_list_is_no_filter() -> None:
+    # Mirrors plan_ids: an empty list means "no filter" — the clause is
+    # omitted entirely and the param is never bound.
+    where, params = _build(MembersListFilters(rank_ids=[]))
+    assert where == "WHERE p.gym_id = :gym_id"
+    assert "rank_ids" not in params
+
+
 def test_date_range_both_bounds_anded() -> None:
     where, params = _build(
         MembersListFilters(

@@ -33,6 +33,7 @@ const Set<String> kAddressableRoutes = {
   AppRoutes.memberships,
   AppRoutes.membershipsDiscounts,
   AppRoutes.membershipsWaivers,
+  AppRoutes.membershipsRanks,
   AppRoutes.schedule,
   AppRoutes.growth,
   AppRoutes.employees,
@@ -62,9 +63,11 @@ class UrlSyncObserver extends NavigatorObserver {
     if (name == null) return;
     final path = Uri.parse(name).path;
     // Sync a top-level section OR a specific-member deep link
-    // (`/members/detail/<id>`), which carries the member id in its path.
+    // (`/members/detail/<id>`) OR a specific-rank deep link
+    // (`/memberships/ranks/detail/<id>`) — each carries its id in the path.
     if (kAddressableRoutes.contains(path) ||
-        AppRoutes.memberIdFromPath(path) != null) {
+        AppRoutes.memberIdFromPath(path) != null ||
+        AppRoutes.mainRankIdFromPath(path) != null) {
       syncBrowserUrl(name);
     }
   }

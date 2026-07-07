@@ -223,8 +223,12 @@ class _Grid extends StatelessWidget {
             gymId: member.gymId,
             memberName: member.fullName,
           ),
-          if (member.rank != null)
-            RankSection(rank: member.rank!),
+          RankSection(
+            rank: member.rank,
+            gymId: member.gymId,
+            memberId: member.memberId,
+            refreshKey: refreshToken,
+          ),
           RetentionSection(
             retention: member.retention,
             rewards: member.recentlyRedeemedRewards,

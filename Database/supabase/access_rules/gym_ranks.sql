@@ -28,4 +28,7 @@ CREATE POLICY "Gym staff can update ranks"
     USING (is_gym_admin_or_owner(gym_ranks.gym_id))
     WITH CHECK (is_gym_admin_or_owner(gym_ranks.gym_id));
 
-REVOKE UPDATE (rank_id, gym_id, created_at) ON TABLE gym_ranks FROM authenticated;
+-- main_rank_num_order is reorder-only (moved via the two-phase reorder path);
+-- image_url is NOT revoked — it is now a user-writable field (preset default
+-- plus manual override in the edit UI).
+REVOKE UPDATE (rank_id, gym_id, created_at, main_rank_num_order) ON TABLE gym_ranks FROM authenticated;

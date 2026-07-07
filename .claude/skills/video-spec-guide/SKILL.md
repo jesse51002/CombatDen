@@ -117,7 +117,7 @@ DI providers (videos domain, spec/agent + worker-status): `litellm_client`, `vid
 `member_video_profile_service`, `video_recs_service`, `video_search_service`, `video_feed_service` —
 out of scope for this skill; see `FastApiBackend/CLAUDE.md`.)
 DI providers (presets domain): `presets_service`, `presets_template_service`.
-DI providers (theme domain): `theme_showcase_service`.
+DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
 No `video_config_*`, `video_template_service`, or `video_showcase_service` providers remain.
 
 ## 1. The spec is APPEND-ONLY VERSIONED — readers use the view, never the table

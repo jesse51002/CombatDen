@@ -18,10 +18,22 @@ class AppRoutes {
   // The single-occurrence edit screen, opened from the chooser dialog's
   // "This occurrence" option.
   static const String scheduleOccurrence = '/schedule/class/occurrence';
-  // The Memberships screen's three tabs are each addressable.
+  // The Gym screen's four tabs are each addressable. (The route path
+  // stays /memberships — the nav section is labelled "Gym".)
   static const String memberships = '/memberships';
   static const String membershipsDiscounts = '/memberships/discounts';
   static const String membershipsWaivers = '/memberships/waivers';
+  static const String membershipsRanks = '/memberships/ranks';
+  // A single main rank's detail view (members-in-rank + promote).
+  // Deep-linkable by rank id, same round-trip shape as
+  // [memberDetailPath] / [memberIdFromPath].
+  static const String membershipsRankDetail = '/memberships/ranks/detail';
+  // The preset picker screen (pushed with BlocProvider.value, keeps
+  // the parent Ranks tab's URL — not independently addressable).
+  static const String membershipsRankPresets = '/memberships/ranks/presets';
+  // Create / edit a main rank (full-screen form). Reads the rank (or
+  // null for create) off route arguments, so it is not deep-linkable.
+  static const String membershipsRankEditor = '/memberships/ranks/editor';
   // Create / edit a membership plan. Reads the plan (or null for
   // create) off route arguments, so it is not deep-linkable.
   static const String membershipDetails = '/memberships/detail';
@@ -54,6 +66,22 @@ class AppRoutes {
   /// route, or any other route). Round-trips with [memberDetailPath].
   static String? memberIdFromPath(String path) {
     const prefix = '$memberDetail/';
+    if (!path.startsWith(prefix)) return null;
+    final id = path.substring(prefix.length);
+    return id.isEmpty ? null : id;
+  }
+
+  /// Deep-link path for a specific main rank's detail page —
+  /// `/memberships/ranks/detail/<mainRankId>`. Round-trips with
+  /// [mainRankIdFromPath] (mirrors [memberDetailPath]).
+  static String membershipsRankDetailPath(String mainRankId) =>
+      '$membershipsRankDetail/$mainRankId';
+
+  /// The main rank id from a `/memberships/ranks/detail/<id>` path,
+  /// or null when [path] is not a specific-rank deep link. Round-trips
+  /// with [membershipsRankDetailPath] (mirrors [memberIdFromPath]).
+  static String? mainRankIdFromPath(String path) {
+    const prefix = '$membershipsRankDetail/';
     if (!path.startsWith(prefix)) return null;
     final id = path.substring(prefix.length);
     return id.isEmpty ? null : id;

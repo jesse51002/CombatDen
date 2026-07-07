@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
@@ -10,24 +11,33 @@ import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_bloc.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_event.dart';
+import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
+import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
+// The rank create/edit form is a full-screen route
+// (AppRoutes.membershipsRankEditor), pushed via the shared onGenerateRoute.
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_event.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
+import 'package:crm/features/memberships/presentation/screens/rank_presets_screen.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
+import 'package:crm/features/memberships/presentation/tabs/ranks_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/waivers_tab.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
-/// Memberships screen — gym-level catalog admin with three
-/// tabs: membership plans, discount presets, and waivers.
+/// Gym screen — gym-level catalog admin (the "Gym" nav section)
+/// with four tabs: membership plans, discount presets, waivers, and
+/// the rank ladder.
 class MembershipsScreen extends StatelessWidget {
-  /// Tab to open on (0 Memberships, 1 Discounts, 2 Waivers).
+  /// Tab to open on (0 Plans, 1 Discounts, 2 Waivers, 3 Ranks).
   final int initialTab;
 
   const MembershipsScreen({super.key, this.initialTab = 0});
@@ -42,6 +52,9 @@ class MembershipsScreen extends StatelessWidget {
         ),
         RepositoryProvider<TasksRepository>(
           create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<RanksRepository>(
+          create: (_) => RanksRepository(apiClient: ApiClient()),
         ),
       ],
       child: MultiBlocProvider(
@@ -66,6 +79,11 @@ class MembershipsScreen extends StatelessWidget {
               repository: ctx.read<TasksRepository>(),
             )..add(TasksOngoingRequested(gymId)),
           ),
+          BlocProvider<RanksBloc>(
+            create: (ctx) => RanksBloc(
+              repository: ctx.read<RanksRepository>(),
+            )..add(RanksInitRequested(gymId)),
+          ),
         ],
         child: AppShell(
           activeRoute: AppRoutes.memberships,
@@ -87,16 +105,18 @@ class _MembershipsBody extends StatefulWidget {
 }
 
 class _MembershipsBodyState extends State<_MembershipsBody> {
-  static const _tabs = ['Memberships', 'Discounts', 'Waivers'];
+  static const _tabs = ['Plans', 'Discounts', 'Waivers', 'Ranks'];
   static const _addLabels = [
     'Add New Membership',
     'Add New Discount',
     'Add New Waiver',
+    'Add New Rank',
   ];
   static const _tabRoutes = [
     AppRoutes.memberships,
     AppRoutes.membershipsDiscounts,
     AppRoutes.membershipsWaivers,
+    AppRoutes.membershipsRanks,
   ];
 
   late int _tabIndex;
@@ -132,7 +152,29 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
         await Navigator.of(context)
             .pushNamed(AppRoutes.membershipsWaiverEditor);
         waiversBloc.add(WaiversInitRequested(widget.gymId));
+      case 3:
+        // Create lives on its own full-screen editor; reload the ladder
+        // on return so a newly created rank shows.
+        final ranksBloc = context.read<RanksBloc>();
+        await Navigator.of(context)
+            .pushNamed(AppRoutes.membershipsRankEditor);
+        ranksBloc.add(RanksInitRequested(widget.gymId));
     }
+  }
+
+  /// Ranks-tab-only secondary action: seed the ladder from a preset. The
+  /// preset screen rides the shared [RanksBloc] down (a bare route, so it
+  /// keeps the Ranks tab's URL) so Apply reloads the ladder on return.
+  void _openPresets() {
+    final bloc = context.read<RanksBloc>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: RankPresetsScreen(gymId: widget.gymId),
+        ),
+      ),
+    );
   }
 
   @override
@@ -160,6 +202,23 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
                 children: [
                   Text(_tabs[_tabIndex], style: DesignConstants.big2),
                   const Spacer(),
+                  // Ranks tab pairs "Seed from preset" beside the primary
+                  // "Add New Rank" so a gym can build its ladder from a
+                  // template or by hand from the same place.
+                  if (_tabIndex == 3) ...[
+                    AppOutlineButton(
+                      text: 'Seed from preset',
+                      borderRadius: DesignConstants.radiusBig,
+                      icon: Icon(
+                        Symbols.auto_awesome_sharp,
+                        size: DesignConstants.iconSizeSmall,
+                        color: DesignConstants.text,
+                        weight: DesignConstants.iconWeight,
+                      ),
+                      onPressed: _openPresets,
+                    ),
+                    const SizedBox(width: DesignConstants.spacingMedium),
+                  ],
                   AppPrimaryButton(
                     text: _addLabels[_tabIndex],
                     onPressed: _openAddDialog,
@@ -172,10 +231,11 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
         Expanded(
           child: IndexedStack(
             index: _tabIndex,
-            children: const [
-              PlansTab(),
-              DiscountsTab(),
-              WaiversTab(),
+            children: [
+              const PlansTab(),
+              const DiscountsTab(),
+              const WaiversTab(),
+              RanksTab(gymId: widget.gymId),
             ],
           ),
         ),

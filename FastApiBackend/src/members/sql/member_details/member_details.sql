@@ -100,12 +100,42 @@ SELECT
     ) AS current_active_price,
     mp.duration_amount,
     mp.duration_unit,
-    gr.rank_id              AS rank_id,
-    gr.main_name            AS rank_main_name,
-    gr.sub_name             AS rank_sub_name,
-    gr.image_url            AS rank_image_url,
-    gr.color                AS rank_color,
-    gr.classes_till_rankup  AS rank_classes_till_rankup,
+    gr.rank_id                   AS rank_id,
+    gr.name                      AS rank_name,
+    m.current_sub_index          AS rank_sub_index,
+    g.sub_rank_type              AS gym_sub_rank_type,
+    gr.image_url                 AS rank_image_url,
+    gr.sub_rank_image_overrides  AS rank_sub_overrides,
+    gr.classes_to_next_major     AS rank_classes_to_next_major,
+    gr.sub_rank_count            AS rank_sub_rank_count,
+    -- Effective leaf belt image: the per-sub override for the member's
+    -- current_sub_index if present, else the main rank image.
+    COALESCE(
+        gr.sub_rank_image_overrides ->> CAST(m.current_sub_index AS TEXT),
+        gr.image_url
+    )                            AS rank_leaf_image_url,
+    -- Real progress toward the next rank: classes the member has attended
+    -- since their last logged rank change (member_activities 'rank_changed'),
+    -- falling back to the member's join date when never changed. Pairs with
+    -- rank_classes_to_next_major (the gym-set threshold) for an honest "X / N".
+    -- member_attendance carries the occurrence timestamp directly
+    -- (occurred_at, denormalized at check-in), so no join is needed.
+    (
+        SELECT COUNT(ma.log_id)
+        FROM member_attendance ma
+        WHERE ma.member_id = m.member_id
+          AND ma.gym_id = m.gym_id
+          AND ma.occurred_at > COALESCE(
+              (
+                  SELECT MAX(act.time)
+                  FROM member_activities act
+                  WHERE act.member_id = m.member_id
+                    AND act.gym_id = m.gym_id
+                    AND act.activity_type = 'rank_changed'
+              ),
+              m.created_at
+          )
+    ) AS rank_classes_since,
     (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM member_billing_profile mbp
 JOIN members m ON m.member_id = mbp.member_id

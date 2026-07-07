@@ -8,7 +8,7 @@ import 'package:crm/features/employees/presentation/widgets/detail/employee_clas
 import 'package:crm/features/employees/presentation/widgets/detail/employee_glance_section.dart';
 import 'package:crm/features/employees/presentation/widgets/detail/employee_info_section.dart';
 import 'package:crm/features/employees/presentation/widgets/detail/employee_profile_header.dart';
-import 'package:crm/features/members/presentation/widgets/specific_member/back_link.dart';
+import 'package:crm/features/employees/presentation/widgets/detail/back_link.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 

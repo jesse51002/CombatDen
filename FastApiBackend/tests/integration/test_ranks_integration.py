@@ -6,10 +6,10 @@ read-only to write+cleanup so the seed stays usable if an earlier test
 fails.
 
 Endpoints covered:
-  GET  /api/v1/ranks/                   list ranks for gym
+  GET  /api/v1/ranks/                   list ranks for gym (+ sub_rank_type)
   GET  /api/v1/ranks/enabled            get rank-enabled state
-  GET  /api/v1/ranks/presets            flat preset list for a gym_type
-  GET  /api/v1/ranks/presets/grouped    all presets grouped
+  GET  /api/v1/ranks/presets            flat preset list for a preset_kind
+  GET  /api/v1/ranks/presets/grouped    all presets grouped by preset_kind
   POST /api/v1/ranks/                   create rank (cleaned up)
   GET  /api/v1/ranks/{rank_id}          get single rank
   PUT  /api/v1/ranks/{rank_id}          update rank (cleaned up)
@@ -27,29 +27,33 @@ import pytest
 
 RANKS_BASE = "/api/v1/ranks"
 
+# Two-level model: one row per MAIN rank. A single ``name`` (no main/sub
+# split, no color, no sub order); sub-ranks are a per-gym count + a
+# persist-only override map, and their labels are derived at read time.
 REQUIRED_RANK_FIELDS = {
     "rank_id",
-    "main_name",
-    "sub_name",
-    "color",
+    "gym_id",
+    "name",
     "image_url",
     "main_rank_num_order",
-    "sub_rank_num_order",
-    "gym_id",
-    "classes_till_rankup",
+    "classes_to_next_major",
+    "sub_rank_count",
+    "sub_rank_image_overrides",
     "created_at",
 }
 
+# The three preset kinds keyed by the ``rank_preset_kind`` enum.
+PRESET_KINDS = ["bjj_belts", "bjj_belts_stripes", "flat"]
+
 REQUIRED_RANK_PRESET_FIELDS = {
     "preset_id",
-    "gym_type",
+    "preset_kind",
     "main_rank_num_order",
-    "sub_rank_num_order",
-    "main_name",
-    "sub_name",
-    "classes_till_rankup",
+    "name",
     "image_url",
-    "color",
+    "classes_to_next_major",
+    "sub_rank_count",
+    "implied_sub_rank_type",
 }
 
 
@@ -57,14 +61,17 @@ def _assert_rank_response_shape(rank: dict) -> None:
     """Assert every required field is present in a RankResponse dict."""
     missing = REQUIRED_RANK_FIELDS - set(rank.keys())
     assert not missing, f"RankResponse missing fields: {missing}"
+    # The retired flat-model fields must be gone.
+    for gone in ("main_name", "sub_name", "color", "sub_rank_num_order"):
+        assert gone not in rank, f"RankResponse still carries retired '{gone}'"
     # rank_id and gym_id must be valid UUIDs
     UUID(rank["rank_id"])
     UUID(rank["gym_id"])
-    assert isinstance(rank["main_name"], str) and rank["main_name"]
-    assert isinstance(rank["sub_name"], str) and rank["sub_name"]
+    assert isinstance(rank["name"], str) and rank["name"]
     assert isinstance(rank["main_rank_num_order"], int)
-    assert isinstance(rank["sub_rank_num_order"], int)
-    assert isinstance(rank["classes_till_rankup"], int)
+    assert isinstance(rank["classes_to_next_major"], int)
+    assert isinstance(rank["sub_rank_count"], int)
+    assert isinstance(rank["sub_rank_image_overrides"], dict)
 
 
 # ---------------------------------------------------------------------------
@@ -76,12 +83,15 @@ class TestListRanks:
     def test_list_ranks_returns_200_with_items_key(
         self, api: httpx.Client, gym_id: str
     ) -> None:
-        """GET / returns 200 with a top-level 'items' list."""
+        """GET / returns 200 with a top-level 'items' list + 'sub_rank_type'."""
         resp = api.get(RANKS_BASE + "/", params={"gym_id": gym_id})
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert "items" in body, f"'items' key missing from response: {body}"
         assert isinstance(body["items"], list)
+        # The gym's per-gym sub-rank type is returned once for the whole
+        # ladder so the client can derive every row's sub-rank labels.
+        assert body.get("sub_rank_type") in ("stripes", "div"), body
 
     def test_list_ranks_items_have_correct_shape(
         self, api: httpx.Client, gym_id: str
@@ -170,44 +180,51 @@ class TestGetRankEnabled:
 
 
 class TestListPresets:
-    @pytest.mark.parametrize("gym_type", ["bjj", "mma", "generic"])
-    def test_list_presets_returns_200_for_valid_type(
-        self, api: httpx.Client, gym_type: str
+    @pytest.mark.parametrize("preset_kind", PRESET_KINDS)
+    def test_list_presets_returns_200_for_valid_kind(
+        self, api: httpx.Client, preset_kind: str
     ) -> None:
-        """GET /presets returns 200 for every valid GymType value."""
-        resp = api.get(RANKS_BASE + "/presets", params={"gym_type": gym_type})
+        """GET /presets returns 200 for every valid RankPresetKind value."""
+        resp = api.get(
+            RANKS_BASE + "/presets", params={"preset_kind": preset_kind}
+        )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert "items" in body
         assert isinstance(body["items"], list)
 
-    @pytest.mark.parametrize("gym_type", ["bjj", "mma", "generic"])
+    @pytest.mark.parametrize("preset_kind", PRESET_KINDS)
     def test_list_presets_items_have_correct_shape(
-        self, api: httpx.Client, gym_type: str
+        self, api: httpx.Client, preset_kind: str
     ) -> None:
         """Every preset item contains all required RankPresetResponse fields."""
-        resp = api.get(RANKS_BASE + "/presets", params={"gym_type": gym_type})
+        resp = api.get(
+            RANKS_BASE + "/presets", params={"preset_kind": preset_kind}
+        )
         assert resp.status_code == 200, resp.text
         items = resp.json()["items"]
         for preset in items:
             missing = REQUIRED_RANK_PRESET_FIELDS - set(preset.keys())
             assert not missing, f"RankPresetResponse missing fields: {missing}"
-            assert preset["gym_type"] == gym_type
+            assert preset["preset_kind"] == preset_kind
             UUID(preset["preset_id"])
+            assert isinstance(preset["sub_rank_count"], int)
+            # A stripes preset implies a sub-rank type; a flat one doesn't.
+            assert preset["implied_sub_rank_type"] in (None, "stripes", "div")
 
-    def test_list_presets_invalid_gym_type_returns_422(
+    def test_list_presets_invalid_kind_returns_422(
         self, api: httpx.Client
     ) -> None:
-        """GET /presets with an unknown gym_type returns 422."""
+        """GET /presets with an unknown preset_kind returns 422."""
         resp = api.get(
-            RANKS_BASE + "/presets", params={"gym_type": "karate"}
+            RANKS_BASE + "/presets", params={"preset_kind": "karate"}
         )
         assert resp.status_code == 422, resp.text
 
     def test_list_presets_missing_param_returns_422(
         self, api: httpx.Client
     ) -> None:
-        """GET /presets without gym_type param returns 422."""
+        """GET /presets without preset_kind param returns 422."""
         resp = api.get(RANKS_BASE + "/presets")
         assert resp.status_code == 422, resp.text
 
@@ -226,51 +243,39 @@ class TestPresetsGrouped:
         assert "presets" in body
         assert isinstance(body["presets"], dict)
 
-    def test_presets_grouped_keys_are_valid_gym_types(
+    def test_presets_grouped_keys_are_valid_preset_kinds(
         self, api: httpx.Client
     ) -> None:
-        """Top-level keys in 'presets' are valid GymType enum values."""
-        valid_types = {"bjj", "mma", "generic"}
+        """Top-level keys in 'presets' are valid RankPresetKind enum values."""
+        valid_kinds = set(PRESET_KINDS)
         resp = api.get(RANKS_BASE + "/presets/grouped")
         assert resp.status_code == 200, resp.text
         keys = set(resp.json()["presets"].keys())
-        assert keys <= valid_types, f"Unexpected keys: {keys - valid_types}"
+        assert keys <= valid_kinds, f"Unexpected keys: {keys - valid_kinds}"
 
     def test_presets_grouped_main_rank_shape(
         self, api: httpx.Client
     ) -> None:
-        """Each grouped entry has main_rank_num_order, main_name, sub_ranks."""
+        """Each grouped entry is a flat RankPresetResponse main row (one row
+        per main rank; no nested sub_ranks in the two-level model)."""
         resp = api.get(RANKS_BASE + "/presets/grouped")
         assert resp.status_code == 200, resp.text
-        for gym_type, groups in resp.json()["presets"].items():
-            assert isinstance(groups, list), (
-                f"{gym_type}: expected list of groups"
+        for preset_kind, rows in resp.json()["presets"].items():
+            assert isinstance(rows, list), (
+                f"{preset_kind}: expected list of preset main rows"
             )
-            for group in groups:
-                assert "main_rank_num_order" in group, group
-                assert "main_name" in group, group
-                assert "sub_ranks" in group, group
-                assert isinstance(group["sub_ranks"], list)
-
-    def test_presets_grouped_sub_rank_shape(self, api: httpx.Client) -> None:
-        """Each sub-rank has preset_id, sub_rank_num_order, sub_name, etc."""
-        required_sub = {
-            "preset_id",
-            "sub_rank_num_order",
-            "sub_name",
-            "classes_till_rankup",
-            "image_url",
-            "color",
-        }
-        resp = api.get(RANKS_BASE + "/presets/grouped")
-        assert resp.status_code == 200, resp.text
-        for gym_type, groups in resp.json()["presets"].items():
-            for group in groups:
-                for sub in group["sub_ranks"]:
-                    missing = required_sub - set(sub.keys())
-                    assert not missing, (
-                        f"{gym_type}/{group['main_name']} sub_rank missing: {missing}"
-                    )
+            for row in rows:
+                missing = REQUIRED_RANK_PRESET_FIELDS - set(row.keys())
+                assert not missing, (
+                    f"{preset_kind} preset row missing: {missing}"
+                )
+                assert row["preset_kind"] == preset_kind
+                assert isinstance(row["main_rank_num_order"], int)
+                assert isinstance(row["name"], str) and row["name"]
+                assert isinstance(row["sub_rank_count"], int)
+                # The retired nested/flat-model fields are gone.
+                for gone in ("sub_ranks", "sub_name", "color", "gym_type"):
+                    assert gone not in row, f"preset row still carries '{gone}'"
 
 
 # ---------------------------------------------------------------------------
@@ -287,12 +292,10 @@ class TestRankCRUDRoundTrip:
         payload = {
             "gym_id": gym_id,
             "main_rank_num_order": 999,
-            "sub_rank_num_order": 999,
-            "main_name": "Integration Test Main",
-            "sub_name": "Integration Test Sub",
-            "classes_till_rankup": 50,
-            "color": "#ABCDEF",
-            "image_url": None,
+            "name": "Integration Test Rank",
+            "classes_to_next_major": 50,
+            "sub_rank_count": 3,
+            "image_url": "https://cdn.combatden.net/ranks/presets/white.png",
         }
         resp = api.post(RANKS_BASE + "/", json=payload)
         assert resp.status_code == 201, (
@@ -314,11 +317,12 @@ class TestRankCRUDRoundTrip:
     ) -> None:
         """Created rank echoes back the fields we sent."""
         assert created_rank["main_rank_num_order"] == 999
-        assert created_rank["sub_rank_num_order"] == 999
-        assert created_rank["main_name"] == "Integration Test Main"
-        assert created_rank["sub_name"] == "Integration Test Sub"
-        assert created_rank["classes_till_rankup"] == 50
-        assert created_rank["color"] == "#ABCDEF"
+        assert created_rank["name"] == "Integration Test Rank"
+        assert created_rank["classes_to_next_major"] == 50
+        assert created_rank["sub_rank_count"] == 3
+        assert created_rank["image_url"] == (
+            "https://cdn.combatden.net/ranks/presets/white.png"
+        )
         assert created_rank["gym_id"] == gym_id
 
     def test_get_rank_by_id(
@@ -342,17 +346,17 @@ class TestRankCRUDRoundTrip:
     def test_update_rank(
         self, api: httpx.Client, created_rank: dict
     ) -> None:
-        """PUT /{rank_id} returns updated rank with new classes_till_rankup."""
+        """PUT /{rank_id} returns the rank with an updated classes_to_next_major."""
         rank_id = created_rank["rank_id"]
         resp = api.put(
             f"{RANKS_BASE}/{rank_id}",
-            json={"data": {"classes_till_rankup": 75}},
+            json={"data": {"classes_to_next_major": 75}},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         _assert_rank_response_shape(body)
-        assert body["classes_till_rankup"] == 75, (
-            f"Expected 75, got {body['classes_till_rankup']}"
+        assert body["classes_to_next_major"] == 75, (
+            f"Expected 75, got {body['classes_to_next_major']}"
         )
 
     def test_update_rank_nonexistent_returns_404(
@@ -361,7 +365,7 @@ class TestRankCRUDRoundTrip:
         """PUT on an unknown rank_id returns 404."""
         resp = api.put(
             f"{RANKS_BASE}/{uuid4()}",
-            json={"data": {"classes_till_rankup": 10}},
+            json={"data": {"classes_to_next_major": 10}},
         )
         assert resp.status_code == 404, resp.text
 

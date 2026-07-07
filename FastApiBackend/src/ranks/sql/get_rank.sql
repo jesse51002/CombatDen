@@ -2,12 +2,11 @@ SELECT
     rank_id,
     gym_id,
     main_rank_num_order,
-    sub_rank_num_order,
-    main_name,
-    sub_name,
-    classes_till_rankup,
+    name,
     image_url,
-    color,
+    classes_to_next_major,
+    sub_rank_count,
+    sub_rank_image_overrides,
     created_at
 FROM gym_ranks
-WHERE rank_id = :rank_id
+WHERE rank_id = CAST(:rank_id AS UUID)

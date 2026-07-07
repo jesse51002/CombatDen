@@ -70,7 +70,7 @@ const List<NavSection> kNavSections = [
   ),
   NavSection(
     icon: Symbols.sell_sharp,
-    label: 'Memberships',
+    label: 'Gym',
     route: AppRoutes.memberships,
   ),
   NavSection(

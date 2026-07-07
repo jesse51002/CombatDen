@@ -47,6 +47,15 @@ class AppFormat(BaseModel):
 
     id: str
     display_name: str
+    # The app-declared classification vocabulary: the closed set of
+    # `category` values this app's runs may carry in their output.yaml.
+    # App-agnostic by construction — the code supports "classification",
+    # nothing more; the class values are the app's own (this package
+    # never hardcodes them). The style picker's `/styles` endpoint
+    # REQUIRES a run's category to be one of these to list it. Default
+    # keeps the frozen per-run `app.yaml` snapshots (and apps with no
+    # classification concept) valid.
+    categories: list[str] = Field(default_factory=list)
     images: list[ImageSlot] = Field(default_factory=list)
     colors: list[ColorSlot] = Field(default_factory=list)
     fonts: list[FontSlot] = Field(default_factory=list)
@@ -68,6 +77,18 @@ class AppFormat(BaseModel):
     def _display_name_non_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("display_name must be non-empty")
+        return v
+
+    @field_validator("categories")
+    @classmethod
+    def _categories_well_formed(cls, v: list[str]) -> list[str]:
+        """Unique, non-empty category values (the closed vocabulary a
+        run's ``output.yaml`` ``category`` is checked against)."""
+        if any(not c.strip() for c in v):
+            raise ValueError("categories entries must be non-empty")
+        if len(v) != len(set(v)):
+            dupes = sorted({c for c in v if v.count(c) > 1})
+            raise ValueError(f"duplicate categories: {dupes}")
         return v
 
     @field_validator("images")
