@@ -7,7 +7,7 @@ a non-viewer is rejected. The embedding provider is overridden with a
 deterministic 1536-dim stub so no OpenAI call is made — the seeded
 ``video_rag`` row carries the same vector so it retrieves cleanly.
 
-Requires migration ``20260703000000_video_worker_rag`` (pgvector + the
+Requires migration ``20260703000001_video_worker_rag`` (pgvector + the
 ``video_rag`` / ``member_video_profile`` / ``member_video_recs`` tables). When
 the shared local DB has NOT had that migration applied, the recs/search tests
 fail at the query — the expected "pending migration apply" state, not a code

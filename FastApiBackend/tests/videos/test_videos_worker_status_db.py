@@ -5,7 +5,7 @@ transport, with ``auth`` overridden so the gym-employee gate always passes. Ther
 is no queue and no manual-run endpoint — the worker derives its own work — so this
 only exercises the status projection over ``video_run``.
 
-Requires migration ``20260703000000_video_worker_rag`` (the ``video_run.status``
+Requires migration ``20260703000001_video_worker_rag`` (the ``video_run.status``
 column). When the shared local DB has NOT had that migration applied, these fail
 at the query — the expected "pending migration apply" state, not a code fault.
 """
