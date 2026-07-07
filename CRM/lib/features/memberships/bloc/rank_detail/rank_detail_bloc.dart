@@ -24,6 +24,7 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
     on<RankDetailInitRequested>(_onInitRequested);
     on<RankDetailNextPageRequested>(_onNextPageRequested);
     on<RankDetailPromoteRequested>(_onPromoteRequested);
+    on<RankDetailDeleteRequested>(_onDeleteRequested);
   }
 
   Future<void> _onInitRequested(
@@ -143,6 +144,37 @@ class RankDetailBloc extends Bloc<RankDetailEvent, RankDetailState> {
       ));
     } catch (e, stackTrace) {
       log('Rank detail promote failed', error: e, stackTrace: stackTrace);
+      final afterState = state;
+      if (afterState is RankDetailLoaded) {
+        emit(afterState.copyWith(
+          isMutating: false,
+          actionError: e.toString(),
+        ));
+      }
+    }
+  }
+
+  Future<void> _onDeleteRequested(
+    RankDetailDeleteRequested event,
+    Emitter<RankDetailState> emit,
+  ) async {
+    final current = state;
+    if (current is! RankDetailLoaded) return;
+    emit(current.copyWith(isMutating: true, clearActionError: true));
+
+    try {
+      // The backend reassigns this rank's members to a neighbour rank
+      // before deleting it. Don't re-fetch the (now-gone) rank — the
+      // screen pops on the deleteSuccessCount bump.
+      await _repository.deleteRank(current.rank.rankId);
+      final afterState = state;
+      if (afterState is! RankDetailLoaded) return;
+      emit(afterState.copyWith(
+        isMutating: false,
+        deleteSuccessCount: afterState.deleteSuccessCount + 1,
+      ));
+    } catch (e, stackTrace) {
+      log('Rank detail delete failed', error: e, stackTrace: stackTrace);
       final afterState = state;
       if (afterState is RankDetailLoaded) {
         emit(afterState.copyWith(

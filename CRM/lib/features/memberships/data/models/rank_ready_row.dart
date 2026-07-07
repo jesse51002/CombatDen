@@ -19,7 +19,6 @@ class RankReadyRow extends Equatable {
   final String mainRankId;
   final String mainName;
   final int? currentSubIndex;
-  final String? subLabel;
   final String? imageUrl;
   final int classesSince;
   final int? stepDenominator;
@@ -31,7 +30,6 @@ class RankReadyRow extends Equatable {
     required this.mainRankId,
     required this.mainName,
     this.currentSubIndex,
-    this.subLabel,
     this.imageUrl,
     required this.classesSince,
     this.stepDenominator,
@@ -48,7 +46,6 @@ class RankReadyRow extends Equatable {
         mainRankId,
         mainName,
         currentSubIndex,
-        subLabel,
         imageUrl,
         classesSince,
         stepDenominator,

@@ -9,9 +9,10 @@ import 'package:crm/features/memberships/data/models/rank_ladder.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 
 /// Manages the gym's rank ladder: main ranks + sub-rank type +
-/// enabled flag, plus create / update / delete / reorder /
-/// seed-from-preset / toggle / sub-type-change, each reloading the
-/// ladder.
+/// enabled flag, plus enable-toggle / sub-type-change / seed-from-preset
+/// / reorder, each reloading the ladder. Per-rank create + edit go
+/// through the repository-direct `edit_rank_screen.dart`; delete goes
+/// through `RankDetailBloc` — none of them run here.
 class RanksBloc extends Bloc<RanksEvent, RanksState> {
   final RanksRepository _repository;
 
@@ -19,9 +20,6 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       : _repository = repository,
         super(const RanksInitial()) {
     on<RanksInitRequested>(_onInitRequested);
-    on<RankCreated>(_onCreated);
-    on<RankUpdated>(_onUpdated);
-    on<RankDeleted>(_onDeleted);
     on<RankEnabledToggled>(_onEnabledToggled);
     on<RankPresetSeeded>(_onPresetSeeded);
     on<RanksReordered>(_onReordered);
@@ -41,27 +39,6 @@ class RanksBloc extends Bloc<RanksEvent, RanksState> {
       emit(RanksError(e.toString(), gymId: event.gymId));
     }
   }
-
-  Future<void> _onCreated(RankCreated event, Emitter<RanksState> emit) =>
-      _mutateAndReload(
-        emit,
-        event.request.gymId,
-        () => _repository.createRank(event.request),
-      );
-
-  Future<void> _onUpdated(RankUpdated event, Emitter<RanksState> emit) =>
-      _mutateAndReload(
-        emit,
-        event.gymId,
-        () => _repository.updateRank(event.rankId, event.data),
-      );
-
-  Future<void> _onDeleted(RankDeleted event, Emitter<RanksState> emit) =>
-      _mutateAndReload(
-        emit,
-        event.gymId,
-        () => _repository.deleteRank(event.rankId),
-      );
 
   Future<void> _onEnabledToggled(
     RankEnabledToggled event,

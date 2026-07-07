@@ -14,7 +14,6 @@ class RankMemberRow extends Equatable {
   final String name;
   final String? avatarUrl;
   final int? currentSubIndex;
-  final String? subLabel;
   final int classesSince;
   final int? stepDenominator;
 
@@ -23,7 +22,6 @@ class RankMemberRow extends Equatable {
     required this.name,
     this.avatarUrl,
     this.currentSubIndex,
-    this.subLabel,
     required this.classesSince,
     this.stepDenominator,
   });
@@ -37,7 +35,6 @@ class RankMemberRow extends Equatable {
         name,
         avatarUrl,
         currentSubIndex,
-        subLabel,
         classesSince,
         stepDenominator,
       ];

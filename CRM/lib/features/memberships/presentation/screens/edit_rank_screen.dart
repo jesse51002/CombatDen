@@ -269,18 +269,23 @@ class _EditRankScreenState extends State<EditRankScreen> {
                     Row(
                       children: [
                         const Spacer(),
-                        AppOutlineButton(
-                          text: 'Cancel',
-                          borderRadius: DesignConstants.radiusSmall,
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                        const SizedBox(width: DesignConstants.spacingMedium),
-                        AppPrimaryButton(
-                          text: _isEdit ? 'Save' : 'Create',
-                          borderRadius: DesignConstants.radiusSmall,
-                          isLoading: _saving,
-                          onPressed:
-                              _saving ? null : () => _save(nextOrder),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          spacing: DesignConstants.spacingMedium,
+                          children: [
+                            AppOutlineButton(
+                              text: 'Cancel',
+                              borderRadius: DesignConstants.radiusSmall,
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            AppPrimaryButton(
+                              text: _isEdit ? 'Save' : 'Create',
+                              borderRadius: DesignConstants.radiusSmall,
+                              isLoading: _saving,
+                              onPressed:
+                                  _saving ? null : () => _save(nextOrder),
+                            ),
+                          ],
                         ),
                       ],
                     ),

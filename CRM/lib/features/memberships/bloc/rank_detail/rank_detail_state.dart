@@ -62,6 +62,11 @@ class RankDetailLoaded extends RankDetailState {
   /// listener can show a one-shot confirmation.
   final int actionSuccessCount;
 
+  /// Monotonic token bumped once the rank is successfully deleted, so a
+  /// listener can pop the screen back to the ladder (kept separate from
+  /// [actionSuccessCount] so a delete never fires the promote toast).
+  final int deleteSuccessCount;
+
   const RankDetailLoaded({
     required this.gymId,
     required this.rank,
@@ -76,6 +81,7 @@ class RankDetailLoaded extends RankDetailState {
     this.isMutating = false,
     this.actionError,
     this.actionSuccessCount = 0,
+    this.deleteSuccessCount = 0,
   });
 
   RankDetailLoaded copyWith({
@@ -92,6 +98,7 @@ class RankDetailLoaded extends RankDetailState {
     String? actionError,
     bool clearActionError = false,
     int? actionSuccessCount,
+    int? deleteSuccessCount,
   }) {
     return RankDetailLoaded(
       gymId: gymId,
@@ -108,6 +115,7 @@ class RankDetailLoaded extends RankDetailState {
       actionError:
           clearActionError ? null : (actionError ?? this.actionError),
       actionSuccessCount: actionSuccessCount ?? this.actionSuccessCount,
+      deleteSuccessCount: deleteSuccessCount ?? this.deleteSuccessCount,
     );
   }
 
@@ -126,6 +134,7 @@ class RankDetailLoaded extends RankDetailState {
         isMutating,
         actionError,
         actionSuccessCount,
+        deleteSuccessCount,
       ];
 }
 

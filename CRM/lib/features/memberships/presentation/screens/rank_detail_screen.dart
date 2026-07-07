@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -70,40 +68,52 @@ class _RankDetailView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<RankDetailBloc, RankDetailState>(
+    // A successful delete pops back to the ladder; kept on its own
+    // listener (off deleteSuccessCount) so it never trips the promote
+    // toast below.
+    return BlocListener<RankDetailBloc, RankDetailState>(
       listenWhen: (prev, curr) =>
+          prev is RankDetailLoaded &&
           curr is RankDetailLoaded &&
-          (curr.actionError != null ||
-              (prev is RankDetailLoaded &&
-                  curr.actionSuccessCount != prev.actionSuccessCount)),
-      listener: (context, state) {
-        if (state is! RankDetailLoaded) return;
-        final error = state.actionError;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              error ?? 'Member promoted.',
-              style: DesignConstants.p.copyWith(color: DesignConstants.onAccent),
+          curr.deleteSuccessCount != prev.deleteSuccessCount,
+      listener: (context, _) => Navigator.of(context).pop(),
+      child: BlocConsumer<RankDetailBloc, RankDetailState>(
+        listenWhen: (prev, curr) =>
+            curr is RankDetailLoaded &&
+            (curr.actionError != null ||
+                (prev is RankDetailLoaded &&
+                    curr.actionSuccessCount != prev.actionSuccessCount)),
+        listener: (context, state) {
+          if (state is! RankDetailLoaded) return;
+          final error = state.actionError;
+          final fill =
+              error != null ? DesignConstants.badRed : DesignConstants.goodGreen;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                error ?? 'Member promoted.',
+                style: DesignConstants.p
+                    .copyWith(color: DesignConstants.onFill(fill)),
+              ),
+              backgroundColor: fill,
             ),
-            backgroundColor:
-                error != null ? DesignConstants.badRed : DesignConstants.goodGreen,
-          ),
-        );
-      },
-      builder: (context, state) {
-        return switch (state) {
-          RankDetailInitial() ||
-          RankDetailLoading() =>
-            const Center(child: AppSpinner()),
-          RankDetailError() => _ErrorView(
-              message: state.message,
-              onRetry: () => context.read<RankDetailBloc>().add(
-                    RankDetailInitRequested(gymId: gymId, rankId: rankId),
-                  ),
-            ),
-          RankDetailLoaded() => _Loaded(state: state),
-        };
-      },
+          );
+        },
+        builder: (context, state) {
+          return switch (state) {
+            RankDetailInitial() ||
+            RankDetailLoading() =>
+              const Center(child: AppSpinner()),
+            RankDetailError() => _ErrorView(
+                message: state.message,
+                onRetry: () => context.read<RankDetailBloc>().add(
+                      RankDetailInitRequested(gymId: gymId, rankId: rankId),
+                    ),
+              ),
+            RankDetailLoaded() => _Loaded(state: state),
+          };
+        },
+      ),
     );
   }
 }
@@ -119,10 +129,6 @@ class _Loaded extends StatefulWidget {
 
 class _LoadedState extends State<_Loaded> {
   final ScrollController _controller = ScrollController();
-
-  /// True while a repository-direct delete is in flight (the promote
-  /// path has its own `state.isMutating`); both drive the scrim overlay.
-  bool _deleting = false;
 
   @override
   void initState() {
@@ -184,44 +190,30 @@ class _LoadedState extends State<_Loaded> {
     ));
   }
 
-  /// Confirms, then deletes this rank (the backend reassigns its members
-  /// to a neighbour rank first) and pops back to the ladder. Repository-
-  /// direct — the delete is a one-shot that ends this screen, mirroring
-  /// the repository-direct editor.
+  /// Confirms, then dispatches the delete through [RankDetailBloc] (the
+  /// backend reassigns its members to a neighbour rank first). The scrim
+  /// rides `state.isMutating`; on success the view's delete listener pops
+  /// back to the ladder, on failure the shared listener shows the error.
   Future<void> _delete() async {
-    final rank = widget.state.rank;
-    final repository = context.read<RanksRepository>();
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final state = widget.state;
+    final rank = state.rank;
+    final bloc = context.read<RankDetailBloc>();
+    // Sub-positions only exist when the gym has them turned on — omit the
+    // sentence on a None gym, where subRankCount is a dormant value the
+    // user never sees.
+    final subsNote = state.subRankType != RankSubType.none
+        ? ' Its ${rank.subRankCount} sub-position(s) go with it.'
+        : '';
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Delete ${rank.name}',
-      message: 'Members on this rank move to a neighbouring rank. Its '
-          '${rank.subRankCount} sub-position(s) go with it. This cannot '
-          'be undone.',
+      message: 'Members on this rank move to a neighbouring rank.$subsNote '
+          'This cannot be undone.',
       confirmLabel: 'Delete',
       confirmColor: DesignConstants.badRed,
     );
     if (!confirmed) return;
-    setState(() => _deleting = true);
-    try {
-      await repository.deleteRank(rank.rankId);
-      navigator.pop();
-    } catch (e, st) {
-      log('Failed to delete rank', error: e, stackTrace: st);
-      if (!mounted) return;
-      setState(() => _deleting = false);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not delete the rank. Please try again.',
-            style:
-                DesignConstants.p.copyWith(color: DesignConstants.onAccent),
-          ),
-          backgroundColor: DesignConstants.badRed,
-        ),
-      );
-    }
+    bloc.add(const RankDetailDeleteRequested());
   }
 
   @override
@@ -304,7 +296,7 @@ class _LoadedState extends State<_Loaded> {
             );
           },
         ),
-        if (state.isMutating || _deleting)
+        if (state.isMutating)
           Positioned.fill(
             child: ColoredBox(
               color: DesignConstants.text.withValues(alpha: 0.08),
@@ -364,18 +356,23 @@ class _Hero extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            AppOutlineButton(
-              text: 'Edit',
-              borderRadius: DesignConstants.radiusSmall,
-              onPressed: onEdit,
-            ),
-            const SizedBox(width: DesignConstants.spacingMedium),
-            AppOutlineButton(
-              text: 'Delete',
-              borderRadius: DesignConstants.radiusSmall,
-              borderColor: DesignConstants.badRed,
-              textColor: DesignConstants.badRed,
-              onPressed: onDelete,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                AppOutlineButton(
+                  text: 'Edit',
+                  borderRadius: DesignConstants.radiusSmall,
+                  onPressed: onEdit,
+                ),
+                AppOutlineButton(
+                  text: 'Delete',
+                  borderRadius: DesignConstants.radiusSmall,
+                  borderColor: DesignConstants.badRed,
+                  textColor: DesignConstants.badRed,
+                  onPressed: onDelete,
+                ),
+              ],
             ),
           ],
         ),

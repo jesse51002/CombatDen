@@ -12,7 +12,6 @@ RankMemberRow _$RankMemberRowFromJson(Map<String, dynamic> json) =>
       name: json['name'] as String,
       avatarUrl: json['avatar_url'] as String?,
       currentSubIndex: (json['current_sub_index'] as num?)?.toInt(),
-      subLabel: json['sub_label'] as String?,
       classesSince: (json['classes_since'] as num).toInt(),
       stepDenominator: (json['step_denominator'] as num?)?.toInt(),
     );

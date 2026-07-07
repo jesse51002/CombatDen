@@ -84,35 +84,47 @@ class MainRankCard extends StatelessWidget {
                     // Pin the column to the card's full width so the
                     // centered content stays centered even when the sub
                     // strip (which otherwise widens the column) is hidden
-                    // — e.g. when the gym's sub-rank style is None.
+                    // — e.g. when the gym's sub-rank style is None. It
+                    // sits outside the spaced content column below so it
+                    // adds no leading gap above the belt.
                     const SizedBox(width: double.infinity),
-                    RankBeltImage(
-                      imageUrl: rank.imageUrl,
-                      size: DesignConstants.rankBeltHeight,
-                      radius: DesignConstants.radiusBig,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      spacing: DesignConstants.spacingLarge,
+                      children: [
+                        RankBeltImage(
+                          imageUrl: rank.imageUrl,
+                          size: DesignConstants.rankBeltHeight,
+                          radius: DesignConstants.radiusBig,
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          spacing: DesignConstants.spacingTiny,
+                          children: [
+                            Text(
+                              rank.name,
+                              textAlign: TextAlign.center,
+                              style: DesignConstants.h1,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              caption,
+                              textAlign: TextAlign.center,
+                              style: DesignConstants.pSmall.copyWith(
+                                color: DesignConstants.text2nd,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_showSubs) ...[
+                          const Hairline(),
+                          _SubStrip(rank: rank, subRankType: subRankType),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: DesignConstants.spacingLarge),
-                    Text(
-                      rank.name,
-                      textAlign: TextAlign.center,
-                      style: DesignConstants.h1,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: DesignConstants.spacingTiny),
-                    Text(
-                      caption,
-                      textAlign: TextAlign.center,
-                      style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text2nd,
-                      ),
-                    ),
-                    if (_showSubs) ...[
-                      const SizedBox(height: DesignConstants.spacingLarge),
-                      const Hairline(),
-                      const SizedBox(height: DesignConstants.spacingLarge),
-                      _SubStrip(rank: rank, subRankType: subRankType),
-                    ],
                   ],
                 ),
               ),

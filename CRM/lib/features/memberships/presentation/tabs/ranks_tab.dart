@@ -44,11 +44,32 @@ class _RanksTabState extends State<RanksTab> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<RanksBloc, RanksState>(
+      // Surface a failed mutation as an error, and every committed
+      // mutation (seed / enable toggle / sub-type / reorder — each bumps
+      // mutationCount) as a green confirmation, so no ladder change ends
+      // with just a spinner that quietly disappears.
       listenWhen: (prev, curr) =>
-          curr is RanksLoaded && curr.actionError != null,
+          curr is RanksLoaded &&
+          (curr.actionError != null ||
+              (prev is RanksLoaded &&
+                  curr.mutationCount != prev.mutationCount)),
       listener: (context, state) {
-        if (state is RanksLoaded && state.actionError != null) {
-          showTabActionError(context, state.actionError!);
+        if (state is! RanksLoaded) return;
+        final error = state.actionError;
+        if (error != null) {
+          showTabActionError(context, error);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Ranks updated.',
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.onFill(DesignConstants.goodGreen),
+                ),
+              ),
+              backgroundColor: DesignConstants.goodGreen,
+            ),
+          );
         }
       },
       builder: (context, state) {
@@ -204,8 +225,9 @@ class _ReadyView extends StatelessWidget {
             SnackBar(
               content: Text(
                 'Member promoted.',
-                style: DesignConstants.p
-                    .copyWith(color: DesignConstants.onAccent),
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.onFill(DesignConstants.goodGreen),
+                ),
               ),
               backgroundColor: DesignConstants.goodGreen,
             ),

@@ -30,16 +30,16 @@ class RanksLoaded extends RanksState {
   /// Whether the gym's rank system is on.
   final bool isRankEnabled;
 
-  /// True while a create/update/delete/reorder/toggle is in flight.
+  /// True while an enable-toggle / sub-type / seed / reorder is in flight.
   final bool isMutating;
 
   /// Set when the last mutation failed; cleared on the next load.
   final String? actionError;
 
   /// Monotonic counter bumped on every successful mutation-reload
-  /// (create / update / delete / reorder / toggle / sub-type / seed). Lets
-  /// sibling surfaces — the ready-to-promote board — reload when the ladder
-  /// changes under them.
+  /// (enable toggle / reorder / sub-type / seed). Lets sibling surfaces —
+  /// the ready-to-promote board — reload when the ladder changes under
+  /// them, and drives the Ranks tab's success confirmation toast.
   final int mutationCount;
 
   const RanksLoaded({

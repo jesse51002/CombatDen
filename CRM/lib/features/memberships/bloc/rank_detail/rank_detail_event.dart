@@ -45,3 +45,11 @@ class RankDetailPromoteRequested extends RankDetailEvent {
   @override
   List<Object?> get props => [memberId, choice];
 }
+
+/// Staff deletes this rank. The backend reassigns its members to a
+/// neighbouring rank first. On success the bloc bumps
+/// [RankDetailLoaded.deleteSuccessCount] so the screen can pop back to
+/// the ladder; on failure it surfaces the error like a failed promote.
+class RankDetailDeleteRequested extends RankDetailEvent {
+  const RankDetailDeleteRequested();
+}
