@@ -21,6 +21,39 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
+/// Page-scoped uniform text enlargement for the video-agent surface. Linear
+/// scaling preserves every DesignConstants type ratio (hierarchy unchanged);
+/// only the absolute floor moves (11px labels -> ~14px). One tunable number.
+const double _kVideoAgentTextScale = 1.3;
+
+/// Composes the page zoom ON TOP of the viewer's own accessibility text
+/// scaling (multiply, not replace) so anyone who bumped OS/browser text size
+/// keeps that gain.
+class _ComposedTextScaler extends TextScaler {
+  const _ComposedTextScaler(this._parent, this._factor);
+  final TextScaler _parent;
+  final double _factor;
+
+  @override
+  double scale(double fontSize) => _parent.scale(fontSize) * _factor;
+
+  // Deprecated linear multiplier the SDK still requires a concrete override for;
+  // real rendering goes through scale(). Compose the parent's factor like the
+  // framework's own wrapping scalers do.
+  @override
+  double get textScaleFactor =>
+      _parent.textScaleFactor * _factor; // ignore: deprecated_member_use
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ComposedTextScaler &&
+      other._parent == _parent &&
+      other._factor == _factor;
+
+  @override
+  int get hashCode => Object.hash(_parent, _factor);
+}
+
 /// Full-screen conversational surface for authoring the gym's video feed
 /// spec. The owner chats with an LLM agent to produce criteria +
 /// YouTube search queries; the agent proposes a draft the owner can review,
@@ -57,13 +90,20 @@ class _VideoAgentBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<VideoAgentBloc, VideoAgentState>(
-      builder: (ctx, state) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _TopBar(loadStatus: state.loadStatus),
-          Expanded(child: _Content(state: state)),
-        ],
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(
+        textScaler:
+            _ComposedTextScaler(media.textScaler, _kVideoAgentTextScale),
+      ),
+      child: BlocBuilder<VideoAgentBloc, VideoAgentState>(
+        builder: (ctx, state) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TopBar(loadStatus: state.loadStatus),
+            Expanded(child: _Content(state: state)),
+          ],
+        ),
       ),
     );
   }
@@ -181,7 +221,7 @@ class _ChatLayout extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _ChatColumn(state: state)),
+          Expanded(child: SelectionArea(child: _ChatColumn(state: state))),
           // Right column: a pending proposal takes the slot (highlighted),
           // otherwise the current saved spec — same panel, two modes.
           if (hasDraft || hasConfig) ...[
@@ -191,32 +231,36 @@ class _ChatLayout extends StatelessWidget {
               ),
               child: Hairline(vertical: true),
             ),
+            // Its own SelectionArea (separate from the chat's) so a drag in the
+            // spec pane can't extend into the chat and vice-versa.
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: DesignConstants.spacingLarge,
-                ),
-                child: hasDraft
-                    ? VideoAgentSpecPanel(
-                        disciplines: state.pendingDraft!.disciplines,
-                        videosDesc: state.pendingDraft!.videosDesc,
-                        avoidDesc: state.pendingDraft!.avoidDesc,
-                        mode: VideoSpecPanelMode.proposed,
-                        footer: _ProposedActions(
-                          saveStatus: state.saveStatus,
+              child: SelectionArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: DesignConstants.spacingLarge,
+                  ),
+                  child: hasDraft
+                      ? VideoAgentSpecPanel(
+                          disciplines: state.pendingDraft!.disciplines,
+                          videosDesc: state.pendingDraft!.videosDesc,
+                          avoidDesc: state.pendingDraft!.avoidDesc,
+                          mode: VideoSpecPanelMode.proposed,
+                          footer: _ProposedActions(
+                            saveStatus: state.saveStatus,
+                          ),
+                        )
+                      : VideoAgentSpecPanel(
+                          disciplines: state.savedConfig!.disciplines,
+                          videosDesc: state.savedConfig!.videosDesc,
+                          avoidDesc: state.savedConfig!.avoidDesc,
+                          // Green success glow right after an Accept, held until
+                          // the owner's next message resets the save status.
+                          mode:
+                              state.saveStatus == VideoAgentSaveStatus.saved
+                              ? VideoSpecPanelMode.saved
+                              : VideoSpecPanelMode.current,
                         ),
-                      )
-                    : VideoAgentSpecPanel(
-                        disciplines: state.savedConfig!.disciplines,
-                        videosDesc: state.savedConfig!.videosDesc,
-                        avoidDesc: state.savedConfig!.avoidDesc,
-                        // Green success glow right after an Accept, held until
-                        // the owner's next message resets the save status.
-                        mode:
-                            state.saveStatus == VideoAgentSaveStatus.saved
-                            ? VideoSpecPanelMode.saved
-                            : VideoSpecPanelMode.current,
-                      ),
+                ),
               ),
             ),
           ],

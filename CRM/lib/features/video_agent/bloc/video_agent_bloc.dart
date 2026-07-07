@@ -271,7 +271,8 @@ class VideoAgentBloc
             messages: [
               ...state.messages,
               const ChatMessage(
-                text: 'Spec saved.',
+                text: 'Spec saved. Your new videos will populate within 24 '
+                    'hours.',
                 isUser: false,
                 status: ChatMessageStatus.saved,
               ),

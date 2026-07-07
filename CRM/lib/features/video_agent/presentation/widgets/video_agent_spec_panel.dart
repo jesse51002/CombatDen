@@ -105,6 +105,9 @@ class _VideoAgentSpecPanelState extends State<VideoAgentSpecPanel> {
               ),
             ),
           ),
+          if (mode == VideoSpecPanelMode.current ||
+              mode == VideoSpecPanelMode.saved)
+            const _PopulationNote(),
           if (widget.footer != null) widget.footer!,
         ],
       ),
@@ -195,6 +198,37 @@ class _DescBody extends StatelessWidget {
         listIndent: DesignConstants.spacingLarge,
         a: body.copyWith(color: DesignConstants.hyperlink),
       ),
+    );
+  }
+}
+
+/// Pinned reminder under the saved / current spec that the feed refreshes
+/// asynchronously — a save queues work the worker fulfils within 24 hours,
+/// so the owner doesn't expect instant new videos.
+class _PopulationNote extends StatelessWidget {
+  const _PopulationNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Icon(
+          Symbols.schedule_sharp,
+          size: DesignConstants.iconSizeSmall,
+          weight: DesignConstants.iconWeight,
+          color: DesignConstants.text3rd,
+        ),
+        Expanded(
+          child: Text(
+            'New videos populate within 24 hours.',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
