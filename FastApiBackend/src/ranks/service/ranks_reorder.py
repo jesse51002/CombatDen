@@ -1,8 +1,9 @@
 """Ranks whole-ladder concern: the two-phase reorder.
 
 The reorder rewrites the entire ladder's main positions atomically. With
-one row per MAIN rank, a group rename is just ``update_rank(name)`` and a
-group delete is just ``delete_rank`` — there is no separate group op.
+one row per MAIN rank, a rename is just ``update_rank(name)`` and a delete
+is just ``delete_rank`` — there is no separate group op, so this concern is
+purely the reorder.
 """
 
 import json
@@ -28,7 +29,7 @@ from src.shared.sql_loader import load_sql
 REORDER_SHIFT_OFFSET = 100000
 
 
-class RanksGroups(RanksBase):
+class RanksReorder(RanksBase):
     """Full-ladder two-phase reorder."""
 
     async def reorder_ranks(

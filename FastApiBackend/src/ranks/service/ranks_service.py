@@ -1,7 +1,7 @@
 """Ranks domain facade.
 
 Composes the rank concern services — ``RanksMembers`` (member-rank
-changes + backfill), ``RanksGroups`` (full-ladder reorder),
+changes + backfill), ``RanksReorder`` (full-ladder reorder),
 ``RanksPresets`` (seed-from-preset + preset reads), and ``RanksReads``
 (the two paginated member-board reads) — behind the single public API
 the router injects. The facade itself keeps the small, self-contained
@@ -45,10 +45,10 @@ from src.ranks.schema.ranks_schema import (
     RankUpdateData,
 )
 from src.ranks.service.ranks_base import RanksBase
-from src.ranks.service.ranks_groups import RanksGroups
 from src.ranks.service.ranks_members import RanksMembers
 from src.ranks.service.ranks_presets import RanksPresets
 from src.ranks.service.ranks_reads import RanksReads
+from src.ranks.service.ranks_reorder import RanksReorder
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -65,13 +65,13 @@ class RanksService(RanksBase):
         self,
         db_pool: DirectDatabasePool,
         members: RanksMembers,
-        groups: RanksGroups,
+        reorder: RanksReorder,
         presets: RanksPresets,
         reads: RanksReads,
     ) -> None:
         super().__init__(db_pool)
         self._members = members
-        self._groups = groups
+        self._reorder = reorder
         self._presets = presets
         self._reads = reads
 
@@ -254,14 +254,14 @@ class RanksService(RanksBase):
         """Set a member to an explicit leaf, or to no rank."""
         return await self._members.set_member_rank(request)
 
-    # ---------- full-ladder reorder (→ RanksGroups) ----------
+    # ---------- full-ladder reorder (→ RanksReorder) ----------
 
     async def reorder_ranks(
         self,
         request: RankReorderRequest,
     ) -> RankListResponse:
         """Apply a full new ordering to a gym's ranks atomically."""
-        return await self._groups.reorder_ranks(request)
+        return await self._reorder.reorder_ranks(request)
 
     # ---------- preset flows (→ RanksPresets) ----------
 

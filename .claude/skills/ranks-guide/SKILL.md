@@ -11,7 +11,7 @@ description: >-
   the rank_changed progress anchor, persist-only belt-image overrides, and the
   three rank presets. Load this whenever you touch anything rank-shaped:
   gym_ranks / rank_presets / gyms.sub_rank_type / members.current_sub_index,
-  the RanksService facade + its concern services (RanksMembers / RanksGroups /
+  the RanksService facade + its concern services (RanksMembers / RanksReorder /
   RanksReads / RanksPresets), the /api/v1/ranks routes, promote/set-member-rank,
   the ready-to-promote or members-in-rank reads, the member_details rank block,
   the seed's rank generators, or the CRM rank UI (ladder / rank-detail /
@@ -249,9 +249,11 @@ demo/showcase `PresetsService` (that importer never touches ranks).
   `reconcile_sub_index_for_gym` (own-session, the gyms edge) /
   `reconcile_sub_index_in_session` (in-session, both `from_preset` AND
   `update_rank`'s count change) → `reconcile_member_sub_index_for_gym.sql`.
-- **`RanksGroups`** — only the main-only two-phase `reorder_ranks` (+`REORDER_SHIFT_OFFSET`
-  guard against the non-deferrable `UNIQUE (gym_id, main_rank_num_order)`). There is
-  no more group rename/delete (a "group" is now a main rank → plain update/delete).
+- **`RanksReorder`** (`ranks_reorder.py`) — only the main-only two-phase
+  `reorder_ranks` (+`REORDER_SHIFT_OFFSET` guard against the non-deferrable
+  `UNIQUE (gym_id, main_rank_num_order)`). There is no group rename/delete
+  (a main rank is renamed via `update_rank` and removed via `delete_rank`),
+  so this concern is purely the reorder.
 - **`RanksReads`** — the two paginated member reads (`COUNT(*) OVER()` +
   `start_index`/`count`) plus the per-sub-index count: `list_ready_to_promote`
   (active, ranked, not top-of-ladder members sorted by **percentage complete
@@ -285,8 +287,12 @@ CRUD (`GET /`, `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`) ·
 `POST /from-preset` (`preset_kind`) · `GET /presets` + `GET /presets/grouped` ·
 `GET /enabled` + `PUT /enabled` · `POST /promote-member` · `POST /set-member-rank`
 (`rank_id?` + `sub_index?`) · `POST /reorder` (main-only) · **`GET /ready-to-promote`**
-· **`GET /{rank_id}/members`** · **`GET /{rank_id}/sub-rank-counts`** (`gym_id`
-query param → the per-sub-position count breakdown). The static routes and the
+· **`GET /{rank_id}/members`** · **`GET /{rank_id}/sub-rank-counts`** (NO query
+params → the per-sub-position count breakdown). Both `/{rank_id}/...` reads
+**derive the gym from the rank**, never a client `gym_id`: `get_rank(rank_id)`
+first (clean 404 if missing) → verify the employee against the RANK's gym →
+pass the rank-derived `gym_id` down (the service still takes `(gym_id, rank_id)`,
+but the router supplies gym from the resolved rank). The static routes and the
 `/{rank_id}/...` routes are declared before the bare `/{rank_id}`.
 **Removed:** `PUT /rename-group`, `DELETE /group`. `_rank_http_error` maps
 `"highest rank"`→409, `"not found"`→404, else 400.

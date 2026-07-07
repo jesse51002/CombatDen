@@ -697,17 +697,24 @@ def test_members_in_rank_404_when_rank_missing(client, db_pool_mock, auth_header
 
 def test_sub_rank_counts_200(client, db_pool_mock, auth_headers, fake_gym_id, fake_rank_id):
     """GET /api/v1/ranks/{rank_id}/sub-rank-counts returns the total on the
-    rank plus a sparse per-sub-index breakdown (the total is summed)."""
+    rank plus a sparse per-sub-index breakdown (the total is summed). The
+    gym is derived from the rank (resolved first), not a query param."""
+    rank_row = make_rank_row(rank_id=fake_rank_id, gym_id=fake_gym_id)
     rows = [
         {"sub_index": 0, "count": 3},
         {"sub_index": 1, "count": 2},
     ]
 
     session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(side_effect=[_many(rows)])
+    session.execute = AsyncMock(
+        side_effect=[
+            _one(rank_row),  # router get_rank (auth/gym resolution)
+            _many(rows),  # count_members_by_sub_index
+        ],
+    )
 
     response = client.get(
-        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts?gym_id={fake_gym_id}",
+        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts",
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -724,16 +731,34 @@ def test_sub_rank_counts_none_gym_single_null_row(
 ):
     """On a 'none' gym members carry a NULL sub-index, so the breakdown is a
     single {null, total} row."""
+    rank_row = make_rank_row(rank_id=fake_rank_id, gym_id=fake_gym_id)
     rows = [{"sub_index": None, "count": 7}]
 
     session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(side_effect=[_many(rows)])
+    session.execute = AsyncMock(
+        side_effect=[
+            _one(rank_row),  # router get_rank (auth/gym resolution)
+            _many(rows),  # count_members_by_sub_index
+        ],
+    )
 
     response = client.get(
-        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts?gym_id={fake_gym_id}",
+        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts",
         headers=auth_headers,
     )
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 7
     assert body["counts"] == [{"sub_index": None, "count": 7}]
+
+
+def test_sub_rank_counts_404_when_rank_missing(client, db_pool_mock, auth_headers, fake_rank_id):
+    """A rank_id that doesn't resolve returns 404 (router get_rank guard)."""
+    session = db_pool_mock.session.return_value
+    session.execute = AsyncMock(side_effect=[_one(None)])  # get_rank → not found
+
+    response = client.get(
+        f"/api/v1/ranks/{fake_rank_id}/sub-rank-counts",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404

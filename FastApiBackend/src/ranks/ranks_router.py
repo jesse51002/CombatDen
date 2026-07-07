@@ -616,27 +616,43 @@ async def list_members_in_rank(
         200: {"description": "Counts returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
+        404: {"description": "Rank not found"},
     },
 )
 @inject
 async def count_members_by_sub_index(
     rank_id: UUID,
-    gym_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     ranks_service: RanksService = Depends(Provide[DependencyInjector.ranks_service]),
 ) -> RankSubRankCountsResponse:
-    """Member counts per sub-position for a main rank."""
+    """Member counts per sub-position for a main rank.
+
+    The gym is derived from the rank (resolved first — a clean 404 if the
+    rank is missing), then the employee is verified against the RANK's gym;
+    no client-supplied ``gym_id`` is trusted (mirrors ``/{rank_id}/members``).
+    """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        return await ranks_service.count_members_by_sub_index(gym_id, rank_id)
+        rank = await ranks_service.get_rank(rank_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rank not found",
+        ) from None
+
+    await auth.verify_gym_employee(rank.gym_id, user_payload)
+
+    try:
+        return await ranks_service.count_members_by_sub_index(
+            rank.gym_id,
+            rank_id,
+        )
     except Exception:
         logger.error(
-            "Failed to count members by sub-index: rank_id=%s, gym_id=%s",
+            "Failed to count members by sub-index: rank_id=%s",
             rank_id,
-            gym_id,
             exc_info=True,
         )
         raise HTTPException(

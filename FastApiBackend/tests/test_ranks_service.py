@@ -35,10 +35,10 @@ from src.ranks.schema.ranks_schema import (
     RankSetMemberRequest,
     RankUpdateData,
 )
-from src.ranks.service.ranks_groups import REORDER_SHIFT_OFFSET, RanksGroups
 from src.ranks.service.ranks_members import RanksMembers
 from src.ranks.service.ranks_presets import RanksPresets
 from src.ranks.service.ranks_reads import RanksReads
+from src.ranks.service.ranks_reorder import REORDER_SHIFT_OFFSET, RanksReorder
 from src.ranks.service.ranks_service import RanksService
 from src.shared.sql_loader import load_sql
 from tests.conftest import make_rank_row
@@ -102,10 +102,10 @@ def _make_service(pool: MagicMock) -> RanksService:
     through the delegated calls exactly as it did before the split.
     """
     members = RanksMembers(pool)
-    groups = RanksGroups(pool)
+    reorder = RanksReorder(pool)
     presets = RanksPresets(pool, members)
     reads = RanksReads(pool)
-    return RanksService(pool, members, groups, presets, reads)
+    return RanksService(pool, members, reorder, presets, reads)
 
 
 def _executed_sql_strings(session: MagicMock) -> list[str]:

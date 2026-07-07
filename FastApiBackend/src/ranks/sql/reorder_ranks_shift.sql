@@ -6,7 +6,7 @@
 -- collide because their original main orders are unique.
 --
 -- The +100000 offset MUST stay in sync with REORDER_SHIFT_OFFSET in
--- src/ranks/service/ranks_groups.py — the reorder guard rejects any
+-- src/ranks/service/ranks_reorder.py — the reorder guard rejects any
 -- payload target main order >= that constant so this shift can never
 -- collide with a valid target. Change one, change the other.
 UPDATE gym_ranks
