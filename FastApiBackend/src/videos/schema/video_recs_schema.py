@@ -1,11 +1,14 @@
 """Pydantic response models for a member's video recommendation.
 
-A rec is a single served feed card (:class:`RecommendedVideoCard` — a
-:class:`GymVideoCard` plus its blended ``score`` and an ``already_recommended``
-flag) wrapped in a :class:`MemberVideoRec` that carries the served ``rec_id``
-(the client posts it back on a click) and the video's genre ``category``. The
-rec surface serves ONE video at a time, rotating through the genre categories in
-``settings.video_rec_category_rotation`` so a member sees a spread over time.
+A rec is a single served feed card (:class:`GymVideoCard`) wrapped in a
+:class:`MemberVideoRec` that carries the served ``rec_id`` (the client posts it
+back on a click) and the video's genre ``category``. The rec surface serves ONE
+video at a time, rotating through the genre categories in
+``settings.video_rec_category_rotation`` so a member sees a spread over time. The
+pick is ranked by PURE cosine similarity to the member's video-taste embedding
+(gym relevance when they have no embedding yet) — no composite blend, no stored
+score. :class:`RecCandidate` is the internal value the feed service returns for a
+single ranked pick (the video id plus its card) before it is recorded.
 """
 
 from __future__ import annotations
@@ -19,16 +22,18 @@ import src.shared.db_schema_path  # noqa: F401
 from src.videos.schema.videos_schema import GymVideoCard
 
 
-class RecommendedVideoCard(GymVideoCard):
-    """A served feed card enriched with its recommendation score + seen flag.
+class RecCandidate(BaseModel):
+    """One ranked recommendation pick before it is recorded.
 
-    Extends :class:`GymVideoCard` (same rendered fields + the derived
-    ``big_group``) with the RAG-blended ``score`` and whether this member has
-    been recommended the video before.
+    ``VideoFeedService.load_next_rec_video`` returns this so the service passes a
+    typed value (not a raw row): ``video_id`` is the pool id to record, ``video``
+    the card to return to the client.
     """
 
-    score: float
-    already_recommended: bool = False
+    model_config = ConfigDict(extra="ignore")
+
+    video_id: str
+    video: GymVideoCard
 
 
 class MemberVideoRec(BaseModel):
@@ -42,7 +47,7 @@ class MemberVideoRec(BaseModel):
 
     rec_id: UUID
     category: VideoGenre
-    video: RecommendedVideoCard
+    video: GymVideoCard
 
 
 class VideoRecClickResponse(BaseModel):

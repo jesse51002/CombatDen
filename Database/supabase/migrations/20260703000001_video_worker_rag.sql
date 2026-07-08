@@ -162,7 +162,6 @@ CREATE TABLE member_video_recs (
     -- The video's genre (video.tag) it was served under at this event; recs are
     -- grouped by this genre category (analytics / category-mix).
     category video_genre NOT NULL,
-    score DOUBLE PRECISION NOT NULL,
     recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Click signal: NULL = served but not clicked; set when the member opens it.
     clicked_at TIMESTAMPTZ,

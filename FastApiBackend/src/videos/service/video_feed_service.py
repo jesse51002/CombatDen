@@ -23,6 +23,7 @@ from sqlalchemy import text
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.videos import SQL_DIR
+from src.videos.schema.video_recs_schema import RecCandidate
 from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup
 from src.videos.schema.videos_schema import (
     GymVideoCard,
@@ -209,6 +210,48 @@ class VideoFeedService:
                 (await session.execute(text(sql), params)).mappings().all()
             )
         return build_feed_page_result(rows)
+
+    # ── member rec (single pure-cosine pick) ──────────────────────
+
+    async def load_next_rec_video(
+        self,
+        gym_id: UUID,
+        member_id: UUID,
+        category: VideoGenre,
+        embedding: str | None,
+    ) -> RecCandidate | None:
+        """The member's next single recommendation in ``category``, or None.
+
+        Ranks the gym's served feed of that genre by PURE cosine similarity to the
+        member's video-taste ``embedding`` (gym relevance when ``embedding`` is
+        None), excluding already-served videos so each call advances. Returns the
+        single top pick as a :class:`RecCandidate` (its ``video_id`` + card), or
+        ``None`` when the category yields no candidate.
+
+        The candidate set is the gym's SERVED feed — accepted rows of the latest
+        COMPLETED run PLUS the owner section (``video_run_id IS NULL``) — the same
+        set the feed serves (NOT the feed page's exclusive owner flag). This is
+        why the rec has its own SQL rather than a ``load_feed_page(limit=1)`` call.
+        ``embedding`` is passed in (the rec service loads it once and reuses it
+        across the category rotation).
+        """
+        sql = load_sql(SQL_DIR / "videos_load_next_rec.sql")
+        params = {
+            "gym_id": str(gym_id),
+            "member_id": str(member_id),
+            "category": category.value,
+            "member_embedding": embedding,
+        }
+        async with self._db.session() as session:
+            row = (
+                (await session.execute(text(sql), params)).mappings().fetchone()
+            )
+        if row is None:
+            return None
+        return RecCandidate(
+            video_id=row["video_id"],
+            video=GymVideoCard.model_validate(dict(row)),
+        )
 
     async def _load_pool_videos_by_id(
         self, ids: Iterable[str]

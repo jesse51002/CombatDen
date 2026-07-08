@@ -1,11 +1,11 @@
 """VideosService — pure delegating facade for the videos domain.
 
 Composes: ``VideoFeedService`` (live gym feed + pool reads, incl. optional
-member-personalized ordering), ``VideoSpecService`` (spec DB read/write),
-``VideoSpecAuthoring`` (deterministic commit gate), ``VideoFeedRefiner``
-(feed-learning refiner), ``VideosWorkerStatusService`` (read-only worker state),
-``VideoRecsService`` (the member's single rotating-category RAG recommendation),
-and ``VideoRecClickService`` (record a rec click → stamp + log + fire a profile
+member-personalized ordering AND the single pure-cosine rec pick),
+``VideoSpecService`` (spec DB read/write), ``VideoSpecAuthoring`` (deterministic
+commit gate), ``VideoFeedRefiner`` (feed-learning refiner), ``VideoRecsService``
+(the member's single rotating-category RAG recommendation), and
+``VideoRecClickService`` (record a rec click → stamp + log + fire a profile
 refresh).
 
 The router injects this facade for every non-agent video operation; the
@@ -30,7 +30,6 @@ from src.videos.schema.video_spec_schema import (
     VideoSpecDraft,
     VideoSpecView,
 )
-from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymVideoCard,
@@ -42,9 +41,6 @@ from src.videos.service.video_rec_click_service import VideoRecClickService
 from src.videos.service.video_recs_service import VideoRecsService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
-from src.videos.service.videos_worker_status_service import (
-    VideosWorkerStatusService,
-)
 
 
 class VideosService:
@@ -60,7 +56,6 @@ class VideosService:
         spec_service: VideoSpecService,
         authoring: VideoSpecAuthoring,
         feed_refiner: VideoFeedRefiner,
-        worker_status: VideosWorkerStatusService,
         recs_service: VideoRecsService,
         click_service: VideoRecClickService,
     ) -> None:
@@ -68,7 +63,6 @@ class VideosService:
         self._spec_service = spec_service
         self._authoring = authoring
         self._feed_refiner = feed_refiner
-        self._worker_status = worker_status
         self._recs = recs_service
         self._click = click_service
 
@@ -189,14 +183,6 @@ class VideosService:
 
     async def refine_from_feed(self, gym_id: UUID) -> VideoSpecView | None:
         return await self._feed_refiner.refine_from_feed(gym_id)
-
-    # ── worker status (read-only) ─────────────────────────────────
-
-    async def load_worker_status(
-        self, gym_id: UUID
-    ) -> VideoWorkerStatusResponse:
-        """The gym's video-worker state (last refresh, running, last run)."""
-        return await self._worker_status.status(gym_id)
 
     # ── member rec + rec click (RAG read surface) ─────────────────
 

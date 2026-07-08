@@ -34,9 +34,6 @@ CREATE TABLE member_video_recs (
     -- The video's genre (video.tag) it was served under at this event; recs are
     -- grouped by this genre category (analytics / category-mix).
     category video_genre NOT NULL,
-    -- The composite score at this serve: RAG cosine dominant, blended with gym
-    -- relevance + popularity per the backend's weight settings.
-    score DOUBLE PRECISION NOT NULL,
     recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Click signal: NULL = served but not clicked; set (service_role) when the
     -- member opens this recommendation. Feeds engagement / taste learning.

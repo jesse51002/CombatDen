@@ -87,9 +87,9 @@ class Settings(BaseSettings):
     # Roughly one third land as landscape-targeted queries, the rest generic.
     video_query_count: int = 30
 
-    # ── Video RAG read surface (member recs + semantic search) ──────
+    # ── Video RAG read surface (member recs + personalized feed) ──────
     # Embedding model + dimension for the member's video-taste profile embedding
-    # AND the query embedded at search time. The dimension is pinned to the
+    # AND the video summaries the VideoService worker embeds. The dimension is pinned to the
     # `vector(1536)` DDL — a CROSS-SERVICE CONTRACT: it pins BOTH the
     # `video_rag.embedding` the VideoService worker writes AND the
     # `members.video_profile_embedding` this backend writes (all three must use
@@ -108,16 +108,14 @@ class Settings(BaseSettings):
     # member's facts into the one-paragraph taste summary; reuses
     # `anthropic_api_key`.
     video_profile_summary_model: str = "anthropic/claude-haiku-4-5"
-    # Rec ranking weights (sum ~1.0): RAG cosine similarity dominant, blended
-    # with gym relevance (1/(1+relevance_index)) and popularity (log views).
-    video_rec_weight_similarity: float = 0.7
-    video_rec_weight_relevance: float = 0.2
-    video_rec_weight_views: float = 0.1
     # The member rec surface serves ONE video at a time, rotating the served
     # genre category through this best-first order: the member's total served-rec
     # count modulo the list length picks the starting category, and a category
     # with no videos falls through to the next. Every member of the enum appears
-    # once (educational/technical content first, lighter genres last).
+    # once (educational/technical content first, lighter genres last). The pick
+    # WITHIN a category is ranked by PURE cosine similarity to the member's
+    # taste embedding (gym relevance when unbuilt) — no blend weights, no LIMIT
+    # setting (the rec SQL is a fixed LIMIT 1).
     video_rec_category_rotation: list[VideoGenre] = [
         VideoGenre.educational,
         VideoGenre.professional,
@@ -129,10 +127,6 @@ class Settings(BaseSettings):
         VideoGenre.clips,
         VideoGenre.memes,
     ]
-    # Videos returned per rec request. 1 = the single "first option" the surface
-    # serves; the per-category candidate query LIMITs to this and the first valid
-    # row is the served pick.
-    video_rec_count: int = 1
 
     # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
     # build-time asset pipeline populates (theme images, fonts, etc.). This

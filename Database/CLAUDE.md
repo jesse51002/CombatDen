@@ -132,9 +132,11 @@ extensions`); embedding columns are `vector(1536)`, a **cross-service contract**
   dimension contract as `video_rag.embedding` (compared by cosine). Client-immutable (listed in the
   `MEMBERS` frozenset alongside the Stripe columns).
 - **`member_video_recs`** — per-member rec history (the freshness partition), an **append-only event
-  log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, category)`, `score`,
+  log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, category)`,
   `recommended_at`, plus `clicked_at TIMESTAMPTZ` (nullable click signal — NULL = served but not clicked;
-  set by the backend when the member opens the rec). **No stored counters and no UNIQUE** — a re-serve
+  set by the backend when the member opens the rec). The rec ranks by PURE cosine similarity to the
+  member's taste embedding (no stored score column — the composite blend was dropped). **No stored
+  counters and no UNIQUE** — a re-serve
   INSERTs another row; "times recommended" = `COUNT(*)` and "last recommended" = `MAX(recommended_at)`,
   derived by aggregate. Index `(member_id, video_id)` backs the already-recommended anti-join + the
   per-video MAX aggregate ("already recommended" is global per member, not per category). No vector column.

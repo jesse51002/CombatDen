@@ -477,7 +477,7 @@ how-to-work-here facts belong here:
 ## `videos` domain (`src/videos/`)
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
-agent plus the RAG read surface. Six routes cover the spec/agent + worker-status + RAG surface
+agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
 (all `verify_gym_employee`-gated EXCEPT the member rec + rec-click routes, which are
 `verify_can_view_member`):
 
@@ -486,7 +486,6 @@ agent plus the RAG read surface. Six routes cover the spec/agent + worker-status
 | `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
 | `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
-| `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state, read-only: `last_updated` / `running` / `last_run_status` (no queue — there is nothing to enqueue) |
 | `GET /api/v1/gyms/{id}/members/{member_id}/video-rec` | The member's next single rotating-category RAG rec — rotates the served genre by the member's served-rec count, records the pick, returns `{rec_id, category, video}` (`verify_can_view_member`; 404 when the member isn't in the path gym OR no category yields a video) |
 | `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 
@@ -518,23 +517,23 @@ acknowledge and invite further changes (the conversation stays open, `saved=True
   picked up by the VideoService worker on its own next tick (the worker derives the due gym from
   timestamps; see the VideoService CLAUDE.md).
 - **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
-- **`VideosWorkerStatusService`** (`videos_worker_status_service.py`) — read-only status seam for the
-  VideoService background worker (the backend has no control surface over the worker anymore — the
-  worker derives its own due gym from timestamps already in the schema; there is nothing to enqueue).
-  `status(gym_id)` reads last-refresh / running / last-run-status in one query. **Serve-path invariant:**
-  every "latest run" subselect filters `AND status = 'completed'` so a mid-flight `running` run never
-  becomes latest and blanks the feed — including the owner keep/reject curation writes, which target
-  the run currently being served.
 
 **`VideosService` (`videos_service.py`) is the domain FACADE** — composes `VideoFeedService`,
-`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`, `VideosWorkerStatusService`,
+`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`,
 `VideoRecsService`, and `VideoRecClickService`. Exposes: `load_latest_spec`,
 `save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
-`load_worker_status`, `get_video_rec`, `record_rec_click`, plus all feed operations
+`get_video_rec`, `record_rec_click`, plus all feed operations
 (`load_feed_ids`, `load_pool_videos`, `load_feed_page` — which takes the optional `member_id`,
-owner add/remove/keep). The conversational agent uses it for
+`load_next_rec_video`, owner add/remove/keep). The conversational agent uses it for
 the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
+
+**Serve-path invariant (feed + rec):** every "latest run" subselect on the serve path filters
+`AND status = 'completed'` so a mid-flight `running` run never becomes latest and blanks the feed —
+this covers the feed page, the single rec candidate query, and the owner keep/reject curation writes
+(which target the run currently being served). The `video_run.status` column exists for exactly this
+(the VideoService worker sets it; the backend has no worker-control surface — the worker derives its
+own due gym from timestamps already in the schema, so there is nothing to enqueue and no status route).
 
 **RAG read surface — single rotating-category rec + optional personalized feed + rec-click.**
 
@@ -567,20 +566,25 @@ the rec, the personalized feed) tolerates a missing embedding by ranking without
   `MemberNotInGymError` maps to 404 at the route.
 - **`VideoRecsService`** (`video_recs_service.py`) — `get_rec(gym_id, member_id) -> MemberVideoRec | None`:
   serves ONE video at a time, **rotating the served genre category** through
-  `settings.video_rec_category_rotation`. `verify_member_in_gym` → `load_embedding` (read-only; None ⇒
-  no-similarity ranking) → `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks
-  the starting category; within a category it runs ONE ranked candidate query
-  (`video_recs_candidates.sql` with the member embedding, or `video_recs_candidates_no_embedding.sql`
-  without — composite score minus the similarity term), each filtered `v.tag = CAST(:category AS
-  video_genre)` and `LIMIT :count` (`video_rec_count`, default 1). A category that yields **no** rows
-  falls through to the next in the rotation (wrapping); the first genre with a video wins. Score =
-  `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) + w_views*min(ln(1+views)/20,1)`; ORDER BY
-  hard-partitions UNRECOMMENDED first, then oldest last-serve (`MAX(recommended_at)`), then score, so
-  the top row is the freshest strong pick. The served pick is APPENDED to `member_video_recs`
-  (`video_recs_record_insert.sql`, `RETURNING rec_id`) and returned as `MemberVideoRec{rec_id, category,
-  video}`. Candidates = the gym's SERVED feed (accepted latest-COMPLETED-run rows + owner `video_run_id
-  IS NULL`, mirroring `videos_load_feed_ids`). Returns `None` (→ route 404) when no category anywhere
-  yields a video. `MemberNotInGymError` propagates (→ 404).
+  `settings.video_rec_category_rotation`. It is a **thin wrapper over the feed** — it drives the rotation
+  and records the pick, but the ranking + candidate query live in `VideoFeedService.load_next_rec_video`.
+  `verify_member_in_gym` → `load_embedding` (read-only, loaded ONCE; None ⇒ gym-relevance ranking) →
+  `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks the starting category;
+  within a category it calls `feed_service.load_next_rec_video(gym_id, member_id, category, embedding)`,
+  which runs `videos_load_next_rec.sql` (one file, `LIMIT 1`) filtered `v.tag = CAST(:category AS
+  video_genre)`. **Ranking is PURE cosine similarity** to the member's taste embedding
+  (`r.embedding <=> CAST(:member_embedding AS vector)`, un-enriched rows `NULLS LAST`), then
+  `relevance_index`, then `video_id`; when the member has no embedding the SQL's `CASE` collapses the
+  distance term so the whole set orders by relevance — **no composite blend, no weights, no stored
+  score**. Already-served videos are excluded (`NOT EXISTS` over `member_video_recs`) so each call
+  advances. A category that yields **no** candidate falls through to the next in the rotation (wrapping);
+  the first genre with a video wins. The pick returns as a `RecCandidate` (`video_id` + `GymVideoCard`),
+  is APPENDED to `member_video_recs` (`video_recs_record_insert.sql`, `RETURNING rec_id`), and returned as
+  `MemberVideoRec{rec_id, category, video}` (`video` is a plain `GymVideoCard`). **Candidate set unchanged:**
+  the gym's SERVED feed — accepted latest-COMPLETED-run rows + owner `video_run_id IS NULL`, mirroring
+  `videos_load_feed_ids` (NOT the feed page's exclusive owner flag — that owner-vs-run question is a
+  separate open decision). Returns `None` (→ route 404) when no category anywhere yields a video.
+  `MemberNotInGymError` propagates (→ 404).
 - **Personalized feed** (`VideoFeedService.load_feed_page`, `member_id` param) — when a `member_id` is
   supplied AND it has a built embedding, the page runs `videos_load_feed_page_personalized.sql` (the same
   candidate set / filters / pagination / `COUNT(*) OVER()` total as `videos_load_feed_page.sql`, plus
@@ -605,13 +609,14 @@ There is **no semantic-search service** — `VideoSearchService` and the `/video
 removed (zero callers). The rec's `category` is typed as the existing `VideoGenre` enum (`schema.video`),
 never a separate abstraction (there is no mood-bucket map). Member activity writers use the shared
 `MemberActivityType` enum (`schema.member_activity`). Response schemas: `schema/video_recs_schema.py`
-(`RecommendedVideoCard(GymVideoCard)` + score/already_recommended, `MemberVideoRec` (`rec_id` /
-`category: VideoGenre` / `video`), `VideoRecClickResponse`); the profile summary schema is
-`schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL: `sql/member_profile_load.sql`
-/ `member_profile_source.sql` / `member_profile_update.sql`, `video_recs_candidates.sql` /
-`video_recs_candidates_no_embedding.sql` (per-category, `LIMIT :count`), `video_recs_served_count.sql`,
-`video_recs_record_insert.sql` (`RETURNING rec_id`), `videos_load_feed_page_personalized.sql`,
-`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`.
+(`RecCandidate` (`video_id` / `video: GymVideoCard`) — the feed's single-pick value, `MemberVideoRec`
+(`rec_id` / `category: VideoGenre` / `video: GymVideoCard`), `VideoRecClickResponse`); the profile
+summary schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
+`sql/member_profile_load.sql` / `member_profile_source.sql` / `member_profile_update.sql`,
+`videos_load_next_rec.sql` (one file, pure cosine with a `CASE` fallback to relevance, `LIMIT 1`),
+`video_recs_served_count.sql`, `video_recs_record_insert.sql` (`RETURNING rec_id`),
+`videos_load_feed_page_personalized.sql`, `video_rec_click_update.sql` / `video_rec_load.sql` /
+`member_activity_video_click_insert.sql`.
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -662,10 +667,10 @@ RAG settings: `video_embedding_model` (litellm format, default `openai/text-embe
 `openai_api_key`), `video_embedding_dim` (1536, pinned to the `vector(1536)` DDL and shared by
 `video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
 model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuses `anthropic_api_key`),
-`video_profile_refresh_cooldown_days` (3), `video_rec_weight_similarity` / `_relevance` / `_views`
-(0.7 / 0.2 / 0.1), `video_rec_category_rotation` (ordered `VideoGenre` list — best-first genre order the
-single rec rotates through), `video_rec_count` (1; videos per rec request → the per-category
-`LIMIT :count`).
+`video_profile_refresh_cooldown_days` (3), `video_rec_category_rotation` (ordered `VideoGenre` list —
+best-first genre order the single rec rotates through). The pick WITHIN a category is ranked by pure
+cosine similarity — there are no ranking-weight settings and no rec-count setting (the rec SQL is a
+fixed `LIMIT 1`).
 
 **Versioned spec — readers always use the view, not the table.**
 `gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
@@ -681,8 +686,9 @@ surfaces the single most-recent version per gym. Do not `SELECT` directly from t
 separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
-`videos_worker_status_service`, `video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`
-(defined before `video_feed_service`, which reads the embedding), `video_feed_service`,
+`video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`
+(defined before `video_feed_service`, which reads the embedding), `video_feed_service`
+(defined before `video_recs_service`, which delegates the rec candidate query to it),
 `member_video_profile_refresh_runner`, `video_recs_service`,
 `video_rec_click_service`, `video_agent_service`, `videos_service`.
 

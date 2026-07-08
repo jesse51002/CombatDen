@@ -20,9 +20,6 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent``        — one conversational turn.
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
-    * ``GET /api/v1/gyms/{gym_id}/video-worker/status`` — the gym's worker
-      state (last refresh / running / last run status). Read-only: there is no
-      manual run — the worker derives its own work.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-rec`` — a member's
       next rotating-category RAG recommendation (``verify_can_view_member``).
     * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click``
@@ -54,7 +51,6 @@ from src.videos.schema.video_recs_schema import (
     VideoRecClickResponse,
 )
 from src.videos.schema.video_spec_schema import VideoSpecView
-from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymFeedPreview,
@@ -598,45 +594,6 @@ async def refine_video_spec_from_feed(
             detail="No new feed curation to learn from.",
         )
     return result
-
-
-# ── Video worker status (read-only) ──────────────────────────
-
-
-@videos_router.get(
-    "/api/v1/gyms/{gym_id}/video-worker/status",
-    response_model=VideoWorkerStatusResponse,
-    summary="Get a gym's video-worker state",
-    responses={
-        200: {"description": "The gym's worker state"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not an employee of this gym"},
-    },
-)
-@inject
-async def get_video_worker_status(
-    gym_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    videos_service: VideosService = Depends(
-        Provide[DependencyInjector.videos_service]
-    ),
-) -> VideoWorkerStatusResponse:
-    """Return the gym's video-worker state: last feed refresh, whether a run is
-    running, and the most-recent run's status."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
-
-    try:
-        return await videos_service.load_worker_status(gym_id)
-    except Exception:
-        logger.error(
-            "Failed to load video-worker status for %s", gym_id, exc_info=True
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load the video-worker status",
-        ) from None
 
 
 # ── RAG read surface (member rec + rec click) ────────────────

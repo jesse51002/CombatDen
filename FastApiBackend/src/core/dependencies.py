@@ -192,9 +192,6 @@ from src.videos.service.video_recs_service import VideoRecsService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
-from src.videos.service.videos_worker_status_service import (
-    VideosWorkerStatusService,
-)
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 from src.waivers.service.waivers_service import WaiversService
 
@@ -443,12 +440,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         litellm_client=litellm_client,
         model=settings.video_llm_model,
     )
-    # Read-only status of the VideoService background worker (the worker runs
-    # elsewhere and derives its own work — no enqueue seam).
-    videos_worker_status_service = providers.Singleton(
-        VideosWorkerStatusService,
-        db_pool=db_pool,
-    )
     video_spec_authoring = providers.Singleton(
         VideoSpecAuthoring,
         spec_service=video_spec_service,
@@ -494,15 +485,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         MemberVideoProfileRefreshRunner,
         profile_service=member_video_profile_service,
     )
+    # The rec is a thin wrapper over the feed: it drives the category rotation
+    # and records the pick, but the pure-cosine candidate query lives in
+    # video_feed_service.load_next_rec_video (defined above).
     video_recs_service = providers.Factory(
         VideoRecsService,
         db_pool=db_pool,
         profile_service=member_video_profile_service,
-        weight_similarity=settings.video_rec_weight_similarity,
-        weight_relevance=settings.video_rec_weight_relevance,
-        weight_views=settings.video_rec_weight_views,
+        feed_service=video_feed_service,
         rotation=settings.video_rec_category_rotation,
-        rec_count=settings.video_rec_count,
     )
     # Record a rec click: stamp clicked_at + log a video_clicked activity, then
     # fire the profile refresh via the runner above.
@@ -511,16 +502,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         refresh_runner=member_video_profile_refresh_runner,
     )
-    # Facade: composes feed + spec + worker-status + RAG sub-services. Template
-    # catalog reads are in PresetsTemplateService; showcase reads are in
-    # ThemeShowcaseService.
+    # Facade: composes feed + spec + RAG sub-services. Template catalog reads are
+    # in PresetsTemplateService; showcase reads are in ThemeShowcaseService.
     videos_service = providers.Factory(
         VideosService,
         feed_service=video_feed_service,
         spec_service=video_spec_service,
         authoring=video_spec_authoring,
         feed_refiner=video_feed_refiner,
-        worker_status=videos_worker_status_service,
         recs_service=video_recs_service,
         click_service=video_rec_click_service,
     )

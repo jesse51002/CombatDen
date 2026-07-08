@@ -5,8 +5,10 @@ Covers the services driven against a fake DB pool + fake litellm client:
 NEVER builds), ``refresh_if_due`` (cooldown no-op vs stale rebuild + the
 embedding-dimension guard), ``load_embedding``, the rotating single-rec
 ``get_rec`` (rotation index by served count, empty-category fall-through,
-no-embedding composite path, records + returns rec_id, None when nothing
-available, propagates the ownership error), and the personalized feed page
+no-embedding passed straight to the feed, records + returns rec_id with the
+video as a ``GymVideoCard``, None when nothing available, propagates the
+ownership error — the rec is now a thin wrapper over a faked
+``VideoFeedService.load_next_rec_video``), and the personalized feed page
 (``VideoFeedService.load_feed_page`` picks the personalized SQL when the member
 has an embedding, the default SQL otherwise).
 """
@@ -21,7 +23,8 @@ import pytest
 from schema.video import VideoGenre
 
 from src.videos.schema.member_profile_schema import MemberProfileSummary
-from src.videos.schema.video_recs_schema import MemberVideoRec
+from src.videos.schema.video_recs_schema import MemberVideoRec, RecCandidate
+from src.videos.schema.videos_schema import GymVideoCard
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
     MemberVideoProfileService,
@@ -297,34 +300,25 @@ _ROTATION = [
 ]
 
 
-def _candidate_row(
-    video_id: str = "vid1", tag: str = "educational", score: float = 0.9
-) -> dict:
-    return {
-        "video_id": video_id,
-        "url": f"https://youtu.be/{video_id}",
-        "title": "Test",
-        "thumbnail_url": "https://img/x.jpg",
-        "channel_name": "Chan",
-        "channel_url": "https://c",
-        "channel_avatar_url": "",
-        "view_count": 100,
-        "duration_seconds": 60,
-        "tag": tag,
-        "relevance_index": 0,
-        "already_recommended": False,
-        "similarity": 0.8,
-        "score": score,
-    }
-
-
-def _degrade_row(
-    video_id: str = "vid1", tag: str = "educational", score: float = 0.5
-) -> dict:
-    """A no-embedding degrade candidate row — no ``similarity`` column."""
-    row = _candidate_row(video_id, tag, score)
-    del row["similarity"]
-    return row
+def _rec_candidate(
+    video_id: str = "vid1", tag: str = "educational"
+) -> RecCandidate:
+    """The single ranked pick VideoFeedService.load_next_rec_video returns."""
+    return RecCandidate(
+        video_id=video_id,
+        video=GymVideoCard(
+            url=f"https://youtu.be/{video_id}",
+            title="Test",
+            thumbnail_url="https://img/x.jpg",
+            channel_name="Chan",
+            channel_url="https://c",
+            channel_avatar_url="",
+            view_count=100,
+            duration_seconds=60,
+            tag=tag,
+            relevance_index=0,
+        ),
+    )
 
 
 def _count_result(n: int) -> _FakeResult:
@@ -335,15 +329,34 @@ def _rec_id_result(rec_id: object) -> _FakeResult:
     return _FakeResult(one={"rec_id": str(rec_id)})
 
 
-def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
+class _FakeFeed:
+    """A stand-in for VideoFeedService: ``load_next_rec_video`` returns the
+    mapping's RecCandidate for each category (None if absent), and records every
+    call so the rotation + embedding pass-through can be asserted."""
+
+    def __init__(self, by_category: dict[VideoGenre, RecCandidate]):
+        self._by_category = by_category
+        self.calls: list[tuple] = []
+
+    async def load_next_rec_video(
+        self,
+        gym_id: object,
+        member_id: object,
+        category: VideoGenre,
+        embedding: str | None,
+    ) -> RecCandidate | None:
+        self.calls.append((gym_id, member_id, category, embedding))
+        return self._by_category.get(category)
+
+
+def _recs_service(
+    pool: MagicMock, profile: AsyncMock, feed: _FakeFeed
+) -> VideoRecsService:
     return VideoRecsService(
         db_pool=pool,
         profile_service=profile,
-        weight_similarity=0.7,
-        weight_relevance=0.2,
-        weight_views=0.1,
+        feed_service=feed,
         rotation=list(_ROTATION),
-        rec_count=1,
     )
 
 
@@ -357,15 +370,10 @@ def _profile_stub(embedding: str | None = "[0.1]") -> AsyncMock:
 async def test_get_rec_rotation_index_by_served_count() -> None:
     # served_count = 1 → start = 1 % 3 → the professional category is served.
     rec_id = uuid4()
-    pool, session = _make_pool(
-        [
-            _count_result(1),
-            _FakeResult(rows=[_candidate_row("vp", "professional")]),
-            _rec_id_result(rec_id),
-        ]
-    )
-    profile = _profile_stub()
-    svc = _recs_service(pool, profile)
+    pool, session = _make_pool([_count_result(1), _rec_id_result(rec_id)])
+    profile = _profile_stub(embedding="[0.9]")
+    feed = _FakeFeed({VideoGenre.professional: _rec_candidate("vp", "professional")})
+    svc = _recs_service(pool, profile, feed)
 
     rec = await svc.get_rec(uuid4(), uuid4())
 
@@ -374,101 +382,89 @@ async def test_get_rec_rotation_index_by_served_count() -> None:
     assert isinstance(rec, MemberVideoRec)
     assert rec.category == VideoGenre.professional
     assert rec.rec_id == rec_id
-    # count query → ONE category query (professional) → record insert.
-    assert len(session.executed) == 3
-    assert session.executed[1][1]["category"] == "professional"
+    # Only the professional category was queried (start index 1), embedding passed.
+    assert [c[2] for c in feed.calls] == [VideoGenre.professional]
+    assert feed.calls[0][3] == "[0.9]"
+    # DB touched twice only: served-count read + record insert.
+    assert len(session.executed) == 2
 
 
 async def test_get_rec_falls_through_empty_category() -> None:
-    # served_count = 0 → start educational, which is EMPTY → advance to
+    # served_count = 0 → start educational, which yields None → advance to
     # professional, which yields the pick.
     rec_id = uuid4()
-    pool, session = _make_pool(
-        [
-            _count_result(0),
-            _FakeResult(rows=[]),  # educational: nothing
-            _FakeResult(rows=[_candidate_row("vp", "professional")]),
-            _rec_id_result(rec_id),
-        ]
-    )
+    pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub()
-    svc = _recs_service(pool, profile)
+    feed = _FakeFeed(
+        {VideoGenre.professional: _rec_candidate("vp", "professional")}
+    )
+    svc = _recs_service(pool, profile, feed)
 
     rec = await svc.get_rec(uuid4(), uuid4())
 
     assert rec is not None
     assert rec.category == VideoGenre.professional
-    # count → educational (empty) → professional (pick) → record.
-    assert len(session.executed) == 4
-    assert session.executed[1][1]["category"] == "educational"
-    assert session.executed[2][1]["category"] == "professional"
+    # educational (empty) → professional (pick); no query past the winner.
+    assert [c[2] for c in feed.calls] == [
+        VideoGenre.educational,
+        VideoGenre.professional,
+    ]
+    assert len(session.executed) == 2
 
 
-async def test_get_rec_no_embedding_composite_path() -> None:
+async def test_get_rec_passes_none_embedding_to_feed() -> None:
+    # A member with no profile embedding: None is passed straight to the feed
+    # (the SQL's CASE degrades to relevance ranking); no composite fallback here.
     rec_id = uuid4()
-    pool, session = _make_pool(
-        [
-            _count_result(0),
-            _FakeResult(rows=[_degrade_row("d0", "educational")]),
-            _rec_id_result(rec_id),
-        ]
-    )
+    pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub(embedding=None)
-    svc = _recs_service(pool, profile)
+    feed = _FakeFeed(
+        {VideoGenre.educational: _rec_candidate("d0", "educational")}
+    )
+    svc = _recs_service(pool, profile, feed)
 
     rec = await svc.get_rec(uuid4(), uuid4())
 
     assert rec is not None
     assert rec.category == VideoGenre.educational
-    # The candidate query bound NO similarity inputs (degrade ranking).
-    cand_params = session.executed[1][1]
-    assert "member_embedding" not in cand_params
-    assert "w_sim" not in cand_params
-    assert cand_params["category"] == "educational"
+    assert feed.calls[0][3] is None  # embedding forwarded as None
 
 
 async def test_get_rec_records_pick_and_returns_rec_id() -> None:
     rec_id = uuid4()
-    pool, session = _make_pool(
-        [
-            _count_result(0),
-            _FakeResult(rows=[_candidate_row("ve", "educational", score=0.77)]),
-            _rec_id_result(rec_id),
-        ]
-    )
+    pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub()
-    svc = _recs_service(pool, profile)
+    feed = _FakeFeed(
+        {VideoGenre.educational: _rec_candidate("ve", "educational")}
+    )
+    svc = _recs_service(pool, profile, feed)
 
     rec = await svc.get_rec(uuid4(), uuid4())
 
     assert rec.rec_id == rec_id
     assert rec.video.url.endswith("ve")
-    # The last execute is the record insert, carrying the served pick.
+    assert isinstance(rec.video, GymVideoCard)
+    # The last execute is the record insert — the served pick, and NO score bind.
     insert_params = session.executed[-1][1]
     assert insert_params["video_id"] == "ve"
     assert insert_params["category"] == "educational"
-    assert insert_params["score"] == 0.77
+    assert "score" not in insert_params
 
 
 async def test_get_rec_returns_none_when_no_category_yields() -> None:
     # Every category in the rotation is empty → None (route maps to 404), and
     # nothing is recorded.
-    pool, session = _make_pool(
-        [
-            _count_result(0),
-            _FakeResult(rows=[]),  # educational
-            _FakeResult(rows=[]),  # professional
-            _FakeResult(rows=[]),  # analysis
-        ]
-    )
+    pool, session = _make_pool([_count_result(0)])
     profile = _profile_stub()
-    svc = _recs_service(pool, profile)
+    feed = _FakeFeed({})  # no category yields a candidate
+    svc = _recs_service(pool, profile, feed)
 
     rec = await svc.get_rec(uuid4(), uuid4())
 
     assert rec is None
-    # count + one query per rotation category, and NO record insert.
-    assert len(session.executed) == 1 + len(_ROTATION)
+    # Every rotation category was tried; only the served-count read hit the DB.
+    assert len(feed.calls) == len(_ROTATION)
+    assert len(session.executed) == 1
 
 
 async def test_get_rec_propagates_member_not_in_gym() -> None:
@@ -478,12 +474,14 @@ async def test_get_rec_propagates_member_not_in_gym() -> None:
         side_effect=MemberNotInGymError("Member not found in this gym")
     )
     profile.load_embedding = AsyncMock()
-    svc = _recs_service(pool, profile)
+    feed = _FakeFeed({})
+    svc = _recs_service(pool, profile, feed)
 
     with pytest.raises(MemberNotInGymError):
         await svc.get_rec(uuid4(), uuid4())
 
     assert len(session.executed) == 0
+    assert len(feed.calls) == 0
     profile.load_embedding.assert_not_called()
 
 

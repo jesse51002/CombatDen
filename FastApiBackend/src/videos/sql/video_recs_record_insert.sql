@@ -6,12 +6,11 @@
 -- defaults to now(). "Already recommended" is global per member. category is the
 -- served video's genre (video.tag), the existing video_genre enum.
 INSERT INTO member_video_recs (
-    member_id, gym_id, video_id, category, score
+    member_id, gym_id, video_id, category
 ) VALUES (
     CAST(:member_id AS UUID),
     CAST(:gym_id AS UUID),
     :video_id,
-    CAST(:category AS video_genre),
-    :score
+    CAST(:category AS video_genre)
 )
 RETURNING rec_id
