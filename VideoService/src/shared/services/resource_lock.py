@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from src.api.config import settings
+from src.shared.config import settings
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 

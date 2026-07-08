@@ -1,0 +1,66 @@
+flowchart TB
+  %% ============================================================
+  %% VideoService background worker — in-depth run_tick + pipeline
+  %% Prose source of truth: VideoService/CLAUDE.md "The background worker".
+  %% Rules: top-down TB, sibling-only edges (validate with check_siblings.py).
+  %% ============================================================
+
+  Legend["🧭 Legend — green = worker logic · orange = shared DB / external services<br/>solid arrow = live call · dashed = lazy / optional / side-effect<br/>top-down = execution order · every edge connects siblings"]
+
+  WorkerLoop["🔁 run.py loop (make worker)<br/>one gym per tick · wait worker_poll_seconds (60)<br/>NOT a web server · no port · no queue"]
+
+  subgraph Tick["🎬 The tick — WorkerService.run_tick (one gym)"]
+    direction TB
+    t_lock["1 · acquire global TTL lock<br/>video_worker_run on resource_locks (non-blocking single-shot)<br/>TTL 900s · heartbeat 300s renews · a lost beat aborts mid-run<br/>→ one gym at a time across every worker instance"]
+    t_orphan["2 · recover orphans (under the lock)<br/>any run still status='running' = a dead process<br/>→ mark failed (error='orphaned') · no re-enqueue"]
+    t_cap["3 · system-wide run cap<br/>runs of ANY status across ALL gyms in 24h ≥ worker_system_run_cap (5)<br/>→ skip selection (global quota / Apify budget guard)"]
+    t_due["4 · derive the single DUE gym (worker_select_due_gym.sql)<br/>NO queue — timestamps vs last run start (MAX video_run.created_at)<br/>tier1 newer admin_update spec · tier2 settled manual feed curation (1h) · tier3 weekly floor (7d)<br/>per-gym cap (2) enforced in the query · nothing due → tick ends"]
+    t_open["5 · open video_run (status='running')<br/>under the heartbeat → drive the pipeline"]
+    t_lock --> t_orphan
+    t_orphan --> t_cap
+    t_cap --> t_due
+    t_due --> t_open
+  end
+
+  subgraph Pipeline["⚙️ The pipeline — six stages, in order (one gym)"]
+    direction TB
+    p_spec["1 · Spec<br/>load gym_video_spec_latest<br/>criteria_changed vs the spec in force at the last COMPLETED run<br/>→ incremental (unchanged) | fresh (changed)"]
+    p_scrape["2 · Scrape → YouTube Data API v3<br/>search.list per spec query + batched videos.list metadata (free within quota)<br/>merge-upsert the shared video pool (source_queries accumulate; transcript NULL here)"]
+    p_funnel["3 · Funnel (cap scan_budget_per_run = 1000)<br/>Tier1 own-query hits matching a gym discipline (+ untagged fresh scrapes)<br/>Tier2 cosine RAG probes over video_rag (only if room left)"]
+    p_enrich["4 · Enrich (per un-enriched candidate + owner-section videos)<br/>lazy Apify transcript fetch → cache to video.transcript (placeholder on miss, never aborts)<br/>ONE multimodal LLM call → tag + disciplines + summary + facets (tag/disciplines onto the pool row)<br/>embed the summary (batched) → insert video_rag"]
+    p_scan["5 · Scan<br/>batched keep/drop vs the spec's videos_desc / avoid_desc<br/>a missing verdict → rejected"]
+    p_feed["6 · Feed-write / carry-forward (one txn)<br/>new video_run rows: carry the prior run FIRST (all rows incremental / manual-only fresh)<br/>then insert the fresh automatic verdicts ON CONFLICT DO NOTHING → manual always wins<br/>complete the run (status='completed') = the served run"]
+    p_spec --> p_scrape
+    p_scrape --> p_funnel
+    p_funnel --> p_enrich
+    p_enrich --> p_scan
+    p_scan --> p_feed
+  end
+
+  Cost["🧾 Cost ledger — cost_log, 5 rows per run<br/>every row: source='video' · run_id (TEXT, no FK) · gym_id · stage · model · cost_usd · breakdown<br/>search — FREE (YouTube quota units in breakdown, model NULL)<br/>transcript — Apify pintostudio/youtube-transcript-scraper (~$0.01/video, model NULL)<br/>enrich — one multimodal LLM call<br/>embed — summary embedding<br/>scan — batched keep/drop LLM<br/>a failed stage marks the run failed (its created_at watermark holds → no hot-loop)"]
+
+  DB["🗄️ Shared Supabase Postgres<br/>resource_locks · video_run · gym_video_spec(_latest)<br/>video pool · video_rag (pgvector vector(1536)) · gym_video_feed · cost_log"]
+  YouTube["📺 YouTube Data API v3<br/>search.list discovery + videos.list metadata (free within ~10k units/day)"]
+  Apify["🎞️ Apify · pintostudio/youtube-transcript-scraper<br/>transcripts ONLY · lazy at enrich (~$0.01/video)"]
+  LLM["🤖 LLM providers<br/>Gemini (enrich + scan) · OpenAI text-embedding-3-small (embed)"]
+
+  WorkerLoop --> Tick
+  Tick -->|"due gym + open run → run the pipeline"| Pipeline
+  Pipeline -.->|"each stage → a cost_log row"| Cost
+  Tick -->|"lock · orphan recovery · derive due gym · open run"| DB
+  Pipeline -->|"upsert pool · read/write video_rag · write feed runs"| DB
+  Pipeline -->|"scrape: discovery + metadata"| YouTube
+  Pipeline -.->|"enrich: lazy transcript"| Apify
+  Pipeline -->|"enrich + scan + embed"| LLM
+  Cost -->|"insert cost_log rows"| DB
+
+  classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef data fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
+  classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
+  classDef tool fill:#fdf6d8,stroke:#caab2f,color:#4a3d08;
+  class WorkerLoop svc;
+  class YouTube,Apify,LLM ext;
+  class DB,Cost data;
+  class Legend tool;
+  style Tick fill:#dff0e6,stroke:#2f8f53;
+  style Pipeline fill:#dff0e6,stroke:#2f8f53;

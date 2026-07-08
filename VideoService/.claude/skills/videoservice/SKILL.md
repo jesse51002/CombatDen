@@ -48,14 +48,13 @@ field (one ThemeService design id). The gym browser derives a coarse
 | Understand / run / debug the worker's **ingest** (scrape → funnel → enrich) | `references/scraper.md` | `src/worker` (`make worker`), self-scheduling |
 | Understand / run / debug the worker's **judgment** (scan → feed-write) | `references/scan.md` | `src/worker` (`make worker`), self-scheduling |
 
-**Gym authoring is the one operator-driven job.** The scrape/scan pipeline is no
-longer a per-step script — it is the single background **worker** (`src/worker`,
-`python -m src.worker.run`), a self-scheduling loop with no job queue: each tick
-derives the single highest-priority "due" gym straight from timestamps already in
-the schema (a fresh `admin_update` spec version, a settled manual feed curation, or
-a weekly refresh floor) and runs the whole pipeline under a global lock. `make worker`
-runs it locally against `.env`. (The old `scripts/scraper` + `scripts/scan` +
-`src/classification` are deleted — the worker absorbed them.)
+**Gym authoring is the one operator-driven job.** The scrape → scan pipeline runs
+as the single background **worker** (`src/worker`, `python -m src.worker.run`), a
+self-scheduling loop with no job queue: each tick derives the single
+highest-priority "due" gym straight from timestamps already in the schema (a fresh
+`admin_update` spec version, a settled manual feed curation, or a weekly refresh
+floor) and runs the whole pipeline under a global lock. `make worker` runs it
+locally against `.env`.
 
 ## How the pieces connect
 
@@ -76,11 +75,12 @@ runs it locally against `.env`. (The old `scripts/scraper` + `scripts/scan` +
   self-scheduling.
 - **FastApiBackend has no control surface** — there is nothing to enqueue and no
   manual-run route; it only exposes a read-only worker-status endpoint, serves the
-  feed, and serves the RAG member-recs + semantic search that the worker's
-  `video_rag` rows power. The two never call each other — the shared `video_*`
-  tables (and their timestamps) are the hand-off the worker reads to derive its own
-  work. The embedding model + `vector(1536)` dimension is a contract pinned on both
-  sides.
+  feed (with an optional per-member personalized ordering), and serves the RAG
+  member recommendations — a single rotating-category rec per request — that the
+  worker's `video_rag` rows power. The two never call each other — the shared
+  `video_*` tables (and their timestamps) are the hand-off the worker reads to
+  derive its own work. The embedding model + `vector(1536)` dimension is a contract
+  pinned on both sides.
 
 ## Hard rules (all work)
 

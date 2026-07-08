@@ -1,10 +1,13 @@
-"""Pure transforms: raw ``streamers/youtube-scraper`` dataset items → ``VideoOutput``.
+"""Pure transforms: YouTube Data API items → ``VideoOutput``.
 
-No I/O and no Apify token needed here, so this is the unit-testable core of the
-worker's scrape stage. One Apify run per query returns fully-enriched items
-(metadata + channel avatar + inline subtitles), so every field comes from the one
-item. Videos leave here untagged (``tag=None``, empty ``gym_type``); the worker's
-enrich stage fills genre + disciplines from the real content + thumbnail.
+No I/O and no API key needed here, so this is the unit-testable core of the
+worker's scrape stage. One query's fetch is two API calls: ``search.list`` (id +
+snippet) merged with ``videos.list`` (fuller snippet + statistics + duration).
+This module pairs a query's search items with the by-id details and folds them
+into deduped ``VideoOutput``s. Videos leave here untagged (``tag=None``, empty
+``gym_type``) and WITHOUT a transcript — the enrich stage fills genre +
+disciplines and fetches the transcript lazily (from Apify) only for the videos it
+actually enriches.
 
 A class-less concern module by design (pure functions) — the house exception to
 "no loose module-level functions", exactly like the scan/roster mappers.
@@ -12,27 +15,29 @@ A class-less concern module by design (pure functions) — the house exception t
 
 from __future__ import annotations
 
-import html
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from schema.video_output import VideoOutput
-from src.shared.util.video_id import video_id_from_url
 
 WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
-# "1:02:03" / "5:30" / "45" -> seconds. The actor reports duration as a clock
-# string (or sometimes an int of seconds); both are handled, bad/absent -> None.
-_CLOCK = re.compile(r"^\d+(?::\d{1,2})*$")
-# An SRT cue index / timestamp line, so a defensively-stripped transcript reads
-# clean even if the actor ever returns srt where we asked for plaintext.
-_SRT_TIMECODE = re.compile(r"^\d+$|-->")
+CHANNEL_URL = "https://www.youtube.com/channel/{channel_id}"
+# ISO-8601 duration as YouTube reports it (``PT1H2M3S`` / ``PT5M30S`` / ``PT45S``,
+# rarely with a leading day component) → seconds.
+_ISO8601_DURATION = re.compile(
+    r"^P(?:(?P<days>\d+)D)?"
+    r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
+)
+# Thumbnail resolutions best → worst; the first present one is used.
+_THUMBNAIL_PREFERENCE = ("maxres", "standard", "high", "medium", "default")
 
 
 @dataclass(frozen=True)
-class ApifyHit:
-    """One search-result item, paired with the query that surfaced it and its
-    rank within that query. The intermediate the dedup step folds over."""
+class VideoHit:
+    """One search-result item merged with its ``videos.list`` details, paired with
+    the query that surfaced it and its rank within that query. The intermediate
+    the dedup step folds over."""
 
     video_id: str
     url: str
@@ -45,13 +50,25 @@ class ApifyHit:
     view_count: int | None
     like_count: int | None
     duration_seconds: int | None
-    transcript: str | None
     query: str
     rank: int  # 0-based position in this query's results (lower = more relevant)
 
 
+def youtube_item_id(item: dict) -> str:
+    """The video id of a YouTube API item. ``search.list`` items nest it under
+    ``id.videoId``; ``videos.list`` items carry a plain string ``id``. Empty when
+    absent (a non-video search result)."""
+    ident = item.get("id")
+    if isinstance(ident, dict):
+        return ident.get("videoId") or ""
+    if isinstance(ident, str):
+        return ident
+    return ""
+
+
 def _to_int(value: object) -> int | None:
-    """Counts may be int, numeric string, or absent/hidden -> None."""
+    """Counts may be a numeric string (the API's shape), an int, or absent/hidden
+    (likeCount is omitted when hidden) → None."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -63,69 +80,79 @@ def _to_int(value: object) -> int | None:
 
 
 def _parse_duration(value: object) -> int | None:
-    """Runtime in seconds from an int (already seconds) or a clock string
-    (``H:MM:SS`` / ``M:SS`` / ``SS``). Anything else -> None."""
-    if isinstance(value, bool):
+    """Runtime in seconds from an ISO-8601 duration string (``PT#H#M#S``).
+    Anything unparseable or zero (e.g. a live broadcast's ``P0D``/``PT0S``) →
+    None."""
+    if not isinstance(value, str):
         return None
-    if isinstance(value, int):
-        return value or None
-    if isinstance(value, str) and _CLOCK.match(value.strip()):
-        total = 0
-        for part in value.strip().split(":"):
-            total = total * 60 + int(part)
-        return total or None
-    return None
-
-
-def _extract_transcript(item: dict) -> str | None:
-    """The plain-text transcript from an item's ``subtitles`` array, or None.
-
-    We request ``subtitlesFormat=plaintext``, so each entry's ``srt`` field holds
-    plain text; we still defensively strip SRT cue numbers / timecodes in case an
-    srt-shaped payload comes back, and unescape HTML entities the captions carry."""
-    subtitles = item.get("subtitles")
-    if not isinstance(subtitles, list):
+    match = _ISO8601_DURATION.match(value.strip())
+    if not match:
         return None
-    for entry in subtitles:
-        if not isinstance(entry, dict):
-            continue
-        text = entry.get("srt") or entry.get("text") or entry.get("plaintext")
-        if isinstance(text, str) and text.strip():
-            lines = [
-                ln
-                for ln in text.splitlines()
-                if ln.strip() and not _SRT_TIMECODE.search(ln.strip())
-            ]
-            cleaned = html.unescape(" ".join(lines).strip())
-            if cleaned:
-                return cleaned
-    return None
+    parts = {k: int(v) if v else 0 for k, v in match.groupdict().items()}
+    total = (
+        parts["days"] * 86400
+        + parts["hours"] * 3600
+        + parts["minutes"] * 60
+        + parts["seconds"]
+    )
+    return total or None
 
 
-def parse_search_items(items: Sequence[dict], query: str) -> list[ApifyHit]:
-    """Pull the modelled fields out of one run's dataset items, pairing every
-    video with the query that produced it. Non-video / id-less items are skipped;
-    rank is the contiguous position among the videos kept."""
-    hits: list[ApifyHit] = []
-    for item in items:
-        url = item.get("url") or ""
-        video_id = item.get("id") or video_id_from_url(url)
+def _best_thumbnail(thumbnails: object) -> str:
+    """The highest-resolution thumbnail URL from a snippet's ``thumbnails`` map,
+    or empty string when none is present."""
+    if not isinstance(thumbnails, dict):
+        return ""
+    for key in _THUMBNAIL_PREFERENCE:
+        entry = thumbnails.get(key)
+        if isinstance(entry, dict) and entry.get("url"):
+            return str(entry["url"])
+    return ""
+
+
+def parse_youtube_items(
+    search_items: Sequence[dict],
+    details_by_id: Mapping[str, dict],
+    query: str,
+) -> list[VideoHit]:
+    """Pull the modelled fields out of a query's ``search.list`` items, enriched
+    by the matching ``videos.list`` details, pairing every video with the query
+    that produced it. The ``videos.list`` snippet is preferred (its title +
+    description are un-truncated); non-video / id-less items are skipped; rank is
+    the contiguous position among the videos kept."""
+    hits: list[VideoHit] = []
+    for item in search_items:
+        video_id = youtube_item_id(item)
         if not video_id:
             continue
+        search_snippet = item.get("snippet") or {}
+        detail = details_by_id.get(video_id) or {}
+        detail_snippet = detail.get("snippet") or {}
+        snippet = detail_snippet or search_snippet
+        stats = detail.get("statistics") or {}
+        content = detail.get("contentDetails") or {}
+        channel_id = snippet.get("channelId") or search_snippet.get("channelId") or ""
         hits.append(
-            ApifyHit(
+            VideoHit(
                 video_id=video_id,
-                url=url or WATCH_URL.format(video_id=video_id),
-                title=item.get("title") or "",
-                description=item.get("text") or item.get("description") or "",
-                thumbnail_url=item.get("thumbnailUrl") or "",
-                channel_name=item.get("channelName") or "",
-                channel_url=item.get("channelUrl") or "",
-                channel_avatar_url=item.get("channelAvatarUrl") or "",
-                view_count=_to_int(item.get("viewCount")),
-                like_count=_to_int(item.get("likes")),
-                duration_seconds=_parse_duration(item.get("duration")),
-                transcript=_extract_transcript(item),
+                url=WATCH_URL.format(video_id=video_id),
+                title=snippet.get("title") or search_snippet.get("title") or "",
+                description=snippet.get("description") or "",
+                thumbnail_url=_best_thumbnail(
+                    snippet.get("thumbnails") or search_snippet.get("thumbnails")
+                ),
+                channel_name=(
+                    snippet.get("channelTitle")
+                    or search_snippet.get("channelTitle")
+                    or ""
+                ),
+                channel_url=(
+                    CHANNEL_URL.format(channel_id=channel_id) if channel_id else ""
+                ),
+                channel_avatar_url="",  # the API's snippet carries no avatar
+                view_count=_to_int(stats.get("viewCount")),
+                like_count=_to_int(stats.get("likeCount")),
+                duration_seconds=_parse_duration(content.get("duration")),
                 query=query,
                 rank=len(hits),
             )
@@ -133,12 +160,12 @@ def parse_search_items(items: Sequence[dict], query: str) -> list[ApifyHit]:
     return hits
 
 
-def build_outputs(hits: Sequence[ApifyHit]) -> list[VideoOutput]:
-    """De-dup hits by video id into ``VideoOutput``s. First hit wins for content
-    (incl. transcript); the queries that surfaced a video are merged and the best
-    (lowest) rank kept. Videos leave here untagged (``tag=None``, empty
-    ``gym_type``); the enrich stage fills those."""
-    first: dict[str, ApifyHit] = {}
+def build_outputs(hits: Sequence[VideoHit]) -> list[VideoOutput]:
+    """De-dup hits by video id into ``VideoOutput``s. First hit wins for content;
+    the queries that surfaced a video are merged and the best (lowest) rank kept.
+    Videos leave here untagged (``tag=None``, empty ``gym_type``) and without a
+    transcript — the enrich stage fills both."""
+    first: dict[str, VideoHit] = {}
     merged_queries: dict[str, dict[str, None]] = {}
     best_rank: dict[str, int] = {}
     for hit in hits:
@@ -165,7 +192,7 @@ def build_outputs(hits: Sequence[ApifyHit]) -> list[VideoOutput]:
                 duration_seconds=hit.duration_seconds,
                 source_queries=list(merged_queries[video_id]),
                 relevance_index=best_rank[video_id],
-                transcript=hit.transcript,
+                transcript=None,
             )
         )
     return outputs

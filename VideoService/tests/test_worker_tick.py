@@ -53,7 +53,9 @@ class RecordingStage:
 
 def _service(db, lock, *, scraper=None, funnel=None, enricher=None, scanner=None):
     spec = RecordingStage("load", SPEC)
-    scraper = scraper or RecordingStage("scrape", ScrapeResult(0.1, 5, 2, 3))
+    scraper = scraper or RecordingStage(
+        "scrape", ScrapeResult(0.0, 100, 5, 2, 3)
+    )
     funnel = funnel or RecordingStage(
         "select", FunnelResult(candidate_ids=["a"], tier1_count=1, embed_usd=0.0)
     )
@@ -205,7 +207,7 @@ def test_pipeline_aborts_between_stages() -> None:
         async def scrape(self, spec):  # noqa: ANN001
             self.calls.append((spec,))
             abort.set()  # simulate the heartbeat losing the lock mid-stage
-            return ScrapeResult(0.0, 0, 0, 0)
+            return ScrapeResult(0.0, 0, 0, 0, 0)
 
     scraper = AbortingScraper()
     funnel = RecordingStage("select", FunnelResult())

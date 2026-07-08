@@ -16,7 +16,7 @@ import os
 
 from sqlalchemy.engine import make_url
 
-from src.api.config import Settings
+from src.shared.config import Settings
 from src.shared.database import DirectDatabasePool
 
 logger = logging.getLogger(__name__)

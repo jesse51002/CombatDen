@@ -18,7 +18,7 @@ import asyncio
 from pathlib import Path
 from uuid import uuid4
 
-from src.api.config import settings
+from src.shared.config import settings
 from src.shared.services import resource_lock as resource_lock_module
 from src.shared.services.resource_lock import ResourceLock
 

@@ -1,10 +1,10 @@
-"""Worker settings — the knobs, model ids, and Apify token for the background
-worker, from env / ``.env``.
+"""Worker settings — the knobs, model ids, the YouTube Data API key, and the
+Apify (transcript) token for the background worker, from env / ``.env``.
 
-Kept separate from ``src/api/config.py`` (DB + lock) and ``src/core/config.py``
+Kept separate from ``src/shared/config.py`` (DB + lock) and ``src/core/config.py``
 (LLM provider keys) so each concern owns its own ``Settings``, all reading the
-same ``.env``. The worker composes all three: DB settings from the api config,
-provider keys resolved by the LLM client via the core config, and these
+same ``.env``. The worker composes all three: DB settings from the shared
+config, provider keys resolved by the LLM client via the core config, and these
 worker-specific fields.
 
 The model ids are ``settings`` fields (env-overridable) rather than per-call
@@ -46,8 +46,8 @@ class WorkerSettings(BaseSettings):
     worker_cap_window_hours: int = 24
     # Max runs per gym within the window (a 3rd waits for the window to roll).
     worker_gym_run_cap: int = 2
-    # Max runs across ALL gyms within the window — the global Apify/quota budget
-    # guard, separate from the per-gym cap.
+    # Max runs across ALL gyms within the window — the global YouTube-quota /
+    # Apify-transcript budget guard, separate from the per-gym cap.
     worker_system_run_cap: int = 5
     # Tier-2 batch settle: a manual curation triggers a run only once the most
     # recent manual curation is at least this old (owners curate in bursts, so
@@ -63,7 +63,7 @@ class WorkerSettings(BaseSettings):
     worker_scan_concurrency: int = 8
 
     # --- budgets -------------------------------------------------------------
-    # Cap per query on the Apify scrape.
+    # Cap per query on the YouTube search (the API's search.list maxResults, ≤50).
     worker_max_results_per_query: int = 20
     # Hard cap on candidates scanned in one run (tier 1 first, then tier 2).
     scan_budget_per_run: int = 1000
@@ -74,10 +74,16 @@ class WorkerSettings(BaseSettings):
     # Head characters of transcript fed to the enrich call.
     enrich_transcript_char_budget: int = 8000
 
-    # --- Apify ---------------------------------------------------------------
+    # --- YouTube Data API + Apify transcripts --------------------------------
+    # Google Cloud API key for the YouTube Data API v3 (discovery + metadata).
+    # Free within the daily quota (10k units/day; search.list = 100 units).
+    youtube_api_key: str = ""
+    # Apify token for the transcript actor (transcripts are fetched lazily at
+    # enrich, one actor run per video).
     apify_token: str = ""
-    # streamers/youtube-scraper price per returned video (~$2.40 / 1,000).
-    apify_cost_per_video_usd: float = 0.0024
+    # pintostudio/youtube-transcript-scraper price per fetched video
+    # ($10 / 1,000 results).
+    apify_transcript_cost_per_video_usd: float = 0.01
 
     # --- models --------------------------------------------------------------
     # Multimodal classify+summarize call; provider-prefixed for litellm routing.

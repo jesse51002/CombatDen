@@ -31,11 +31,15 @@ def route(sql: str) -> str:
         ("video_run_id IS NULL", "owner_feed"),
         ("FROM video_rag\nWHERE video_id = ANY(:ids)", "existing_rag"),
         ("INSERT INTO video_rag", "insert_rag"),
+        ("SET transcript", "cache_transcripts"),
         ("SET tag", "update_tags"),
+        # upsert_video must be routed before the "thumbnail_url" token: the
+        # upsert's column list also names thumbnail_url, so it would otherwise be
+        # misrouted to load_videos_enrich.
+        ("INSERT INTO video (", "upsert_video"),
         ("thumbnail_url", "load_videos_enrich"),
         ("JOIN video_rag r", "scan_candidates"),
         ("FROM video\nWHERE video_id = ANY(:ids)", "existing_videos"),
-        ("INSERT INTO video (", "upsert_video"),
         ("INSERT INTO cost_log", "insert_cost"),
     ]
     for token, name in checks:
@@ -118,6 +122,52 @@ class RoutingFakeDb:
 
     def read_params(self, name: str) -> list[Any]:
         return [p for _, n, p in self.reads if n == name]
+
+
+class FakeYouTube:
+    """YouTube Data API client stand-in: programmable ``search`` + ``list_videos``.
+
+    ``search_items`` maps a query → its ``search.list`` items; ``details`` maps a
+    video id → its ``videos.list`` detail item. Records the queries searched and
+    the id batches listed."""
+
+    def __init__(
+        self,
+        search_items: dict[str, list[dict]] | None = None,
+        details: dict[str, dict] | None = None,
+    ) -> None:
+        self._search_items = search_items or {}
+        self._details = details or {}
+        self.searched: list[str] = []
+        self.listed: list[list[str]] = []
+
+    async def search(
+        self, query: str, *, max_results: int, language: str
+    ) -> list[dict]:
+        self.searched.append(query)
+        return list(self._search_items.get(query, []))
+
+    async def list_videos(self, video_ids: list[str]) -> list[dict]:
+        self.listed.append(list(video_ids))
+        return [self._details[v] for v in video_ids if v in self._details]
+
+
+class FakeTranscriptClient:
+    """Transcript client stand-in: returns a canned transcript per video id (or
+    None for a miss), recording every fetch. ``fail=True`` misses on every id."""
+
+    def __init__(
+        self, transcripts: dict[str, str] | None = None, *, fail: bool = False
+    ) -> None:
+        self._transcripts = transcripts or {}
+        self._fail = fail
+        self.fetched: list[str] = []
+
+    async def fetch(self, video_id: str, *, language: str) -> str | None:
+        self.fetched.append(video_id)
+        if self._fail:
+            return None
+        return self._transcripts.get(video_id)
 
 
 class FakeLLM:

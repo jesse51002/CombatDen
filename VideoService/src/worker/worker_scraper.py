@@ -1,10 +1,14 @@
 """Stage 2 — scrape the spec's queries into the shared pool.
 
-One Apify actor run per query (concurrent under a semaphore); a failed query is
-logged and dropped, never aborting the run (partial scrape is fine). Results are
-transformed by the pure ``worker_transforms`` and merge-upserted into ``video``:
-new videos land untagged, existing videos keep their content (never wiped with
-NULLs) and gain the surfacing query. Reports the Apify spend and new/updated split.
+Discovery + metadata come from the official YouTube Data API (two calls per
+query: ``search.list`` for the ids, ``videos.list`` for stats + duration),
+concurrent under a semaphore; a failed query is logged and dropped, never
+aborting the run (partial scrape is fine). Results are transformed by the pure
+``worker_transforms`` and merge-upserted into ``video``: new videos land untagged
+and transcript-less (the enrich stage fetches transcripts lazily), existing
+videos keep their content (never wiped with NULLs) and gain the surfacing query.
+The YouTube Data API is free within quota, so the scrape reports its quota usage
+(a diagnostic) and a spend of $0.
 """
 
 from __future__ import annotations
@@ -19,44 +23,53 @@ from schema.video_output import VideoOutput
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.shared.util.video_id import video_id_from_url
-from src.worker.worker_apify import WorkerApifyClient
 from src.worker.worker_config import settings
 from src.worker.worker_spec import SpecData
-from src.worker.worker_transforms import parse_search_items, build_outputs
+from src.worker.worker_transforms import (
+    build_outputs,
+    parse_youtube_items,
+    youtube_item_id,
+)
+from src.worker.worker_youtube import WorkerYouTubeClient
 
 logger = logging.getLogger(__name__)
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 SCRAPE_LANGUAGE = "en"
+# search.list costs 100 quota units per query; videos.list adds ~1/query (a
+# rounding error), so the search cost dominates the per-run quota diagnostic.
+QUOTA_UNITS_PER_SEARCH = 100
 
 
 @dataclass(frozen=True)
 class ScrapeResult:
-    """What one scrape did: spend + how much of the pool it touched."""
+    """What one scrape did: spend + quota + how much of the pool it touched."""
 
-    apify_usd: float
+    search_usd: float  # YouTube Data API is free within quota → always 0.0
+    youtube_quota_units: int  # ~100 units per spec query (a diagnostic)
     results_fetched: int  # raw video items returned across all queries
     new_count: int
     updated_count: int
 
 
 class WorkerScraper:
-    """Runs the spec's queries through Apify and merges results into the pool."""
+    """Runs the spec's queries through the YouTube Data API and merges results
+    into the pool."""
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        apify_client: WorkerApifyClient,
+        youtube_client: WorkerYouTubeClient,
     ) -> None:
         self._db = db_pool
-        self._apify = apify_client
+        self._youtube = youtube_client
 
     async def scrape(self, spec: SpecData) -> ScrapeResult:
         """Fetch every spec query and merge-upsert the results into ``video``."""
         queries = spec.queries
         if not queries:
             logger.warning("gym %s has no queries — nothing to scrape", spec.gym_id)
-            return ScrapeResult(0.0, 0, 0, 0)
+            return ScrapeResult(0.0, 0, 0, 0, 0)
 
         sem = asyncio.Semaphore(settings.worker_scrape_concurrency)
         per_query = await asyncio.gather(
@@ -67,40 +80,45 @@ class WorkerScraper:
         fresh = build_outputs(hits)
 
         new_count, updated_count = await self._merge(fresh)
-        apify_usd = round(
-            results_fetched * settings.apify_cost_per_video_usd, 4
-        )
+        quota_units = len(queries) * QUOTA_UNITS_PER_SEARCH
         logger.info(
-            "gym %s scrape: %d fetched, %d new / %d updated; Apify $%.4f",
+            "gym %s scrape: %d fetched, %d new / %d updated; YouTube ~%d quota units (free)",
             spec.gym_id,
             results_fetched,
             new_count,
             updated_count,
-            apify_usd,
+            quota_units,
         )
         return ScrapeResult(
-            apify_usd=apify_usd,
+            search_usd=0.0,
+            youtube_quota_units=quota_units,
             results_fetched=results_fetched,
             new_count=new_count,
             updated_count=updated_count,
         )
 
-    async def _search_query(
-        self, query: str, sem: asyncio.Semaphore
-    ) -> list:
-        """One query's Apify run under the concurrency gate. A failure logs and
-        drops just this query (the Apify spend on the rest is not wasted)."""
+    async def _search_query(self, query: str, sem: asyncio.Semaphore) -> list:
+        """One query's YouTube fetch (search + details) under the concurrency
+        gate. A failure logs and drops just this query (the rest are unaffected;
+        the free quota already spent on them is not wasted)."""
         async with sem:
             try:
-                items = await self._apify.search(
+                search_items = await self._youtube.search(
                     query,
                     max_results=settings.worker_max_results_per_query,
                     language=SCRAPE_LANGUAGE,
                 )
+                ids = [
+                    vid
+                    for vid in (youtube_item_id(i) for i in search_items)
+                    if vid
+                ]
+                details = await self._youtube.list_videos(ids) if ids else []
             except Exception as exc:  # noqa: BLE001 - one bad query never aborts
                 logger.warning("query %r failed (dropped): %s", query, exc)
                 return []
-            return parse_search_items(items, query)
+            details_by_id = {youtube_item_id(d): d for d in details}
+            return parse_youtube_items(search_items, details_by_id, query)
 
     async def _merge(self, fresh: list[VideoOutput]) -> tuple[int, int]:
         """Merge-upsert the deduped fresh videos; return (new, updated) counts."""

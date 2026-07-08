@@ -2,7 +2,10 @@
 
 Covers: videos already in video_rag are skipped; a per-video failure is isolated
 (the rest still enrich); the thumbnail is passed as image_urls only when it is a
-plausible http(s) URL; and summaries embed in batches.
+plausible http(s) URL; summaries embed in batches; and the LAZY transcript fetch —
+a candidate with no cached transcript triggers one Apify fetch (used in the prompt
++ cached back + billed), a cached transcript is not re-fetched, and a fetch miss
+degrades to the placeholder without aborting the run.
 """
 
 from __future__ import annotations
@@ -14,11 +17,17 @@ from schema.video_type import VideoType
 from src.core.errors import ProviderError
 from src.worker import worker_enricher
 from src.worker.schema.enrich_result import EnrichResult
-from src.worker.worker_enricher import WorkerEnricher
-from tests.worker_fakes import FakeLLM, RoutingFakeDb
+from src.worker.worker_config import settings
+from src.worker.worker_enricher import NO_TRANSCRIPT_PLACEHOLDER, WorkerEnricher
+from tests.worker_fakes import FakeLLM, FakeTranscriptClient, RoutingFakeDb
 
 
-def _video(vid: str, *, thumbnail: str = "https://i.ytimg.com/x.jpg") -> dict:
+def _video(
+    vid: str,
+    *,
+    thumbnail: str = "https://i.ytimg.com/x.jpg",
+    transcript: str | None = "a transcript",
+) -> dict:
     return {
         "video_id": vid,
         "title": f"Video {vid}",
@@ -26,7 +35,7 @@ def _video(vid: str, *, thumbnail: str = "https://i.ytimg.com/x.jpg") -> dict:
         "description": "desc",
         "thumbnail_url": thumbnail,
         "duration_seconds": 120,
-        "transcript": "a transcript",
+        "transcript": transcript,
     }
 
 
@@ -55,7 +64,7 @@ def test_skips_videos_already_in_rag() -> None:
     db.rows["existing_rag"] = [{"video_id": "v1"}]  # already enriched
     db.rows["load_videos_enrich"] = [_video("v2")]
     llm = FakeLLM(structured=_handler())
-    enricher = WorkerEnricher(db, llm)
+    enricher = WorkerEnricher(db, llm, FakeTranscriptClient())
 
     result = asyncio.run(enricher.enrich("gym-1", ["v1", "v2"]))
 
@@ -71,7 +80,7 @@ def test_per_video_failure_isolated() -> None:
     db = RoutingFakeDb()
     db.rows["load_videos_enrich"] = [_video("v1"), _video("v2")]
     llm = FakeLLM(structured=_handler(fail_substr="Video v1"))
-    enricher = WorkerEnricher(db, llm)
+    enricher = WorkerEnricher(db, llm, FakeTranscriptClient())
 
     result = asyncio.run(enricher.enrich("gym-1", ["v1", "v2"]))
 
@@ -89,7 +98,7 @@ def test_image_urls_only_for_http_thumbnail() -> None:
         _video("v2", thumbnail=""),  # no usable thumbnail
     ]
     llm = FakeLLM(structured=_handler())
-    enricher = WorkerEnricher(db, llm)
+    enricher = WorkerEnricher(db, llm, FakeTranscriptClient())
 
     asyncio.run(enricher.enrich("gym-1", ["v1", "v2"]))
 
@@ -103,7 +112,7 @@ def test_summaries_embed_in_batches(monkeypatch) -> None:
     db = RoutingFakeDb()
     db.rows["load_videos_enrich"] = [_video("v1"), _video("v2"), _video("v3")]
     llm = FakeLLM(structured=_handler(cost=0.01), embed_cost=0.005)
-    enricher = WorkerEnricher(db, llm)
+    enricher = WorkerEnricher(db, llm, FakeTranscriptClient())
 
     result = asyncio.run(enricher.enrich("gym-1", ["v1", "v2", "v3"]))
 
@@ -112,3 +121,55 @@ def test_summaries_embed_in_batches(monkeypatch) -> None:
     assert result.embed_usd == 0.01  # 0.005 × 2 batches
     rag_rows = [p for n, _, p in db.writes if n == "insert_rag"][0]
     assert len(rag_rows) == 3  # one video_rag row per enriched video
+
+
+def test_lazy_fetch_used_cached_and_billed() -> None:
+    db = RoutingFakeDb()
+    db.rows["load_videos_enrich"] = [_video("v1", transcript=None)]  # no transcript
+    transcript = FakeTranscriptClient({"v1": "the fetched transcript body"})
+    llm = FakeLLM(structured=_handler())
+    enricher = WorkerEnricher(db, llm, transcript)
+
+    result = asyncio.run(enricher.enrich("gym-1", ["v1"]))
+
+    # Fetched once, and the fetched text feeds the prompt.
+    assert transcript.fetched == ["v1"]
+    assert "the fetched transcript body" in llm.structured_calls[0]["messages"][0]["content"]
+    # Cached back onto the pool row so a later run reuses it.
+    cache_rows = [p for n, _, p in db.writes if n == "cache_transcripts"][0]
+    assert cache_rows == [{"video_id": "v1", "transcript": "the fetched transcript body"}]
+    # Billed for the one Apify fetch.
+    assert result.transcript_usd == round(settings.apify_transcript_cost_per_video_usd, 4)
+
+
+def test_cached_transcript_not_refetched() -> None:
+    db = RoutingFakeDb()
+    db.rows["load_videos_enrich"] = [_video("v1", transcript="already have it")]
+    transcript = FakeTranscriptClient({"v1": "should not be used"})
+    llm = FakeLLM(structured=_handler())
+    enricher = WorkerEnricher(db, llm, transcript)
+
+    result = asyncio.run(enricher.enrich("gym-1", ["v1"]))
+
+    assert transcript.fetched == []  # never fetched — the row already had one
+    assert "cache_transcripts" not in db.write_names()
+    assert result.transcript_usd == 0.0
+    assert "already have it" in llm.structured_calls[0]["messages"][0]["content"]
+
+
+def test_fetch_miss_degrades_to_placeholder_and_continues() -> None:
+    db = RoutingFakeDb()
+    db.rows["load_videos_enrich"] = [_video("v1", transcript=None)]
+    transcript = FakeTranscriptClient(fail=True)  # every fetch misses
+    llm = FakeLLM(structured=_handler())
+    enricher = WorkerEnricher(db, llm, transcript)
+
+    result = asyncio.run(enricher.enrich("gym-1", ["v1"]))
+
+    assert transcript.fetched == ["v1"]  # the fetch was attempted
+    prompt = llm.structured_calls[0]["messages"][0]["content"]
+    assert NO_TRANSCRIPT_PLACEHOLDER in prompt  # degraded to the placeholder
+    assert "cache_transcripts" not in db.write_names()  # nothing to cache
+    assert result.enriched_count == 1  # the run continued
+    # A missed fetch still ran the actor → still billed.
+    assert result.transcript_usd == round(settings.apify_transcript_cost_per_video_usd, 4)

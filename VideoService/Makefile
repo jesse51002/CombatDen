@@ -1,20 +1,16 @@
-.PHONY: api worker test gym-check sync-gyms sync-gyms-prod docker-build ecr-push pause resume
-
-# `python -m uvicorn` (not the console script) survives stale .venv shebangs
-# left over from the CustomYoutubeService -> VideoService rename.
-api:
-	poetry run python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8002 --reload
+.PHONY: worker test gym-check sync-gyms sync-gyms-prod
 
 # `python -m pytest` (not the `pytest` console script) survives stale .venv
 # shebangs left over from the CustomYoutubeService -> VideoService rename.
 test:
 	poetry run python -m pytest tests/ -v
 
-# The background worker: pops the oldest queued gym and runs its
-# scrape -> funnel -> enrich -> scan -> feed-write pipeline under the global
-# video-worker lock, one run at a time. Long-running loop (Ctrl-C / SIGTERM to
-# stop). Requires DATABASE_URL, APIFY_TOKEN, and the model provider keys in .env.
-# `python -m` (not a console script) survives stale .venv shebangs.
+# The background worker: self-schedules (no queue) the highest-priority due gym
+# each tick and runs its scrape -> funnel -> enrich -> scan -> feed-write pipeline
+# under the global video-worker lock, one run at a time. Long-running loop (Ctrl-C
+# / SIGTERM to stop). Requires DATABASE_URL, YOUTUBE_API_KEY (scrape), APIFY_TOKEN
+# (transcripts), and the model provider keys in .env. `python -m` (not a console
+# script) survives stale .venv shebangs.
 worker:
 	poetry run python -m src.worker.run
 
@@ -47,27 +43,6 @@ sync-gyms-prod:
 	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
 
 # The pool scrape + per-gym scan are no longer standalone scripts: they are the
-# background `worker` (see the `worker` target above), which the FastApiBackend
-# drives per gym via the video_worker_queue.
-
-# --- Production (AWS App Runner) — see ../DEPLOYMENT.md ---------------------
-ECR ?= 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-videoservice
-SERVICE_ARN ?= arn:aws:apprunner:us-east-1:259645229668:service/combatden-videoservice/e86bea56dcdd4b6d8f71af2fe61dbf4c
-
-# Build the serving image (gyms/ + videos/ baked in; see Dockerfile).
-docker-build:
-	docker build -t combatden-videoservice:latest .
-
-# Build + push to ECR + trigger an App Runner deploy (AutoDeployments are off).
-ecr-push: docker-build
-	aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 259645229668.dkr.ecr.us-east-1.amazonaws.com
-	docker tag combatden-videoservice:latest $(ECR):latest
-	docker push $(ECR):latest
-	aws apprunner start-deployment --region us-east-1 --service-arn $(SERVICE_ARN) --query 'OperationId' --output text
-
-# Demo on/off: pause stops compute billing between demos; resume (~1 min) before.
-pause:
-	aws apprunner pause-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
-
-resume:
-	aws apprunner resume-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
+# background `worker` (see the `worker` target above), which self-schedules the
+# next due gym each tick from timestamps in the schema (no queue, no backend
+# trigger).

@@ -1,10 +1,11 @@
-"""API settings.
+"""Shared settings — the DB connection, the resource lock, and the data root.
 
-The read API now queries the shared Supabase Postgres (``database_url``) instead
-of reading flat YAML, so a live DB connection is required at serve time. The
-``data_root`` (holding the git-tracked ``gyms/`` + the legacy ``videos/`` /
-``cost_log.yaml``) is still used by the ``sync-gyms`` and one-time import scripts
-to read the authored YAML; the read path no longer touches it.
+The background worker (`src/worker`) and the gym-config sync scripts
+(`scripts/`) are the only surviving consumers of this service now that the
+read-only API has been retired. Both need a live connection to the shared
+Supabase Postgres (`database_url`), the pool tuning knobs, the default lock
+TTL for `ResourceLock`, and the authored-YAML `data_root` the sync/import
+scripts read `gyms/` (and the legacy `videos/` / `cost_log.yaml`) from.
 """
 
 from __future__ import annotations
@@ -13,12 +14,12 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# This file is <root>/src/api/config.py; the YAML data lives flat under <root>.
+# This file is <root>/src/shared/config.py; the YAML data lives flat under <root>.
 _DEFAULT_DATA_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    """Read-only API config. Env vars (or `.env`) override every default."""
+    """Shared DB + lock + data-root config. Env vars (or `.env`) override every default."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -42,15 +43,6 @@ class Settings(BaseSettings):
     # Authored-YAML root for the sync-gyms / import scripts (holds `gyms/`, and
     # the legacy `videos/` + `cost_log.yaml` consumed once at cutover).
     data_root: Path = _DEFAULT_DATA_ROOT
-    # No auth: the demo hits this directly. `["*"]` keeps it open.
-    cors_origins: list[str] = ["*"]
-
-    # CDN base for ThemeService assets. Defaults to the prod CDN so the derived
-    # gym `celebration_image_url` ALWAYS points at the CDN (matching ThemeService,
-    # whose images are de-baked) without depending on an App Runner env var being
-    # set. Set this empty to emit the ThemeService-relative path the client
-    # absolutises (local dev).
-    assets_cdn_base_url: str = "https://cdn.combatden.net"
 
 
 settings = Settings()

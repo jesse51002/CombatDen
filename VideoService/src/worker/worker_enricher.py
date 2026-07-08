@@ -7,6 +7,12 @@ those already enriched (a ``video_rag`` row). Per video, a single vision call
 the summaries are then batch-embedded and stored in ``video_rag``. Per-video
 failures are isolated (skip + count), never aborting the run; calls fan out under
 a concurrency gate.
+
+Transcripts are fetched LAZILY here: a candidate whose pool row has no cached
+transcript triggers one Apify transcript-actor run (under the same gate), the
+result feeds this video's prompt AND is cached back onto ``video`` so a later run
+reuses it instead of re-paying Apify. A transcript miss/failure degrades to the
+no-transcript placeholder — it never aborts the video's enrich or the run.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from src.shared.interfaces.llm_client import LLMClient
 from src.shared.sql_loader import load_sql
 from src.shared.util.duration import format_duration
 from src.worker.schema.enrich_result import EnrichResult
+from src.worker.worker_apify import WorkerTranscriptClient
 from src.worker.worker_config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,6 +41,8 @@ ENRICH_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "worker_enric
 # Texts per embedding call. The provider caps batch size / tokens; 64 short
 # summaries per call keeps well under it while amortising the request overhead.
 EMBED_BATCH_SIZE = 64
+# Language requested from the transcript actor for the lazy fetch.
+TRANSCRIPT_LANGUAGE = "en"
 NO_TRANSCRIPT_PLACEHOLDER = (
     "(no transcript available — judge from the title, description, and thumbnail)"
 )
@@ -48,21 +57,42 @@ class EnrichResultRow:
 
 
 @dataclass(frozen=True)
+class EnrichOutcome:
+    """One video's enrich attempt: the row (None when the LLM call failed), the
+    LLM spend, whether a transcript fetch was attempted (billable), and the
+    transcript actually fetched (to cache), if any."""
+
+    video_id: str
+    row: EnrichResultRow | None
+    llm_usd: float
+    attempted_fetch: bool
+    fetched_transcript: str | None
+
+
+@dataclass(frozen=True)
 class EnrichCost:
-    """What the enrich stage did: spend (LLM + embed) + how many rows."""
+    """What the enrich stage did: spend (LLM + embed + transcript) + row counts."""
 
     llm_usd: float = 0.0
     embed_usd: float = 0.0
+    transcript_usd: float = 0.0
     enriched_count: int = 0
     skipped_count: int = 0
 
 
 class WorkerEnricher:
-    """Runs the one-call classify+summarize+embed over the enrich set."""
+    """Runs the one-call classify+summarize+embed over the enrich set, fetching
+    missing transcripts lazily."""
 
-    def __init__(self, db_pool: DirectDatabasePool, llm_client: LLMClient) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        llm_client: LLMClient,
+        transcript_client: WorkerTranscriptClient,
+    ) -> None:
         self._db = db_pool
         self._llm = llm_client
+        self._transcript = transcript_client
 
     async def enrich(self, gym_id: str, candidate_ids: list[str]) -> EnrichCost:
         """Enrich the candidates + owner videos that are not yet enriched."""
@@ -73,23 +103,48 @@ class WorkerEnricher:
             load_sql(SQL_DIR / "worker_load_videos_for_enrich.sql"),
             {"ids": to_enrich},
         )
-        rows, llm_usd, skipped = await self._enrich_all(videos)
+        outcomes = await self._enrich_all(videos)
+        llm_usd = sum(o.llm_usd for o in outcomes)
+        fetch_count = sum(1 for o in outcomes if o.attempted_fetch)
+        transcript_usd = round(
+            fetch_count * settings.apify_transcript_cost_per_video_usd, 4
+        )
+        await self._cache_transcripts(outcomes)
+
+        rows = [o.row for o in outcomes if o.row is not None]
+        skipped = sum(1 for o in outcomes if o.row is None)
         if not rows:
-            return EnrichCost(llm_usd=llm_usd, skipped_count=skipped)
+            logger.info(
+                "gym %s enrich: 0 enriched, %d skipped, %d transcripts fetched; "
+                "transcript $%.4f",
+                gym_id,
+                skipped,
+                fetch_count,
+                transcript_usd,
+            )
+            return EnrichCost(
+                llm_usd=llm_usd,
+                transcript_usd=transcript_usd,
+                skipped_count=skipped,
+            )
 
         await self._write_tags(rows)
         embed_usd = await self._embed_and_store(rows)
         logger.info(
-            "gym %s enrich: %d enriched, %d skipped; LLM $%.4f embed $%.4f",
+            "gym %s enrich: %d enriched, %d skipped, %d transcripts fetched; "
+            "LLM $%.4f embed $%.4f transcript $%.4f",
             gym_id,
             len(rows),
             skipped,
+            fetch_count,
             llm_usd,
             embed_usd,
+            transcript_usd,
         )
         return EnrichCost(
             llm_usd=llm_usd,
             embed_usd=embed_usd,
+            transcript_usd=transcript_usd,
             enriched_count=len(rows),
             skipped_count=skipped,
         )
@@ -112,31 +167,32 @@ class WorkerEnricher:
         enriched = {r["video_id"] for r in already}
         return [vid for vid in combined if vid not in enriched]
 
-    async def _enrich_all(
-        self, videos: list[dict]
-    ) -> tuple[list[EnrichResultRow], float, int]:
-        """Fan out the per-video enrich calls; return (successes, cost, skipped)."""
+    async def _enrich_all(self, videos: list[dict]) -> list[EnrichOutcome]:
+        """Fan out the per-video enrich calls; return every outcome."""
         vocab = self._discipline_vocab()
         sem = asyncio.Semaphore(settings.worker_enrich_concurrency)
-        outcomes = await asyncio.gather(
-            *(self._enrich_one(v, vocab, sem) for v in videos)
+        return list(
+            await asyncio.gather(*(self._enrich_one(v, vocab, sem) for v in videos))
         )
-        rows: list[EnrichResultRow] = []
-        llm_usd = 0.0
-        skipped = 0
-        for row, cost in outcomes:
-            llm_usd += cost
-            if row is None:
-                skipped += 1
-            else:
-                rows.append(row)
-        return rows, llm_usd, skipped
 
     async def _enrich_one(
         self, video: dict, vocab: str, sem: asyncio.Semaphore
-    ) -> tuple[EnrichResultRow | None, float]:
-        """One video's enrich call under the gate. A failure → (None, 0.0)."""
+    ) -> EnrichOutcome:
+        """One video's enrich call under the gate, fetching its transcript lazily
+        if the pool row has none. A fetch miss/failure or a failed LLM call never
+        aborts the run."""
         async with sem:
+            video_id = video["video_id"]
+            transcript = video["transcript"]
+            attempted_fetch = False
+            fetched: str | None = None
+            if not transcript or not str(transcript).strip():
+                attempted_fetch = True
+                fetched = await self._transcript.fetch(
+                    video_id, language=TRANSCRIPT_LANGUAGE
+                )
+                transcript = fetched
+
             prompt = Template(
                 ENRICH_PROMPT_PATH.read_text(encoding="utf-8")
             ).safe_substitute(
@@ -144,7 +200,7 @@ class WorkerEnricher:
                 channel=video["channel_name"],
                 description=video["description"],
                 duration=format_duration(video["duration_seconds"]),
-                transcript=self._truncate(video["transcript"]),
+                transcript=self._truncate(transcript),
                 gym_type_vocab=vocab,
             )
             try:
@@ -156,10 +212,36 @@ class WorkerEnricher:
                 )
             except Exception as exc:  # noqa: BLE001 - one bad video never aborts
                 logger.warning(
-                    "enrich failed for %s (skipped): %s", video["video_id"], exc
+                    "enrich failed for %s (skipped): %s", video_id, exc
                 )
-                return None, 0.0
-            return EnrichResultRow(video["video_id"], result), cost
+                return EnrichOutcome(
+                    video_id=video_id,
+                    row=None,
+                    llm_usd=0.0,
+                    attempted_fetch=attempted_fetch,
+                    fetched_transcript=fetched,
+                )
+            return EnrichOutcome(
+                video_id=video_id,
+                row=EnrichResultRow(video_id, result),
+                llm_usd=cost,
+                attempted_fetch=attempted_fetch,
+                fetched_transcript=fetched,
+            )
+
+    async def _cache_transcripts(self, outcomes: list[EnrichOutcome]) -> None:
+        """Persist every transcript we actually fetched this run onto its pool
+        video, so a later run reuses it instead of re-paying Apify."""
+        params = [
+            {"video_id": o.video_id, "transcript": o.fetched_transcript}
+            for o in outcomes
+            if o.fetched_transcript
+        ]
+        if not params:
+            return
+        await self._db.execute_with_retry(
+            load_sql(SQL_DIR / "worker_cache_transcripts.sql"), params
+        )
 
     async def _write_tags(self, rows: list[EnrichResultRow]) -> None:
         """Write each enrichment's genre + disciplines onto its pool video."""

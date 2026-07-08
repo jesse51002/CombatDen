@@ -79,37 +79,24 @@ docker push 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-themeservice:
 aws apprunner start-deployment --region us-east-1 --service-arn <theme ARN>   # AutoDeployments are off
 ```
 
-### VideoService runtime config — `DATABASE_URL` (App Runner env var, NOT in the image)
+### VideoService (read API retired)
 
-VideoService no longer bakes data into the image; it **reads the shared Supabase
-Postgres at runtime**, so its container needs `DATABASE_URL`. (ThemeService
-already uses this same App Runner env-var pattern for `GOOGLE_FONTS_API_KEY`, and
-now `ASSETS_CDN_BASE_URL` too — see the assets section below.) The rule:
+The standalone VideoService read API (`src/api`, App Runner, `video.combatden.net`,
+port 8002) has been retired — the MobileApp was its only remaining consumer and
+is being rebuilt. Its App Runner service is now **orphaned** (nothing builds or
+deploys to it any more) and should be paused/deleted manually by the operator
+when convenient. The VideoService **background worker** now ships only in the
+combined `deploy/` image (see the *Combined backend + worker image* section
+below), which documents its runtime env vars including `DATABASE_URL`.
 
-- **Never copy `.env` into the image / `Dockerfile`.** That bakes the DB password
-  into an ECR layer, and the local `.env` points at `127.0.0.1` — the prod
-  container would try to reach localhost. The image stays env-agnostic (`src/` +
-  `schema/` only).
-- Set `DATABASE_URL` as a **runtime environment variable on the App Runner
-  service** (one-time; it persists across `start-deployment` redeploys). Pydantic
-  reads it straight from the environment — no `.env` file in the container.
-  - Console: video service → Configuration → Edit → *Environment variables* →
-    `DATABASE_URL = postgresql://...@db.rgmvgevwclvqhjeirzfb.supabase.co:5432/postgres`
-    (raw `postgresql://` is fine — `src/shared/database.py` normalises it to asyncpg).
-  - CLI: `aws apprunner update-service --service-arn <video ARN> --source-configuration 'ImageRepository={ImageConfiguration={RuntimeEnvironmentVariables={DATABASE_URL=postgresql://...}}}'`
-- **Preferred for the secret:** store the URL in AWS Secrets Manager / SSM and
-  reference it via App Runner `RuntimeEnvironmentSecrets` (ARN), so the password
-  isn't sitting in the service config either.
-- After setting it, redeploy as above. Without it the container starts but 500s
-  on the first query.
-
-**Schema + data on prod** (run from your machine, never baked/automated):
+**Prod content sync** (run from your machine, never baked/automated) — still
+needed so the worker has gym configs + data to run against:
 - Schema: applied via Supabase migrations from `Database/` (you run them). **Never
   `supabase db pull` while local schema is ahead of prod** — it generates a
   destructive migration that drops the new tables.
-- Content: load/refresh the prod DB with the pipeline pointed at prod via the
-  `ENV_FILE` flag — `ENV_FILE=.env.prod make sync-gyms-prod GYM_ID=all` then
-  `make import-yaml-prod` (prod secrets live in the gitignored `VideoService/.env.prod`).
+- Content: load/refresh the prod DB with the gym-config tooling pointed at prod
+  via the `ENV_FILE` flag — `ENV_FILE=.env.prod make sync-gyms-prod GYM_ID=all`
+  (prod secrets live in the gitignored `VideoService/.env.prod`).
 
 ### ThemeService assets — S3 + CloudFront (`cdn.combatden.net`)
 
@@ -162,14 +149,14 @@ No SPA 403/404→index rewrite — it's an asset CDN; a missing key should 404.
 > (cert target / CloudFront domain) keeps its full form + trailing dot.
 
 Then:
-- `ASSETS_CDN_BASE_URL` is **no longer required as an env var** — both services
-  default it to `https://cdn.combatden.net` in code (ThemeService
-  `src/api/config.py`, VideoService `src/api/config.py`), so they always emit
-  absolute CDN URLs (theme: image/icon URLs)
-  even when the App Runner var is unset. Only set it to point at a *different*
-  CDN; set it empty for local serving. (This replaced the earlier "must be set
-  in prod or paths 404" requirement — the de-baked container can't serve the
-  bytes, so CDN is now the safe default rather than an opt-in.)
+- `ASSETS_CDN_BASE_URL` is **no longer required as an env var** — ThemeService
+  defaults it to `https://cdn.combatden.net` in code (`src/api/config.py`), so it
+  always emits absolute CDN URLs (image/icon URLs) even when the App Runner var
+  is unset. Only set it to point at a *different* CDN; set it empty for local
+  serving. (This replaced the earlier "must be set in prod or paths 404"
+  requirement — the de-baked container can't serve the bytes, so CDN is now the
+  safe default rather than an opt-in. VideoService's read API used to derive gym
+  celebration-image CDN URLs the same way; it has been retired — see above.)
 - Backfill: from `ThemeService/`, with AWS creds configured, run `make sync-assets`
   (~760 PNG + 304 SVG, skips unchanged). The bucket name defaults to
   `combatden-assets` (override via `ASSETS_BUCKET` only if it ever changes). Needs
@@ -197,8 +184,9 @@ A separate deployment target from the demo App Runner services above: **one Dock
 image that runs the FastApiBackend API and the VideoService background worker
 together** (`deploy/Dockerfile` + `deploy/entrypoint.sh`). This is the production
 path for the CRM's backend + the video pipeline — it does **not** replace the
-ThemeService / VideoService read APIs, which stay on App Runner (the VideoService
-read API keeps serving the MobileApp until it's repointed).
+ThemeService read API, which stays on App Runner. (VideoService's own read API
+has been retired — its orphaned App Runner service is a manual pause/delete, see
+above.)
 
 **What runs inside** (exactly two processes, supervised by `entrypoint.sh`):
 1. **FastApiBackend** — `uvicorn src.main:app` on `:8000` (the CRM-facing API).

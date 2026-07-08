@@ -1,9 +1,10 @@
 """Direct async Postgres connection pool over SQLAlchemy.
 
-Modelled on ``FastApiBackend/src/shared/database.py`` — VideoService now reads
+Modelled on ``FastApiBackend/src/shared/database.py`` — VideoService reads
 from (and its scripts write to) the shared Supabase Postgres instead of flat
-YAML. The read API holds one process-scoped pool; the scripts build their own.
-``database_url`` is a ``postgresql+asyncpg://`` URL from ``.env``.
+YAML. The background worker holds one process-scoped pool; the sync/import
+scripts build their own. ``database_url`` is a ``postgresql+asyncpg://`` URL
+from ``.env``.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.api.config import settings
+from src.shared.config import settings
 
 logger = logging.getLogger(__name__)
 

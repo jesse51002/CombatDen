@@ -1,10 +1,12 @@
 """Stage 6 — append this run's per-stage spend to the generic ledger.
 
-Writes one ``cost_log`` row per cost-bearing stage (search / enrich / embed /
-scan), each stamped ``source='video'`` + the gym + run id so per-run and
-per-gym spend are queryable directly. Embed spend from BOTH the funnel probes
-and the enrich summaries is folded into the single 'embed' row. Logs the run's
-total at the end.
+Writes one ``cost_log`` row per cost-bearing stage (search / transcript / enrich
+/ embed / scan), each stamped ``source='video'`` + the gym + run id so per-run
+and per-gym spend are queryable directly. ``search`` is free (the YouTube Data
+API within quota) and carries its quota usage as a breakdown diagnostic;
+``transcript`` carries the Apify transcript spend. Embed spend from BOTH the
+funnel probes and the enrich summaries is folded into the single 'embed' row.
+Logs the run's total at the end.
 """
 
 from __future__ import annotations
@@ -26,9 +28,11 @@ SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 @dataclass(frozen=True)
 class RunCost:
-    """The per-stage USD a run spent."""
+    """The per-stage USD a run spent, plus the free search stage's quota usage."""
 
-    apify_usd: float = 0.0
+    search_usd: float = 0.0  # YouTube Data API — free within quota (always 0.0)
+    youtube_quota_units: int = 0  # search-stage quota diagnostic (not billed)
+    transcript_usd: float = 0.0  # Apify transcript fetches at enrich
     enrich_llm_usd: float = 0.0
     embed_usd: float = 0.0
     scan_llm_usd: float = 0.0
@@ -36,7 +40,8 @@ class RunCost:
     @property
     def total_usd(self) -> float:
         return (
-            self.apify_usd
+            self.search_usd
+            + self.transcript_usd
             + self.enrich_llm_usd
             + self.embed_usd
             + self.scan_llm_usd
@@ -50,14 +55,21 @@ class WorkerCostLog:
         self._db = db_pool
 
     async def log(self, gym_id: str, run_id: str, cost: RunCost) -> None:
-        """Append the four per-stage rows and log the run total."""
+        """Append the five per-stage rows and log the run total."""
         entries = [
             (
                 CostStage.search,
                 None,
-                cost.apify_usd,
-                {"apify_usd": cost.apify_usd},
-                "scrape",
+                cost.search_usd,
+                {"youtube_quota_units": cost.youtube_quota_units},
+                "youtube data api",
+            ),
+            (
+                CostStage.transcript,
+                None,
+                cost.transcript_usd,
+                {"apify_usd": cost.transcript_usd},
+                "apify transcripts",
             ),
             (
                 CostStage.enrich,
@@ -84,11 +96,13 @@ class WorkerCostLog:
         for stage, model, cost_usd, breakdown, note in entries:
             await self._insert(gym_id, run_id, stage, model, cost_usd, breakdown, note)
         logger.info(
-            "gym %s run %s cost: search $%.4f enrich $%.4f embed $%.4f "
-            "scan $%.4f = total $%.4f",
+            "gym %s run %s cost: search $%.4f (%d quota) transcript $%.4f "
+            "enrich $%.4f embed $%.4f scan $%.4f = total $%.4f",
             gym_id,
             run_id,
-            cost.apify_usd,
+            cost.search_usd,
+            cost.youtube_quota_units,
+            cost.transcript_usd,
             cost.enrich_llm_usd,
             cost.embed_usd,
             cost.scan_llm_usd,
@@ -102,7 +116,7 @@ class WorkerCostLog:
         stage: CostStage,
         model: str | None,
         cost_usd: float,
-        breakdown: dict[str, float],
+        breakdown: dict[str, float | int],
         note: str,
     ) -> None:
         await self._db.execute_with_retry(

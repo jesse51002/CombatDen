@@ -123,7 +123,9 @@ class WorkerService:
         scan = await self._scanner.scan(spec, run_id, funnel.candidate_ids)
         self._check_abort(abort)
         cost = RunCost(
-            apify_usd=scrape.apify_usd,
+            search_usd=scrape.search_usd,
+            youtube_quota_units=scrape.youtube_quota_units,
+            transcript_usd=enrich.transcript_usd,
             enrich_llm_usd=enrich.llm_usd,
             embed_usd=funnel.embed_usd + enrich.embed_usd,
             scan_llm_usd=scan.llm_usd,
@@ -163,7 +165,8 @@ class WorkerService:
 
     async def _system_cap_reached(self) -> bool:
         """True when runs started across all gyms in the rolling window already
-        reach the system-wide cap (the global Apify/quota budget guard)."""
+        reach the system-wide cap (the global YouTube-quota / Apify-transcript
+        budget guard)."""
         row = await self._db.execute_with_retry(
             load_sql(SQL_DIR / "worker_system_run_count.sql"),
             {"cap_window_hours": settings.worker_cap_window_hours},
