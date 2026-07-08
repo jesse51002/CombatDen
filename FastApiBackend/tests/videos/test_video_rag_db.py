@@ -1,18 +1,21 @@
-"""Live-DB integration for the video RAG read surface (recs + search).
+"""Live-DB integration for the video RAG read surface (recs + search + click).
 
 Drives the real endpoints against the shared local Supabase over an ASGI
 transport. ``auth`` is overridden always-pass for the happy-path tests; the
 403 test wires the REAL ``verify_can_view_member`` behind a fake JWT payload so
-a non-viewer is rejected. The embedding provider is overridden with a
-deterministic 1536-dim stub so no OpenAI call is made — the seeded
-``video_rag`` row carries the same vector so it retrieves cleanly.
+a non-viewer is rejected. The LLM client is overridden with a deterministic
+stub — its embedding is a fixed 1536-dim vector (no OpenAI call) that the seeded
+``video_rag`` row also carries so retrieval is clean, and its summary call
+returns a canned taste paragraph (no chat model call) so the profile builds.
 
-Requires migration ``20260703000001_video_worker_rag`` (pgvector + the
-``video_rag`` / ``member_video_profile`` / ``member_video_recs`` tables). When
-the shared local DB has NOT had that migration applied, the recs/search tests
-fail at the query — the expected "pending migration apply" state, not a code
-fault. The 403 test only reads ``members`` / ``gym_employees`` and passes
-regardless.
+The per-member RAG profile is columns on ``members``
+(``video_profile_summary`` / ``video_profile_embedding`` / …), not a sidecar
+table. These tests require the pending video-worker-RAG migration (pgvector, the
+``video_rag`` / ``member_video_recs`` tables, the ``members.video_profile_*``
+columns, and ``member_video_recs.clicked_at``). Until it is applied on the
+shared local DB, the recs/search/click tests fail at the query — the expected
+"pending migration apply" state, not a code fault. The 403 test only reads
+``members`` / ``gym_employees`` and passes regardless.
 """
 
 from __future__ import annotations
@@ -40,10 +43,14 @@ _VEC_LITERAL = "[" + ",".join(str(x) for x in _VEC) + "]"
 
 
 class _StubLiteLLM:
-    """A LiteLLMClient stand-in: embed returns the fixed vector per input."""
+    """A LiteLLMClient stand-in: embed returns the fixed vector per input, and
+    complete_structured returns a canned taste summary (no chat model call)."""
 
     async def embed(self, *, texts: list[str], model: str) -> list[list[float]]:
         return [list(_VEC) for _ in texts]
+
+    async def complete_structured(self, *, prompt: str, schema, model: str):
+        return schema(summary="a test taste profile")
 
 
 async def _insert_member(db_pool: DirectDatabasePool, gym_id: UUID) -> UUID:
@@ -106,8 +113,9 @@ async def _seed_served_rag_video(
 async def _delete_rag_seed(
     db_pool: DirectDatabasePool, member_id: UUID, video_id: str
 ) -> None:
-    """Delete the video (cascades feed + video_rag) and the member (cascades
-    member_video_profile + member_video_recs)."""
+    """Delete the video (cascades feed + video_rag) and the member (which
+    carries the video_profile_* columns and cascades member_video_recs +
+    member_activities)."""
     async with db_pool.session() as session, session.begin():
         await session.execute(
             text("DELETE FROM video WHERE video_id = :vid"), {"vid": video_id}
@@ -177,6 +185,50 @@ async def test_recs_returns_served_video_and_records(
         await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
         assert await _rec_count(db_pool, member_id, video_id) == 2
     finally:
+        await _delete_rag_seed(db_pool, member_id, video_id)
+
+
+async def test_rec_click_stamps_and_logs(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """Recording recs then POSTing a click stamps ``clicked_at`` on that rec,
+    logs a ``video_clicked`` activity, and returns ``clicked=true``; a repeat
+    click is idempotent (``clicked=false``, no second activity)."""
+    member_id = await _insert_member(db_pool, gym_id)
+    video_id = "ragvid_0003"
+    await _seed_served_rag_video(db_pool, gym_id, video_id)
+    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-recs"
+    try:
+        # Serve + record a rec so a member_video_recs row exists to click.
+        await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
+        rec_id = await _load_rec_id(db_pool, member_id, video_id)
+        assert rec_id is not None
+
+        # First click: stamped + logged.
+        resp = await rag_client.post(
+            f"{base}/{rec_id}/click", headers=_AUTH_HEADERS
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["clicked"] is True
+        assert body["video_id"] == video_id
+        assert await _clicked_at_set(db_pool, rec_id) is True
+        assert await _video_click_activity_count(db_pool, member_id) == 1
+
+        # Repeat click: idempotent (no re-stamp, no second activity).
+        repeat = await rag_client.post(
+            f"{base}/{rec_id}/click", headers=_AUTH_HEADERS
+        )
+        assert repeat.status_code == 200
+        assert repeat.json()["clicked"] is False
+        assert await _video_click_activity_count(db_pool, member_id) == 1
+    finally:
+        # member_activities has no cascade FK — clear it before the member.
+        async with db_pool.session() as session, session.begin():
+            await session.execute(
+                text("DELETE FROM member_activities WHERE member_id = :m"),
+                {"m": str(member_id)},
+            )
         await _delete_rag_seed(db_pool, member_id, video_id)
 
 
@@ -272,6 +324,67 @@ async def _rec_count(
                         "WHERE member_id = :m AND video_id = :v"
                     ),
                     {"m": str(member_id), "v": video_id},
+                )
+            )
+            .mappings()
+            .fetchone()
+        )
+    return int(row["n"])
+
+
+async def _load_rec_id(
+    db_pool: DirectDatabasePool, member_id: UUID, video_id: str
+) -> UUID | None:
+    """One served rec_id for (member, video), or None when none were recorded."""
+    async with db_pool.session() as session:
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT rec_id FROM member_video_recs "
+                        "WHERE member_id = :m AND video_id = :v LIMIT 1"
+                    ),
+                    {"m": str(member_id), "v": video_id},
+                )
+            )
+            .mappings()
+            .fetchone()
+        )
+    return UUID(str(row["rec_id"])) if row is not None else None
+
+
+async def _clicked_at_set(db_pool: DirectDatabasePool, rec_id: UUID) -> bool:
+    """True when the rec's ``clicked_at`` has been stamped."""
+    async with db_pool.session() as session:
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT clicked_at FROM member_video_recs "
+                        "WHERE rec_id = :r"
+                    ),
+                    {"r": str(rec_id)},
+                )
+            )
+            .mappings()
+            .fetchone()
+        )
+    return row is not None and row["clicked_at"] is not None
+
+
+async def _video_click_activity_count(
+    db_pool: DirectDatabasePool, member_id: UUID
+) -> int:
+    """How many ``video_clicked`` activities the member has logged."""
+    async with db_pool.session() as session:
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT COUNT(*) AS n FROM member_activities "
+                        "WHERE member_id = :m AND activity_type = 'video_clicked'"
+                    ),
+                    {"m": str(member_id)},
                 )
             )
             .mappings()

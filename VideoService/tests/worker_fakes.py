@@ -36,7 +36,7 @@ def route(sql: str) -> str:
         ("JOIN video_rag r", "scan_candidates"),
         ("FROM video\nWHERE video_id = ANY(:ids)", "existing_videos"),
         ("INSERT INTO video (", "upsert_video"),
-        ("INSERT INTO video_cost_log", "insert_cost"),
+        ("INSERT INTO cost_log", "insert_cost"),
     ]
     for token, name in checks:
         if token in sql:

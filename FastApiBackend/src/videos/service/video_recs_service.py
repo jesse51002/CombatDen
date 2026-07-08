@@ -1,37 +1,41 @@
 """VideoRecsService — mood-bucketed RAG video recommendations for a member.
 
-Ensures the member's 5 bucket profiles exist (:class:`MemberVideoProfileService`),
-then runs one candidate query per bucket (five sequential reads — fine at this
-scale): retrieve the gym's served, enriched feed, filter to the bucket's genres,
-rank by a blended score (RAG cosine + gym relevance + popularity) with
-unrecommended videos hard-partitioned first. On ``record=True`` the served rows
-are written to ``member_video_recs`` (freshness history); ``record=False`` (CRM
-preview) writes nothing.
+Ensures the member's video-taste profile exists
+(:class:`MemberVideoProfileService`), then ranks the gym's served, enriched feed
+ONCE against the member's single profile embedding (RAG cosine blended with gym
+relevance + popularity, unrecommended videos hard-partitioned first). The ranked
+candidates are grouped into the 5 mood buckets in Python via
+``bucket_for_genre(tag)`` and sliced to ``per_bucket``. A member with no
+embedding yet falls back to the no-similarity degrade query so they still get
+recs. On ``record=True`` the served rows are written to ``member_video_recs``
+(freshness history); ``record=False`` (CRM preview) writes nothing.
 """
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from schema.video import MoodBucket
+from pydantic import ValidationError
+from schema.video import MoodBucket, VideoGenre
 from sqlalchemy import text
 
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.videos import SQL_DIR
-from src.videos.schema.video_mood_bucket import genres_for_bucket
+from src.videos.schema.video_mood_bucket import bucket_for_genre
 from src.videos.schema.video_recs_schema import (
     MemberVideoRecsResponse,
     RecBucket,
     RecommendedVideoCard,
 )
 from src.videos.service.member_video_profile_service import (
+    MemberNotInGymError,
     MemberVideoProfileService,
 )
 
 
 class VideoRecsService:
-    """Retrieve + rank per-bucket video recommendations for a member."""
+    """Rank a member's recommendations once, then group them by mood bucket."""
 
     def __init__(
         self,
@@ -41,12 +45,14 @@ class VideoRecsService:
         weight_similarity: float,
         weight_relevance: float,
         weight_views: float,
+        candidate_limit: int,
     ) -> None:
         self._db = db_pool
         self._profiles = profile_service
         self._w_sim = weight_similarity
         self._w_rel = weight_relevance
         self._w_views = weight_views
+        self._candidate_limit = candidate_limit
 
     async def get_recs(
         self,
@@ -58,50 +64,44 @@ class VideoRecsService:
     ) -> MemberVideoRecsResponse:
         """Top-``per_bucket`` recommendations per mood bucket for the member.
 
-        Builds/refreshes the member's profiles, retrieves + ranks each bucket,
-        and (when ``record``) records the served rows.
+        Verifies the member belongs to ``gym_id`` (``MemberNotInGymError``
+        propagates → 404) and lazily builds a missing profile. A profile-BUILD
+        failure (LLM / embedding provider down or misconfigured) is best-effort:
+        it must NOT blank the member's feed, so the member falls through with no
+        embedding to the no-similarity degrade ranking rather than 500ing (the
+        approved "degrade, don't 500" spec). Such a failure still surfaces via
+        the ``/videos/search`` path (which raises) and the refresh runner's crash
+        log. The ranked rows are grouped by ``bucket_for_genre`` and sliced to
+        ``per_bucket`` (all 5 buckets present); ``record`` appends the served rows.
         """
-        await self._profiles.ensure_profiles(member_id, gym_id)
-        embeddings = await self._profiles.load_embeddings(member_id)
+        try:
+            await self._profiles.ensure_profile(member_id, gym_id)
+        except MemberNotInGymError:
+            # The member↔gym ownership guard is a hard 404 — never degraded.
+            raise
+        except Exception:
+            # Best-effort personalization: a failed profile build must not blank
+            # the member's feed. Fall through with no embedding to the
+            # no-similarity degrade query below.
+            pass
+        embedding = await self._profiles.load_embedding(member_id)
 
-        out: list[RecBucket] = []
+        rows = await self._load_candidates(gym_id, member_id, embedding)
+
+        buckets: dict[MoodBucket, list[RecommendedVideoCard]] = {
+            b: [] for b in MoodBucket
+        }
         served: list[dict] = []
-        for bucket in MoodBucket:
-            cards = await self._recs_for_bucket(
-                gym_id, member_id, bucket, embeddings.get(bucket), per_bucket,
-                served if record else None,
-            )
-            out.append(RecBucket(bucket=bucket, videos=cards))
-
-        if record and served:
-            await self._record_served(gym_id, member_id, served)
-        return MemberVideoRecsResponse(buckets=out)
-
-    # ── per-bucket retrieval ──────────────────────────────────────
-
-    async def _recs_for_bucket(
-        self,
-        gym_id: UUID,
-        member_id: UUID,
-        bucket: MoodBucket,
-        embedding: str | None,
-        per_bucket: int,
-        served: list[dict] | None,
-    ) -> list[RecommendedVideoCard]:
-        """Retrieve + rank one bucket; append served rows when recording."""
-        if embedding is None:
-            return []
-        rows = await self._load_candidates(
-            gym_id, member_id, bucket, embedding, per_bucket
-        )
-        cards: list[RecommendedVideoCard] = []
         for row in rows:
+            bucket = bucket_for_genre(VideoGenre(row["tag"]))
+            if len(buckets[bucket]) >= per_bucket:
+                continue
             try:
                 card = RecommendedVideoCard.model_validate(dict(row))
-            except ValueError:
+            except ValidationError:
                 continue
-            cards.append(card)
-            if served is not None:
+            buckets[bucket].append(card)
+            if record:
                 served.append(
                     {
                         "video_id": row["video_id"],
@@ -109,28 +109,38 @@ class VideoRecsService:
                         "score": row["score"],
                     }
                 )
-        return cards
+            if all(len(buckets[b]) >= per_bucket for b in MoodBucket):
+                break
+
+        if record and served:
+            await self._record_served(gym_id, member_id, served)
+
+        out = [RecBucket(bucket=b, videos=buckets[b]) for b in MoodBucket]
+        return MemberVideoRecsResponse(buckets=out)
+
+    # ── candidate retrieval (one ranked query) ────────────────────
 
     async def _load_candidates(
-        self,
-        gym_id: UUID,
-        member_id: UUID,
-        bucket: MoodBucket,
-        embedding: str,
-        per_bucket: int,
+        self, gym_id: UUID, member_id: UUID, embedding: str | None
     ) -> list[dict]:
-        """Run the candidate query for one bucket."""
-        sql = load_sql(SQL_DIR / "video_recs_candidates.sql")
-        params = {
+        """Run the single ranked candidate query (with or without similarity)."""
+        base = {
             "gym_id": str(gym_id),
             "member_id": str(member_id),
-            "profile_embedding": embedding,
-            "genres": [g.value for g in genres_for_bucket(bucket)],
-            "w_sim": self._w_sim,
             "w_rel": self._w_rel,
             "w_views": self._w_views,
-            "per_bucket": per_bucket,
+            "candidate_limit": self._candidate_limit,
         }
+        if embedding is None:
+            sql = load_sql(SQL_DIR / "video_recs_candidates_no_embedding.sql")
+            params = base
+        else:
+            sql = load_sql(SQL_DIR / "video_recs_candidates.sql")
+            params = {
+                **base,
+                "member_embedding": embedding,
+                "w_sim": self._w_sim,
+            }
         async with self._db.session() as session:
             rows = (
                 (await session.execute(text(sql), params)).mappings().all()

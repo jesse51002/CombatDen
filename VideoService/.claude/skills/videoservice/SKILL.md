@@ -31,7 +31,8 @@ gyms/<gym_id>.yaml   a gym: gym_type (disciplines) + theme (design id) +
                      videos {specification, queries} + classes + rewards
 video_* (Postgres)   the shared pool (video), each gym's curated feed (video_run +
                      gym_video_feed), per-video RAG (video_rag = summary +
-                     embedding), and the spend ledger (video_cost_log)
+                     embedding), and the generic spend ledger (cost_log,
+                     source='video')
 ```
 
 The gym files are loaded into SQL with `make sync-gyms`. There is **no `apps/`

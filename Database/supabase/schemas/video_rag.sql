@@ -31,7 +31,7 @@ CREATE TABLE video_rag (
     -- (a cross-service contract: VideoService worker writes, FastApiBackend
     -- reads/queries — both pin the same model + dim in settings). Changing
     -- models is a one-way door: migration + full re-embed of this table AND
-    -- member_video_profile.
+    -- members.video_profile_embedding.
     embedding vector(1536) NOT NULL,
     embedding_model TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()

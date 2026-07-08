@@ -21,6 +21,16 @@ CREATE TABLE members (
     -- service on every assign/promote path (only the ranks endpoints write it).
     current_sub_index INTEGER CHECK (current_sub_index IS NULL OR current_sub_index >= 0),
 
+    -- RAG video-taste profile (backend-built, service_role-only). One prose
+    -- summary + one embedding per member, built lazily by the backend and
+    -- rebuilt when stale (video_profile_built_at); all NULL until first built.
+    -- The embedding is pinned to settings.video_embedding_dim — the same model
+    -- + dimension contract as video_rag.embedding (they are compared by cosine).
+    video_profile_summary TEXT,
+    video_profile_embedding vector(1536),
+    video_profile_embedding_model TEXT,
+    video_profile_built_at TIMESTAMPTZ,
+
     -- Contact / freeze / Stripe billing (service_role-written only;
     -- NULL for engagement-only members).
     photo_url VARCHAR,

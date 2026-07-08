@@ -56,6 +56,12 @@ MEMBERS: frozenset[str] = frozenset(
         "card_exp_year",
         "freeze_start_date",  # managed by backend freeze/unfreeze logic
         "freeze_end_date",  # managed by backend freeze/unfreeze logic
+        # RAG video-taste profile — backend-built (service_role) derived
+        # artifacts, never client-written (like the Stripe columns above).
+        "video_profile_summary",
+        "video_profile_embedding",
+        "video_profile_embedding_model",
+        "video_profile_built_at",
     }
 )
 
@@ -510,11 +516,15 @@ VIDEO_GYM_FEED: frozenset[str] = frozenset(
     }
 )
 
-VIDEO_COST_LOG: frozenset[str] = frozenset(
+COST_LOG: frozenset[str] = frozenset(
     {
+        # Generic append-only spend ledger (service-role-written; no client
+        # write path). Identity set only.
         "entry_id",  # PK, identity (append-only)
+        "source",  # producing system, set at insert (append-only)
+        "run_id",  # the source run this spend belongs to, set at insert
         "gym_id",  # identity FK, set at insert (append-only)
-        "video_run_id",  # the run this spend belongs to, set at insert (append-only)
+        "created_at",  # auto-generated timestamp
     }
 )
 
@@ -555,11 +565,12 @@ GYM_VIDEO_FEED: frozenset[str] = frozenset(
 )
 
 # ============================================================
-# Video worker RAG (video_rag, member_video_profile, member_video_recs). All
-# three are readable by their subject member / gym staff (SELECT policy), but
-# INSERT/UPDATE/DELETE are revoked for authenticated — written only by the
-# VideoService worker / backend at service_role — so every column is listed,
-# mirroring VIDEO_COST_LOG / VIDEO_RUN / GYM_VIDEO_SPEC.
+# Video worker RAG (video_rag, member_video_recs). Both are readable by their
+# subject member / gym staff (SELECT policy), but INSERT/UPDATE/DELETE are
+# revoked for authenticated — written only by the VideoService worker / backend
+# at service_role — so every column is listed, mirroring COST_LOG / VIDEO_RUN /
+# GYM_VIDEO_SPEC. The per-member video-taste profile lives on the `members`
+# table (video_profile_* columns in MEMBERS above), not a separate table.
 # ============================================================
 
 VIDEO_RAG: frozenset[str] = frozenset(
@@ -570,18 +581,6 @@ VIDEO_RAG: frozenset[str] = frozenset(
         "embedding",  # embedding of summary
         "embedding_model",  # embedding provenance
         "created_at",  # auto-generated timestamp
-    }
-)
-
-MEMBER_VIDEO_PROFILE: frozenset[str] = frozenset(
-    {
-        "member_id",  # composite PK, identity FK
-        "gym_id",  # identity FK, per-gym resource
-        "bucket",  # composite PK, mood bucket
-        "profile_text",  # backend-built profile text
-        "embedding",  # embedding of profile_text
-        "embedding_model",  # embedding provenance
-        "built_at",  # backend-stamped build timestamp
     }
 )
 

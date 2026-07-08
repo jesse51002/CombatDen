@@ -1,16 +1,23 @@
 -- HAND-AUTHORED migration (not `supabase db diff` output).
--- Adds the video-worker RAG surface: pgvector, a run status lifecycle on
--- video_run, two new video_cost_log execution types + a per-run FK, and three
--- new tables (video_rag, member_video_profile, member_video_recs).
+-- Adds the video-worker RAG surface and generalizes the cost ledger:
+--   * pgvector extension
+--   * a run status lifecycle on video_run
+--   * a generic cost_log (replaces video_cost_log): source + run_id + gym_id +
+--     stage + cost_usd + model; matched back to its source table via (source, run_id)
+--   * video_rag (per-video RAG sidecar)
+--   * the member video-taste RAG profile columns on members (mood_bucket declared here)
+--   * member_video_recs (per-serve rec history, with a clicked_at click signal)
+--   * member_activities.activity_type promoted from free-text VARCHAR to the
+--     member_activity_type enum
 -- The worker has no queue table — it derives which gym to run from run/spec/
 -- curation timestamps (see VideoService/src/worker/sql/worker_select_due_gym.sql).
--- Mirrors schemas/_extensions.sql, video_rag.sql, member_video_profile.sql,
--- member_video_recs.sql, video_run.sql (edited),
--- video_cost_log.sql (edited) and access_rules/video_rag.sql,
--- member_video_profile.sql, member_video_recs.sql.
+-- Mirrors schemas/_extensions.sql, cost_log.sql, video_rag.sql,
+-- member_video_recs.sql, members.sql, member_activities.sql, video_run.sql
+-- (edited) and access_rules/cost_log.sql, video_rag.sql, member_video_recs.sql.
 --
--- Existing live tables touched: video_run, video_cost_log (video_cost_log
--- already has legacy rows attributed to TEXT video_gym template slugs).
+-- The DB is reset+reseeded fresh at apply time: video_cost_log and the RAG
+-- tables are EMPTY and member_activities is empty (seed runs after), so the
+-- clean cost_log drop/recreate and the activity_type cast are safe.
 
 -- ============================================================
 -- 1. pgvector extension — everything vector-typed below depends on it.
@@ -31,64 +38,54 @@ ALTER TABLE video_run
     ADD COLUMN error TEXT;
 
 -- ============================================================
--- 3. video_execution_type: add 'enrich' and 'embed'
---    Postgres 15+: ADD VALUE is transaction-safe as long as the new values
---    are not USED in the same transaction — this migration never references
---    'enrich'/'embed' in a DML statement, so the simple ADD VALUE form is
---    used here (unlike the discount_duration_unit type-recreate, which had
---    to use its new 'cycle' value in the same transaction via an UPDATE).
+-- 3. cost_log: a generic spend ledger that REPLACES video_cost_log.
+--    The old table + its enum are used only here, and the DB is reseeded
+--    fresh, so a clean drop/recreate beats a data-preserving retype. `source`
+--    names the producing system (only 'video' today; extensible) and
+--    (source, run_id) matches a cost row back to its source table's run.
 -- ============================================================
 
-ALTER TYPE video_execution_type ADD VALUE IF NOT EXISTS 'enrich';
-ALTER TYPE video_execution_type ADD VALUE IF NOT EXISTS 'embed';
+DROP TABLE IF EXISTS video_cost_log CASCADE;
+DROP TYPE IF EXISTS video_execution_type;
+
+CREATE TYPE cost_stage AS ENUM (
+    'search', 'transcript', 'tag', 'enrich', 'embed', 'scan'
+);
+CREATE TYPE cost_source AS ENUM ('video');
+
+CREATE TABLE cost_log (
+    entry_id UUID NOT NULL DEFAULT uuid_generate_v4()
+        CONSTRAINT pk_cost_log PRIMARY KEY,
+    source cost_source NOT NULL,
+    run_id TEXT,
+    gym_id UUID
+        CONSTRAINT fk_cost_log_gym REFERENCES gyms(gym_id) ON DELETE SET NULL,
+    stage cost_stage NOT NULL,
+    model TEXT,
+    cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+    breakdown JSONB NOT NULL DEFAULT '{}',
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_cost_log_gym ON cost_log (gym_id);
+CREATE INDEX idx_cost_log_run ON cost_log (run_id);
+CREATE INDEX idx_cost_log_source ON cost_log (source);
+
+-- Cost rows are service-role-written and matched back to their source table
+-- via (source, run_id). Public SELECT (cost visibility); no client writes.
+ALTER TABLE cost_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public can read cost log"
+    ON cost_log
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+REVOKE INSERT, UPDATE, DELETE ON TABLE cost_log FROM authenticated;
 
 -- ============================================================
--- 4. video_cost_log: retype gym_id TEXT -> UUID (FK -> gyms), add
---    video_run_id. Order matters — preserve legacy attribution before the
---    column is retyped and its old FK dropped.
--- ============================================================
-
--- 4a. Preserve legacy attribution: fold the old TEXT video_gym slug into the
---     note before the column is retyped (legacy template slugs cannot map to
---     real gyms, but their spend + provenance must survive).
-UPDATE video_cost_log
-SET note = COALESCE(note || ' | ', '') || 'template:' || gym_id
-WHERE gym_id IS NOT NULL;
-
--- 4b. Drop the old FK (TEXT gym_id -> video_gym).
-ALTER TABLE video_cost_log DROP CONSTRAINT fk_video_cost_log_gym;
-
--- 4c. Drop the existing index on gym_id before the retype, for deterministic
---     recreation (the type change from TEXT to UUID is not binary-coercible,
---     so rely on an explicit drop + recreate rather than the automatic
---     index-rebuild path).
-DROP INDEX idx_video_cost_log_gym;
-
--- 4d. Retype gym_id to UUID. Legacy template slugs cannot map to any real
---     gym, so every existing row's gym_id becomes NULL (its spend + the
---     'template:<slug>' note from step 4a are preserved).
-ALTER TABLE video_cost_log
-    ALTER COLUMN gym_id TYPE UUID USING NULL;
-
--- 4e. Add the new FK to gyms, same constraint name as before.
-ALTER TABLE video_cost_log
-    ADD CONSTRAINT fk_video_cost_log_gym
-        FOREIGN KEY (gym_id) REFERENCES gyms(gym_id) ON DELETE SET NULL;
-
--- 4f. Recreate the gym_id index.
-CREATE INDEX idx_video_cost_log_gym ON video_cost_log (gym_id);
-
--- 4g. New column: the worker run this spend belongs to (NULL for legacy rows
---     and spend outside a run).
-ALTER TABLE video_cost_log
-    ADD COLUMN video_run_id UUID
-        CONSTRAINT fk_video_cost_log_run
-            REFERENCES video_run(run_id) ON DELETE SET NULL;
-
-CREATE INDEX idx_video_cost_log_run ON video_cost_log (video_run_id);
-
--- ============================================================
--- 5. New table: video_rag (RAG sidecar for enriched videos)
+-- 4. New table: video_rag (RAG sidecar for enriched videos)
 -- ============================================================
 
 CREATE TABLE video_rag (
@@ -130,47 +127,25 @@ CREATE POLICY "Read summaries for visible videos"
 REVOKE INSERT, UPDATE, DELETE ON TABLE video_rag FROM authenticated;
 
 -- ============================================================
--- 6. New table: member_video_profile (declares mood_bucket)
+-- 5. mood_bucket enum + the member video-taste RAG profile on members.
+--    The profile lives on members (not a sidecar table): one summary + one
+--    embedding per member, built lazily by the backend (service_role) — all
+--    nullable, null until first built. The embedding is pinned to
+--    settings.video_embedding_dim (cross-service contract; same model + dim as
+--    video_rag.embedding). mood_bucket is still consumed by member_video_recs
+--    below, so it is declared here.
 -- ============================================================
 
 CREATE TYPE mood_bucket AS ENUM ('teach', 'enjoy', 'inform', 'human', 'peak');
 
-CREATE TABLE member_video_profile (
-    member_id UUID NOT NULL
-        CONSTRAINT fk_member_video_profile_member
-            REFERENCES members(member_id) ON DELETE CASCADE,
-    gym_id UUID NOT NULL
-        CONSTRAINT fk_member_video_profile_gym
-            REFERENCES gyms(gym_id) ON DELETE CASCADE,
-    bucket mood_bucket NOT NULL,
-    profile_text TEXT NOT NULL,
-    embedding vector(1536) NOT NULL,
-    embedding_model TEXT NOT NULL,
-    built_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT pk_member_video_profile PRIMARY KEY (member_id, bucket),
-    CONSTRAINT fk_member_video_profile_member_gym
-        FOREIGN KEY (member_id, gym_id)
-        REFERENCES members (member_id, gym_id)
-);
-
-ALTER TABLE member_video_profile ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Members and gym staff can view video profiles"
-    ON member_video_profile
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM members
-            WHERE members.member_id = member_video_profile.member_id
-            AND members.user_id = auth.uid()
-        )
-        OR is_gym_admin_or_owner(member_video_profile.gym_id)
-    );
-
-REVOKE INSERT, UPDATE, DELETE ON TABLE member_video_profile FROM authenticated;
+ALTER TABLE members
+    ADD COLUMN video_profile_summary TEXT,
+    ADD COLUMN video_profile_embedding vector(1536),
+    ADD COLUMN video_profile_embedding_model TEXT,
+    ADD COLUMN video_profile_built_at TIMESTAMPTZ;
 
 -- ============================================================
--- 7. New table: member_video_recs (uses mood_bucket)
+-- 6. New table: member_video_recs (uses mood_bucket)
 -- ============================================================
 
 CREATE TABLE member_video_recs (
@@ -188,6 +163,8 @@ CREATE TABLE member_video_recs (
     bucket mood_bucket NOT NULL,
     score DOUBLE PRECISION NOT NULL,
     recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Click signal: NULL = served but not clicked; set when the member opens it.
+    clicked_at TIMESTAMPTZ,
     CONSTRAINT fk_member_video_recs_member_gym
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id)
@@ -213,3 +190,18 @@ CREATE POLICY "Members and gym staff can view rec history"
     );
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE member_video_recs FROM authenticated;
+
+-- ============================================================
+-- 7. member_activities.activity_type: free-text VARCHAR -> enum.
+--    The table is empty at migration time (seed runs after), so the cast is
+--    safe; the existing readers compare activity_type = 'rank_changed' as a
+--    text literal and keep working against the enum column.
+-- ============================================================
+
+CREATE TYPE member_activity_type AS ENUM (
+    'class_attended', 'rank_changed', 'video_clicked'
+);
+
+ALTER TABLE member_activities
+    ALTER COLUMN activity_type TYPE member_activity_type
+    USING activity_type::member_activity_type;

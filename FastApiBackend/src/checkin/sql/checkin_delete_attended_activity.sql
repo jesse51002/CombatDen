@@ -10,7 +10,7 @@ WHERE activity_id = (
     FROM member_activities
     WHERE member_id = CAST(:m AS UUID)
       AND gym_id = CAST(:g AS UUID)
-      AND activity_type = :activity_type
+      AND activity_type = CAST(:activity_type AS member_activity_type)
       AND activity_info ->> 'class_id' = :class_id
     LIMIT 1
 )

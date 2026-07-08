@@ -70,17 +70,6 @@ class GymVideoSpecSource(StrEnum):
     system_update = "system_update"  # preset import / automation
 
 
-class VideoExecutionType(StrEnum):
-    """Mirrors the Postgres `video_execution_type` enum in schemas/video_cost_log.sql."""
-
-    search = "search"
-    transcript = "transcript"
-    tag = "tag"
-    enrich = "enrich"
-    embed = "embed"
-    scan = "scan"
-
-
 class VideoRunStatus(StrEnum):
     """Mirrors the Postgres `video_run_status` enum in schemas/video_run.sql —
     the lifecycle of a versioned worker run that built a gym's video feed."""
@@ -91,7 +80,7 @@ class VideoRunStatus(StrEnum):
 
 
 class MoodBucket(StrEnum):
-    """Mirrors the Postgres `mood_bucket` enum in schemas/member_video_profile.sql
+    """Mirrors the Postgres `mood_bucket` enum in schemas/member_video_recs.sql
     — the five mood clusters (teach / enjoy / inform / human / peak) that member
     video recs are retrieved against. This is the same vocabulary the
     query-generator prompt already uses to enforce feed breadth; a video's bucket

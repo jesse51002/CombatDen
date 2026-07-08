@@ -96,7 +96,8 @@ schema_paths = [
     "./schemas/video_gym_reward.sql",
     "./schemas/video.sql",
     "./schemas/video_gym_feed.sql",
-    "./schemas/video_cost_log.sql",
+    # Generic spend ledger (FK gyms; replaces video_cost_log). gyms loads early.
+    "./schemas/cost_log.sql",
     # Per-gym live video content (UUID-keyed; the prod counterpart of the
     # video_gym* template catalog). Loads after gyms + video (FK targets).
     "./schemas/gym_video_spec.sql",

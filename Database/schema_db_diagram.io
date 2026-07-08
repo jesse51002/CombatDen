@@ -96,6 +96,11 @@ Table members {
   points_balance integer [not null, default: 0]
   current_rank_id uuid [note: 'nullable, FK to gym_ranks (composite with gym_id)']
   current_sub_index integer [note: 'nullable; leaf position within current_rank_id (NULL when sub_rank_count=0); written only by ranks endpoints']
+  // --- RAG video-taste profile (backend-built, service_role-only; NULL until first built) ---
+  video_profile_summary text
+  video_profile_embedding vector [note: 'vector(1536); same model+dim contract as video_rag.embedding']
+  video_profile_embedding_model text
+  video_profile_built_at timestamptz
   // --- merged billing/contact/Stripe (service_role-written; NULL for engagement-only members) ---
   photo_url varchar
   phone varchar
@@ -312,7 +317,7 @@ Table member_activities {
   activity_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
   gym_id uuid [not null]
-  activity_type varchar [not null]
+  activity_type member_activity_type [not null, note: 'enum: class_attended | rank_changed | video_clicked']
   activity_info jsonb [default: '{}']
   time timestamptz [not null, default: `now()`]
 }
@@ -771,14 +776,20 @@ Table video_gym_feed {
   }
 }
 
-Table video_cost_log {
+// Generic spend ledger (replaces video_cost_log). source names the producing
+// system (only 'video' today; extensible); (source, run_id) matches a cost row
+// back to its source table's run. Service-role-written; public SELECT.
+Table cost_log {
   entry_id uuid [primary key, default: `uuid_generate_v4()`, note: 'append-only']
-  execution_type video_execution_type [not null, note: 'enum: search|transcript|tag|enrich|embed|scan']
-  gym_id uuid [note: 'FK to gyms.gym_id (real gym attribution); NULL for unattributed spend; legacy template slugs moved into note']
-  video_run_id uuid [note: 'the worker run this spend belongs to (per-run cost = SUM per run_id); NULL for legacy rows']
-  at timestamptz [not null]
+  source cost_source [not null, note: 'enum: video (extensible); producing system']
+  run_id text [note: 'the source run this spend belongs to (per-run cost = SUM per run_id, scoped by source); NULL outside a run']
+  gym_id uuid [note: 'FK to gyms.gym_id (real gym attribution); NULL for unattributed spend']
+  stage cost_stage [not null, note: 'enum: search|transcript|tag|enrich|embed|scan']
+  model text [note: 'model that produced the spend, when one applies']
+  cost_usd float8 [not null, default: 0, note: 'row total in USD']
   breakdown jsonb [not null, default: '{}', note: 'USD component map']
   note text
+  created_at timestamptz [not null, default: `now()`]
 }
 
 Ref: video_gym_query.gym_id > video_gym.gym_id
@@ -787,8 +798,7 @@ Ref: video_gym_reward.gym_id > video_gym.gym_id
 
 Ref: video_gym_feed.gym_id > video_gym.gym_id
 Ref: video_gym_feed.video_id > video.video_id
-Ref: video_cost_log.gym_id > gyms.gym_id
-Ref: video_cost_log.video_run_id > video_run.run_id
+Ref: cost_log.gym_id > gyms.gym_id
 
 // ============================================================
 // Real-gym video content (gym_video_* tables). These reference the
@@ -853,22 +863,11 @@ Table video_rag {
   created_at timestamptz [not null, default: `now()`]
 }
 
-// Per-member RAG profile, one row per mood bucket (teach|enjoy|inform|human|peak
-// — the query-gen clusters). Recs pull top-k per bucket then interleave.
-// v1 profile_text = deterministic template; built lazily by the backend.
-Table member_video_profile {
-  member_id uuid [not null, note: 'FK to members.member_id']
-  gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
-  bucket mood_bucket [not null, note: 'enum: teach | enjoy | inform | human | peak']
-  profile_text text [not null]
-  embedding vector [not null, note: 'vector(1536); same model+dim contract as video_rag']
-  embedding_model text [not null]
-  built_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (member_id, bucket) [pk]
-  }
-}
+// The per-member RAG video-taste profile lives on the members table
+// (video_profile_summary / video_profile_embedding / *_model / *_built_at) —
+// one summary + one embedding per member, built lazily by the backend. The
+// mood_bucket enum (teach|enjoy|inform|human|peak — the query-gen clusters) is
+// declared in member_video_recs.sql and consumed by member_video_recs.bucket.
 
 // Rec-serve history: freshness partition (never-recommended first). Append-only
 // event log — one row PER SERVE (re-serves INSERT another row; times=COUNT,
@@ -882,6 +881,7 @@ Table member_video_recs {
   bucket mood_bucket [not null, note: 'the bucket it was served under at this event']
   score float8 [not null, note: 'composite score at this serve']
   recommended_at timestamptz [not null, default: `now()`, note: 'append-only serve log; times=COUNT, last serve=MAX(recommended_at)']
+  clicked_at timestamptz [note: 'nullable; NULL = served but not clicked; set (service_role) when the member opens the rec']
 
   indexes {
     (member_id, video_id) [note: 'already-recommended anti-join + per-video MAX(recommended_at)']
@@ -899,6 +899,5 @@ Ref: gym_video_feed.gym_id > gyms.gym_id
 Ref: gym_video_feed.video_id > video.video_id
 Ref: gym_video_feed.video_run_id > video_run.run_id
 Ref: video_rag.video_id - video.video_id
-Ref: member_video_profile.member_id > members.member_id
 Ref: member_video_recs.member_id > members.member_id
 Ref: member_video_recs.video_id > video.video_id

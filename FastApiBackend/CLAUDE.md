@@ -477,8 +477,9 @@ how-to-work-here facts belong here:
 ## `videos` domain (`src/videos/`)
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
-agent plus the RAG read surface. Six routes cover the spec/agent + worker-status + RAG surface
-(all `verify_gym_employee`-gated EXCEPT the member recs route, which is `verify_can_view_member`):
+agent plus the RAG read surface. Seven routes cover the spec/agent + worker-status + RAG surface
+(all `verify_gym_employee`-gated EXCEPT the member recs + rec-click routes, which are
+`verify_can_view_member`):
 
 | Route | What it does |
 |---|---|
@@ -487,6 +488,7 @@ agent plus the RAG read surface. Six routes cover the spec/agent + worker-status
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
 | `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state, read-only: `last_updated` / `running` / `last_run_status` (no queue — there is nothing to enqueue) |
 | `GET /api/v1/gyms/{id}/members/{member_id}/video-recs` | A member's mood-bucketed RAG recs (`verify_can_view_member`; `per_bucket` cap 20, `record` bool) |
+| `POST /api/v1/gyms/{id}/members/{member_id}/video-recs/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 | `GET /api/v1/gyms/{id}/videos/search` | Semantic search over the gym's served feed (`q` min-len 2, `limit` default `video_search_limit`, cap 50) |
 
 **Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
@@ -527,47 +529,72 @@ and `VideoSearchService`. Exposes: `load_latest_spec`,
 the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
 
-**RAG read surface — member recs + semantic search (deterministic v1 profiles).**
+**RAG read surface — member recs + semantic search + rec-click.**
 
-Three flat `service/` classes power the two RAG routes; readers compare a member's/query's embedding
-against `video_rag.embedding` (the VideoService worker's lazy per-video summary embeddings). The
-`vector(1536)` DDL is a **cross-service contract** — every produced vector is length-checked against
-`settings.video_embedding_dim` (a mismatch raises, not writes a wrong-width vector). Embeddings are
-serialized to pgvector text form (`'[0.1,0.2,...]'`) and bound with `CAST(:x AS vector)`.
+The per-member RAG profile is **ONE LLM-written summary + ONE embedding stored on the `members` row**
+(`video_profile_summary` / `video_profile_embedding` / `video_profile_embedding_model` /
+`video_profile_built_at`, all nullable, service-role-written, in the `MEMBERS` immutable frozenset) —
+not a sidecar table. A small chat model (`video_profile_summary_model`) turns the member's facts (rank,
+gym disciplines, most-attended classes in a 90-day window, and recently `video_clicked` videos' title +
+`video_rag` summary) into a short taste paragraph; that paragraph is embedded once and its embedding is
+what recs + search rank against `video_rag.embedding`. The `vector(1536)` DDL is a **cross-service
+contract** — every produced vector is length-checked against `settings.video_embedding_dim` (a mismatch
+raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[0.1,0.2,...]'`), bound
+`CAST(:x AS vector)`.
 
-- **`MemberVideoProfileService`** (`member_video_profile_service.py`) — lazily builds a member's 5
-  mood-bucket profiles. `ensure_profiles(member_id, gym_id)` first verifies **the member actually
-  belongs to `gym_id`** — checked on every call, both the freshness no-op (via `gym_id` carried on
-  each `member_video_profile` row, frozen at insert) and the cold-build path (via the live `members`
-  row) — raising `MemberNotInGymError` (a `ValueError` subclass) on a mismatch or missing member BEFORE
-  any profile read/build. This is what stops a caller who's authorized to view a member (`verify_can_view_member`
-  only checks the member, not the path `gym_id`) from ranking a DIFFERENT gym's feed by passing a
-  mismatched `gym_id`; the route maps exactly this exception to 404 (any other `ValueError`, e.g. an embedding-dimension config mismatch, stays a 500 and never leaks internals). LLM list outputs are hard-capped by truncating validators (`MAX_GENERATED_QUERIES`/`MAX_LANDSCAPE_ITEMS` in `video_spec_schema.py`) — every generated query is real Apify spend. Otherwise: no-op when all 5 buckets
-  exist and the newest `built_at` is within `video_profile_ttl_days`; else reads member facts in ONE
-  query (rank, 90-day attendance count/recency, top-3 attended classes, gym disciplines from
-  `gym_video_spec_latest`), renders a **deterministic v1 template** per bucket (shared base sentence +
-  one bucket-flavor sentence; NULL-rank → "A member", zero-attendance → the attendance clause is
-  omitted), embeds all 5 in ONE `embed()` call, and upserts. `load_embeddings(member_id)` reads the
-  per-bucket embeddings back for recs.
+- **`MemberVideoProfileService`** (`member_video_profile_service.py`) — builds + reads the profile.
+  `ensure_profile(member_id, gym_id)` verifies the member belongs to `gym_id` (raising
+  `MemberNotInGymError`, a `ValueError` subclass, on a mismatch or missing member — this stops a caller
+  authorized to view a member, `verify_can_view_member` only checks the member not the path `gym_id`,
+  from ranking a DIFFERENT gym's feed) then lazily builds ONLY a MISSING embedding. `refresh_if_due`
+  is the trigger gate — same guard, then rebuilds when the embedding is missing OR
+  `video_profile_built_at` is older than `video_profile_refresh_cooldown_days` (3d), a no-op within the
+  cooldown. `_build` reads member facts in ONE query → renders `prompts/member_profile_summary.md` →
+  `complete_structured` (summary model) → `embed` (embedding model) → dim-check → UPDATE the members
+  row. `load_embedding(member_id)` reads the pgvector text back (None when unbuilt).
+  `MemberNotInGymError` maps to 404 at the route; the profile-service methods themselves raise on any
+  other build failure (e.g. an embedding-dim config mismatch), which the `/videos/search` path surfaces
+  as a 500 — but the recs path deliberately degrades instead (see `VideoRecsService`).
 - **`VideoRecsService`** (`video_recs_service.py`) — `get_recs(gym_id, member_id, per_bucket, record)`:
-  calls `ensure_profiles`, then runs ONE candidate query per bucket (5 sequential). Candidates = the
-  gym's SERVED feed (accepted latest-COMPLETED-run rows + owner `video_run_id IS NULL` rows, mirroring
-  `videos_load_feed_ids`) JOIN `video_rag`, filtered to the bucket's genres (the deterministic
-  `video_mood_bucket` genre→bucket map). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
-  w_views*min(ln(1+views)/20,1)` (weights from `video_rec_weight_*` settings). ORDER BY hard-partitions
-  UNRECOMMENDED first, then within-unrecommended score DESC, within-recommended by last serve
-  (`MAX(recommended_at)`, pre-aggregated per video from the append-only log) ASC then score DESC.
-  `record=True` APPENDS one `member_video_recs` row per served video (event log — no upsert, no
-  counter); `record=False` (CRM preview) writes nothing.
-- **`VideoSearchService`** (`video_search_service.py`) — `search(gym_id, q, limit)`: embeds `q` once,
-  ranks the same served feed by cosine similarity (no bucket filter), most-similar first.
+  `ensure_profile` → `load_embedding` → runs **ONE ranked candidate query** (`video_recs_candidates.sql`)
+  against the member's single embedding; a member with no embedding yet degrades to
+  `video_recs_candidates_no_embedding.sql` (composite score minus the similarity term — no `video_rag`
+  join, so a brand-new member still gets recs). `MemberNotInGymError` propagates (→ 404), but a
+  profile-BUILD failure (LLM / embedding provider down or misconfigured) is best-effort — `get_recs`
+  swallows it and falls through to the no-embedding degrade ranking rather than 500ing the member's feed
+  (the approved "degrade, don't 500" spec; the misconfig still surfaces via `/videos/search` + the
+  refresh runner's crash log). Candidates = the gym's SERVED feed (accepted
+  latest-COMPLETED-run rows + owner `video_run_id IS NULL`, mirroring `videos_load_feed_ids`). The
+  ranked rows are grouped into the 5 mood buckets **in Python** (`bucket_for_genre(tag)`) and sliced to
+  `per_bucket` (all 5 buckets always present). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
+  w_views*min(ln(1+views)/20,1)`; ORDER BY hard-partitions UNRECOMMENDED first, then oldest last-serve
+  (`MAX(recommended_at)`), then score. `record=True` APPENDS one `member_video_recs` row per served
+  video (event log); `record=False` (CRM preview) writes nothing.
+- **`VideoRecClickService`** (`video_rec_click_service.py`) — `record_click(gym_id, member_id, rec_id)`:
+  in one txn stamps `member_video_recs.clicked_at` (first click only — idempotent via `clicked_at IS
+  NULL`, scoped to member+gym) and logs a `video_clicked` `member_activities` row (carrying `video_id`
+  + `rec_id`); on the first click it fires `MemberVideoProfileRefreshRunner.start`. A repeat click is
+  idempotent (`clicked=false`, no re-stamp/re-log/re-fire); an unknown rec for this member+gym raises
+  `RecNotFoundError` → 404.
+- **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget
+  runner (mirrors `MembershipsInvoiceFetchRunner`: a `ClassVar` task set, a done-callback crash logger,
+  `drain()` in the `main.py` lifespan). `start(member_id, gym_id)` fires `refresh_if_due` detached; a
+  refresh failure NEVER surfaces to the caller. Two triggers wire it: the **video-click** (inside
+  `VideoRecClickService`) and the **class sign-up** (router-level composition in `checkin_router.py`'s
+  `signup` handler, after a successful `create` — keeps `SignupService` decoupled from the videos domain).
+- **`VideoSearchService`** (`video_search_service.py`) — unchanged: `search(gym_id, q, limit)` embeds
+  `q` once and ranks the same served feed by cosine similarity (no bucket filter), most-similar first.
 
-The genre→bucket map lives in `schema/video_mood_bucket.py` (`GENRE_TO_BUCKET` + `genres_for_bucket`);
-`MoodBucket` is imported from the Database package (`schema.video`), never redefined. Response schemas:
-`schema/video_recs_schema.py` (`RecommendedVideoCard(GymVideoCard)` + score/already_recommended,
-`RecBucket`, `MemberVideoRecsResponse`) and `schema/video_search_schema.py`
-(`SearchResultCard(GymVideoCard)` + similarity, `VideoSearchResponse`). SQL in `sql/member_profile_*.sql`,
-`video_recs_candidates.sql`, `video_recs_record_insert.sql`, `video_search_candidates.sql`.
+The genre→bucket map lives in `schema/video_mood_bucket.py` (`GENRE_TO_BUCKET` + `bucket_for_genre`);
+`MoodBucket` is imported from `schema.video`, never redefined. Member activity writers use the shared
+`MemberActivityType` enum (`schema.member_activity`). Response schemas: `schema/video_recs_schema.py`
+(`RecommendedVideoCard(GymVideoCard)` + score/already_recommended, `RecBucket`,
+`MemberVideoRecsResponse`, `VideoRecClickResponse`) and `schema/video_search_schema.py`
+(`SearchResultCard(GymVideoCard)` + similarity, `VideoSearchResponse`); the profile summary schema is
+`schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL: `sql/member_profile_load.sql`
+/ `member_profile_source.sql` / `member_profile_update.sql`, `video_recs_candidates.sql` /
+`video_recs_candidates_no_embedding.sql`, `video_recs_record_insert.sql`, `video_rec_click_update.sql` /
+`video_rec_load.sql` / `member_activity_video_click_insert.sql`, `video_search_candidates.sql`.
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -615,9 +642,11 @@ Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare 
 `video_query_count` (queries per commit, injected into `VideoSpecAuthoring`).
 
 RAG settings: `video_embedding_model` (litellm format, default `openai/text-embedding-3-small` — needs
-`openai_api_key`), `video_embedding_dim` (1536, pinned to the `vector(1536)` DDL), `video_profile_ttl_days`
-(30), `video_rec_weight_similarity` / `_relevance` / `_views` (0.7 / 0.2 / 0.1), `video_search_limit`
-(20; route caps at 50).
+`openai_api_key`), `video_embedding_dim` (1536, pinned to the `vector(1536)` DDL and shared by
+`video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
+model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuses `anthropic_api_key`),
+`video_profile_refresh_cooldown_days` (3), `video_rec_weight_similarity` / `_relevance` / `_views`
+(0.7 / 0.2 / 0.1), `video_rec_candidate_limit` (500), `video_search_limit` (20; route caps at 50).
 
 **Versioned spec — readers always use the view, not the table.**
 `gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
@@ -634,7 +663,8 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
 `videos_worker_status_service`, `video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`,
-`video_recs_service`, `video_search_service`, `video_agent_service`, `videos_service`.
+`member_video_profile_refresh_runner`, `video_recs_service`, `video_search_service`,
+`video_rec_click_service`, `video_agent_service`, `videos_service`.
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 

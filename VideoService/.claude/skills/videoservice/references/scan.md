@@ -28,8 +28,8 @@ In one transaction, open a new `video_run` (`status='running'`) and:
    ever served: every "latest run" read filters `status='completed'`, so a
    mid-flight `running` run never becomes latest and blanks the gym's feed.
 
-A `scan` `video_cost_log` row is written for the run (stamped `gym_id` +
-`video_run_id`).
+A `scan` row is written to the generic `cost_log` table for the run (`source='video'`,
+stamped `run_id` (TEXT) + `gym_id` + `model` + `cost_usd`).
 
 ## Failure semantics
 

@@ -24,6 +24,10 @@ A real gym's live content (no prefix — each route declares its full path):
       manual run — the worker derives its own work.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-recs`` — a member's
       mood-bucketed RAG recommendations (``verify_can_view_member``).
+    * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-recs/{rec_id}/click``
+      — record a member opening a rec: stamps ``clicked_at``, logs a
+      ``video_clicked`` activity, and fires a profile refresh
+      (``verify_can_view_member``).
     * ``GET /api/v1/gyms/{gym_id}/videos/search`` — semantic search over the
       gym's served feed.
 
@@ -47,7 +51,10 @@ from src.videos.schema.video_agent_schema import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
-from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
+from src.videos.schema.video_recs_schema import (
+    MemberVideoRecsResponse,
+    VideoRecClickResponse,
+)
 from src.videos.schema.video_search_schema import VideoSearchResponse
 from src.videos.schema.video_spec_schema import VideoSpecView
 from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
@@ -66,6 +73,7 @@ from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_rec_click_service import RecNotFoundError
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import (
     YouTubeApiError,
@@ -691,6 +699,56 @@ async def get_member_video_recs(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to build video recommendations",
+        ) from None
+
+
+@videos_router.post(
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-recs/{rec_id}/click",
+    response_model=VideoRecClickResponse,
+    summary="Record a member opening (clicking) a recommendation",
+    description=(
+        "Stamp a served recommendation as clicked (first click only — "
+        "idempotent via ``clicked_at IS NULL``): logs a ``video_clicked`` "
+        "member activity and fires a fire-and-forget profile refresh. A repeat "
+        "click returns ``clicked=false`` without re-stamping / re-logging / "
+        "re-firing. Gated by ``verify_can_view_member``."
+    ),
+    responses={
+        200: {"description": "Click recorded (or an idempotent repeat)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Recommendation not found for this member"},
+    },
+)
+@inject
+async def click_member_video_rec(
+    gym_id: UUID,
+    member_id: UUID,
+    rec_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> VideoRecClickResponse:
+    """Record a member opening a rec. Gated by ``verify_can_view_member``
+    (staff of the member's gym OR the member themselves)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await videos_service.record_rec_click(gym_id, member_id, rec_id)
+    except RecNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to record rec click for member %s", member_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record recommendation click",
         ) from None
 
 

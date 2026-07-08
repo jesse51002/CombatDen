@@ -63,7 +63,7 @@ FastApiBackend's member recs + semantic search rank against — the model + dime
 are a **cross-service contract** (`run.py` asserts `embedding_dim == 1536` at
 startup).
 
-Each stage logs spend to `video_cost_log` (`search` / `embed` / `enrich`), stamped
-with `gym_id` + `video_run_id`.
+Each stage logs spend to the generic `cost_log` table (`search` / `embed` / `enrich`,
+`source='video'`), stamped with `run_id` (TEXT) + `gym_id` + `model` + `cost_usd`.
 
 → Continue with the scan + feed-write half in `scan.md`.

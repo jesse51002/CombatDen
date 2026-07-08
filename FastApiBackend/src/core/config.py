@@ -82,23 +82,34 @@ class Settings(BaseSettings):
     video_query_count: int = 30
 
     # ── Video RAG read surface (member recs + semantic search) ──────
-    # Embedding model + dimension for member profiles AND the query embedded at
-    # search time. The dimension is pinned to the `vector(1536)` DDL — a
-    # CROSS-SERVICE CONTRACT with the VideoService worker that writes
-    # `video_rag.embedding` (both must use the same model + dim). Uses the
-    # litellm `provider/name` format so the provider key is resolved from the
-    # prefix (openai/ → openai_api_key). Changing the model is a one-way door:
-    # migration + full re-embed of video_rag AND member_video_profile.
+    # Embedding model + dimension for the member's video-taste profile embedding
+    # AND the query embedded at search time. The dimension is pinned to the
+    # `vector(1536)` DDL — a CROSS-SERVICE CONTRACT: it pins BOTH the
+    # `video_rag.embedding` the VideoService worker writes AND the
+    # `members.video_profile_embedding` this backend writes (all three must use
+    # the same model + dim, they are compared by cosine). Uses the litellm
+    # `provider/name` format so the provider key is resolved from the prefix
+    # (openai/ → openai_api_key). Changing the model is a one-way door:
+    # migration + full re-embed of video_rag AND members.video_profile_embedding.
     video_embedding_model: str = "openai/text-embedding-3-small"
     video_embedding_dim: int = 1536
-    # A member's 5 mood-bucket RAG profiles are rebuilt lazily when the newest
-    # one is older than this (deterministic v1 template — cheap to rebuild).
-    video_profile_ttl_days: int = 30
+    # A member's video-taste profile is ONE summary + ONE embedding on the
+    # members row. `refresh_if_due` (fired by class-booking + video-click
+    # triggers) rebuilds it at most once per this cooldown; `ensure_profile`
+    # only lazily builds a MISSING profile on the first recs request.
+    video_profile_refresh_cooldown_days: int = 3
+    # Small/cheap chat model (litellm provider/name format) that turns a
+    # member's facts into the one-paragraph taste summary; reuses
+    # `anthropic_api_key`.
+    video_profile_summary_model: str = "anthropic/claude-haiku-4-5"
     # Rec ranking weights (sum ~1.0): RAG cosine similarity dominant, blended
     # with gym relevance (1/(1+relevance_index)) and popularity (log views).
     video_rec_weight_similarity: float = 0.7
     video_rec_weight_relevance: float = 0.2
     video_rec_weight_views: float = 0.1
+    # Generous working-set cap for the single rank-once rec query (grouping +
+    # per-bucket slicing happen in Python).
+    video_rec_candidate_limit: int = 500
     # Default result count for GET /videos/search (the route caps at 50).
     video_search_limit: int = 20
 

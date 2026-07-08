@@ -6,7 +6,7 @@ Loads, in order:
   1. the shared pool ``videos/<id>.yaml`` -> ``video`` (streamed in batches),
   2. each gym's existing ``good_video_ids`` / ``rejected_video_ids`` ->
      ``video_gym_feed`` (ids not in the pool are skipped),
-  3. ``cost_log.yaml`` -> ``video_cost_log``.
+  3. ``cost_log.yaml`` -> ``cost_log`` (the generic spend-ledger table).
 
 Run AFTER the migration and ``sync-gyms`` (the gyms must already exist in SQL for
 the feed FK). Idempotent: videos upsert by id and feeds are rewritten per gym, so
@@ -88,7 +88,7 @@ async def _import_feeds(writer: VideoDbWriter, root: Path) -> int:
 
 
 async def _import_cost_log(writer: VideoDbWriter, root: Path) -> int:
-    """Append ``cost_log.yaml`` entries into ``video_cost_log`` (no gym attribution
+    """Append ``cost_log.yaml`` entries into ``cost_log`` (no gym attribution
     — the old global log didn't record which gym a scan was for)."""
     log_file = root / COST_LOG_FILENAME
     if not log_file.is_file():

@@ -1,34 +1,46 @@
-"""MemberVideoProfileService — build + read a member's per-bucket RAG profiles.
+"""MemberVideoProfileService — build + read a member's RAG taste profile.
 
-One ``member_video_profile`` row per mood bucket holds the profile TEXT a
-member's recommendations are retrieved against, plus its embedding. v1 profile
-text is a DETERMINISTIC template built from member facts (rank, trailing-window
-attendance, top classes, gym disciplines) — the interface is the point; the text
-gets smarter later. Built lazily on first recs request and rebuilt when stale.
+The per-member RAG profile is ONE LLM-written summary plus ONE embedding, stored
+directly on the ``members`` row (``video_profile_summary`` /
+``video_profile_embedding`` / ``video_profile_embedding_model`` /
+``video_profile_built_at``). A small chat model turns the member's facts (rank,
+gym disciplines, most-attended classes, recently clicked videos) into a short
+video-taste paragraph; that paragraph is embedded once and the summary embedding
+is what recommendations rank against.
 
-The five bucket texts are embedded in ONE ``embed`` batch call and upserted
-together. Embeddings are stored/read as pgvector text form and every produced
-vector is length-checked against the pinned embedding dimension (a cross-service
-contract with the VideoService worker that writes ``video_rag.embedding``).
+``ensure_profile`` lazily builds a MISSING profile (first recs request);
+``refresh_if_due`` is the trigger gate — it rebuilds only when the profile is
+missing or older than the refresh cooldown, so class-booking / video-click
+triggers can fire it freely. Both first verify the member belongs to the gym
+they were asked about (``MemberNotInGymError`` otherwise). Embeddings are
+stored/read as pgvector text form and every produced vector is length-checked
+against the pinned embedding dimension (a cross-service contract with the
+VideoService worker that writes ``video_rag.embedding``).
 """
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from string import Template
 from uuid import UUID
 
-from schema.video import MoodBucket
 from sqlalchemy import text
 
 from src.shared.database import DirectDatabasePool
 from src.shared.litellm_client import LiteLLMClient
 from src.shared.sql_loader import load_sql
-from src.videos import SQL_DIR
+from src.videos import PROMPTS_DIR, SQL_DIR
+from src.videos.schema.member_profile_schema import MemberProfileSummary
 
-# Trailing window (days) for the attendance facts folded into the profile text
-# and the "attended N classes in the last 90 days" clause.
+# Trailing window (days) for the attendance facts folded into the summary.
 ATTENDANCE_WINDOW_DAYS = 90
+# Most-attended classes surfaced to the summary prompt.
+TOP_CLASSES_LIMIT = 3
+# Most-recently-clicked videos surfaced to the summary prompt.
+RECENT_CLICKS_LIMIT = 10
+
+_SUMMARY_PROMPT_PATH = PROMPTS_DIR / "member_profile_summary.md"
 
 
 class MemberNotInGymError(ValueError):
@@ -39,28 +51,9 @@ class MemberNotInGymError(ValueError):
     mismatch) stays a 500 and never leaks internals to the client.
     """
 
-# The one bucket-flavor sentence appended per mood bucket. Deterministic v1
-# vocabulary matching the five clusters the query generator uses for breadth.
-_BUCKET_FLAVOR: dict[MoodBucket, str] = {
-    MoodBucket.teach: (
-        "wants technique tutorials, drills and progress-appropriate instruction"
-    ),
-    MoodBucket.enjoy: "wants highlights, funny clips and entertaining montages",
-    MoodBucket.inform: (
-        "wants news, event results and announcements in this sport"
-    ),
-    MoodBucket.human: (
-        "wants interviews, day-in-the-life and behind-the-scenes with athletes "
-        "and coaches"
-    ),
-    MoodBucket.peak: (
-        "wants elite professional performances and championship-level footage"
-    ),
-}
-
 
 class MemberVideoProfileService:
-    """Lazily build + refresh a member's 5 mood-bucket RAG profiles."""
+    """Build (lazy / refresh-if-due) + read a member's video-taste profile."""
 
     def __init__(
         self,
@@ -69,96 +62,119 @@ class MemberVideoProfileService:
         litellm_client: LiteLLMClient,
         embedding_model: str,
         embedding_dim: int,
-        profile_ttl_days: int,
+        summary_model: str,
+        refresh_cooldown_days: int,
     ) -> None:
         self._db = db_pool
         self._litellm = litellm_client
         self._embedding_model = embedding_model
         self._embedding_dim = embedding_dim
-        self._profile_ttl_days = profile_ttl_days
+        self._summary_model = summary_model
+        self._refresh_cooldown_days = refresh_cooldown_days
+        self._prompt_template = _SUMMARY_PROMPT_PATH.read_text(encoding="utf-8")
 
-    # ── build (lazy, refresh-on-stale) ────────────────────────────
+    # ── public API ────────────────────────────────────────────────
 
-    async def ensure_profiles(self, member_id: UUID, gym_id: UUID) -> None:
-        """Ensure the member's 5 bucket profiles exist and are fresh.
+    async def ensure_profile(self, member_id: UUID, gym_id: UUID) -> None:
+        """Ensure the member has a profile embedding, building it if missing.
 
-        Raises ``MemberNotInGymError`` when the member
-        doesn't exist or belongs to a DIFFERENT gym than ``gym_id`` — checked on
-        every call (including the freshness no-op), so a caller authorized to
-        view a member can never rank another gym's feed by passing a
-        mismatched ``gym_id``. Otherwise: no-op when all 5 buckets are present
-        and the newest ``built_at`` is younger than ``profile_ttl_days``; else
-        (re)builds all 5 — read the member facts, render one deterministic
-        text per bucket, embed the batch in one call, and upsert.
+        Verifies the member belongs to ``gym_id`` (``MemberNotInGymError``
+        otherwise), then builds ONLY when the embedding is absent. Does NOT
+        force a rebuild on staleness — that is ``refresh_if_due``'s job.
         """
-        if await self._profiles_fresh(member_id, gym_id):
-            return
+        row = await self._load_row(member_id)
+        self._guard(row, gym_id)
+        if row["embedding"] is None:
+            await self._build(member_id, gym_id)
 
-        source = await self._load_source(member_id, gym_id)
-        texts = self._build_texts(source)
-        buckets = list(MoodBucket)
-        embeddings = await self._litellm.embed(
-            texts=[texts[b] for b in buckets],
-            model=self._embedding_model,
+    async def refresh_if_due(self, member_id: UUID, gym_id: UUID) -> None:
+        """Rebuild the profile when missing or past the refresh cooldown.
+
+        Verifies membership (``MemberNotInGymError`` otherwise), then rebuilds
+        when the embedding is absent or ``video_profile_built_at`` is older than
+        the cooldown; a no-op within the cooldown. Safe to call often (the
+        class-booking + video-click triggers fire it fire-and-forget).
+        """
+        row = await self._load_row(member_id)
+        self._guard(row, gym_id)
+        if self._needs_rebuild(row):
+            await self._build(member_id, gym_id)
+
+    async def load_embedding(self, member_id: UUID) -> str | None:
+        """The member's profile embedding (pgvector text form), or None.
+
+        Read after :meth:`ensure_profile`; None when the profile has not been
+        built yet (the recs service then runs its no-embedding degrade query).
+        """
+        row = await self._load_row(member_id)
+        if row is None:
+            return None
+        return row["embedding"]
+
+    # ── ownership + rebuild decision ──────────────────────────────
+
+    @staticmethod
+    def _guard(row: dict | None, gym_id: UUID) -> None:
+        """Reject a missing member or a member of a DIFFERENT gym.
+
+        Stops a caller authorized to view a member (``verify_can_view_member``
+        only checks the member, not the path ``gym_id``) from ranking another
+        gym's feed against this member by passing a mismatched ``gym_id``.
+        """
+        if row is None or str(row["gym_id"]) != str(gym_id):
+            raise MemberNotInGymError("Member not found in this gym")
+
+    def _needs_rebuild(self, row: dict) -> bool:
+        """True when the embedding is missing or older than the cooldown."""
+        if row["embedding"] is None:
+            return True
+        built_at: datetime | None = row["video_profile_built_at"]
+        if built_at is None:
+            return True
+        cutoff = datetime.now(UTC) - timedelta(days=self._refresh_cooldown_days)
+        return built_at < cutoff
+
+    # ── build ─────────────────────────────────────────────────────
+
+    async def _build(self, member_id: UUID, gym_id: UUID) -> None:
+        """Read the member's facts, summarize + embed them, and persist.
+
+        ``gym_id`` is already verified by the caller's guard; the source read
+        and the write are member-keyed.
+        """
+        source = await self._load_source(member_id)
+        prompt = self._render_prompt(source)
+        summary = await self._litellm.complete_structured(
+            prompt=prompt,
+            schema=MemberProfileSummary,
+            model=self._summary_model,
         )
-        self._assert_dims(embeddings)
-        await self._upsert(member_id, gym_id, buckets, texts, embeddings)
+        embeddings = await self._litellm.embed(
+            texts=[summary.summary], model=self._embedding_model
+        )
+        embedding = embeddings[0]
+        self._assert_dim(embedding)
+        await self._update(
+            member_id, summary.summary, self._to_vector_literal(embedding)
+        )
 
-    async def load_embeddings(self, member_id: UUID) -> dict[MoodBucket, str]:
-        """The member's per-bucket profile embeddings (pgvector text form).
-
-        Read after :meth:`ensure_profiles`; each value is passed straight back
-        into the candidate query's cosine comparison.
-        """
-        sql = load_sql(SQL_DIR / "member_profile_embeddings.sql")
-        async with self._db.session() as session:
-            rows = (
-                (await session.execute(text(sql), {"member_id": str(member_id)}))
-                .mappings()
-                .all()
-            )
-        return {MoodBucket(r["bucket"]): r["embedding"] for r in rows}
-
-    # ── freshness ─────────────────────────────────────────────────
-
-    async def _profiles_fresh(self, member_id: UUID, gym_id: UUID) -> bool:
-        """True when all 5 buckets exist, belong to ``gym_id``, and the newest
-        is within the TTL.
-
-        Raises ``MemberNotInGymError`` when existing
-        profile rows belong to a different gym — every row shares the same
-        gym_id (frozen at insert), so checking the first row suffices. No
-        rows yet (first-ever request) is not an error here; the cold-build
-        path in :meth:`_load_source` owns that check against the live
-        ``members`` row.
-        """
+    async def _load_row(self, member_id: UUID) -> dict | None:
+        """The member's profile columns (gym_id, built_at, model, embedding)."""
         sql = load_sql(SQL_DIR / "member_profile_load.sql")
         async with self._db.session() as session:
-            rows = (
-                (await session.execute(text(sql), {"member_id": str(member_id)}))
+            row = (
+                (
+                    await session.execute(
+                        text(sql), {"member_id": str(member_id)}
+                    )
+                )
                 .mappings()
-                .all()
+                .fetchone()
             )
-        if not rows:
-            return False
-        if str(rows[0]["gym_id"]) != str(gym_id):
-            raise MemberNotInGymError("Member not found in this gym")
-        if len({r["bucket"] for r in rows}) < len(MoodBucket):
-            return False
-        newest: datetime = max(r["built_at"] for r in rows)
-        cutoff = datetime.now(UTC) - timedelta(days=self._profile_ttl_days)
-        return newest >= cutoff
+        return dict(row) if row is not None else None
 
-    # ── source facts ──────────────────────────────────────────────
-
-    async def _load_source(self, member_id: UUID, gym_id: UUID) -> dict:
-        """Read the member facts the deterministic template is built from.
-
-        Raises ``MemberNotInGymError`` when the member
-        doesn't exist or belongs to a different gym than ``gym_id`` — the
-        cold-build-path ownership guard (the freshness path's own guard lives
-        in :meth:`_profiles_fresh`).
-        """
+    async def _load_source(self, member_id: UUID) -> dict:
+        """Read the member facts the summary prompt is built from (one query)."""
         sql = load_sql(SQL_DIR / "member_profile_source.sql")
         async with self._db.session() as session:
             row = (
@@ -168,106 +184,84 @@ class MemberVideoProfileService:
                         {
                             "member_id": str(member_id),
                             "window_days": ATTENDANCE_WINDOW_DAYS,
+                            "class_limit": TOP_CLASSES_LIMIT,
+                            "click_limit": RECENT_CLICKS_LIMIT,
                         },
                     )
                 )
                 .mappings()
                 .fetchone()
             )
-        if row is None or str(row["gym_id"]) != str(gym_id):
+        if row is None:
             raise MemberNotInGymError("Member not found in this gym")
         return dict(row)
 
-    # ── deterministic text ────────────────────────────────────────
-
-    def _build_texts(self, source: dict) -> dict[MoodBucket, str]:
-        """Render the 5 deterministic bucket profile texts from member facts."""
-        rank = self._rank_phrase(
-            source.get("rank_main_name"), source.get("rank_sub_name")
-        )
-        disciplines = ", ".join(self._as_list(source.get("disciplines")))
-        attendance_count = int(source.get("attendance_count") or 0)
-        class_names = self._as_list(source.get("top_classes"))
-        base = self._base_sentence(
-            rank, disciplines, attendance_count, class_names
-        )
-        return {
-            bucket: f"{base} This member {_BUCKET_FLAVOR[bucket]}."
-            for bucket in MoodBucket
-        }
-
-    @staticmethod
-    def _rank_phrase(main_name: str | None, sub_name: str | None) -> str | None:
-        """A member's rank as ``"<main> <sub>"``, or None when unranked."""
-        if not main_name:
-            return None
-        return f"{main_name} {sub_name}".strip()
-
-    @staticmethod
-    def _base_sentence(
-        rank: str | None,
-        disciplines: str,
-        attendance_count: int,
-        class_names: list[str],
-    ) -> str:
-        """The shared base sentence, null-safe.
-
-        No rank → "A member"; no disciplines → "at a gym"; zero attendance → the
-        attendance clause is omitted entirely.
-        """
-        subject = f"A {rank} member" if rank else "A member"
-        place = f" at a {disciplines} gym" if disciplines else " at a gym"
-        sentence = subject + place
-        if attendance_count > 0:
-            sentence += (
-                f", attended {attendance_count} classes in the last "
-                f"{ATTENDANCE_WINDOW_DAYS} days"
-            )
-            if class_names:
-                sentence += f", mostly {', '.join(class_names)}"
-        return sentence + "."
-
-    # ── persistence ───────────────────────────────────────────────
-
-    async def _upsert(
-        self,
-        member_id: UUID,
-        gym_id: UUID,
-        buckets: list[MoodBucket],
-        texts: dict[MoodBucket, str],
-        embeddings: list[list[float]],
+    async def _update(
+        self, member_id: UUID, summary: str, embedding_literal: str
     ) -> None:
-        """Upsert all 5 bucket rows in one transaction (executemany)."""
-        sql = load_sql(SQL_DIR / "member_profile_upsert.sql")
-        params = [
-            {
-                "member_id": str(member_id),
-                "gym_id": str(gym_id),
-                "bucket": bucket.value,
-                "profile_text": texts[bucket],
-                "embedding": self._to_vector_literal(embeddings[i]),
-                "embedding_model": self._embedding_model,
-            }
-            for i, bucket in enumerate(buckets)
-        ]
+        """Persist the rebuilt summary + embedding on the member row."""
+        sql = load_sql(SQL_DIR / "member_profile_update.sql")
+        params = {
+            "member_id": str(member_id),
+            "summary": summary,
+            "embedding": embedding_literal,
+            "embedding_model": self._embedding_model,
+        }
         async with self._db.session() as session, session.begin():
             await session.execute(text(sql), params)
 
+    # ── prompt rendering ──────────────────────────────────────────
+
+    def _render_prompt(self, source: dict) -> str:
+        """Fill the summary prompt from the member facts, null-safe.
+
+        Empty facts degrade gracefully: no disciplines → "a fitness", no rank →
+        "an unranked member", and empty class / clicked lists → "(none yet)".
+        """
+        disciplines = self._as_list(source.get("disciplines"))
+        disciplines_text = ", ".join(disciplines) if disciplines else "a fitness"
+        rank_name = source.get("rank_name")
+        rank_text = rank_name if rank_name else "an unranked member"
+        classes = self._as_list(source.get("attended_classes"))
+        classes_text = ", ".join(classes) if classes else "(none yet)"
+        clicked_text = self._render_clicked(
+            self._as_list(source.get("clicked_videos"))
+        )
+        return Template(self._prompt_template).safe_substitute(
+            disciplines=disciplines_text,
+            rank=rank_text,
+            attended_classes=classes_text,
+            clicked_videos=clicked_text,
+        )
+
+    @staticmethod
+    def _render_clicked(clicked: list) -> str:
+        """Bulleted ``- <title> — <summary>`` lines, or "(none yet)"."""
+        lines: list[str] = []
+        for item in clicked:
+            if not isinstance(item, dict):
+                continue
+            title = (item.get("title") or "").strip()
+            summary = (item.get("summary") or "").strip()
+            if not title:
+                continue
+            lines.append(f"- {title} — {summary}" if summary else f"- {title}")
+        return "\n".join(lines) if lines else "(none yet)"
+
     # ── helpers ───────────────────────────────────────────────────
 
-    def _assert_dims(self, embeddings: list[list[float]]) -> None:
-        """Every produced vector must match the pinned embedding dimension.
+    def _assert_dim(self, vec: list[float]) -> None:
+        """The produced vector must match the pinned embedding dimension.
 
         The ``vector(1536)`` DDL is a cross-service contract; a mismatch means a
         misconfigured embedding model, so fail loudly rather than write a
         wrong-width vector.
         """
-        for vec in embeddings:
-            if len(vec) != self._embedding_dim:
-                raise ValueError(
-                    f"embedding dimension {len(vec)} != expected "
-                    f"{self._embedding_dim} (model {self._embedding_model})"
-                )
+        if len(vec) != self._embedding_dim:
+            raise ValueError(
+                f"embedding dimension {len(vec)} != expected "
+                f"{self._embedding_dim} (model {self._embedding_model})"
+            )
 
     @staticmethod
     def _to_vector_literal(vec: list[float]) -> str:
@@ -275,7 +269,7 @@ class MemberVideoProfileService:
         return "[" + ",".join(str(x) for x in vec) + "]"
 
     @staticmethod
-    def _as_list(value: object) -> list[str]:
+    def _as_list(value: object) -> list:
         """A JSONB column as a Python list — tolerant of the driver returning a
         decoded list, a raw JSON string, or NULL."""
         if value is None:

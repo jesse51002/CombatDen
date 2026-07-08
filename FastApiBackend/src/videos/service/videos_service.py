@@ -3,8 +3,9 @@
 Composes: ``VideoFeedService`` (live gym feed + pool reads), ``VideoSpecService``
 (spec DB read/write), ``VideoSpecAuthoring`` (deterministic commit gate),
 ``VideoFeedRefiner`` (feed-learning refiner), ``VideosWorkerStatusService``
-(read-only worker state), ``VideoRecsService`` (member RAG recommendations), and
-``VideoSearchService`` (semantic feed search).
+(read-only worker state), ``VideoRecsService`` (member RAG recommendations),
+``VideoSearchService`` (semantic feed search), and ``VideoRecClickService``
+(record a rec click → stamp + log + fire a profile refresh).
 
 The router injects this facade for every non-agent video operation; the
 conversational agent uses it for the deterministic accept-path
@@ -20,7 +21,10 @@ from uuid import UUID
 
 from schema.video import GymVideoSpecSource, VideoGenre
 
-from src.videos.schema.video_recs_schema import MemberVideoRecsResponse
+from src.videos.schema.video_recs_schema import (
+    MemberVideoRecsResponse,
+    VideoRecClickResponse,
+)
 from src.videos.schema.video_search_schema import SearchResultCard
 from src.videos.schema.video_spec_schema import (
     VideoSpecDraft,
@@ -34,6 +38,7 @@ from src.videos.schema.videos_schema import (
 )
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
+from src.videos.service.video_rec_click_service import VideoRecClickService
 from src.videos.service.video_recs_service import VideoRecsService
 from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
@@ -59,6 +64,7 @@ class VideosService:
         worker_status: VideosWorkerStatusService,
         recs_service: VideoRecsService,
         search_service: VideoSearchService,
+        click_service: VideoRecClickService,
     ) -> None:
         self._feed = feed_service
         self._spec_service = spec_service
@@ -67,6 +73,7 @@ class VideosService:
         self._worker_status = worker_status
         self._recs = recs_service
         self._search = search_service
+        self._click = click_service
 
     # ── live gym feed ─────────────────────────────────────────────
 
@@ -208,3 +215,9 @@ class VideosService:
     ) -> list[SearchResultCard]:
         """Semantic search over the gym's served feed (most-similar first)."""
         return await self._search.search(gym_id, q, limit)
+
+    async def record_rec_click(
+        self, gym_id: UUID, member_id: UUID, rec_id: UUID
+    ) -> VideoRecClickResponse:
+        """Record a member opening (clicking) a served recommendation."""
+        return await self._click.record_click(gym_id, member_id, rec_id)

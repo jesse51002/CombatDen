@@ -1,9 +1,10 @@
-"""Stage 6 — append this run's per-stage spend to the ledger.
+"""Stage 6 — append this run's per-stage spend to the generic ledger.
 
-Writes one ``video_cost_log`` row per cost-bearing stage (search / enrich / embed
-/ scan), each stamped with the gym + run id so per-run and per-gym spend are
-queryable directly. Embed spend from BOTH the funnel probes and the enrich
-summaries is folded into the single 'embed' row. Logs the run's total at the end.
+Writes one ``cost_log`` row per cost-bearing stage (search / enrich / embed /
+scan), each stamped ``source='video'`` + the gym + run id so per-run and
+per-gym spend are queryable directly. Embed spend from BOTH the funnel probes
+and the enrich summaries is folded into the single 'embed' row. Logs the run's
+total at the end.
 """
 
 from __future__ import annotations
@@ -11,12 +12,12 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
-from schema.cost_log import ExecutionType
+from schema.cost import CostSource, CostStage
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from src.worker.worker_config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class RunCost:
 
 
 class WorkerCostLog:
-    """Appends a run's spend to ``video_cost_log``."""
+    """Appends a run's spend to ``cost_log``."""
 
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db = db_pool
@@ -51,18 +52,37 @@ class WorkerCostLog:
     async def log(self, gym_id: str, run_id: str, cost: RunCost) -> None:
         """Append the four per-stage rows and log the run total."""
         entries = [
-            (ExecutionType.SEARCH, {"apify_usd": cost.apify_usd}, "scrape"),
-            (ExecutionType.ENRICH, {"llm_usd": cost.enrich_llm_usd}, "enrich"),
             (
-                ExecutionType.EMBED,
+                CostStage.search,
+                None,
+                cost.apify_usd,
+                {"apify_usd": cost.apify_usd},
+                "scrape",
+            ),
+            (
+                CostStage.enrich,
+                settings.enrich_model,
+                cost.enrich_llm_usd,
+                {"llm_usd": cost.enrich_llm_usd},
+                "enrich",
+            ),
+            (
+                CostStage.embed,
+                settings.embedding_model,
+                cost.embed_usd,
                 {"llm_usd": cost.embed_usd},
                 "query + summary embeddings",
             ),
-            (ExecutionType.SCAN, {"llm_usd": cost.scan_llm_usd}, "scan"),
+            (
+                CostStage.scan,
+                settings.scan_model,
+                cost.scan_llm_usd,
+                {"llm_usd": cost.scan_llm_usd},
+                "scan",
+            ),
         ]
-        now = datetime.now(timezone.utc)
-        for execution_type, breakdown, note in entries:
-            await self._insert(gym_id, run_id, execution_type, breakdown, note, now)
+        for stage, model, cost_usd, breakdown, note in entries:
+            await self._insert(gym_id, run_id, stage, model, cost_usd, breakdown, note)
         logger.info(
             "gym %s run %s cost: search $%.4f enrich $%.4f embed $%.4f "
             "scan $%.4f = total $%.4f",
@@ -79,18 +99,21 @@ class WorkerCostLog:
         self,
         gym_id: str,
         run_id: str,
-        execution_type: ExecutionType,
+        stage: CostStage,
+        model: str | None,
+        cost_usd: float,
         breakdown: dict[str, float],
         note: str,
-        at: datetime,
     ) -> None:
         await self._db.execute_with_retry(
             load_sql(SQL_DIR / "worker_insert_cost.sql"),
             {
-                "execution_type": execution_type.value,
+                "source": CostSource.video.value,
+                "run_id": str(run_id),
                 "gym_id": gym_id,
-                "run_id": run_id,
-                "at": at,
+                "stage": stage.value,
+                "model": model,
+                "cost_usd": cost_usd,
                 "breakdown": json.dumps(breakdown),
                 "note": note,
             },

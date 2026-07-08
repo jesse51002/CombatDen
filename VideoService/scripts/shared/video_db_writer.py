@@ -15,7 +15,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from schema import CostEntry, Gym, VideoOutput
+from schema import CostEntry, CostSource, Gym, VideoOutput
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.shared.util.video_id import video_id_from_url
@@ -159,16 +159,22 @@ class VideoDbWriter:
             await session.commit()
 
     async def append_cost(self, entry: CostEntry, gym_id: str | None = None) -> None:
-        """Append one spend-ledger row. ``gym_id`` attributes per-gym scan spend."""
+        """Append one legacy spend-ledger row into ``cost_log``. ``gym_id``
+        attributes per-gym scan spend; no run is associated (the old global
+        ledger didn't record which run a scan belonged to)."""
         async with self._db.session() as session:
             await session.execute(
                 text(_sql("insert_cost.sql")),
                 {
-                    "execution_type": entry.execution_type.value,
+                    "source": CostSource.video.value,
+                    "run_id": None,
                     "gym_id": gym_id,
-                    "at": entry.at,
+                    "stage": entry.execution_type.value,
+                    "model": None,
+                    "cost_usd": entry.total_usd,
                     "breakdown": json.dumps(entry.breakdown),
                     "note": entry.note,
+                    "created_at": entry.at,
                 },
             )
             await session.commit()

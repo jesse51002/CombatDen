@@ -15,7 +15,7 @@ gyms/<gym_id>.yaml   one gym — git-tracked source of truth, synced into SQL
 video_gym + children (Postgres)   gyms, queries, classes, rewards
 video                (Postgres)   the shared video pool (one row per video)
 video_gym_feed       (Postgres)   each gym's curated good/rejected feed
-video_cost_log       (Postgres)   append-only spend ledger
+cost_log             (Postgres)   generic append-only spend ledger (source='video')
 ```
 
 The read API queries the `video_gym*` template tables (needs `DATABASE_URL`); the
@@ -115,10 +115,13 @@ flowchart TD
 
 ## Cost log
 
-The worker logs spend to the `video_cost_log` table (per stage: `search` /
-`enrich` / `embed` / `scan`), each row stamped with `gym_id` + `video_run_id`. The
-legacy flat `cost_log.yaml` is only read once, by `make import-yaml`, to seed the DB
-at cutover.
+The worker logs spend to the generic **`cost_log`** table (shared across every
+cost-bearing system; VideoService always writes `source='video'`) — one row per
+stage (`search` / `enrich` / `embed` / `scan`), each stamped with `run_id` (TEXT,
+no FK), `gym_id`, `model` (NULL where not applicable), and `cost_usd` (the row's
+USD total; `breakdown` still carries the component detail map). The legacy flat
+`cost_log.yaml` is only read once, by `make import-yaml`, to seed the DB at
+cutover.
 
 ## Run the API
 

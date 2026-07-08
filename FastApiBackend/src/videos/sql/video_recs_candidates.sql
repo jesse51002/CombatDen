@@ -1,28 +1,32 @@
--- One mood bucket's ranked video recommendations for a member.
+-- A member's ranked video recommendations, RANKED ONCE against the member's
+-- single video-taste embedding (members.video_profile_embedding). Grouping into
+-- the 5 mood buckets happens in Python (bucket_for_genre(v.tag)) AFTER this
+-- query -- this SQL no longer filters by bucket genres.
 --
 -- Candidate set = the gym's SERVED feed, EXACTLY as videos_load_feed_ids
 -- defines it: accepted rows of the gym's latest COMPLETED run PLUS the owner's
--- run-independent rows (video_run_id IS NULL). The `status = 'completed'`
--- filter on the latest-run subselect must mirror the feed serve path so a
--- mid-flight 'running' run never leaks in. Restricted to this bucket via
--- v.tag = ANY(:genres) (the deterministic genre → bucket map).
+-- run-independent rows (video_run_id IS NULL). The completed-status filter on
+-- the latest-run subselect mirrors the feed serve path so a mid-flight
+-- 'running' run never leaks in.
 --
 -- Only ENRICHED videos are eligible: the JOIN to video_rag drops any pool video
--- without a summary embedding (RAG is lazy — un-enriched videos are invisible).
+-- without a summary embedding (RAG is lazy -- un-enriched videos are invisible
+-- to the similarity ranking).
 --
 -- Ranking:
---   similarity = 1 - cosine_distance(video summary embedding, profile embedding)
+--   similarity = 1 - cosine_distance(video summary embedding, member embedding)
 --   score      = w_sim*similarity + w_rel*(1/(1+relevance_index))
 --                + w_views*min(ln(1+views)/20, 1)
 -- ORDER BY hard-partitions UNRECOMMENDED videos first (freshness), then:
---   within unrecommended  → score DESC
---   within recommended    → last serve ASC (oldest first), score DESC
--- so a member never sees the same video re-pushed while unseen ones remain.
+--   within unrecommended  -> score DESC
+--   within recommended    -> last serve ASC (oldest first), score DESC
 --
 -- member_video_recs is an append-only serve log (one row per serve), so the
 -- per-video last-serve time is MAX(recommended_at), pre-aggregated per video in
--- the `member_recs` CTE below; its presence in the LEFT JOIN is what flags
--- already_recommended.
+-- the member_recs CTE below; its presence in the LEFT JOIN flags
+-- already_recommended (global per member, any bucket). A generous
+-- :candidate_limit only bounds the working set; grouping + per-bucket slicing
+-- happen in Python.
 WITH member_recs AS (
     SELECT video_id, MAX(recommended_at) AS last_recommended_at
     FROM member_video_recs
@@ -44,7 +48,7 @@ scored AS (
         v.relevance_index,
         (mr.video_id IS NOT NULL) AS already_recommended,
         mr.last_recommended_at AS last_recommended_at,
-        (1 - (r.embedding <=> CAST(:profile_embedding AS vector))) AS similarity
+        (1 - (r.embedding <=> CAST(:member_embedding AS vector))) AS similarity
     FROM gym_video_feed f
     JOIN video v ON v.video_id = f.video_id
     JOIN video_rag r ON r.video_id = v.video_id
@@ -61,7 +65,6 @@ scored AS (
             LIMIT 1)
       )
       AND v.tag IS NOT NULL
-      AND v.tag::text = ANY(:genres)
 )
 SELECT
     video_id,
@@ -87,4 +90,4 @@ ORDER BY
     already_recommended ASC,
     last_recommended_at ASC NULLS FIRST,
     score DESC
-LIMIT :per_bucket
+LIMIT :candidate_limit

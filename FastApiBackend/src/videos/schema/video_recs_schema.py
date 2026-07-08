@@ -42,3 +42,12 @@ class MemberVideoRecsResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     buckets: list[RecBucket] = Field(default_factory=list)
+
+
+class VideoRecClickResponse(BaseModel):
+    """Result of a member opening (clicking) a recommendation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    clicked: bool  # True = first click (stamped + logged); False = idempotent repeat
+    video_id: str

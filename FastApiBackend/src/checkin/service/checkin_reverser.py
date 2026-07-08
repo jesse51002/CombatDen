@@ -24,16 +24,14 @@ from datetime import date, time
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
+from schema.member_activity import MemberActivityType
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin import SQL_DIR
-from src.checkin.schema.checkin_schema import (
-    CLASS_ATTENDED_ACTIVITY_TYPE,
-    CheckinRemoveResponse,
-)
+from src.checkin.schema.checkin_schema import CheckinRemoveResponse
 from src.shared.db_rows import fetch_one
 from src.shared.sql_loader import load_sql
 
@@ -138,7 +136,7 @@ class CheckinReverser:
             {
                 "m": str(member_id),
                 "g": str(gym_id),
-                "activity_type": CLASS_ATTENDED_ACTIVITY_TYPE,
+                "activity_type": MemberActivityType.class_attended.value,
                 "class_id": str(class_id),
             },
         )

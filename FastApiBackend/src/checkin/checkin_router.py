@@ -50,6 +50,9 @@ from src.checkin.service.signup_service import SignupService
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
+from src.videos.service.member_video_profile_refresh_runner import (
+    MemberVideoProfileRefreshRunner,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -252,19 +255,28 @@ async def signup(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
+    profile_refresh_runner: MemberVideoProfileRefreshRunner = Depends(
+        Provide[DependencyInjector.member_video_profile_refresh_runner]
+    ),
 ) -> SignupResponse:
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        return await signup_service.create(
+        result = await signup_service.create(
             request.member_id,
             request.gym_id,
             request.class_id,
             request.occurrence_date,
             request.occurrence_time,
         )
+        # A class booking is fresh taste signal — fire a best-effort profile
+        # refresh (gated to once per cooldown; never fails the booking). The
+        # trigger is router-level composition so SignupService stays decoupled
+        # from the videos domain.
+        profile_refresh_runner.start(request.member_id, request.gym_id)
+        return result
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

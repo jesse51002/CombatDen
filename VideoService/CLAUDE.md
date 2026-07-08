@@ -282,11 +282,15 @@ reads the gym's runs (running / last-run-status / last-completed timestamp) — 
    owner's manual keep/reject always wins. Complete the run (`status='completed'`), which is
    what makes it the served run.
 
-Each stage's spend is logged to `video_cost_log` as `search` / `enrich` / `embed` / `scan`
-rows, each stamped with `gym_id` + `video_run_id`. **A failed stage marks the run `failed`**
-— its `created_at` still counts as the gym's last-run watermark, so a deterministic failure
-does not hot-loop; the gym simply waits for a new tier-1/2 trigger or the tier-3 weekly
-floor to become due again (poison guard — no manual re-trigger exists).
+Each stage's spend is logged to the generic **`cost_log`** table (shared across every
+cost-bearing system, not just video — see `../Database/CLAUDE.md`) as `search` / `enrich` /
+`embed` / `scan` rows, each stamped `source='video'`, `run_id` (the run's id as TEXT, no FK),
+`gym_id`, `stage`, `model` (the LLM/embedding model used, NULL for the Apify search stage),
+and `cost_usd` (the row's single USD total; `breakdown` still carries the component detail
+map). **A failed stage marks the run `failed`** — its `created_at` still counts as the gym's
+last-run watermark, so a deterministic failure does not hot-loop; the gym simply waits for a
+new tier-1/2 trigger or the tier-3 weekly floor to become due again (poison guard — no manual
+re-trigger exists).
 
 ### Settings + the embedding contract
 

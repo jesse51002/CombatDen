@@ -1,13 +1,13 @@
 """Pure-logic unit tests for the video RAG read surface (no DB / no OpenAI).
 
-Covers the deterministic genre→bucket map (asserted TOTAL both directions), the
-deterministic profile-text template (incl. NULL-rank / zero-attendance
-branches), and the three services driven against a fake DB pool + fake litellm
-client: ``ensure_profiles`` freshness (no-op vs rebuild), the member↔gym
-ownership guard on both the fresh and cold-build paths (a mismatched gym_id
-raises ``ValueError`` before any profile build), ``get_recs`` running one
-query per bucket and honoring the ``record`` flag, ``search`` embedding the
-query once, and the embedding-dimension guard raising on a mismatch.
+Covers the deterministic genre→bucket map (asserted TOTAL both directions) and
+the three services driven against a fake DB pool + fake litellm client:
+``ensure_profile`` (build-if-missing vs no-op), ``refresh_if_due`` (cooldown
+no-op vs stale rebuild), the member↔gym ownership guard (a mismatched / missing
+member raises ``MemberNotInGymError`` before any build), ``load_embedding``,
+the embedding-dimension guard, ``get_recs`` running ONE candidate query then
+grouping by ``bucket_for_genre`` (honoring ``per_bucket`` + the ``record`` flag,
+incl. the no-embedding degrade path), and ``search`` embedding the query once.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ from uuid import uuid4
 import pytest
 from schema.video import MoodBucket, VideoGenre
 
+from src.videos.schema.member_profile_schema import MemberProfileSummary
 from src.videos.schema.video_mood_bucket import (
     GENRE_TO_BUCKET,
     bucket_for_genre,
     genres_for_bucket,
 )
 from src.videos.service.member_video_profile_service import (
-    ATTENDANCE_WINDOW_DAYS,
     MemberNotInGymError,
     MemberVideoProfileService,
 )
@@ -120,76 +120,196 @@ def test_genre_to_bucket_exact_mapping() -> None:
     assert bucket_for_genre(VideoGenre.professional) is MoodBucket.peak
 
 
-# ── deterministic profile template ───────────────────────────────────
+# ── profile service fixtures ─────────────────────────────────────────
 
 
-def _profile_service(embedding_dim: int = 4) -> MemberVideoProfileService:
+def _profile_service(
+    pool: object, client: object, *, embedding_dim: int = 4
+) -> MemberVideoProfileService:
     return MemberVideoProfileService(
-        db_pool=MagicMock(),
-        litellm_client=MagicMock(),
+        db_pool=pool,
+        litellm_client=client,
         embedding_model="test/model",
         embedding_dim=embedding_dim,
-        profile_ttl_days=30,
+        summary_model="test/summary-model",
+        refresh_cooldown_days=3,
     )
 
 
-def test_profile_text_full_is_deterministic_and_shaped() -> None:
-    svc = _profile_service()
-    source = {
-        "rank_main_name": "White",
-        "rank_sub_name": "0 stripes",
-        "attendance_count": 7,
-        "top_classes": ["BJJ Fundamentals", "Wrestling"],
-        "disciplines": ["bjj", "wrestling"],
-    }
-    texts = svc._build_texts(source)
-    # Deterministic: same input → identical output.
-    assert svc._build_texts(source) == texts
-    # All five buckets present.
-    assert set(texts) == set(MoodBucket)
-    base = (
-        "A White 0 stripes member at a bjj, wrestling gym, attended 7 classes "
-        f"in the last {ATTENDANCE_WINDOW_DAYS} days, mostly BJJ Fundamentals, "
-        "Wrestling."
+def _load_result(
+    gym_id: object,
+    *,
+    embedding: str | None = None,
+    built_at: datetime | None = None,
+) -> _FakeResult:
+    """A ``member_profile_load.sql`` row (or absent member when gym is None)."""
+    if gym_id is None:
+        return _FakeResult(one=None)
+    return _FakeResult(
+        one={
+            "gym_id": str(gym_id),
+            "video_profile_built_at": built_at,
+            "video_profile_embedding_model": "test/model" if embedding else None,
+            "embedding": embedding,
+        }
     )
-    assert texts[MoodBucket.teach] == (
-        f"{base} This member wants technique tutorials, drills and "
-        "progress-appropriate instruction."
+
+
+def _source_result(gym_id: object) -> _FakeResult:
+    return _FakeResult(
+        one={
+            "gym_id": str(gym_id),
+            "rank_name": "White Belt",
+            "disciplines": ["bjj", "wrestling"],
+            "attended_classes": ["BJJ Fundamentals"],
+            "clicked_videos": [],
+        }
     )
-    assert "elite professional performances" in texts[MoodBucket.peak]
-    assert texts[MoodBucket.peak].startswith(base)
 
 
-def test_profile_text_null_rank_becomes_a_member() -> None:
-    svc = _profile_service()
-    source = {
-        "rank_main_name": None,
-        "rank_sub_name": None,
-        "attendance_count": 3,
-        "top_classes": ["Boxing"],
-        "disciplines": ["boxing"],
-    }
-    texts = svc._build_texts(source)
-    assert texts[MoodBucket.enjoy].startswith(
-        "A member at a boxing gym, attended 3 classes"
+def _summary_client(*, dim: int = 4) -> MagicMock:
+    client = MagicMock()
+    client.complete_structured = AsyncMock(
+        return_value=MemberProfileSummary(summary="loves bjj technique videos")
     )
-    assert "None" not in texts[MoodBucket.enjoy]
+    client.embed = AsyncMock(return_value=[[0.1] * dim])
+    return client
 
 
-def test_profile_text_zero_attendance_omits_clause() -> None:
-    svc = _profile_service()
-    source = {
-        "rank_main_name": "Blue",
-        "rank_sub_name": "2 stripes",
-        "attendance_count": 0,
-        "top_classes": [],
-        "disciplines": [],
-    }
-    texts = svc._build_texts(source)
-    base = texts[MoodBucket.peak].split(" This member")[0]
-    # No attendance clause, and no disciplines → "at a gym".
-    assert base == "A Blue 2 stripes member at a gym."
-    assert "attended" not in base
+# ── ensure_profile: build-if-missing vs no-op ────────────────────────
+
+
+async def test_ensure_profile_builds_when_embedding_missing() -> None:
+    gym_id = uuid4()
+    pool, session = _make_pool(
+        [
+            _load_result(gym_id, embedding=None),  # load: no embedding yet
+            _source_result(gym_id),  # source facts
+            _FakeResult(),  # update
+        ]
+    )
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    await svc.ensure_profile(uuid4(), gym_id)
+
+    client.complete_structured.assert_awaited_once()
+    client.embed.assert_awaited_once()
+    # load → source → update.
+    assert len(session.executed) == 3
+    update_params = session.executed[2][1]
+    assert update_params["embedding"] == "[0.1,0.1,0.1,0.1]"
+    assert update_params["summary"] == "loves bjj technique videos"
+
+
+async def test_ensure_profile_noop_when_embedding_present() -> None:
+    gym_id = uuid4()
+    pool, session = _make_pool([_load_result(gym_id, embedding="[0.1,0.2]")])
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    await svc.ensure_profile(uuid4(), gym_id)
+
+    client.complete_structured.assert_not_called()
+    client.embed.assert_not_called()
+    assert len(session.executed) == 1  # only the load ran
+
+
+async def test_ensure_profile_raises_on_gym_mismatch() -> None:
+    real_gym_id = uuid4()
+    wrong_gym_id = uuid4()
+    pool, session = _make_pool(
+        [_load_result(real_gym_id, embedding=None)]
+    )
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
+        await svc.ensure_profile(uuid4(), wrong_gym_id)
+
+    client.embed.assert_not_called()
+    assert len(session.executed) == 1  # load only — no source, no build
+
+
+async def test_ensure_profile_raises_when_member_missing() -> None:
+    pool, session = _make_pool([_load_result(None)])
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
+        await svc.ensure_profile(uuid4(), uuid4())
+
+    client.embed.assert_not_called()
+    assert len(session.executed) == 1
+
+
+async def test_ensure_profile_raises_on_embedding_dim_mismatch() -> None:
+    gym_id = uuid4()
+    pool, _ = _make_pool(
+        [_load_result(gym_id, embedding=None), _source_result(gym_id)]
+    )
+    client = _summary_client(dim=2)  # embed returns dim 2, service expects 4
+    svc = _profile_service(pool, client)
+
+    with pytest.raises(ValueError, match="embedding dimension"):
+        await svc.ensure_profile(uuid4(), gym_id)
+
+
+# ── refresh_if_due: cooldown no-op vs stale rebuild ──────────────────
+
+
+async def test_refresh_if_due_noop_within_cooldown() -> None:
+    gym_id = uuid4()
+    fresh = datetime.now(UTC) - timedelta(days=1)  # < 3-day cooldown
+    pool, session = _make_pool(
+        [_load_result(gym_id, embedding="[0.1,0.2]", built_at=fresh)]
+    )
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    await svc.refresh_if_due(uuid4(), gym_id)
+
+    client.complete_structured.assert_not_called()
+    client.embed.assert_not_called()
+    assert len(session.executed) == 1  # load only
+
+
+async def test_refresh_if_due_rebuilds_when_stale() -> None:
+    gym_id = uuid4()
+    stale = datetime.now(UTC) - timedelta(days=10)  # > 3-day cooldown
+    pool, session = _make_pool(
+        [
+            _load_result(gym_id, embedding="[0.1,0.2]", built_at=stale),
+            _source_result(gym_id),
+            _FakeResult(),
+        ]
+    )
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    await svc.refresh_if_due(uuid4(), gym_id)
+
+    client.complete_structured.assert_awaited_once()
+    client.embed.assert_awaited_once()
+    assert len(session.executed) == 3  # load → source → update
+
+
+# ── load_embedding ───────────────────────────────────────────────────
+
+
+async def test_load_embedding_returns_text_when_built() -> None:
+    gym_id = uuid4()
+    pool, _ = _make_pool([_load_result(gym_id, embedding="[0.3,0.4]")])
+    svc = _profile_service(pool, _summary_client())
+
+    assert await svc.load_embedding(uuid4()) == "[0.3,0.4]"
+
+
+async def test_load_embedding_returns_none_when_absent() -> None:
+    # No member row at all → None.
+    pool, _ = _make_pool([_load_result(None)])
+    svc = _profile_service(pool, _summary_client())
+    assert await svc.load_embedding(uuid4()) is None
 
 
 def test_as_list_tolerates_json_string_list_and_none() -> None:
@@ -198,241 +318,28 @@ def test_as_list_tolerates_json_string_list_and_none() -> None:
     assert MemberVideoProfileService._as_list(["a"]) == ["a"]
 
 
-# ── ensure_profiles: freshness (no-op vs rebuild) ────────────────────
-
-
-def _profile_rows(built_at: datetime, gym_id: object) -> list[dict]:
-    return [
-        {"bucket": b.value, "built_at": built_at, "gym_id": str(gym_id)}
-        for b in MoodBucket
-    ]
-
-
-async def test_ensure_profiles_noop_when_fresh() -> None:
-    gym_id = uuid4()
-    pool, session = _make_pool(
-        [_FakeResult(rows=_profile_rows(datetime.now(UTC), gym_id))]
+def test_render_prompt_degrades_gracefully_with_no_facts() -> None:
+    svc = _profile_service(MagicMock(), _summary_client())
+    prompt = svc._render_prompt(
+        {
+            "rank_name": None,
+            "disciplines": [],
+            "attended_classes": [],
+            "clicked_videos": [],
+        }
     )
-    client = MagicMock()
-    client.embed = AsyncMock()
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    await svc.ensure_profiles(uuid4(), gym_id)
-
-    client.embed.assert_not_called()
-    # Only the freshness load ran — no source read, no upsert.
-    assert len(session.executed) == 1
+    assert "an unranked member" in prompt
+    assert "a fitness gym" in prompt
+    assert "(none yet)" in prompt
+    assert "$" not in prompt  # every placeholder substituted
 
 
-async def test_ensure_profiles_rebuilds_when_stale() -> None:
-    gym_id = uuid4()
-    stale = datetime.now(UTC) - timedelta(days=60)
-    source_row = {
-        "gym_id": str(gym_id),
-        "rank_main_name": "White",
-        "rank_sub_name": "0 stripes",
-        "attendance_count": 2,
-        "top_classes": ["BJJ"],
-        "disciplines": ["bjj"],
-    }
-    pool, session = _make_pool(
-        [
-            _FakeResult(rows=_profile_rows(stale, gym_id)),  # load (stale)
-            _FakeResult(one=source_row),  # source
-            _FakeResult(),  # upsert
-        ]
-    )
-    client = MagicMock()
-    client.embed = AsyncMock(
-        return_value=[[0.1, 0.2, 0.3, 0.4] for _ in range(5)]
-    )
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    await svc.ensure_profiles(uuid4(), gym_id)
-
-    client.embed.assert_awaited_once()
-    # load → source → upsert.
-    assert len(session.executed) == 3
-    upsert_params = session.executed[2][1]
-    assert isinstance(upsert_params, list) and len(upsert_params) == 5
-    # Embedding serialized to pgvector text form.
-    assert upsert_params[0]["embedding"] == "[0.1,0.2,0.3,0.4]"
+# ── get_recs: one query, grouped by bucket ───────────────────────────
 
 
-async def test_ensure_profiles_rebuilds_when_buckets_missing() -> None:
-    gym_id = uuid4()
-    fresh = datetime.now(UTC)
-    partial = [
-        {"bucket": MoodBucket.teach.value, "built_at": fresh, "gym_id": str(gym_id)}
-    ]
-    source_row = {
-        "gym_id": str(gym_id),
-        "rank_main_name": None,
-        "rank_sub_name": None,
-        "attendance_count": 0,
-        "top_classes": [],
-        "disciplines": [],
-    }
-    pool, session = _make_pool(
-        [
-            _FakeResult(rows=partial),  # only 1 of 5 buckets → rebuild
-            _FakeResult(one=source_row),
-            _FakeResult(),
-        ]
-    )
-    client = MagicMock()
-    client.embed = AsyncMock(
-        return_value=[[0.5, 0.6, 0.7, 0.8] for _ in range(5)]
-    )
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    await svc.ensure_profiles(uuid4(), gym_id)
-    client.embed.assert_awaited_once()
-    assert len(session.executed) == 3
-
-
-async def test_ensure_profiles_raises_on_embedding_dim_mismatch() -> None:
-    gym_id = uuid4()
-    stale = datetime.now(UTC) - timedelta(days=60)
-    source_row = {
-        "gym_id": str(gym_id),
-        "rank_main_name": None,
-        "rank_sub_name": None,
-        "attendance_count": 0,
-        "top_classes": [],
-        "disciplines": [],
-    }
-    pool, _ = _make_pool(
-        [
-            _FakeResult(rows=_profile_rows(stale, gym_id)),
-            _FakeResult(one=source_row),
-        ]
-    )
-    client = MagicMock()
-    client.embed = AsyncMock(return_value=[[0.1, 0.2] for _ in range(5)])  # dim 2
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,  # expects 4, gets 2
-        profile_ttl_days=30,
-    )
-
-    with pytest.raises(ValueError, match="embedding dimension"):
-        await svc.ensure_profiles(uuid4(), gym_id)
-
-
-# ── ensure_profiles: member↔gym ownership guard (security) ──────────
-
-
-async def test_ensure_profiles_raises_when_fresh_profile_belongs_to_different_gym() -> (
-    None
-):
-    """A member with already-fresh profiles built under their REAL gym must
-    still be rejected when asked about a DIFFERENT gym_id — otherwise an
-    authorized viewer could pass a mismatched gym_id and rank that other
-    gym's feed against the real member's profile. No source read, no build."""
-    real_gym_id = uuid4()
-    wrong_gym_id = uuid4()
-    pool, session = _make_pool(
-        [_FakeResult(rows=_profile_rows(datetime.now(UTC), real_gym_id))]
-    )
-    client = MagicMock()
-    client.embed = AsyncMock()
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
-        await svc.ensure_profiles(uuid4(), wrong_gym_id)
-
-    client.embed.assert_not_called()
-    # Only the freshness load ran — no source read, no upsert, no build.
-    assert len(session.executed) == 1
-
-
-async def test_ensure_profiles_raises_when_member_in_different_gym_cold_path() -> None:
-    """No profile rows yet (first-ever request): the cold-build path's own
-    guard reads the live member row and rejects a mismatched gym_id before
-    any embedding call."""
-    real_gym_id = uuid4()
-    wrong_gym_id = uuid4()
-    source_row = {
-        "gym_id": str(real_gym_id),
-        "rank_main_name": None,
-        "rank_sub_name": None,
-        "attendance_count": 0,
-        "top_classes": [],
-        "disciplines": [],
-    }
-    pool, session = _make_pool(
-        [
-            _FakeResult(rows=[]),  # no profiles yet
-            _FakeResult(one=source_row),  # source: member is in a DIFFERENT gym
-        ]
-    )
-    client = MagicMock()
-    client.embed = AsyncMock()
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
-        await svc.ensure_profiles(uuid4(), wrong_gym_id)
-
-    client.embed.assert_not_called()
-    assert len(session.executed) == 2
-
-
-async def test_ensure_profiles_raises_when_member_row_missing() -> None:
-    """The member doesn't exist at all: the source query returns no row."""
-    pool, _ = _make_pool([_FakeResult(rows=[]), _FakeResult(one=None)])
-    client = MagicMock()
-    client.embed = AsyncMock()
-    svc = MemberVideoProfileService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
-        profile_ttl_days=30,
-    )
-
-    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
-        await svc.ensure_profiles(uuid4(), uuid4())
-
-    client.embed.assert_not_called()
-
-
-# ── get_recs: per-bucket queries + record flag ───────────────────────
-
-
-def _candidate_row(video_id: str = "vid1", score: float = 0.9) -> dict:
+def _candidate_row(
+    video_id: str = "vid1", tag: str = "educational", score: float = 0.9
+) -> dict:
     return {
         "video_id": video_id,
         "url": f"https://youtu.be/{video_id}",
@@ -443,12 +350,31 @@ def _candidate_row(video_id: str = "vid1", score: float = 0.9) -> dict:
         "channel_avatar_url": "",
         "view_count": 100,
         "duration_seconds": 60,
-        "tag": "educational",
+        "tag": tag,
         "relevance_index": 0,
         "already_recommended": False,
         "similarity": 0.8,
         "score": score,
     }
+
+
+def _degrade_row(
+    video_id: str = "vid1", tag: str = "educational", score: float = 0.5
+) -> dict:
+    """A no-embedding degrade candidate row — no ``similarity`` column."""
+    row = _candidate_row(video_id, tag, score)
+    del row["similarity"]
+    return row
+
+
+# One row per mood bucket (distinct genres) for the grouping tests.
+_ONE_PER_BUCKET = [
+    _candidate_row("vid_teach", "educational"),
+    _candidate_row("vid_enjoy", "entertainment"),
+    _candidate_row("vid_inform", "news"),
+    _candidate_row("vid_human", "interview"),
+    _candidate_row("vid_peak", "professional"),
+]
 
 
 def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
@@ -458,70 +384,127 @@ def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
         weight_similarity=0.7,
         weight_relevance=0.2,
         weight_views=0.1,
+        candidate_limit=500,
     )
 
 
-def _profile_stub() -> AsyncMock:
+def _profile_stub(embedding: str | None = "[0.1]") -> AsyncMock:
     profile = AsyncMock()
-    profile.ensure_profiles = AsyncMock()
-    profile.load_embeddings = AsyncMock(
-        return_value={b: "[0.1]" for b in MoodBucket}
-    )
+    profile.ensure_profile = AsyncMock()
+    profile.load_embedding = AsyncMock(return_value=embedding)
     return profile
 
 
-async def test_get_recs_runs_one_query_per_bucket_no_record() -> None:
-    pool, session = _make_pool(
-        [_FakeResult(rows=[_candidate_row(f"vid{i}")]) for i in range(5)]
-    )
+async def test_get_recs_runs_one_query_and_groups_by_bucket() -> None:
+    pool, session = _make_pool([_FakeResult(rows=list(_ONE_PER_BUCKET))])
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
     resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
 
-    profile.ensure_profiles.assert_awaited_once()
-    profile.load_embeddings.assert_awaited_once()
-    # One candidate query per bucket, and NO record upsert (record=False).
-    assert len(session.executed) == 5
+    profile.ensure_profile.assert_awaited_once()
+    profile.load_embedding.assert_awaited_once()
+    # ONE candidate query (rank-once) and NO record upsert (record=False).
+    assert len(session.executed) == 1
+    # The main (with-embedding) query bound the member embedding + w_sim.
+    params = session.executed[0][1]
+    assert params["member_embedding"] == "[0.1]"
+    assert "w_sim" in params
+    # All 5 buckets present, each with its one grouped video.
     assert len(resp.buckets) == len(MoodBucket)
     assert all(len(b.videos) == 1 for b in resp.buckets)
-    assert resp.buckets[0].videos[0].score == pytest.approx(0.9)
+
+
+async def test_get_recs_honors_per_bucket_cap() -> None:
+    # Three educational rows all map to teach; per_bucket=1 keeps only one.
+    rows = [_candidate_row(f"e{i}", "educational") for i in range(3)]
+    pool, session = _make_pool([_FakeResult(rows=rows)])
+    profile = _profile_stub()
+    svc = _recs_service(pool, profile)
+
+    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=1, record=False)
+
+    assert len(session.executed) == 1
+    teach = next(b for b in resp.buckets if b.bucket is MoodBucket.teach)
+    assert len(teach.videos) == 1
+    assert all(
+        len(b.videos) == 0 for b in resp.buckets if b.bucket is not MoodBucket.teach
+    )
 
 
 async def test_get_recs_records_served_when_record_true() -> None:
     pool, session = _make_pool(
-        [_FakeResult(rows=[_candidate_row(f"vid{i}")]) for i in range(5)]
-        + [_FakeResult()]  # the record upsert
+        [_FakeResult(rows=list(_ONE_PER_BUCKET)), _FakeResult()]
     )
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
     await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=True)
 
-    # 5 candidate queries + 1 record upsert.
-    assert len(session.executed) == 6
-    upsert_params = session.executed[5][1]
+    # 1 candidate query + 1 record upsert.
+    assert len(session.executed) == 2
+    upsert_params = session.executed[1][1]
     assert isinstance(upsert_params, list) and len(upsert_params) == 5
-    assert {p["video_id"] for p in upsert_params} == {f"vid{i}" for i in range(5)}
+    assert {p["video_id"] for p in upsert_params} == {
+        r["video_id"] for r in _ONE_PER_BUCKET
+    }
 
 
-async def test_get_recs_skips_bucket_with_no_profile_embedding() -> None:
-    # Only 4 buckets have embeddings → the missing bucket runs no query.
-    profile = AsyncMock()
-    profile.ensure_profiles = AsyncMock()
-    embeddings = {b: "[0.1]" for b in MoodBucket}
-    del embeddings[MoodBucket.peak]
-    profile.load_embeddings = AsyncMock(return_value=embeddings)
+async def test_get_recs_degrades_when_no_embedding() -> None:
+    # load_embedding → None → the no-embedding query runs; still all 5 buckets.
     pool, session = _make_pool(
-        [_FakeResult(rows=[_candidate_row()]) for _ in range(4)]
+        [_FakeResult(rows=[_degrade_row("d0", "educational")])]
     )
+    profile = _profile_stub(embedding=None)
     svc = _recs_service(pool, profile)
 
     resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
 
-    assert len(session.executed) == 4  # peak skipped
-    peak = next(b for b in resp.buckets if b.bucket is MoodBucket.peak)
-    assert peak.videos == []
+    assert len(session.executed) == 1
+    params = session.executed[0][1]
+    # The degrade query binds NO similarity inputs.
+    assert "member_embedding" not in params
+    assert "w_sim" not in params
+    assert len(resp.buckets) == len(MoodBucket)
+    teach = next(b for b in resp.buckets if b.bucket is MoodBucket.teach)
+    assert len(teach.videos) == 1
+
+
+async def test_get_recs_propagates_member_not_in_gym() -> None:
+    # The ownership guard is a hard 404 — get_recs never degrades it away.
+    pool, session = _make_pool([])
+    profile = AsyncMock()
+    profile.ensure_profile = AsyncMock(
+        side_effect=MemberNotInGymError("Member not found in this gym")
+    )
+    profile.load_embedding = AsyncMock()
+    svc = _recs_service(pool, profile)
+
+    with pytest.raises(MemberNotInGymError):
+        await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+
+    # No candidate query ran, and load_embedding was never reached.
+    assert len(session.executed) == 0
+    profile.load_embedding.assert_not_called()
+
+
+async def test_get_recs_degrades_on_build_failure() -> None:
+    # A profile-BUILD failure (LLM/embedding down) must not 500 — get_recs
+    # swallows it and falls through to the no-embedding degrade ranking.
+    pool, session = _make_pool(
+        [_FakeResult(rows=[_degrade_row("d0", "educational")])]
+    )
+    profile = AsyncMock()
+    profile.ensure_profile = AsyncMock(side_effect=RuntimeError("llm down"))
+    profile.load_embedding = AsyncMock(return_value=None)
+    svc = _recs_service(pool, profile)
+
+    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+
+    # Degrade query ran (no similarity inputs) and all 5 buckets are present.
+    assert len(session.executed) == 1
+    assert "member_embedding" not in session.executed[0][1]
+    assert len(resp.buckets) == len(MoodBucket)
 
 
 # ── search: embeds q once + dim guard ────────────────────────────────

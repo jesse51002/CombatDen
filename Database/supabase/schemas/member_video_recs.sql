@@ -1,3 +1,15 @@
+-- The five MOOD BUCKETS member video recs are retrieved against. Recs pull
+-- top-k per bucket then interleave — the bucket quota is what stops retrieval
+-- collapsing to all-educational content. The buckets are the same clusters the
+-- query-generator prompt enforces feed breadth with (teach / enjoy / inform /
+-- human / peak); a video's bucket membership is DETERMINISTIC CODE from its
+-- `video.tag` genre (educational,analysis→teach; entertainment,clips,memes→
+-- enjoy; news→inform; interview,vlog→human; professional→peak) — RAG ranks
+-- WITHIN a bucket. Consumed by this table's `bucket` column and by the backend
+-- recs/search path; the member's video-taste profile lives on `members`
+-- (video_profile_summary / video_profile_embedding).
+CREATE TYPE mood_bucket AS ENUM ('teach', 'enjoy', 'inform', 'human', 'peak');
+
 -- Recommendation history: an APPEND-ONLY event log — one row per (member,
 -- video) SERVE. Freshness is the point — the rec ranking hard-partitions
 -- unrecommended videos first, then previously-recommended by oldest last serve
@@ -29,6 +41,9 @@ CREATE TABLE member_video_recs (
     -- relevance + popularity per the backend's weight settings.
     score DOUBLE PRECISION NOT NULL,
     recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Click signal: NULL = served but not clicked; set (service_role) when the
+    -- member opens this recommendation. Feeds engagement / taste learning.
+    clicked_at TIMESTAMPTZ,
     CONSTRAINT fk_member_video_recs_member_gym
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id)
