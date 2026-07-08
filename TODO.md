@@ -40,6 +40,8 @@ tracked separately, not here.
 
 - **Landing page / one-pager rework for the full CRM** — not deeply audited yet; flagged as needed by Jesse, scope TBD.
 
+- **Rank pictures update for the preset and also image default tray (just different colored belt images) when creating a new rank**
+
 ## Blocks going live regardless of the above
 
 - **FastApiBackend has no prod deployment yet** (`api.combatden.net` not live per README). CRM currently only works end-to-end against `localhost:8000`. Nothing above ships to a real gym until this exists.
