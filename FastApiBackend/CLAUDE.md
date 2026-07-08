@@ -487,7 +487,7 @@ agent plus the RAG read surface. Seven routes cover the spec/agent + worker-stat
 | `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
 | `GET /api/v1/gyms/{id}/video-worker/status` | The gym's worker state, read-only: `last_updated` / `running` / `last_run_status` (no queue — there is nothing to enqueue) |
-| `GET /api/v1/gyms/{id}/members/{member_id}/video-recs` | A member's mood-bucketed RAG recs (`verify_can_view_member`; `per_bucket` cap 20, `record` bool) |
+| `GET /api/v1/gyms/{id}/members/{member_id}/video-recs` | A member's genre-categorized RAG recs (`verify_can_view_member`; `per_category` cap 20, `record` bool) |
 | `POST /api/v1/gyms/{id}/members/{member_id}/video-recs/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 | `GET /api/v1/gyms/{id}/videos/search` | Semantic search over the gym's served feed (`q` min-len 2, `limit` default `video_search_limit`, cap 50) |
 
@@ -555,7 +555,7 @@ raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[
   `MemberNotInGymError` maps to 404 at the route; the profile-service methods themselves raise on any
   other build failure (e.g. an embedding-dim config mismatch), which the `/videos/search` path surfaces
   as a 500 — but the recs path deliberately degrades instead (see `VideoRecsService`).
-- **`VideoRecsService`** (`video_recs_service.py`) — `get_recs(gym_id, member_id, per_bucket, record)`:
+- **`VideoRecsService`** (`video_recs_service.py`) — `get_recs(gym_id, member_id, per_category, record)`:
   `ensure_profile` → `load_embedding` → runs **ONE ranked candidate query** (`video_recs_candidates.sql`)
   against the member's single embedding; a member with no embedding yet degrades to
   `video_recs_candidates_no_embedding.sql` (composite score minus the similarity term — no `video_rag`
@@ -565,11 +565,12 @@ raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[
   (the approved "degrade, don't 500" spec; the misconfig still surfaces via `/videos/search` + the
   refresh runner's crash log). Candidates = the gym's SERVED feed (accepted
   latest-COMPLETED-run rows + owner `video_run_id IS NULL`, mirroring `videos_load_feed_ids`). The
-  ranked rows are grouped into the 5 mood buckets **in Python** (`bucket_for_genre(tag)`) and sliced to
-  `per_bucket` (all 5 buckets always present). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
+  ranked rows are grouped by the video's genre (`video.tag`) **in Python** — one `RecCategory` per genre
+  that appears, in rank (first-appearance) order — and each is sliced to `per_category` (empty categories
+  are omitted; there is no mood-bucket abstraction). Score = `w_sim*cos_sim + w_rel*(1/(1+relevance_index)) +
   w_views*min(ln(1+views)/20,1)`; ORDER BY hard-partitions UNRECOMMENDED first, then oldest last-serve
   (`MAX(recommended_at)`), then score. `record=True` APPENDS one `member_video_recs` row per served
-  video (event log); `record=False` (CRM preview) writes nothing.
+  video (event log), stamping each with its genre `category`; `record=False` (CRM preview) writes nothing.
 - **`VideoRecClickService`** (`video_rec_click_service.py`) — `record_click(gym_id, member_id, rec_id)`:
   in one txn stamps `member_video_recs.clicked_at` (first click only — idempotent via `clicked_at IS
   NULL`, scoped to member+gym) and logs a `video_clicked` `member_activities` row (carrying `video_id`
@@ -583,13 +584,15 @@ raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[
   `VideoRecClickService`) and the **class sign-up** (router-level composition in `checkin_router.py`'s
   `signup` handler, after a successful `create` — keeps `SignupService` decoupled from the videos domain).
 - **`VideoSearchService`** (`video_search_service.py`) — unchanged: `search(gym_id, q, limit)` embeds
-  `q` once and ranks the same served feed by cosine similarity (no bucket filter), most-similar first.
+  `q` once and ranks the same served feed by cosine similarity (no genre filter), most-similar first.
 
-The genre→bucket map lives in `schema/video_mood_bucket.py` (`GENRE_TO_BUCKET` + `bucket_for_genre`);
-`MoodBucket` is imported from `schema.video`, never redefined. Member activity writers use the shared
-`MemberActivityType` enum (`schema.member_activity`). Response schemas: `schema/video_recs_schema.py`
-(`RecommendedVideoCard(GymVideoCard)` + score/already_recommended, `RecBucket`,
-`MemberVideoRecsResponse`, `VideoRecClickResponse`) and `schema/video_search_schema.py`
+Recs are grouped by the video's genre `category` directly — `category` is typed as the existing
+`VideoGenre` enum (`schema.video`), never a separate abstraction (the old genre→mood-bucket map is gone).
+Member activity writers use the shared `MemberActivityType` enum (`schema.member_activity`). Response
+schemas: `schema/video_recs_schema.py`
+(`RecommendedVideoCard(GymVideoCard)` + score/already_recommended, `RecCategory` (a `category: VideoGenre`
++ its videos), `MemberVideoRecsResponse` (`categories`), `VideoRecClickResponse`) and
+`schema/video_search_schema.py`
 (`SearchResultCard(GymVideoCard)` + similarity, `VideoSearchResponse`); the profile summary schema is
 `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL: `sql/member_profile_load.sql`
 / `member_profile_source.sql` / `member_profile_update.sql`, `video_recs_candidates.sql` /

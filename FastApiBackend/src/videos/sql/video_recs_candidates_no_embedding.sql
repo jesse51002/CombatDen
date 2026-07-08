@@ -1,8 +1,8 @@
 -- Fallback rec candidates for a member with NO video-taste embedding yet
 -- (never built / build failed). Ranks the gym's SERVED feed by the composite
 -- score WITHOUT the similarity term -- RAG enrichment is not required, so a
--- brand-new member still gets recs. Grouping into mood buckets happens in
--- Python (bucket_for_genre(v.tag)); this query does not filter by bucket.
+-- brand-new member still gets recs. Grouping by the video's genre category
+-- (v.tag) happens in Python; this query does not filter or group by genre.
 -- Candidate set + already_recommended anti-join mirror video_recs_candidates.sql.
 WITH member_recs AS (
     SELECT video_id, MAX(recommended_at) AS last_recommended_at

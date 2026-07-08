@@ -1,13 +1,13 @@
 """Pure-logic unit tests for the video RAG read surface (no DB / no OpenAI).
 
-Covers the deterministic genre→bucket map (asserted TOTAL both directions) and
-the three services driven against a fake DB pool + fake litellm client:
+Covers the three services driven against a fake DB pool + fake litellm client:
 ``ensure_profile`` (build-if-missing vs no-op), ``refresh_if_due`` (cooldown
 no-op vs stale rebuild), the member↔gym ownership guard (a mismatched / missing
 member raises ``MemberNotInGymError`` before any build), ``load_embedding``,
 the embedding-dimension guard, ``get_recs`` running ONE candidate query then
-grouping by ``bucket_for_genre`` (honoring ``per_bucket`` + the ``record`` flag,
-incl. the no-embedding degrade path), and ``search`` embedding the query once.
+grouping by the video's genre category (honoring ``per_category`` + the
+``record`` flag, incl. the no-embedding degrade path), and ``search`` embedding
+the query once.
 """
 
 from __future__ import annotations
@@ -17,14 +17,9 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from schema.video import MoodBucket, VideoGenre
+from schema.video import VideoGenre
 
 from src.videos.schema.member_profile_schema import MemberProfileSummary
-from src.videos.schema.video_mood_bucket import (
-    GENRE_TO_BUCKET,
-    bucket_for_genre,
-    genres_for_bucket,
-)
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
     MemberVideoProfileService,
@@ -86,38 +81,6 @@ def _make_pool(results: list[_FakeResult]) -> tuple[MagicMock, _FakeSession]:
     pool = MagicMock()
     pool.session = lambda: session
     return pool, session
-
-
-# ── genre → bucket map totality ──────────────────────────────────────
-
-
-def test_genre_to_bucket_is_total_and_all_buckets_reachable() -> None:
-    # Every genre maps to exactly one bucket.
-    assert set(GENRE_TO_BUCKET) == set(VideoGenre)
-    for genre in VideoGenre:
-        assert isinstance(bucket_for_genre(genre), MoodBucket)
-    # Every bucket is reachable, and the per-bucket genre lists partition the
-    # full genre set (no genre missing, none double-counted).
-    covered: list[VideoGenre] = []
-    for bucket in MoodBucket:
-        genres = genres_for_bucket(bucket)
-        assert genres, f"bucket {bucket} has no genres"
-        covered.extend(genres)
-    assert sorted(g.value for g in covered) == sorted(
-        g.value for g in VideoGenre
-    )
-
-
-def test_genre_to_bucket_exact_mapping() -> None:
-    assert bucket_for_genre(VideoGenre.educational) is MoodBucket.teach
-    assert bucket_for_genre(VideoGenre.analysis) is MoodBucket.teach
-    assert bucket_for_genre(VideoGenre.entertainment) is MoodBucket.enjoy
-    assert bucket_for_genre(VideoGenre.clips) is MoodBucket.enjoy
-    assert bucket_for_genre(VideoGenre.memes) is MoodBucket.enjoy
-    assert bucket_for_genre(VideoGenre.news) is MoodBucket.inform
-    assert bucket_for_genre(VideoGenre.interview) is MoodBucket.human
-    assert bucket_for_genre(VideoGenre.vlog) is MoodBucket.human
-    assert bucket_for_genre(VideoGenre.professional) is MoodBucket.peak
 
 
 # ── profile service fixtures ─────────────────────────────────────────
@@ -334,7 +297,7 @@ def test_render_prompt_degrades_gracefully_with_no_facts() -> None:
     assert "$" not in prompt  # every placeholder substituted
 
 
-# ── get_recs: one query, grouped by bucket ───────────────────────────
+# ── get_recs: one query, grouped by genre category ───────────────────
 
 
 def _candidate_row(
@@ -367,14 +330,23 @@ def _degrade_row(
     return row
 
 
-# One row per mood bucket (distinct genres) for the grouping tests.
-_ONE_PER_BUCKET = [
-    _candidate_row("vid_teach", "educational"),
-    _candidate_row("vid_enjoy", "entertainment"),
-    _candidate_row("vid_inform", "news"),
-    _candidate_row("vid_human", "interview"),
-    _candidate_row("vid_peak", "professional"),
+# Five rows, each a distinct genre, for the grouping tests.
+_ONE_PER_CATEGORY = [
+    _candidate_row("vid_educational", "educational"),
+    _candidate_row("vid_entertainment", "entertainment"),
+    _candidate_row("vid_news", "news"),
+    _candidate_row("vid_interview", "interview"),
+    _candidate_row("vid_professional", "professional"),
 ]
+
+# The distinct genres present in _ONE_PER_CATEGORY.
+_DISTINCT_GENRES = {
+    VideoGenre.educational,
+    VideoGenre.entertainment,
+    VideoGenre.news,
+    VideoGenre.interview,
+    VideoGenre.professional,
+}
 
 
 def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
@@ -395,79 +367,81 @@ def _profile_stub(embedding: str | None = "[0.1]") -> AsyncMock:
     return profile
 
 
-async def test_get_recs_runs_one_query_and_groups_by_bucket() -> None:
-    pool, session = _make_pool([_FakeResult(rows=list(_ONE_PER_BUCKET))])
+async def test_get_recs_runs_one_query_and_groups_by_category() -> None:
+    pool, session = _make_pool([_FakeResult(rows=list(_ONE_PER_CATEGORY))])
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
-    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
 
     profile.ensure_profile.assert_awaited_once()
     profile.load_embedding.assert_awaited_once()
-    # ONE candidate query (rank-once) and NO record upsert (record=False).
+    # ONE candidate query (rank-once) and NO record insert (record=False).
     assert len(session.executed) == 1
     # The main (with-embedding) query bound the member embedding + w_sim.
     params = session.executed[0][1]
     assert params["member_embedding"] == "[0.1]"
     assert "w_sim" in params
-    # All 5 buckets present, each with its one grouped video.
-    assert len(resp.buckets) == len(MoodBucket)
-    assert all(len(b.videos) == 1 for b in resp.buckets)
+    # One category per distinct genre that appears, each with its grouped video.
+    assert {c.category for c in resp.categories} == _DISTINCT_GENRES
+    assert all(len(c.videos) == 1 for c in resp.categories)
 
 
-async def test_get_recs_honors_per_bucket_cap() -> None:
-    # Three educational rows all map to teach; per_bucket=1 keeps only one.
+async def test_get_recs_honors_per_category_cap() -> None:
+    # Three educational rows all group under the educational category;
+    # per_category=1 keeps only one, and empty categories are omitted.
     rows = [_candidate_row(f"e{i}", "educational") for i in range(3)]
     pool, session = _make_pool([_FakeResult(rows=rows)])
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
-    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=1, record=False)
+    resp = await svc.get_recs(uuid4(), uuid4(), per_category=1, record=False)
 
     assert len(session.executed) == 1
-    teach = next(b for b in resp.buckets if b.bucket is MoodBucket.teach)
-    assert len(teach.videos) == 1
-    assert all(
-        len(b.videos) == 0 for b in resp.buckets if b.bucket is not MoodBucket.teach
-    )
+    assert [c.category for c in resp.categories] == [VideoGenre.educational]
+    assert len(resp.categories[0].videos) == 1
 
 
 async def test_get_recs_records_served_when_record_true() -> None:
     pool, session = _make_pool(
-        [_FakeResult(rows=list(_ONE_PER_BUCKET)), _FakeResult()]
+        [_FakeResult(rows=list(_ONE_PER_CATEGORY)), _FakeResult()]
     )
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
-    await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=True)
+    await svc.get_recs(uuid4(), uuid4(), per_category=5, record=True)
 
-    # 1 candidate query + 1 record upsert.
+    # 1 candidate query + 1 record insert.
     assert len(session.executed) == 2
-    upsert_params = session.executed[1][1]
-    assert isinstance(upsert_params, list) and len(upsert_params) == 5
-    assert {p["video_id"] for p in upsert_params} == {
-        r["video_id"] for r in _ONE_PER_BUCKET
+    insert_params = session.executed[1][1]
+    assert isinstance(insert_params, list) and len(insert_params) == 5
+    assert {p["video_id"] for p in insert_params} == {
+        r["video_id"] for r in _ONE_PER_CATEGORY
+    }
+    # Each served row carries the video's genre as its category.
+    assert {p["category"] for p in insert_params} == {
+        g.value for g in _DISTINCT_GENRES
     }
 
 
 async def test_get_recs_degrades_when_no_embedding() -> None:
-    # load_embedding → None → the no-embedding query runs; still all 5 buckets.
+    # load_embedding → None → the no-embedding query runs; one educational row
+    # → one educational category.
     pool, session = _make_pool(
         [_FakeResult(rows=[_degrade_row("d0", "educational")])]
     )
     profile = _profile_stub(embedding=None)
     svc = _recs_service(pool, profile)
 
-    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
 
     assert len(session.executed) == 1
     params = session.executed[0][1]
     # The degrade query binds NO similarity inputs.
     assert "member_embedding" not in params
     assert "w_sim" not in params
-    assert len(resp.buckets) == len(MoodBucket)
-    teach = next(b for b in resp.buckets if b.bucket is MoodBucket.teach)
-    assert len(teach.videos) == 1
+    assert [c.category for c in resp.categories] == [VideoGenre.educational]
+    assert len(resp.categories[0].videos) == 1
 
 
 async def test_get_recs_propagates_member_not_in_gym() -> None:
@@ -481,7 +455,7 @@ async def test_get_recs_propagates_member_not_in_gym() -> None:
     svc = _recs_service(pool, profile)
 
     with pytest.raises(MemberNotInGymError):
-        await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+        await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
 
     # No candidate query ran, and load_embedding was never reached.
     assert len(session.executed) == 0
@@ -499,12 +473,13 @@ async def test_get_recs_degrades_on_build_failure() -> None:
     profile.load_embedding = AsyncMock(return_value=None)
     svc = _recs_service(pool, profile)
 
-    resp = await svc.get_recs(uuid4(), uuid4(), per_bucket=5, record=False)
+    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
 
-    # Degrade query ran (no similarity inputs) and all 5 buckets are present.
+    # Degrade query ran (no similarity inputs) and the educational category is
+    # present.
     assert len(session.executed) == 1
     assert "member_embedding" not in session.executed[0][1]
-    assert len(resp.buckets) == len(MoodBucket)
+    assert [c.category for c in resp.categories] == [VideoGenre.educational]
 
 
 # ── search: embeds q once + dim guard ────────────────────────────────

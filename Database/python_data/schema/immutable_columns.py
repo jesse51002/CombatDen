@@ -590,7 +590,7 @@ MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "video_id",  # identity FK
-        "bucket",  # bucket served under at this event
+        "category",  # video genre served under at this event
         "score",  # composite score at this serve
         "recommended_at",  # backend-stamped; append-only serve log
     }

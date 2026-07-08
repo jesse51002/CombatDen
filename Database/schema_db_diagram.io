@@ -865,9 +865,9 @@ Table video_rag {
 
 // The per-member RAG video-taste profile lives on the members table
 // (video_profile_summary / video_profile_embedding / *_model / *_built_at) —
-// one summary + one embedding per member, built lazily by the backend. The
-// mood_bucket enum (teach|enjoy|inform|human|peak — the query-gen clusters) is
-// declared in member_video_recs.sql and consumed by member_video_recs.bucket.
+// one summary + one embedding per member, built lazily by the backend. Recs are
+// grouped by the video's genre category (video.tag — the video_genre enum),
+// stored on member_video_recs.category; there is no separate bucket abstraction.
 
 // Rec-serve history: freshness partition (never-recommended first). Append-only
 // event log — one row PER SERVE (re-serves INSERT another row; times=COUNT,
@@ -878,7 +878,7 @@ Table member_video_recs {
   member_id uuid [not null, note: 'FK to members.member_id']
   gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
   video_id text [not null, note: 'FK to video.video_id']
-  bucket mood_bucket [not null, note: 'the bucket it was served under at this event']
+  category video_genre [not null, note: 'the video genre it was served under at this event']
   score float8 [not null, note: 'composite score at this serve']
   recommended_at timestamptz [not null, default: `now()`, note: 'append-only serve log; times=COUNT, last serve=MAX(recommended_at)']
   clicked_at timestamptz [note: 'nullable; NULL = served but not clicked; set (service_role) when the member opens the rec']

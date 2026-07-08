@@ -1,7 +1,7 @@
 """VideoSearchService — semantic search over a gym's served video feed.
 
 Embeds a free-text query once, then ranks the gym's served + enriched feed by
-cosine similarity to each video's summary embedding. No bucket filter — this is
+cosine similarity to each video's summary embedding. No genre filter — this is
 staff-facing full-feed search, not the member rec surface.
 """
 

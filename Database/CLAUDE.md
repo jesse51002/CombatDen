@@ -132,14 +132,15 @@ extensions`); embedding columns are `vector(1536)`, a **cross-service contract**
   dimension contract as `video_rag.embedding` (compared by cosine). Client-immutable (listed in the
   `MEMBERS` frozenset alongside the Stripe columns).
 - **`member_video_recs`** — per-member rec history (the freshness partition), an **append-only event
-  log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, bucket)`, `score`,
+  log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, category)`, `score`,
   `recommended_at`, plus `clicked_at TIMESTAMPTZ` (nullable click signal — NULL = served but not clicked;
   set by the backend when the member opens the rec). **No stored counters and no UNIQUE** — a re-serve
   INSERTs another row; "times recommended" = `COUNT(*)` and "last recommended" = `MAX(recommended_at)`,
   derived by aggregate. Index `(member_id, video_id)` backs the already-recommended anti-join + the
-  per-video MAX aggregate ("already recommended" is global per member, not per bucket). No vector column.
-  The **`mood_bucket`** enum (`CREATE TYPE mood_bucket AS ENUM ('teach','enjoy','inform','human','peak')`)
-  is declared at the top of this table's schema file — its only remaining consumer.
+  per-video MAX aggregate ("already recommended" is global per member, not per category). No vector column.
+  Recs are grouped by the video's genre **`category`** — the column is typed as the existing **`video_genre`**
+  enum (the type of `video.tag`, created in the baseline `schemas/video.sql`); there is no separate
+  mood-bucket abstraction, so this table declares no new enum.
 
 **No worker queue table.** The worker is not enqueued — each tick it *derives* which gym to run from
 timestamps already in these tables (`VideoService/src/worker/sql/worker_select_due_gym.sql`): a gym is
@@ -173,7 +174,7 @@ append-only (REVOKE UPDATE for `authenticated`); the seed emits `class_attended`
 `rank_changed` anchor per ranked member (`video_clicked` is a valid value but not seeded — no grounded
 `activity_info` shape).
 
-The Postgres enums are mirrored in `python_data/schema/`: `video.py` (`VideoRunStatus`, `MoodBucket`),
+The Postgres enums are mirrored in `python_data/schema/`: `video.py` (`VideoRunStatus`),
 `cost.py` (`CostSource`, `CostStage`), and `member_activity.py` (`MemberActivityType`).
 `immutable_columns.py` carries `VIDEO_RAG` / `MEMBER_VIDEO_RECS` / `COST_LOG` frozensets and the four
 `video_profile_*` columns in `MEMBERS`.
@@ -181,7 +182,7 @@ The Postgres enums are mirrored in `python_data/schema/`: `video.py` (`VideoRunS
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, constraints, indexes, triggers)
 - `access_rules/` — RLS policies, REVOKE/GRANT statements for each table (loaded after all schemas to avoid circular dependencies)
-- `migrations/` — generated migration files (do not touch)
+- `migrations/` — hand-authored migration files (see *Schema workflow*; an unapplied one may be edited in place, an already-applied one never)
 - `python_data/schema/` — shared Python enums, Pydantic models, and immutable column definitions used by both the seeding scripts and the FastAPI backend
 - `schema_db_diagram.io` — dbdiagram.io markup; always update this file when adding, removing, or renaming columns/tables
 - `seed.mermaid` — Mermaid map of the end-state spread of everything `make seed` (`python_data/main.py`) creates (counts, types, proportions per gym); a living doc — keep it in sync with `constants.py` and the `python_data/` generators whenever the seed's outputs change. Author/edit it with the `mermaid-creation` skill (top-down `TB`, sibling-only edges, render + `check_siblings.py` + Mermaid-9 parse).

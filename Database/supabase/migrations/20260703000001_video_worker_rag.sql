@@ -5,8 +5,9 @@
 --   * a generic cost_log (replaces video_cost_log): source + run_id + gym_id +
 --     stage + cost_usd + model; matched back to its source table via (source, run_id)
 --   * video_rag (per-video RAG sidecar)
---   * the member video-taste RAG profile columns on members (mood_bucket declared here)
---   * member_video_recs (per-serve rec history, with a clicked_at click signal)
+--   * the member video-taste RAG profile columns on members
+--   * member_video_recs (per-serve rec history, grouped by the video's genre
+--     category, with a clicked_at click signal)
 --   * member_activities.activity_type promoted from free-text VARCHAR to the
 --     member_activity_type enum
 -- The worker has no queue table — it derives which gym to run from run/spec/
@@ -127,16 +128,13 @@ CREATE POLICY "Read summaries for visible videos"
 REVOKE INSERT, UPDATE, DELETE ON TABLE video_rag FROM authenticated;
 
 -- ============================================================
--- 5. mood_bucket enum + the member video-taste RAG profile on members.
+-- 5. The member video-taste RAG profile on members.
 --    The profile lives on members (not a sidecar table): one summary + one
 --    embedding per member, built lazily by the backend (service_role) — all
 --    nullable, null until first built. The embedding is pinned to
 --    settings.video_embedding_dim (cross-service contract; same model + dim as
---    video_rag.embedding). mood_bucket is still consumed by member_video_recs
---    below, so it is declared here.
+--    video_rag.embedding).
 -- ============================================================
-
-CREATE TYPE mood_bucket AS ENUM ('teach', 'enjoy', 'inform', 'human', 'peak');
 
 ALTER TABLE members
     ADD COLUMN video_profile_summary TEXT,
@@ -145,7 +143,8 @@ ALTER TABLE members
     ADD COLUMN video_profile_built_at TIMESTAMPTZ;
 
 -- ============================================================
--- 6. New table: member_video_recs (uses mood_bucket)
+-- 6. New table: member_video_recs (grouped by the video's genre category —
+--    video_genre, the type of video.tag, created in the baseline migration)
 -- ============================================================
 
 CREATE TABLE member_video_recs (
@@ -160,7 +159,9 @@ CREATE TABLE member_video_recs (
     video_id TEXT NOT NULL
         CONSTRAINT fk_member_video_recs_video
             REFERENCES video(video_id) ON DELETE CASCADE,
-    bucket mood_bucket NOT NULL,
+    -- The video's genre (video.tag) it was served under at this event; recs are
+    -- grouped by this genre category (analytics / category-mix).
+    category video_genre NOT NULL,
     score DOUBLE PRECISION NOT NULL,
     recommended_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Click signal: NULL = served but not clicked; set when the member opens it.

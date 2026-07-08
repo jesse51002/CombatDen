@@ -202,12 +202,12 @@ class VideosService:
         gym_id: UUID,
         member_id: UUID,
         *,
-        per_bucket: int,
+        per_category: int,
         record: bool,
     ) -> MemberVideoRecsResponse:
-        """A member's mood-bucketed video recommendations (RAG-ranked)."""
+        """A member's genre-categorized video recommendations (RAG-ranked)."""
         return await self._recs.get_recs(
-            gym_id, member_id, per_bucket=per_bucket, record=record
+            gym_id, member_id, per_category=per_category, record=record
         )
 
     async def search_videos(

@@ -1,7 +1,7 @@
 -- A member's ranked video recommendations, RANKED ONCE against the member's
--- single video-taste embedding (members.video_profile_embedding). Grouping into
--- the 5 mood buckets happens in Python (bucket_for_genre(v.tag)) AFTER this
--- query -- this SQL no longer filters by bucket genres.
+-- single video-taste embedding (members.video_profile_embedding). Grouping by
+-- the video's genre category (v.tag) happens in Python AFTER this query -- this
+-- SQL does not filter or group by genre.
 --
 -- Candidate set = the gym's SERVED feed, EXACTLY as videos_load_feed_ids
 -- defines it: accepted rows of the gym's latest COMPLETED run PLUS the owner's
@@ -24,9 +24,9 @@
 -- member_video_recs is an append-only serve log (one row per serve), so the
 -- per-video last-serve time is MAX(recommended_at), pre-aggregated per video in
 -- the member_recs CTE below; its presence in the LEFT JOIN flags
--- already_recommended (global per member, any bucket). A generous
--- :candidate_limit only bounds the working set; grouping + per-bucket slicing
--- happen in Python.
+-- already_recommended (global per member, any genre). A generous
+-- :candidate_limit only bounds the working set; grouping by genre + per-category
+-- slicing happen in Python.
 WITH member_recs AS (
     SELECT video_id, MAX(recommended_at) AS last_recommended_at
     FROM member_video_recs

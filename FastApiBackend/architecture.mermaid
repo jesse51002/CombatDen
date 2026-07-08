@@ -72,7 +72,7 @@ flowchart TB
     video_spec_authoring["VideoSpecAuthoring — src/videos/service/<br/>deterministic commit gate: diff guard → query gen → save (no enqueue — worker self-derives)<br/>commit(gym_id, criteria, *, source) → VideoSpecView | None"]
     videos_worker_status_service["VideosWorkerStatusService — src/videos/service/<br/>read-only status seam for the VideoService worker<br/>(no queue — the worker derives its own due gym from timestamps)<br/>serve reads filter status='completed'"]
     member_video_profile_service["MemberVideoProfileService — src/videos/service/<br/>ONE LLM summary + embedding on members.video_profile_*<br/>ensure_profile (lazy build if missing) · refresh_if_due (3d cooldown)"]
-    video_recs_service["VideoRecsService — src/videos/service/<br/>RANK ONCE by the member embedding → group by mood bucket in Python<br/>blended score + freshness partition · no-embedding degrade · records member_video_recs"]
+    video_recs_service["VideoRecsService — src/videos/service/<br/>RANK ONCE by the member embedding → group by genre category in Python<br/>blended score + freshness partition · no-embedding degrade · records member_video_recs"]
     video_search_service["VideoSearchService — src/videos/service/<br/>semantic search over the served feed ∩ video_rag (cosine · q embedded once)"]
     video_rec_click_service["VideoRecClickService — src/videos/service/<br/>record_click: stamp member_video_recs.clicked_at (idempotent) +<br/>log a video_clicked activity → fire the profile refresh"]
     member_video_profile_refresh_runner["MemberVideoProfileRefreshRunner — src/videos/service/<br/>fire-and-forget refresh_if_due runner (drain() in lifespan)<br/>triggers: video-click + class sign-up · max once / 3d"]

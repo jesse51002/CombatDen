@@ -77,17 +77,3 @@ class VideoRunStatus(StrEnum):
     running = "running"
     completed = "completed"
     failed = "failed"
-
-
-class MoodBucket(StrEnum):
-    """Mirrors the Postgres `mood_bucket` enum in schemas/member_video_recs.sql
-    — the five mood clusters (teach / enjoy / inform / human / peak) that member
-    video recs are retrieved against. This is the same vocabulary the
-    query-generator prompt already uses to enforce feed breadth; a video's bucket
-    membership derives deterministically from its `video.tag` genre."""
-
-    teach = "teach"
-    enjoy = "enjoy"
-    inform = "inform"
-    human = "human"
-    peak = "peak"

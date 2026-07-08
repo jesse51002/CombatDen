@@ -75,7 +75,7 @@ async def _insert_member(db_pool: DirectDatabasePool, gym_id: UUID) -> UUID:
 async def _seed_served_rag_video(
     db_pool: DirectDatabasePool, gym_id: UUID, video_id: str
 ) -> None:
-    """Seed one served, enriched owner video: a pool row (educational → teach),
+    """Seed one served, enriched owner video: a pool row (educational genre),
     its video_rag summary embedding, and an accepted run-independent feed row."""
     async with db_pool.session() as session, session.begin():
         await session.execute(
@@ -162,21 +162,22 @@ def _always_pass_auth() -> MagicMock:
 async def test_recs_returns_served_video_and_records(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """recs=false → the seeded video appears in its bucket, nothing recorded;
-    recs=true → a new member_video_recs row is appended per serve (the log
-    grows 0 → 1 → 2; count is derived, not a stored counter)."""
+    """recs=false → the seeded video appears in its genre category, nothing
+    recorded; recs=true → a new member_video_recs row is appended per serve (the
+    log grows 0 → 1 → 2; count is derived, not a stored counter)."""
     member_id = await _insert_member(db_pool, gym_id)
     video_id = "ragvid_0001"
     await _seed_served_rag_video(db_pool, gym_id, video_id)
     base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-recs"
     try:
-        # Preview (record=false): shape + no history write.
+        # Preview (record=false): shape + no history write. The one seeded
+        # educational video yields exactly one category — "educational".
         resp = await rag_client.get(f"{base}?record=false", headers=_AUTH_HEADERS)
         assert resp.status_code == 200
-        buckets = {b["bucket"]: b for b in resp.json()["buckets"]}
-        assert set(buckets) == {"teach", "enjoy", "inform", "human", "peak"}
-        teach_ids = [v["url"] for v in buckets["teach"]["videos"]]
-        assert any(video_id in u for u in teach_ids)
+        categories = {c["category"]: c for c in resp.json()["categories"]}
+        assert set(categories) == {"educational"}
+        educational_ids = [v["url"] for v in categories["educational"]["videos"]]
+        assert any(video_id in u for u in educational_ids)
         assert await _rec_count(db_pool, member_id, video_id) == 0
 
         # Record twice: the append-only log grows 1 → 2 rows for this video.

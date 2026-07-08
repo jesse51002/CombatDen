@@ -1,14 +1,16 @@
-"""VideoRecsService — mood-bucketed RAG video recommendations for a member.
+"""VideoRecsService — genre-categorized RAG video recommendations for a member.
 
 Ensures the member's video-taste profile exists
 (:class:`MemberVideoProfileService`), then ranks the gym's served, enriched feed
 ONCE against the member's single profile embedding (RAG cosine blended with gym
 relevance + popularity, unrecommended videos hard-partitioned first). The ranked
-candidates are grouped into the 5 mood buckets in Python via
-``bucket_for_genre(tag)`` and sliced to ``per_bucket``. A member with no
-embedding yet falls back to the no-similarity degrade query so they still get
-recs. On ``record=True`` the served rows are written to ``member_video_recs``
-(freshness history); ``record=False`` (CRM preview) writes nothing.
+candidates are then grouped by the video's genre (``video.tag``) directly — one
+:class:`RecCategory` per genre that appears, in rank (first-appearance) order —
+and each category is sliced to ``per_category``. A member with no embedding yet
+falls back to the no-similarity degrade query so they still get recs. On
+``record=True`` the served rows are written to ``member_video_recs`` (freshness
+history), each stamped with its genre category; ``record=False`` (CRM preview)
+writes nothing.
 """
 
 from __future__ import annotations
@@ -16,16 +18,15 @@ from __future__ import annotations
 from uuid import UUID
 
 from pydantic import ValidationError
-from schema.video import MoodBucket, VideoGenre
+from schema.video import VideoGenre
 from sqlalchemy import text
 
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.videos import SQL_DIR
-from src.videos.schema.video_mood_bucket import bucket_for_genre
 from src.videos.schema.video_recs_schema import (
     MemberVideoRecsResponse,
-    RecBucket,
+    RecCategory,
     RecommendedVideoCard,
 )
 from src.videos.service.member_video_profile_service import (
@@ -35,7 +36,7 @@ from src.videos.service.member_video_profile_service import (
 
 
 class VideoRecsService:
-    """Rank a member's recommendations once, then group them by mood bucket."""
+    """Rank a member's recommendations once, then group them by genre category."""
 
     def __init__(
         self,
@@ -59,10 +60,10 @@ class VideoRecsService:
         gym_id: UUID,
         member_id: UUID,
         *,
-        per_bucket: int,
+        per_category: int,
         record: bool,
     ) -> MemberVideoRecsResponse:
-        """Top-``per_bucket`` recommendations per mood bucket for the member.
+        """Top-``per_category`` recommendations per genre category for the member.
 
         Verifies the member belongs to ``gym_id`` (``MemberNotInGymError``
         propagates → 404) and lazily builds a missing profile. A profile-BUILD
@@ -71,8 +72,9 @@ class VideoRecsService:
         embedding to the no-similarity degrade ranking rather than 500ing (the
         approved "degrade, don't 500" spec). Such a failure still surfaces via
         the ``/videos/search`` path (which raises) and the refresh runner's crash
-        log. The ranked rows are grouped by ``bucket_for_genre`` and sliced to
-        ``per_bucket`` (all 5 buckets present); ``record`` appends the served rows.
+        log. The ranked rows are grouped by the video's genre (``video.tag``)
+        directly — one category per genre that appears, in rank order — and each
+        is sliced to ``per_category``; ``record`` appends the served rows.
         """
         try:
             await self._profiles.ensure_profile(member_id, gym_id)
@@ -88,35 +90,38 @@ class VideoRecsService:
 
         rows = await self._load_candidates(gym_id, member_id, embedding)
 
-        buckets: dict[MoodBucket, list[RecommendedVideoCard]] = {
-            b: [] for b in MoodBucket
-        }
+        # Group by the video's genre category directly, preserving rank
+        # (first-appearance) order, and cap each category to per_category.
+        categories: dict[VideoGenre, list[RecommendedVideoCard]] = {}
         served: list[dict] = []
         for row in rows:
-            bucket = bucket_for_genre(VideoGenre(row["tag"]))
-            if len(buckets[bucket]) >= per_bucket:
+            genre = VideoGenre(row["tag"])
+            cat_videos = categories.setdefault(genre, [])
+            if len(cat_videos) >= per_category:
                 continue
             try:
                 card = RecommendedVideoCard.model_validate(dict(row))
             except ValidationError:
                 continue
-            buckets[bucket].append(card)
+            cat_videos.append(card)
             if record:
                 served.append(
                     {
                         "video_id": row["video_id"],
-                        "bucket": bucket.value,
+                        "category": genre.value,
                         "score": row["score"],
                     }
                 )
-            if all(len(buckets[b]) >= per_bucket for b in MoodBucket):
-                break
 
         if record and served:
             await self._record_served(gym_id, member_id, served)
 
-        out = [RecBucket(bucket=b, videos=buckets[b]) for b in MoodBucket]
-        return MemberVideoRecsResponse(buckets=out)
+        out = [
+            RecCategory(category=genre, videos=videos)
+            for genre, videos in categories.items()
+            if videos
+        ]
+        return MemberVideoRecsResponse(categories=out)
 
     # ── candidate retrieval (one ranked query) ────────────────────
 
@@ -159,7 +164,7 @@ class VideoRecsService:
                 "member_id": str(member_id),
                 "gym_id": str(gym_id),
                 "video_id": row["video_id"],
-                "bucket": row["bucket"],
+                "category": row["category"],
                 "score": row["score"],
             }
             for row in served

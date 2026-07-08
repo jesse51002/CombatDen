@@ -4,12 +4,13 @@
 -- so a video served N times has N rows. "Times recommended" (COUNT) and "last
 -- recommended" (MAX(recommended_at)) are derived by aggregate, not stored.
 -- recommended_at defaults to now(). "Already recommended" is global per member.
+-- category is the video's genre (video.tag), the existing video_genre enum.
 INSERT INTO member_video_recs (
-    member_id, gym_id, video_id, bucket, score
+    member_id, gym_id, video_id, category, score
 ) VALUES (
     CAST(:member_id AS UUID),
     CAST(:gym_id AS UUID),
     :video_id,
-    CAST(:bucket AS mood_bucket),
+    CAST(:category AS video_genre),
     :score
 )

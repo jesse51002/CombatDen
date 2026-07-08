@@ -1,6 +1,6 @@
 -- Semantic video search within a gym's SERVED feed. Same candidate set as the
 -- rec query (accepted rows of the latest COMPLETED run + the owner's
--- run-independent rows), but with NO bucket/genre filter — a free-text query is
+-- run-independent rows), but with NO genre filter — a free-text query is
 -- embedded once and ranked by cosine similarity to each video's summary
 -- embedding. Only enriched videos (those with a video_rag row) are searchable.
 SELECT

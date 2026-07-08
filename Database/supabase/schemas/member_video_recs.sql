@@ -1,21 +1,17 @@
--- The five MOOD BUCKETS member video recs are retrieved against. Recs pull
--- top-k per bucket then interleave — the bucket quota is what stops retrieval
--- collapsing to all-educational content. The buckets are the same clusters the
--- query-generator prompt enforces feed breadth with (teach / enjoy / inform /
--- human / peak); a video's bucket membership is DETERMINISTIC CODE from its
--- `video.tag` genre (educational,analysis→teach; entertainment,clips,memes→
--- enjoy; news→inform; interview,vlog→human; professional→peak) — RAG ranks
--- WITHIN a bucket. Consumed by this table's `bucket` column and by the backend
--- recs/search path; the member's video-taste profile lives on `members`
--- (video_profile_summary / video_profile_embedding).
-CREATE TYPE mood_bucket AS ENUM ('teach', 'enjoy', 'inform', 'human', 'peak');
-
 -- Recommendation history: an APPEND-ONLY event log — one row per (member,
 -- video) SERVE. Freshness is the point — the rec ranking hard-partitions
 -- unrecommended videos first, then previously-recommended by oldest last serve
 -- (the per-video MAX(recommended_at)) — so the same video is never repeatedly
 -- pushed while unseen candidates exist. "Already recommended" is global per
--- member (not per-bucket): a video served under any bucket counts as seen.
+-- member (not per-category): a video served under any genre category counts as
+-- seen.
+--
+-- Recs are grouped by the video's genre CATEGORY (its `video.tag` — the
+-- `video_genre` enum created in schemas/video.sql). There is no separate
+-- abstraction over the genre: `category` stores the video's actual genre and
+-- RAG ranks WITHIN a category. Consumed by this table's `category` column and
+-- by the backend recs/search path; the member's video-taste profile lives on
+-- `members` (video_profile_summary / video_profile_embedding).
 --
 -- No stored counters: a re-serve INSERTs another row rather than bumping a
 -- column, so "times recommended" = COUNT(*) and "last recommended" =
@@ -35,8 +31,9 @@ CREATE TABLE member_video_recs (
     video_id TEXT NOT NULL
         CONSTRAINT fk_member_video_recs_video
             REFERENCES video(video_id) ON DELETE CASCADE,
-    -- The bucket it was served under at this event (analytics / bucket-mix).
-    bucket mood_bucket NOT NULL,
+    -- The video's genre (video.tag) it was served under at this event; recs are
+    -- grouped by this genre category (analytics / category-mix).
+    category video_genre NOT NULL,
     -- The composite score at this serve: RAG cosine dominant, blended with gym
     -- relevance + popularity per the backend's weight settings.
     score DOUBLE PRECISION NOT NULL,

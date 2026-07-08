@@ -107,8 +107,8 @@ class Settings(BaseSettings):
     video_rec_weight_similarity: float = 0.7
     video_rec_weight_relevance: float = 0.2
     video_rec_weight_views: float = 0.1
-    # Generous working-set cap for the single rank-once rec query (grouping +
-    # per-bucket slicing happen in Python).
+    # Generous working-set cap for the single rank-once rec query (grouping by
+    # genre + per-category slicing happen in Python).
     video_rec_candidate_limit: int = 500
     # Default result count for GET /videos/search (the route caps at 50).
     video_search_limit: int = 20

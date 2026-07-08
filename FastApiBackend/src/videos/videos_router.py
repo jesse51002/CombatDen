@@ -23,7 +23,7 @@ A real gym's live content (no prefix — each route declares its full path):
       state (last refresh / running / last run status). Read-only: there is no
       manual run — the worker derives its own work.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-recs`` — a member's
-      mood-bucketed RAG recommendations (``verify_can_view_member``).
+      genre-categorized RAG recommendations (``verify_can_view_member``).
     * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-recs/{rec_id}/click``
       — record a member opening a rec: stamps ``clicked_at``, logs a
       ``video_clicked`` activity, and fires a profile refresh
@@ -90,9 +90,9 @@ DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 # Videos per genre in the one-shot "All" preview.
 PREVIEW_PER_TAG = 10
-# Member recs: default + cap on videos returned per mood bucket.
-DEFAULT_PER_BUCKET = 5
-MAX_PER_BUCKET = 20
+# Member recs: default + cap on videos returned per genre category.
+DEFAULT_PER_CATEGORY = 5
+MAX_PER_CATEGORY = 20
 # Semantic search: min query length + result-count cap (default is a setting).
 SEARCH_Q_MIN_LENGTH = 2
 MAX_SEARCH_LIMIT = 50
@@ -647,18 +647,18 @@ async def get_video_worker_status(
 @videos_router.get(
     "/api/v1/gyms/{gym_id}/members/{member_id}/video-recs",
     response_model=MemberVideoRecsResponse,
-    summary="Get a member's mood-bucketed video recommendations",
+    summary="Get a member's genre-categorized video recommendations",
     description=(
-        "Per-mood-bucket RAG recommendations for a member (top ``per_bucket`` "
-        "per bucket, all 5 buckets present). Ranked by summary-embedding cosine "
-        "similarity to the member's profile, blended with gym relevance + "
-        "popularity, with unseen videos surfaced ahead of already-recommended "
-        "ones. ``record=true`` records the served videos (they won't be "
-        "re-pushed while unseen ones remain); ``record=false`` (CRM preview) "
-        "writes nothing."
+        "Per-genre-category RAG recommendations for a member (top "
+        "``per_category`` per category, one entry per genre that appears). "
+        "Ranked by summary-embedding cosine similarity to the member's profile, "
+        "blended with gym relevance + popularity, with unseen videos surfaced "
+        "ahead of already-recommended ones. ``record=true`` records the served "
+        "videos (they won't be re-pushed while unseen ones remain); "
+        "``record=false`` (CRM preview) writes nothing."
     ),
     responses={
-        200: {"description": "The member's recommendations, grouped by bucket"},
+        200: {"description": "The member's recommendations, grouped by category"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
         404: {"description": "Member not found"},
@@ -669,14 +669,14 @@ async def get_member_video_recs(
     gym_id: UUID,
     member_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    per_bucket: int = Query(DEFAULT_PER_BUCKET, ge=1, le=MAX_PER_BUCKET),
+    per_category: int = Query(DEFAULT_PER_CATEGORY, ge=1, le=MAX_PER_CATEGORY),
     record: bool = Query(False),
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> MemberVideoRecsResponse:
-    """Return the member's per-bucket recommendations. Gated by
+    """Return the member's per-category recommendations. Gated by
     ``verify_can_view_member`` (staff of the member's gym OR the member
     themselves)."""
     user_payload = auth.get_current_user(credentials)
@@ -684,7 +684,7 @@ async def get_member_video_recs(
 
     try:
         return await videos_service.get_video_recs(
-            gym_id, member_id, per_bucket=per_bucket, record=record
+            gym_id, member_id, per_category=per_category, record=record
         )
     except MemberNotInGymError as exc:
         # Only the ownership guard maps to 404 — any other ValueError (e.g.
