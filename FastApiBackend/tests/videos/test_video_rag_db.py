@@ -1,4 +1,4 @@
-"""Live-DB integration for the video RAG read surface (recs + search + click).
+"""Live-DB integration for the video RAG read surface (single rec + click).
 
 Drives the real endpoints against the shared local Supabase over an ASGI
 transport. ``auth`` is overridden always-pass for the happy-path tests; the
@@ -6,14 +6,16 @@ transport. ``auth`` is overridden always-pass for the happy-path tests; the
 a non-viewer is rejected. The LLM client is overridden with a deterministic
 stub — its embedding is a fixed 1536-dim vector (no OpenAI call) that the seeded
 ``video_rag`` row also carries so retrieval is clean, and its summary call
-returns a canned taste paragraph (no chat model call) so the profile builds.
+returns a canned taste paragraph (no chat model call).
 
-The per-member RAG profile is columns on ``members``
+The rec surface serves ONE rotating-category recommendation and records it, so a
+GET returns ``{rec_id, category, video}`` and appends a ``member_video_recs``
+row. The per-member RAG profile is columns on ``members``
 (``video_profile_summary`` / ``video_profile_embedding`` / …), not a sidecar
 table. These tests require the pending video-worker-RAG migration (pgvector, the
 ``video_rag`` / ``member_video_recs`` tables, the ``members.video_profile_*``
 columns, and ``member_video_recs.clicked_at``). Until it is applied on the
-shared local DB, the recs/search/click tests fail at the query — the expected
+shared local DB, the rec/click tests fail at the query — the expected
 "pending migration apply" state, not a code fault. The 403 test only reads
 ``members`` / ``gym_employees`` and passes regardless.
 """
@@ -159,31 +161,34 @@ def _always_pass_auth() -> MagicMock:
     return auth
 
 
-async def test_recs_returns_served_video_and_records(
+async def test_rec_returns_served_video_and_records(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """recs=false → the seeded video appears in its genre category, nothing
-    recorded; recs=true → a new member_video_recs row is appended per serve (the
-    log grows 0 → 1 → 2; count is derived, not a stored counter)."""
+    """The GET serves ONE rotating-category rec and records it: the rotation
+    starts at ``educational`` (the seeded video's genre), so the first GET
+    returns the seeded video with its rec_id and appends a member_video_recs row
+    (the append-only log grows 0 → 1 → 2 as the only-educational video is
+    re-served; count is derived, not a stored counter)."""
     member_id = await _insert_member(db_pool, gym_id)
     video_id = "ragvid_0001"
     await _seed_served_rag_video(db_pool, gym_id, video_id)
-    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-recs"
+    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
     try:
-        # Preview (record=false): shape + no history write. The one seeded
-        # educational video yields exactly one category — "educational".
-        resp = await rag_client.get(f"{base}?record=false", headers=_AUTH_HEADERS)
+        # First serve: rotation start (educational) yields the seeded video and
+        # records exactly one row.
+        resp = await rag_client.get(base, headers=_AUTH_HEADERS)
         assert resp.status_code == 200
-        categories = {c["category"]: c for c in resp.json()["categories"]}
-        assert set(categories) == {"educational"}
-        educational_ids = [v["url"] for v in categories["educational"]["videos"]]
-        assert any(video_id in u for u in educational_ids)
-        assert await _rec_count(db_pool, member_id, video_id) == 0
-
-        # Record twice: the append-only log grows 1 → 2 rows for this video.
-        await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
+        body = resp.json()
+        assert body["category"] == "educational"
+        assert video_id in body["video"]["url"]
+        assert body["rec_id"]
         assert await _rec_count(db_pool, member_id, video_id) == 1
-        await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
+
+        # Second serve: only educational has a video, so it is served again and
+        # the append-only log grows 1 → 2 rows for this video.
+        resp2 = await rag_client.get(base, headers=_AUTH_HEADERS)
+        assert resp2.status_code == 200
+        assert video_id in resp2.json()["video"]["url"]
         assert await _rec_count(db_pool, member_id, video_id) == 2
     finally:
         await _delete_rag_seed(db_pool, member_id, video_id)
@@ -192,17 +197,17 @@ async def test_recs_returns_served_video_and_records(
 async def test_rec_click_stamps_and_logs(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """Recording recs then POSTing a click stamps ``clicked_at`` on that rec,
+    """Serving a rec then POSTing a click stamps ``clicked_at`` on that rec,
     logs a ``video_clicked`` activity, and returns ``clicked=true``; a repeat
     click is idempotent (``clicked=false``, no second activity)."""
     member_id = await _insert_member(db_pool, gym_id)
     video_id = "ragvid_0003"
     await _seed_served_rag_video(db_pool, gym_id, video_id)
-    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-recs"
+    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
     try:
-        # Serve + record a rec so a member_video_recs row exists to click.
-        await rag_client.get(f"{base}?record=true", headers=_AUTH_HEADERS)
-        rec_id = await _load_rec_id(db_pool, member_id, video_id)
+        # Serve a rec — the GET records it and returns its rec_id to click.
+        served = await rag_client.get(base, headers=_AUTH_HEADERS)
+        rec_id = served.json()["rec_id"]
         assert rec_id is not None
 
         # First click: stamped + logged.
@@ -233,7 +238,7 @@ async def test_rec_click_stamps_and_logs(
         await _delete_rag_seed(db_pool, member_id, video_id)
 
 
-async def test_recs_wrong_gym_returns_404(
+async def test_rec_wrong_gym_returns_404(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
     """A caller authorized to view the member (auth always-passes here) but
@@ -244,7 +249,7 @@ async def test_recs_wrong_gym_returns_404(
     wrong_gym_id = uuid4()
     try:
         resp = await rag_client.get(
-            f"/api/v1/gyms/{wrong_gym_id}/members/{member_id}/video-recs",
+            f"/api/v1/gyms/{wrong_gym_id}/members/{member_id}/video-rec",
             headers=_AUTH_HEADERS,
         )
         assert resp.status_code == 404
@@ -256,27 +261,7 @@ async def test_recs_wrong_gym_returns_404(
             )
 
 
-async def test_search_returns_served_video(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
-) -> None:
-    """search returns 200 and the seeded served video with a similarity score."""
-    member_id = await _insert_member(db_pool, gym_id)
-    video_id = "ragvid_0002"
-    await _seed_served_rag_video(db_pool, gym_id, video_id)
-    try:
-        resp = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos/search?q=test video&limit=10",
-            headers=_AUTH_HEADERS,
-        )
-        assert resp.status_code == 200
-        results = resp.json()["results"]
-        assert any(video_id in r["url"] for r in results)
-        assert all("similarity" in r for r in results)
-    finally:
-        await _delete_rag_seed(db_pool, member_id, video_id)
-
-
-async def test_recs_forbidden_for_non_viewer(
+async def test_rec_forbidden_for_non_viewer(
     db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
     """A caller who is neither the member nor gym staff gets 403 (real
@@ -299,7 +284,7 @@ async def test_recs_forbidden_for_non_viewer(
             transport=transport, base_url="http://test"
         ) as client:
             resp = await client.get(
-                f"/api/v1/gyms/{gym_id}/members/{member_id}/video-recs",
+                f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec",
                 headers=_AUTH_HEADERS,
             )
         assert resp.status_code == 403
@@ -331,27 +316,6 @@ async def _rec_count(
             .fetchone()
         )
     return int(row["n"])
-
-
-async def _load_rec_id(
-    db_pool: DirectDatabasePool, member_id: UUID, video_id: str
-) -> UUID | None:
-    """One served rec_id for (member, video), or None when none were recorded."""
-    async with db_pool.session() as session:
-        row = (
-            (
-                await session.execute(
-                    text(
-                        "SELECT rec_id FROM member_video_recs "
-                        "WHERE member_id = :m AND video_id = :v LIMIT 1"
-                    ),
-                    {"m": str(member_id), "v": video_id},
-                )
-            )
-            .mappings()
-            .fetchone()
-        )
-    return UUID(str(row["rec_id"])) if row is not None else None
 
 
 async def _clicked_at_set(db_pool: DirectDatabasePool, rec_id: UUID) -> bool:

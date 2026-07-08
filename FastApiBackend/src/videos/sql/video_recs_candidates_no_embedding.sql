@@ -1,8 +1,8 @@
--- Fallback rec candidates for a member with NO video-taste embedding yet
--- (never built / build failed). Ranks the gym's SERVED feed by the composite
--- score WITHOUT the similarity term -- RAG enrichment is not required, so a
--- brand-new member still gets recs. Grouping by the video's genre category
--- (v.tag) happens in Python; this query does not filter or group by genre.
+-- Fallback rec candidates WITHIN ONE genre category for a member with NO
+-- video-taste embedding yet (never built / build failed). Ranks the gym's SERVED
+-- feed of :category by the composite score WITHOUT the similarity term -- RAG
+-- enrichment is not required, so a brand-new member still gets recs. The caller
+-- rotates categories and runs this once per category until a pick is found.
 -- Candidate set + already_recommended anti-join mirror video_recs_candidates.sql.
 WITH member_recs AS (
     SELECT video_id, MAX(recommended_at) AS last_recommended_at
@@ -39,7 +39,7 @@ scored AS (
             ORDER BY created_at DESC
             LIMIT 1)
       )
-      AND v.tag IS NOT NULL
+      AND v.tag = CAST(:category AS video_genre)
 )
 SELECT
     video_id, url, title, thumbnail_url, channel_name, channel_url,
@@ -54,4 +54,4 @@ ORDER BY
     already_recommended ASC,
     last_recommended_at ASC NULLS FIRST,
     score DESC
-LIMIT :candidate_limit
+LIMIT :count

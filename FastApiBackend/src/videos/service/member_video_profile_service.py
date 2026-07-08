@@ -8,11 +8,14 @@ gym disciplines, most-attended classes, recently clicked videos) into a short
 video-taste paragraph; that paragraph is embedded once and the summary embedding
 is what recommendations rank against.
 
-``ensure_profile`` lazily builds a MISSING profile (first recs request);
-``refresh_if_due`` is the trigger gate — it rebuilds only when the profile is
-missing or older than the refresh cooldown, so class-booking / video-click
-triggers can fire it freely. Both first verify the member belongs to the gym
-they were asked about (``MemberNotInGymError`` otherwise). Embeddings are
+The profile is (re)built ONLY by ``refresh_if_due`` — the trigger gate that
+rebuilds when the profile is missing or older than the refresh cooldown, fired
+fire-and-forget by the class-booking / video-click triggers. Reads never build:
+``verify_member_in_gym`` is the ownership guard the rec path calls before reading
+the embedding, and ``load_embedding`` returns None when the profile has not been
+built yet (the rec path then ranks without similarity). Every guard first
+verifies the member belongs to the gym they were asked about
+(``MemberNotInGymError`` otherwise). Embeddings are
 stored/read as pgvector text form and every produced vector is length-checked
 against the pinned embedding dimension (a cross-service contract with the
 VideoService worker that writes ``video_rag.embedding``).
@@ -53,7 +56,7 @@ class MemberNotInGymError(ValueError):
 
 
 class MemberVideoProfileService:
-    """Build (lazy / refresh-if-due) + read a member's video-taste profile."""
+    """Build (refresh-if-due only) + read a member's video-taste profile."""
 
     def __init__(
         self,
@@ -75,17 +78,19 @@ class MemberVideoProfileService:
 
     # ── public API ────────────────────────────────────────────────
 
-    async def ensure_profile(self, member_id: UUID, gym_id: UUID) -> None:
-        """Ensure the member has a profile embedding, building it if missing.
+    async def verify_member_in_gym(
+        self, member_id: UUID, gym_id: UUID
+    ) -> None:
+        """Verify the member exists and belongs to ``gym_id`` (READ-ONLY).
 
-        Verifies the member belongs to ``gym_id`` (``MemberNotInGymError``
-        otherwise), then builds ONLY when the embedding is absent. Does NOT
-        force a rebuild on staleness — that is ``refresh_if_due``'s job.
+        Raises ``MemberNotInGymError`` on a missing member or a gym mismatch,
+        and NEVER builds a profile — a read must not have the side effect of
+        building. The rec path calls this to 404 a member not in the path gym
+        before reading their embedding; the profile itself is (re)built only by
+        ``refresh_if_due`` (the click + class-booking triggers).
         """
         row = await self._load_row(member_id)
         self._guard(row, gym_id)
-        if row["embedding"] is None:
-            await self._build(member_id, gym_id)
 
     async def refresh_if_due(self, member_id: UUID, gym_id: UUID) -> None:
         """Rebuild the profile when missing or past the refresh cooldown.
@@ -103,8 +108,9 @@ class MemberVideoProfileService:
     async def load_embedding(self, member_id: UUID) -> str | None:
         """The member's profile embedding (pgvector text form), or None.
 
-        Read after :meth:`ensure_profile`; None when the profile has not been
-        built yet (the recs service then runs its no-embedding degrade query).
+        None when the profile has not been built yet (the rec service then ranks
+        without similarity via its no-embedding candidate query). Never triggers
+        a build.
         """
         row = await self._load_row(member_id)
         if row is None:

@@ -29,6 +29,9 @@ from src.videos.schema.videos_schema import (
     YouTubeVideoMetadata,
     build_feed_page_result,
 )
+from src.videos.service.member_video_profile_service import (
+    MemberVideoProfileService,
+)
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 
 # A YouTube video id is always 11 chars from this alphabet.
@@ -55,9 +58,11 @@ class VideoFeedService:
         self,
         db_pool: DirectDatabasePool,
         youtube_client: YouTubeMetadataClient,
+        profile_service: MemberVideoProfileService,
     ) -> None:
         self._db = db_pool
         self._youtube = youtube_client
+        self._profiles = profile_service
 
     # ── helpers ──────────────────────────────────────────────────
 
@@ -143,6 +148,7 @@ class VideoFeedService:
         rejected: bool = False,
         video_type: VideoGenre | None = None,
         big_group: BigGroup | None = None,
+        member_id: UUID | None = None,
         limit: int,
         offset: int,
     ) -> tuple[list[GymVideoCard], int]:
@@ -151,6 +157,16 @@ class VideoFeedService:
         Joins ``gym_video_feed`` → ``video``, applies owner/run + status +
         optional tag filters at the DB level, and returns ``(page, total)``
         in one round-trip.
+
+        When ``member_id`` is supplied AND that member has a built video-taste
+        profile embedding, the page is PERSONALIZED — enriched videos are ranked
+        by cosine distance to the member's embedding, un-enriched ones falling to
+        the end by relevance. The embedding is READ-ONLY (never built here); a
+        member with no embedding (or no ``member_id``) gets the default
+        relevance-ordered page. ``member_id`` is only a re-ordering hint — the
+        candidate set is always this gym's feed — so no ownership guard is needed
+        (the route is already gym-employee gated). NOTE: a member-facing route is
+        a future concern; this stays staff-facing (CRM preview) for now.
 
         ``total`` is the count of all matching rows before pagination (via
         ``COUNT(*) OVER()``). It will be 0 when the requested ``offset``
@@ -163,34 +179,34 @@ class VideoFeedService:
             else GymVideoScanStatus.accepted
         )
         educational_genres = [g.value for g in EDUCATIONAL_GENRES]
-        sql = load_sql(SQL_DIR / "videos_load_feed_page.sql")
+        embedding = (
+            await self._profiles.load_embedding(member_id)
+            if member_id is not None
+            else None
+        )
+        params: dict = {
+            "gym_id": str(gym_id),
+            "scan_status": scan_status.value,
+            "owner": owner,
+            "video_type": (
+                video_type.value if video_type is not None else None
+            ),
+            "filter_big_group": (
+                big_group.value if big_group is not None else None
+            ),
+            "educational_genres": educational_genres,
+            "limit": limit,
+            "offset": offset,
+        }
+        if embedding is not None:
+            sql_file = "videos_load_feed_page_personalized.sql"
+            params["member_embedding"] = embedding
+        else:
+            sql_file = "videos_load_feed_page.sql"
+        sql = load_sql(SQL_DIR / sql_file)
         async with self._db.session() as session:
             rows = (
-                (
-                    await session.execute(
-                        text(sql),
-                        {
-                            "gym_id": str(gym_id),
-                            "scan_status": scan_status.value,
-                            "owner": owner,
-                            "video_type": (
-                                video_type.value
-                                if video_type is not None
-                                else None
-                            ),
-                            "filter_big_group": (
-                                big_group.value
-                                if big_group is not None
-                                else None
-                            ),
-                            "educational_genres": educational_genres,
-                            "limit": limit,
-                            "offset": offset,
-                        },
-                    )
-                )
-                .mappings()
-                .all()
+                (await session.execute(text(sql), params)).mappings().all()
             )
         return build_feed_page_result(rows)
 

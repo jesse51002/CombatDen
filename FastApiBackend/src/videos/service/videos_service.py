@@ -1,11 +1,12 @@
 """VideosService — pure delegating facade for the videos domain.
 
-Composes: ``VideoFeedService`` (live gym feed + pool reads), ``VideoSpecService``
-(spec DB read/write), ``VideoSpecAuthoring`` (deterministic commit gate),
-``VideoFeedRefiner`` (feed-learning refiner), ``VideosWorkerStatusService``
-(read-only worker state), ``VideoRecsService`` (member RAG recommendations),
-``VideoSearchService`` (semantic feed search), and ``VideoRecClickService``
-(record a rec click → stamp + log + fire a profile refresh).
+Composes: ``VideoFeedService`` (live gym feed + pool reads, incl. optional
+member-personalized ordering), ``VideoSpecService`` (spec DB read/write),
+``VideoSpecAuthoring`` (deterministic commit gate), ``VideoFeedRefiner``
+(feed-learning refiner), ``VideosWorkerStatusService`` (read-only worker state),
+``VideoRecsService`` (the member's single rotating-category RAG recommendation),
+and ``VideoRecClickService`` (record a rec click → stamp + log + fire a profile
+refresh).
 
 The router injects this facade for every non-agent video operation; the
 conversational agent uses it for the deterministic accept-path
@@ -22,10 +23,9 @@ from uuid import UUID
 from schema.video import GymVideoSpecSource, VideoGenre
 
 from src.videos.schema.video_recs_schema import (
-    MemberVideoRecsResponse,
+    MemberVideoRec,
     VideoRecClickResponse,
 )
-from src.videos.schema.video_search_schema import SearchResultCard
 from src.videos.schema.video_spec_schema import (
     VideoSpecDraft,
     VideoSpecView,
@@ -40,7 +40,6 @@ from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_rec_click_service import VideoRecClickService
 from src.videos.service.video_recs_service import VideoRecsService
-from src.videos.service.video_search_service import VideoSearchService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_worker_status_service import (
@@ -63,7 +62,6 @@ class VideosService:
         feed_refiner: VideoFeedRefiner,
         worker_status: VideosWorkerStatusService,
         recs_service: VideoRecsService,
-        search_service: VideoSearchService,
         click_service: VideoRecClickService,
     ) -> None:
         self._feed = feed_service
@@ -72,7 +70,6 @@ class VideosService:
         self._feed_refiner = feed_refiner
         self._worker_status = worker_status
         self._recs = recs_service
-        self._search = search_service
         self._click = click_service
 
     # ── live gym feed ─────────────────────────────────────────────
@@ -97,16 +94,22 @@ class VideosService:
         rejected: bool = False,
         video_type: VideoGenre | None = None,
         big_group: BigGroup | None = None,
+        member_id: UUID | None = None,
         limit: int,
         offset: int,
     ) -> tuple[list[GymVideoCard], int]:
-        """Paginated real-gym feed page — delegates to VideoFeedService."""
+        """Paginated real-gym feed page — delegates to VideoFeedService.
+
+        ``member_id`` optionally personalizes the ordering to that member's
+        video-taste embedding (read-only; ignored when they have no profile).
+        """
         return await self._feed.load_feed_page(
             gym_id,
             owner=owner,
             rejected=rejected,
             video_type=video_type,
             big_group=big_group,
+            member_id=member_id,
             limit=limit,
             offset=offset,
         )
@@ -195,26 +198,17 @@ class VideosService:
         """The gym's video-worker state (last refresh, running, last run)."""
         return await self._worker_status.status(gym_id)
 
-    # ── member recs + semantic search (RAG read surface) ──────────
+    # ── member rec + rec click (RAG read surface) ─────────────────
 
-    async def get_video_recs(
-        self,
-        gym_id: UUID,
-        member_id: UUID,
-        *,
-        per_category: int,
-        record: bool,
-    ) -> MemberVideoRecsResponse:
-        """A member's genre-categorized video recommendations (RAG-ranked)."""
-        return await self._recs.get_recs(
-            gym_id, member_id, per_category=per_category, record=record
-        )
+    async def get_video_rec(
+        self, gym_id: UUID, member_id: UUID
+    ) -> MemberVideoRec | None:
+        """The member's next rotating-category recommendation (RAG-ranked).
 
-    async def search_videos(
-        self, gym_id: UUID, q: str, limit: int
-    ) -> list[SearchResultCard]:
-        """Semantic search over the gym's served feed (most-similar first)."""
-        return await self._search.search(gym_id, q, limit)
+        Records the served pick and returns it with its ``rec_id``; ``None`` when
+        no category yields a video (the route maps that to 404).
+        """
+        return await self._recs.get_rec(gym_id, member_id)
 
     async def record_rec_click(
         self, gym_id: UUID, member_id: UUID, rec_id: UUID

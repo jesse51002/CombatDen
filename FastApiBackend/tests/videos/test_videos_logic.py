@@ -123,7 +123,11 @@ def _make_feed_service(mock_rows: list[dict]) -> tuple[VideoFeedService, MagicMo
     mock_db = MagicMock()
     mock_db.session = _session_ctx
 
-    svc = VideoFeedService(db_pool=mock_db, youtube_client=MagicMock())
+    svc = VideoFeedService(
+        db_pool=mock_db,
+        youtube_client=MagicMock(),
+        profile_service=MagicMock(),
+    )
     return svc, mock_session
 
 

@@ -4,6 +4,12 @@ import sys
 
 from pydantic_settings import BaseSettings
 
+# db_schema_path registers the Database python_data package on sys.path; it MUST
+# run before `from schema.*`. config.py is an early importer, so keep this first
+# (isort: skip stops import-sorting from reordering `schema` ahead of it).
+import src.shared.db_schema_path  # noqa: F401  # isort: skip
+from schema.video import VideoGenre  # isort: skip
+
 
 class AppEnv(enum.StrEnum):
     """Application environment."""
@@ -94,9 +100,9 @@ class Settings(BaseSettings):
     video_embedding_model: str = "openai/text-embedding-3-small"
     video_embedding_dim: int = 1536
     # A member's video-taste profile is ONE summary + ONE embedding on the
-    # members row. `refresh_if_due` (fired by class-booking + video-click
-    # triggers) rebuilds it at most once per this cooldown; `ensure_profile`
-    # only lazily builds a MISSING profile on the first recs request.
+    # members row, (re)built ONLY by `refresh_if_due` (fired fire-and-forget by
+    # the class-booking + video-click triggers) at most once per this cooldown.
+    # Reads never build — a member with no profile yet ranks without similarity.
     video_profile_refresh_cooldown_days: int = 3
     # Small/cheap chat model (litellm provider/name format) that turns a
     # member's facts into the one-paragraph taste summary; reuses
@@ -107,11 +113,26 @@ class Settings(BaseSettings):
     video_rec_weight_similarity: float = 0.7
     video_rec_weight_relevance: float = 0.2
     video_rec_weight_views: float = 0.1
-    # Generous working-set cap for the single rank-once rec query (grouping by
-    # genre + per-category slicing happen in Python).
-    video_rec_candidate_limit: int = 500
-    # Default result count for GET /videos/search (the route caps at 50).
-    video_search_limit: int = 20
+    # The member rec surface serves ONE video at a time, rotating the served
+    # genre category through this best-first order: the member's total served-rec
+    # count modulo the list length picks the starting category, and a category
+    # with no videos falls through to the next. Every member of the enum appears
+    # once (educational/technical content first, lighter genres last).
+    video_rec_category_rotation: list[VideoGenre] = [
+        VideoGenre.educational,
+        VideoGenre.professional,
+        VideoGenre.analysis,
+        VideoGenre.interview,
+        VideoGenre.vlog,
+        VideoGenre.news,
+        VideoGenre.entertainment,
+        VideoGenre.clips,
+        VideoGenre.memes,
+    ]
+    # Videos returned per rec request. 1 = the single "first option" the surface
+    # serves; the per-category candidate query LIMITs to this and the first valid
+    # row is the served pick.
+    video_rec_count: int = 1
 
     # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
     # build-time asset pipeline populates (theme images, fonts, etc.). This

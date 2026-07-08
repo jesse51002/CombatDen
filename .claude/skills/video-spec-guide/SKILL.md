@@ -44,9 +44,8 @@ the `videoservice` skill under `VideoService/.claude/skills/`). The worker has *
 control surface** and is never triggered by the authoring path — it is fully
 self-scheduling, deriving its own due gym each tick from timestamps already in the
 schema (an `admin_update` spec version, a settled manual feed curation, or a weekly
-refresh floor; below). The domain also grew a RAG read surface (member recs +
-semantic search) that ranks against the worker's `video_rag` embeddings — out of
-scope here; see `FastApiBackend/CLAUDE.md`.
+refresh floor; below). The domain also grew a RAG read surface (member video recs) that ranks against the
+worker's `video_rag` embeddings — out of scope here; see `FastApiBackend/CLAUDE.md`.
 
 ## 0. Architecture: LLM split, general services, thin agent, one-way layering
 
@@ -114,7 +113,7 @@ Pydantic AI (`pydantic-ai-slim[anthropic]`) for `VideoAgentService` only. Python
 DI providers (videos domain, spec/agent + worker-status): `litellm_client`, `video_spec_service`,
 `video_query_generator`, `videos_worker_status_service`, `video_spec_authoring`, `video_feed_refiner`,
 `video_agent_service`, `videos_service` (facade). (The domain also wires the RAG read surface —
-`member_video_profile_service`, `video_recs_service`, `video_search_service`, `video_feed_service` —
+`member_video_profile_service`, `video_recs_service`, `video_feed_service` —
 out of scope for this skill; see `FastApiBackend/CLAUDE.md`.)
 DI providers (presets domain): `presets_service`, `presets_template_service`.
 DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
@@ -290,10 +289,10 @@ code (monorepo no-inline-prompt rule).
 ### Cost ledger
 
 Agent/refiner token spend is surfaced in `AgentTurnResponse.usage` and logs; it is
-**not** written to `video_cost_log` — even though the ledger's `video_execution_type`
-enum now covers the worker's full stage set (`search | transcript | tag | enrich |
-embed | scan`, each attributable to a `video_run_id`), none of those stages is
-agent/refiner conversation, so there's no matching execution type to log it under.
+**not** written to the generic **`cost_log`** ledger — even though its `cost_stage`
+enum covers the worker's full stage set (`search | transcript | tag | enrich | embed
+| scan`, each row stamped `source='video'` + `run_id` + `gym_id`), none of those
+stages is agent/refiner conversation, so there's no matching stage to log it under.
 A proper agent-cost ledger is deferred.
 
 ## 7. Testing without a key or a DB

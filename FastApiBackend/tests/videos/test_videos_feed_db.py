@@ -59,7 +59,9 @@ async def test_load_feed_page_prepares_against_live_db(
     Guards against ``AmbiguousParameterError`` returning if the explicit
     ``CAST(...)`` on the nullable genre/group params is ever removed.
     """
-    service = VideoFeedService(db_pool=db_pool, youtube_client=MagicMock())
+    service = VideoFeedService(
+        db_pool=db_pool, youtube_client=MagicMock(), profile_service=MagicMock()
+    )
 
     cards, total = await service.load_feed_page(
         gym_id,

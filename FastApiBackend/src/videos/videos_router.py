@@ -2,7 +2,8 @@
 
 A real gym's live content (no prefix — each route declares its full path):
 
-    * ``GET /api/v1/gyms/{gym_id}/videos``              — paginated served feed.
+    * ``GET /api/v1/gyms/{gym_id}/videos``              — paginated served feed
+      (optionally personalized to a ``member_id``'s video-taste embedding).
     * ``POST /api/v1/gyms/{gym_id}/videos/lookup``      — fetch a YouTube link's
       real metadata (no write) for the add confirmation.
     * ``POST /api/v1/gyms/{gym_id}/videos``             — add one owner-provided
@@ -22,14 +23,12 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``GET /api/v1/gyms/{gym_id}/video-worker/status`` — the gym's worker
       state (last refresh / running / last run status). Read-only: there is no
       manual run — the worker derives its own work.
-    * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-recs`` — a member's
-      genre-categorized RAG recommendations (``verify_can_view_member``).
-    * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-recs/{rec_id}/click``
+    * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-rec`` — a member's
+      next rotating-category RAG recommendation (``verify_can_view_member``).
+    * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click``
       — record a member opening a rec: stamps ``clicked_at``, logs a
       ``video_clicked`` activity, and fires a profile refresh
       (``verify_can_view_member``).
-    * ``GET /api/v1/gyms/{gym_id}/videos/search`` — semantic search over the
-      gym's served feed.
 
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
@@ -44,7 +43,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
-from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
 from src.videos.schema.video_agent_schema import (
@@ -52,10 +50,9 @@ from src.videos.schema.video_agent_schema import (
     AgentTurnResponse,
 )
 from src.videos.schema.video_recs_schema import (
-    MemberVideoRecsResponse,
+    MemberVideoRec,
     VideoRecClickResponse,
 )
-from src.videos.schema.video_search_schema import VideoSearchResponse
 from src.videos.schema.video_spec_schema import VideoSpecView
 from src.videos.schema.video_worker_schema import VideoWorkerStatusResponse
 from src.videos.schema.videos_big_group import BigGroup
@@ -90,12 +87,6 @@ DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 # Videos per genre in the one-shot "All" preview.
 PREVIEW_PER_TAG = 10
-# Member recs: default + cap on videos returned per genre category.
-DEFAULT_PER_CATEGORY = 5
-MAX_PER_CATEGORY = 20
-# Semantic search: min query length + result-count cap (default is a setting).
-SEARCH_Q_MIN_LENGTH = 2
-MAX_SEARCH_LIMIT = 50
 
 
 # ── A real gym's live feed ────────────────────────────────────────────
@@ -110,7 +101,9 @@ MAX_SEARCH_LIMIT = 50
     description=(
         "A page of the gym's served feed, hydrated from the shared pool in "
         "relevance order. ``video_type``/``big_group`` filter as expected "
-        "(mutually exclusive)."
+        "(mutually exclusive). An optional ``member_id`` personalizes the "
+        "ordering to that member's video-taste embedding (read-only; ignored "
+        "when the member has no profile yet). Staff-facing (CRM preview)."
     ),
     responses={
         200: {"description": "A page of the gym's feed"},
@@ -127,6 +120,7 @@ async def get_gym_videos(
     big_group: BigGroup | None = None,
     owner: bool = Query(False),
     rejected: bool = Query(False),
+    member_id: UUID | None = Query(None),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
@@ -137,7 +131,10 @@ async def get_gym_videos(
     """Return one page of the gym's feed, hydrated from the shared pool in
     relevance order. ``owner=true`` → the owner "Your videos" section (else
     the gym's latest scan run); ``rejected=true`` → the rejected list (else
-    the served, accepted videos)."""
+    the served, accepted videos). ``member_id`` optionally re-orders the page to
+    that member's video-taste embedding (read-only ranking hint — the candidate
+    set is always this gym's feed, so it can't leak; a member-facing route is a
+    future concern, this stays gym-employee gated)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
@@ -154,6 +151,7 @@ async def get_gym_videos(
             rejected=rejected,
             video_type=video_type,
             big_group=big_group,
+            member_id=member_id,
             limit=limit,
             offset=offset,
         )
@@ -641,51 +639,50 @@ async def get_video_worker_status(
         ) from None
 
 
-# ── RAG read surface (member recs + semantic search) ─────────
+# ── RAG read surface (member rec + rec click) ────────────────
 
 
 @videos_router.get(
-    "/api/v1/gyms/{gym_id}/members/{member_id}/video-recs",
-    response_model=MemberVideoRecsResponse,
-    summary="Get a member's genre-categorized video recommendations",
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-rec",
+    response_model=MemberVideoRec,
+    summary="Get a member's next rotating-category video recommendation",
     description=(
-        "Per-genre-category RAG recommendations for a member (top "
-        "``per_category`` per category, one entry per genre that appears). "
-        "Ranked by summary-embedding cosine similarity to the member's profile, "
-        "blended with gym relevance + popularity, with unseen videos surfaced "
-        "ahead of already-recommended ones. ``record=true`` records the served "
-        "videos (they won't be re-pushed while unseen ones remain); "
-        "``record=false`` (CRM preview) writes nothing."
+        "The member's single next recommendation. The served genre category "
+        "rotates by the member's total served-rec count, and within it the "
+        "gym's served, enriched feed is ranked by summary-embedding cosine "
+        "similarity to the member's profile (blended with gym relevance + "
+        "popularity; the composite minus similarity when the member has no "
+        "profile yet), unseen videos ahead of already-recommended ones. The "
+        "served pick is recorded to ``member_video_recs`` and returned with its "
+        "``rec_id`` (post it back to the click route). 404 when the member has "
+        "no recommendation available in any category."
     ),
     responses={
-        200: {"description": "The member's recommendations, grouped by category"},
+        200: {"description": "The member's next recommendation"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
-        404: {"description": "Member not found"},
+        404: {"description": "Member not found, or no recommendation available"},
     },
 )
 @inject
-async def get_member_video_recs(
+async def get_member_video_rec(
     gym_id: UUID,
     member_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    per_category: int = Query(DEFAULT_PER_CATEGORY, ge=1, le=MAX_PER_CATEGORY),
-    record: bool = Query(False),
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
-) -> MemberVideoRecsResponse:
-    """Return the member's per-category recommendations. Gated by
+) -> MemberVideoRec:
+    """Return the member's next rotating-category recommendation. Gated by
     ``verify_can_view_member`` (staff of the member's gym OR the member
-    themselves)."""
+    themselves). 404 when the member isn't in the path gym, or when no category
+    yields a video."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await videos_service.get_video_recs(
-            gym_id, member_id, per_category=per_category, record=record
-        )
+        rec = await videos_service.get_video_rec(gym_id, member_id)
     except MemberNotInGymError as exc:
         # Only the ownership guard maps to 404 — any other ValueError (e.g.
         # an embedding-dimension config mismatch) is a server fault -> 500.
@@ -694,16 +691,22 @@ async def get_member_video_recs(
         ) from None
     except Exception:
         logger.error(
-            "Failed to build video recs for member %s", member_id, exc_info=True
+            "Failed to build video rec for member %s", member_id, exc_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to build video recommendations",
+            detail="Failed to build video recommendation",
         ) from None
+    if rec is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No video recommendation available for this member",
+        )
+    return rec
 
 
 @videos_router.post(
-    "/api/v1/gyms/{gym_id}/members/{member_id}/video-recs/{rec_id}/click",
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click",
     response_model=VideoRecClickResponse,
     summary="Record a member opening (clicking) a recommendation",
     description=(
@@ -750,50 +753,3 @@ async def click_member_video_rec(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to record recommendation click",
         ) from None
-
-
-@videos_router.get(
-    "/api/v1/gyms/{gym_id}/videos/search",
-    response_model=VideoSearchResponse,
-    summary="Semantic search over a gym's served video feed",
-    description=(
-        "Embed the free-text query ``q`` and rank the gym's served, enriched "
-        "feed by cosine similarity to each video's summary embedding "
-        "(most-similar first). ``limit`` caps the result count (max 50)."
-    ),
-    responses={
-        200: {"description": "The most-similar served videos for the query"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not an employee of this gym"},
-    },
-)
-@inject
-async def search_gym_videos(
-    gym_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    q: str = Query(..., min_length=SEARCH_Q_MIN_LENGTH),
-    limit: int = Query(
-        settings.video_search_limit, ge=1, le=MAX_SEARCH_LIMIT
-    ),
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    videos_service: VideosService = Depends(
-        Provide[DependencyInjector.videos_service]
-    ),
-) -> VideoSearchResponse:
-    """Return the most-similar served videos for ``q``. Gated by
-    ``verify_gym_employee`` like the other feed routes."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
-
-    try:
-        results = await videos_service.search_videos(gym_id, q, limit)
-    except Exception:
-        logger.error(
-            "Failed to search gym videos for %s", gym_id, exc_info=True
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to search gym videos",
-        ) from None
-
-    return VideoSearchResponse(results=results)

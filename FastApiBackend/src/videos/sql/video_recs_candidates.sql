@@ -1,17 +1,18 @@
--- A member's ranked video recommendations, RANKED ONCE against the member's
--- single video-taste embedding (members.video_profile_embedding). Grouping by
--- the video's genre category (v.tag) happens in Python AFTER this query -- this
--- SQL does not filter or group by genre.
+-- A member's ranked recommendations WITHIN ONE genre category, ranked against
+-- the member's single video-taste embedding (members.video_profile_embedding).
+-- The caller rotates categories (video_rec_category_rotation) and runs this once
+-- per category until a pick is found; :category is the current genre.
 --
--- Candidate set = the gym's SERVED feed, EXACTLY as videos_load_feed_ids
--- defines it: accepted rows of the gym's latest COMPLETED run PLUS the owner's
--- run-independent rows (video_run_id IS NULL). The completed-status filter on
--- the latest-run subselect mirrors the feed serve path so a mid-flight
--- 'running' run never leaks in.
+-- Candidate set = the gym's SERVED feed, EXACTLY as videos_load_feed_ids defines
+-- it: accepted rows of the gym's latest COMPLETED run PLUS the owner's
+-- run-independent rows (video_run_id IS NULL). The completed-status filter on the
+-- latest-run subselect mirrors the feed serve path so a mid-flight 'running' run
+-- never leaks in.
 --
--- Only ENRICHED videos are eligible: the JOIN to video_rag drops any pool video
--- without a summary embedding (RAG is lazy -- un-enriched videos are invisible
--- to the similarity ranking).
+-- Only ENRICHED videos of :category are eligible: the JOIN to video_rag drops any
+-- pool video without a summary embedding (RAG is lazy -- un-enriched videos are
+-- invisible to the similarity ranking), and the tag equality filter keeps only
+-- the requested genre.
 --
 -- Ranking:
 --   similarity = 1 - cosine_distance(video summary embedding, member embedding)
@@ -20,13 +21,13 @@
 -- ORDER BY hard-partitions UNRECOMMENDED videos first (freshness), then:
 --   within unrecommended  -> score DESC
 --   within recommended    -> last serve ASC (oldest first), score DESC
+-- so the top row is the freshest strong pick in this genre.
 --
 -- member_video_recs is an append-only serve log (one row per serve), so the
 -- per-video last-serve time is MAX(recommended_at), pre-aggregated per video in
 -- the member_recs CTE below; its presence in the LEFT JOIN flags
--- already_recommended (global per member, any genre). A generous
--- :candidate_limit only bounds the working set; grouping by genre + per-category
--- slicing happen in Python.
+-- already_recommended (global per member, any genre). :count bounds the returned
+-- rows (the caller takes the first valid one as the served pick).
 WITH member_recs AS (
     SELECT video_id, MAX(recommended_at) AS last_recommended_at
     FROM member_video_recs
@@ -64,7 +65,7 @@ scored AS (
             ORDER BY created_at DESC
             LIMIT 1)
       )
-      AND v.tag IS NOT NULL
+      AND v.tag = CAST(:category AS video_genre)
 )
 SELECT
     video_id,
@@ -90,4 +91,4 @@ ORDER BY
     already_recommended ASC,
     last_recommended_at ASC NULLS FIRST,
     score DESC
-LIMIT :candidate_limit
+LIMIT :count

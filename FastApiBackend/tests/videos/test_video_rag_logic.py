@@ -1,13 +1,14 @@
 """Pure-logic unit tests for the video RAG read surface (no DB / no OpenAI).
 
-Covers the three services driven against a fake DB pool + fake litellm client:
-``ensure_profile`` (build-if-missing vs no-op), ``refresh_if_due`` (cooldown
-no-op vs stale rebuild), the member↔gym ownership guard (a mismatched / missing
-member raises ``MemberNotInGymError`` before any build), ``load_embedding``,
-the embedding-dimension guard, ``get_recs`` running ONE candidate query then
-grouping by the video's genre category (honoring ``per_category`` + the
-``record`` flag, incl. the no-embedding degrade path), and ``search`` embedding
-the query once.
+Covers the services driven against a fake DB pool + fake litellm client:
+``verify_member_in_gym`` (the READ-ONLY ownership guard — passes / raises,
+NEVER builds), ``refresh_if_due`` (cooldown no-op vs stale rebuild + the
+embedding-dimension guard), ``load_embedding``, the rotating single-rec
+``get_rec`` (rotation index by served count, empty-category fall-through,
+no-embedding composite path, records + returns rec_id, None when nothing
+available, propagates the ownership error), and the personalized feed page
+(``VideoFeedService.load_feed_page`` picks the personalized SQL when the member
+has an embedding, the default SQL otherwise).
 """
 
 from __future__ import annotations
@@ -20,12 +21,13 @@ import pytest
 from schema.video import VideoGenre
 
 from src.videos.schema.member_profile_schema import MemberProfileSummary
+from src.videos.schema.video_recs_schema import MemberVideoRec
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
     MemberVideoProfileService,
 )
+from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_recs_service import VideoRecsService
-from src.videos.service.video_search_service import VideoSearchService
 
 # ── fake DB pool ─────────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ class _FakeResult:
     """A stand-in for a SQLAlchemy result: ``.mappings().all()/.fetchone()``."""
 
     def __init__(self, rows: list[dict] | None = None, one: dict | None = None):
-        self._rows = rows or []
+        self._rows = rows if rows is not None else []
         self._one = one
 
     def mappings(self) -> _FakeResult:
@@ -139,86 +141,44 @@ def _summary_client(*, dim: int = 4) -> MagicMock:
     return client
 
 
-# ── ensure_profile: build-if-missing vs no-op ────────────────────────
+# ── verify_member_in_gym: read-only guard, never builds ──────────────
 
 
-async def test_ensure_profile_builds_when_embedding_missing() -> None:
+async def test_verify_member_in_gym_passes_and_never_builds() -> None:
     gym_id = uuid4()
-    pool, session = _make_pool(
-        [
-            _load_result(gym_id, embedding=None),  # load: no embedding yet
-            _source_result(gym_id),  # source facts
-            _FakeResult(),  # update
-        ]
-    )
+    # Even with NO embedding, verify must NOT build — a read has no side effect.
+    pool, session = _make_pool([_load_result(gym_id, embedding=None)])
     client = _summary_client()
     svc = _profile_service(pool, client)
 
-    await svc.ensure_profile(uuid4(), gym_id)
-
-    client.complete_structured.assert_awaited_once()
-    client.embed.assert_awaited_once()
-    # load → source → update.
-    assert len(session.executed) == 3
-    update_params = session.executed[2][1]
-    assert update_params["embedding"] == "[0.1,0.1,0.1,0.1]"
-    assert update_params["summary"] == "loves bjj technique videos"
-
-
-async def test_ensure_profile_noop_when_embedding_present() -> None:
-    gym_id = uuid4()
-    pool, session = _make_pool([_load_result(gym_id, embedding="[0.1,0.2]")])
-    client = _summary_client()
-    svc = _profile_service(pool, client)
-
-    await svc.ensure_profile(uuid4(), gym_id)
+    await svc.verify_member_in_gym(uuid4(), gym_id)
 
     client.complete_structured.assert_not_called()
     client.embed.assert_not_called()
-    assert len(session.executed) == 1  # only the load ran
+    assert len(session.executed) == 1  # only the load ran, no build
 
 
-async def test_ensure_profile_raises_on_gym_mismatch() -> None:
+async def test_verify_member_in_gym_raises_on_gym_mismatch() -> None:
     real_gym_id = uuid4()
     wrong_gym_id = uuid4()
-    pool, session = _make_pool(
-        [_load_result(real_gym_id, embedding=None)]
-    )
-    client = _summary_client()
-    svc = _profile_service(pool, client)
+    pool, session = _make_pool([_load_result(real_gym_id, embedding=None)])
+    svc = _profile_service(pool, _summary_client())
 
     with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
-        await svc.ensure_profile(uuid4(), wrong_gym_id)
-
-    client.embed.assert_not_called()
-    assert len(session.executed) == 1  # load only — no source, no build
-
-
-async def test_ensure_profile_raises_when_member_missing() -> None:
-    pool, session = _make_pool([_load_result(None)])
-    client = _summary_client()
-    svc = _profile_service(pool, client)
-
-    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
-        await svc.ensure_profile(uuid4(), uuid4())
-
-    client.embed.assert_not_called()
+        await svc.verify_member_in_gym(uuid4(), wrong_gym_id)
     assert len(session.executed) == 1
 
 
-async def test_ensure_profile_raises_on_embedding_dim_mismatch() -> None:
-    gym_id = uuid4()
-    pool, _ = _make_pool(
-        [_load_result(gym_id, embedding=None), _source_result(gym_id)]
-    )
-    client = _summary_client(dim=2)  # embed returns dim 2, service expects 4
-    svc = _profile_service(pool, client)
+async def test_verify_member_in_gym_raises_when_member_missing() -> None:
+    pool, session = _make_pool([_load_result(None)])
+    svc = _profile_service(pool, _summary_client())
 
-    with pytest.raises(ValueError, match="embedding dimension"):
-        await svc.ensure_profile(uuid4(), gym_id)
+    with pytest.raises(MemberNotInGymError, match="Member not found in this gym"):
+        await svc.verify_member_in_gym(uuid4(), uuid4())
+    assert len(session.executed) == 1
 
 
-# ── refresh_if_due: cooldown no-op vs stale rebuild ──────────────────
+# ── refresh_if_due: cooldown no-op vs stale rebuild + dim guard ──────
 
 
 async def test_refresh_if_due_noop_within_cooldown() -> None:
@@ -257,6 +217,37 @@ async def test_refresh_if_due_rebuilds_when_stale() -> None:
     assert len(session.executed) == 3  # load → source → update
 
 
+async def test_refresh_if_due_rebuilds_when_embedding_missing() -> None:
+    gym_id = uuid4()
+    pool, session = _make_pool(
+        [
+            _load_result(gym_id, embedding=None),  # no embedding → rebuild
+            _source_result(gym_id),
+            _FakeResult(),
+        ]
+    )
+    client = _summary_client()
+    svc = _profile_service(pool, client)
+
+    await svc.refresh_if_due(uuid4(), gym_id)
+
+    client.embed.assert_awaited_once()
+    assert len(session.executed) == 3
+    assert session.executed[2][1]["embedding"] == "[0.1,0.1,0.1,0.1]"
+
+
+async def test_refresh_if_due_raises_on_embedding_dim_mismatch() -> None:
+    gym_id = uuid4()
+    pool, _ = _make_pool(
+        [_load_result(gym_id, embedding=None), _source_result(gym_id)]
+    )
+    client = _summary_client(dim=2)  # embed returns dim 2, service expects 4
+    svc = _profile_service(pool, client)
+
+    with pytest.raises(ValueError, match="embedding dimension"):
+        await svc.refresh_if_due(uuid4(), gym_id)
+
+
 # ── load_embedding ───────────────────────────────────────────────────
 
 
@@ -269,7 +260,6 @@ async def test_load_embedding_returns_text_when_built() -> None:
 
 
 async def test_load_embedding_returns_none_when_absent() -> None:
-    # No member row at all → None.
     pool, _ = _make_pool([_load_result(None)])
     svc = _profile_service(pool, _summary_client())
     assert await svc.load_embedding(uuid4()) is None
@@ -297,7 +287,14 @@ def test_render_prompt_degrades_gracefully_with_no_facts() -> None:
     assert "$" not in prompt  # every placeholder substituted
 
 
-# ── get_recs: one query, grouped by genre category ───────────────────
+# ── get_rec: rotating single-category recommendation ─────────────────
+
+# A fixed 3-genre rotation makes the served-count index deterministic.
+_ROTATION = [
+    VideoGenre.educational,
+    VideoGenre.professional,
+    VideoGenre.analysis,
+]
 
 
 def _candidate_row(
@@ -330,23 +327,12 @@ def _degrade_row(
     return row
 
 
-# Five rows, each a distinct genre, for the grouping tests.
-_ONE_PER_CATEGORY = [
-    _candidate_row("vid_educational", "educational"),
-    _candidate_row("vid_entertainment", "entertainment"),
-    _candidate_row("vid_news", "news"),
-    _candidate_row("vid_interview", "interview"),
-    _candidate_row("vid_professional", "professional"),
-]
+def _count_result(n: int) -> _FakeResult:
+    return _FakeResult(one={"n": n})
 
-# The distinct genres present in _ONE_PER_CATEGORY.
-_DISTINCT_GENRES = {
-    VideoGenre.educational,
-    VideoGenre.entertainment,
-    VideoGenre.news,
-    VideoGenre.interview,
-    VideoGenre.professional,
-}
+
+def _rec_id_result(rec_id: object) -> _FakeResult:
+    return _FakeResult(one={"rec_id": str(rec_id)})
 
 
 def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
@@ -356,140 +342,160 @@ def _recs_service(pool: MagicMock, profile: AsyncMock) -> VideoRecsService:
         weight_similarity=0.7,
         weight_relevance=0.2,
         weight_views=0.1,
-        candidate_limit=500,
+        rotation=list(_ROTATION),
+        rec_count=1,
     )
 
 
 def _profile_stub(embedding: str | None = "[0.1]") -> AsyncMock:
     profile = AsyncMock()
-    profile.ensure_profile = AsyncMock()
+    profile.verify_member_in_gym = AsyncMock()
     profile.load_embedding = AsyncMock(return_value=embedding)
     return profile
 
 
-async def test_get_recs_runs_one_query_and_groups_by_category() -> None:
-    pool, session = _make_pool([_FakeResult(rows=list(_ONE_PER_CATEGORY))])
-    profile = _profile_stub()
-    svc = _recs_service(pool, profile)
-
-    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
-
-    profile.ensure_profile.assert_awaited_once()
-    profile.load_embedding.assert_awaited_once()
-    # ONE candidate query (rank-once) and NO record insert (record=False).
-    assert len(session.executed) == 1
-    # The main (with-embedding) query bound the member embedding + w_sim.
-    params = session.executed[0][1]
-    assert params["member_embedding"] == "[0.1]"
-    assert "w_sim" in params
-    # One category per distinct genre that appears, each with its grouped video.
-    assert {c.category for c in resp.categories} == _DISTINCT_GENRES
-    assert all(len(c.videos) == 1 for c in resp.categories)
-
-
-async def test_get_recs_honors_per_category_cap() -> None:
-    # Three educational rows all group under the educational category;
-    # per_category=1 keeps only one, and empty categories are omitted.
-    rows = [_candidate_row(f"e{i}", "educational") for i in range(3)]
-    pool, session = _make_pool([_FakeResult(rows=rows)])
-    profile = _profile_stub()
-    svc = _recs_service(pool, profile)
-
-    resp = await svc.get_recs(uuid4(), uuid4(), per_category=1, record=False)
-
-    assert len(session.executed) == 1
-    assert [c.category for c in resp.categories] == [VideoGenre.educational]
-    assert len(resp.categories[0].videos) == 1
-
-
-async def test_get_recs_records_served_when_record_true() -> None:
+async def test_get_rec_rotation_index_by_served_count() -> None:
+    # served_count = 1 → start = 1 % 3 → the professional category is served.
+    rec_id = uuid4()
     pool, session = _make_pool(
-        [_FakeResult(rows=list(_ONE_PER_CATEGORY)), _FakeResult()]
+        [
+            _count_result(1),
+            _FakeResult(rows=[_candidate_row("vp", "professional")]),
+            _rec_id_result(rec_id),
+        ]
     )
     profile = _profile_stub()
     svc = _recs_service(pool, profile)
 
-    await svc.get_recs(uuid4(), uuid4(), per_category=5, record=True)
+    rec = await svc.get_rec(uuid4(), uuid4())
 
-    # 1 candidate query + 1 record insert.
-    assert len(session.executed) == 2
-    insert_params = session.executed[1][1]
-    assert isinstance(insert_params, list) and len(insert_params) == 5
-    assert {p["video_id"] for p in insert_params} == {
-        r["video_id"] for r in _ONE_PER_CATEGORY
-    }
-    # Each served row carries the video's genre as its category.
-    assert {p["category"] for p in insert_params} == {
-        g.value for g in _DISTINCT_GENRES
-    }
+    profile.verify_member_in_gym.assert_awaited_once()
+    profile.load_embedding.assert_awaited_once()
+    assert isinstance(rec, MemberVideoRec)
+    assert rec.category == VideoGenre.professional
+    assert rec.rec_id == rec_id
+    # count query → ONE category query (professional) → record insert.
+    assert len(session.executed) == 3
+    assert session.executed[1][1]["category"] == "professional"
 
 
-async def test_get_recs_degrades_when_no_embedding() -> None:
-    # load_embedding → None → the no-embedding query runs; one educational row
-    # → one educational category.
+async def test_get_rec_falls_through_empty_category() -> None:
+    # served_count = 0 → start educational, which is EMPTY → advance to
+    # professional, which yields the pick.
+    rec_id = uuid4()
     pool, session = _make_pool(
-        [_FakeResult(rows=[_degrade_row("d0", "educational")])]
+        [
+            _count_result(0),
+            _FakeResult(rows=[]),  # educational: nothing
+            _FakeResult(rows=[_candidate_row("vp", "professional")]),
+            _rec_id_result(rec_id),
+        ]
+    )
+    profile = _profile_stub()
+    svc = _recs_service(pool, profile)
+
+    rec = await svc.get_rec(uuid4(), uuid4())
+
+    assert rec is not None
+    assert rec.category == VideoGenre.professional
+    # count → educational (empty) → professional (pick) → record.
+    assert len(session.executed) == 4
+    assert session.executed[1][1]["category"] == "educational"
+    assert session.executed[2][1]["category"] == "professional"
+
+
+async def test_get_rec_no_embedding_composite_path() -> None:
+    rec_id = uuid4()
+    pool, session = _make_pool(
+        [
+            _count_result(0),
+            _FakeResult(rows=[_degrade_row("d0", "educational")]),
+            _rec_id_result(rec_id),
+        ]
     )
     profile = _profile_stub(embedding=None)
     svc = _recs_service(pool, profile)
 
-    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
+    rec = await svc.get_rec(uuid4(), uuid4())
 
-    assert len(session.executed) == 1
-    params = session.executed[0][1]
-    # The degrade query binds NO similarity inputs.
-    assert "member_embedding" not in params
-    assert "w_sim" not in params
-    assert [c.category for c in resp.categories] == [VideoGenre.educational]
-    assert len(resp.categories[0].videos) == 1
+    assert rec is not None
+    assert rec.category == VideoGenre.educational
+    # The candidate query bound NO similarity inputs (degrade ranking).
+    cand_params = session.executed[1][1]
+    assert "member_embedding" not in cand_params
+    assert "w_sim" not in cand_params
+    assert cand_params["category"] == "educational"
 
 
-async def test_get_recs_propagates_member_not_in_gym() -> None:
-    # The ownership guard is a hard 404 — get_recs never degrades it away.
+async def test_get_rec_records_pick_and_returns_rec_id() -> None:
+    rec_id = uuid4()
+    pool, session = _make_pool(
+        [
+            _count_result(0),
+            _FakeResult(rows=[_candidate_row("ve", "educational", score=0.77)]),
+            _rec_id_result(rec_id),
+        ]
+    )
+    profile = _profile_stub()
+    svc = _recs_service(pool, profile)
+
+    rec = await svc.get_rec(uuid4(), uuid4())
+
+    assert rec.rec_id == rec_id
+    assert rec.video.url.endswith("ve")
+    # The last execute is the record insert, carrying the served pick.
+    insert_params = session.executed[-1][1]
+    assert insert_params["video_id"] == "ve"
+    assert insert_params["category"] == "educational"
+    assert insert_params["score"] == 0.77
+
+
+async def test_get_rec_returns_none_when_no_category_yields() -> None:
+    # Every category in the rotation is empty → None (route maps to 404), and
+    # nothing is recorded.
+    pool, session = _make_pool(
+        [
+            _count_result(0),
+            _FakeResult(rows=[]),  # educational
+            _FakeResult(rows=[]),  # professional
+            _FakeResult(rows=[]),  # analysis
+        ]
+    )
+    profile = _profile_stub()
+    svc = _recs_service(pool, profile)
+
+    rec = await svc.get_rec(uuid4(), uuid4())
+
+    assert rec is None
+    # count + one query per rotation category, and NO record insert.
+    assert len(session.executed) == 1 + len(_ROTATION)
+
+
+async def test_get_rec_propagates_member_not_in_gym() -> None:
     pool, session = _make_pool([])
     profile = AsyncMock()
-    profile.ensure_profile = AsyncMock(
+    profile.verify_member_in_gym = AsyncMock(
         side_effect=MemberNotInGymError("Member not found in this gym")
     )
     profile.load_embedding = AsyncMock()
     svc = _recs_service(pool, profile)
 
     with pytest.raises(MemberNotInGymError):
-        await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
+        await svc.get_rec(uuid4(), uuid4())
 
-    # No candidate query ran, and load_embedding was never reached.
     assert len(session.executed) == 0
     profile.load_embedding.assert_not_called()
 
 
-async def test_get_recs_degrades_on_build_failure() -> None:
-    # A profile-BUILD failure (LLM/embedding down) must not 500 — get_recs
-    # swallows it and falls through to the no-embedding degrade ranking.
-    pool, session = _make_pool(
-        [_FakeResult(rows=[_degrade_row("d0", "educational")])]
-    )
-    profile = AsyncMock()
-    profile.ensure_profile = AsyncMock(side_effect=RuntimeError("llm down"))
-    profile.load_embedding = AsyncMock(return_value=None)
-    svc = _recs_service(pool, profile)
-
-    resp = await svc.get_recs(uuid4(), uuid4(), per_category=5, record=False)
-
-    # Degrade query ran (no similarity inputs) and the educational category is
-    # present.
-    assert len(session.executed) == 1
-    assert "member_embedding" not in session.executed[0][1]
-    assert [c.category for c in resp.categories] == [VideoGenre.educational]
+# ── personalized feed page: SQL selection by embedding presence ──────
 
 
-# ── search: embeds q once + dim guard ────────────────────────────────
-
-
-def _search_row(video_id: str = "vid1", similarity: float = 0.7) -> dict:
+def _feed_row(video_id: str = "fv1") -> dict:
+    """A minimal feed-page row with a ``total`` column (validates as a card)."""
     return {
         "video_id": video_id,
         "url": f"https://youtu.be/{video_id}",
-        "title": "Test",
+        "title": "Feed Vid",
         "thumbnail_url": "https://img/x.jpg",
         "channel_name": "Chan",
         "channel_url": "https://c",
@@ -498,43 +504,57 @@ def _search_row(video_id: str = "vid1", similarity: float = 0.7) -> dict:
         "duration_seconds": 60,
         "tag": "educational",
         "relevance_index": 0,
-        "similarity": similarity,
+        "total": 1,
     }
 
 
-async def test_search_embeds_query_once_and_forwards_limit() -> None:
-    pool, session = _make_pool([_FakeResult(rows=[_search_row()])])
-    client = MagicMock()
-    client.embed = AsyncMock(return_value=[[0.1, 0.2, 0.3, 0.4]])
-    svc = VideoSearchService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
+def _feed_service(pool: MagicMock, embedding: str | None) -> VideoFeedService:
+    profile = AsyncMock()
+    profile.load_embedding = AsyncMock(return_value=embedding)
+    return VideoFeedService(
+        db_pool=pool, youtube_client=MagicMock(), profile_service=profile
     )
 
-    results = await svc.search(uuid4(), "kettlebell swings", 20)
 
-    client.embed.assert_awaited_once()
-    _, kwargs = client.embed.call_args
-    assert kwargs["texts"] == ["kettlebell swings"]
-    assert len(results) == 1
-    assert results[0].similarity == pytest.approx(0.7)
-    assert session.executed[0][1]["limit"] == 20
-    # Query embedding bound as pgvector text form.
-    assert session.executed[0][1]["query_embedding"] == "[0.1,0.2,0.3,0.4]"
+async def test_feed_page_uses_personalized_sql_when_embedding_present() -> None:
+    pool, session = _make_pool([_FakeResult(rows=[_feed_row()])])
+    svc = _feed_service(pool, embedding="[0.1,0.2]")
 
-
-async def test_search_raises_on_embedding_dim_mismatch() -> None:
-    pool, _ = _make_pool([])
-    client = MagicMock()
-    client.embed = AsyncMock(return_value=[[0.1, 0.2]])  # dim 2 != 4
-    svc = VideoSearchService(
-        db_pool=pool,
-        litellm_client=client,
-        embedding_model="test/model",
-        embedding_dim=4,
+    cards, total = await svc.load_feed_page(
+        uuid4(), member_id=uuid4(), limit=10, offset=0
     )
 
-    with pytest.raises(ValueError, match="embedding dimension"):
-        await svc.search(uuid4(), "q", 20)
+    assert total == 1 and len(cards) == 1
+    sql, params = session.executed[0]
+    # The personalized SQL orders by the pgvector distance and binds the vector.
+    assert "<=>" in sql
+    assert params["member_embedding"] == "[0.1,0.2]"
+
+
+async def test_feed_page_uses_default_sql_when_no_embedding() -> None:
+    pool, session = _make_pool([_FakeResult(rows=[_feed_row()])])
+    svc = _feed_service(pool, embedding=None)  # member has no profile yet
+
+    cards, total = await svc.load_feed_page(
+        uuid4(), member_id=uuid4(), limit=10, offset=0
+    )
+
+    assert total == 1 and len(cards) == 1
+    sql, params = session.executed[0]
+    assert "<=>" not in sql
+    assert "member_embedding" not in params
+
+
+async def test_feed_page_skips_embedding_read_when_no_member_id() -> None:
+    pool, session = _make_pool([_FakeResult(rows=[_feed_row()])])
+    profile = AsyncMock()
+    profile.load_embedding = AsyncMock(return_value="[0.1]")
+    svc = VideoFeedService(
+        db_pool=pool, youtube_client=MagicMock(), profile_service=profile
+    )
+
+    await svc.load_feed_page(uuid4(), limit=10, offset=0)
+
+    # No member_id → no embedding read, default SQL.
+    profile.load_embedding.assert_not_called()
+    assert "<=>" not in session.executed[0][0]
