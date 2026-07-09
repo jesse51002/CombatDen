@@ -148,9 +148,20 @@ class EnrichTemplatesRunner:
         totals.failed += sum(1 for o in outcomes if o.row is None)
         if not rows:
             return
-        vectors, embed_usd = await self._llm.embed(
-            [row.result.summary for row in rows], model=settings.embedding_model
-        )
+        try:
+            vectors, embed_usd = await self._llm.embed(
+                [row.result.summary for row in rows], model=settings.embedding_model
+            )
+        except Exception as exc:  # noqa: BLE001 - one embed failure strikes the chunk, not the run
+            # Mirror the worker enricher: a batch embed failure (a provider blip,
+            # a rate limit, depleted credits) strikes this chunk and the run keeps
+            # going. The chunk's videos aren't written to the sidecar, so a later
+            # resume re-enriches exactly them (resumable-skip is by sidecar id).
+            logger.warning(
+                "embed failed for %d row(s) — skipping this chunk: %s", len(rows), exc
+            )
+            totals.failed += len(rows)
+            return
         totals.embed_usd += embed_usd
         records = [
             VideoRagRecord(
