@@ -4,9 +4,12 @@ The target set (``worker_scan_targets.sql``) is the ``pending`` feed rows in eac
 gym's latest non-failed run whose video is already enriched (a ``video_rag`` row)
 and is under the strike ceiling, grouped by gym. The sweep DRAINS it: per gym, it
 loads that gym's LATEST spec at scan time (judge against the current criteria, not
-a run-pinned one), batches the candidates, and runs a MULTIMODAL keep/drop — each
-batch's candidate thumbnails are passed as ``image_urls`` in the SAME order the
-candidates are listed in the prompt, so the model weighs the thumbnail visually.
+a run-pinned one), batches the candidates, and runs a TEXT-ONLY keep/drop against
+each candidate's summary + structured enrich outputs (genre, disciplines, facets).
+The enrich step already did the multimodal (thumbnail) pass ONCE and folded the
+visual detail into the summary, so scan never re-fetches the thumbnail — cheaper,
+and it matters because scan runs per-gym (a video in many feeds is scanned many
+times) while enrich runs once per video.
 
 Verdicts are written by UPDATE (``worker_update_verdict.sql``): a ``pending`` row is
 flipped to accepted/rejected, guarded by ``scan_status = 'pending'`` so a manual
@@ -22,6 +25,7 @@ bumped alone and stays ``pending``. Spend is one ``scan`` cost row per gym per s
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -32,6 +36,7 @@ from string import Template
 from src.shared.database import DirectDatabasePool
 from src.shared.interfaces.llm_client import LLMClient
 from src.shared.sql_loader import load_sql
+from src.shared.util.jsonb import as_list
 from src.worker.schema.scan_batch import ScanBatchResult
 from src.worker.worker_abort import check_abort
 from src.worker.worker_config import settings
@@ -44,11 +49,10 @@ SCAN_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "worker_scan.md
 
 SCAN_STATUS_ACCEPTED = "accepted"
 SCAN_STATUS_REJECTED = "rejected"
-NO_IMAGE_NOTE = "\n  thumbnail: (no image provided)"
 
 
 class WorkerScanner:
-    """Drains the pending-scan target set: per gym, multimodal keep/drop against
+    """Drains the pending-scan target set: per gym, a text-only keep/drop against
     the gym's latest spec, verdicts written by UPDATE, hard failures struck."""
 
     def __init__(
@@ -103,15 +107,14 @@ class WorkerScanner:
     async def _scan_batch(
         self, criteria: tuple[str, str], gym_id: str, run_id: str, batch: list[dict]
     ) -> float:
-        """One batch's multimodal keep/drop. On an LLM exception the whole batch is
+        """One batch's text-only keep/drop. On an LLM exception the whole batch is
         struck and left pending; a per-id miss is struck alone and left pending."""
-        prompt, image_urls = self._build_batch(criteria, batch)
+        prompt = self._build_batch(criteria, batch)
         try:
             result, cost = await self._llm.complete_structured_with_cost(
                 [{"role": "user", "content": prompt}],
                 schema=ScanBatchResult,
                 model=settings.scan_model,
-                image_urls=image_urls or None,
             )
         except Exception as exc:  # noqa: BLE001 - a bad batch strikes, not aborts
             logger.warning("scan batch failed (strike, stays pending): %s", exc)
@@ -198,42 +201,42 @@ class WorkerScanner:
         ]
 
     @staticmethod
-    def _build_batch(
-        criteria: tuple[str, str], batch: list[dict]
-    ) -> tuple[str, list[str]]:
-        """The scan prompt + the batch's image URLs, in candidate order.
-
-        A candidate with a plausible http(s) thumbnail contributes its URL to
-        ``image_urls`` (in order) and is listed plainly; a candidate without one is
-        listed with a ``(no image provided)`` note and contributes no image — so the
-        attached images map, in order, to the un-noted candidates."""
+    def _build_batch(criteria: tuple[str, str], batch: list[dict]) -> str:
+        """The text-only scan prompt for one batch. Each candidate is listed with
+        its structured enrich outputs (genre, disciplines, facets) and its detailed
+        summary — the summary already folds in the thumbnail's visual detail, so no
+        image is attached."""
         lines: list[str] = []
-        image_urls: list[str] = []
         for index, row in enumerate(batch, start=1):
-            thumb = row["thumbnail_url"]
-            if thumb and thumb.startswith(("http://", "https://")):
-                image_urls.append(thumb)
-                image_note = ""
-            else:
-                image_note = NO_IMAGE_NOTE
             genre = row["genre"] or "unknown"
+            disciplines = ", ".join(as_list(row["disciplines"])) or "unknown"
             lines.append(
                 f"- candidate {index}\n"
                 f"  video_id: {row['video_id']}\n"
                 f"  title: {row['title']}\n"
                 f"  channel: {row['channel_name']}\n"
                 f"  genre: {genre}\n"
+                f"  disciplines: {disciplines}\n"
+                f"  facets: {WorkerScanner._facets_text(row['facets'])}\n"
                 f"  summary: {row['summary']}"
-                f"{image_note}"
             )
-        prompt = Template(
+        return Template(
             SCAN_PROMPT_PATH.read_text(encoding="utf-8")
         ).safe_substitute(
             videos_desc=criteria[0],
             avoid_desc=criteria[1],
             videos_block="\n".join(lines),
         )
-        return prompt, image_urls
+
+    @staticmethod
+    def _facets_text(facets: object) -> str:
+        """Render the enrich ``facets`` map compactly for the prompt, tolerating
+        the driver returning either a decoded dict or a JSON string."""
+        if isinstance(facets, str):
+            return facets or "{}"
+        if facets:
+            return json.dumps(facets, separators=(",", ":"))
+        return "{}"
 
     @staticmethod
     def _chunks(seq: Sequence[dict], size: int) -> Iterator[list[dict]]:

@@ -1,8 +1,9 @@
 You decide whether each of several YouTube videos belongs in ONE specific gym's
-video feed. Every video has already been enriched (genre + a content/thumbnail
-summary). Your job is the quality/fit gate: judge each against THIS gym's own
-specifications. The same video may be right for one gym and wrong for another —
-judge only for this gym.
+video feed. Every video has already been enriched: a separate step watched the
+video's thumbnail and read its transcript, then wrote a detailed summary plus
+structured attributes (genre, disciplines, facets). Your job is the quality/fit
+gate: judge each against THIS gym's own specifications. The same video may be right
+for one gym and wrong for another — judge only for this gym.
 
 ## The gym
 
@@ -14,17 +15,12 @@ $avoid_desc
 
 ## The videos to judge
 
-Each has an id, title, channel, genre, and a summary (which includes what the
-thumbnail shows). Judge each on its own merits.
-
-The candidates' thumbnail images are ATTACHED to this message. They are provided
-in the SAME order as the candidates listed below — the N images correspond, in
-order, to the N candidates (image 1 = candidate 1, image 2 = candidate 2, …).
-A candidate marked `thumbnail: (no image provided)` contributes no image, so skip
-it when matching images to candidates in order. WEIGH the thumbnail visually
-alongside the text: attire (gi vs no-gi, uniform vs streetwear), setting
-(competition mat, home gym, studio), and production style (professional broadcast
-vs phone clip vs clickbait graphics) are strong fit/quality signals.
+Each has an id, title, channel, genre, disciplines, facets, and a detailed
+summary. The summary is your primary signal: it already describes what the
+thumbnail shows (attire like gi vs no-gi, the setting, the production style) as
+well as the content and who is in it — so weigh it as if you had seen the video.
+The `facets` object surfaces confident structured attributes (e.g. gi, setting,
+skill level). Judge each candidate on its own merits from these fields.
 
 $videos_block
 

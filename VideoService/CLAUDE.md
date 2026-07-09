@@ -288,16 +288,21 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   `rejected`; `accepted`-without-rag are imported presets / pre-RAG carry-forwards that must
   get an embedding) ∪ ALL owner-section rows (`video_run_id IS NULL`). Per video: lazy Apify
   transcript (miss → placeholder, NOT a strike), ONE multimodal `enrich_model` call
-  (thumbnail + metadata + transcript slice → genre `tag`, disciplines, summary, facets),
-  tags written to `video`, summaries batch-embedded into `video_rag` (concurrency
-  `worker_enrich_concurrency`, 8).
-- **scan** (global sweep, per-gym batches, MULTIMODAL — `WorkerScanner.drain`). Targets
+  (thumbnail + metadata + transcript slice → genre `tag`, disciplines, a **detailed**
+  summary, facets), tags written to `video`, summaries batch-embedded into `video_rag`
+  (concurrency `worker_enrich_concurrency`, 8). The enrich call is the ONLY step that sees
+  the thumbnail + transcript — its summary must fold in the visual + content detail because
+  scan reads only that summary (below).
+- **scan** (global sweep, per-gym batches, **TEXT-ONLY** — `WorkerScanner.drain`). Targets
   (`worker_scan_targets.sql`) = `pending` rows in each gym's latest non-failed run whose
   video HAS a `video_rag` row and is under the strike ceiling. Per gym: load the **latest**
   spec at scan time (judge against current criteria), batch by `scan_batch_size` (12), and
-  run keep/drop with each batch's candidate thumbnails passed as ordered `image_urls`.
-  Verdicts are written by UPDATE (`worker_update_verdict.sql`) guarded on
-  `scan_status = 'pending'` — a manual or prior automatic verdict is never overwritten.
+  run keep/drop on each candidate's **summary + structured enrich outputs** (genre,
+  disciplines, facets) — NO thumbnail is re-sent, since enrich already folded the visual
+  detail into the summary. Text-only is cheaper AND matters because scan runs per-gym (a
+  video in many feeds is scanned many times) while enrich runs once per video. Verdicts are
+  written by UPDATE (`worker_update_verdict.sql`) guarded on `scan_status = 'pending'` — a
+  manual or prior automatic verdict is never overwritten.
 
 ### The strike / cleanup mechanic (`video.failure_count`)
 

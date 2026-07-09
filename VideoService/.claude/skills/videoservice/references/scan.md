@@ -11,7 +11,7 @@ file's own name matches the older "judgment" half.
 Neither sweep is tied to any single gym or run — each drains its WHOLE target set
 across every gym in one pass, unlike the per-gym `scraper.md` step.
 
-## Scan (tried first — global sweep, per-gym batches, MULTIMODAL)
+## Scan (tried first — global sweep, per-gym batches, TEXT-ONLY)
 
 **Targets** (`worker_scan_targets.sql`): `pending` feed rows in each gym's latest
 non-failed run whose video already has a `video_rag` row (enriched) and is under
@@ -20,10 +20,12 @@ the strike ceiling, grouped by gym.
 Per gym: load that gym's **LATEST** spec **at scan time** (`worker_spec_load_latest.sql`
 — judged against the CURRENT criteria, not whatever spec was in force when the
 candidate was scraped), batch the candidates (`scan_batch_size`, 12), and run a
-**multimodal** keep/drop — each batch's candidate thumbnails are passed as
-`image_urls` in the same order the candidates are listed in the prompt
-(`scan_model`, `gemini/gemini-2.5-flash-lite`), so the model weighs the thumbnail
-visually, not just the summary text.
+**text-only** keep/drop (`scan_model`, `gemini/gemini-2.5-flash-lite`) on each
+candidate's **summary + structured enrich outputs** (genre, disciplines, facets).
+NO thumbnail is re-sent: the enrich step already did the multimodal pass and folded
+the visual detail into the detailed summary, so scan reads that instead. This is
+cheaper AND scale-correct — scan runs per-gym (a video in many feeds is scanned many
+times) while enrich runs once per video.
 
 **Verdicts are written by UPDATE** (`worker_update_verdict.sql`), not by a fresh
 feed insert — there is no per-run scan-write. A `pending` row is flipped to

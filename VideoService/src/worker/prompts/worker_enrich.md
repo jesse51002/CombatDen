@@ -47,11 +47,21 @@ graphic-heavy).
    Allowed disciplines (use these exact strings):
 $gym_type_vocab
 
-3. **summary** — a few sentences describing what the video contains. This is the
-   text that gets embedded for semantic search, so it MUST be concrete and MUST
-   describe what the THUMBNAIL shows (attire like gi vs no-gi, the setting, the
-   production style) in addition to the content and who is in it. Prefer specific
-   nouns over vague praise.
+3. **summary** — a detailed, self-contained paragraph (aim for ~4–8 sentences)
+   describing what the video IS. This summary does double duty: it is embedded for
+   recommendation ranking AND it is the ONLY thing a later per-gym keep/drop step
+   sees — that step never gets the thumbnail or the transcript, just this text. So
+   anything you omit is invisible to it. Be thorough and concrete, covering:
+   - the actual subject and what the video does (teaches technique X, breaks down a
+     match, full bout between named competitors, day-in-the-life, etc.);
+   - what the THUMBNAIL shows — attire (gi vs no-gi, uniform vs streetwear), the
+     setting (competition mat, home gym, studio, outdoors), and the production
+     style (professional broadcast, phone clip, graphic-heavy clickbait);
+   - who is in it (named athletes, coaches, or identifiable events/promotions);
+   - the format and skill level (tutorial vs highlight vs full match; beginner vs
+     advanced) and any quality/credibility signals.
+   Prefer specific nouns over vague praise. Do NOT make it a one-liner — a terse
+   summary starves the keep/drop step of the signal it needs.
 
 4. **facets** — a small free-shape object of structured attributes you can read
    off confidently, e.g. `{"gi": false, "setting": "competition",

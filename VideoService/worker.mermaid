@@ -20,7 +20,7 @@ flowchart TB
 
   subgraph Steps["⚙️ One heavy step, first-with-work, drained fully this tick"]
     direction TB
-    s_scan["1st · SCAN — global sweep, per-gym batches, MULTIMODAL<br/>targets: pending rows (video under strike ceiling) in each gym's latest non-failed run<br/>loads that gym's LATEST spec AT SCAN TIME · batches of 12 · thumbnails passed as image_urls<br/>verdict UPDATE guarded on scan_status='pending' (a manual/prior verdict is never overwritten)<br/>strike: a batch's LLM failure bumps every video in it and leaves them pending (no default-to-rejected)"]
+    s_scan["1st · SCAN — global sweep, per-gym batches, TEXT-ONLY<br/>targets: pending rows (video under strike ceiling) in each gym's latest non-failed run<br/>loads that gym's LATEST spec AT SCAN TIME · batches of 12 · judges the summary + genre/disciplines/facets (no thumbnail — enrich folded it into the summary)<br/>verdict UPDATE guarded on scan_status='pending' (a manual/prior verdict is never overwritten)<br/>strike: a batch's LLM failure bumps every video in it and leaves them pending (no default-to-rejected)"]
     s_enrich["2nd, if scan had no work · ENRICH — global, gym-agnostic sweep<br/>targets: videos with NO video_rag row yet, under the strike ceiling<br/>(pending/accepted rows of each gym's latest non-failed run) ∪ ALL owner-section rows<br/>lazy Apify transcript fetch (a miss → placeholder, not a strike) → cache onto video<br/>ONE multimodal call → tag + disciplines + summary + facets · batch-embed summaries → insert video_rag<br/>strike: a hard multimodal/embed failure"]
     s_scrape["3rd, if scan+enrich had no work · SCRAPE — per-gym, quota-bound<br/>the ONLY step that opens video_run · bounded by per-gym (2/24h) + system (5/24h) rolling run caps<br/>selects the due gym (no in-flight run) → YouTube Data API v3 search+details → merge-upsert the pool<br/>funnel (tier1 query+discipline overlap, tier2 RAG probe) → write_feed:<br/>carries the prior completed run forward FIRST, then inserts candidates as 'pending' (ON CONFLICT DO NOTHING)"]
     s_scan -->|"no pending-with-rag targets"| s_enrich
@@ -34,7 +34,7 @@ flowchart TB
   DB["🗄️ Shared Supabase Postgres<br/>resource_locks · video_run · gym_video_spec(_latest)<br/>video pool (failure_count strikes) · video_rag (pgvector, HNSW vector_cosine_ops) · gym_video_feed · cost_log"]
   YouTube["📺 YouTube Data API v3<br/>search.list discovery + videos.list metadata (free within ~10k units/day)"]
   Apify["🎞️ Apify · pintostudio/youtube-transcript-scraper<br/>transcripts ONLY · lazy at enrich (~$0.01/video)"]
-  LLM["🤖 LLM providers<br/>Gemini (enrich + scan, multimodal) · OpenAI text-embedding-3-small (embed)"]
+  LLM["🤖 LLM providers<br/>Gemini (enrich multimodal · scan text-only) · OpenAI text-embedding-3-small (embed)"]
 
   WorkerLoop --> Tick
   Tick -->|"one heavy step, first-with-work, drained fully"| Steps

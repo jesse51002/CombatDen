@@ -5,9 +5,9 @@ gym's LATEST spec (read at scan time); batches by ``scan_batch_size``; writes
 verdicts by UPDATE (guarded on ``scan_status = 'pending'``); resets strikes on a
 verdict; strikes-without-reject on failure (a batch LLM exception bumps every video
 in the batch and leaves them pending; a per-id omission bumps that id alone, still
-pending — NO default-to-rejected); drops hallucinated ids; passes thumbnails as
-image_urls in candidate order; stamps rejected_at only on rejects; and logs one
-scan cost row per gym.
+pending — NO default-to-rejected); drops hallucinated ids; renders each candidate's
+summary + structured fields (genre, disciplines, facets) as text with NO image
+attached; stamps rejected_at only on rejects; and logs one scan cost row per gym.
 """
 
 from __future__ import annotations
@@ -44,7 +44,8 @@ def _candidate(
     *,
     gym_id: str = "gym-1",
     run_id: str = "run-1",
-    thumbnail: str = "https://i.ytimg.com/x.jpg",
+    disciplines: list[str] | None = None,
+    facets: dict | None = None,
 ) -> dict:
     return {
         "gym_id": gym_id,
@@ -52,9 +53,10 @@ def _candidate(
         "video_id": vid,
         "title": f"Title {vid}",
         "channel_name": "Chan",
-        "thumbnail_url": thumbnail,
         "genre": "educational",
+        "disciplines": disciplines if disciplines is not None else ["boxing"],
         "summary": "summary text",
+        "facets": facets if facets is not None else {"skill_level": "beginner"},
     }
 
 
@@ -213,24 +215,24 @@ def test_rejected_stamps_rejected_at() -> None:
     assert rows["b"]["rejected_at"] is not None
 
 
-def test_multimodal_image_order() -> None:
+def test_text_only_prompt_has_structured_fields() -> None:
     db = RoutingFakeDb()
     db.rows["scan_targets"] = [
-        _candidate("a", thumbnail="https://a.jpg"),
-        _candidate("b", thumbnail=""),  # no image
-        _candidate("c", thumbnail="https://c.jpg"),
+        _candidate("a", disciplines=["boxing", "kickboxing"], facets={"gi": False}),
     ]
     db.ones["spec_latest"] = _criteria()
-    llm = FakeLLM(structured=_handler({"a", "b", "c"}))
+    llm = FakeLLM(structured=_handler({"a"}))
     scanner, _ = _scanner(db, llm)
 
     asyncio.run(scanner.drain(_abort()))
 
     call = llm.structured_calls[0]
-    # images are in candidate order, skipping the no-image candidate.
-    assert call["image_urls"] == ["https://a.jpg", "https://c.jpg"]
+    # Text-only: no image is attached — the summary carries the visual detail.
+    assert call["image_urls"] is None
     prompt = call["messages"][0]["content"]
-    assert "(no image provided)" in prompt  # 'b' noted, not dropped
+    assert "boxing, kickboxing" in prompt  # disciplines rendered
+    assert '"gi":false' in prompt  # facets rendered as compact JSON
+    assert "summary text" in prompt  # the summary, the primary signal
     assert "worth surfacing" in prompt  # latest spec criteria in the prompt
 
 

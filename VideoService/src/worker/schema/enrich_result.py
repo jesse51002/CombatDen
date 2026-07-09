@@ -2,10 +2,11 @@
 
 Per pool video, a single vision call (thumbnail image + title/channel/description
 + transcript slice) produces the genre ``tag`` and the ``disciplines`` it is
-relevant to (both written onto ``video``), plus a prose ``summary`` that MUST
-describe what the thumbnail shows (attire like gi vs no-gi, setting, production
-style) and free-shape ``facets``. The summary is then embedded into
-``video_rag``.
+relevant to (both written onto ``video``), plus a detailed prose ``summary`` and
+free-shape ``facets``. The summary is embedded into ``video_rag`` AND is the sole
+signal the later per-gym scan reads (scan never re-sees the thumbnail or the
+transcript), so it must fold in the visual detail — attire like gi vs no-gi,
+setting, production style — alongside the content, format, and who is in it.
 
 ``extra="forbid"`` so a malformed reply is rejected and re-asked by
 ``complete_structured_with_cost``'s validate-and-retry loop. ``disciplines`` is
@@ -31,8 +32,9 @@ class EnrichResult(BaseModel):
     # Every discipline this video is relevant to (>= 1). Written to
     # ``video.disciplines``; routes the video into the slices gyms scan.
     disciplines: list[GymType] = Field(min_length=1)
-    # Prose content summary that MUST include what the thumbnail depicts
-    # (attire, setting, production style) as well as the content. Embedded.
+    # Detailed prose summary (~4-8 sentences). Embedded AND the ONLY signal the
+    # per-gym scan sees, so it must include what the thumbnail depicts (attire,
+    # setting, production style) plus the content, format, and who is in it.
     summary: str
     # Free-shape structured attributes, e.g. {"gi": false, "setting":
     # "competition", "skill_level": "beginner"}. Stored on ``video_rag``.
