@@ -20,6 +20,8 @@ from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.shared.util.video_id import video_id_from_url
 
+from scripts.shared.video_rag_sidecar import VideoRagRecord, VideoRagSidecar
+
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
@@ -131,6 +133,28 @@ class VideoDbWriter:
             return 0
         async with self._db.session() as session:
             await session.execute(text(_sql("upsert_video.sql")), rows)
+            await session.commit()
+        return len(rows)
+
+    async def upsert_video_rag(self, records: Sequence[VideoRagRecord]) -> int:
+        """Upsert enriched RAG rows from the template sidecar (FK-safe insert,
+        ON CONFLICT DO NOTHING — SEEDS video_rag, never clobbers a live worker
+        enrichment). Facets are JSON-encoded and the embedding floats are rendered
+        to the pgvector text literal here. Returns the number of rows attempted."""
+        rows = [
+            {
+                "video_id": r.video_id,
+                "summary": r.summary,
+                "facets": json.dumps(r.facets),
+                "embedding": VideoRagSidecar.to_pgvector(r.embedding),
+                "embedding_model": r.embedding_model,
+            }
+            for r in records
+        ]
+        if not rows:
+            return 0
+        async with self._db.session() as session:
+            await session.execute(text(_sql("insert_video_rag.sql")), rows)
             await session.commit()
         return len(rows)
 

@@ -1,14 +1,21 @@
-"""Stage 2 — scrape the spec's queries into the shared pool.
+"""Scrape step — scrape the spec's queries into the shared pool, then write the
+run's PENDING feed rows.
 
 Discovery + metadata come from the official YouTube Data API (two calls per
 query: ``search.list`` for the ids, ``videos.list`` for stats + duration),
 concurrent under a semaphore; a failed query is logged and dropped, never
 aborting the run (partial scrape is fine). Results are transformed by the pure
 ``worker_transforms`` and merge-upserted into ``video``: new videos land untagged
-and transcript-less (the enrich stage fetches transcripts lazily), existing
+and transcript-less (the enrich sweep fetches transcripts lazily), existing
 videos keep their content (never wiped with NULLs) and gain the surfacing query.
 The YouTube Data API is free within quota, so the scrape reports its quota usage
 (a diagnostic) and a spend of $0.
+
+``write_feed`` is the scrape step's ONLY feed write: it carries the previous
+completed run's rows forward FIRST (ALL rows incremental, manual-only fresh), then
+inserts every funnel candidate as a ``pending`` row ``ON CONFLICT DO NOTHING`` so a
+carried row always wins. The run is left ``running`` — the enrich + scan sweeps and
+the finalizer take it from there; nothing is enriched, scanned, or completed here.
 """
 
 from __future__ import annotations
@@ -18,6 +25,8 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+from sqlalchemy import text
 
 from schema.video_output import VideoOutput
 from src.shared.database import DirectDatabasePool
@@ -39,6 +48,9 @@ SCRAPE_LANGUAGE = "en"
 # search.list costs 100 quota units per query; videos.list adds ~1/query (a
 # rounding error), so the search cost dominates the per-run quota diagnostic.
 QUOTA_UNITS_PER_SEARCH = 100
+# Fresh-run carry-forward: copy ONLY the owner's manual verdicts (incremental
+# copies ALL prior rows — the empty clause).
+MANUAL_ONLY_CLAUSE = "AND curation_type = 'manual'"
 
 
 @dataclass(frozen=True)
@@ -119,6 +131,42 @@ class WorkerScraper:
                 return []
             details_by_id = {youtube_item_id(d): d for d in details}
             return parse_youtube_items(search_items, details_by_id, query)
+
+    async def write_feed(
+        self, spec: SpecData, run_id: str, candidate_ids: list[str]
+    ) -> int:
+        """Write this run's feed rows in ONE txn: carry the previous completed
+        run's rows forward FIRST, then insert every candidate as ``pending``.
+
+        Carried rows win the ``ON CONFLICT`` (inserted first), so a carried
+        manual/verdict row is never downgraded to pending. Returns the number of
+        candidates offered to the pending insert (pre-conflict)."""
+        async with self._db.session() as session:
+            if spec.prev_run_id is not None:
+                clause = MANUAL_ONLY_CLAUSE if spec.criteria_changed else ""
+                cf_sql = load_sql(
+                    SQL_DIR / "worker_carry_forward.sql", {"manual_only": clause}
+                )
+                await session.execute(
+                    text(cf_sql),
+                    {"new_run_id": run_id, "prev_run_id": spec.prev_run_id},
+                )
+            params = [
+                {"gym_id": spec.gym_id, "video_id": vid, "run_id": run_id}
+                for vid in candidate_ids
+            ]
+            if params:
+                await session.execute(
+                    text(load_sql(SQL_DIR / "worker_insert_pending.sql")), params
+                )
+            await session.commit()
+        logger.info(
+            "gym %s scrape feed: %d candidates written as pending (run %s)",
+            spec.gym_id,
+            len(candidate_ids),
+            run_id,
+        )
+        return len(candidate_ids)
 
     async def _merge(self, fresh: list[VideoOutput]) -> tuple[int, int]:
         """Merge-upsert the deduped fresh videos; return (new, updated) counts."""

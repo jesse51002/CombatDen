@@ -87,36 +87,44 @@ Two independent halves over the shared Postgres — they never call each other:
 flowchart TD
     human(["Operator"]) --> maker["gym_maker<br/>(author gyms/&lt;id&gt;.yaml)"]
     maker --> gym[("gyms/&lt;id&gt;.yaml<br/>gym_type · theme · spec · queries")]
-    gym -->|make sync-gyms| tmpl[("video_gym* templates<br/>+ video pool (Postgres)")]
+    gym -->|make sync-gyms| tmpl[("video_gym* templates<br/>+ video pool + video_rag sidecar (Postgres)")]
 
     backend(["FastApiBackend<br/>spec save (admin_update)"]) -->|writes| real[("gym_video_spec · video pool · video_rag<br/>gym_video_feed · video_run (Postgres)")]
-    real -.->|"derive due gym from timestamps (no queue)"| worker["worker (src/worker)<br/>scrape → funnel → enrich → scan → feed-write"]
+    real -.->|"scrape step: derive due gym from timestamps (no queue)"| worker["worker (src/worker)<br/>tick = cleanup → finalize → one drained step<br/>(scan → enrich → scrape)"]
     youtube(["YouTube Data API v3<br/>(discovery + metadata)"]) -.-> worker
     apify(["Apify transcript actor<br/>(lazy, at enrich)"]) -.-> worker
     llm(["enrich · scan · embed LLMs"]) -.-> worker
     worker -->|writes| real
 
-    fb["FastApiBackend videos domain<br/>feed · RAG recs · search"]
+    fb["FastApiBackend videos domain<br/>unified feed · owner listing · RAG recs"]
     tmpl --> fb
     real --> fb
 ```
 
 - **gym_maker** (operator) authors a gym file; `make sync-gyms` loads the template
-  catalog + pool the FastApiBackend serves. Its guide is `references/gym_maker.md`.
-- **the worker** (`src/worker`, self-scheduling — no queue, no backend trigger) derives
-  the single highest-priority "due" gym each tick straight from timestamps already in
-  the schema (a fresh `admin_update` spec version, a settled manual feed curation, or a
-  weekly refresh floor), then runs the scrape → funnel → enrich → scan → feed-write
-  pipeline — writing the shared `video` pool, per-video `video_rag`, and each real gym's
-  `gym_video_feed` runs (the content the FastApiBackend serves: feed + RAG
-  member-recs/search). It absorbed the old `scripts/scraper` + `scripts/scan` scripts.
-  Its guides are `references/scraper.md` (ingest) + `references/scan.md` (judgment) in
-  the `videoservice` skill.
+  catalog + pool + the pre-built `video_rag` sidecar the FastApiBackend serves. Its
+  guide is `references/gym_maker.md`.
+- **the worker** (`src/worker`, self-scheduling — no queue, no backend trigger) runs
+  DECOUPLED, DB-backed steps, not a per-gym pipeline. Every tick runs cleanup
+  (strike-maxed video deletion) + finalize (complete/fail `running` runs from their
+  feed rows) for free, then drains ONE heavy step, first-with-work: **scan** (a
+  global multimodal verdict sweep), else **enrich** (a global RAG-building sweep),
+  else **scrape** (the only quota-bound, per-gym, run-opening step — it alone still
+  derives its due gym each pass straight from timestamps already in the schema: a
+  fresh `admin_update` spec version, a settled manual feed curation, or a weekly
+  refresh floor) — writing the shared `video` pool, per-video `video_rag`, and each
+  real gym's `gym_video_feed` runs (the content the FastApiBackend serves: the
+  unified feed, the owner listing, and RAG member recs). It absorbed the old
+  `scripts/scraper` + `scripts/scan` scripts. Its guides are `references/scraper.md`
+  (the tick + the scrape step) + `references/scan.md` (enrich + scan + the strike
+  mechanic) in the `videoservice` skill.
 
-> **One gym at a time.** The worker holds a global `"video_worker_run"` lock and
-> processes one gym per tick; never run two pipelines at once.
+> **One worker instance at a time.** The worker holds a global `"video_worker_run"`
+> lock — only one instance ticks at once. The scrape step still processes one gym at
+> a time (its due-gym selection); enrich and scan are global sweeps that touch many
+> gyms' videos within a single tick.
 
-For the worker's in-depth flow — `run_tick` (lock → orphan recovery → run caps → due-gym derivation → open run), the six pipeline stages, and the five `cost_log` rows — see **[`worker.mermaid`](worker.mermaid)** (render with the `mermaid-creation` skill).
+For the worker's in-depth flow — the tick order (lock → cleanup → finalize → one drained step, no orphan rule), the scrape/enrich/scan steps, and the `cost_log` attribution per step — see **[`worker.mermaid`](worker.mermaid)** (render with the `mermaid-creation` skill).
 
 ## Cost log
 
@@ -137,11 +145,12 @@ One skill, `videoservice` (`.claude/skills/videoservice/`), with a lean router
 
 - `references/gym_maker.md` — author/edit a gym (the interview + the writable
   surface).
-- `references/scraper.md` — run the scrape + classify.
-- `references/scan.md` — run a scan (thin).
+- `references/scraper.md` — the tick order (cleanup → finalize → one drained step)
+  and the scrape step in depth.
+- `references/scan.md` — the enrich + scan sweeps and the strike/cleanup mechanic.
 
-Use it to set up a gym, write a gym's videos config / classes / rewards, run the
-scraper, or run a scan.
+Use it to set up a gym, write a gym's videos config / classes / rewards, or
+understand / run / debug the worker.
 
 ## Scripts + the worker
 
@@ -151,7 +160,7 @@ All run via **`poetry run`** (never bare `python3` / `.venv/bin/*`):
 make gym-check GYM_ID=all          # validate gym files round-trip the Gym model
 make sync-gyms GYM_ID=all          # load authored gym YAML -> SQL (idempotent; runs the import below)
 poetry run python -m scripts.import_yaml.run   # one-time cutover: pool + feeds + cost log -> SQL
-make worker                        # run the background pipeline (scrape → funnel → enrich → scan → feed-write)
+make worker                        # run the background worker (cleanup → finalize → one drained step: scan → enrich → scrape)
 ```
 
 `make sync-gyms` runs `scripts.import_yaml` internally with `--skip-cost-log` (so
@@ -160,9 +169,10 @@ the bare `scripts.import_yaml.run` above. `gym-check` / `sync-gyms` / the import
 pick their DB via the `ENV_FILE` flag (default `.env`;
 `ENV_FILE=.env.prod make sync-gyms GYM_ID=all`, or the `make sync-gyms-prod` helper
 — prod secrets in the gitignored `.env.prod`). `make worker` is a long-running loop
-against `.env` — it self-schedules (no queue, no backend trigger): run it locally
-alongside the backend and it picks up a gym on its own next tick once a spec save /
-feed curation / weekly floor makes that gym due.
+against `.env` — it self-schedules (no queue, no backend trigger): every tick it
+drains whichever heavy step has work (scan, else enrich, else scrape), and the
+scrape step in particular picks up a gym on its own once a spec save / feed
+curation / weekly floor makes that gym due.
 
 Env in `.env`: `DATABASE_URL` (the scripts + worker), plus `YOUTUBE_API_KEY`
 (worker discovery + metadata) and `APIFY_TOKEN` (worker transcript fetches, at

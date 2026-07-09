@@ -18,10 +18,15 @@
 --
 -- Gyms already at :gym_run_cap runs within the rolling :cap_window_hours window
 -- are excluded (per-gym cap; the system-wide cap is a separate scalar guard the
--- worker checks before this query). Ties within a tier go to the oldest waiting
--- trigger first.
+-- worker checks before this query). A gym with an in-flight ('running') run is
+-- ALSO excluded — only the scrape step opens runs, and a gym must never have two
+-- in-flight runs at once (the second would race the finalize/serve logic). Ties
+-- within a tier go to the oldest waiting trigger first.
 WITH spec_gyms AS (
     SELECT DISTINCT gym_id FROM gym_video_spec
+),
+running_gyms AS (
+    SELECT DISTINCT gym_id FROM video_run WHERE status = 'running'
 ),
 last_run AS (
     SELECT gym_id, max(created_at) AS last_run_at
@@ -75,6 +80,7 @@ tiered AS (
     LEFT JOIN last_admin la ON la.gym_id = g.gym_id
     LEFT JOIN last_curation lc ON lc.gym_id = g.gym_id
     WHERE COALESCE(rw.n, 0) < :gym_run_cap
+      AND g.gym_id NOT IN (SELECT gym_id FROM running_gyms)
 )
 SELECT gym_id
 FROM tiered

@@ -19,9 +19,11 @@ from src.shared.database import DirectDatabasePool
 from src.shared.services.llm_client import LiteLLMClient
 from src.shared.services.resource_lock import ResourceLock
 from src.worker.worker_apify import WorkerTranscriptClient
+from src.worker.worker_cleanup import WorkerCleanup
 from src.worker.worker_config import settings
 from src.worker.worker_cost_log import WorkerCostLog
 from src.worker.worker_enricher import WorkerEnricher
+from src.worker.worker_finalizer import WorkerFinalizer
 from src.worker.worker_funnel import WorkerFunnel
 from src.worker.worker_scanner import WorkerScanner
 from src.worker.worker_scraper import WorkerScraper
@@ -38,22 +40,25 @@ EXPECTED_EMBEDDING_DIM = 1536
 
 
 def _build_service(db_pool: DirectDatabasePool) -> WorkerService:
-    """Wire the worker's dependencies: one LLM client shared across the stages,
-    the YouTube Data API client (discovery + metadata) for the scraper, and the
-    Apify transcript client (lazy fetch) for the enricher."""
+    """Wire the worker's dependencies: one LLM client shared across the steps, the
+    YouTube Data API client (discovery + metadata) for the scraper, the Apify
+    transcript client (lazy fetch) for the enrich sweep, and the shared cost log."""
     llm = LiteLLMClient()
     lock = ResourceLock(db_pool)
     youtube = WorkerYouTubeClient(settings.youtube_api_key)
     transcript = WorkerTranscriptClient(settings.apify_token)
+    cost_log = WorkerCostLog(db_pool)
     return WorkerService(
         db_pool=db_pool,
         resource_lock=lock,
         spec=WorkerSpec(db_pool),
         scraper=WorkerScraper(db_pool, youtube),
         funnel=WorkerFunnel(db_pool, llm),
-        enricher=WorkerEnricher(db_pool, llm, transcript),
-        scanner=WorkerScanner(db_pool, llm),
-        cost_log=WorkerCostLog(db_pool),
+        enricher=WorkerEnricher(db_pool, llm, transcript, cost_log),
+        scanner=WorkerScanner(db_pool, llm, cost_log),
+        cleanup=WorkerCleanup(db_pool),
+        finalizer=WorkerFinalizer(db_pool),
+        cost_log=cost_log,
     )
 
 

@@ -1,47 +1,110 @@
-# Worker judgment — scan → feed-write
+# Worker judgment + RAG build — enrich, scan, and the strike mechanic
 
-The second half of the background **worker** (`src/worker`): turn the enriched
-candidates into the gym's served feed. Continues from `scraper.md` (scrape →
-funnel → enrich) as part of the same `make worker` pipeline — not a separate
-command.
+The other half of the background **worker** (`src/worker`): two GLOBAL,
+gym-agnostic sweeps — **enrich** (build the RAG layer) and **scan** (settle feed
+verdicts) — plus the per-video strike/cleanup mechanic they both feed. Continues
+from `scraper.md` (the tick order + the scrape step); these are steps 2 and 3 of
+"one heavy step, first-with-work" — **scan is tried FIRST, then enrich** (backlog
+before fresh ingest), so read them in tick-priority order below even though this
+file's own name matches the older "judgment" half.
 
-## Stage 5 — scan
+Neither sweep is tied to any single gym or run — each drains its WHOLE target set
+across every gym in one pass, unlike the per-gym `scraper.md` step.
 
-Load the funnel candidates joined to `video_rag` (a candidate whose enrich failed —
-no `video_rag` row — is simply not scanned). Judge them in batches of
-`scan_batch_size` (≈12 summaries per LLM call, `scan_model`
-`gemini/gemini-2.5-flash-lite`, concurrency `worker_scan_concurrency`) against the
-spec's `videos_desc` / `avoid_desc` → a keep/drop verdict per video. A missing or
-hallucinated verdict defaults to **rejected**.
+## Scan (tried first — global sweep, per-gym batches, MULTIMODAL)
 
-## Stage 6 — feed write (carry-forward)
+**Targets** (`worker_scan_targets.sql`): `pending` feed rows in each gym's latest
+non-failed run whose video already has a `video_rag` row (enriched) and is under
+the strike ceiling, grouped by gym.
 
-In one transaction, open a new `video_run` (`status='running'`) and:
+Per gym: load that gym's **LATEST** spec **at scan time** (`worker_spec_load_latest.sql`
+— judged against the CURRENT criteria, not whatever spec was in force when the
+candidate was scraped), batch the candidates (`scan_batch_size`, 12), and run a
+**multimodal** keep/drop — each batch's candidate thumbnails are passed as
+`image_urls` in the same order the candidates are listed in the prompt
+(`scan_model`, `gemini/gemini-2.5-flash-lite`), so the model weighs the thumbnail
+visually, not just the summary text.
 
-1. **Carry forward** the previous completed run's feed rows FIRST — ALL rows in
-   incremental mode (criteria unchanged), only the owner's **manual-curation** rows
-   in a fresh run (criteria changed).
-2. Insert the fresh **automatic** verdicts `ON CONFLICT (video_run_id, video_id) DO
-   NOTHING`. Because carried rows are inserted first, they win — **the owner's
-   manual keep/reject always beats a fresh automatic verdict.**
-3. Complete the run (`status='completed'`, `finished_at`). Only a completed run is
-   ever served: every "latest run" read filters `status='completed'`, so a
-   mid-flight `running` run never becomes latest and blanks the gym's feed.
+**Verdicts are written by UPDATE** (`worker_update_verdict.sql`), not by a fresh
+feed insert — there is no per-run scan-write. A `pending` row is flipped to
+`accepted`/`rejected`, guarded by `scan_status = 'pending'` so a manual verdict (or
+a prior automatic one) is never overwritten. A verdicted video's strike counter is
+reset to 0.
 
-A `scan` row is written to the generic `cost_log` table for the run (`source='video'`,
-stamped `run_id` (TEXT) + `gym_id` + `model` + `cost_usd`).
+**Strike semantics — no default-to-rejected.** A batch whose LLM call raises bumps
+`failure_count` for EVERY video in the batch and leaves the rows `pending`
+(retried next sweep, by this gym or a later sweep); a video the model omits from an
+otherwise-successful batch is bumped alone and stays `pending`. A missing verdict
+is never silently rejected.
 
-## Failure semantics
+One `scan` cost row is logged per gym per sweep (`source='video'`, that gym + its
+latest run, `scan_model`, the batched LLM spend).
 
-Any stage exception marks the run `failed` (with the error). There is no
-re-enqueue — a failed run's `created_at` still counts as the gym's last-run
-watermark, so a deterministic failure does not hot-loop (poison guard): the gym
-simply waits for a new tier-1/2 trigger or the tier-3 weekly floor to become due
-again. A crash that leaves a run stuck `running` is recovered (marked `failed`,
-same no-re-enqueue rule) by the next tick's orphan sweep.
+## Enrich (tried second, if scan had no work — global, gym-agnostic sweep)
 
-## Sequential by design
+**Targets** (`worker_enrich_targets.sql`): every video that still LACKS a
+`video_rag` row and is under the strike ceiling, drawn from each gym's latest
+non-failed run (`pending`/`accepted` rows — `rejected` rows are skipped;
+`accepted`-without-rag rows are imported presets or pre-RAG carry-forwards that
+still need an embedding) **∪ ALL owner-section rows** (`video_run_id IS NULL`). Not
+tied to any single gym or run.
 
-The global `"video_worker_run"` lock means the worker processes **one gym at a
-time** across every instance; within a gym, provider calls fan out only to the
-configured `worker_*_concurrency`. Never bypass the lock.
+Per video, ONE multimodal call (`enrich_model`, `gemini/gemini-2.5-flash-lite`)
+over the thumbnail image + metadata + a transcript slice
+(`enrich_transcript_char_budget`, 8000 chars) → `{genre tag, disciplines, prose
+summary, facets}`. A candidate whose pool row has **no cached transcript**
+triggers ONE lazy **Apify** `pintostudio/youtube-transcript-scraper` run here
+(`apify_transcript_cost_per_video_usd` ≈ $0.01/video); the fetched transcript
+feeds this video's prompt AND is **cached back onto `video.transcript`** so a
+later sweep reuses it instead of re-paying Apify. A transcript miss/failure
+degrades to a no-transcript placeholder and is **NOT a strike**.
+
+The tag + disciplines are written back onto the pool `video` row; summaries are
+batch-embedded (`embedding_model`, `openai/text-embedding-3-small` → `vector(1536)`,
+chunks of `EMBED_BATCH_SIZE`, 64) and inserted as `video_rag` rows. This is the
+RAG layer the FastApiBackend's unified feed and member recs rank against — the
+model + dimension are a **cross-service contract** (`run.py` asserts
+`embedding_dim == 1536` at startup; the served feed's `INNER JOIN video_rag` is
+the enriched-gate every client reads through — see "the served feed" below).
+
+**Strike semantics — hard errors only.** A video whose multimodal call OR whose
+chunk's embed call raises gets `failure_count += 1` and is skipped; a video that
+enriches successfully gets `failure_count` reset to 0. A missing transcript is
+never a strike.
+
+Spend is logged once at the end of the sweep as **POOL-LEVEL** cost rows
+(`gym_id`/`run_id` NULL — a swept video is shared across gyms, so per-gym
+attribution would be arbitrary): `transcript` (the lazy Apify spend),
+`enrich` (the multimodal calls), `embed` (the summary embeddings).
+
+## The strike / cleanup mechanic (`video.failure_count`)
+
+Both sweeps share one counter on the pool `video` row: bumped on a hard failure,
+reset to 0 on success. The tick's **cleanup** step (`scraper.md`, step 1) deletes
+any video at `worker_failure_max` (3) strikes every tick, before finalize runs —
+FK cascades remove its feed rows, its `video_rag` row, and any member recs.
+
+## Failure semantics (runs, not videos)
+
+A run's completion/failure is decided by the tick's **finalize** step
+(`scraper.md`, step 2), purely from the run's feed rows — there is no per-stage
+run-failure and no orphan sweep. See `scraper.md` for the complete/fail rules.
+
+## The served feed (how the backend reads this work)
+
+Not part of the worker, but the reason enrich + scan exist: the FastApiBackend's
+**unified feed** (`GET /gyms/{id}/videos`) always merges the owner section with the
+gym's latest **COMPLETED** run and serves ONLY **enriched-AND-accepted** videos
+(`INNER JOIN video_rag` — an `accepted` row with no embedding stays invisible until
+the enrich sweep reaches it). A **separate, ungated** owner-management listing
+(`GET /gyms/{id}/videos/owner`) shows an owner-added video the instant it's added,
+before enrichment, so the CRM can badge it "processing…" while the worker catches
+up. See `FastApiBackend/CLAUDE.md`'s `videos` domain section for the full ranking
+model (σ-scaled owner boost + decayed watch-penalty).
+
+## Sequential by design (within a gym; global across sweeps)
+
+The global `"video_worker_run"` lock means only one worker instance ticks at a
+time. Within the scan/enrich sweeps, provider calls fan out only to the configured
+`worker_*_concurrency` (`worker_enrich_concurrency`, `worker_scan_concurrency`).
+Never bypass the lock or run two workers concurrently.

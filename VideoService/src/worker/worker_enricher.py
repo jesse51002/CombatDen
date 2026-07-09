@@ -1,18 +1,25 @@
-"""Stage 4 — enrich candidates + owner videos with ONE multimodal call each.
+"""Enrich sweep — a gym-agnostic pass that gives every un-enriched target video
+ONE multimodal classify+summarize+embed and a ``video_rag`` row.
 
-The enrich set is the budgeted candidates ∪ the gym's owner-section videos, minus
-those already enriched (a ``video_rag`` row). Per video, a single vision call
-(thumbnail image + title/channel/description + transcript slice) yields the genre
-``tag`` + ``disciplines`` (written onto ``video``) and a ``summary`` + ``facets``;
-the summaries are then batch-embedded and stored in ``video_rag``. Per-video
-failures are isolated (skip + count), never aborting the run; calls fan out under
-a concurrency gate.
+The target set (``worker_enrich_targets.sql``) is every video that still LACKS a
+``video_rag`` row and is under the strike ceiling, drawn from each gym's latest
+non-failed run (``pending``/``accepted`` rows) ∪ ALL owner-section rows — so it is
+NOT tied to any single gym or run. The sweep DRAINS the whole target set: per
+video, a single vision call (thumbnail image + title/channel/description +
+transcript slice) yields the genre ``tag`` + ``disciplines`` (written onto
+``video``) and a ``summary`` + ``facets``; summaries are batch-embedded into
+``video_rag``. Targets are processed in chunks (one embed call per chunk), with the
+abort flag checked between chunks.
 
-Transcripts are fetched LAZILY here: a candidate whose pool row has no cached
-transcript triggers one Apify transcript-actor run (under the same gate), the
-result feeds this video's prompt AND is cached back onto ``video`` so a later run
-reuses it instead of re-paying Apify. A transcript miss/failure degrades to the
-no-transcript placeholder — it never aborts the video's enrich or the run.
+Transcripts are fetched LAZILY: a target with no cached transcript triggers one
+Apify run, the result feeds the prompt AND is cached back onto ``video``; a
+miss/failure degrades to the placeholder and is NOT a strike.
+
+Strike semantics — HARD errors only: a video whose multimodal call OR whose chunk's
+embed call raises gets ``failure_count += 1`` (``worker_bump_failure.sql``) and is
+skipped; a video that enriches successfully gets ``failure_count`` reset to 0
+(``worker_reset_failure.sql``). A missing transcript is not an error. Spend is
+logged as POOL-LEVEL cost rows (gym_id / run_id NULL) once at the end.
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
@@ -30,16 +38,19 @@ from src.shared.interfaces.llm_client import LLMClient
 from src.shared.sql_loader import load_sql
 from src.shared.util.duration import format_duration
 from src.worker.schema.enrich_result import EnrichResult
+from src.worker.worker_abort import check_abort
 from src.worker.worker_apify import WorkerTranscriptClient
 from src.worker.worker_config import settings
+from src.worker.worker_cost_log import WorkerCostLog
 
 logger = logging.getLogger(__name__)
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 ENRICH_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "worker_enrich.md"
 
-# Texts per embedding call. The provider caps batch size / tokens; 64 short
-# summaries per call keeps well under it while amortising the request overhead.
+# Videos per sweep chunk == texts per embed call. The provider caps batch
+# size / tokens; 64 short summaries per call keeps well under it while amortising
+# the request overhead. Also the granularity at which the abort flag is checked.
 EMBED_BATCH_SIZE = 64
 # Language requested from the transcript actor for the lazy fetch.
 TRANSCRIPT_LANGUAGE = "en"
@@ -58,8 +69,8 @@ class EnrichResultRow:
 
 @dataclass(frozen=True)
 class EnrichOutcome:
-    """One video's enrich attempt: the row (None when the LLM call failed), the
-    LLM spend, whether a transcript fetch was attempted (billable), and the
+    """One video's enrich attempt: the row (None when the multimodal call failed),
+    the LLM spend, whether a transcript fetch was attempted (billable), and the
     transcript actually fetched (to cache), if any."""
 
     video_id: str
@@ -69,118 +80,117 @@ class EnrichOutcome:
     fetched_transcript: str | None
 
 
-@dataclass(frozen=True)
-class EnrichCost:
-    """What the enrich stage did: spend (LLM + embed + transcript) + row counts."""
+@dataclass
+class _SweepTotals:
+    """Running spend + counts accumulated across the sweep's chunks."""
 
-    llm_usd: float = 0.0
+    processed: int = 0
+    enriched: int = 0
+    enrich_usd: float = 0.0
     embed_usd: float = 0.0
-    transcript_usd: float = 0.0
-    enriched_count: int = 0
-    skipped_count: int = 0
+    transcripts_fetched: int = 0
 
 
 class WorkerEnricher:
-    """Runs the one-call classify+summarize+embed over the enrich set, fetching
-    missing transcripts lazily."""
+    """Drains the un-enriched target set: one multimodal enrich + embed per video,
+    fetching missing transcripts lazily, striking hard failures."""
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         llm_client: LLMClient,
         transcript_client: WorkerTranscriptClient,
+        cost_log: WorkerCostLog,
     ) -> None:
         self._db = db_pool
         self._llm = llm_client
         self._transcript = transcript_client
+        self._cost_log = cost_log
 
-    async def enrich(self, gym_id: str, candidate_ids: list[str]) -> EnrichCost:
-        """Enrich the candidates + owner videos that are not yet enriched."""
-        to_enrich = await self._resolve_targets(gym_id, candidate_ids)
-        if not to_enrich:
-            return EnrichCost()
-        videos = await self._db.fetch_all(
-            load_sql(SQL_DIR / "worker_load_videos_for_enrich.sql"),
-            {"ids": to_enrich},
+    async def drain(self, abort: asyncio.Event) -> bool:
+        """Enrich every target. Returns True iff there was work this sweep."""
+        targets = await self._db.fetch_all(
+            load_sql(SQL_DIR / "worker_enrich_targets.sql"),
+            {"max_failures": settings.worker_failure_max},
         )
-        outcomes = await self._enrich_all(videos)
-        llm_usd = sum(o.llm_usd for o in outcomes)
-        fetch_count = sum(1 for o in outcomes if o.attempted_fetch)
+        if not targets:
+            return False
+
+        vocab = self.discipline_vocab()
+        sem = asyncio.Semaphore(settings.worker_enrich_concurrency)
+        totals = _SweepTotals()
+        for chunk in self._chunks(targets, EMBED_BATCH_SIZE):
+            check_abort(abort)
+            await self._process_chunk(chunk, vocab, sem, totals)
+
         transcript_usd = round(
-            fetch_count * settings.apify_transcript_cost_per_video_usd, 4
+            totals.transcripts_fetched
+            * settings.apify_transcript_cost_per_video_usd,
+            4,
+        )
+        await self._cost_log.log_enrich(
+            transcript_usd=transcript_usd,
+            enrich_usd=totals.enrich_usd,
+            embed_usd=totals.embed_usd,
+            videos=totals.processed,
+            transcripts_fetched=totals.transcripts_fetched,
+        )
+        logger.info(
+            "enrich sweep: %d processed, %d enriched, %d transcripts fetched",
+            totals.processed,
+            totals.enriched,
+            totals.transcripts_fetched,
+        )
+        return True
+
+    async def _process_chunk(
+        self,
+        chunk: list[dict],
+        vocab: str,
+        sem: asyncio.Semaphore,
+        totals: _SweepTotals,
+    ) -> None:
+        """Enrich one chunk: fan out the vision calls, cache transcripts, embed
+        the successes in one call, then strike / heal the video rows."""
+        outcomes = list(
+            await asyncio.gather(*(self.enrich_one(v, vocab, sem) for v in chunk))
         )
         await self._cache_transcripts(outcomes)
+        totals.processed += len(outcomes)
+        totals.enrich_usd += sum(o.llm_usd for o in outcomes)
+        totals.transcripts_fetched += sum(1 for o in outcomes if o.attempted_fetch)
 
         rows = [o.row for o in outcomes if o.row is not None]
-        skipped = sum(1 for o in outcomes if o.row is None)
-        if not rows:
-            logger.info(
-                "gym %s enrich: 0 enriched, %d skipped, %d transcripts fetched; "
-                "transcript $%.4f",
-                gym_id,
-                skipped,
-                fetch_count,
-                transcript_usd,
-            )
-            return EnrichCost(
-                llm_usd=llm_usd,
-                transcript_usd=transcript_usd,
-                skipped_count=skipped,
-            )
+        struck = [o.video_id for o in outcomes if o.row is None]
+        if rows:
+            await self._write_tags(rows)
+            try:
+                totals.embed_usd += await self._embed_and_store(rows)
+            except Exception as exc:  # noqa: BLE001 - embed failure strikes chunk
+                logger.warning(
+                    "embed failed for chunk — striking %d video(s): %s",
+                    len(rows),
+                    exc,
+                )
+                struck += [r.video_id for r in rows]
+            else:
+                totals.enriched += len(rows)
+                await self._reset_failure([r.video_id for r in rows])
+        if struck:
+            await self._bump_failure(struck)
 
-        await self._write_tags(rows)
-        embed_usd = await self._embed_and_store(rows)
-        logger.info(
-            "gym %s enrich: %d enriched, %d skipped, %d transcripts fetched; "
-            "LLM $%.4f embed $%.4f transcript $%.4f",
-            gym_id,
-            len(rows),
-            skipped,
-            fetch_count,
-            llm_usd,
-            embed_usd,
-            transcript_usd,
-        )
-        return EnrichCost(
-            llm_usd=llm_usd,
-            embed_usd=embed_usd,
-            transcript_usd=transcript_usd,
-            enriched_count=len(rows),
-            skipped_count=skipped,
-        )
-
-    async def _resolve_targets(
-        self, gym_id: str, candidate_ids: list[str]
-    ) -> list[str]:
-        """Candidates ∪ owner videos, minus those already enriched."""
-        owner = await self._db.fetch_all(
-            load_sql(SQL_DIR / "worker_owner_feed_ids.sql"), {"gym_id": gym_id}
-        )
-        combined = list(
-            dict.fromkeys(candidate_ids + [r["video_id"] for r in owner])
-        )
-        if not combined:
-            return []
-        already = await self._db.fetch_all(
-            load_sql(SQL_DIR / "worker_existing_rag_ids.sql"), {"ids": combined}
-        )
-        enriched = {r["video_id"] for r in already}
-        return [vid for vid in combined if vid not in enriched]
-
-    async def _enrich_all(self, videos: list[dict]) -> list[EnrichOutcome]:
-        """Fan out the per-video enrich calls; return every outcome."""
-        vocab = self._discipline_vocab()
-        sem = asyncio.Semaphore(settings.worker_enrich_concurrency)
-        return list(
-            await asyncio.gather(*(self._enrich_one(v, vocab, sem) for v in videos))
-        )
-
-    async def _enrich_one(
+    async def enrich_one(
         self, video: dict, vocab: str, sem: asyncio.Semaphore
     ) -> EnrichOutcome:
         """One video's enrich call under the gate, fetching its transcript lazily
-        if the pool row has none. A fetch miss/failure or a failed LLM call never
-        aborts the run."""
+        if the pool row has none. A fetch miss/failure or a failed multimodal call
+        never aborts the sweep (the latter becomes a strike upstream).
+
+        This is the PUBLIC per-video enrich unit — the sweep drives it in chunks,
+        and the one-time ``scripts/enrich_templates`` run reuses it to produce the
+        template RAG sidecar (same summary pass, sidecar sink instead of the DB).
+        ``video`` needs the keys ``video_id``, ``title``, ``channel_name``,
+        ``description``, ``thumbnail_url``, ``duration_seconds``, ``transcript``."""
         async with sem:
             video_id = video["video_id"]
             transcript = video["transcript"]
@@ -210,9 +220,9 @@ class WorkerEnricher:
                     model=settings.enrich_model,
                     image_urls=self._image_urls(video["thumbnail_url"]),
                 )
-            except Exception as exc:  # noqa: BLE001 - one bad video never aborts
+            except Exception as exc:  # noqa: BLE001 - one bad video is a strike
                 logger.warning(
-                    "enrich failed for %s (skipped): %s", video_id, exc
+                    "enrich failed for %s (strike): %s", video_id, exc
                 )
                 return EnrichOutcome(
                     video_id=video_id,
@@ -230,8 +240,8 @@ class WorkerEnricher:
             )
 
     async def _cache_transcripts(self, outcomes: list[EnrichOutcome]) -> None:
-        """Persist every transcript we actually fetched this run onto its pool
-        video, so a later run reuses it instead of re-paying Apify."""
+        """Persist every transcript we actually fetched onto its pool video, so a
+        later sweep reuses it instead of re-paying Apify."""
         params = [
             {"video_id": o.video_id, "transcript": o.fetched_transcript}
             for o in outcomes
@@ -260,7 +270,10 @@ class WorkerEnricher:
         )
 
     async def _embed_and_store(self, rows: list[EnrichResultRow]) -> float:
-        """Batch-embed the summaries and insert the ``video_rag`` rows."""
+        """Batch-embed the chunk's summaries and insert the ``video_rag`` rows.
+
+        Raised by the embed call on a provider failure — the caller strikes the
+        chunk's videos so they are retried on a later sweep."""
         summaries = [row.result.summary for row in rows]
         vectors: list[list[float]] = []
         embed_usd = 0.0
@@ -287,6 +300,24 @@ class WorkerEnricher:
         )
         return embed_usd
 
+    async def _reset_failure(self, video_ids: list[str]) -> None:
+        """Clear the strike counter on videos that enriched successfully."""
+        if not video_ids:
+            return
+        await self._db.execute_with_retry(
+            load_sql(SQL_DIR / "worker_reset_failure.sql"),
+            [{"video_id": vid} for vid in video_ids],
+        )
+
+    async def _bump_failure(self, video_ids: list[str]) -> None:
+        """Bump the strike counter on videos whose enrich hard-failed."""
+        if not video_ids:
+            return
+        await self._db.execute_with_retry(
+            load_sql(SQL_DIR / "worker_bump_failure.sql"),
+            [{"video_id": vid} for vid in video_ids],
+        )
+
     def _truncate(self, text: str | None) -> str:
         """Transcript head clipped to the enrich budget, or the placeholder."""
         if not text or not text.strip():
@@ -311,7 +342,14 @@ class WorkerEnricher:
         return "[" + ",".join(repr(float(f)) for f in vector) + "]"
 
     @staticmethod
-    def _discipline_vocab() -> str:
+    def discipline_vocab() -> str:
         """The allowed discipline values as a bulleted list, built from the enum
-        so the prompt can never drift from the schema."""
+        so the prompt can never drift from the schema. Public so a reuser (the
+        enrich-templates run) builds the exact ``vocab`` arg ``enrich_one`` wants."""
         return "\n".join(f"  - {member.value}" for member in GymType)
+
+    @staticmethod
+    def _chunks(seq: Sequence[dict], size: int) -> Iterator[list[dict]]:
+        """Yield ``seq`` in lists of at most ``size``."""
+        for start in range(0, len(seq), size):
+            yield list(seq[start : start + size])

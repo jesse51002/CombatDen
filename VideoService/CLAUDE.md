@@ -154,7 +154,10 @@ DB-URL normaliser, …) round out the suite. Round-trip every gym file with
   There are two write paths into the shared Postgres: the **worker** writes the
   pool + RAG + feed + runs + cost log through its own `src/worker/sql/`, and
   `make sync-gyms` (which also runs `scripts.import_yaml`) loads the YAML gym
-  configs through `scripts/shared/video_db_writer.py` (`scripts/sql/`).
+  configs + the pool + the **template RAG sidecar** (`video_rag/` → `video_rag`)
+  through `scripts/shared/video_db_writer.py` (`scripts/sql/`). The one-time
+  `make enrich-templates` run is NOT a DB write path — it READS the pool and WRITES
+  the untracked-local sidecar file that `import_yaml` then loads.
 
 ---
 
@@ -168,145 +171,170 @@ worker:
    `gyms/<gym_id>.yaml` and validate it round-trips the `Gym` schema (YAML-only).
 2. **Sync gyms → SQL** (`make sync-gyms GYM_ID=<id|all>`) — upsert the authored
    gym files into `video_gym` + its query/class/reward child tables, then load
-   the existing `videos/` pool + each gym's good/rejected feeds into SQL (pool
-   upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It runs the
-   import with `--skip-cost-log`, so the append-only `cost_log.yaml` is **not**
-   imported here (re-running would duplicate ledger rows); load it once by hand
-   with `poetry run python -m scripts.import_yaml.run` if you need the history.
+   the existing `videos/` pool + the **template RAG sidecar** (`video_rag/` →
+   `video_rag`, see below) + each gym's good/rejected feeds into SQL (pool +
+   video_rag upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It
+   runs the import with `--skip-cost-log`, so the append-only `cost_log.yaml` is
+   **not** imported here (re-running would duplicate ledger rows); load it once by
+   hand with `poetry run python -m scripts.import_yaml.run` if you need the history.
    These write through `scripts/shared/video_db_writer.py` + `scripts/sql/` and
    pick their DB via the **`ENV_FILE`** flag (default `.env`; `ENV_FILE=.env.prod`
    targets prod) — see `scripts/shared/db_target.py`.
-3. **The content worker** (`make worker` → `python -m src.worker.run`) — the
-   scrape → funnel → enrich → scan → feed-write pipeline, detailed in the next
-   section. It **replaced** the old standalone `scripts/scraper` + `scripts/scan`
-   jobs (both deleted, along with `src/classification`); it writes through its own
-   `src/worker/sql/`, not `VideoDbWriter`.
+3. **Enrich the templates → RAG sidecar** (`make enrich-templates`) — a **one-time,
+   PAID** run that builds the artifact step 2 loads. The unified feed gates on a
+   `video_rag` row (an embedding) being present, so a freshly-imported preset feed
+   would look empty until the worker's enrich sweep caught up. This run enriches
+   the **~18.9k unique template videos** referenced in `video_gym_feed` (both
+   verdicts) ONCE — reusing the worker enricher's per-video unit
+   (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call,
+   lazy Apify transcript on a miss) plus a summary embedding — and appends each to
+   the **untracked-local sidecar** `video_rag/video_rag.jsonl` (base64-packed
+   float32 embeddings; ~165 MB, distributed to prod via S3 exactly like `videos/`).
+   `import_yaml` then reloads it into `video_rag` on every sync (upsert by
+   `video_id`, `ON CONFLICT DO NOTHING` — SEEDS, never clobbers a live worker
+   enrichment). Because `video_rag` is keyed by `video_id` and shared across the
+   template pool AND every real gym, seeding it for template videos enriches every
+   gym that later imports a preset **for free**. It only READS the DB (the pool
+   fields) and WRITES the sidecar file — never mutates the DB — and is
+   resumable/idempotent (skips videos already in the sidecar). Needs the keys the
+   configured `enrich_model` + `embedding_model` use (default `GEMINI_API_KEY` +
+   `OPENAI_API_KEY`) + `APIFY_TOKEN`, and a DB already synced (pool +
+   `video_gym_feed` loaded). The sidecar format is owned by
+   `scripts/shared/video_rag_sidecar.py`.
+4. **The content worker** (`make worker` → `python -m src.worker.run`) — the
+   decoupled scrape / enrich / scan step worker (cleanup → finalize → one drained
+   step per tick), detailed in the next section. It **replaced** the old standalone
+   `scripts/scraper` + `scripts/scan` jobs (both deleted, along with
+   `src/classification`); it writes through its own `src/worker/sql/`, not
+   `VideoDbWriter`.
 
 ---
 
 ## The background worker (`src/worker`)
 
 A standalone long-running process — `python -m src.worker.run` (`make worker`) — that
-regenerates gym feeds and builds the RAG layer. **Not a web server, no port.** It is the
-video half of the combined `deploy/` container (the other half is FastApiBackend's
+keeps every gym's feed and the shared RAG layer current. **Not a web server, no port.** It
+is the video half of the combined `deploy/` container (the other half is FastApiBackend's
 uvicorn). **There is no job queue and no control surface** — the worker is fully
-self-scheduling: each tick derives the single highest-priority "due" gym straight from
-timestamps already in the schema (`video_run`, `gym_video_spec`, `gym_video_feed`). The
-FastApiBackend never triggers a run; its only involvement is a read-only status endpoint
-(`GET …/video-worker/status`) that reads the same run rows the worker writes. The two
-never call each other. The full flow — the tick's control path, the six pipeline
-stages, and the five `cost_log` rows — is diagrammed in `worker.mermaid` at the
-VideoService root (keep it in sync with this section; author/edit it with the
-`mermaid-creation` skill).
+self-scheduling: it derives its own work each tick straight from timestamps already in the
+schema (`video_run`, `gym_video_spec`, `gym_video_feed`). The FastApiBackend never triggers
+a run and there is **no worker status/control endpoint** — the two systems never call each
+other; the backend only *reads* the same `video_*` rows the worker writes. The flow is
+diagrammed in `worker.mermaid` at the VideoService root (a docs task owns that file; keep
+this section and the diagram in agreement, and edit the diagram with the `mermaid-creation`
+skill).
+
+**The re-architecture: independent DB-backed steps, one per tick.** A tick no longer runs
+one gym end-to-end. Instead each step reads its own work from the DB and is idempotent, so
+the steps are decoupled and crash recovery is free. Feed rows are written at **scrape** time
+as `pending`; a global **enrich** sweep gives every un-enriched video a `video_rag` row; a
+global **scan** sweep settles each `pending` row to `accepted`/`rejected`.
 
 ### The tick
 
-`run.py` is a loop: one gym per tick, then wait `worker_poll_seconds` (60) for the next.
-Each `WorkerService.run_tick`:
+`run.py` is a loop: `WorkerService.run_tick`, then wait `worker_poll_seconds` (60). Each
+tick takes the global TTL lock `"video_worker_run"` on the shared `resource_locks` table
+(single-shot, non-blocking — a second worker no-ops the tick; TTL `worker_lock_ttl_seconds`
+900s, renewed by a `worker_heartbeat_seconds` (300s) heartbeat; a lost heartbeat sets the
+abort flag and the current drain stops between videos/batches/gyms). Then, under one lock
+hold, IN ORDER:
 
-1. **Acquires a global TTL lock** `"video_worker_run"` on the shared `resource_locks`
-   table (single-shot, non-blocking — a second worker just no-ops the tick). TTL =
-   `worker_lock_ttl_seconds` (900s), renewed by a heartbeat every
-   `worker_heartbeat_seconds` (300s); a lost heartbeat aborts the run mid-pipeline. So
-   only one gym is ever processed at a time across every worker instance.
-2. **Recovers orphans** — under the exclusive lock, any `video_run` still `status='running'`
-   must be from a dead process: it is marked `failed` (`error='orphaned'`). There is no
-   re-enqueue — the run's `created_at` still counts as that gym's last-run watermark, and
-   the next tick's derivation step (below) re-selects the gym once it is next due (subject
-   to the run caps). This just clears the stuck `running` row so the state stays truthful.
-3. **Checks the system-wide run cap** — if runs of ANY status across ALL gyms in the
-   rolling `worker_cap_window_hours` (24h) window already reach `worker_system_run_cap`
-   (5), the tick skips selection entirely (the global Apify/quota budget guard).
-4. **Derives the single due gym** (`worker_select_due_gym.sql`) — see *Scheduling* below.
-   Nothing due → the tick ends with no run.
+1. **Cleanup** (always, cheap) — `DELETE FROM video WHERE failure_count >= worker_failure_max`
+   (3). The FK cascades remove the video's feed rows, `video_rag` row, and member recs. Runs
+   FIRST so the finalize step's denominators reflect the shrunk feed.
+2. **Finalize** (always, cheap) — complete/fail every `running` run purely from its feed
+   rows (below). Runs are long-lived now, so a separate step decides when one is done.
+3. **One heavy step, first-with-work, drained fully** — check **scan**, then **enrich**, then
+   **scrape** (backlog first; scrape is the quota-bound ingest, so it goes last). The first
+   step that has work is DRAINED COMPLETELY this tick, then the tick ends. If none has work
+   the tick ends.
 
-### Scheduling: due-gym derivation + the run caps
+**There is NO orphan rule.** `running` is a legitimate long-lived multi-tick state (a run
+full of `pending` rows the sweeps are still chewing through), so a `running` run is never
+treated as dead. Crash recovery is free — every step is DB-derived + idempotent, and the
+finalize 0-row / TTL guards catch any pathologically stuck run.
 
-No queue, no enqueue call from anywhere — the worker computes its own work every tick
-from timestamps already in the schema. A gym (one with a video spec) is **due** when a
-trigger is newer than its last run's **start** (`MAX(video_run.created_at)`, ANY status —
-a failed run still advances this watermark, so a deterministic failure does not hot-loop;
-it waits for a new trigger or the weekly floor). The trigger decides the priority **tier**
-(lower tier wins; ties go to the oldest-waiting trigger first):
+### Finalize (complete / fail runs from their feed rows)
 
-- **tier 1** — the gym's latest `gym_video_spec` version with `source='admin_update'`
-  (an owner/agent edit) is newer than the last run start.
-- **tier 2** — the gym's latest MANUAL `gym_video_feed` curation (`curated_at`, any
-  reject/keep/re-add) is newer than the last run AND has settled at least
-  `worker_curation_batch_hours` (1h) ago — so a burst of curations batches into one run.
-- **tier 3** — the gym's last run is at least `worker_weekly_refresh_days` (7) old
-  (periodic refresh). A never-run gym qualifies only via tier 1/2 — a preset-only gym
-  that was never edited is NOT auto-run (matches the old "preset import does not
-  enqueue" behavior).
+Two SQL passes, IN ORDER (completion beats the TTL fail):
 
-Two rolling-`worker_cap_window_hours` run caps, both counting runs of ANY status (the
-poison-loop guard): **per-gym** — `worker_gym_run_cap` (2), enforced inside the
-derivation query itself; **system-wide** — `worker_system_run_cap` (5), checked by the
-tick (step 3 above) before the derivation query runs at all. `GET …/video-worker/status`
-reads the gym's runs (running / last-run-status / last-completed timestamp) — there is no
-`queued` field to report.
+1. **complete** (`worker_finalize_complete.sql`) — a `running` run whose **terminal**
+   fraction reaches `worker_run_complete_fraction` (0.9) is completed. terminal = feed rows
+   with `scan_status IN ('accepted','rejected')`; denominator = ALL the run's feed rows.
+2. **fail** (`worker_finalize_fail.sql`) — a `running` run with **zero** feed rows older
+   than `worker_zero_row_grace_hours` (1h) → `failed`, `error='no feed rows'`; else a run
+   older than `worker_run_ttl_hours` (24h) that never reached the completion fraction →
+   `failed`, `error='run ttl exceeded'`.
 
-### The pipeline (six stages, per gym)
+### The lifecycle: pending → enriched → scanned
 
-1. **Spec** — load the gym's latest spec from the `gym_video_spec_latest` view; compute
-   `criteria_changed` by comparing the current `(videos_desc, avoid_desc)` against the spec
-   version in force at the gym's previous **completed** run (drives incremental vs fresh).
-2. **Scrape** — two official **YouTube Data API v3** calls per spec query (`search.list` for
-   the ids + snippet, then `videos.list` for stats + the ISO-8601 duration), concurrency
-   `worker_scrape_concurrency` (4). The API is free within the daily quota (10k units/day;
-   `search.list` = 100 units); a failed query is dropped, not fatal. Results are
-   **merge-upserted** into the shared `video` pool (`source_queries` accumulate;
-   `tag`/`disciplines`/`transcript` never overwritten — fresh scrapes land untagged and
-   transcript-less). Transcripts are NOT fetched here — they are a lazy enrich-stage fetch.
-3. **Funnel** — pick candidates up to `scan_budget_per_run` (1000). **Tier 1**: pool rows
-   whose `source_queries` overlap the spec queries AND match a gym discipline (or are
-   untagged — so this run's fresh scrapes get scanned), relevance-ordered; incremental mode
-   excludes the previous run's already-verdicted ids. **Tier 2** (only if room left): every
-   spec query embedded in one call, then a cosine top-`rag_probe_top_k` (40) probe over
-   discipline-matched `video_rag` rows. A full Tier 1 skips Tier 2 entirely.
-4. **Enrich** — for each un-enriched candidate **and** the gym's owner-section videos, ONE
-   multimodal LLM call (`enrich_model`, `gemini/gemini-2.5-flash-lite`; thumbnail image +
-   metadata + a `enrich_transcript_char_budget` (8000-char) transcript slice) →
-   `{genre tag, disciplines, prose summary, facets}`. A candidate whose pool row has no cached
-   transcript triggers ONE lazy **Apify** transcript-actor fetch here (under the same enrich
-   gate), whose result feeds this video's prompt AND is cached back onto `video.transcript` so
-   a later run reuses it instead of re-paying Apify; a miss/failure degrades to a no-transcript
-   placeholder and never aborts. The tag + disciplines are written back onto the `video` pool
-   row; the summary is embedded (batched) and stored as a `video_rag` row.
-5. **Scan** — batched keep/drop (`scan_batch_size` ≈ 12 summaries per LLM call,
-   `scan_model` `gemini/gemini-2.5-flash-lite`) against the spec's `videos_desc`/`avoid_desc`.
-   A missing verdict defaults to rejected.
-6. **Feed write (carry-forward)** — open a new `video_run` (`running`), copy the previous
-   completed run's rows FIRST (ALL rows in incremental mode; only manual-curation rows in a
-   fresh run), then insert the fresh automatic verdicts `ON CONFLICT DO NOTHING` — so the
-   owner's manual keep/reject always wins. Complete the run (`status='completed'`), which is
-   what makes it the served run.
+- **scrape** (per-gym, quota-bound — the ONLY step that opens runs, so the run caps bound
+  exactly the quota-limited work). It selects the due gym (`worker_select_due_gym.sql`,
+  which now also excludes any gym with a `running` run — never two in-flight runs), loads
+  the latest spec + incremental context (`WorkerSpec`), opens a `video_run` (`running`),
+  runs the **YouTube Data API v3** scrape (two calls per query, merge-upserted into the
+  `video` pool — `source_queries` accumulate, `tag`/`disciplines`/`transcript` never wiped),
+  and picks candidates via the two-tier **funnel** (tier-1 query+discipline overlap incl.
+  untagged fresh scrapes with incremental exclusion, tier-2 RAG probe up to
+  `scan_budget_per_run`). Then the **feed write** (`WorkerScraper.write_feed`): carry the
+  previous completed run's rows forward FIRST (ALL rows incremental / manual-only fresh —
+  `worker_carry_forward.sql`), then insert every candidate as a `pending` row
+  (`worker_insert_pending.sql`, `curation_type='automatic'`) `ON CONFLICT DO NOTHING` so a
+  carried row always wins. The run is left `running`; nothing is enriched, scanned, or
+  completed here.
+- **enrich** (global, gym-agnostic sweep — `WorkerEnricher.drain`). Targets
+  (`worker_enrich_targets.sql`) = videos that LACK a `video_rag` row and are under the strike
+  ceiling, drawn from each gym's **latest non-failed run** (`pending`/`accepted` rows — skip
+  `rejected`; `accepted`-without-rag are imported presets / pre-RAG carry-forwards that must
+  get an embedding) ∪ ALL owner-section rows (`video_run_id IS NULL`). Per video: lazy Apify
+  transcript (miss → placeholder, NOT a strike), ONE multimodal `enrich_model` call
+  (thumbnail + metadata + transcript slice → genre `tag`, disciplines, summary, facets),
+  tags written to `video`, summaries batch-embedded into `video_rag` (concurrency
+  `worker_enrich_concurrency`, 8).
+- **scan** (global sweep, per-gym batches, MULTIMODAL — `WorkerScanner.drain`). Targets
+  (`worker_scan_targets.sql`) = `pending` rows in each gym's latest non-failed run whose
+  video HAS a `video_rag` row and is under the strike ceiling. Per gym: load the **latest**
+  spec at scan time (judge against current criteria), batch by `scan_batch_size` (12), and
+  run keep/drop with each batch's candidate thumbnails passed as ordered `image_urls`.
+  Verdicts are written by UPDATE (`worker_update_verdict.sql`) guarded on
+  `scan_status = 'pending'` — a manual or prior automatic verdict is never overwritten.
 
-Each stage's spend is logged to the generic **`cost_log`** table (shared across every
-cost-bearing system, not just video — see `../Database/CLAUDE.md`) as `search` / `transcript`
-/ `enrich` / `embed` / `scan` rows, each stamped `source='video'`, `run_id` (the run's id as
-TEXT, no FK), `gym_id`, `stage`, `model` (the LLM/embedding model used, NULL for the free
-`search` stage and the Apify `transcript` stage), and `cost_usd` (the row's single USD total;
-`breakdown` still carries the component detail map). The `search` row is **free** (cost 0 — the
-YouTube Data API within quota — its breakdown carries the quota units as a diagnostic); the
-`transcript` row carries the Apify transcript spend. **A failed stage marks the run `failed`**
-— its `created_at` still counts as the gym's
-last-run watermark, so a deterministic failure does not hot-loop; the gym simply waits for a
-new tier-1/2 trigger or the tier-3 weekly floor to become due again (poison guard — no manual
-re-trigger exists).
+### The strike / cleanup mechanic (`video.failure_count`)
+
+Hard errors only. In the enrich sweep a video whose multimodal call OR whose chunk's embed
+call raises is bumped (`worker_bump_failure.sql`); in the scan sweep a batch whose LLM call
+raises bumps EVERY video in the batch and leaves the rows `pending` (retried next sweep — **no
+default-to-rejected**), and a video the model omits from an otherwise-successful batch is
+bumped alone and stays `pending`. A missing transcript is **not** a strike. On success —
+enriched, or verdicted — the counter is reset to 0 (`worker_reset_failure.sql`). The cleanup
+step deletes a video at `worker_failure_max` (3) strikes.
+
+### Cost logging (`cost_log`, attributed per step)
+
+Spend goes to the generic **`cost_log`** table (shared across cost-bearing systems — see
+`../Database/CLAUDE.md`), each row stamped `source='video'`, `stage`, `model` (NULL for the
+free `search` stage and the Apify `transcript` stage), `cost_usd`, and a `breakdown` map.
+Attribution differs by step: **scrape** logs `search` (free; quota-units diagnostic) +
+`embed` (tier-2 probe), both keyed to that gym + run; **enrich** logs `transcript` +
+`enrich` + `embed` as **pool-level** rows (`gym_id` and `run_id` NULL — a swept video is
+shared across gyms, so per-gym attribution would be arbitrary); **scan** logs one `scan` row
+per gym per sweep, keyed to that gym + its latest run.
 
 ### Settings + the embedding contract
 
 Worker knobs live in `src/worker/worker_config.py` (`WorkerSettings`) — the models above,
 scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
 `worker_system_run_cap` (5), `worker_curation_batch_hours` (1),
-`worker_weekly_refresh_days` (7) — see *Scheduling* above), budgets (`scan_budget_per_run`,
-`scan_batch_size`, `rag_probe_top_k`, `enrich_transcript_char_budget`), concurrency
-(`worker_*_concurrency`), the lock/loop timers, the `youtube_api_key` (YouTube Data API v3,
-discovery + metadata), and the `apify_token` + `apify_transcript_cost_per_video_usd` (the lazy
-transcript fetches at enrich). It reads `DATABASE_URL` from `src/shared/config.py` and the LLM
-provider keys (`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from
-`src/core/config.py` — three `Settings` classes over the one `.env`.
+`worker_weekly_refresh_days` (7)), the strike ceiling + run finalize
+(`worker_failure_max` (3), `worker_run_complete_fraction` (0.9),
+`worker_run_ttl_hours` (24), `worker_zero_row_grace_hours` (1)), budgets
+(`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
+`enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop
+timers, the `youtube_api_key` (YouTube Data API v3, discovery + metadata), and the
+`apify_token` + `apify_transcript_cost_per_video_usd` (the lazy transcript fetches at
+enrich). It reads `DATABASE_URL` from `src/shared/config.py` and the LLM provider keys
+(`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from `src/core/config.py` — three
+`Settings` classes over the one `.env`.
 
 The **embedding contract is cross-service.** The worker embeds with
 `embedding_model` (`openai/text-embedding-3-small`) into `video_rag.embedding` typed

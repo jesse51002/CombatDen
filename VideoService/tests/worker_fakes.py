@@ -18,9 +18,9 @@ def route(sql: str) -> str:
     checks = [
         ("count(*) AS runs_in_window", "system_count"),
         ("WITH spec_gyms AS", "select_due_gym"),
-        ("'orphaned'", "fail_orphans"),
-        ("error = :error", "fail_run"),
-        ("SET status = 'completed'", "complete_run"),
+        ("DELETE FROM video", "cleanup_videos"),
+        (":complete_fraction", "finalize_complete"),
+        ("'no feed rows'", "finalize_fail"),
         ("INSERT INTO video_run", "insert_run"),
         ("gym_video_spec_latest", "spec_latest"),
         ("SELECT run_id, created_at", "prev_run"),
@@ -28,17 +28,15 @@ def route(sql: str) -> str:
         ("jsonb_exists_any(source_queries", "tier1"),
         ("r.embedding <=>", "tier2"),
         ("SELECT video_id\nFROM gym_video_feed", "prev_verdicts"),
-        ("video_run_id IS NULL", "owner_feed"),
-        ("FROM video_rag\nWHERE video_id = ANY(:ids)", "existing_rag"),
+        ("IN ('pending', 'accepted')", "enrich_targets"),
+        ("v.tag AS genre", "scan_targets"),
+        ("UPDATE gym_video_feed", "update_verdict"),
+        ("failure_count = failure_count + 1", "bump_failure"),
+        ("failure_count = 0", "reset_failure"),
         ("INSERT INTO video_rag", "insert_rag"),
         ("SET transcript", "cache_transcripts"),
         ("SET tag", "update_tags"),
-        # upsert_video must be routed before the "thumbnail_url" token: the
-        # upsert's column list also names thumbnail_url, so it would otherwise be
-        # misrouted to load_videos_enrich.
         ("INSERT INTO video (", "upsert_video"),
-        ("thumbnail_url", "load_videos_enrich"),
-        ("JOIN video_rag r", "scan_candidates"),
         ("FROM video\nWHERE video_id = ANY(:ids)", "existing_videos"),
         ("INSERT INTO cost_log", "insert_cost"),
     ]
@@ -46,13 +44,19 @@ def route(sql: str) -> str:
         if token in sql:
             return name
     if "INSERT INTO gym_video_feed" in sql:
-        return "carry_forward" if "SELECT\n    gym_id" in sql else "insert_verdict"
+        # Both are INSERT INTO gym_video_feed: the carry-forward is an
+        # INSERT ... SELECT, the pending write is an INSERT ... VALUES.
+        return "carry_forward" if "SELECT\n    gym_id" in sql else "insert_pending"
     raise AssertionError(f"unrouted SQL:\n{sql[:200]}")
 
 
 class _FakeResult:
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
+
+    @property
+    def rowcount(self) -> int:
+        return len(self._rows)
 
     def mappings(self) -> "_FakeResult":
         return self
@@ -86,6 +90,10 @@ class RoutingFakeDb:
     def __init__(self) -> None:
         self.rows: dict[str, list[dict]] = {}
         self.ones: dict[str, dict | None] = {}
+        # Per-name queues that pop one value per call (for a read whose result
+        # must change across calls, e.g. the scrape drain re-selecting due gyms).
+        # Falls back to ``ones`` once a queue is exhausted / absent.
+        self.seq: dict[str, list[dict | None]] = {}
         self.session_rows: dict[str, list[dict]] = {}
         self.reads: list[tuple[str, str, Any]] = []
         self.writes: list[tuple[str, str, Any]] = []
@@ -107,6 +115,8 @@ class RoutingFakeDb:
     ) -> dict | None:
         name = route(sql)
         self.writes.append((name, sql, params))
+        if self.seq.get(name):
+            return self.seq[name].pop(0)
         return self.ones.get(name)
 
     def session(self) -> _FakeSession:

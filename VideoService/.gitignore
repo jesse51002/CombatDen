@@ -15,3 +15,8 @@ __pycache__/
 apps/*/preview.html
 
 videos/
+
+# Template-enrich RAG sidecar (~165 MB of pre-paid summaries + embeddings).
+# Untracked-local like videos/ — too heavy + high-entropy to git-track;
+# distributed to prod via S3 (see CLAUDE.md). Produced by `make enrich-templates`.
+video_rag/

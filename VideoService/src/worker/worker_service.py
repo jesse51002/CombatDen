@@ -1,15 +1,23 @@
-"""The worker orchestrator: one ``run_tick`` = at most one gym's pipeline run.
+"""The worker orchestrator: one ``run_tick`` runs three DB-backed steps under one
+lock hold.
 
-A tick takes the global TTL-lease lock (returns quietly if another holder has
-it), fails any run orphaned by a dead process, and — unless the system-wide
-rolling run cap is already reached — DERIVES the single highest-priority gym that
-is due (``worker_select_due_gym.sql``), opens a run, and drives the six stages
-under a heartbeat that renews the lease. There is no queue: due-ness is computed
-each tick from run / spec / curation timestamps, tier-sorted, under per-gym and
-system rolling run caps. On success the run is completed; on any exception it is
-failed with a truncated error — a failed run still advances the gym's last-run
-watermark, so a deterministic failure does not hot-loop (it waits for a new
-trigger or the weekly floor). The lock is always released.
+There is no per-gym end-to-end pipeline anymore. A tick takes the global TTL-lease
+lock (returns quietly if another holder has it), starts a heartbeat that renews the
+lease, and then, IN ORDER:
+
+  1. CLEANUP (always, cheap) — delete videos at the strike ceiling, so the finalize
+     step's terminal-fraction denominators reflect the shrunk feed.
+  2. FINALIZE (always, cheap) — complete / fail every 'running' run from its feed
+     rows (90%-terminal completes; 0-row-after-grace and TTL-exceeded fail).
+  3. ONE HEAVY STEP, first-with-work, drained fully — check SCAN, then ENRICH, then
+     SCRAPE (backlog first; scrape is the quota-bound ingest, so it goes last). The
+     first step that has work is drained completely this tick, then the tick ends.
+
+Runs are now a legitimate long-lived multi-tick state ('running' full of 'pending'
+feed rows), so there is NO orphan rule — crash recovery is free (every step is
+DB-derived + idempotent; the finalize 0-row/TTL guards catch any pathologically
+stuck run). Only the SCRAPE step opens runs, so the per-gym + system rolling run
+caps still bound exactly the quota-limited work. The lock is always released.
 """
 
 from __future__ import annotations
@@ -20,14 +28,15 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
-
 from src.shared.database import DirectDatabasePool
 from src.shared.services.resource_lock import ResourceLock
 from src.shared.sql_loader import load_sql
+from src.worker.worker_abort import WorkerAborted, check_abort
+from src.worker.worker_cleanup import WorkerCleanup
 from src.worker.worker_config import settings
-from src.worker.worker_cost_log import RunCost, WorkerCostLog
+from src.worker.worker_cost_log import WorkerCostLog
 from src.worker.worker_enricher import WorkerEnricher
+from src.worker.worker_finalizer import WorkerFinalizer
 from src.worker.worker_funnel import WorkerFunnel
 from src.worker.worker_scanner import WorkerScanner
 from src.worker.worker_scraper import WorkerScraper
@@ -37,16 +46,12 @@ logger = logging.getLogger(__name__)
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 LOCK_KEY = "video_worker_run"
-ERROR_MAX_LEN = 1000
 
-
-class WorkerAborted(Exception):
-    """Raised between stages when the heartbeat lost the lock — the tick must
-    stop (another process may already own the work)."""
+__all__ = ["WorkerAborted", "WorkerService"]
 
 
 class WorkerService:
-    """Orchestrates one gym's scrape→enrich→scan run per tick."""
+    """Orchestrates the cleanup → finalize → one-heavy-step tick."""
 
     def __init__(
         self,
@@ -57,6 +62,8 @@ class WorkerService:
         funnel: WorkerFunnel,
         enricher: WorkerEnricher,
         scanner: WorkerScanner,
+        cleanup: WorkerCleanup,
+        finalizer: WorkerFinalizer,
         cost_log: WorkerCostLog,
     ) -> None:
         self._db = db_pool
@@ -66,76 +73,76 @@ class WorkerService:
         self._funnel = funnel
         self._enricher = enricher
         self._scanner = scanner
+        self._cleanup = cleanup
+        self._finalizer = finalizer
         self._cost_log = cost_log
 
     async def run_tick(self) -> None:
-        """Process at most one due gym. No-op when the lock is held elsewhere,
-        the system run cap is reached, or nothing is due."""
+        """Cleanup → finalize → the first heavy step with work, drained fully.
+        No-op when the lock is held elsewhere."""
         token = uuid4()
         acquired = await self._lock.acquire_once(
             LOCK_KEY, token, ttl_seconds=settings.worker_lock_ttl_seconds
         )
         if not acquired:
             return
-        try:
-            await self._recover_orphans()
-            if await self._system_cap_reached():
-                logger.info("system run cap reached — skipping tick")
-                return
-            gym_id = await self._select_gym()
-            if gym_id is None:
-                return
-            await self._process_gym(gym_id, token)
-        finally:
-            await self._lock.release(LOCK_KEY, token)
-
-    async def _process_gym(self, gym_id: str, token: UUID) -> None:
-        """Run the pipeline for one gym under a heartbeat, finalising the run."""
         abort = asyncio.Event()
         heartbeat = asyncio.create_task(self._heartbeat(token, abort))
-        run_id: str | None = None
         try:
-            run_id = await self._start_run(gym_id)
-            await self._run_pipeline(gym_id, run_id, abort)
-            await self._complete_run(run_id)
-        except Exception as exc:  # noqa: BLE001 - failure is recorded, not raised
-            logger.error("run failed for gym %s", gym_id, exc_info=True)
-            if run_id is not None:
-                await self._fail_run(run_id, str(exc)[:ERROR_MAX_LEN])
+            await self._cleanup.run()
+            await self._finalizer.finalize()
+            await self._run_one_step(abort)
+        except WorkerAborted:
+            logger.warning("tick aborted mid-step — heartbeat lost the lock")
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat
+            await self._lock.release(LOCK_KEY, token)
 
-    async def _run_pipeline(
-        self, gym_id: str, run_id: str, abort: asyncio.Event
-    ) -> None:
-        """The six stages in order, checking the abort flag between each."""
-        self._check_abort(abort)
+    async def _run_one_step(self, abort: asyncio.Event) -> None:
+        """Drain the FIRST heavy step that has work: scan, else enrich, else
+        scrape. Backlog (scan/enrich) is preferred over fresh ingest (scrape)."""
+        if await self._scanner.drain(abort):
+            return
+        if await self._enricher.drain(abort):
+            return
+        await self._scrape_step(abort)
+
+    async def _scrape_step(self, abort: asyncio.Event) -> bool:
+        """Drain the scrape ingest: while the system run cap is not reached and a
+        gym is due, open a run and scrape it (leaving 'running' + 'pending' rows).
+        Bounded by the rolling per-gym + system run caps. A due gym with an
+        in-flight run is never re-selected, so the drain advances through gyms."""
+        did_any = False
+        while True:
+            check_abort(abort)
+            if await self._system_cap_reached():
+                logger.info("system run cap reached — stopping scrape drain")
+                break
+            gym_id = await self._select_gym()
+            if gym_id is None:
+                break
+            await self._scrape_gym(gym_id)
+            did_any = True
+        return did_any
+
+    async def _scrape_gym(self, gym_id: str) -> None:
+        """One gym's scrape: load spec → open a run → scrape the pool → funnel
+        candidates → carry-forward + write them as 'pending'. Logs the scrape
+        cost. Does NOT enrich, scan, or complete the run — the sweeps + finalizer
+        take it from here."""
         spec = await self._spec.load(gym_id)
-        self._check_abort(abort)
+        run_id = await self._start_run(gym_id)
         scrape = await self._scraper.scrape(spec)
-        self._check_abort(abort)
         funnel = await self._funnel.select(spec)
-        self._check_abort(abort)
-        enrich = await self._enricher.enrich(gym_id, funnel.candidate_ids)
-        self._check_abort(abort)
-        scan = await self._scanner.scan(spec, run_id, funnel.candidate_ids)
-        self._check_abort(abort)
-        cost = RunCost(
-            search_usd=scrape.search_usd,
+        await self._scraper.write_feed(spec, run_id, funnel.candidate_ids)
+        await self._cost_log.log_scrape(
+            gym_id,
+            run_id,
             youtube_quota_units=scrape.youtube_quota_units,
-            transcript_usd=enrich.transcript_usd,
-            enrich_llm_usd=enrich.llm_usd,
-            embed_usd=funnel.embed_usd + enrich.embed_usd,
-            scan_llm_usd=scan.llm_usd,
+            embed_usd=funnel.embed_usd,
         )
-        await self._cost_log.log(gym_id, run_id, cost)
-
-    @staticmethod
-    def _check_abort(abort: asyncio.Event) -> None:
-        if abort.is_set():
-            raise WorkerAborted("heartbeat lost the worker lock")
 
     async def _heartbeat(self, token: UUID, abort: asyncio.Event) -> None:
         """Renew the lease every interval; on a lost lease set the abort flag."""
@@ -145,28 +152,13 @@ class WorkerService:
                 LOCK_KEY, token, ttl_seconds=settings.worker_lock_ttl_seconds
             )
             if not renewed:
-                logger.error("heartbeat lost the lock — aborting run")
+                logger.error("heartbeat lost the lock — aborting tick")
                 abort.set()
                 return
 
-    async def _recover_orphans(self) -> None:
-        """Fail every 'running' run — dead, since we hold the exclusive lock. No
-        re-enqueue: the derivation re-selects the gym when it is next due (subject
-        to the run caps); this just clears the stuck 'running' row so the state
-        stays truthful and the run-cap counts stay accurate."""
-        async with self._db.session() as session:
-            result = await session.execute(
-                text(load_sql(SQL_DIR / "worker_fail_orphans.sql"))
-            )
-            orphans = result.mappings().all()
-            await session.commit()
-        if orphans:
-            logger.warning("recovered %d orphaned run(s)", len(orphans))
-
     async def _system_cap_reached(self) -> bool:
         """True when runs started across all gyms in the rolling window already
-        reach the system-wide cap (the global YouTube-quota / Apify-transcript
-        budget guard)."""
+        reach the system-wide cap (the global YouTube-quota / Apify budget guard)."""
         row = await self._db.execute_with_retry(
             load_sql(SQL_DIR / "worker_system_run_count.sql"),
             {"cap_window_hours": settings.worker_cap_window_hours},
@@ -175,8 +167,8 @@ class WorkerService:
         return count >= settings.worker_system_run_cap
 
     async def _select_gym(self) -> str | None:
-        """Derive the highest-priority DUE gym under its per-gym run cap, or None
-        when nothing is due (see worker_select_due_gym.sql)."""
+        """Derive the highest-priority DUE gym under its per-gym run cap (and with
+        no in-flight run), or None when nothing is due."""
         row = await self._db.execute_with_retry(
             load_sql(SQL_DIR / "worker_select_due_gym.sql"),
             {
@@ -195,14 +187,3 @@ class WorkerService:
         if row is None:
             raise RuntimeError(f"failed to open a run for gym {gym_id}")
         return str(row["run_id"])
-
-    async def _complete_run(self, run_id: str) -> None:
-        await self._db.execute_with_retry(
-            load_sql(SQL_DIR / "worker_complete_run.sql"), {"run_id": run_id}
-        )
-
-    async def _fail_run(self, run_id: str, error: str) -> None:
-        await self._db.execute_with_retry(
-            load_sql(SQL_DIR / "worker_fail_run.sql"),
-            {"run_id": run_id, "error": error},
-        )

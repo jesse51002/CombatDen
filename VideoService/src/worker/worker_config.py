@@ -57,6 +57,22 @@ class WorkerSettings(BaseSettings):
     # is re-run even with no pending edit or curation.
     worker_weekly_refresh_days: int = 7
 
+    # --- strike ceiling + run finalize --------------------------------------
+    # Hard-error strike ceiling: the enrich/scan sweeps bump video.failure_count
+    # on a hard error (an LLM/embed call raising) and reset it to 0 on success;
+    # the per-tick cleanup deletes a video once it reaches this many strikes.
+    worker_failure_max: int = 3
+    # A 'running' run finalizes to 'completed' once at least this fraction of its
+    # feed rows are terminal (scan_status accepted/rejected).
+    worker_run_complete_fraction: float = 0.9
+    # A 'running' run that has not reached the completion fraction by this age is
+    # failed ('run ttl exceeded') — the stuck-run backstop.
+    worker_run_ttl_hours: int = 24
+    # Grace before a 'running' run with ZERO feed rows is failed ('no feed rows')
+    # — lets a scrape whose rows land shortly after the run row not be failed
+    # prematurely.
+    worker_zero_row_grace_hours: int = 1
+
     # --- concurrency ---------------------------------------------------------
     worker_scrape_concurrency: int = 4
     worker_enrich_concurrency: int = 8

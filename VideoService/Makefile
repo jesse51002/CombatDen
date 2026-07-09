@@ -1,4 +1,4 @@
-.PHONY: worker test gym-check sync-gyms sync-gyms-prod
+.PHONY: worker test gym-check sync-gyms sync-gyms-prod enrich-templates
 
 # `python -m pytest` (not the `pytest` console script) survives stale .venv
 # shebangs left over from the CustomYoutubeService -> VideoService rename.
@@ -41,6 +41,19 @@ sync-gyms:
 # Usage: make sync-gyms-prod GYM_ID=all
 sync-gyms-prod:
 	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
+
+# One-time PAID run: enrich every unique template video (~18.9k, both feed
+# verdicts) into the RAG sidecar (video_rag/video_rag.jsonl) so `make sync-gyms`
+# can seed video_rag on any DB without re-paying the LLM. Reuses the worker
+# enricher's per-video unit; resumable/idempotent (skips videos already in the
+# sidecar), so a crashed run just re-runs. Run AFTER `make sync-gyms` (needs the
+# pool + video_gym_feed loaded). Requires the keys the configured enrich_model +
+# embedding_model use (by default GEMINI_API_KEY + OPENAI_API_KEY) and
+# APIFY_TOKEN (lazy transcript fetches for the ~16% of videos with none) in .env.
+# Targets the DB in ENV_FILE (default .env). Cost ~ $30-150 for the summary pass.
+#   make enrich-templates
+enrich-templates:
+	poetry run python -m scripts.enrich_templates.run
 
 # The pool scrape + per-gym scan are no longer standalone scripts: they are the
 # background `worker` (see the `worker` target above), which self-schedules the

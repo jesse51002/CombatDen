@@ -1,19 +1,23 @@
-"""Stage 6 — append this run's per-stage spend to the generic ledger.
+"""Append per-step spend to the generic ``cost_log`` ledger.
 
-Writes one ``cost_log`` row per cost-bearing stage (search / transcript / enrich
-/ embed / scan), each stamped ``source='video'`` + the gym + run id so per-run
-and per-gym spend are queryable directly. ``search`` is free (the YouTube Data
-API within quota) and carries its quota usage as a breakdown diagnostic;
-``transcript`` carries the Apify transcript spend. Embed spend from BOTH the
-funnel probes and the enrich summaries is folded into the single 'embed' row.
-Logs the run's total at the end.
+One row per cost-bearing stage (search / transcript / enrich / embed / scan),
+each stamped ``source='video'`` + ``stage`` + ``model`` (NULL for the free search
+stage and the Apify transcript stage) + ``cost_usd`` (the row's single USD total;
+``breakdown`` carries the component detail). Attribution differs by STEP, because
+the worker's steps are decoupled:
+
+  * SCRAPE (per gym / per run) — ``search`` (free; quota units diagnostic) +
+    ``embed`` (the tier-2 funnel probe embeds), both stamped that gym + run.
+  * ENRICH (a gym-agnostic sweep) — ``transcript`` + ``enrich`` + ``embed``, all
+    stamped ``gym_id = NULL`` and ``run_id = NULL``: a swept video is shared across
+    gyms, so per-gym attribution would be arbitrary.
+  * SCAN (per gym / per sweep) — one ``scan`` row stamped that gym + its latest run.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 from schema.cost import CostSource, CostStage
@@ -26,104 +30,137 @@ logger = logging.getLogger(__name__)
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 
-@dataclass(frozen=True)
-class RunCost:
-    """The per-stage USD a run spent, plus the free search stage's quota usage."""
-
-    search_usd: float = 0.0  # YouTube Data API — free within quota (always 0.0)
-    youtube_quota_units: int = 0  # search-stage quota diagnostic (not billed)
-    transcript_usd: float = 0.0  # Apify transcript fetches at enrich
-    enrich_llm_usd: float = 0.0
-    embed_usd: float = 0.0
-    scan_llm_usd: float = 0.0
-
-    @property
-    def total_usd(self) -> float:
-        return (
-            self.search_usd
-            + self.transcript_usd
-            + self.enrich_llm_usd
-            + self.embed_usd
-            + self.scan_llm_usd
-        )
-
-
 class WorkerCostLog:
-    """Appends a run's spend to ``cost_log``."""
+    """Appends a step's spend rows to ``cost_log``."""
 
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db = db_pool
 
-    async def log(self, gym_id: str, run_id: str, cost: RunCost) -> None:
-        """Append the five per-stage rows and log the run total."""
-        entries = [
-            (
-                CostStage.search,
-                None,
-                cost.search_usd,
-                {"youtube_quota_units": cost.youtube_quota_units},
-                "youtube data api",
-            ),
-            (
-                CostStage.transcript,
-                None,
-                cost.transcript_usd,
-                {"apify_usd": cost.transcript_usd},
-                "apify transcripts",
-            ),
-            (
-                CostStage.enrich,
-                settings.enrich_model,
-                cost.enrich_llm_usd,
-                {"llm_usd": cost.enrich_llm_usd},
-                "enrich",
-            ),
-            (
-                CostStage.embed,
-                settings.embedding_model,
-                cost.embed_usd,
-                {"llm_usd": cost.embed_usd},
-                "query + summary embeddings",
-            ),
-            (
-                CostStage.scan,
-                settings.scan_model,
-                cost.scan_llm_usd,
-                {"llm_usd": cost.scan_llm_usd},
-                "scan",
-            ),
-        ]
-        for stage, model, cost_usd, breakdown, note in entries:
-            await self._insert(gym_id, run_id, stage, model, cost_usd, breakdown, note)
-        logger.info(
-            "gym %s run %s cost: search $%.4f (%d quota) transcript $%.4f "
-            "enrich $%.4f embed $%.4f scan $%.4f = total $%.4f",
+    async def log_scrape(
+        self,
+        gym_id: str,
+        run_id: str,
+        *,
+        youtube_quota_units: int,
+        embed_usd: float,
+    ) -> None:
+        """The scrape step's rows: the free ``search`` (quota diagnostic) and the
+        tier-2 probe ``embed``, both attributed to this gym + run."""
+        await self._insert(
             gym_id,
             run_id,
-            cost.search_usd,
-            cost.youtube_quota_units,
-            cost.transcript_usd,
-            cost.enrich_llm_usd,
-            cost.embed_usd,
-            cost.scan_llm_usd,
-            cost.total_usd,
+            CostStage.search,
+            None,
+            0.0,
+            {"youtube_quota_units": youtube_quota_units},
+            "youtube data api",
+        )
+        await self._insert(
+            gym_id,
+            run_id,
+            CostStage.embed,
+            settings.embedding_model,
+            embed_usd,
+            {"llm_usd": embed_usd},
+            "tier-2 query embeddings",
+        )
+        logger.info(
+            "gym %s run %s scrape cost: search $0 (%d quota) embed $%.4f",
+            gym_id,
+            run_id,
+            youtube_quota_units,
+            embed_usd,
+        )
+
+    async def log_enrich(
+        self,
+        *,
+        transcript_usd: float,
+        enrich_usd: float,
+        embed_usd: float,
+        videos: int,
+        transcripts_fetched: int,
+    ) -> None:
+        """The enrich sweep's POOL-LEVEL rows (gym_id / run_id NULL): the Apify
+        ``transcript`` spend, the multimodal ``enrich`` spend, and the summary
+        ``embed`` spend."""
+        breakdown = {"videos": videos, "transcripts_fetched": transcripts_fetched}
+        await self._insert(
+            None,
+            None,
+            CostStage.transcript,
+            None,
+            transcript_usd,
+            breakdown,
+            "apify transcripts (sweep)",
+        )
+        await self._insert(
+            None,
+            None,
+            CostStage.enrich,
+            settings.enrich_model,
+            enrich_usd,
+            breakdown,
+            "enrich (sweep)",
+        )
+        await self._insert(
+            None,
+            None,
+            CostStage.embed,
+            settings.embedding_model,
+            embed_usd,
+            breakdown,
+            "summary embeddings (sweep)",
+        )
+        logger.info(
+            "enrich sweep cost: transcript $%.4f enrich $%.4f embed $%.4f "
+            "(%d videos, %d transcripts fetched)",
+            transcript_usd,
+            enrich_usd,
+            embed_usd,
+            videos,
+            transcripts_fetched,
+        )
+
+    async def log_scan(
+        self, gym_id: str, run_id: str, *, scan_usd: float, scanned: int
+    ) -> None:
+        """The scan sweep's per-gym row: the batched keep/drop ``scan`` spend,
+        attributed to this gym + its latest run."""
+        await self._insert(
+            gym_id,
+            run_id,
+            CostStage.scan,
+            settings.scan_model,
+            scan_usd,
+            {"llm_usd": scan_usd, "scanned": scanned},
+            "scan (sweep)",
+        )
+        logger.info(
+            "gym %s run %s scan cost: $%.4f (%d scanned)",
+            gym_id,
+            run_id,
+            scan_usd,
+            scanned,
         )
 
     async def _insert(
         self,
-        gym_id: str,
-        run_id: str,
+        gym_id: str | None,
+        run_id: str | None,
         stage: CostStage,
         model: str | None,
         cost_usd: float,
         breakdown: dict[str, float | int],
         note: str,
     ) -> None:
+        """Append one ``cost_log`` row. ``gym_id`` / ``run_id`` may be NULL (a
+        pool-level sweep row) — they are never coerced to the string 'None'."""
         await self._db.execute_with_retry(
             load_sql(SQL_DIR / "worker_insert_cost.sql"),
             {
                 "source": CostSource.video.value,
-                "run_id": str(run_id),
+                "run_id": str(run_id) if run_id is not None else None,
                 "gym_id": gym_id,
                 "stage": stage.value,
                 "model": model,

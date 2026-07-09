@@ -17,6 +17,15 @@ $avoid_desc
 Each has an id, title, channel, genre, and a summary (which includes what the
 thumbnail shows). Judge each on its own merits.
 
+The candidates' thumbnail images are ATTACHED to this message. They are provided
+in the SAME order as the candidates listed below — the N images correspond, in
+order, to the N candidates (image 1 = candidate 1, image 2 = candidate 2, …).
+A candidate marked `thumbnail: (no image provided)` contributes no image, so skip
+it when matching images to candidates in order. WEIGH the thumbnail visually
+alongside the text: attire (gi vs no-gi, uniform vs streetwear), setting
+(competition mat, home gym, studio), and production style (professional broadcast
+vs phone clip vs clickbait graphics) are strong fit/quality signals.
+
 $videos_block
 
 ## Your judgment
