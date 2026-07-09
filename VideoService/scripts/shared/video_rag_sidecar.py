@@ -18,16 +18,17 @@ enriched video::
 
     {"video_id": "...", "summary": "...", "tag": "educational",
      "disciplines": ["mma"], "facets": {...},
-     "embedding_model": "openai/text-embedding-3-small",
-     "embedding": "<base64 of little-endian float32[1536]>"}
+     "embedding_model": "gemini/gemini-embedding-001",
+     "embedding": "<base64 of little-endian float32[3072]>"}
 
-The 1536-d embedding dominates the size, so it is stored as base64-packed
-float32 (~8.2 KB/row) rather than a JSON float array (~28 KB/row). float32 is the
-exact width ``video_rag.embedding`` (``vector(1536)``) stores, so the round-trip
-is lossless against the DB. At ~18.9k template videos the whole artifact is
-~165 MB — far past a git-trackable size and high-entropy (won't delta-compress),
-so it lives untracked-local like ``videos/`` and is distributed to prod the same
-way (manual S3 upload + fetch; see VideoService/CLAUDE.md).
+The 3072-d embedding dominates the size, so it is stored as base64-packed
+float32 (~16 KB/row) rather than a JSON float array. float32 is the exact width
+``video_rag.embedding`` (``vector(3072)``) stores, so the round-trip is lossless
+against the DB. At ~18.9k template videos the whole artifact is ~330 MB — far past
+a git-trackable size and high-entropy (won't delta-compress), so it lives
+untracked-local like ``videos/`` and is distributed to prod the same way (manual
+S3 upload + fetch; see VideoService/CLAUDE.md). (The packer is dimension-agnostic —
+it reads the length off each vector — so the width follows the model.)
 
 DISTRIBUTION. Both writer (``enrich_templates``) and reader (``import_yaml``)
 speak this format only through this module, so the layout has one owner.

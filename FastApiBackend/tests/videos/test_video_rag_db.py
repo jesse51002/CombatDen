@@ -4,7 +4,8 @@ Drives the real endpoints against the shared local Supabase over an ASGI
 transport. ``auth`` is overridden always-pass for the happy-path tests; the
 403 test wires the REAL ``verify_can_view_member`` behind a fake JWT payload so
 a non-viewer is rejected. The LLM client is overridden with a deterministic
-stub — its embedding is a fixed 1536-dim vector (no OpenAI call) that the seeded
+stub — its embedding is a fixed vector sized to ``settings.video_embedding_dim``
+(no provider call) that the seeded
 ``video_rag`` row also carries so retrieval is clean, and its summary call
 returns a canned taste paragraph (no chat model call).
 
@@ -31,12 +32,15 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
+from src.core.config import settings
 from src.main import app
 from src.shared.auth import Auth
 from src.shared.database import DirectDatabasePool
 
 _AUTH_HEADERS = {"Authorization": "Bearer fake-jwt"}
-_EMBEDDING_DIM = 1536
+# Sized to the cross-service embedding contract so the test vector always matches
+# the vector(N) column width (tracks video_embedding_dim through model changes).
+_EMBEDDING_DIM = settings.video_embedding_dim
 # One shared deterministic vector: the member profile embeddings AND the seeded
 # video_rag row use it, so cosine distance is 0 (similarity 1) and retrieval is
 # deterministic without an OpenAI call.

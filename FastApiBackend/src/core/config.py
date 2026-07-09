@@ -90,15 +90,18 @@ class Settings(BaseSettings):
     # ── Video RAG read surface (member recs + personalized feed) ──────
     # Embedding model + dimension for the member's video-taste profile embedding
     # AND the video summaries the VideoService worker embeds. The dimension is pinned to the
-    # `vector(1536)` DDL — a CROSS-SERVICE CONTRACT: it pins BOTH the
+    # `vector(3072)` DDL — a CROSS-SERVICE CONTRACT: it pins BOTH the
     # `video_rag.embedding` the VideoService worker writes AND the
     # `members.video_profile_embedding` this backend writes (all three must use
     # the same model + dim, they are compared by cosine). Uses the litellm
     # `provider/name` format so the provider key is resolved from the prefix
-    # (openai/ → openai_api_key). Changing the model is a one-way door:
-    # migration + full re-embed of video_rag AND members.video_profile_embedding.
-    video_embedding_model: str = "openai/text-embedding-3-small"
-    video_embedding_dim: int = 1536
+    # (gemini/ → gemini_api_key). gemini-embedding-001 outputs native 3072 dims
+    # (pre-normalized at 3072 — no manual renormalization needed). Stored full
+    # precision; the video_rag HNSW index runs on a halfvec cast (the `vector` type
+    # can't HNSW past 2000 dims). Changing the model is a one-way door: migration +
+    # full re-embed of video_rag AND members.video_profile_embedding.
+    video_embedding_model: str = "gemini/gemini-embedding-001"
+    video_embedding_dim: int = 3072
     # A member's video-taste profile is ONE summary + ONE embedding on the
     # members row, (re)built ONLY by `refresh_if_due` (fired fire-and-forget by
     # the class-booking + video-click triggers) at most once per this cooldown.

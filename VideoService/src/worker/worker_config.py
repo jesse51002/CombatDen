@@ -107,9 +107,11 @@ class WorkerSettings(BaseSettings):
     # Batched keep/drop scan call.
     scan_model: str = "gemini/gemini-2.5-flash-lite"
     # Summary embedding model. Its dimension is a cross-service contract with the
-    # FastApiBackend readers — both pin the same model + dim.
-    embedding_model: str = "openai/text-embedding-3-small"
-    embedding_dim: int = 1536
+    # FastApiBackend readers — both pin the same model + dim. gemini-embedding-001
+    # outputs native 3072 (pre-normalized at 3072); stored full precision, HNSW
+    # indexed as a halfvec cast (vector can't HNSW past 2000 dims).
+    embedding_model: str = "gemini/gemini-embedding-001"
+    embedding_dim: int = 3072
 
 
 settings = WorkerSettings()

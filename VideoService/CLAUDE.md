@@ -189,7 +189,7 @@ worker:
    (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call,
    lazy Apify transcript on a miss) plus a summary embedding — and appends each to
    the **untracked-local sidecar** `video_rag/video_rag.jsonl` (base64-packed
-   float32 embeddings; ~165 MB, distributed to prod via S3 exactly like `videos/`).
+   float32 embeddings; ~330 MB at 3072 dims, distributed to prod via S3 exactly like `videos/`).
    `import_yaml` then reloads it into `video_rag` on every sync (upsert by
    `video_id`, `ON CONFLICT DO NOTHING` — SEEDS, never clobbers a live worker
    enrichment). Because `video_rag` is keyed by `video_id` and shared across the
@@ -342,8 +342,11 @@ enrich). It reads `DATABASE_URL` from `src/shared/config.py` and the LLM provide
 `Settings` classes over the one `.env`.
 
 The **embedding contract is cross-service.** The worker embeds with
-`embedding_model` (`openai/text-embedding-3-small`) into `video_rag.embedding` typed
-`vector(1536)`; `run.py` asserts `embedding_dim == 1536` at startup. The FastApiBackend RAG
-readers (member recs + semantic search) rank against those same `video_rag` embeddings, so
-both sides pin the **same model + `vector(1536)` dimension** (`settings.video_embedding_dim`
-on the backend). Changing one without the other silently breaks similarity.
+`embedding_model` (`gemini/gemini-embedding-001`, native 3072) into `video_rag.embedding` typed
+`vector(3072)`; `run.py` asserts `embedding_dim == 3072` at startup. The FastApiBackend RAG
+readers (member recs + personalized feed) rank against those same `video_rag` embeddings, so
+both sides pin the **same model + `vector(3072)` dimension** (`settings.video_embedding_dim`
+on the backend). The embedding is stored full precision; only the `video_rag` HNSW index runs on
+a `halfvec(3072)` cast (the `vector` type can't HNSW past 2000 dims), so the worker's Tier-2 funnel
+probe casts to `halfvec` to use it. Changing the model/dim is a one-way door — a coordinated
+re-embed of BOTH sides — and changing one without the other silently breaks similarity.

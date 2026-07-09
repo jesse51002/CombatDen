@@ -71,7 +71,7 @@ worker` runs the loop locally against `.env`.
    imported preset feeds serve instantly instead of waiting for the worker to
    enrich. That sidecar is built once by the PAID `make enrich-templates` run
    (enriches the ~18.9k unique `video_gym_feed` videos, reusing
-   `WorkerEnricher.enrich_one`; untracked-local like `videos/`, ~165 MB, S3 to
+   `WorkerEnricher.enrich_one`; untracked-local like `videos/`, ~330 MB, S3 to
    prod). See the CLAUDE.md "Jobs / workflow" for the full flow.
 3. **The worker runs** — its tick is three DECOUPLED DB-backed steps, not a single
    per-gym pipeline: cleanup + finalize run every tick for free, then ONE heavy
@@ -98,7 +98,7 @@ worker` runs the loop locally against `.env`.
   per request, itself a thin wrapper over the unified feed — that the worker's
   `video_rag` rows power. The two never call each other — the shared `video_*`
   tables (and their timestamps) are the hand-off the worker reads to derive its own
-  work. The embedding model + `vector(1536)` dimension is a contract pinned on both
+  work. The embedding model + `vector(3072)` dimension is a contract pinned on both
   sides.
 
 ## Hard rules (all work)

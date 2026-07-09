@@ -259,7 +259,7 @@ class MemberVideoProfileService:
     def _assert_dim(self, vec: list[float]) -> None:
         """The produced vector must match the pinned embedding dimension.
 
-        The ``vector(1536)`` DDL is a cross-service contract; a mismatch means a
+        The ``vector(3072)`` DDL is a cross-service contract; a mismatch means a
         misconfigured embedding model, so fail loudly rather than write a
         wrong-width vector.
         """

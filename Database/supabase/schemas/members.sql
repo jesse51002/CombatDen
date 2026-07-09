@@ -27,7 +27,7 @@ CREATE TABLE members (
     -- The embedding is pinned to settings.video_embedding_dim — the same model
     -- + dimension contract as video_rag.embedding (they are compared by cosine).
     video_profile_summary TEXT,
-    video_profile_embedding vector(1536),
+    video_profile_embedding vector(3072),
     video_profile_embedding_model TEXT,
     video_profile_built_at TIMESTAMPTZ,
 

@@ -125,7 +125,7 @@ CREATE TABLE video_rag (
     facets JSONB NOT NULL DEFAULT '{}'
         CONSTRAINT video_rag_facets_is_object
             CHECK (jsonb_typeof(facets) = 'object'),
-    embedding vector(1536) NOT NULL,
+    embedding vector(3072) NOT NULL,
     embedding_model TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -133,10 +133,14 @@ CREATE TABLE video_rag (
 -- HNSW ANN index over the summary embeddings. The ~18.9k unique template videos
 -- are enriched up front (the enrich-templates sidecar seeds video_rag on every
 -- `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the
--- first sync — without the index every feed / rec / funnel cosine query would
--- scan the whole table. vector_cosine_ops matches the <=> cosine the readers use.
+-- first sync — without the index the worker's tier-2 funnel probe would scan the
+-- whole pool. The embedding is stored full-precision vector(3072) but INDEXED as a
+-- halfvec cast: pgvector's HNSW caps the `vector` type at 2000 dims (Postgres 8KB
+-- page limit), and 3072 > 2000, so the index runs on the compact half-precision
+-- representation (halfvec supports HNSW to 4000 dims; recall loss vs full precision
+-- is ~0). The funnel probe casts to halfvec to match this indexed expression.
 CREATE INDEX idx_video_rag_embedding ON video_rag
-    USING hnsw (embedding vector_cosine_ops);
+    USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops);
 
 ALTER TABLE video_rag ENABLE ROW LEVEL SECURITY;
 
@@ -173,7 +177,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE video_rag FROM authenticated;
 
 ALTER TABLE members
     ADD COLUMN video_profile_summary TEXT,
-    ADD COLUMN video_profile_embedding vector(1536),
+    ADD COLUMN video_profile_embedding vector(3072),
     ADD COLUMN video_profile_embedding_model TEXT,
     ADD COLUMN video_profile_built_at TIMESTAMPTZ;
 

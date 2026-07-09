@@ -33,10 +33,10 @@ from src.worker.worker_youtube import WorkerYouTubeClient
 
 logger = logging.getLogger(__name__)
 
-# The video_rag.embedding column is vector(1536); the worker MUST embed at this
+# The video_rag.embedding column is vector(3072); the worker MUST embed at this
 # dimension or every insert fails. Asserted at startup so a mis-set model /
 # embedding_dim is caught immediately, not mid-run.
-EXPECTED_EMBEDDING_DIM = 1536
+EXPECTED_EMBEDDING_DIM = 3072
 
 
 def _build_service(db_pool: DirectDatabasePool) -> WorkerService:

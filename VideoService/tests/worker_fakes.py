@@ -26,7 +26,7 @@ def route(sql: str) -> str:
         ("SELECT run_id, created_at", "prev_run"),
         ("created_at <= :as_of", "spec_as_of"),
         ("jsonb_exists_any(source_queries", "tier1"),
-        ("r.embedding <=>", "tier2"),
+        ("r.embedding::halfvec", "tier2"),
         ("SELECT video_id\nFROM gym_video_feed", "prev_verdicts"),
         ("IN ('pending', 'accepted')", "enrich_targets"),
         ("v.tag AS genre", "scan_targets"),

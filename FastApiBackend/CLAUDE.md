@@ -574,10 +574,12 @@ The per-member RAG profile is **ONE LLM-written summary + ONE embedding stored o
 not a sidecar table. A small chat model (`video_profile_summary_model`) turns the member's facts (rank,
 gym disciplines, most-attended classes in a 90-day window, and recently `video_clicked` videos' title +
 `video_rag` summary) into a short taste paragraph; that paragraph is embedded once and its embedding is
-what the rec + the personalized feed rank against `video_rag.embedding`. The `vector(1536)` DDL is a
+what the rec + the personalized feed rank against `video_rag.embedding`. The `vector(3072)` DDL is a
 **cross-service contract** — every produced vector is length-checked against `settings.video_embedding_dim`
 (a mismatch raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[0.1,0.2,...]'`),
-bound `CAST(:x AS vector)`.
+bound `CAST(:x AS vector)`. The gym-scoped feed/rec reads cosine-rank a few hundred candidates (one gym's
+feed) at full precision — no index needed; the `halfvec`-cast HNSW index on `video_rag` serves the
+worker's pool-wide funnel probe.
 
 **The profile is (re)built ONLY by `refresh_if_due` — reads never build.** There is no
 build-on-read: `refresh_if_due` (fired fire-and-forget by the click + class-booking triggers) is the
@@ -683,9 +685,9 @@ Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare 
 `anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`,
 `video_query_count` (queries per commit, injected into `VideoSpecAuthoring`).
 
-RAG settings: `video_embedding_model` (litellm format, default `openai/text-embedding-3-small` — needs
-`openai_api_key`), `video_embedding_dim` (1536, pinned to the `vector(1536)` DDL and shared by
-`video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
+RAG settings: `video_embedding_model` (litellm format, default `gemini/gemini-embedding-001` — native
+3072, pre-normalized, needs `gemini_api_key`), `video_embedding_dim` (3072, pinned to the `vector(3072)`
+DDL and shared by `video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
 model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuses `anthropic_api_key`),
 `video_profile_refresh_cooldown_days` (3), `video_rec_category_rotation` (ordered `VideoGenre` list —
 best-first genre order the single rec rotates through). The pick WITHIN a category is the top of the

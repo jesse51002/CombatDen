@@ -62,11 +62,11 @@ later sweep reuses it instead of re-paying Apify. A transcript miss/failure
 degrades to a no-transcript placeholder and is **NOT a strike**.
 
 The tag + disciplines are written back onto the pool `video` row; summaries are
-batch-embedded (`embedding_model`, `openai/text-embedding-3-small` → `vector(1536)`,
+batch-embedded (`embedding_model`, `gemini/gemini-embedding-001` → `vector(3072)`,
 chunks of `EMBED_BATCH_SIZE`, 64) and inserted as `video_rag` rows. This is the
 RAG layer the FastApiBackend's unified feed and member recs rank against — the
 model + dimension are a **cross-service contract** (`run.py` asserts
-`embedding_dim == 1536` at startup; the served feed's `INNER JOIN video_rag` is
+`embedding_dim == 3072` at startup; the served feed's `INNER JOIN video_rag` is
 the enriched-gate every client reads through — see "the served feed" below).
 
 **Strike semantics — hard errors only.** A video whose multimodal call OR whose

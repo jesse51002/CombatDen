@@ -125,22 +125,25 @@ personalized feed ranking from. Two new tables (`video_rag`, `member_video_recs`
 video-taste profile columns on `members`, a status lifecycle on `video_run`, and the generic `cost_log`
 support it.
 **pgvector** is enabled in `schemas/_extensions.sql` (`CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA
-extensions`); embedding columns are `vector(1536)`, a **cross-service contract** pinned to
-`settings.video_embedding_dim` in the backend (a wrong-width vector raises rather than writes).
+extensions`); embedding columns are `vector(3072)` (`gemini-embedding-001`, native 3072), a
+**cross-service contract** pinned to `settings.video_embedding_dim` in the backend (a wrong-width vector
+raises rather than writes).
 
 **`video.failure_count`** — a per-video hard-error strike counter (`INTEGER NOT NULL DEFAULT 0`,
 `CHECK (failure_count >= 0)`, declared in `schemas/video.sql`). The worker bumps it on a step
 exception, resets it to 0 on success, and its cleanup step deletes the video at 3 strikes.
 
 - **`video_rag`** — one RAG row per pooled video: `video_id TEXT` **PK** (FK → `video`, `ON DELETE
-  CASCADE`), `summary TEXT`, `facets JSONB` (object CHECK), `embedding vector(1536)`, `embedding_model`,
+  CASCADE`), `summary TEXT`, `facets JSONB` (object CHECK), `embedding vector(3072)`, `embedding_model`,
   `created_at`. The worker enrich stage writes it once per un-enriched video; the summary embedding is
-  what recs/search rank against. It carries an **HNSW `vector_cosine_ops` index** (`idx_video_rag_embedding`):
+  what recs rank against. It carries an **HNSW index built on a `halfvec` cast**
+  (`idx_video_rag_embedding` — `hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)`; pgvector's HNSW
+  caps the `vector` type at 2000 dims, so 3072 is indexed at half precision, recall ~unchanged):
   the ~18.9k unique template videos are enriched up front (the VideoService `enrich-templates` sidecar seeds
   `video_rag` on every `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the first
   sync and every feed / rec / funnel cosine query needs the ANN index.
 - **Member video-taste profile on `members`** — the per-member RAG profile is columns on the `members`
-  table, not a sidecar: `video_profile_summary TEXT`, `video_profile_embedding vector(1536)`,
+  table, not a sidecar: `video_profile_summary TEXT`, `video_profile_embedding vector(3072)`,
   `video_profile_embedding_model TEXT`, `video_profile_built_at TIMESTAMPTZ` — all nullable, NULL until
   first built. One summary + one embedding per member, lazily (re)built by the backend (service_role)
   from deterministic v1 template text and rebuilt when stale (`video_profile_built_at`). Same model +

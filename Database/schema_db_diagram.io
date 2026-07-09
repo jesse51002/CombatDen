@@ -98,7 +98,7 @@ Table members {
   current_sub_index integer [note: 'nullable; leaf position within current_rank_id (NULL when sub_rank_count=0); written only by ranks endpoints']
   // --- RAG video-taste profile (backend-built, service_role-only; NULL until first built) ---
   video_profile_summary text
-  video_profile_embedding vector [note: 'vector(1536); same model+dim contract as video_rag.embedding']
+  video_profile_embedding vector [note: 'vector(3072); same model+dim contract as video_rag.embedding']
   video_profile_embedding_model text
   video_profile_built_at timestamptz
   // --- merged billing/contact/Stripe (service_role-written; NULL for engagement-only members) ---
@@ -854,12 +854,12 @@ Table gym_video_feed {
 
 // RAG sidecar: one row per ENRICHED pool video (worker's one multimodal
 // classify+summarize call). Lazy — un-enriched videos have no row and are
-// invisible to RAG. ONE embedding kind: the summary embedding (vector(1536)).
+// invisible to RAG. ONE embedding kind: the summary embedding (vector(3072)).
 Table video_rag {
   video_id text [primary key, note: 'FK to video.video_id, ON DELETE CASCADE']
   summary text [not null, note: 'prose summary incl. thumbnail visuals (gi vs no-gi etc.)']
   facets jsonb [not null, default: '{}', note: 'structured attrs from the same call']
-  embedding vector [not null, note: 'vector(1536) of summary; model+dim pinned cross-service (one-way door)']
+  embedding vector [not null, note: 'vector(3072) of summary; model+dim pinned cross-service (one-way door)']
   embedding_model text [not null]
   created_at timestamptz [not null, default: `now()`]
 }

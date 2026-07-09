@@ -27,12 +27,12 @@ CREATE TABLE video_rag (
     facets JSONB NOT NULL DEFAULT '{}'
         CONSTRAINT video_rag_facets_is_object
             CHECK (jsonb_typeof(facets) = 'object'),
-    -- Embedding of `summary`. The dimension is pinned to the embedding model
-    -- (a cross-service contract: VideoService worker writes, FastApiBackend
-    -- reads/queries — both pin the same model + dim in settings). Changing
-    -- models is a one-way door: migration + full re-embed of this table AND
-    -- members.video_profile_embedding.
-    embedding vector(1536) NOT NULL,
+    -- Embedding of `summary` (gemini-embedding-001, native 3072). The dimension
+    -- is pinned to the embedding model (a cross-service contract: VideoService
+    -- worker writes, FastApiBackend reads/queries — both pin the same model + dim
+    -- in settings). Changing models is a one-way door: migration + full re-embed
+    -- of this table AND members.video_profile_embedding.
+    embedding vector(3072) NOT NULL,
     embedding_model TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -40,8 +40,11 @@ CREATE TABLE video_rag (
 -- HNSW ANN index over the summary embeddings. The ~18.9k unique template videos
 -- are enriched up front (the enrich-templates sidecar seeds video_rag on every
 -- `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the
--- very first sync — without the index every feed / rec / funnel cosine query
--- would scan the whole table. `vector_cosine_ops` matches the `<=>` cosine
--- distance the Tier-2 probes and rec/search readers rank with.
+-- very first sync — without the index the worker's Tier-2 funnel probe would scan
+-- the whole pool. The embedding is stored full-precision `vector(3072)` but INDEXED
+-- as a `halfvec` cast: pgvector's HNSW caps the `vector` type at 2000 dims (the 8KB
+-- page limit), and 3072 > 2000, so the index runs on the compact half-precision
+-- form (`halfvec` supports HNSW to 4000 dims; recall vs full precision is ~identical).
+-- The Tier-2 probe casts its query to `halfvec` to match this indexed expression.
 CREATE INDEX idx_video_rag_embedding ON video_rag
-    USING hnsw (embedding vector_cosine_ops);
+    USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops);
