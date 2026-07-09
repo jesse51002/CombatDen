@@ -85,11 +85,13 @@ class EnrichTemplatesRunner:
         enricher: WorkerEnricher,
         llm: LiteLLMClient,
         sidecar: VideoRagSidecar,
+        limit: int | None = None,
     ) -> None:
         self._db = db_pool
         self._enricher = enricher
         self._llm = llm
         self._sidecar = sidecar
+        self._limit = limit
         self._vocab = WorkerEnricher.discipline_vocab()
 
     async def run(self) -> _Totals:
@@ -123,6 +125,9 @@ class EnrichTemplatesRunner:
             len(done),
             len(targets),
         )
+        if self._limit is not None and len(targets) > self._limit:
+            targets = targets[: self._limit]
+            logger.info("  --limit: capped to %d this run (smoke test)", self._limit)
         return targets
 
     async def _process_chunk(
@@ -163,13 +168,13 @@ class EnrichTemplatesRunner:
         totals.enriched += len(records)
 
 
-async def run(*, root: Path) -> _Totals:
+async def run(*, root: Path, limit: int | None = None) -> _Totals:
     pool = build_write_pool()
     llm = LiteLLMClient()
     transcript = WorkerTranscriptClient(settings.apify_token)
     enricher = WorkerEnricher(pool, llm, transcript, WorkerCostLog(pool))
     sidecar = VideoRagSidecar(root)
-    runner = EnrichTemplatesRunner(pool, enricher, llm, sidecar)
+    runner = EnrichTemplatesRunner(pool, enricher, llm, sidecar, limit=limit)
     try:
         totals = await runner.run()
     finally:
@@ -191,10 +196,17 @@ async def run(*, root: Path) -> _Totals:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=_DEFAULT_ROOT)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Enrich at most N videos this run — a cheap smoke test to prove the "
+        "pipeline end-to-end before the full paid run.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    asyncio.run(run(root=args.root))
+    asyncio.run(run(root=args.root, limit=args.limit))
     return 0
 
 

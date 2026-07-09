@@ -197,10 +197,13 @@ worker:
    gym that later imports a preset **for free**. It only READS the DB (the pool
    fields) and WRITES the sidecar file — never mutates the DB — and is
    resumable/idempotent (skips videos already in the sidecar). Needs the keys the
-   configured `enrich_model` + `embedding_model` use (default `GEMINI_API_KEY` +
-   `OPENAI_API_KEY`) + `APIFY_TOKEN`, and a DB already synced (pool +
-   `video_gym_feed` loaded). The sidecar format is owned by
-   `scripts/shared/video_rag_sidecar.py`.
+   configured `enrich_model` + `embedding_model` use — both Gemini now, so just
+   `GEMINI_API_KEY` — plus `APIFY_TOKEN` for the lazy transcript fetches, and a DB
+   already synced (pool + `video_gym_feed` loaded). The sidecar format is owned by
+   `scripts/shared/video_rag_sidecar.py`. **Smoke-test first:** `make
+   enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"` runs the whole
+   enrich→embed→sidecar pipeline on ONE video (into a throwaway root) to prove it
+   works before the full paid run.
 4. **The content worker** (`make worker` → `python -m src.worker.run`) — the
    decoupled scrape / enrich / scan step worker (cleanup → finalize → one drained
    step per tick), detailed in the next section. It **replaced** the old standalone

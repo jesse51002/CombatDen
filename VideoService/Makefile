@@ -53,7 +53,9 @@ sync-gyms-prod:
 # Targets the DB in ENV_FILE (default .env). Cost ~ $30-150 for the summary pass.
 #   make enrich-templates
 enrich-templates:
-	poetry run python -m scripts.enrich_templates.run
+	poetry run python -m scripts.enrich_templates.run $(ARGS)
+# Smoke-test the whole enrich->embed->sidecar pipeline on ONE video before the
+# full paid run:  make enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"
 
 # The pool scrape + per-gym scan are no longer standalone scripts: they are the
 # background `worker` (see the `worker` target above), which self-schedules the
