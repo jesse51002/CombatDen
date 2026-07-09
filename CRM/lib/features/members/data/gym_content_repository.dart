@@ -113,14 +113,16 @@ class GymContentRepository {
   }
 
   /// `GET /api/v1/gyms/{gymId}/videos?video_type=&limit=&offset=` — one page
-  /// of the real gym's video feed. Identical JSON shape to the template feed
-  /// endpoint; [Video.fromJson] parses it unchanged.
+  /// of the real gym's served feed (always the merged owner + latest-run
+  /// view — there is no owner filter on this endpoint; see
+  /// [fetchOwnerVideos] for the ungated "Your videos" management listing).
+  /// Identical JSON shape to the template feed endpoint; [Video.fromJson]
+  /// parses it unchanged.
   ///
   /// Throws [ServerException] / [NetworkException] on failure.
   Future<VideoPage> fetchVideos(
     String gymId, {
     String? videoType,
-    bool owner = false,
     bool rejected = false,
     int limit = 20,
     int offset = 0,
@@ -133,24 +135,10 @@ class GymContentRepository {
           'offset': offset,
           if (videoType != null && videoType.isNotEmpty)
             'video_type': videoType,
-          if (owner) 'owner': true,
           if (rejected) 'rejected': true,
         },
       );
-      final data = response.data;
-      if (data == null) {
-        throw const ServerException('Empty videos response');
-      }
-      final raw = data['videos'];
-      if (raw is! List) {
-        throw const ServerException('Missing videos array in response');
-      }
-      final videos = raw
-          .whereType<Map>()
-          .map((e) => Video.fromJson(Map<String, dynamic>.from(e)))
-          .toList(growable: false);
-      final total = (data['total'] as int?) ?? videos.length;
-      return VideoPage(videos: videos, total: total);
+      return _parseVideoPage(response.data, 'Empty videos response');
     } on ServerException {
       rethrow;
     } on NetworkException {
@@ -159,6 +147,53 @@ class GymContentRepository {
       log('fetchVideos failed', error: e, stackTrace: st);
       throw ServerException('Failed to load gym videos: $e');
     }
+  }
+
+  /// `GET /api/v1/gyms/{gymId}/videos/owner` — the ungated "Your videos"
+  /// management listing: every owner-added video, including one still being
+  /// enriched (its card carries `enriched: false` while it processes).
+  /// Identical response shape to [fetchVideos]; [Video.fromJson] parses it
+  /// unchanged.
+  ///
+  /// Throws [ServerException] / [NetworkException] on failure.
+  Future<VideoPage> fetchOwnerVideos(
+    String gymId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/api/v1/gyms/$gymId/videos/owner',
+        queryParameters: {'limit': limit, 'offset': offset},
+      );
+      return _parseVideoPage(response.data, 'Empty owner videos response');
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('fetchOwnerVideos failed', error: e, stackTrace: st);
+      throw ServerException('Failed to load your videos: $e');
+    }
+  }
+
+  /// Shared tail for [fetchVideos] / [fetchOwnerVideos]: both endpoints
+  /// return the identical `GymVideosFeed` shape (`total`/`limit`/`offset`/
+  /// `videos`).
+  VideoPage _parseVideoPage(Map<String, dynamic>? data, String emptyMessage) {
+    if (data == null) {
+      throw ServerException(emptyMessage);
+    }
+    final raw = data['videos'];
+    if (raw is! List) {
+      throw const ServerException('Missing videos array in response');
+    }
+    final videos = raw
+        .whereType<Map>()
+        .map((e) => Video.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+    final total = (data['total'] as int?) ?? videos.length;
+    return VideoPage(videos: videos, total: total);
   }
 
   /// `POST /api/v1/gyms/{gymId}/videos/lookup` — fetch a YouTube link's real
