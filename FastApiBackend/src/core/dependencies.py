@@ -471,13 +471,16 @@ class DependencyInjector(containers.DeclarativeContainer):
         refresh_cooldown_days=settings.video_profile_refresh_cooldown_days,
     )
     # Concern services — stateless, composed by the facade. The feed service
-    # reads a member's profile embedding (read-only) for optional personalized
-    # ordering when the feed route is passed a member_id.
+    # reads a member's profile embedding (read-only) for the unified feed's
+    # optional personalized ordering when passed a member_id, and applies the
+    # σ-scaled owner boost + decayed watch penalty from these two settings.
     video_feed_service = providers.Factory(
         VideoFeedService,
         db_pool=db_pool,
         youtube_client=youtube_metadata_client,
         profile_service=member_video_profile_service,
+        bump_sigma_fraction=settings.video_feed_bump_sigma_fraction,
+        watch_penalty_half_life_days=settings.video_watch_penalty_half_life_days,
     )
     # Fire-and-forget profile refresh (class-booking + video-click triggers).
     # Singleton so drain() on shutdown sees every in-flight refresh task.
@@ -486,8 +489,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         profile_service=member_video_profile_service,
     )
     # The rec is a thin wrapper over the feed: it drives the category rotation
-    # and records the pick, but the pure-cosine candidate query lives in
-    # video_feed_service.load_next_rec_video (defined above).
+    # and records the pick, but the ranking + candidate query live in the unified
+    # video_feed_service.load_feed_page (defined above; the rec calls it limit=1).
     video_recs_service = providers.Factory(
         VideoRecsService,
         db_pool=db_pool,

@@ -5,10 +5,11 @@ A rec is a single served feed card (:class:`GymVideoCard`) wrapped in a
 back on a click) and the video's genre ``category``. The rec surface serves ONE
 video at a time, rotating through the genre categories in
 ``settings.video_rec_category_rotation`` so a member sees a spread over time. The
-pick is ranked by PURE cosine similarity to the member's video-taste embedding
-(gym relevance when they have no embedding yet) — no composite blend, no stored
-score. :class:`RecCandidate` is the internal value the feed service returns for a
-single ranked pick (the video id plus its card) before it is recorded.
+pick is the top of the unified feed read (``VideoFeedService.load_feed_page``,
+``limit=1``) for that genre — cosine order to the member's taste embedding (gym
+relevance when they have no embedding yet), with the decayed already-watched
+penalty advancing the pick on a re-serve. The card already carries its
+``video_id``, so no separate candidate wrapper is needed.
 """
 
 from __future__ import annotations
@@ -20,20 +21,6 @@ from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401
 from src.videos.schema.videos_schema import GymVideoCard
-
-
-class RecCandidate(BaseModel):
-    """One ranked recommendation pick before it is recorded.
-
-    ``VideoFeedService.load_next_rec_video`` returns this so the service passes a
-    typed value (not a raw row): ``video_id`` is the pool id to record, ``video``
-    the card to return to the client.
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    video_id: str
-    video: GymVideoCard
 
 
 class MemberVideoRec(BaseModel):

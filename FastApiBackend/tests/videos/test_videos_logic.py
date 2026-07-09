@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 from schema.video import VideoGenre
 
 from src.presets.service.presets_template_service import PresetsTemplateService
@@ -24,7 +25,14 @@ from src.theme.service.theme_showcase_service import ThemeShowcaseService
 from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup, big_group_for
 from src.videos.schema.videos_gym_type import GymType
 from src.videos.schema.videos_parent_gym_type import ParentGymType, parent_of
+from src.videos.schema.videos_schema import GymVideoCard
 from src.videos.service.video_feed_service import VideoFeedService
+
+# Feed-ranking knobs the mocked feed service is built with (values don't matter
+# to the mock — only that they are forwarded to the SQL binds).
+_BUMP_FRACTION = 0.10
+_HALF_LIFE_DAYS = 7.0
+_HALF_LIFE_SECONDS = _HALF_LIFE_DAYS * 86400
 
 
 def test_big_group_for_is_total_over_genres():
@@ -127,6 +135,8 @@ def _make_feed_service(mock_rows: list[dict]) -> tuple[VideoFeedService, MagicMo
         db_pool=mock_db,
         youtube_client=MagicMock(),
         profile_service=MagicMock(),
+        bump_sigma_fraction=_BUMP_FRACTION,
+        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
     return svc, mock_session
 
@@ -162,7 +172,6 @@ async def test_load_feed_page_no_filter_returns_page_and_total() -> None:
 
     cards, total = await svc.load_feed_page(
         _GYM_ID,
-        owner=False,
         rejected=False,
         video_type=None,
         big_group=None,
@@ -180,6 +189,14 @@ async def test_load_feed_page_no_filter_returns_page_and_total() -> None:
     assert params["offset"] == 0
     assert params["gym_id"] == str(_GYM_ID)
     assert params["educational_genres"] == _EDUCATIONAL_GENRE_VALUES
+    # No member_id supplied → embedding + member_id bound NULL, rank knobs bound.
+    assert params["member_embedding"] is None
+    assert params["member_id"] is None
+    assert params["bump_fraction"] == _BUMP_FRACTION
+    assert params["half_life_seconds"] == _HALF_LIFE_SECONDS
+    # The owner/source split is gone — one merged candidate set.
+    assert "owner" not in params
+    assert "source" not in params
 
 
 async def test_load_feed_page_video_type_filter() -> None:
@@ -248,21 +265,83 @@ async def test_load_feed_page_empty_result_returns_zero_total() -> None:
     assert total == 0
 
 
-async def test_load_feed_page_owner_and_rejected_flags() -> None:
-    """owner=True and rejected=True are forwarded to the SQL params."""
+async def test_load_feed_page_rejected_maps_scan_status_no_owner_param() -> None:
+    """rejected=True maps scan_status='rejected'; there is NO owner/source param
+    (one merged candidate set), and the rank binds are always present."""
     svc, mock_session = _make_feed_service([_video_row(total=1)])
 
     await svc.load_feed_page(
         _GYM_ID,
-        owner=True,
         rejected=True,
+        member_id=None,
         limit=10,
         offset=0,
     )
 
     params = mock_session.execute.call_args[0][1]
-    assert params["owner"] is True
     assert params["scan_status"] == "rejected"
+    assert "owner" not in params
+    assert "source" not in params
+    assert params["member_embedding"] is None
+    assert params["member_id"] is None
+    assert params["bump_fraction"] == _BUMP_FRACTION
+    assert params["half_life_seconds"] == _HALF_LIFE_SECONDS
+
+
+async def test_load_feed_page_binds_member_embedding_when_member_has_profile() -> None:
+    """A member with a built embedding binds it + the member_id for the penalty."""
+    member_id = UUID("00000000-0000-0000-0000-0000000000aa")
+    svc, mock_session = _make_feed_service([_video_row(total=1)])
+    # Give the (mocked) profile service a built embedding for this member.
+    svc._profiles.load_embedding = AsyncMock(return_value="[0.1,0.2]")
+
+    await svc.load_feed_page(_GYM_ID, member_id=member_id, limit=10, offset=0)
+
+    svc._profiles.load_embedding.assert_awaited_once_with(member_id)
+    params = mock_session.execute.call_args[0][1]
+    assert params["member_embedding"] == "[0.1,0.2]"
+    assert params["member_id"] == str(member_id)
+
+
+async def test_load_owner_videos_exposes_enriched_flag() -> None:
+    """The ungated owner listing hydrates cards, forwards gym/limit/offset (no
+    owner/scan_status param), and a row can carry enriched=False + owner_added."""
+    row = _video_row(owner_added=True, enriched=False, total=1)
+    svc, mock_session = _make_feed_service([row])
+
+    cards, total = await svc.load_owner_videos(_GYM_ID, limit=15, offset=5)
+
+    assert total == 1
+    assert len(cards) == 1
+    assert cards[0].enriched is False
+    assert cards[0].owner_added is True
+    params = mock_session.execute.call_args[0][1]
+    assert params["gym_id"] == str(_GYM_ID)
+    assert params["limit"] == 15
+    assert params["offset"] == 5
+    assert "owner" not in params
+    assert "scan_status" not in params
+
+
+def test_gym_video_card_requires_video_id() -> None:
+    """video_id is a required field now; a card without it fails validation and
+    one with it (defaulting owner_added/enriched) validates."""
+    base = {
+        "url": "https://youtu.be/x",
+        "title": "T",
+        "thumbnail_url": "https://img/x.jpg",
+        "channel_name": "C",
+        "channel_url": "https://c",
+        "channel_avatar_url": "",
+        "relevance_index": 0,
+    }
+    with pytest.raises(ValidationError):
+        GymVideoCard(**base)
+
+    card = GymVideoCard(video_id="vid1", **base)
+    assert card.video_id == "vid1"
+    assert card.owner_added is False  # default
+    assert card.enriched is True  # default
 
 
 async def test_load_feed_page_invalid_row_skipped() -> None:

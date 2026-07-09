@@ -489,12 +489,40 @@ agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
 | `GET /api/v1/gyms/{id}/members/{member_id}/video-rec` | The member's next single rotating-category RAG rec — rotates the served genre by the member's served-rec count, records the pick, returns `{rec_id, category, video}` (`verify_can_view_member`; 404 when the member isn't in the path gym OR no category yields a video) |
 | `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 
-The plain feed route `GET /api/v1/gyms/{id}/videos` (`verify_gym_employee`) additionally takes an
-optional `member_id` query param: when that member has a built video-taste embedding, the page is
-ordered by cosine distance to it (personalized), else the default relevance order. The embedding is
-read-only (never built on this path); `member_id` is only a re-ordering hint (the candidate set is
-always the path gym's feed, so it can't leak — a member-facing route is a future concern, this stays
-staff-facing). There is **no semantic-search route** — it was removed (zero callers).
+**ONE unified feed read backs everything (`VideoFeedService.load_feed_page`).** `GET /api/v1/gyms/{id}/videos`
+(`verify_gym_employee`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
+COMPLETED run — there is **no owner/source param**. It serves **only enriched-AND-accepted** videos:
+the SQL **INNER JOIN**s `video_rag` (the enriched-only gate) so a row shows only once it has an
+embedding, and `?rejected` selects `scan_status` `accepted` vs `rejected`. `?member_id` is a read-only
+ranking hint (the candidate set is always the path gym's feed, so it can't leak — a member-facing route
+is a future concern, this stays staff-facing). **This same read backs the member rec** (`limit=1`,
+filtered to one genre).
+
+**Ranking — one axis, two σ-scaled nudges** (all in `videos_load_feed_page.sql`, wrapped in a CTE so a
+window stddev is available):
+- `axis` = cosine distance to the member embedding (`r.embedding <=> CAST(:member_embedding AS vector)`)
+  when one is bound, else gym `relevance_index`. A NULL `:member_embedding` is detected via
+  `CAST(:member_embedding AS text) IS NULL` (mirroring the CAST-to-text/CAST-to-vector pattern so
+  asyncpg binds a NULL cleanly — do NOT split into two SQL files for the null-embedding case).
+- `sigma` = `COALESCE(stddev_samp(axis) OVER (), 0)` over the whole candidate set.
+- `penalty_units` = `SUM(power(0.5, age_seconds / :half_life_seconds))` over the member's prior serves of
+  this video (`member_video_recs`), 0 rows when `:member_id` is NULL — a just-served video ≈ 1, an old
+  serve ≈ 0.
+- `adjusted` = `axis − owner·:bump_fraction·sigma + penalty_units·:bump_fraction·sigma`, `ORDER BY
+  adjusted ASC, relevance_index ASC, video_id ASC`. Owner videos nudged NEARER, watched videos nudged
+  FARTHER, symmetric and σ-scaled. Two `Settings`: `video_feed_bump_sigma_fraction` (0.10) and
+  `video_watch_penalty_half_life_days` (7.0, ×86400 → `:half_life_seconds`), injected into
+  `VideoFeedService` (no `settings` import — DI constructor args).
+
+**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_employee`,
+`load_owner_videos` / `videos_load_owner_videos.sql`): owner-section rows only, **LEFT JOIN** `video_rag`
+(NOT the enriched gate) exposing `enriched` so the CRM can badge "processing…", `ORDER BY curated_at DESC
+NULLS LAST`. An owner-added video is visible here the INSTANT it's added — before enrichment — which the
+enriched-gated served feed can't show. `GymVideoCard` carries `video_id` (required), `owner_added`
+(feed selects `video_run_id IS NULL AS owner_added`), and `enriched` (default `True`; only the owner
+listing sets it `False`).
+
+There is **no semantic-search route** — it was removed (zero callers).
 
 **Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
 
@@ -524,14 +552,17 @@ acknowledge and invite further changes (the conversation stays open, `saved=True
 `save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
 `get_video_rec`, `record_rec_click`, plus all feed operations
 (`load_feed_ids`, `load_pool_videos`, `load_feed_page` — which takes the optional `member_id`,
-`load_next_rec_video`, owner add/remove/keep). The conversational agent uses it for
+`load_owner_videos`, owner add/remove/keep). The conversational agent uses it for
 the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
 
 **Serve-path invariant (feed + rec):** every "latest run" subselect on the serve path filters
 `AND status = 'completed'` so a mid-flight `running` run never becomes latest and blanks the feed —
-this covers the feed page, the single rec candidate query, and the owner keep/reject curation writes
-(which target the run currently being served). The `video_run.status` column exists for exactly this
+this covers the unified feed page (which the rec reuses at `limit=1`) and the owner keep/reject curation
+writes (which target the run currently being served). Beyond the completed-run filter, the serve path
+also gates on **enriched AND accepted** — the feed's `INNER JOIN video_rag` is THE serve invariant: an
+accepted row with no embedding is invisible until the worker enriches it (the ungated `/videos/owner`
+listing is the only read that shows an un-enriched owner video). The `video_run.status` column exists for exactly this
 (the VideoService worker sets it; the backend has no worker-control surface — the worker derives its
 own due gym from timestamps already in the schema, so there is nothing to enqueue and no status route).
 
@@ -566,32 +597,21 @@ the rec, the personalized feed) tolerates a missing embedding by ranking without
   `MemberNotInGymError` maps to 404 at the route.
 - **`VideoRecsService`** (`video_recs_service.py`) — `get_rec(gym_id, member_id) -> MemberVideoRec | None`:
   serves ONE video at a time, **rotating the served genre category** through
-  `settings.video_rec_category_rotation`. It is a **thin wrapper over the feed** — it drives the rotation
-  and records the pick, but the ranking + candidate query live in `VideoFeedService.load_next_rec_video`.
-  `verify_member_in_gym` → `load_embedding` (read-only, loaded ONCE; None ⇒ gym-relevance ranking) →
+  `settings.video_rec_category_rotation`. It is a **thin wrapper over the unified feed** — it drives the
+  rotation and records the pick, but the ranking + candidate query live in the ONE
+  `VideoFeedService.load_feed_page` (there is no separate rec SQL). `verify_member_in_gym` →
   `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks the starting category;
-  within a category it calls `feed_service.load_next_rec_video(gym_id, member_id, category, embedding)`,
-  which runs `videos_load_next_rec.sql` (one file, `LIMIT 1`) filtered `v.tag = CAST(:category AS
-  video_genre)`. **Ranking is PURE cosine similarity** to the member's taste embedding
-  (`r.embedding <=> CAST(:member_embedding AS vector)`, un-enriched rows `NULLS LAST`), then
-  `relevance_index`, then `video_id`; when the member has no embedding the SQL's `CASE` collapses the
-  distance term so the whole set orders by relevance — **no composite blend, no weights, no stored
-  score**. Already-served videos are excluded (`NOT EXISTS` over `member_video_recs`) so each call
-  advances. A category that yields **no** candidate falls through to the next in the rotation (wrapping);
-  the first genre with a video wins. The pick returns as a `RecCandidate` (`video_id` + `GymVideoCard`),
-  is APPENDED to `member_video_recs` (`video_recs_record_insert.sql`, `RETURNING rec_id`), and returned as
-  `MemberVideoRec{rec_id, category, video}` (`video` is a plain `GymVideoCard`). **Candidate set unchanged:**
-  the gym's SERVED feed — accepted latest-COMPLETED-run rows + owner `video_run_id IS NULL`, mirroring
-  `videos_load_feed_ids` (NOT the feed page's exclusive owner flag — that owner-vs-run question is a
-  separate open decision). Returns `None` (→ route 404) when no category anywhere yields a video.
-  `MemberNotInGymError` propagates (→ 404).
-- **Personalized feed** (`VideoFeedService.load_feed_page`, `member_id` param) — when a `member_id` is
-  supplied AND it has a built embedding, the page runs `videos_load_feed_page_personalized.sql` (the same
-  candidate set / filters / pagination / `COUNT(*) OVER()` total as `videos_load_feed_page.sql`, plus
-  `LEFT JOIN video_rag` and `ORDER BY (r.embedding <=> CAST(:member_embedding AS vector)) ASC NULLS LAST,
-  v.relevance_index, v.video_id`). The embedding is READ-ONLY (never built here); no `member_id` or no
-  embedding ⇒ the plain feed SQL. The feed does NOT record anything to `member_video_recs`.
-  `VideoFeedService` takes `MemberVideoProfileService` by constructor DI for this read.
+  within a category it calls `feed_service.load_feed_page(gym_id, video_type=category, member_id=member_id,
+  limit=1, offset=0)` and takes the first card if the page is non-empty (the feed itself reads the
+  embedding once and applies the owner-boost + decayed-watch-penalty ranking above). A category that
+  yields **no** card falls through to the next in the rotation (wrapping); the first genre with a video
+  wins. **The rec advances on a re-serve via the decayed watch penalty baked into `load_feed_page` — there
+  is NO already-served anti-join.** A just-served video is nudged back on the next call, so a category with
+  enough clustered candidates surfaces a different pick; a sparse category (one video) legitimately
+  re-serves the same one. The pick is APPENDED to `member_video_recs`
+  (`video_recs_record_insert.sql`, `RETURNING rec_id`) and returned as `MemberVideoRec{rec_id, category,
+  video}` (`video` is the `GymVideoCard`, carrying `video_id`). Returns `None` (→ route 404) when no
+  category anywhere yields a video. `MemberNotInGymError` propagates (→ 404).
 - **`VideoRecClickService`** (`video_rec_click_service.py`) — `record_click(gym_id, member_id, rec_id)`:
   in one txn stamps `member_video_recs.clicked_at` (first click only — idempotent via `clicked_at IS
   NULL`, scoped to member+gym) and logs a `video_clicked` `member_activities` row (carrying `video_id`
@@ -609,14 +629,14 @@ There is **no semantic-search service** — `VideoSearchService` and the `/video
 removed (zero callers). The rec's `category` is typed as the existing `VideoGenre` enum (`schema.video`),
 never a separate abstraction (there is no mood-bucket map). Member activity writers use the shared
 `MemberActivityType` enum (`schema.member_activity`). Response schemas: `schema/video_recs_schema.py`
-(`RecCandidate` (`video_id` / `video: GymVideoCard`) — the feed's single-pick value, `MemberVideoRec`
-(`rec_id` / `category: VideoGenre` / `video: GymVideoCard`), `VideoRecClickResponse`); the profile
-summary schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
+(`MemberVideoRec` (`rec_id` / `category: VideoGenre` / `video: GymVideoCard`) and `VideoRecClickResponse`
+— there is no `RecCandidate` wrapper; the card already carries its `video_id`); the profile summary
+schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
 `sql/member_profile_load.sql` / `member_profile_source.sql` / `member_profile_update.sql`,
-`videos_load_next_rec.sql` (one file, pure cosine with a `CASE` fallback to relevance, `LIMIT 1`),
+`videos_load_feed_page.sql` (THE unified feed + rec read), `videos_load_owner_videos.sql` (the ungated
+owner listing), `videos_load_feed_ids.sql` (the merged, enriched-gated preview candidate set),
 `video_recs_served_count.sql`, `video_recs_record_insert.sql` (`RETURNING rec_id`),
-`videos_load_feed_page_personalized.sql`, `video_rec_click_update.sql` / `video_rec_load.sql` /
-`member_activity_video_click_insert.sql`.
+`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`.
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -668,9 +688,11 @@ RAG settings: `video_embedding_model` (litellm format, default `openai/text-embe
 `video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
 model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuses `anthropic_api_key`),
 `video_profile_refresh_cooldown_days` (3), `video_rec_category_rotation` (ordered `VideoGenre` list —
-best-first genre order the single rec rotates through). The pick WITHIN a category is ranked by pure
-cosine similarity — there are no ranking-weight settings and no rec-count setting (the rec SQL is a
-fixed `LIMIT 1`).
+best-first genre order the single rec rotates through). The pick WITHIN a category is the top of the
+unified feed for that genre (`load_feed_page`, `limit=1`) — cosine order to the taste embedding with the
+owner boost + decayed watch penalty, governed by `video_feed_bump_sigma_fraction` (0.10) and
+`video_watch_penalty_half_life_days` (7.0), the two feed-ranking `Settings` injected into
+`VideoFeedService`. There is no per-rec score column and no rec-count setting.
 
 **Versioned spec — readers always use the view, not the table.**
 `gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).

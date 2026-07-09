@@ -5,12 +5,12 @@ Covers the services driven against a fake DB pool + fake litellm client:
 NEVER builds), ``refresh_if_due`` (cooldown no-op vs stale rebuild + the
 embedding-dimension guard), ``load_embedding``, the rotating single-rec
 ``get_rec`` (rotation index by served count, empty-category fall-through,
-no-embedding passed straight to the feed, records + returns rec_id with the
-video as a ``GymVideoCard``, None when nothing available, propagates the
-ownership error — the rec is now a thin wrapper over a faked
-``VideoFeedService.load_next_rec_video``), and the personalized feed page
-(``VideoFeedService.load_feed_page`` picks the personalized SQL when the member
-has an embedding, the default SQL otherwise).
+forwards the member_id to the feed, records + returns rec_id with the video as a
+``GymVideoCard``, None when nothing available, propagates the ownership error —
+the rec is now a thin wrapper over a faked ``VideoFeedService.load_feed_page``),
+and the unified feed page (``VideoFeedService.load_feed_page`` always binds the
+member_embedding — text or NULL — plus the member_id / rank knobs, and reads the
+embedding only when a member_id is supplied).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import pytest
 from schema.video import VideoGenre
 
 from src.videos.schema.member_profile_schema import MemberProfileSummary
-from src.videos.schema.video_recs_schema import MemberVideoRec, RecCandidate
+from src.videos.schema.video_recs_schema import MemberVideoRec
 from src.videos.schema.videos_schema import GymVideoCard
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
@@ -31,6 +31,10 @@ from src.videos.service.member_video_profile_service import (
 )
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_recs_service import VideoRecsService
+
+# Feed-ranking knobs the VideoFeedService under test is built with.
+_BUMP_FRACTION = 0.10
+_HALF_LIFE_DAYS = 7.0
 
 # ── fake DB pool ─────────────────────────────────────────────────────
 
@@ -300,24 +304,22 @@ _ROTATION = [
 ]
 
 
-def _rec_candidate(
+def _rec_card(
     video_id: str = "vid1", tag: str = "educational"
-) -> RecCandidate:
-    """The single ranked pick VideoFeedService.load_next_rec_video returns."""
-    return RecCandidate(
+) -> GymVideoCard:
+    """The single ranked card VideoFeedService.load_feed_page(limit=1) returns."""
+    return GymVideoCard(
         video_id=video_id,
-        video=GymVideoCard(
-            url=f"https://youtu.be/{video_id}",
-            title="Test",
-            thumbnail_url="https://img/x.jpg",
-            channel_name="Chan",
-            channel_url="https://c",
-            channel_avatar_url="",
-            view_count=100,
-            duration_seconds=60,
-            tag=tag,
-            relevance_index=0,
-        ),
+        url=f"https://youtu.be/{video_id}",
+        title="Test",
+        thumbnail_url="https://img/x.jpg",
+        channel_name="Chan",
+        channel_url="https://c",
+        channel_avatar_url="",
+        view_count=100,
+        duration_seconds=60,
+        tag=tag,
+        relevance_index=0,
     )
 
 
@@ -330,23 +332,27 @@ def _rec_id_result(rec_id: object) -> _FakeResult:
 
 
 class _FakeFeed:
-    """A stand-in for VideoFeedService: ``load_next_rec_video`` returns the
-    mapping's RecCandidate for each category (None if absent), and records every
-    call so the rotation + embedding pass-through can be asserted."""
+    """A stand-in for VideoFeedService: ``load_feed_page`` returns a one-card
+    page (``[card], 1``) for each category present in the mapping (an empty page
+    otherwise), and records every call so the rotation + the forwarded member_id
+    can be asserted. The rec calls it filtered to one genre with ``limit=1``."""
 
-    def __init__(self, by_category: dict[VideoGenre, RecCandidate]):
+    def __init__(self, by_category: dict[VideoGenre, GymVideoCard]):
         self._by_category = by_category
         self.calls: list[tuple] = []
 
-    async def load_next_rec_video(
+    async def load_feed_page(
         self,
         gym_id: object,
+        *,
+        video_type: VideoGenre,
         member_id: object,
-        category: VideoGenre,
-        embedding: str | None,
-    ) -> RecCandidate | None:
-        self.calls.append((gym_id, member_id, category, embedding))
-        return self._by_category.get(category)
+        limit: int,
+        offset: int,
+    ) -> tuple[list[GymVideoCard], int]:
+        self.calls.append((gym_id, member_id, video_type, limit, offset))
+        card = self._by_category.get(video_type)
+        return ([card], 1) if card is not None else ([], 0)
 
 
 def _recs_service(
@@ -370,33 +376,35 @@ def _profile_stub(embedding: str | None = "[0.1]") -> AsyncMock:
 async def test_get_rec_rotation_index_by_served_count() -> None:
     # served_count = 1 → start = 1 % 3 → the professional category is served.
     rec_id = uuid4()
+    member_id = uuid4()
     pool, session = _make_pool([_count_result(1), _rec_id_result(rec_id)])
     profile = _profile_stub(embedding="[0.9]")
-    feed = _FakeFeed({VideoGenre.professional: _rec_candidate("vp", "professional")})
+    feed = _FakeFeed({VideoGenre.professional: _rec_card("vp", "professional")})
     svc = _recs_service(pool, profile, feed)
 
-    rec = await svc.get_rec(uuid4(), uuid4())
+    rec = await svc.get_rec(uuid4(), member_id)
 
     profile.verify_member_in_gym.assert_awaited_once()
-    profile.load_embedding.assert_awaited_once()
+    # get_rec no longer loads the embedding itself — load_feed_page does.
+    profile.load_embedding.assert_not_called()
     assert isinstance(rec, MemberVideoRec)
     assert rec.category == VideoGenre.professional
     assert rec.rec_id == rec_id
-    # Only the professional category was queried (start index 1), embedding passed.
+    # Only the professional category was queried (start index 1), member_id passed.
     assert [c[2] for c in feed.calls] == [VideoGenre.professional]
-    assert feed.calls[0][3] == "[0.9]"
+    assert feed.calls[0][1] == member_id
     # DB touched twice only: served-count read + record insert.
     assert len(session.executed) == 2
 
 
 async def test_get_rec_falls_through_empty_category() -> None:
-    # served_count = 0 → start educational, which yields None → advance to
-    # professional, which yields the pick.
+    # served_count = 0 → start educational, which yields an empty page → advance
+    # to professional, which yields the pick.
     rec_id = uuid4()
     pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub()
     feed = _FakeFeed(
-        {VideoGenre.professional: _rec_candidate("vp", "professional")}
+        {VideoGenre.professional: _rec_card("vp", "professional")}
     )
     svc = _recs_service(pool, profile, feed)
 
@@ -412,22 +420,26 @@ async def test_get_rec_falls_through_empty_category() -> None:
     assert len(session.executed) == 2
 
 
-async def test_get_rec_passes_none_embedding_to_feed() -> None:
-    # A member with no profile embedding: None is passed straight to the feed
-    # (the SQL's CASE degrades to relevance ranking); no composite fallback here.
+async def test_get_rec_forwards_member_id_to_feed() -> None:
+    # get_rec forwards the member_id + limit=1 to the feed read; the embedding
+    # handling (incl. the no-profile relevance fallback) lives inside the feed.
     rec_id = uuid4()
+    member_id = uuid4()
     pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub(embedding=None)
     feed = _FakeFeed(
-        {VideoGenre.educational: _rec_candidate("d0", "educational")}
+        {VideoGenre.educational: _rec_card("d0", "educational")}
     )
     svc = _recs_service(pool, profile, feed)
 
-    rec = await svc.get_rec(uuid4(), uuid4())
+    rec = await svc.get_rec(uuid4(), member_id)
 
     assert rec is not None
     assert rec.category == VideoGenre.educational
-    assert feed.calls[0][3] is None  # embedding forwarded as None
+    # (gym_id, member_id, video_type, limit, offset)
+    assert feed.calls[0][1] == member_id
+    assert feed.calls[0][3] == 1  # limit=1
+    assert feed.calls[0][4] == 0  # offset=0
 
 
 async def test_get_rec_records_pick_and_returns_rec_id() -> None:
@@ -435,7 +447,7 @@ async def test_get_rec_records_pick_and_returns_rec_id() -> None:
     pool, session = _make_pool([_count_result(0), _rec_id_result(rec_id)])
     profile = _profile_stub()
     feed = _FakeFeed(
-        {VideoGenre.educational: _rec_candidate("ve", "educational")}
+        {VideoGenre.educational: _rec_card("ve", "educational")}
     )
     svc = _recs_service(pool, profile, feed)
 
@@ -485,7 +497,7 @@ async def test_get_rec_propagates_member_not_in_gym() -> None:
     profile.load_embedding.assert_not_called()
 
 
-# ── personalized feed page: SQL selection by embedding presence ──────
+# ── unified feed page: one SQL, always binds the rank params ─────────
 
 
 def _feed_row(video_id: str = "fv1") -> dict:
@@ -502,6 +514,7 @@ def _feed_row(video_id: str = "fv1") -> dict:
         "duration_seconds": 60,
         "tag": "educational",
         "relevance_index": 0,
+        "owner_added": False,
         "total": 1,
     }
 
@@ -510,37 +523,49 @@ def _feed_service(pool: MagicMock, embedding: str | None) -> VideoFeedService:
     profile = AsyncMock()
     profile.load_embedding = AsyncMock(return_value=embedding)
     return VideoFeedService(
-        db_pool=pool, youtube_client=MagicMock(), profile_service=profile
+        db_pool=pool,
+        youtube_client=MagicMock(),
+        profile_service=profile,
+        bump_sigma_fraction=_BUMP_FRACTION,
+        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
 
 
-async def test_feed_page_uses_personalized_sql_when_embedding_present() -> None:
+async def test_feed_page_binds_embedding_and_member_id_when_profile_built() -> None:
     pool, session = _make_pool([_FakeResult(rows=[_feed_row()])])
     svc = _feed_service(pool, embedding="[0.1,0.2]")
+    member_id = uuid4()
 
     cards, total = await svc.load_feed_page(
-        uuid4(), member_id=uuid4(), limit=10, offset=0
+        uuid4(), member_id=member_id, limit=10, offset=0
     )
 
     assert total == 1 and len(cards) == 1
     sql, params = session.executed[0]
-    # The personalized SQL orders by the pgvector distance and binds the vector.
+    # The one unified SQL always carries the pgvector distance operator.
     assert "<=>" in sql
     assert params["member_embedding"] == "[0.1,0.2]"
+    assert params["member_id"] == str(member_id)
+    assert params["bump_fraction"] == _BUMP_FRACTION
+    assert params["half_life_seconds"] == _HALF_LIFE_DAYS * 86400
 
 
-async def test_feed_page_uses_default_sql_when_no_embedding() -> None:
+async def test_feed_page_binds_null_embedding_when_no_profile() -> None:
     pool, session = _make_pool([_FakeResult(rows=[_feed_row()])])
     svc = _feed_service(pool, embedding=None)  # member has no profile yet
+    member_id = uuid4()
 
     cards, total = await svc.load_feed_page(
-        uuid4(), member_id=uuid4(), limit=10, offset=0
+        uuid4(), member_id=member_id, limit=10, offset=0
     )
 
     assert total == 1 and len(cards) == 1
     sql, params = session.executed[0]
-    assert "<=>" not in sql
-    assert "member_embedding" not in params
+    # Same SQL — the embedding is just bound NULL; member_id still bound for the
+    # decayed watch penalty subquery.
+    assert "<=>" in sql
+    assert params["member_embedding"] is None
+    assert params["member_id"] == str(member_id)
 
 
 async def test_feed_page_skips_embedding_read_when_no_member_id() -> None:
@@ -548,11 +573,17 @@ async def test_feed_page_skips_embedding_read_when_no_member_id() -> None:
     profile = AsyncMock()
     profile.load_embedding = AsyncMock(return_value="[0.1]")
     svc = VideoFeedService(
-        db_pool=pool, youtube_client=MagicMock(), profile_service=profile
+        db_pool=pool,
+        youtube_client=MagicMock(),
+        profile_service=profile,
+        bump_sigma_fraction=_BUMP_FRACTION,
+        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
 
     await svc.load_feed_page(uuid4(), limit=10, offset=0)
 
-    # No member_id → no embedding read, default SQL.
+    # No member_id → no embedding read; embedding + member_id bound NULL.
     profile.load_embedding.assert_not_called()
-    assert "<=>" not in session.executed[0][0]
+    params = session.executed[0][1]
+    assert params["member_embedding"] is None
+    assert params["member_id"] is None

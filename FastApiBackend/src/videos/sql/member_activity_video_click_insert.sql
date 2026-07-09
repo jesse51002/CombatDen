@@ -5,5 +5,7 @@ VALUES (
     CAST(:member_id AS UUID),
     CAST(:gym_id AS UUID),
     CAST(:activity_type AS member_activity_type),
-    jsonb_build_object('video_id', :video_id, 'rec_id', CAST(:rec_id AS UUID))
+    jsonb_build_object(
+        'video_id', CAST(:video_id AS TEXT), 'rec_id', CAST(:rec_id AS UUID)
+    )
 )

@@ -44,6 +44,26 @@ _VEC = [0.02] * _EMBEDDING_DIM
 _VEC_LITERAL = "[" + ",".join(str(x) for x in _VEC) + "]"
 
 
+def _vec(nonzero: dict[int, float]) -> str:
+    """A pgvector text literal with the given sparse non-zero components."""
+    arr = [0.0] * _EMBEDDING_DIM
+    for i, v in nonzero.items():
+        arr[i] = v
+    return "[" + ",".join(str(x) for x in arr) + "]"
+
+
+# Crafted vectors for the ranking tests. Cosine distance (`<=>`) to _MEMBER_VEC:
+#   _VEC_NEAR  → 0.0     (identical direction)
+#   _VEC_NEAR2 → ~0.0012 (a 0.05 nudge on axis 1)
+#   _VEC_FAR   → 1.0     (orthogonal)
+# A tight #1↔#2 gap (~0.0012) with a fat spread (the far cluster) is what lets
+# 0.1σ (~0.06) exceed the gap so the owner boost / watch penalty can flip #1↔#2.
+_MEMBER_VEC = _vec({0: 1.0})
+_VEC_NEAR = _vec({0: 1.0})
+_VEC_NEAR2 = _vec({0: 1.0, 1: 0.05})
+_VEC_FAR = _vec({1: 1.0})
+
+
 class _StubLiteLLM:
     """A LiteLLMClient stand-in: embed returns the fixed vector per input, and
     complete_structured returns a canned taste summary (no chat model call)."""
@@ -295,6 +315,283 @@ async def test_rec_forbidden_for_non_viewer(
                 text("DELETE FROM members WHERE member_id = :m"),
                 {"m": str(member_id)},
             )
+
+
+# ── feed-behavior seeding helpers ─────────────────────────────────────
+
+
+async def _seed_owner_video(
+    db_pool: DirectDatabasePool,
+    gym_id: UUID,
+    video_id: str,
+    *,
+    tag: str = "educational",
+    relevance: int = 0,
+    enriched: bool = True,
+    scan_status: str = "accepted",
+    embedding: str = _VEC_LITERAL,
+) -> None:
+    """Seed one owner-section (video_run_id NULL) feed video: a pool row, an
+    optional video_rag row (enrichment gate), and the feed membership."""
+    async with db_pool.session() as session, session.begin():
+        await session.execute(
+            text(
+                "INSERT INTO video (video_id, url, title, thumbnail_url, "
+                "channel_name, channel_url, relevance_index, tag, gym_id, "
+                "added_via) VALUES (:vid, :url, 'Vid', :thumb, 'Chan', :churl, "
+                ":rel, CAST(:tag AS video_genre), :g, 'manual')"
+            ),
+            {
+                "vid": video_id,
+                "url": f"https://youtu.be/{video_id}",
+                "thumb": "https://img/x.jpg",
+                "churl": "https://c",
+                "rel": relevance,
+                "tag": tag,
+                "g": str(gym_id),
+            },
+        )
+        if enriched:
+            await session.execute(
+                text(
+                    "INSERT INTO video_rag (video_id, summary, embedding, "
+                    "embedding_model) VALUES (:vid, 'sum', CAST(:emb AS vector), "
+                    "'test/model')"
+                ),
+                {"vid": video_id, "emb": embedding},
+            )
+        await session.execute(
+            text(
+                "INSERT INTO gym_video_feed (gym_id, video_id, video_run_id, "
+                "scan_status, curated_at) VALUES (:g, :vid, NULL, "
+                "CAST(:st AS gym_video_scan_status), now())"
+            ),
+            {"g": str(gym_id), "vid": video_id, "st": scan_status},
+        )
+
+
+async def _set_member_embedding(
+    db_pool: DirectDatabasePool, member_id: UUID, vec_literal: str
+) -> None:
+    """Seed the member's taste embedding directly (bypasses the LLM build path).
+    Writes members.video_profile_* — fails until the RAG migration is applied."""
+    async with db_pool.session() as session, session.begin():
+        await session.execute(
+            text(
+                "UPDATE members SET video_profile_embedding = CAST(:v AS vector), "
+                "video_profile_embedding_model = 'test/model', "
+                "video_profile_built_at = now() WHERE member_id = :m"
+            ),
+            {"v": vec_literal, "m": str(member_id)},
+        )
+
+
+async def _record_served(
+    db_pool: DirectDatabasePool,
+    member_id: UUID,
+    gym_id: UUID,
+    video_id: str,
+    *,
+    category: str = "educational",
+) -> None:
+    """Append a fresh (recommended_at = now()) served-rec row for this member."""
+    async with db_pool.session() as session, session.begin():
+        await session.execute(
+            text(
+                "INSERT INTO member_video_recs (member_id, gym_id, video_id, "
+                "category) VALUES (:m, :g, :v, CAST(:c AS video_genre))"
+            ),
+            {
+                "m": str(member_id),
+                "g": str(gym_id),
+                "v": video_id,
+                "c": category,
+            },
+        )
+
+
+async def _delete_videos(
+    db_pool: DirectDatabasePool, video_ids: list[str]
+) -> None:
+    """Delete pool videos (cascades their feed + video_rag + rec rows)."""
+    async with db_pool.session() as session, session.begin():
+        await session.execute(
+            text("DELETE FROM video WHERE video_id = ANY(:ids)"),
+            {"ids": video_ids},
+        )
+
+
+async def _delete_member_and_videos(
+    db_pool: DirectDatabasePool, member_id: UUID, video_ids: list[str]
+) -> None:
+    """Delete the videos (cascade) and the member (cascades its rec rows)."""
+    await _delete_videos(db_pool, video_ids)
+    async with db_pool.session() as session, session.begin():
+        await session.execute(
+            text("DELETE FROM members WHERE member_id = :m"),
+            {"m": str(member_id)},
+        )
+
+
+# ── feed serve-path behavior (no member profile needed) ───────────────
+
+
+async def test_feed_serves_only_enriched(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """The unified served feed shows an enriched owner video and HIDES an
+    accepted-but-un-enriched one (INNER JOIN video_rag). No member_id, so no
+    members.video_profile_* read — runs without the members-column migration."""
+    enr, bare = "feedenr01", "feedbare01"
+    await _seed_owner_video(db_pool, gym_id, enr, enriched=True)
+    await _seed_owner_video(db_pool, gym_id, bare, enriched=False)
+    try:
+        resp = await rag_client.get(
+            f"/api/v1/gyms/{gym_id}/videos?video_type=educational&limit=100",
+            headers=_AUTH_HEADERS,
+        )
+        assert resp.status_code == 200
+        cards = {v["video_id"]: v for v in resp.json()["videos"]}
+        assert enr in cards
+        assert bare not in cards
+        assert cards[enr]["owner_added"] is True
+        assert cards[enr]["enriched"] is True
+    finally:
+        await _delete_videos(db_pool, [enr, bare])
+
+
+async def test_owner_listing_shows_unenriched(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """The ungated owner listing shows an owner video BEFORE enrichment, flagged
+    ``enriched=false`` (LEFT JOIN video_rag) — the opposite of the served feed."""
+    bare = "ownerbare01"
+    await _seed_owner_video(db_pool, gym_id, bare, enriched=False)
+    try:
+        resp = await rag_client.get(
+            f"/api/v1/gyms/{gym_id}/videos/owner?limit=100",
+            headers=_AUTH_HEADERS,
+        )
+        assert resp.status_code == 200
+        rows = {v["video_id"]: v for v in resp.json()["videos"]}
+        assert bare in rows
+        assert rows[bare]["enriched"] is False
+        assert rows[bare]["owner_added"] is True
+    finally:
+        await _delete_videos(db_pool, [bare])
+
+
+async def test_pending_invisible_in_all_lists(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """A 'pending' scan_status row (worker candidate, enriched or not) is invisible
+    in the accepted feed, the rejected feed, AND the owner listing."""
+    pend = "pending01"
+    await _seed_owner_video(
+        db_pool, gym_id, pend, enriched=True, scan_status="pending"
+    )
+    try:
+        acc = await rag_client.get(
+            f"/api/v1/gyms/{gym_id}/videos?limit=100", headers=_AUTH_HEADERS
+        )
+        rej = await rag_client.get(
+            f"/api/v1/gyms/{gym_id}/videos?rejected=true&limit=100",
+            headers=_AUTH_HEADERS,
+        )
+        own = await rag_client.get(
+            f"/api/v1/gyms/{gym_id}/videos/owner?limit=100",
+            headers=_AUTH_HEADERS,
+        )
+        assert pend not in [v["video_id"] for v in acc.json()["videos"]]
+        assert pend not in [v["video_id"] for v in rej.json()["videos"]]
+        assert pend not in [v["video_id"] for v in own.json()["videos"]]
+    finally:
+        await _delete_videos(db_pool, [pend])
+
+
+# ── personalized ranking (needs members.video_profile_*) ──────────────
+
+
+async def test_personalized_watch_penalty_flips_top_pick(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """With a member embedding bound, A (cosine 0) leads B (cosine ~0.0012). After
+    A is served once (a fresh member_video_recs row), the decayed watch penalty
+    (~0.1σ) exceeds the tiny A↔B gap and B becomes the top pick. Three far videos
+    (cosine 1.0) inflate σ. Migration-gated on members.video_profile_*."""
+    member_id = await _insert_member(db_pool, gym_id)
+    a, b = "flipa01", "flipb01"
+    far = ["flipf01", "flipf02", "flipf03"]
+    url = (
+        f"/api/v1/gyms/{gym_id}/videos"
+        f"?video_type=educational&member_id={member_id}&limit=100"
+    )
+    try:
+        # Seed inside the try so a setup failure (e.g. missing video_profile_*
+        # before the migration) still triggers cleanup.
+        await _seed_owner_video(
+            db_pool, gym_id, a, embedding=_VEC_NEAR, relevance=0
+        )
+        await _seed_owner_video(
+            db_pool, gym_id, b, embedding=_VEC_NEAR2, relevance=1
+        )
+        for i, f in enumerate(far):
+            await _seed_owner_video(
+                db_pool, gym_id, f, embedding=_VEC_FAR, relevance=10 + i
+            )
+        await _set_member_embedding(db_pool, member_id, _MEMBER_VEC)
+
+        before = await rag_client.get(url, headers=_AUTH_HEADERS)
+        ids_before = [v["video_id"] for v in before.json()["videos"]]
+        assert ids_before[0] == a  # closest by cosine wins pre-penalty
+
+        await _record_served(db_pool, member_id, gym_id, a)
+
+        after = await rag_client.get(url, headers=_AUTH_HEADERS)
+        ids_after = [v["video_id"] for v in after.json()["videos"]]
+        assert ids_after[0] == b  # A pushed back by the fresh watch penalty
+        assert ids_after.index(b) < ids_after.index(a)
+    finally:
+        await _delete_member_and_videos(db_pool, member_id, [a, b, *far])
+
+
+async def test_rec_advances_across_consecutive_calls(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+) -> None:
+    """Two consecutive rec GETs return DIFFERENT videos: the first serves A (the
+    closest educational pick), and the decayed watch penalty it records pushes A
+    below B on the next serve (needed ~5 clustered candidates — 2 near at cosine
+    0/0.0012 plus 3 orthogonal at cosine 1.0 to fatten σ — for 0.1σ to clear the
+    #1↔#2 gap). No already-served anti-join. Migration-gated on
+    members.video_profile_*."""
+    member_id = await _insert_member(db_pool, gym_id)
+    a, b = "adva01", "advb01"
+    far = ["advf01", "advf02", "advf03"]
+    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
+    try:
+        # Seed inside the try so a setup failure (e.g. missing video_profile_*
+        # before the migration) still triggers cleanup.
+        await _seed_owner_video(
+            db_pool, gym_id, a, embedding=_VEC_NEAR, relevance=0
+        )
+        await _seed_owner_video(
+            db_pool, gym_id, b, embedding=_VEC_NEAR2, relevance=1
+        )
+        for i, f in enumerate(far):
+            await _seed_owner_video(
+                db_pool, gym_id, f, embedding=_VEC_FAR, relevance=10 + i
+            )
+        await _set_member_embedding(db_pool, member_id, _MEMBER_VEC)
+
+        first = await rag_client.get(base, headers=_AUTH_HEADERS)
+        assert first.status_code == 200
+        assert first.json()["video"]["video_id"] == a
+
+        second = await rag_client.get(base, headers=_AUTH_HEADERS)
+        assert second.status_code == 200
+        assert second.json()["video"]["video_id"] == b
+    finally:
+        await _delete_member_and_videos(db_pool, member_id, [a, b, *far])
 
 
 async def _rec_count(

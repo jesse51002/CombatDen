@@ -1,7 +1,7 @@
 """VideosService — pure delegating facade for the videos domain.
 
-Composes: ``VideoFeedService`` (live gym feed + pool reads, incl. optional
-member-personalized ordering AND the single pure-cosine rec pick),
+Composes: ``VideoFeedService`` (the unified live gym feed + pool reads + the
+ungated owner management listing; the feed read backs the member rec too),
 ``VideoSpecService`` (spec DB read/write), ``VideoSpecAuthoring`` (deterministic
 commit gate), ``VideoFeedRefiner`` (feed-learning refiner), ``VideoRecsService``
 (the member's single rotating-category RAG recommendation), and
@@ -69,11 +69,9 @@ class VideosService:
     # ── live gym feed ─────────────────────────────────────────────
 
     async def load_feed_ids(
-        self, gym_id: UUID, *, owner: bool = False, rejected: bool = False
+        self, gym_id: UUID, *, rejected: bool = False
     ) -> list[str]:
-        return await self._feed.load_feed_ids(
-            gym_id, owner=owner, rejected=rejected
-        )
+        return await self._feed.load_feed_ids(gym_id, rejected=rejected)
 
     async def load_pool_videos(
         self, video_ids: list[str]
@@ -84,7 +82,6 @@ class VideosService:
         self,
         gym_id: UUID,
         *,
-        owner: bool = False,
         rejected: bool = False,
         video_type: VideoGenre | None = None,
         big_group: BigGroup | None = None,
@@ -92,20 +89,31 @@ class VideosService:
         limit: int,
         offset: int,
     ) -> tuple[list[GymVideoCard], int]:
-        """Paginated real-gym feed page — delegates to VideoFeedService.
+        """The unified real-gym feed page — delegates to VideoFeedService.
 
-        ``member_id`` optionally personalizes the ordering to that member's
-        video-taste embedding (read-only; ignored when they have no profile).
+        ALWAYS merges the owner section with the latest completed run and serves
+        only enriched+accepted videos. ``member_id`` optionally personalizes the
+        ranking to that member's video-taste embedding (read-only; gym relevance
+        when they have no profile) and decays their watch penalty.
         """
         return await self._feed.load_feed_page(
             gym_id,
-            owner=owner,
             rejected=rejected,
             video_type=video_type,
             big_group=big_group,
             member_id=member_id,
             limit=limit,
             offset=offset,
+        )
+
+    async def load_owner_videos(
+        self, gym_id: UUID, *, limit: int, offset: int
+    ) -> tuple[list[GymVideoCard], int]:
+        """The gym owner's UNGATED "Your videos" management listing — delegates
+        to VideoFeedService. Not enriched-gated (an owner add shows instantly);
+        each card carries ``enriched`` so the CRM can badge "processing…"."""
+        return await self._feed.load_owner_videos(
+            gym_id, limit=limit, offset=offset
         )
 
     # ── live gym spec (legacy projection) ────────────────────────
