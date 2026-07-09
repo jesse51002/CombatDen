@@ -37,8 +37,11 @@ CREATE TABLE video_rag (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- No ANN index yet: Tier-2 probes and rec ranking run exact cosine over
--- hundreds→low-thousands of discipline-filtered rows. When enriched rows
--- cross ~10k and probe latency degrades, add:
---   CREATE INDEX idx_video_rag_embedding ON video_rag
---       USING hnsw (embedding vector_cosine_ops);
+-- HNSW ANN index over the summary embeddings. The ~18.9k unique template videos
+-- are enriched up front (the enrich-templates sidecar seeds video_rag on every
+-- `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the
+-- very first sync — without the index every feed / rec / funnel cosine query
+-- would scan the whole table. `vector_cosine_ops` matches the `<=>` cosine
+-- distance the Tier-2 probes and rec/search readers rank with.
+CREATE INDEX idx_video_rag_embedding ON video_rag
+    USING hnsw (embedding vector_cosine_ops);

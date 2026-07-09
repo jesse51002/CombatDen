@@ -495,6 +495,7 @@ VIDEO: frozenset[str] = frozenset(
         "video_id",  # PK (YouTube id)
         "gym_id",  # custom-video ownership; backend-set on add, never client-edited
         "added_via",  # web_query vs manual; backend-set, marks deletability
+        "failure_count",  # worker-managed hard-error strike counter
     }
 )
 

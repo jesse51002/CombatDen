@@ -91,6 +91,12 @@ per gym. Never query the underlying `gym_video_spec` table directly in a read pa
 (one row per query per gym). They are now stored in `gym_video_spec.queries JSONB` as part of the
 versioned spec. Do not reference or recreate `gym_video_query`.
 
+**`gym_video_scan_status` has a third value, `'pending'`** (`CREATE TYPE gym_video_scan_status AS ENUM
+('accepted', 'rejected', 'pending')`, declared in `schemas/gym_video_feed.sql`; added via `ALTER TYPE
+... ADD VALUE` in migration `20260703000001_video_worker_rag.sql`, appended last so its ordinal matches
+runtime). A `'pending'` row is a worker-written candidate that has not yet been enrich+scan processed;
+the scan stage flips it to `'accepted'`/`'rejected'`.
+
 **`gym_video_feed` curation audit** — `gym_video_feed` carries a unified curation pair:
 - `curation_type gym_video_curation_type NOT NULL DEFAULT 'automatic'` — how the row's CURRENT
   `scan_status` was set: `'manual'` = owner rejected / kept / re-added via the UI;
@@ -111,19 +117,28 @@ are columns that must be guarded (they are immutable once written).
 
 ## Video worker + RAG schema (`cost_log`, `video_rag`, `member_video_recs`)
 
-The VideoService background **worker** (a separate process; see `VideoService/src/worker/`) regenerates
-each gym's feed and, in the same pass, builds the RAG layer the backend serves per-member recs and
-semantic search from. Two new tables (`video_rag`, `member_video_recs`), the member video-taste profile
-columns on `members`, a status lifecycle on `video_run`, and the generic `cost_log` support it.
+The VideoService background **worker** (a separate process; see `VideoService/src/worker/`) runs three
+DECOUPLED, DB-backed steps every tick — **cleanup**, **finalize**, and ONE drained heavy step
+(**scan**, else **enrich**, else **scrape** — the only quota-bound, run-opening step) — that together
+regenerate each gym's feed and build the RAG layer the backend serves per-member recs and the
+personalized feed ranking from. Two new tables (`video_rag`, `member_video_recs`), the member
+video-taste profile columns on `members`, a status lifecycle on `video_run`, and the generic `cost_log`
+support it.
 **pgvector** is enabled in `schemas/_extensions.sql` (`CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA
 extensions`); embedding columns are `vector(1536)`, a **cross-service contract** pinned to
 `settings.video_embedding_dim` in the backend (a wrong-width vector raises rather than writes).
 
+**`video.failure_count`** — a per-video hard-error strike counter (`INTEGER NOT NULL DEFAULT 0`,
+`CHECK (failure_count >= 0)`, declared in `schemas/video.sql`). The worker bumps it on a step
+exception, resets it to 0 on success, and its cleanup step deletes the video at 3 strikes.
+
 - **`video_rag`** — one RAG row per pooled video: `video_id TEXT` **PK** (FK → `video`, `ON DELETE
   CASCADE`), `summary TEXT`, `facets JSONB` (object CHECK), `embedding vector(1536)`, `embedding_model`,
   `created_at`. The worker enrich stage writes it once per un-enriched video; the summary embedding is
-  what recs/search rank against. (No ANN index yet — a future HNSW `vector_cosine_ops` index once rows
-  cross ~10k; the schema file documents it.)
+  what recs/search rank against. It carries an **HNSW `vector_cosine_ops` index** (`idx_video_rag_embedding`):
+  the ~18.9k unique template videos are enriched up front (the VideoService `enrich-templates` sidecar seeds
+  `video_rag` on every `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the first
+  sync and every feed / rec / funnel cosine query needs the ANN index.
 - **Member video-taste profile on `members`** — the per-member RAG profile is columns on the `members`
   table, not a sidecar: `video_profile_summary TEXT`, `video_profile_embedding vector(1536)`,
   `video_profile_embedding_model TEXT`, `video_profile_built_at TIMESTAMPTZ` — all nullable, NULL until
@@ -134,31 +149,47 @@ extensions`); embedding columns are `vector(1536)`, a **cross-service contract**
 - **`member_video_recs`** — per-member rec history (the freshness partition), an **append-only event
   log**: one row per serve — `rec_id UUID` PK, `(member_id, gym_id, video_id, category)`,
   `recommended_at`, plus `clicked_at TIMESTAMPTZ` (nullable click signal — NULL = served but not clicked;
-  set by the backend when the member opens the rec). The rec ranks by PURE cosine similarity to the
-  member's taste embedding (no stored score column — the composite blend was dropped). **No stored
-  counters and no UNIQUE** — a re-serve
-  INSERTs another row; "times recommended" = `COUNT(*)` and "last recommended" = `MAX(recommended_at)`,
-  derived by aggregate. Index `(member_id, video_id)` backs the already-recommended anti-join + the
-  per-video MAX aggregate ("already recommended" is global per member, not per category). No vector column.
-  Recs are grouped by the video's genre **`category`** — the column is typed as the existing **`video_genre`**
-  enum (the type of `video.tag`, created in the baseline `schemas/video.sql`); there is no separate
-  mood-bucket abstraction, so this table declares no new enum.
+  set by the backend when the member opens the rec). There is no stored score, no stored counters, and
+  **no already-served anti-join** — ranking is computed entirely at READ time by the unified feed query:
+  cosine distance to the member's taste embedding, nudged by a σ-scaled **decayed watch penalty** —
+  `SUM(power(0.5, age_seconds / half_life_seconds))` over this member's prior serves of a candidate video
+  (a just-served video's penalty is near its full σ-scaled weight, decaying toward 0 as the serve ages,
+  half-life `video_watch_penalty_half_life_days` = 7d) — so a served video is nudged back immediately
+  after and drifts forward again over the following week, rather than being hard-excluded. A re-serve
+  INSERTs another row (no UPDATE, no UNIQUE); "times recommended" = `COUNT(*)` and "last recommended" =
+  `MAX(recommended_at)`, both derived by aggregate. Index `(member_id, video_id)` backs that per-video
+  decayed-penalty aggregate ("already recommended" weighting is global per member, not per category). No
+  vector column. Recs are grouped by the video's genre **`category`** — the column is typed as the
+  existing **`video_genre`** enum (the type of `video.tag`, created in the baseline `schemas/video.sql`);
+  there is no separate mood-bucket abstraction, so this table declares no new enum.
 
-**No worker queue table.** The worker is not enqueued — each tick it *derives* which gym to run from
+**No worker queue table, and step-selection is not a per-gym pipeline.** Only the **scrape** step (the
+sole per-gym, quota-bound, run-opening step) ever selects a gym; it *derives* the due gym from
 timestamps already in these tables (`VideoService/src/worker/sql/worker_select_due_gym.sql`): a gym is
 DUE when its latest `gym_video_spec` **`admin_update`** version (tier 1), its latest **manual**
 `gym_video_feed.curated_at` settled ≥ 1h ago (tier 2), or its last run ≥ 7 days ago (tier 3) is newer
-than its last `video_run`. Tier-sorted, one gym per tick, under a per-gym **2 / 24h** and system-wide
-**5 / 24h** rolling run cap (both counting runs of any status — the poison-loop guard, since a failed run
-still advances the last-run watermark). A committed spec change no longer enqueues anything; the worker
-notices the new `admin_update` version on its next tick.
+than its last `video_run`, excluding any gym with a `running` run. Tier-sorted, one gym drained per
+scrape pass, under a per-gym **2 / 24h** and system-wide **5 / 24h** rolling run cap (both counting runs
+of any status — the poison-loop guard, since a failed run still advances the last-run watermark). A
+committed spec change no longer enqueues anything; the scrape step notices the new `admin_update`
+version whenever it next runs. The **enrich** and **scan** steps never select a gym at all — they are
+global, gym-agnostic sweeps that drain whatever the DB shows as their target set (an un-enriched video;
+a `pending` feed row) across every gym in one pass.
 
 **`video_run` gains a status lifecycle.** New `CREATE TYPE video_run_status AS ENUM
 ('running','completed','failed')`; `status` (DEFAULT `'completed'` so every pre-existing run and the
-plain preset-import `INSERT` stays served), `finished_at`, `error` (failure detail, or `'orphaned'` when
-the worker finds a dead `running` run on lock acquisition). **Serve invariant:** every "latest run"
-read is the newest by `created_at` **AND `status = 'completed'`** — a mid-flight `running` run must never
-become latest and blank the gym's feed.
+plain preset-import `INSERT` stays served), `finished_at`, `error` (`'no feed rows'` when a `running` run
+still has zero feed rows after a 1h grace window, or `'run ttl exceeded'` when a run never reaches the
+completion fraction within 24h). A run is left `running` — a legitimate long-lived multi-tick state, full
+of `pending` rows the enrich/scan sweeps are still working through — until the worker's **finalize** step
+(every tick, cheap) decides it's done: a `running` run whose terminal (`accepted`/`rejected`) fraction of
+ALL its feed rows reaches `worker_run_complete_fraction` (0.9) is completed; otherwise it fails as above.
+There is **no orphan rule** — every step is DB-derived and idempotent, so a crashed worker simply leaves
+work for the next tick to resume; only the finalize step's zero-row/TTL guards catch a pathologically
+stuck run. **Serve invariant:** every "latest run" read is the newest by `created_at` **AND
+`status = 'completed'`** (a mid-flight `running` run must never become latest and blank the gym's feed)
+**AND** the served row is **enriched AND accepted** — the feed/rec read `INNER JOIN`s `video_rag` so an
+accepted row with no embedding stays invisible until the enrich sweep reaches it.
 
 **Generic `cost_log` (replaces `video_cost_log`).** A source-agnostic append-only spend ledger:
 `entry_id` PK, `source cost_source` (enum, only `'video'` today — extensible), `run_id TEXT` (the source

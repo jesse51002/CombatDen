@@ -1,10 +1,13 @@
 -- HAND-AUTHORED migration (not `supabase db diff` output).
 -- Adds the video-worker RAG surface and generalizes the cost ledger:
+--   * a 'pending' value on gym_video_scan_status (candidate rows the worker has
+--     written but not yet enrich+scan processed)
 --   * pgvector extension
+--   * video.failure_count (per-video hard-error strike counter)
 --   * a run status lifecycle on video_run
 --   * a generic cost_log (replaces video_cost_log): source + run_id + gym_id +
 --     stage + cost_usd + model; matched back to its source table via (source, run_id)
---   * video_rag (per-video RAG sidecar)
+--   * video_rag (per-video RAG sidecar) + its HNSW ANN embedding index
 --   * the member video-taste RAG profile columns on members
 --   * member_video_recs (per-serve rec history, grouped by the video's genre
 --     category, with a clicked_at click signal)
@@ -12,19 +15,43 @@
 --     member_activity_type enum
 -- The worker has no queue table — it derives which gym to run from run/spec/
 -- curation timestamps (see VideoService/src/worker/sql/worker_select_due_gym.sql).
--- Mirrors schemas/_extensions.sql, cost_log.sql, video_rag.sql,
--- member_video_recs.sql, members.sql, member_activities.sql, video_run.sql
--- (edited) and access_rules/cost_log.sql, video_rag.sql, member_video_recs.sql.
+-- Mirrors schemas/gym_video_feed.sql (edited), _extensions.sql, video.sql
+-- (edited), cost_log.sql, video_rag.sql, member_video_recs.sql, members.sql,
+-- member_activities.sql, video_run.sql (edited) and access_rules/cost_log.sql,
+-- video_rag.sql, member_video_recs.sql.
 --
 -- The DB is reset+reseeded fresh at apply time: video_cost_log and the RAG
 -- tables are EMPTY and member_activities is empty (seed runs after), so the
 -- clean cost_log drop/recreate and the activity_type cast are safe.
 
 -- ============================================================
+-- 0. gym_video_scan_status: add 'pending' (candidate rows the worker writes
+--    ahead of enrich+scan; settles to accepted/rejected once scanned). Placed
+--    first, before any DDL below, because PG12+ only allows ADD VALUE inside a
+--    transaction when the new value is not USED in that same transaction —
+--    this migration never references 'pending', so it's safe, but it stays at
+--    the top on principle. Appended LAST in the enum so its ordinal matches
+--    this ADD VALUE (not a type-recreate — that tool is only for RETIRING
+--    values, per Database/CLAUDE.md).
+-- ============================================================
+
+ALTER TYPE gym_video_scan_status ADD VALUE IF NOT EXISTS 'pending';
+
+-- ============================================================
 -- 1. pgvector extension — everything vector-typed below depends on it.
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
+-- ============================================================
+-- 1a. video: hard-error strike counter. The worker bumps it on a step
+--     exception, resets to 0 on success, and the cleanup step deletes the
+--     video at 3 strikes.
+-- ============================================================
+
+ALTER TABLE video
+    ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0
+        CONSTRAINT chk_video_failure_count CHECK (failure_count >= 0);
 
 -- ============================================================
 -- 2. video_run: add the run status lifecycle
@@ -102,6 +129,14 @@ CREATE TABLE video_rag (
     embedding_model TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- HNSW ANN index over the summary embeddings. The ~18.9k unique template videos
+-- are enriched up front (the enrich-templates sidecar seeds video_rag on every
+-- `make sync-gyms`), so the table crosses the ~10k exact-scan threshold from the
+-- first sync — without the index every feed / rec / funnel cosine query would
+-- scan the whole table. vector_cosine_ops matches the <=> cosine the readers use.
+CREATE INDEX idx_video_rag_embedding ON video_rag
+    USING hnsw (embedding vector_cosine_ops);
 
 ALTER TABLE video_rag ENABLE ROW LEVEL SECURITY;
 

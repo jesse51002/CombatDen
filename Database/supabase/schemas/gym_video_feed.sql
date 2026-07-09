@@ -8,8 +8,11 @@
 -- web_query videos are rejected (kept, `scan_status='rejected'`), manual videos
 -- are hard-deleted.
 
--- The scan keep/drop decision for one feed row.
-CREATE TYPE gym_video_scan_status AS ENUM ('accepted', 'rejected');
+-- The scan keep/drop decision for one feed row. 'pending' = a candidate row the
+-- worker has written but not yet enrich+scan processed (appended LAST so its
+-- ordinal matches the runtime `ALTER TYPE ... ADD VALUE`); it settles to
+-- 'accepted'/'rejected' once the scan stage judges it.
+CREATE TYPE gym_video_scan_status AS ENUM ('accepted', 'rejected', 'pending');
 
 -- How the row's current scan_status was set: automatic scan/import vs. manual
 -- owner/admin action in the UI. A single column covers all curation paths;

@@ -43,6 +43,10 @@ CREATE TABLE video (
         CONSTRAINT video_relevance_index_nonneg CHECK (relevance_index >= 0),
     transcript_error TEXT,
     transcript TEXT,           -- full caption text (large); NULL when none / fetch failed
+    -- Hard-error strike counter; the worker bumps it on a step exception,
+    -- resets to 0 on success, and the cleanup step deletes the video at 3 strikes.
+    failure_count INTEGER NOT NULL DEFAULT 0
+        CONSTRAINT chk_video_failure_count CHECK (failure_count >= 0),
     -- The owning gym for an owner-added CUSTOM video (private to it). NULL for a
     -- shared, web-query/scraped video (the default — the pool is gym-agnostic
     -- except for these custom rows). Removing a custom video deletes its pool row

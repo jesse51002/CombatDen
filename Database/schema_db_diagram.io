@@ -759,6 +759,7 @@ Table video {
   relevance_index integer [not null]
   transcript_error text
   transcript text
+  failure_count integer [not null, default: 0, note: 'hard-error strike counter; worker bumps on step exception, resets to 0 on success, deletes video at 3 strikes']
   gym_id uuid [note: 'owning gym for a custom owner-added video (private); NULL = shared web-query/scraped']
   added_via video_source [not null, default: 'web_query', note: 'enum: web_query | manual — how it entered + whether deletable (web_query = reject only, manual = hard delete)']
 }
@@ -842,7 +843,7 @@ Table gym_video_feed {
   gym_id uuid [not null, note: 'FK to gyms.gym_id']
   video_id text [not null, note: 'FK to video.video_id']
   video_run_id uuid [note: 'NULL = owner "Your videos" section (always served); set = a scan run (served only while latest)']
-  scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected']
+  scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected | pending (worker-written candidate, not yet enrich+scan processed)']
   curation_type gym_video_curation_type [not null, default: 'automatic', note: 'enum: automatic | manual; how the current scan_status was set']
   curation_reason text [note: 'nullable; owner free-text reason for the latest manual curation; NULL for automatic rows']
   rejected_at timestamptz [note: 'last rejection time; retained across re-acceptance (history)']

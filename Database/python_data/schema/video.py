@@ -50,6 +50,7 @@ class GymVideoScanStatus(StrEnum):
 
     accepted = "accepted"  # served
     rejected = "rejected"  # the rejected list (web_query removals land here)
+    pending = "pending"  # written by the worker, not yet enrich+scan processed
 
 
 class GymVideoCurationType(StrEnum):
