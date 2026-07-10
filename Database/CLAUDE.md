@@ -109,6 +109,13 @@ the scan stage flips it to `'accepted'`/`'rejected'`.
 - `curated_at` — when the owner last manually touched the row (reject/keep/re-add); NULL for
   automatic-only rows. The feed-learning refiner filters on `curation_type = 'manual'` AND
   `curated_at >` the gym's last `feed_update` version to find unconsumed signals.
+- `scanned_at` — when the worker's scan step last JUDGED this row against the gym's spec; stamped
+  `now()` by every verdict write (`worker_update_verdict.sql`), NULL until first scanned (added in
+  migration `20260710010000_add_feed_scanned_at.sql`). The feed-learning **re-scan** (the second half
+  of the `feed_update` auto-learn loop) targets an `automatic` row whose `scanned_at` predates a
+  gym `feed_update` spec version that has settled ≥ the worker's `worker_feed_update_rescan_delay_hours`
+  (1h): it re-judges the row in place against the new criteria and re-stamps `scanned_at`, so the same
+  `feed_update` never re-triggers it. Manual rows (`curation_type = 'manual'`) are never re-scanned.
 
 **`gym_video_spec_source` enum** — a new Postgres enum (`CREATE TYPE gym_video_spec_source AS ENUM
 ('admin_update', 'system_update', 'feed_update')`), mirrored in

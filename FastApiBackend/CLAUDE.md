@@ -546,6 +546,23 @@ acknowledge and invite further changes (the conversation stays open, `saved=True
   timestamps; see the VideoService CLAUDE.md).
 - **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
 
+**The `feed_update` auto-learn loop — immediate coalesced auto-refine on manual curation.**
+The moment a gym owner manually curates the feed, the spec auto-learns and the VideoService worker
+prunes/surfaces similar videos within ~2h, with zero feed downtime. The BACKEND half is a
+**fire-and-forget, per-gym-coalesced runner**, **`VideoFeedRefineRunner`**
+(`video_feed_refine_runner.py`) — mirrors `MemberVideoProfileRefreshRunner` (a `ClassVar` task set +
+done-callback crash logger + `drain()` in the `main.py` lifespan), plus a `ClassVar` in-flight-gym set:
+`start(gym_id)` fires `VideoFeedRefiner.refine_from_feed` detached, DROPPING the fire when a refine for
+that gym is already in flight (5 rapid rejects → one refine, which folds the newest manual signals). A
+refine failure NEVER surfaces to the curation caller. It is fired at **router-level composition** (keeps
+`VideoFeedService` decoupled from the runner) from the **reject** (`DELETE …/videos/{id}` with `owner=False`)
+and **keep** (`POST …/videos/{id}/keep`) endpoints **ONLY** — NOT owner-add (`POST …/videos`) and NOT
+owner-remove (`owner=True`), which aren't keep/avoid signals. The refine mints a `feed_update`
+`gym_video_spec` version from the gym's unconsumed `curation_type='manual'` signals; the WORKER half is
+the scan sweep's in-place re-scan (arm B — re-judges the gym's auto feed rows against the new criteria
+≥`worker_feed_update_rescan_delay_hours` (1h) later; the settle wait lives in the worker, see the
+VideoService CLAUDE.md). DI provider: `video_feed_refine_runner` (Singleton, injected into the router).
+
 **`VideosService` (`videos_service.py`) is a PURE-DELEGATING domain FACADE** — composes `VideoFeedService`,
 `VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`,
 `VideoRecsService`, and `VideoRecClickService`; every method is a one-liner to a concern
@@ -733,7 +750,8 @@ surfaces the single most-recent version per gym. Do not `SELECT` directly from t
 separate `gym_video_query` table was dropped when versioned spec shipped).
 
 **DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
-`video_spec_authoring`, `video_feed_refiner`, `member_video_profile_service`
+`video_spec_authoring`, `video_feed_refiner`, `video_feed_refine_runner`
+(the coalesced auto-refine, injected into the router), `member_video_profile_service`
 (defined before `video_feed_service`, which reads the embedding), `video_feed_service`
 (defined before `video_recs_service`, which delegates the rec candidate query to it),
 `member_video_profile_refresh_runner`, `video_recs_service`,

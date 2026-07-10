@@ -848,6 +848,7 @@ Table gym_video_feed {
   curation_reason text [note: 'nullable; owner free-text reason for the latest manual curation; NULL for automatic rows']
   rejected_at timestamptz [note: 'last rejection time; retained across re-acceptance (history)']
   curated_at timestamptz [note: 'nullable; when the owner last manually curated this row (reject/keep/re-add)']
+  scanned_at timestamptz [note: 'nullable; when the worker scan last judged this row; the feed-learning re-scan compares the gym latest feed_update spec created_at against it']
 }
 
 // gym_video_query was DROPPED — queries now live in gym_video_spec.queries JSONB.

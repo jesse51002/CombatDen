@@ -68,6 +68,13 @@ class WorkerSettings(BaseSettings):
     # — lets a scrape whose rows land shortly after the run row not be failed
     # prematurely.
     worker_zero_row_grace_hours: int = 1
+    # Feed-learning re-scan wait: the scan sweep re-judges a gym's 'automatic'
+    # feed rows against a new 'feed_update' spec version only once that version has
+    # settled at least this many hours (the coalescing window — a burst of manual
+    # curations mints one feed_update, and the wait lets it quiesce before the
+    # in-place re-scan runs). The immediate refine that mints the version lives in
+    # the backend; this delay lives here in the worker.
+    worker_feed_update_rescan_delay_hours: float = 1.0
 
     # --- concurrency ---------------------------------------------------------
     worker_scrape_concurrency: int = 4

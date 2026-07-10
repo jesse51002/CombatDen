@@ -1,20 +1,26 @@
-"""Scan sweep — a gym-agnostic keep/drop pass that settles ``pending`` feed rows.
+"""Scan sweep — a gym-agnostic keep/drop pass that settles + re-judges feed rows.
 
-The target set (``worker_scan_targets.sql``) is the ``pending`` feed rows in each
-gym's latest non-failed run whose video is already enriched (a ``video_rag`` row)
-and is under the strike ceiling, grouped by gym. The sweep DRAINS it: per gym, it
-loads that gym's LATEST spec at scan time (judge against the current criteria, not
-a run-pinned one), batches the candidates, and runs a TEXT-ONLY keep/drop against
-each candidate's summary + structured enrich outputs (genre, disciplines, facets).
-The enrich step already did the multimodal (thumbnail) pass ONCE and folded the
-visual detail into the summary, so scan never re-fetches the thumbnail — cheaper,
-and it matters because scan runs per-gym (a video in many feeds is scanned many
-times) while enrich runs once per video.
+The target set (``worker_scan_targets.sql``) is the feed rows in each gym's latest
+non-failed run whose video is already enriched (a ``video_rag`` row) and is under
+the strike ceiling, grouped by gym, matching EITHER arm: (A) a ``pending`` row (its
+first-ever verdict), OR (B) an ``automatic`` row (pending/accepted/rejected) whose
+``scanned_at`` predates a gym ``feed_update`` spec version that has settled ≥
+``worker_feed_update_rescan_delay_hours`` — the feed-learning RE-SCAN. The sweep
+DRAINS it: per gym, it loads that gym's LATEST spec at scan time (judge against the
+current criteria — the ``feed_update`` folded in the owner's manual signals), batches
+the candidates, and runs a TEXT-ONLY keep/drop against each candidate's summary +
+structured enrich outputs (genre, disciplines, facets). The enrich step already did
+the multimodal (thumbnail) pass ONCE and folded the visual detail into the summary,
+so scan never re-fetches the thumbnail — cheaper, and it matters because scan runs
+per-gym (a video in many feeds is scanned many times) while enrich runs once per
+video.
 
-Verdicts are written by UPDATE (``worker_update_verdict.sql``): a ``pending`` row is
-flipped to accepted/rejected, guarded by ``scan_status = 'pending'`` so a manual
-verdict (or a prior automatic one) is never overwritten. A verdicted video gets its
-strike counter reset.
+Verdicts are written by UPDATE (``worker_update_verdict.sql``): an automatic row is
+flipped to accepted/rejected (arm B flips accepted<->rejected only when the judgment
+changes) and stamped ``scanned_at = now()``, guarded by ``curation_type <> 'manual'``
+so an owner's explicit keep/reject verdict is never overwritten and the row is never
+flipped to ``pending`` (which would blank it from the served feed). A verdicted video
+gets its strike counter reset.
 
 Strike semantics — there is NO default-to-rejected: a batch whose LLM call raises
 bumps ``failure_count`` for EVERY video in the batch and leaves the rows ``pending``
@@ -52,8 +58,9 @@ SCAN_STATUS_REJECTED = "rejected"
 
 
 class WorkerScanner:
-    """Drains the pending-scan target set: per gym, a text-only keep/drop against
-    the gym's latest spec, verdicts written by UPDATE, hard failures struck."""
+    """Drains the scan target set (first-scan ``pending`` rows + feed_update
+    re-scan rows): per gym, a text-only keep/drop against the gym's latest spec,
+    verdicts written by UPDATE (auto rows only), hard failures struck."""
 
     def __init__(
         self,
@@ -69,7 +76,12 @@ class WorkerScanner:
         """Scan every pending target, grouped by gym. True iff there was work."""
         targets = await self._db.fetch_all(
             load_sql(SQL_DIR / "worker_scan_targets.sql"),
-            {"max_failures": settings.worker_failure_max},
+            {
+                "max_failures": settings.worker_failure_max,
+                "rescan_delay_hours": (
+                    settings.worker_feed_update_rescan_delay_hours
+                ),
+            },
         )
         if not targets:
             return False
@@ -145,7 +157,7 @@ class WorkerScanner:
     async def _write_verdicts(
         self, gym_id: str, run_id: str, verdicts: dict[str, bool]
     ) -> None:
-        """Flip each verdicted pending row to accepted/rejected by UPDATE."""
+        """Flip each verdicted auto row to accepted/rejected by UPDATE."""
         params = self._verdict_params(gym_id, run_id, verdicts)
         if not params:
             return

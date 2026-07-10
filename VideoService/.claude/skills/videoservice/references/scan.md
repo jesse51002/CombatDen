@@ -13,25 +13,48 @@ across every gym in one pass, unlike the per-gym `scraper.md` step.
 
 ## Scan (tried first — global sweep, per-gym batches, TEXT-ONLY)
 
-**Targets** (`worker_scan_targets.sql`): `pending` feed rows in each gym's latest
-non-failed run whose video already has a `video_rag` row (enriched) and is under
-the strike ceiling, grouped by gym.
+**Targets** (`worker_scan_targets.sql`): each gym's latest-non-failed-run feed rows
+whose video already has a `video_rag` row (enriched) and is under the strike ceiling,
+grouped by gym, matching **either arm**:
+
+- **Arm A — first scan.** `scan_status = 'pending'` rows: a candidate the worker wrote
+  but has not yet verdicted.
+- **Arm B — the feed-learning RE-SCAN.** `curation_type = 'automatic'` rows (pending
+  OR already accepted/rejected) whose `scanned_at` predates a gym `feed_update`
+  `gym_video_spec` version that has **settled** ≥ `worker_feed_update_rescan_delay_hours`
+  (1h) — `s.created_at <= now() - :rescan_delay_hours` AND `s.created_at >
+  COALESCE(scanned_at, '-infinity')`. This re-judges the gym's existing auto feed rows
+  in place against the new criteria after an owner's manual curation folds into a
+  `feed_update` version. Arm B **never** includes a `curation_type = 'manual'` row, so
+  an owner's explicit keep/reject is never re-scanned.
 
 Per gym: load that gym's **LATEST** spec **at scan time** (`worker_spec_load_latest.sql`
-— judged against the CURRENT criteria, not whatever spec was in force when the
-candidate was scraped), batch the candidates (`scan_batch_size`, 12), and run a
-**text-only** keep/drop (`scan_model`, `gemini/gemini-2.5-flash-lite`) on each
-candidate's **summary + structured enrich outputs** (genre, disciplines, facets).
-NO thumbnail is re-sent: the enrich step already did the multimodal pass and folded
-the visual detail into the detailed summary, so scan reads that instead. This is
-cheaper AND scale-correct — scan runs per-gym (a video in many feeds is scanned many
-times) while enrich runs once per video.
+— judged against the CURRENT criteria, i.e. the `feed_update` folded in the owner's
+manual signals, not whatever spec was in force when the candidate was scraped), batch
+the candidates (`scan_batch_size`, 12), and run a **text-only** keep/drop (`scan_model`,
+`gemini/gemini-2.5-flash-lite`) on each candidate's **summary + structured enrich
+outputs** (genre, disciplines, facets). NO thumbnail is re-sent: the enrich step
+already did the multimodal pass and folded the visual detail into the detailed summary,
+so scan reads that instead. This is cheaper AND scale-correct — scan runs per-gym (a
+video in many feeds is scanned many times) while enrich runs once per video.
 
 **Verdicts are written by UPDATE** (`worker_update_verdict.sql`), not by a fresh
-feed insert — there is no per-run scan-write. A `pending` row is flipped to
-`accepted`/`rejected`, guarded by `scan_status = 'pending'` so a manual verdict (or
-a prior automatic one) is never overwritten. A verdicted video's strike counter is
+feed insert — there is no per-run scan-write. An automatic row is flipped to
+`accepted`/`rejected` (arm B flips accepted↔rejected only when the judgment changes)
+and stamped `scanned_at = now()`, guarded by `curation_type <> 'manual'` so an owner's
+explicit keep/reject is never overwritten and a row is **never flipped to `pending`**
+(which would blank it from the served feed). `scanned_at = now()` marks the row judged
+so the same `feed_update` never re-triggers it. A verdicted video's strike counter is
 reset to 0.
+
+**The `feed_update` auto-learn loop (zero downtime).** Arm B is the WORKER half of the
+loop; the BACKEND half is an immediate, per-gym-coalesced auto-refine fired the moment a
+gym owner manually rejects or keeps a feed video (FastApiBackend `videos` domain —
+`VideoFeedRefineRunner` → `VideoFeedRefiner`), which mints the `feed_update` version.
+The ≥1h settle wait lives HERE in the worker (arm B's `:rescan_delay_hours`), letting a
+burst of curations coalesce into one `feed_update` before the in-place re-scan sweeps
+similar videos in or out — the served feed is never blanked, since rows only flip
+between `accepted`/`rejected`, never to `pending`.
 
 **Strike semantics — no default-to-rejected.** A batch whose LLM call raises bumps
 `failure_count` for EVERY video in the batch and leaves the rows `pending`

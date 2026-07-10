@@ -570,6 +570,17 @@ Future<bool> confirmAndRemoveGenreVideo(
       video.videoId,
       reason: reason.isEmpty ? null : reason,
     );
+    // Two-part effect: the video is gone now, and the feed auto-learns — the
+    // worker removes similar auto-picked videos within ~2 hours.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Removed. Similar videos will be auto-removed within ~2 hours.',
+          ),
+        ),
+      );
+    }
     return true;
   } catch (_) {
     if (context.mounted) {
@@ -601,6 +612,17 @@ Future<bool> keepGenreVideo(BuildContext context, Video video) async {
       video.videoId,
       reason: reason.isEmpty ? null : reason,
     );
+    // Two-part effect: the video is back now, and the feed auto-learns — the
+    // worker surfaces similar videos within ~2 hours.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Added back. Similar videos will be auto-added within ~2 hours.',
+          ),
+        ),
+      );
+    }
     return true;
   } catch (_) {
     if (context.mounted) {

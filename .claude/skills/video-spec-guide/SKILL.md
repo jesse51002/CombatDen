@@ -227,21 +227,28 @@ preset seed leave it NULL). Those are the learning signals.
 4. Calls `VideoSpecService.save_version` to append the result as a `feed_update` row.
 
 The refiner is **batched**, not per-action (feed clicks stay instant; they only
-record `curated_at`). Trigger: **pre-agent-view-open** — the CRM calls
-`POST …/video-agent/refine-from-feed` right before the owner starts editing, so the
-spec already reflects recent curation. The worker does **NOT** call the refiner: it
-is a separate VideoService process and never reaches back into the backend
-(cross-service). A refine that mints a `feed_update` version runs through
-`VideoSpecAuthoring.commit`, which just saves it — a `feed_update` version is **not**
-an `admin_update`, so minting it does NOT itself put the gym on the worker's tier-1
-trigger. The gym still gets re-run on its own schedule regardless: the owner's manual
-curation action that fed the refiner already bumped `gym_video_feed.curated_at`,
-which is the worker's tier-2 trigger (once that curation settles for
-`worker_curation_batch_hours`). So curation → tier-2-triggered feed regeneration
-happens on the worker's own tick, independent of whether/when the refine runs; the
-refine's only job is keeping the spec's criteria current for whenever the worker (or
-the next agent session) reads it — the worker only ever *consumes* the spec (via
-`gym_video_spec_latest`), never calling in.
+record `curated_at`). Two triggers fire it:
+
+1. **Immediate, coalesced, on curation** (the `feed_update` auto-learn loop). The
+   reject and keep endpoints fire a **fire-and-forget, per-gym-coalesced**
+   `VideoFeedRefineRunner.start(gym_id)` right after the curation write commits (router-level
+   composition; NOT owner-add / owner-remove). It runs `refine_from_feed` detached, dropping the
+   fire when a refine for that gym is already in flight — so a burst of rejects mints one
+   `feed_update` version, not many. A refine failure never surfaces to the curation caller.
+2. **Pre-agent-view-open.** The CRM calls `POST …/video-agent/refine-from-feed` right before the
+   owner starts editing, so the spec already reflects recent curation.
+
+The worker does **NOT** call the refiner: it is a separate VideoService process and never reaches
+back into the backend (cross-service). A refine that mints a `feed_update` version runs through
+`VideoSpecAuthoring.commit`, which just saves it — a `feed_update` version is **not** an
+`admin_update`, so minting it does NOT put the gym on the worker's tier-1 SCRAPE trigger (and there
+is no tier-2 scrape trigger — the worker's `worker_select_due_gym.sql` scrapes only on a newer
+`admin_update` version or the weekly refresh floor). Instead the worker's **scan** step re-judges the
+gym's existing auto feed rows **in place** against the new `feed_update` criteria — arm B of
+`worker_scan_targets.sql`, ≥ `worker_feed_update_rescan_delay_hours` (1h) after the version settles —
+flipping accepted↔rejected with zero feed downtime. So a manual curation → an immediate `feed_update`
+→ a ~1h-later in-place re-scan of similar videos, all without a new scrape run. The worker only ever
+*consumes* the spec (via `gym_video_spec_latest`), never calling in.
 
 ## 5. Endpoints — all on the existing `videos_router` (gym-employee gated)
 

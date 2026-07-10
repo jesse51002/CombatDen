@@ -16,7 +16,7 @@ import asyncio
 import re
 
 from src.core.errors import ProviderError
-from src.worker import worker_config
+from src.worker import worker_config, worker_scanner
 from src.worker.schema.scan_batch import ScanBatchResult, ScanVerdictItem
 from src.worker.worker_scanner import WorkerScanner
 from tests.worker_fakes import FakeLLM, RoutingFakeDb
@@ -134,7 +134,7 @@ def test_batch_splitting_and_verdicts(monkeypatch) -> None:
     assert cost.scans == [("gym-1", "run-1", 0.10, 3)]  # 0.05 × 2 batches
 
 
-def test_verdict_update_is_pending_guarded() -> None:
+def test_verdict_update_guards_manual_and_stamps_scanned() -> None:
     db = RoutingFakeDb()
     db.rows["scan_targets"] = [_candidate("a")]
     db.ones["spec_latest"] = _criteria()
@@ -144,10 +144,63 @@ def test_verdict_update_is_pending_guarded() -> None:
     asyncio.run(scanner.drain(_abort()))
 
     verdict_sql = [s for n, s, _ in db.writes if n == "update_verdict"][0]
-    # the guard is what stops a manual / prior verdict being overwritten.
-    assert "scan_status = 'pending'" in verdict_sql
+    # curation_type <> 'manual' is what stops an owner's explicit keep/reject
+    # being overwritten, while still re-judging an automatic (pending OR already
+    # accepted/rejected) row; scanned_at = now() marks the row judged so the same
+    # feed_update never re-triggers it.
+    assert "curation_type <> 'manual'" in verdict_sql
+    assert "scanned_at = now()" in verdict_sql
+    assert "scan_status = 'pending'" not in verdict_sql  # old guard is gone
     row = _verdict_rows(db)[0]
     assert row["gym_id"] == "gym-1" and row["video_run_id"] == "run-1"
+
+
+def test_scan_targets_bind_includes_rescan_delay(monkeypatch) -> None:
+    # The scan-targets fetch threads worker_feed_update_rescan_delay_hours as the
+    # :rescan_delay_hours bind (the ≥1h wait before a feed_update re-scan fires).
+    monkeypatch.setattr(
+        worker_config.settings, "worker_feed_update_rescan_delay_hours", 2.0
+    )
+    db = RoutingFakeDb()  # empty scan_targets → drain is a no-op
+    scanner, _ = _scanner(db, FakeLLM(structured=_handler(set())))
+
+    asyncio.run(scanner.drain(_abort()))
+
+    assert db.read_params("scan_targets") == [
+        {
+            "max_failures": worker_config.settings.worker_failure_max,
+            "rescan_delay_hours": 2.0,
+        }
+    ]
+
+
+def test_scan_targets_sql_has_feed_update_rescan_arm() -> None:
+    # Arm B of the target set: an AUTOMATIC row is re-judged against a settled
+    # feed_update version — a 'manual' row is NEVER selected by this arm.
+    sql = (
+        worker_scanner.SQL_DIR / "worker_scan_targets.sql"
+    ).read_text(encoding="utf-8")
+    assert "source = 'feed_update'" in sql  # arm B keys on a feed_update version
+    assert "curation_type = 'automatic'" in sql  # arm B excludes manual rows
+    assert "f.scan_status = 'pending'" in sql  # arm A (the first-scan path)
+    assert ":rescan_delay_hours" in sql  # the ≥1h settle wait
+
+
+def test_rescan_flips_accepted_to_rejected() -> None:
+    # A re-scan judges an auto row the SQL selected (e.g. a previously-accepted row
+    # a new feed_update made stale); the scanner writes whatever the new criteria
+    # yield — here a flip to 'rejected' with rejected_at stamped, in place.
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a")]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler(set()))  # 'a' now judged bad → rejected
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    row = _verdict_rows(db)[0]
+    assert row["verdict"] == "rejected"
+    assert row["rejected_at"] is not None
 
 
 def test_batch_exception_strikes_all_stays_pending() -> None:

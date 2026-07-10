@@ -54,7 +54,14 @@ CREATE TABLE gym_video_feed (
     -- subsequent re-acceptance so the rejection timestamp is kept as history.
     -- Possible later cleanup: superseded by curation_type + curated_at for the
     -- manual case; kept here for now as an out-of-scope change.
-    rejected_at TIMESTAMPTZ
+    rejected_at TIMESTAMPTZ,
+    -- When the worker's scan step last JUDGED this row against the gym's spec —
+    -- stamped now() by every verdict write (worker_update_verdict.sql). NULL until
+    -- first scanned. The feed-learning re-scan compares a gym's latest 'feed_update'
+    -- spec version's created_at against this: an 'automatic' row whose scanned_at
+    -- predates a settled feed_update is re-judged in place against the new criteria
+    -- (never re-triggering for the same feed_update once stamped).
+    scanned_at TIMESTAMPTZ
 );
 
 -- A video appears at most once per scan run, and at most once in the owner

@@ -184,6 +184,9 @@ from src.videos.service.member_video_profile_service import (
     MemberVideoProfileService,
 )
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refine_runner import (
+    VideoFeedRefineRunner,
+)
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_query_generator import VideoQueryGenerator
@@ -453,6 +456,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         litellm_client=litellm_client,
         model=settings.video_llm_model,
         authoring=video_spec_authoring,
+    )
+    # Fire-and-forget, per-gym-coalesced feed-learning refine, fired at the router
+    # from the manual reject/keep curation endpoints (never owner add/remove).
+    # Singleton so drain() + the coalescing guard (both ClassVar-backed) see every
+    # in-flight task regardless of instance.
+    video_feed_refine_runner = providers.Singleton(
+        VideoFeedRefineRunner,
+        feed_refiner=video_feed_refiner,
     )
     # RAG read surface: the member's video-taste profile is ONE LLM summary +
     # ONE embedding on the members row, built by the profile service (a small

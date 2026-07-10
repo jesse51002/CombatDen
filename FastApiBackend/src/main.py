@@ -34,6 +34,9 @@ from src.uploads.uploads_router import uploads_router
 from src.videos.service.member_video_profile_refresh_runner import (
     MemberVideoProfileRefreshRunner,
 )
+from src.videos.service.video_feed_refine_runner import (
+    VideoFeedRefineRunner,
+)
 from src.videos.videos_router import videos_router
 from src.waivers.waivers_router import waivers_router
 
@@ -54,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Drain in-flight fetches before pool disposal.
         await MembershipsInvoiceFetchRunner.drain()
         await MemberVideoProfileRefreshRunner.drain()
+        await VideoFeedRefineRunner.drain()
         await app.container.db_pool().engine.dispose()
 
 

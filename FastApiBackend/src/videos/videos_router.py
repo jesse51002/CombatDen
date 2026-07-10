@@ -68,6 +68,7 @@ from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refine_runner import VideoFeedRefineRunner
 from src.videos.service.video_rec_click_service import RecNotFoundError
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import (
@@ -373,6 +374,9 @@ async def remove_gym_video(
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
+    refine_runner: VideoFeedRefineRunner = Depends(
+        Provide[DependencyInjector.video_feed_refine_runner]
+    ),
 ) -> None:
     """Remove one video (idempotent → 204): ``owner=true`` ("Your videos")
     deletes it from the owner section (+ owned pool if it's a manual custom);
@@ -398,6 +402,15 @@ async def remove_gym_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to remove gym video",
         ) from None
+
+    # After a manual REJECT (owner=False) commits, fire a coalesced, best-effort
+    # feed-learning refine (mints a feed_update spec version from the gym's manual
+    # signals; the worker re-scans similar videos ≥1h later). An owner-section
+    # remove (owner=True) is NOT a keep/reject curation signal, so it does not
+    # learn. Router-level composition keeps VideoFeedService decoupled from the
+    # runner; a refine failure never surfaces here.
+    if not owner:
+        refine_runner.start(gym_id)
 
 
 @videos_router.post(
@@ -426,6 +439,9 @@ async def keep_gym_video(
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
+    refine_runner: VideoFeedRefineRunner = Depends(
+        Provide[DependencyInjector.video_feed_refine_runner]
+    ),
 ) -> None:
     """Un-reject a video (back to the served feed); idempotent → 204."""
     user_payload = auth.get_current_user(credentials)
@@ -445,6 +461,10 @@ async def keep_gym_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to keep gym video",
         ) from None
+
+    # After the keep (un-reject) commits, fire the same coalesced, best-effort
+    # feed-learning refine so the worker surfaces similar videos ≥1h later.
+    refine_runner.start(gym_id)
 
 
 @videos_router.get(
