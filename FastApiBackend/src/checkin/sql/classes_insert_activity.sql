@@ -5,6 +5,6 @@ INSERT INTO member_activities (member_id, gym_id, activity_type, activity_info)
 VALUES (
     CAST(:m AS UUID),
     CAST(:g AS UUID),
-    :activity_type,
+    CAST(:activity_type AS member_activity_type),
     CAST(:info AS JSONB)
 )

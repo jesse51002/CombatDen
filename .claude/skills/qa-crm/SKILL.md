@@ -172,7 +172,7 @@ Then **Read the screenshot** and judge it: real data vs. spinner vs. blank.
 
 ## 6. Edge-data degradations (expected, not bugs)
 
-VideoService keys on a **string `video_gym` id** (`boxing`, `acro_yoga`, …),
+VideoService keys on a **string `template_gym` id** (`boxing`, `acro_yoga`, …),
 **not** the real gym UUID — separate id spaces, no mapping (see the *VideoService
 integration* section in `CLAUDE.md`). So `GET :8002/gyms/{uuid}` 404s for a real
 CRM gym, and two surfaces degrade quietly **by design**:
@@ -181,7 +181,7 @@ CRM gym, and two surfaces degrade quietly **by design**:
 - **Schedule** shows "Could not reach the video service."
 
 Don't file these as page failures. They resolve by seeding the gym into
-VideoService or pointing the app at a `video_gym` id, not by touching the CRM.
+VideoService or pointing the app at a `template_gym` id, not by touching the CRM.
 
 ## 7. Method note — one browser, sequential
 

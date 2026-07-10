@@ -1,6 +1,6 @@
 -- Assign the gym's lowest-ordered rank to every rank-less member and
 -- append one 'rank_changed' audit row per backfilled member in the
--- same statement (:activity_type is bound to RANK_CHANGED_ACTIVITY_TYPE),
+-- same statement (:activity_type is bound to MemberActivityType.rank_changed),
 -- so each member's progress anchor starts at the backfill moment rather
 -- than their join date. The member is pinned to the lowest rank's BASE
 -- leaf: current_sub_index 0 when it has sub-ranks, else NULL. The EFFECTIVE
@@ -38,7 +38,7 @@ INSERT INTO member_activities (member_id, gym_id, activity_type, activity_info)
 SELECT
     b.member_id,
     CAST(:gym_id AS UUID),
-    :activity_type,
+    CAST(:activity_type AS member_activity_type),
     jsonb_build_object(
         'old_rank_id', NULL,
         'new_rank_id', b.new_rank_id,

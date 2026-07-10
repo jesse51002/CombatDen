@@ -1,4 +1,4 @@
-INSERT INTO video_gym (
+INSERT INTO template_gym (
     gym_id, gym_type, theme,
     short_videos_desc, short_avoid_desc, videos_desc, avoid_desc,
     has_classes, has_rewards

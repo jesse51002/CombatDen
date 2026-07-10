@@ -129,11 +129,14 @@ rewards: null                         # optional points-store reward cards (belo
   > above applies to the hand-authored `VideoService/gyms/<gym_id>.yaml` template
   > files (the 76 demo gym archetypes). For **real customer gyms** (UUID-keyed,
   > stored in `gym_video_spec` in Postgres), query generation is handled by the
-  > FastApiBackend `videos` domain: `POST
-  > /api/v1/gyms/{gym_id}/video-agent/generate-queries` (single structured LLM
-  > call) and `POST /api/v1/gyms/{gym_id}/video-agent` (conversational agent). The
-  > genre-spread methodology from this skill (principle 6) was ported into those
-  > backend prompts.
+  > FastApiBackend `videos` domain — `VideoQueryGenerator` (a two-call
+  > landscape→queries flow) runs **deterministically inside the spec-authoring
+  > commit** (`VideoSpecAuthoring.commit`: diff guard → query gen → save), triggered
+  > by the conversational agent's accept-path (`POST
+  > /api/v1/gyms/{gym_id}/video-agent` with `accepted_spec`) or
+  > `.../video-agent/refine-from-feed`; there is no standalone generate-queries
+  > endpoint. The genre-spread methodology from this skill (principle 6) was ported
+  > into those backend prompts.
 - **`classes` / `rewards`** — `null` until authored. Shapes below.
 
 ### `classes` — branded class cards (`ClassImage`)
@@ -190,8 +193,9 @@ A workable order (adapt, don't recite):
    `specification.videos_desc` / `avoid_desc`. Push for specifics.
 4. **What searches feed it?** — draft `queries` from the discipline + spec; show
    them and let the user cut/add. (Don't invent filler queries.) This step
-   applies to template YAML gyms. For real customer gyms, queries are generated
-   via `POST /api/v1/gyms/{gym_id}/video-agent/generate-queries` on the backend.
+   applies to template YAML gyms. For real customer gyms, queries are generated on
+   the backend by `VideoQueryGenerator` inside the spec-authoring commit (no
+   standalone endpoint).
 5. **Classes / rewards?** — only if the user wants them now; otherwise leave
    `null`. Get real titles/images/points from the user — don't fabricate.
 

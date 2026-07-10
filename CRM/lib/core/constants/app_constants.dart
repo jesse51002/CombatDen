@@ -18,10 +18,10 @@ class AppConstants {
   static const double breakpointTablet = 900;
   static const double breakpointDesktop = 1200;
 
-  /// The VideoService `video_gym` id seeded after login so the read-only
+  /// The VideoService `template_gym` id seeded after login so the read-only
   /// content surfaces (Videos / Schedule / Loyalty / Dashboard classes) have a
   /// gym to render. The regular gym id (a UUID from `GET /api/v1/gyms/me`) and
-  /// the VideoService `video_gym` id (a string like `boxing`) are **separate id
+  /// the VideoService `template_gym` id (a string like `boxing`) are **separate id
   /// spaces with no mapping**, so the real gym's UUID can't be used here — it
   /// 404s the VideoService. The Theme-tab gym picker overrides this. Override
   /// the default with `--dart-define=DEFAULT_VIDEO_GYM=<id>`.

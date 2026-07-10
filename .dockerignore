@@ -1,0 +1,47 @@
+# Root .dockerignore — needed because deploy/Dockerfile builds from the
+# monorepo ROOT as its context (`docker build -f deploy/Dockerfile .`), not
+# from a single-service directory. Keeps that context small; the Dockerfile
+# only COPYs specific files from FastApiBackend/, VideoService/, and
+# Database/python_data/schema/ — everything below is safe to exclude from the
+# tar sent to the Docker daemon. See deploy/CLAUDE.md for what actually ships.
+
+# VCS / editor / tooling cruft
+.git
+.github
+.vscode
+.gstack/
+
+# Whole systems this image doesn't build (their own build/deploy tooling
+# handles them separately)
+CRM/
+MobileApp/
+LandingPage/
+ThemeService/
+
+# Worktree-symlinked poetry venvs (large, and rebuilt fresh inside the image
+# anyway — see setup_worktree_env.sh) + Python/tool caches, everywhere
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+# VideoService: the read API, pipeline scripts, and their inputs aren't part
+# of this image (the worker only needs src/ + schema/). videos/ is a
+# worktree symlink to the ~296M legacy yaml pool; gyms/ is authored config
+# for the sync scripts — neither is a runtime dependency of the worker.
+VideoService/videos/
+VideoService/gyms/
+VideoService/tests/
+VideoService/scripts/
+
+# FastApiBackend: tests aren't part of the runtime image
+FastApiBackend/tests/
+
+# Local env files — never baked into the image; env vars are injected at
+# container runtime instead (see deploy/CLAUDE.md)
+.env
+**/.env
+**/.env.prod
+**/.env.dev

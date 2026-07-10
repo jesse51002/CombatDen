@@ -32,11 +32,13 @@ class LLMClient(ABC):
         *,
         schema: type[ModelT],
         model: str,
+        image_urls: list[str] | None = None,
     ) -> ModelT:
         """Constrained generation: a Pydantic schema in, a model out.
 
         ``model`` is required and carries the provider prefix the client
-        routes on.
+        routes on. When ``image_urls`` is set the implementation attaches the
+        images to the user message as a multimodal (vision) call.
 
         Raises:
             SchemaValidationError: output never validated within the

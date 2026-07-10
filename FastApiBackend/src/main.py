@@ -31,6 +31,12 @@ from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
 from src.tasks.tasks_router import tasks_router
 from src.theme.theme_router import theme_router
 from src.uploads.uploads_router import uploads_router
+from src.videos.service.member_video_profile_refresh_runner import (
+    MemberVideoProfileRefreshRunner,
+)
+from src.videos.service.video_feed_refine_runner import (
+    VideoFeedRefineRunner,
+)
 from src.videos.videos_router import videos_router
 from src.waivers.waivers_router import waivers_router
 
@@ -50,6 +56,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             scheduler.shutdown(wait=False)
         # Drain in-flight fetches before pool disposal.
         await MembershipsInvoiceFetchRunner.drain()
+        await MemberVideoProfileRefreshRunner.drain()
+        await VideoFeedRefineRunner.drain()
         await app.container.db_pool().engine.dispose()
 
 

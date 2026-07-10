@@ -28,8 +28,8 @@ class VideoGenre(StrEnum):
     memes = "memes"
 
 
-class VideoGymFeedStatus(StrEnum):
-    """Mirrors the Postgres `video_gym_feed_status` enum in schemas/video_gym_feed.sql."""
+class TemplateGymFeedStatus(StrEnum):
+    """Mirrors the Postgres `template_gym_feed_status` enum in schemas/template_gym_feed.sql."""
 
     good = "good"
     rejected = "rejected"
@@ -50,6 +50,7 @@ class GymVideoScanStatus(StrEnum):
 
     accepted = "accepted"  # served
     rejected = "rejected"  # the rejected list (web_query removals land here)
+    pending = "pending"  # written by the worker, not yet enrich+scan processed
 
 
 class GymVideoCurationType(StrEnum):
@@ -70,10 +71,10 @@ class GymVideoSpecSource(StrEnum):
     system_update = "system_update"  # preset import / automation
 
 
-class VideoExecutionType(StrEnum):
-    """Mirrors the Postgres `video_execution_type` enum in schemas/video_cost_log.sql."""
+class VideoRunStatus(StrEnum):
+    """Mirrors the Postgres `video_run_status` enum in schemas/video_run.sql —
+    the lifecycle of a versioned worker run that built a gym's video feed."""
 
-    search = "search"
-    transcript = "transcript"
-    tag = "tag"
-    scan = "scan"
+    running = "running"
+    completed = "completed"
+    failed = "failed"

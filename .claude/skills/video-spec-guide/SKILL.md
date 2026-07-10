@@ -9,8 +9,9 @@ description: >-
   three writers that mint versions (the conversational agent = `admin_update`,
   the preset import = `system_update`, the feed-learning refiner = `feed_update`),
   the LLM SPLIT (litellm via LiteLLMClient for VideoQueryGenerator /
-  VideoFeedRefiner single-shot calls; Pydantic AI for the VideoAgentService
-  conversational agent only — Python 3.13, litellm can't run on 3.14),
+  VideoFeedRefiner structured calls — query gen is a two-call landscape→queries
+  flow; Pydantic AI for the VideoAgentService conversational agent only — Python
+  3.13, litellm can't run on 3.14),
   the NO-TOOLS ACCEPT-PATH model (agent proposes criteria-only VideoSpecDraft or
   multi-choice AgentQuestion; accept sends accepted_spec in the POST body;
   VideoSpecAuthoring.commit runs the deterministic diff-guard → query-gen → save),
@@ -35,12 +36,16 @@ holds only the lean "how to work here" summary. When the model, endpoints, or
 learning loop change, **update this skill in the same change** (it is a living
 document — see the bottom).
 
-**Scope.** "Video spec" = the two things the (separate, future) scrape/scan
-**worker** consumes: a gym's `videos_desc`/`avoid_desc` keep/avoid criteria and its
-search `queries`. This skill is about *authoring and modifying* that config. The
-worker that runs the scrape/scan against it is out of scope (later). The old
-single-tenant pipeline (make-a-gym / scrape / scan over YAML) is a *different*
-system — see the `videoservice` skill under `VideoService/.claude/skills/`.
+**Scope.** "Video spec" = the two things the VideoService scrape/scan **worker**
+(`VideoService/src/worker`) consumes: a gym's `videos_desc`/`avoid_desc` keep/avoid
+criteria and its search `queries`. This skill is about *authoring and modifying*
+that config; the worker that runs the pipeline against it is out of scope here (see
+the `videoservice` skill under `VideoService/.claude/skills/`). The worker has **no
+control surface** and is never triggered by the authoring path — it is fully
+self-scheduling, deriving its own due gym each tick from timestamps already in the
+schema (an `admin_update` spec version, a settled manual feed curation, or a weekly
+refresh floor; below). The domain also grew a RAG read surface (member video recs) that ranks against the
+worker's `video_rag` embeddings — out of scope here; see `FastApiBackend/CLAUDE.md`.
 
 ## 0. Architecture: LLM split, general services, thin agent, one-way layering
 
@@ -52,22 +57,44 @@ be called directly from routes:
   `load_latest` (via `gym_video_spec_latest` view) and `save_version` (append-only
   INSERT). No LLM dependency.
 - **`VideoQueryGenerator`** (`service/video_query_generator.py`) — **litellm**
-  structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`.
-  Uses `LiteLLMClient.complete_structured` with `settings.video_llm_model`.
+  structured query gen, a **two-call** flow: call 1 researches the niche's content
+  landscape (`LandscapeResult` — channels / creators / series_events, from the
+  model's own knowledge, hallucination tolerated, never validated); call 2 turns
+  criteria + that rendered landscape into `QueriesResult` (~one third of queries
+  name-targeted at the landscape, the 5-cluster genre spread governing the whole
+  set). Both calls use `LiteLLMClient.complete_structured` with
+  `settings.video_llm_model`; `count` is injected by `VideoSpecAuthoring` from
+  `settings.video_query_count` (30). Prompts: `prompts/video_landscape.md` +
+  `prompts/video_query_generator.md`.
 - **`VideoSpecAuthoring`** (`service/video_spec_authoring.py`) — the **deterministic
   commit gate**: diff guard → call `VideoQueryGenerator.generate` → call
   `VideoSpecService.save_version`. `commit(gym_id, criteria, *, source) →
-  VideoSpecView | None`; returns `None` when criteria are unchanged.
+  VideoSpecView | None`; returns `None` when criteria are unchanged. There is **no
+  enqueue step** — the worker has no control surface to call. An `admin_update`
+  version saved here is picked up by the worker's own timestamp derivation on its
+  next tick (see `VideoService/CLAUDE.md`'s *Scheduling* section); a `feed_update`
+  version (from `VideoFeedRefiner`, below) does **not** itself trigger a run — only
+  `admin_update` versions count toward the worker's tier-1 trigger. The preset
+  import (`src/presets/`) writes its own `system_update` version, which likewise
+  triggers nothing.
 - **`VideoFeedRefiner`** (`service/video_feed_refiner.py`) — **litellm** feed→criteria
   refine: `refine_from_feed`; loads unconsumed curation signals, calls the LLM, then
   delegates commit to **`VideoSpecAuthoring`** (not directly to `VideoSpecService`).
 
 **`VideosService` (`service/videos_service.py`) is the domain FACADE** — it composes
-`VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`, and `VideoFeedRefiner`
+**six** concern services: `VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`,
+`VideoFeedRefiner`, `VideoRecsService`, and `VideoRecClickService`
 (it does NOT inject `VideoQueryGenerator` directly; query gen is an internal of
 `VideoSpecAuthoring`). Key methods: `load_latest_spec`, `save_accepted_spec` (→
-`VideoSpecAuthoring.commit`), `refine_from_feed` (→ `VideoFeedRefiner`), plus all feed
-operations (`load_feed_ids`, `load_pool_videos`, owner add/remove/keep). Template catalog reads
+`VideoSpecAuthoring.commit`), `refine_from_feed` (→ `VideoFeedRefiner`), `get_video_rec`
++ `record_rec_click` (→ the RAG read surface — `VideoRecsService` / `VideoRecClickService`;
+the single rotating-category member rec + the click record, deep detail in
+`FastApiBackend/CLAUDE.md`, out of scope here), plus all feed operations
+(`load_feed_preview`, `load_pool_videos`, `load_feed_page` — the unified served
+feed, enriched-AND-accepted only, which also backs the member rec at `limit=1` —
+`load_owner_videos` — the separate UNGATED owner "Your videos" listing,
+`GET /gyms/{id}/videos/owner`, showing a video before it's enriched — and owner
+add/remove/keep). Template catalog reads
 live in `PresetsTemplateService` (`src/presets/`); showcase (class/reward cards) lives in
 `ThemeShowcaseService` (`src/theme/`). The router goes through the facade for all non-agent
 video operations.
@@ -91,8 +118,14 @@ general/regular services (`VideoSpecService`, `VideoQueryGenerator`, `VideoFeedR
 Pydantic AI (`pydantic-ai-slim[anthropic]`) for `VideoAgentService` only. Python 3.13
 (`requires-python = ">=3.13,<3.14"`) — litellm cannot install on 3.14.
 
-DI providers (videos domain): `litellm_client`, `video_spec_service`, `video_query_generator`,
-`video_spec_authoring`, `video_feed_refiner`, `video_agent_service`, `videos_service`.
+DI providers (videos domain, spec/agent + feed-refine): `litellm_client`, `video_spec_service`,
+`video_query_generator`, `video_spec_authoring`, `video_feed_refiner`,
+`video_feed_refine_runner` (the coalesced `feed_update` auto-refine runner — §4),
+`video_agent_service`, `videos_service` (facade). There is no worker-status provider — the backend has
+no worker-control surface at all (not even read-only status; the worker is fully self-scheduling). (The
+domain also wires the RAG read surface — `member_video_profile_service`, `video_feed_service`,
+`video_recs_service`, `video_rec_click_service`, `member_video_profile_refresh_runner` — out of scope
+for this skill; see `FastApiBackend/CLAUDE.md`.)
 DI providers (presets domain): `presets_service`, `presets_template_service`.
 DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
 No `video_config_*`, `video_template_service`, or `video_showcase_service` providers remain.
@@ -128,7 +161,7 @@ authored), `created_at`.
 | source | minted by | how |
 |---|---|---|
 | `admin_update` | the conversational agent accept-path | `POST /api/v1/gyms/{id}/video-agent` with `accepted_spec` in body → `VideosService.save_accepted_spec` → `VideoSpecAuthoring.commit` → `VideoSpecService.save_version` |
-| `system_update` | the preset import | `PresetsService` → `presets_insert_spec_version.sql` (one versioned row, queries folded from the `video_gym` template) |
+| `system_update` | the preset import | `PresetsService` → `presets_insert_spec_version.sql` (one versioned row, queries folded from the `template_gym` template) |
 | `feed_update` | the feed-learning refiner | `VideoFeedRefiner.refine_from_feed` → `VideoSpecAuthoring.commit` → `VideoSpecService.save_version` |
 
 All three write at **service_role** (clients never write the table; RLS revokes
@@ -159,16 +192,18 @@ the app layer.
   1. Calls `VideosService.save_accepted_spec(gym_id, accepted_spec)` →
      `VideoSpecAuthoring.commit(gym_id, criteria, source="admin_update")`.
   2. `VideoSpecAuthoring.commit`: diff guard (returns `None` if criteria unchanged) →
-     `VideoQueryGenerator.generate` (litellm, produces queries) →
-     `VideoSpecService.save_version` (appends the `admin_update` version).
+     `VideoQueryGenerator.generate` (litellm two-call, produces queries) →
+     `VideoSpecService.save_version` (appends the `admin_update` version — no enqueue;
+     the worker's own timestamp derivation picks it up on its next tick).
   3. Runs the agent on a short "saved" outcome note so it can acknowledge and invite
      further changes. `AgentTurnResponse.saved = True`; the conversation stays open.
 
 - **Query generator** (`service/video_query_generator.py`, `VideoQueryGenerator.generate`):
-  **one litellm structured call** (`LiteLLMClient.complete_structured`, schema=`QueriesResult`)
-  that maps disciplines + criteria → search queries **spread across nine video genres**.
-  Called by `VideoSpecAuthoring.commit` (the shared save path — genre-spread logic lives
-  in one place). Prompt: `prompts/video_query_generator.md`.
+  **two litellm structured calls** — call 1 → `LandscapeResult` (channels / creators /
+  series_events from the model's knowledge), call 2 → `QueriesResult` (criteria + that
+  landscape → queries, ~⅓ name-targeted, spread across the genre clusters). Called by
+  `VideoSpecAuthoring.commit` (the shared save path — the spread + landscape logic lives
+  in one place). Prompts: `prompts/video_landscape.md`, `prompts/video_query_generator.md`.
 
 - **Stateless conversation.** The server holds no session — each turn the client sends
   back the serialized `history` it got last turn (`ModelMessagesTypeAdapter`), and gets
@@ -199,10 +234,33 @@ preset seed leave it NULL). Those are the learning signals.
 4. Calls `VideoSpecService.save_version` to append the result as a `feed_update` row.
 
 The refiner is **batched**, not per-action (feed clicks stay instant; they only
-record `curated_at`). Triggers: **pre-agent-view-open** (the CRM calls
-`POST …/video-agent/refine-from-feed` right before the owner starts editing, so the
-spec already reflects recent curation) and **pre-worker-run** (the future worker
-calls the same service before scanning — build now, wire later).
+record `curated_at`). Two triggers fire it:
+
+1. **Immediate, coalesced, on curation** (the `feed_update` auto-learn loop). The
+   reject and keep endpoints fire a **fire-and-forget, per-gym-coalesced**
+   `VideoFeedRefineRunner.start(gym_id)` right after the curation write commits (router-level
+   composition; NOT owner-add / owner-remove) — but **only when the write actually curated a served
+   row** (the reject/keep service returns whether a row changed; a no-op like keeping an
+   already-accepted video fires nothing). It runs `refine_from_feed` detached; when a refine for that
+   gym is already in flight the fire is **dropped-but-marks-the-gym-dirty**, and the in-flight refine,
+   on finishing, runs exactly one follow-up that reloads and folds any signal that landed mid-flight
+   (so a burst of rejects mints one `feed_update` version plus at most one follow-up — never many, and
+   the last signal of a burst is never lost to the drop-then-anchor-consumes race). A refine failure
+   never surfaces to the curation caller.
+2. **Pre-agent-view-open.** The CRM calls `POST …/video-agent/refine-from-feed` right before the
+   owner starts editing, so the spec already reflects recent curation.
+
+The worker does **NOT** call the refiner: it is a separate VideoService process and never reaches
+back into the backend (cross-service). A refine that mints a `feed_update` version runs through
+`VideoSpecAuthoring.commit`, which just saves it — a `feed_update` version is **not** an
+`admin_update`, so minting it does NOT put the gym on the worker's tier-1 SCRAPE trigger (and there
+is no tier-2 scrape trigger — the worker's `worker_select_due_gym.sql` scrapes only on a newer
+`admin_update` version or the weekly refresh floor). Instead the worker's **scan** step re-judges the
+gym's existing auto feed rows **in place** against the new `feed_update` criteria — arm B of
+`worker_scan_targets.sql`, ≥ `worker_feed_update_rescan_delay_hours` (1h) after the version settles —
+flipping accepted↔rejected with zero feed downtime. So a manual curation → an immediate `feed_update`
+→ a ~1h-later in-place re-scan of similar videos, all without a new scrape run. The worker only ever
+*consumes* the spec (via `gym_video_spec_latest`), never calling in.
 
 ## 5. Endpoints — all on the existing `videos_router` (gym-employee gated)
 
@@ -254,8 +312,11 @@ code (monorepo no-inline-prompt rule).
 ### Cost ledger
 
 Agent/refiner token spend is surfaced in `AgentTurnResponse.usage` and logs; it is
-**not** written to `video_cost_log` (its enum is scrape/scan-shaped). A proper
-agent-cost ledger is deferred.
+**not** written to the generic **`cost_log`** ledger — even though its `cost_stage`
+enum covers the worker's full stage set (`search | transcript | tag | enrich | embed
+| scan`, each row stamped `source='video'` + `run_id` + `gym_id`), none of those
+stages is agent/refiner conversation, so there's no matching stage to log it under.
+A proper agent-cost ledger is deferred.
 
 ## 7. Testing without a key or a DB
 
@@ -304,11 +365,12 @@ agent/generator/refiner logic use stubs. See `tests/videos/`.
   stable for CRM). `videos_insert_feed_video.sql` writes `curation_type = 'manual'`.
   `presets_insert_feed.sql` / `presets_insert_rejected_feed.sql` write
   `curation_type = 'automatic'`.
-- DI: `src/core/dependencies.py` providers: `litellm_client`, `video_spec_service`,
-  `video_query_generator`, `video_spec_authoring`, `video_feed_refiner`,
-  `video_agent_service`, `videos_service`; settings in `src/core/config.py`:
-  `video_llm_model` (litellm format), `video_agent_model` (bare model name),
-  `video_agent_retries`, `anthropic_api_key`, `openai_api_key`, `gemini_api_key`.
+- DI: `src/core/dependencies.py` providers (spec/agent + feed-refine): `litellm_client`,
+  `video_spec_service`, `video_query_generator`, `video_spec_authoring`,
+  `video_feed_refiner`, `video_feed_refine_runner`, `video_agent_service`, `videos_service`; settings in
+  `src/core/config.py`: `video_llm_model` (litellm format), `video_agent_model`
+  (bare model name), `video_query_count` (30), `video_agent_retries`,
+  `anthropic_api_key`, `openai_api_key`, `gemini_api_key`.
 - CRM consumer: `CRM/lib/features/video_agent/` (screen + Bloc + chat/draft/question
   widgets) and `CRM/lib/features/members/data/video_agent_repository.dart`; entry
   point in the settings screen. Calls `POST refine-from-feed` on open (brief loading

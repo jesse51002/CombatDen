@@ -1,63 +1,125 @@
-# Scrape (fetch + classify the pool)
+# Worker tick + ingest — the tick order and the scrape step
 
-Fill and refresh the **shared video pool** (`VideoService/videos/`). This guide
-is **only** about the scraper. It does not author gyms (a gym already exists with
-`queries` — see `gym_maker.md`) and it does not approve videos for any gym
-(that's the scan — see `scan.md`). The scraper produces a **gym-agnostic** pool;
-tagging here is content classification, never approval.
+The background **worker** (`src/worker`) runs a loop of DECOUPLED, DB-backed
+steps — not a single per-gym pipeline. This guide covers the tick's always-run
+prelude (cleanup + finalize) and the **scrape** step in depth (the only
+quota-bound, per-gym, run-opening step). The **enrich + scan** half — the global
+gym-agnostic sweeps that build the RAG layer and settle feed verdicts — is
+`scan.md`.
 
-## What it does, in one pass
+## Where it runs
 
-`scripts/scraper` does fetch **and** classify in one run:
+`python -m src.worker.run` (`make worker`) is a long-running loop: one tick, then
+wait `worker_poll_seconds` (60). Each tick acquires the global `"video_worker_run"`
+lock on the shared `resource_locks` table (non-blocking single-shot — a second
+worker instance just no-ops; TTL 900s, heartbeat 300s renews it; a lost heartbeat
+sets an abort flag and the current drain stops between videos/batches/gyms), then
+runs everything below **under one lock hold**.
 
-1. **Gather queries** — reads every gym's `videos.queries` (or one gym's, with
-   `--gym-id`) and unions them. The gyms own the searches; the scraper just
-   collects them.
-2. **Fetch from Apify** — one actor (`streamers/youtube-scraper`) does the search
-   + metadata + channel avatar + the transcript inline (`subtitlesFormat=plaintext`),
-   so search and transcript are the same step. Results are de-duplicated across
-   queries; each kept video records its `source_queries` and a `relevance_index`.
-3. **Classify** — an LLM reads each video's title / description / transcript and
-   writes two independent axes onto the pooled record:
-   - `tag` — the single genre (`VideoType`).
-   - `gym_type` — the **list** of disciplines the content fits (e.g.
-     `[kettlebell, rowing]`). This is what routes a video into the candidate
-     slices gyms scan. It is **content classification, not approval** — a video
-     tagged `vinyasa` is merely a *candidate* for vinyasa gyms; whether it's good
-     is decided per-gym by the scan.
+## Step 1 — cleanup (always, cheap)
 
-The result is `videos/<video_id>.yaml`, one file per video, no manifest wrapper.
+`DELETE FROM video WHERE failure_count >= worker_failure_max` (3). The FK cascades
+drop the video's feed rows, its `video_rag` row, and any member recs. Runs FIRST
+so the finalize step's terminal-fraction denominators reflect the shrunk feed. See
+`scan.md` for how `failure_count` gets bumped.
 
-## Run it
+## Step 2 — finalize (always, cheap)
 
-```bash
-make scrape                 # every gym's queries → pool, then classify
-make scrape GYM_ID=vinyasa  # only the vinyasa gym's queries
-```
+Completes or fails every `running` run purely from its feed rows — no in-memory run
+bookkeeping, so crash recovery is free. Two SQL passes, in order (completion beats
+the TTL fail):
 
-(Equivalently `poetry run python -m scripts.scraper.run [--gym-id <id>]`. Always
-`poetry run`, never bare `python3` / `.venv/bin/*`.)
+1. **complete** — a `running` run whose terminal (`accepted`/`rejected`) fraction of
+   ALL its feed rows reaches `worker_run_complete_fraction` (0.9).
+2. **fail** — a `running` run with ZERO feed rows older than
+   `worker_zero_row_grace_hours` (1h) → `failed`, `error='no feed rows'`; else a run
+   older than `worker_run_ttl_hours` (24h) that never reached the completion
+   fraction → `failed`, `error='run ttl exceeded'`.
 
-## Cost, idempotency, env
+**There is no orphan rule.** A `running` run is a legitimate long-lived
+multi-tick state — full of `pending` rows the enrich + scan sweeps are still
+chewing through — so it is never treated as dead on its own. Crash recovery is
+free (every step is DB-derived + idempotent); the two guards above catch a
+pathologically stuck run.
 
-- **Apify** bills per result (~$2.40 / 1000 videos). The transcript rides along in
-  the same call, so there's no separate transcript spend.
-- **LLM** tagging is cheap per video but real — it's a model call per video.
-- A scrape **appends two `CostEntry`s** to `cost_log.yaml`: one `SEARCH` (Apify
-  spend) and one `TAG` (LLM spend), each with its breakdown.
-- Env: `APIFY_TOKEN` (fetch) and the tagging model key (e.g. `GEMINI_API_KEY`) in
-  `.env`.
+## Step 3 — one heavy step, first-with-work, drained fully
 
-## Sequential only
+The tick checks **scan**, then **enrich**, then **scrape** (backlog first; scrape
+is the quota-bound ingest, so it goes last) and drains the FIRST one that has
+work completely before the tick ends. See `scan.md` for scan + enrich. If none of
+the three has work, the tick ends after cleanup + finalize.
 
-Per project rule (`[[feedback_aicust_generations_sequential]]`): **one pipeline
-run in flight at a time** — providers are rate-limited. Never launch a scrape in
-parallel with another scrape or a scan. Let one finish before starting the next.
+## The scrape step (per-gym, quota-bound, the only step that opens runs)
 
-## Boundaries
+Because scrape is the only step that opens a `video_run`, the per-gym + system
+rolling run caps bound exactly the quota-limited work — enrich and scan never
+touch a run cap.
 
-- The scraper never writes gym files and never touches any gym's
-  `good_video_ids` / `rejected_video_ids` / `scan_costs`.
-- It writes only the pool (`videos/`) and the `cost_log.yaml`.
-- After a scrape, run the **scan** (`scan.md`) to turn the freshly-tagged pool
-  into each gym's curated feed.
+### Select the due gym
+
+No job queue: `worker_select_due_gym.sql` *derives* the single highest-priority
+DUE gym straight from timestamps already in the schema — a gym is due when its
+latest `gym_video_spec` **`admin_update`** version (tier 1) or its last run ≥ 7
+days ago (tier 3) is newer than its last `video_run`, **and it has no `running`
+run** (never two in-flight runs for the same gym). A manual `gym_video_feed`
+curation does not trigger a scrape run — only an `admin_update` spec edit or the
+weekly refresh floor do. Tier-sorted; per-gym (2/24h) and system-wide (5/24h)
+rolling run caps (counting runs of any status — the poison-loop guard, since a
+failed run still advances the last-run watermark) stop the drain. The drain loop
+repeats — select, scrape, select again — until the system cap is hit or no gym is
+due, so one tick can drain several gyms' scrapes.
+
+### Spec + incremental context
+
+Load the gym's latest spec from `gym_video_spec_latest`. Compute
+`criteria_changed` by comparing the current `(videos_desc, avoid_desc)` against
+the spec version in force at the gym's previous **completed** run — this drives
+incremental (unchanged) vs fresh (changed) carry-forward mode at feed-write time.
+
+### Scrape → YouTube Data API v3
+
+Two official calls **per spec query** — `search.list` for the video ids + snippet
+(100 quota units), then a batched `videos.list` for stats + the ISO-8601 duration
+(~1 unit) — concurrency `worker_scrape_concurrency` (4),
+`worker_max_results_per_query` (20, capped at the API's ≤50) each. The API is
+**free within the daily quota** (10k units/day ≈ 3 gym-scrapes/day). A failed
+query is dropped, not fatal. Results are **merge-upserted** into the shared
+`video` pool: `source_queries` accumulate, `relevance_index` keeps the best, and
+`tag` / `disciplines` / `transcript` are **never overwritten** — fresh scrapes
+land untagged and **transcript-less**. Transcripts are NOT fetched here; they are
+a lazy fetch at enrich time (`scan.md`).
+
+### Funnel
+
+Pick up to `scan_budget_per_run` (1000) candidates:
+
+- **Tier 1** — pool rows whose `source_queries` overlap the spec queries AND match
+  a gym discipline (or are untagged, so this scrape's fresh results are included),
+  relevance-ordered. In incremental mode, exclude the previous run's verdicted ids.
+- **Tier 2** (only if Tier 1 leaves room) — embed all spec queries in one call,
+  then a cosine top-`rag_probe_top_k` (40) probe over discipline-matched
+  `video_rag` rows. A full Tier 1 skips Tier 2 entirely; only already-enriched
+  videos (a `video_rag` row) can match a probe.
+
+### write_feed — the scrape step's ONLY feed write
+
+In one transaction: open the `video_run` (`status='running'`), then:
+
+1. **Carry forward** the previous completed run's feed rows FIRST — ALL rows in
+   incremental mode (criteria unchanged), only the owner's **manual-curation**
+   rows in a fresh run (criteria changed).
+2. Insert every funnel candidate as a **`pending`** row (`curation_type='automatic'`)
+   `ON CONFLICT (video_run_id, video_id) DO NOTHING`. Because carried rows are
+   inserted first, they win — **the owner's manual keep/reject always beats a
+   fresh automatic candidate.**
+
+The run is left `running` — nothing is enriched, scanned, or completed here. The
+enrich + scan sweeps and the finalize step (above) take it from there.
+
+### Cost logging (scrape)
+
+Two rows to the generic `cost_log` table, both stamped that gym + run: `search`
+(**free** — the YouTube Data API within quota; the quota units ride in
+`breakdown`) and `embed` (the tier-2 funnel probe's query embeddings).
+
+→ Continue with the enrich + scan half in `scan.md`.

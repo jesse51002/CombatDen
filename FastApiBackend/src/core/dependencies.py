@@ -177,10 +177,21 @@ from src.theme.service.theme_showcase_defaults_service import (
 )
 from src.theme.service.theme_showcase_service import ThemeShowcaseService
 from src.uploads.service.uploads_s3_service import UploadsS3Service
+from src.videos.service.member_video_profile_refresh_runner import (
+    MemberVideoProfileRefreshRunner,
+)
+from src.videos.service.member_video_profile_service import (
+    MemberVideoProfileService,
+)
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refine_runner import (
+    VideoFeedRefineRunner,
+)
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_query_generator import VideoQueryGenerator
+from src.videos.service.video_rec_click_service import VideoRecClickService
+from src.videos.service.video_recs_service import VideoRecsService
 from src.videos.service.video_spec_authoring import VideoSpecAuthoring
 from src.videos.service.video_spec_service import VideoSpecService
 from src.videos.service.videos_service import VideosService
@@ -436,6 +447,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         VideoSpecAuthoring,
         spec_service=video_spec_service,
         query_generator=video_query_generator,
+        query_count=settings.video_query_count,
     )
     video_feed_refiner = providers.Singleton(
         VideoFeedRefiner,
@@ -445,20 +457,80 @@ class DependencyInjector(containers.DeclarativeContainer):
         model=settings.video_llm_model,
         authoring=video_spec_authoring,
     )
-    # Concern services — stateless, composed by the facade.
+    # Fire-and-forget, per-gym-coalesced feed-learning refine, fired at the router
+    # from the manual reject/keep curation endpoints (never owner add/remove).
+    # Singleton so drain() + the coalescing guard (both ClassVar-backed) see every
+    # in-flight task regardless of instance.
+    video_feed_refine_runner = providers.Singleton(
+        VideoFeedRefineRunner,
+        feed_refiner=video_feed_refiner,
+    )
+    # RAG read surface: the member's video-taste profile is ONE LLM summary +
+    # ONE embedding on the members row, built by the profile service (a small
+    # summary model turns member facts into the taste paragraph; the embedding
+    # model embeds it). The member rec surface serves one rotating-category pick
+    # ranked against that embedding; the feed page optionally re-orders by it. The
+    # embedding model + dim pin the same cross-service contract as the video_rag
+    # DDL. Defined before video_feed_service, which now reads the embedding.
+    member_video_profile_service = providers.Singleton(
+        MemberVideoProfileService,
+        db_pool=db_pool,
+        litellm_client=litellm_client,
+        embedding_model=settings.video_embedding_model,
+        embedding_dim=settings.video_embedding_dim,
+        summary_model=settings.video_profile_summary_model,
+        refresh_cooldown_days=settings.video_profile_refresh_cooldown_days,
+        attendance_window_days=settings.video_profile_attendance_window_days,
+        top_classes_limit=settings.video_profile_top_classes_limit,
+        recent_clicks_limit=settings.video_profile_recent_clicks_limit,
+    )
+    # Concern services — stateless, composed by the facade. The feed service
+    # reads a member's profile embedding (read-only) for the unified feed's
+    # optional personalized ordering when passed a member_id, and applies the
+    # σ-scaled owner boost + decayed served penalty from these two settings.
     video_feed_service = providers.Factory(
         VideoFeedService,
         db_pool=db_pool,
         youtube_client=youtube_metadata_client,
+        profile_service=member_video_profile_service,
+        bump_sigma_fraction=settings.video_feed_bump_sigma_fraction,
+        served_penalty_half_life_days=(
+            settings.video_served_penalty_half_life_days
+        ),
     )
-    # Facade: composes feed + spec sub-services. Template catalog reads are in
-    # PresetsTemplateService; showcase reads are in ThemeShowcaseService.
+    # Fire-and-forget profile refresh (class-booking + video-click triggers).
+    # Singleton so drain() on shutdown sees every in-flight refresh task.
+    member_video_profile_refresh_runner = providers.Singleton(
+        MemberVideoProfileRefreshRunner,
+        profile_service=member_video_profile_service,
+    )
+    # The rec is a thin wrapper over the feed: it drives the category rotation
+    # and records the pick, but the ranking + candidate query live in the unified
+    # video_feed_service.load_feed_page (defined above; the rec calls it limit=1).
+    video_recs_service = providers.Factory(
+        VideoRecsService,
+        db_pool=db_pool,
+        profile_service=member_video_profile_service,
+        feed_service=video_feed_service,
+        rotation=settings.video_rec_category_rotation,
+    )
+    # Record a rec click: stamp clicked_at + log a video_clicked activity, then
+    # fire the profile refresh via the runner above.
+    video_rec_click_service = providers.Factory(
+        VideoRecClickService,
+        db_pool=db_pool,
+        refresh_runner=member_video_profile_refresh_runner,
+    )
+    # Facade: composes feed + spec + RAG sub-services. Template catalog reads are
+    # in PresetsTemplateService; showcase reads are in ThemeShowcaseService.
     videos_service = providers.Factory(
         VideosService,
         feed_service=video_feed_service,
         spec_service=video_spec_service,
         authoring=video_spec_authoring,
         feed_refiner=video_feed_refiner,
+        recs_service=video_recs_service,
+        click_service=video_rec_click_service,
     )
     # Theme: branded class/reward cards for the showcase surface.
     theme_showcase_service = providers.Factory(
@@ -492,7 +564,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         anthropic_api_key=settings.anthropic_api_key,
     )
 
-    # Presets: transactional import of a video_gym template into a real gym's
+    # Presets: transactional import of a template_gym template into a real gym's
     # production tables. Owner-gated + email allowlist. No Stripe. Reuses the
     # canonical classes_expander to seed each imported class's past month of
     # attendance + sign-ups (so the demo gym shows realistic counts).

@@ -18,7 +18,10 @@ class Video {
     required this.tags,
     required this.bigGroups,
     this.durationSeconds,
-  });
+    this.ownerAdded = false,
+    this.enriched = true,
+    String? videoId,
+  }) : _videoId = videoId;
 
   final String url;
   final String title;
@@ -43,16 +46,35 @@ class Video {
   /// Video length in seconds (`duration_seconds`); null when omitted.
   final int? durationSeconds;
 
+  /// The shared-pool video id (`video_id`), when the source endpoint sends
+  /// it. Prefer this over parsing [url] — see [videoId].
+  final String? _videoId;
+
+  /// True when this is an owner-added "Your videos" row rather than a
+  /// scan-run video. Set by the merged serve feed (`GET .../videos`) and the
+  /// owner listing (`GET .../videos/owner`); other read paths default to
+  /// false.
+  final bool ownerAdded;
+
+  /// Whether the video has a RAG embedding yet. Always true except on the
+  /// ungated owner listing (`GET .../videos/owner`), which can show a
+  /// just-added video before it's enriched.
+  final bool enriched;
+
   /// "Combat Culture ‧ 168K views" (drops the views clause when hidden).
   String get metaLabel {
     final views = formatViewCount(viewCount);
     return views.isEmpty ? channelName : '$channelName ‧ $views views';
   }
 
-  /// The YouTube video id, recovered from [url] (the feed serves the canonical
-  /// `watch?v=<id>` form). Empty when [url] isn't a recognisable YouTube link.
-  /// Used as the path id for the remove call.
-  String get videoId => extractYoutubeId(url) ?? '';
+  /// The YouTube video id: the backend's explicit `video_id` when present,
+  /// else recovered from [url] (the feed serves the canonical
+  /// `watch?v=<id>` form). Empty when neither is available. Used as the
+  /// path id for the remove call.
+  String get videoId =>
+      (_videoId != null && _videoId.isNotEmpty)
+          ? _videoId
+          : extractYoutubeId(url) ?? '';
 
   factory Video.fromJson(Map<String, dynamic> json) {
     return Video(
@@ -70,6 +92,9 @@ class Video {
       tags: _wrap(json['tag']),
       bigGroups: _wrap(json['big_group']),
       durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
+      videoId: json['video_id'] as String?,
+      ownerAdded: (json['owner_added'] as bool?) ?? false,
+      enriched: (json['enriched'] as bool?) ?? true,
     );
   }
 

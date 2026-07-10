@@ -1,4 +1,4 @@
--- One template assembled in a single round trip: the video_gym row plus its
+-- One template assembled in a single round trip: the template_gym row plus its
 -- queries, classes, rewards, and curated good/rejected feed ids (ordered by the
 -- pool's relevance_index) as JSONB aggregates. Returns no rows when the template
 -- is missing.
@@ -14,7 +14,7 @@ SELECT
     g.has_rewards,
     (
         SELECT coalesce(jsonb_agg(q.query), '[]'::jsonb)
-        FROM video_gym_query q
+        FROM template_gym_query q
         WHERE q.gym_id = g.gym_id
     ) AS queries,
     (
@@ -32,7 +32,7 @@ SELECT
             ),
             '[]'::jsonb
         )
-        FROM video_gym_class c
+        FROM template_gym_class c
         WHERE c.gym_id = g.gym_id
     ) AS classes,
     (
@@ -48,14 +48,14 @@ SELECT
             ),
             '[]'::jsonb
         )
-        FROM video_gym_reward r
+        FROM template_gym_reward r
         WHERE r.gym_id = g.gym_id
     ) AS rewards,
     (
         SELECT coalesce(jsonb_agg(s.video_id ORDER BY s.relevance_index, s.video_id), '[]'::jsonb)
         FROM (
             SELECT f.video_id, v.relevance_index
-            FROM video_gym_feed f
+            FROM template_gym_feed f
             JOIN video v ON v.video_id = f.video_id
             WHERE f.gym_id = g.gym_id AND f.status = 'good'
         ) s
@@ -64,10 +64,10 @@ SELECT
         SELECT coalesce(jsonb_agg(s.video_id ORDER BY s.relevance_index, s.video_id), '[]'::jsonb)
         FROM (
             SELECT f.video_id, v.relevance_index
-            FROM video_gym_feed f
+            FROM template_gym_feed f
             JOIN video v ON v.video_id = f.video_id
             WHERE f.gym_id = g.gym_id AND f.status = 'rejected'
         ) s
     ) AS rejected_video_ids
-FROM video_gym g
+FROM template_gym g
 WHERE g.gym_id = :gym_id

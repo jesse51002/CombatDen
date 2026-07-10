@@ -12,17 +12,21 @@ video pool, each gym's curated feed, the spend ledger) lives only in Postgres:
 
 ```
 gyms/<gym_id>.yaml   one gym — git-tracked source of truth, synced into SQL
-video_gym + children (Postgres)   gyms, queries, classes, rewards
+template_gym + children (Postgres)   gyms, queries, classes, rewards
 video                (Postgres)   the shared video pool (one row per video)
-video_gym_feed       (Postgres)   each gym's curated good/rejected feed
-video_cost_log       (Postgres)   append-only spend ledger
+template_gym_feed       (Postgres)   each gym's curated good/rejected feed
+cost_log             (Postgres)   generic append-only spend ledger (source='video')
 ```
 
-The read API queries these tables (needs `DATABASE_URL`); the pipeline scripts
-write them. There is **no tenant layer, no `app_id`**. The theme→gym link is just
-each gym's `theme` field (a ThemeService design id), so VideoService never reads
-ThemeService. (The legacy flat `videos/` + `cost_log.yaml` files are only read
-once, by `make import-yaml`, to seed the DB at cutover.)
+The **background worker** (`src/worker`) writes the shared `video` pool, per-video
+`video_rag` (summary + embedding), and each real gym's `gym_video_feed` runs;
+`make sync-gyms` loads the authored templates. The FastApiBackend's `videos`
+domain queries the `template_gym*` template tables and the worker's output to serve
+the CRM and the public theme browser. There is **no tenant layer, no
+`app_id`**. The theme→gym link is just each gym's `theme` field (a ThemeService
+design id), so VideoService never reads ThemeService. (The legacy flat `videos/` +
+`cost_log.yaml` files are only read once, by the `scripts.import_yaml` importer
+(run by `make sync-gyms`), to seed the DB at cutover.)
 
 ## The gym
 
@@ -60,8 +64,8 @@ rewards: null                         # optional points-store reward cards (Rewa
   viewing (display-only, not scanned; optional until all gyms are backfilled).
 - **`good_video_ids` / `rejected_video_ids` / `scan_costs`** are machine state —
   the scan owns them. Author them empty; never hand-edit.
-- **Card art** (the gym's celebration image) is **derived by the API** from the
-  theme — not stored on the gym.
+- **Card art** (the gym's celebration image) is **derived by the FastApiBackend**
+  from the theme — not stored on the gym.
 
 ## The shared video pool
 
@@ -77,89 +81,62 @@ carries two independent, content-derived axes:
 
 ## Architecture
 
+Two independent halves over the shared Postgres — they never call each other:
+
 ```mermaid
 flowchart TD
     human(["Operator"]) --> maker["gym_maker<br/>(author gyms/&lt;id&gt;.yaml)"]
     maker --> gym[("gyms/&lt;id&gt;.yaml<br/>gym_type · theme · spec · queries")]
+    gym -->|make sync-gyms| tmpl[("template_gym* templates<br/>+ video pool + video_rag sidecar (Postgres)")]
 
-    gym -->|make scrape| scraper["scraper<br/>(Apify search + transcript + classify)"]
-    apify(["Apify youtube-scraper"]) -.-> scraper
-    llm1(["LLM tagger"]) -.-> scraper
-    scraper --> pool[("videos/&lt;id&gt;.yaml<br/>shared pool · tag + gym_type")]
+    backend(["FastApiBackend<br/>spec save (admin_update)"]) -->|writes| real[("gym_video_spec · video pool · video_rag<br/>gym_video_feed · video_run (Postgres)")]
+    real -.->|"scrape step: derive due gym from timestamps (no queue)"| worker["worker (src/worker)<br/>tick = cleanup → finalize → one drained step<br/>(scan → enrich → scrape)"]
+    youtube(["YouTube Data API v3<br/>(discovery + metadata)"]) -.-> worker
+    apify(["Apify transcript actor<br/>(lazy, at enrich)"]) -.-> worker
+    llm(["enrich · scan · embed LLMs"]) -.-> worker
+    worker -->|writes| real
 
-    pool -->|make scan GYM_ID=…| scan["scan<br/>(per-gym verdicts vs spec)"]
-    llm2(["LLM scanner"]) -.-> scan
-    scan -->|overwrites good/rejected, appends scan_costs| gym
-
-    gym --> api["read-only API<br/>src/api"]
-    pool -.->|hydrates good_video_ids| api
-    api --> clients(["mobile app / AppManagement"])
+    fb["FastApiBackend videos domain<br/>unified feed · owner listing · RAG recs"]
+    tmpl --> fb
+    real --> fb
 ```
 
-Three jobs, each its own script and its own section of the `videoservice` skill
-(`.claude/skills/videoservice/`):
+- **gym_maker** (operator) authors a gym file; `make sync-gyms` loads the template
+  catalog + pool + the pre-built `video_rag` sidecar the FastApiBackend serves. Its
+  guide is `references/gym_maker.md`.
+- **the worker** (`src/worker`, self-scheduling — no queue, no backend trigger) runs
+  DECOUPLED, DB-backed steps, not a per-gym pipeline. Every tick runs cleanup
+  (strike-maxed video deletion) + finalize (complete/fail `running` runs from their
+  feed rows) for free, then drains ONE heavy step, first-with-work: **scan** (a
+  global multimodal verdict sweep), else **enrich** (a global RAG-building sweep),
+  else **scrape** (the only quota-bound, per-gym, run-opening step — it alone still
+  derives its due gym each pass straight from timestamps already in the schema: a
+  fresh `admin_update` spec version, a settled manual feed curation, or a weekly
+  refresh floor) — writing the shared `video` pool, per-video `video_rag`, and each
+  real gym's `gym_video_feed` runs (the content the FastApiBackend serves: the
+  unified feed, the owner listing, and RAG member recs). It absorbed the old
+  `scripts/scraper` + `scripts/scan` scripts. Its guides are `references/scraper.md`
+  (the tick + the scrape step) + `references/scan.md` (enrich + scan + the strike
+  mechanic) in the `videoservice` skill.
 
-1. **gym_maker** — author/edit a gym file (its disciplines, theme, spec, queries,
-   classes, rewards). Never scrapes or scans.
-2. **scraper** — gather every gym's `queries`, fetch from Apify (search +
-   metadata + channel avatar + inline transcript in one actor), and classify each
-   pooled video (`tag` + `gym_type`). Gym-agnostic; never approves.
-3. **scan** — for one gym (or all), judge the pool slice matching its disciplines
-   against its `specification` and write the gym's `good_video_ids` /
-   `rejected_video_ids`. **Overwrites** good/rejected each run; **appends** a
-   `ScanCost` to the gym's `scan_costs`.
+> **One worker instance at a time.** The worker holds a global `"video_worker_run"`
+> lock — only one instance ticks at once. The scrape step still processes one gym at
+> a time (its due-gym selection); enrich and scan are global sweeps that touch many
+> gyms' videos within a single tick.
 
-The natural order is **gym_maker → scrape → scan**, but the three are
-independent. Spend from scrape + scan is appended to `cost_log.yaml`.
-
-> **Sequential only.** Pipeline runs (scrape, scan) hit rate-limited providers —
-> run **one at a time**, never in parallel.
+For the worker's in-depth flow — the tick order (lock → cleanup → finalize → one drained step, no orphan rule), the scrape/enrich/scan steps, and the `cost_log` attribution per step — see **[`worker.mermaid`](worker.mermaid)** (render with the `mermaid-creation` skill).
 
 ## Cost log
 
-`cost_log.yaml` is an append-only sequence of `CostEntry`:
-
-```yaml
-- execution_type: search          # SEARCH | TRANSCRIPT | TAG | SCAN
-  at: 2026-05-28T12:00:00Z
-  breakdown: {apify_usd: 0.18}    # cost components in USD
-  note: 412 videos across 76 gyms
-- execution_type: tag
-  at: 2026-05-28T12:14:00Z
-  breakdown: {llm_usd: 0.0123}
-```
-
-Each gym additionally keeps its own `scan_costs` history (one `ScanCost {at,
-usd}` per scan run), so per-gym spend is auditable on the gym itself.
-
-## Run the API
-
-```bash
-poetry install
-# .env needs DATABASE_URL=postgresql+asyncpg://...  (a raw postgresql:// Supabase URL also works)
-make api          # uvicorn on http://localhost:8002 — queries the video_* tables
-```
-
-Read-only endpoints:
-
-| Method & path | Returns |
-|---|---|
-| `GET /health` | liveness probe |
-| `GET /gyms` | a **page** of the gym browser (`GymsPage`) — slim cards (id, disciplines, derived `parent_gym_type`, `theme`, derived `celebration_image_url`, counts). Paginate with `?limit=` (default 20, max 100) / `?offset=`; filter with `?query=` (substring over id / theme / discipline) |
-| `GET /gyms/{gym_id}` | one gym's whole content detail (`GymDetail`) — its feed `specification` (short + full descriptions), branded `classes`, and points-store `rewards`, served verbatim. The client reads this into memory once on selection. `404` if there's no such gym |
-| `GET /gyms/{gym_id}/videos` | a **page** of the gym's feed (`VideosFeed`) — **only that gym's good feed**, hydrated from the pool in `relevance_index` order. Paginate; filter with **either** `?video_type=<genre>` **or** `?big_group=<educational\|entertainment>` (both → `400`); `?rejected=true` serves the rejected list. `404` if there's no such gym |
-
-Everything is keyed by `gym_id` — the gym is the unit. Browse `/gyms`, pick one,
-read its detail (`/gyms/{gym_id}`) into memory, and page its feed
-(`/gyms/{gym_id}/videos`). The `theme` a gym carries is used only for branding
-(loading the design), never to fetch content.
-
-The gym browser's `celebration_image_url` is **derived** from the gym's theme
-(`/apps/combatden/{theme}/images/celebration_image`) — a ThemeService-relative
-path the client absolutises against the ThemeService base URL, exactly like the
-theme picker. It is not stored on the gym.
-
-Interactive docs at `http://localhost:8002/docs`.
+The worker logs spend to the generic **`cost_log`** table (shared across every
+cost-bearing system; VideoService always writes `source='video'`) — one row per
+stage (`search` / `transcript` / `enrich` / `embed` / `scan`), each stamped with
+`run_id` (TEXT, no FK), `gym_id`, `model` (NULL where not applicable), and
+`cost_usd` (the row's USD total; `breakdown` still carries the component detail
+map). `search` is **free** (the YouTube Data API within quota — its breakdown
+carries the quota units), and `transcript` carries the lazy Apify transcript
+spend. The legacy flat `cost_log.yaml` is only read once, by the
+`scripts.import_yaml` importer, to seed the DB at cutover.
 
 ## The skill
 
@@ -168,34 +145,42 @@ One skill, `videoservice` (`.claude/skills/videoservice/`), with a lean router
 
 - `references/gym_maker.md` — author/edit a gym (the interview + the writable
   surface).
-- `references/scraper.md` — run the scrape + classify.
-- `references/scan.md` — run a scan (thin).
+- `references/scraper.md` — the tick order (cleanup → finalize → one drained step)
+  and the scrape step in depth.
+- `references/scan.md` — the enrich + scan sweeps and the strike/cleanup mechanic.
 
-Use it to set up a gym, write a gym's videos config / classes / rewards, run the
-scraper, or run a scan.
+Use it to set up a gym, write a gym's videos config / classes / rewards, or
+understand / run / debug the worker.
 
-## Scripts
+## Scripts + the worker
 
 All run via **`poetry run`** (never bare `python3` / `.venv/bin/*`):
 
 ```bash
 make gym-check GYM_ID=all          # validate gym files round-trip the Gym model
-make sync-gyms GYM_ID=all          # load authored gym YAML -> SQL (idempotent)
-make import-yaml                    # one-time cutover: existing pool + feeds + cost log -> SQL
-make scrape                        # scrape + classify the pool   (⚠ pending SQL-writer migration)
-make scan GYM_ID=all               # per-gym keep/drop scan        (⚠ pending SQL-writer migration)
+make sync-gyms GYM_ID=all          # load authored gym YAML -> SQL (idempotent; runs the import below)
+poetry run python -m scripts.import_yaml.run   # one-time cutover: pool + feeds + cost log -> SQL
+make worker                        # run the background worker (cleanup → finalize → one drained step: scan → enrich → scrape)
 ```
 
-The write scripts pick their DB via the `ENV_FILE` flag (default `.env`). To
-target prod: `ENV_FILE=.env.prod make sync-gyms GYM_ID=all`, or the
-`make sync-gyms-prod` / `make import-yaml-prod` helpers (prod secrets live in the
-gitignored `.env.prod`).
+`make sync-gyms` runs `scripts.import_yaml` internally with `--skip-cost-log` (so
+re-runs never duplicate ledger rows); load the cost-log history once by hand with
+the bare `scripts.import_yaml.run` above. `gym-check` / `sync-gyms` / the import
+pick their DB via the `ENV_FILE` flag (default `.env`;
+`ENV_FILE=.env.prod make sync-gyms GYM_ID=all`, or the `make sync-gyms-prod` helper
+— prod secrets in the gitignored `.env.prod`). `make worker` is a long-running loop
+against `.env` — it self-schedules (no queue, no backend trigger): every tick it
+drains whichever heavy step has work (scan, else enrich, else scrape), and the
+scrape step in particular picks up a gym on its own once a spec save / feed
+curation / weekly floor makes that gym due.
 
-Env in `.env`: `DATABASE_URL` (the API + all scripts), plus `APIFY_TOKEN` (scrape)
-and the tagging/scan model key (e.g. `GEMINI_API_KEY`).
+Env in `.env`: `DATABASE_URL` (the scripts + worker), plus `YOUTUBE_API_KEY`
+(worker discovery + metadata) and `APIFY_TOKEN` (worker transcript fetches, at
+enrich), and the model keys (`GEMINI_API_KEY` for enrich/scan, `OPENAI_API_KEY`
+for embeddings).
 
 ## Tests
 
 ```bash
-make test   # unit tests run with no DB; the DB-integration tests run only if DATABASE_URL is set
+make test   # unit + worker-pipeline tests — no DB required
 ```

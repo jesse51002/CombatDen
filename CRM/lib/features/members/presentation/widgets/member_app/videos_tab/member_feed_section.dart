@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
@@ -323,10 +324,20 @@ class _AllSections extends StatelessWidget {
       );
     }
     if (sections.isEmpty) {
+      if (rejected) {
+        return const _FeedMessage('No rejected videos for this gym.');
+      }
+      // A gym with real spec criteria has queued work the worker fulfils
+      // within 24h, so an empty feed reads as "on the way", not "none".
+      final detail = selectedGym.detail;
+      final hasSpec = detail?.spec.videosDesc.isNotEmpty == true ||
+          detail?.spec.avoidDesc.isNotEmpty == true;
       return _FeedMessage(
-        rejected
-            ? 'No rejected videos for this gym.'
+        hasSpec
+            ? 'Your videos are on the way. New videos can take up to '
+              '24 hours to appear.'
             : 'No videos in this feed yet.',
+        icon: hasSpec ? Symbols.schedule_sharp : null,
       );
     }
     // Pills are [All] [Your videos?] [genre…]; the genre rows start after All
@@ -559,6 +570,17 @@ Future<bool> confirmAndRemoveGenreVideo(
       video.videoId,
       reason: reason.isEmpty ? null : reason,
     );
+    // Two-part effect: the video is gone now, and the feed auto-learns — the
+    // worker removes similar auto-picked videos within ~2 hours.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Removed. Similar videos will be auto-removed within ~2 hours.',
+          ),
+        ),
+      );
+    }
     return true;
   } catch (_) {
     if (context.mounted) {
@@ -590,6 +612,17 @@ Future<bool> keepGenreVideo(BuildContext context, Video video) async {
       video.videoId,
       reason: reason.isEmpty ? null : reason,
     );
+    // Two-part effect: the video is back now, and the feed auto-learns — the
+    // worker surfaces similar videos within ~2 hours.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Added back. Similar videos will be auto-added within ~2 hours.',
+          ),
+        ),
+      );
+    }
     return true;
   } catch (_) {
     if (context.mounted) {
@@ -633,9 +666,12 @@ class _InlineLoading extends StatelessWidget {
 
 class _FeedMessage extends StatelessWidget {
   final String? message;
+  final IconData? icon;
 
-  const _FeedMessage(this.message);
-  const _FeedMessage.loading() : message = null;
+  const _FeedMessage(this.message, {this.icon});
+  const _FeedMessage.loading()
+      : message = null,
+        icon = null;
 
   @override
   Widget build(BuildContext context) {
@@ -644,12 +680,25 @@ class _FeedMessage extends StatelessWidget {
       child: Center(
         child: message == null
             ? const AppSpinner()
-            : Text(
-                message!,
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-                textAlign: TextAlign.center,
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                spacing: DesignConstants.spacingMedium,
+                children: [
+                  if (icon != null)
+                    Icon(
+                      icon,
+                      size: DesignConstants.iconSizeMedium,
+                      weight: DesignConstants.iconWeight,
+                      color: DesignConstants.text3rd,
+                    ),
+                  Text(
+                    message!,
+                    style: DesignConstants.p.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
       ),
     );

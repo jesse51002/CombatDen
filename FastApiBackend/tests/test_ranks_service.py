@@ -20,6 +20,7 @@ from uuid import uuid4
 
 import pytest
 from schema.gym_rank import RankPresetKind, SubRankType
+from schema.member_activity import MemberActivityType
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -471,7 +472,7 @@ async def test_backfill_binds_rank_changed_activity_type():
     )
 
     backfill_params = _params_for(session, "backfill_lowest_rank.sql")
-    assert backfill_params["activity_type"] == "rank_changed"
+    assert backfill_params["activity_type"] == MemberActivityType.rank_changed
 
 
 @pytest.mark.asyncio

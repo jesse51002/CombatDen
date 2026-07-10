@@ -4,8 +4,9 @@
 (disciplines + keep/avoid descriptions). Queries are generated deterministically by
 ``VideoQueryGenerator`` after the owner accepts the draft; the agent never sees or
 authors them.  ``VideoSpecView`` is the read projection of a gym's LATEST spec
-version (includes queries, source, created_at).  ``QueriesResult`` is the internal
-structured output of the single-call query generator.
+version (includes queries, source, created_at).  ``VideoQueryGenerator`` runs a
+two-call flow whose structured outputs are ``LandscapeResult`` (call 1 — the
+niche's content landscape) and ``QueriesResult`` (call 2 — the search queries).
 """
 
 from __future__ import annotations
@@ -13,13 +14,20 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schema.video import GymVideoSpecSource
 
 from src.videos.schema.videos_gym_type import GymType
 
-# Default number of search queries generated per spec commit.
-DEFAULT_QUERY_COUNT = 24
+# Hard caps on LLM list outputs. MAX_GENERATED_QUERIES caps the query-
+# GENERATION output only (QueriesResult) — purely agent-gen side, NOT a
+# per-gym limit (a gym's stored spec may accumulate more via manual edits).
+# A generator returning too many is TRUNCATED, never rejected (a reject just
+# churns the structured-output retry loop). It is also sent to the query
+# prompt as $max_queries — the ceiling above the video_query_count (~25)
+# target, so 30 is the hard backstop.
+MAX_GENERATED_QUERIES = 30
+MAX_LANDSCAPE_ITEMS = 25
 
 
 class VideoSpecDraft(BaseModel):
@@ -83,8 +91,45 @@ class VideoSpecView(BaseModel):
     created_at: datetime
 
 
+class LandscapeResult(BaseModel):
+    """Structured output of the landscape-research call (step 1 of query gen).
+
+    The LLM brainstorms the niche's content landscape from its own knowledge:
+    popular YouTube channels, well-known creators / athletes / instructors, and
+    notable series / events / shows. Hallucination is tolerated by design — a
+    wrong name just searches poorly — so nothing here is validated downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    channels: list[str] = Field(
+        description=(
+            "Popular YouTube channels in this niche — each a channel name, "
+            "optionally with a 2-4 word descriptor."
+        ),
+    )
+    creators: list[str] = Field(
+        description=(
+            "Well-known creators / athletes / instructors — each a name, "
+            "optionally with a 2-4 word descriptor."
+        ),
+    )
+    series_events: list[str] = Field(
+        description=(
+            "Notable series / events / shows — each a name, optionally with a "
+            "2-4 word descriptor."
+        ),
+    )
+
+    @field_validator("channels", "creators", "series_events", mode="after")
+    @classmethod
+    def _cap_landscape(cls, value: list[str]) -> list[str]:
+        """Truncate runaway LLM lists to the hard cap (never reject)."""
+        return value[:MAX_LANDSCAPE_ITEMS]
+
+
 class QueriesResult(BaseModel):
-    """Internal structured output of the single-call query generator."""
+    """Structured output of the query-generation call (step 2 of query gen)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -93,3 +138,9 @@ class QueriesResult(BaseModel):
             "Concrete YouTube search phrases spread across the video genres."
         ),
     )
+
+    @field_validator("queries", mode="after")
+    @classmethod
+    def _cap_queries(cls, value: list[str]) -> list[str]:
+        """Truncate a runaway query list — every query is real Apify spend."""
+        return value[:MAX_GENERATED_QUERIES]

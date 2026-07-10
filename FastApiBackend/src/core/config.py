@@ -4,6 +4,12 @@ import sys
 
 from pydantic_settings import BaseSettings
 
+# db_schema_path registers the Database python_data package on sys.path; it MUST
+# run before `from schema.*`. config.py is an early importer, so keep this first
+# (isort: skip stops import-sorting from reordering `schema` ahead of it).
+import src.shared.db_schema_path  # noqa: F401  # isort: skip
+from schema.video import VideoGenre  # isort: skip
+
 
 class AppEnv(enum.StrEnum):
     """Application environment."""
@@ -76,6 +82,78 @@ class Settings(BaseSettings):
     # Bare Anthropic model name for the Pydantic AI VideoAgentService.
     video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
+    # Target number of YouTube search queries VideoQueryGenerator produces per
+    # spec commit (VideoSpecAuthoring injects this into the generator's second
+    # call). The prompt asks for ~this many; MAX_GENERATED_QUERIES is the hard
+    # ceiling above it. Roughly one third land as landscape-targeted queries.
+    video_query_count: int = 25
+
+    # ── Video RAG read surface (member recs + personalized feed) ──────
+    # Embedding model + dimension for the member's video-taste profile embedding
+    # AND the video summaries the VideoService worker embeds. The dimension is pinned to the
+    # `vector(3072)` DDL — a CROSS-SERVICE CONTRACT: it pins BOTH the
+    # `video_rag.embedding` the VideoService worker writes AND the
+    # `members.video_profile_embedding` this backend writes (all three must use
+    # the same model + dim, they are compared by cosine). Uses the litellm
+    # `provider/name` format so the provider key is resolved from the prefix
+    # (gemini/ → gemini_api_key). gemini-embedding-001 outputs native 3072 dims
+    # (pre-normalized at 3072 — no manual renormalization needed). Stored full
+    # precision; the video_rag HNSW index runs on a halfvec cast (the `vector` type
+    # can't HNSW past 2000 dims). Changing the model is a one-way door: migration +
+    # full re-embed of video_rag AND members.video_profile_embedding.
+    video_embedding_model: str = "gemini/gemini-embedding-001"
+    video_embedding_dim: int = 3072
+    # A member's video-taste profile is ONE summary + ONE embedding on the
+    # members row, (re)built ONLY by `refresh_if_due` (fired fire-and-forget by
+    # the class-booking + video-click triggers) at most once per this cooldown.
+    # Reads never build — a member with no profile yet ranks without similarity.
+    video_profile_refresh_cooldown_days: int = 3
+    # Small/cheap chat model (litellm provider/name format) that turns a
+    # member's facts into the one-paragraph taste summary; reuses
+    # `anthropic_api_key`.
+    video_profile_summary_model: str = "anthropic/claude-haiku-4-5"
+    # Which member facts the taste-summary prompt is built from: the trailing
+    # window (days) of attendance folded in, how many most-attended classes and
+    # how many most-recent `video_clicked` videos to surface. Injected into
+    # `MemberVideoProfileService` (no `settings` import in the service).
+    video_profile_attendance_window_days: int = 90
+    video_profile_top_classes_limit: int = 3
+    video_profile_recent_clicks_limit: int = 10
+    # The member rec surface serves ONE video at a time, rotating the served
+    # genre category through this best-first order: the member's total served-rec
+    # count modulo the list length picks the starting category, and a category
+    # with no videos falls through to the next. Every member of the enum appears
+    # once (educational/technical content first, lighter genres last). The pick
+    # WITHIN a category is ranked by PURE cosine similarity to the member's
+    # taste embedding (gym relevance when unbuilt) — no blend weights, no LIMIT
+    # setting (the rec SQL is a fixed LIMIT 1).
+    video_rec_category_rotation: list[VideoGenre] = [
+        VideoGenre.educational,
+        VideoGenre.professional,
+        VideoGenre.analysis,
+        VideoGenre.interview,
+        VideoGenre.vlog,
+        VideoGenre.news,
+        VideoGenre.entertainment,
+        VideoGenre.clips,
+        VideoGenre.memes,
+    ]
+    # ── Unified feed ranking (owner boost + decayed served penalty) ────
+    # The one feed read serves ONLY enriched+accepted videos, merging the owner
+    # section with the latest completed run, ranked on a single axis (cosine
+    # distance to the member's taste embedding when built, else gym relevance).
+    # Two nudges, each scaled by the axis's own sample standard deviation (sigma)
+    # so they stay proportional to the spread: an owner-added video is pulled
+    # ~this fraction of a sigma NEARER, and an already-SERVED video is pushed the
+    # same fraction FARTHER per prior serve (the penalty sums over each serve's
+    # recommended_at — SERVE time, no clicked_at filter — exponentially decayed by
+    # recency: a just-served video contributes ≈1 unit, an old serve ≈0). This
+    # same read backs the member rec, so the decayed penalty is what advances the
+    # rec on a re-serve (no anti-join). ~10% of the cosine spread.
+    video_feed_bump_sigma_fraction: float = 0.10
+    # Half-life (days) of the served (recency) penalty: a serve this many days old
+    # counts half as much toward pushing its video back as a serve just now.
+    video_served_penalty_half_life_days: float = 7.0
 
     # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
     # build-time asset pipeline populates (theme images, fonts, etc.). This

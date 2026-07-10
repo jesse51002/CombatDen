@@ -12,11 +12,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from schema.gym_rank import RankPresetKind, SubRankType
 
-# member_activities.activity_type written on every member rank change
-# (promotion, demotion, assignment, unassignment, enable-backfill). The
-# member-detail progress anchor filters on this same value.
-RANK_CHANGED_ACTIVITY_TYPE = "rank_changed"
-
 
 class RankResponse(BaseModel):
     """A single ``gym_ranks`` row — one MAIN rank.

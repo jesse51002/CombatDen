@@ -1,7 +1,7 @@
 -- A real customer gym's live video spec — APPEND-VERSIONED. Each confirmed change
 -- INSERTs a new immutable version row; readers take the LATEST per gym via the
 -- `gym_video_spec_latest` view, never the raw table. This is the PRODUCTION
--- counterpart of the slug-keyed `video_gym` template catalog (`video_gym*` holds
+-- counterpart of the slug-keyed `template_gym` template catalog (`template_gym*` holds
 -- the 76 hand-authored templates the preset import copies FROM).
 --
 -- The long videos_desc/avoid_desc pair is the scan criteria the (separate) batch
@@ -36,7 +36,7 @@ CREATE TABLE gym_video_spec (
         CONSTRAINT gym_video_spec_queries_is_array CHECK (jsonb_typeof(queries) = 'array'),
     -- What produced this version.
     source gym_video_spec_source NOT NULL,
-    -- Provenance: the video_gym template slug a preset import copied this from.
+    -- Provenance: the template_gym template slug a preset import copied this from.
     imported_from TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

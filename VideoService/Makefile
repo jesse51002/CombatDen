@@ -1,14 +1,18 @@
-.PHONY: api test gym-check sync-gyms sync-gyms-prod scrape scan docker-build ecr-push pause resume
-
-# `python -m uvicorn` (not the console script) survives stale .venv shebangs
-# left over from the CustomYoutubeService -> VideoService rename.
-api:
-	poetry run python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8002 --reload
+.PHONY: worker test gym-check sync-gyms sync-gyms-prod enrich-templates
 
 # `python -m pytest` (not the `pytest` console script) survives stale .venv
 # shebangs left over from the CustomYoutubeService -> VideoService rename.
 test:
 	poetry run python -m pytest tests/ -v
+
+# The background worker: self-schedules (no queue) the highest-priority due gym
+# each tick and runs its scrape -> funnel -> enrich -> scan -> feed-write pipeline
+# under the global video-worker lock, one run at a time. Long-running loop (Ctrl-C
+# / SIGTERM to stop). Requires DATABASE_URL, YOUTUBE_API_KEY (scrape), APIFY_TOKEN
+# (transcripts), and the model provider keys in .env. `python -m` (not a console
+# script) survives stale .venv shebangs.
+worker:
+	poetry run python -m src.worker.run
 
 # Validate a gym file round-trips the Gym model (schema + enum + filename match)
 # before the scraper/scan touch it. The gym_maker job — authors/validates gyms,
@@ -16,7 +20,7 @@ test:
 gym-check:
 	poetry run python -m scripts.gym_maker.run check $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
 
-# Sync the authored gym YAML files into SQL (video_gym + query/class/reward
+# Sync the authored gym YAML files into SQL (template_gym + query/class/reward
 # tables), then load the existing videos/ pool + each gym's good/rejected feeds
 # into SQL (pool upserts, feeds rewrite per gym — both idempotent, no re-scrape).
 # The append-only cost_log is intentionally NOT imported here (--skip-cost-log)
@@ -38,42 +42,22 @@ sync-gyms:
 sync-gyms-prod:
 	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
 
-# Scrape + classify the shared pool in one run: gather the gyms' queries, fetch
-# from Apify (ONE actor does search + metadata + channel avatar + the transcript
-# inline), REPLACE videos/, then tag each pooled video (genre + gym_type) — a
-# gym-agnostic pass, no approval. Requires APIFY_TOKEN + the tagging model key
-# (e.g. GEMINI_API_KEY) in .env. Appends SEARCH + TAG entries to cost_log.yaml.
-# Usage: make scrape  (all gyms' queries)  |  make scrape GYM_ID=vinyasa (one gym).
-scrape:
-	poetry run python -m scripts.scraper.run $(if $(GYM_ID),--gym-id $(GYM_ID),)
+# One-time PAID run: enrich every unique template video (~18.9k, both feed
+# verdicts) into the RAG sidecar (video_rag/video_rag.jsonl) so `make sync-gyms`
+# can seed video_rag on any DB without re-paying the LLM. Reuses the worker
+# enricher's per-video unit; resumable/idempotent (skips videos already in the
+# sidecar), so a crashed run just re-runs. Run AFTER `make sync-gyms` (needs the
+# pool + template_gym_feed loaded). Requires the keys the configured enrich_model +
+# embedding_model use (by default GEMINI_API_KEY + OPENAI_API_KEY) and
+# APIFY_TOKEN (lazy transcript fetches for the ~16% of videos with none) in .env.
+# Targets the DB in ENV_FILE (default .env). Cost ~ $30-150 for the summary pass.
+#   make enrich-templates
+enrich-templates:
+	poetry run python -m scripts.enrich_templates.run $(ARGS)
+# Smoke-test the whole enrich->embed->sidecar pipeline on ONE video before the
+# full paid run:  make enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"
 
-# Scan the pool for one gym (or all) against the gym's own specification ->
-# OVERWRITE that gym's good_video_ids / rejected_video_ids (its feed) and append a
-# ScanCost to its history. Candidates are only the pool's videos tagged with the
-# gym's discipline(s) (run `make scrape` first). Requires the model key (e.g.
-# GEMINI_API_KEY) in .env. Appends a SCAN entry to cost_log.yaml.
-# Usage: make scan GYM_ID=vinyasa   (or GYM_ID=all for every gym).
-scan:
-	poetry run python -m scripts.scan.run $(if $(filter all,$(GYM_ID)),--all-gyms,--gym-id $(GYM_ID))
-
-# --- Production (AWS App Runner) — see ../DEPLOYMENT.md ---------------------
-ECR ?= 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-videoservice
-SERVICE_ARN ?= arn:aws:apprunner:us-east-1:259645229668:service/combatden-videoservice/e86bea56dcdd4b6d8f71af2fe61dbf4c
-
-# Build the serving image (gyms/ + videos/ baked in; see Dockerfile).
-docker-build:
-	docker build -t combatden-videoservice:latest .
-
-# Build + push to ECR + trigger an App Runner deploy (AutoDeployments are off).
-ecr-push: docker-build
-	aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 259645229668.dkr.ecr.us-east-1.amazonaws.com
-	docker tag combatden-videoservice:latest $(ECR):latest
-	docker push $(ECR):latest
-	aws apprunner start-deployment --region us-east-1 --service-arn $(SERVICE_ARN) --query 'OperationId' --output text
-
-# Demo on/off: pause stops compute billing between demos; resume (~1 min) before.
-pause:
-	aws apprunner pause-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
-
-resume:
-	aws apprunner resume-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
+# The pool scrape + per-gym scan are no longer standalone scripts: they are the
+# background `worker` (see the `worker` target above), which self-schedules the
+# next due gym each tick from timestamps in the schema (no queue, no backend
+# trigger).

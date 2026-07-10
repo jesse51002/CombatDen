@@ -13,7 +13,6 @@ from uuid import UUID
 from schema.video import GymVideoSpecSource
 
 from src.videos.schema.video_spec_schema import (
-    DEFAULT_QUERY_COUNT,
     VideoSpecDraft,
     VideoSpecView,
 )
@@ -37,9 +36,11 @@ class VideoSpecAuthoring:
         *,
         spec_service: VideoSpecService,
         query_generator: VideoQueryGenerator,
+        query_count: int,
     ) -> None:
         self._spec_service = spec_service
         self._query_generator = query_generator
+        self._query_count = query_count
 
     async def commit(
         self,
@@ -71,7 +72,7 @@ class VideoSpecAuthoring:
                 disciplines=criteria.disciplines,
                 videos_desc=criteria.videos_desc,
                 avoid_desc=criteria.avoid_desc,
-                count=DEFAULT_QUERY_COUNT,
+                count=self._query_count,
             )
         else:
             # Only display summaries changed — reuse the current spec's queries.
@@ -80,7 +81,9 @@ class VideoSpecAuthoring:
         view = await self._spec_service.save_version(
             gym_id, criteria, queries, source=source
         )
-        # TODO: queue a feed-regeneration worker task here (not implemented yet — part of the flow)
+        # No enqueue: the VideoService worker derives which gym to run from
+        # run / spec / curation timestamps, so this newly-saved admin_update
+        # version is picked up on the worker's next tick (subject to run caps).
         return view
 
     @staticmethod

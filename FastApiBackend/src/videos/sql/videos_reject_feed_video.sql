@@ -10,8 +10,15 @@ SET scan_status = 'rejected',
     curated_at = now()
 WHERE gym_id = CAST(:gym_id AS UUID)
   AND video_id = :video_id
+  -- Only an actually-accepted row is a real reject: re-rejecting an already
+  -- rejected video is a no-op that must curate 0 rows (rowcount = 0) so the
+  -- caller fires no wasted feed-learning refine.
+  AND scan_status <> 'rejected'
+  -- Target the run currently being SERVED (latest COMPLETED): an owner's reject
+  -- during an in-flight run must curate the served feed, not the 'running' one.
   AND video_run_id = (
       SELECT run_id FROM video_run
       WHERE gym_id = CAST(:gym_id AS UUID)
+        AND status = 'completed'
       ORDER BY created_at DESC
       LIMIT 1)

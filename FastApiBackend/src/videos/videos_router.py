@@ -2,7 +2,11 @@
 
 A real gym's live content (no prefix — each route declares its full path):
 
-    * ``GET /api/v1/gyms/{gym_id}/videos``              — paginated served feed.
+    * ``GET /api/v1/gyms/{gym_id}/videos``              — paginated served feed
+      (merged owner + latest run, enriched-only; optionally personalized to a
+      ``member_id``'s video-taste embedding).
+    * ``GET /api/v1/gyms/{gym_id}/videos/owner``        — the ungated owner
+      "Your videos" management listing (shows a video before it's enriched).
     * ``POST /api/v1/gyms/{gym_id}/videos/lookup``      — fetch a YouTube link's
       real metadata (no write) for the add confirmation.
     * ``POST /api/v1/gyms/{gym_id}/videos``             — add one owner-provided
@@ -19,6 +23,12 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent``        — one conversational turn.
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
+    * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-rec`` — a member's
+      next rotating-category RAG recommendation (``verify_can_view_member``).
+    * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click``
+      — record a member opening a rec: stamps ``clicked_at``, logs a
+      ``video_clicked`` activity, and fires a profile refresh
+      (``verify_can_view_member``).
 
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
@@ -39,11 +49,14 @@ from src.videos.schema.video_agent_schema import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
+from src.videos.schema.video_recs_schema import (
+    MemberVideoRec,
+    VideoRecClickResponse,
+)
 from src.videos.schema.video_spec_schema import VideoSpecView
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymFeedPreview,
-    GymFeedSection,
     GymVideoCard,
     GymVideosFeed,
     GymVideoSpecView,
@@ -51,7 +64,12 @@ from src.videos.schema.videos_schema import (
     VideoKeepRequest,
     VideoRemoveRequest,
 )
+from src.videos.service.member_video_profile_service import (
+    MemberNotInGymError,
+)
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_feed_refine_runner import VideoFeedRefineRunner
+from src.videos.service.video_rec_click_service import RecNotFoundError
 from src.videos.service.videos_service import VideosService
 from src.videos.service.youtube_metadata import (
     YouTubeApiError,
@@ -82,13 +100,16 @@ PREVIEW_PER_TAG = 10
     description=(
         "A page of the gym's served feed, hydrated from the shared pool in "
         "relevance order. ``video_type``/``big_group`` filter as expected "
-        "(mutually exclusive)."
+        "(mutually exclusive). An optional ``member_id`` personalizes the "
+        "ordering to that member's video-taste embedding (read-only; ignored "
+        "when the member has no profile yet). Staff-facing (CRM preview)."
     ),
     responses={
         200: {"description": "A page of the gym's feed"},
         400: {"description": "`video_type` and `big_group` are mutually exclusive"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not an employee of this gym"},
+        404: {"description": "`member_id` is not a member of this gym"},
     },
 )
 @inject
@@ -97,8 +118,8 @@ async def get_gym_videos(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     video_type: VideoGenre | None = None,
     big_group: BigGroup | None = None,
-    owner: bool = Query(False),
     rejected: bool = Query(False),
+    member_id: UUID | None = Query(None),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
@@ -106,10 +127,13 @@ async def get_gym_videos(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> GymVideosFeed:
-    """Return one page of the gym's feed, hydrated from the shared pool in
-    relevance order. ``owner=true`` → the owner "Your videos" section (else
-    the gym's latest scan run); ``rejected=true`` → the rejected list (else
-    the served, accepted videos)."""
+    """Return one page of the gym's served feed — the merged owner section +
+    latest completed run, enriched-only, in ranked order. ``rejected=true`` →
+    the rejected list (else the served, accepted videos). ``member_id``
+    optionally re-orders the page to that member's video-taste embedding
+    (read-only ranking hint — the candidate set is always this gym's feed, so it
+    can't leak; a member-facing route is a future concern, this stays
+    gym-employee gated). The ungated owner-management view is ``/videos/owner``."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
@@ -122,13 +146,19 @@ async def get_gym_videos(
     try:
         page, total = await videos_service.load_feed_page(
             gym_id,
-            owner=owner,
             rejected=rejected,
             video_type=video_type,
             big_group=big_group,
+            member_id=member_id,
             limit=limit,
             offset=offset,
         )
+    except MemberNotInGymError as exc:
+        # A member_id not in the path gym must 404 (symmetric with the rec path),
+        # never silently rank a different gym's feed.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
     except Exception:
         logger.error(
             "Failed to load gym videos for %s", gym_id, exc_info=True
@@ -136,6 +166,54 @@ async def get_gym_videos(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to load gym videos",
+        ) from None
+
+    return GymVideosFeed(total=total, limit=limit, offset=offset, videos=page)
+
+
+@videos_router.get(
+    "/api/v1/gyms/{gym_id}/videos/owner",
+    response_model=GymVideosFeed,
+    summary="Get the gym's owner-added 'Your videos' management listing",
+    description=(
+        "The owner's own added videos — the UNGATED management view. Unlike the "
+        "served feed, this is NOT enrichment-gated: a just-added video appears "
+        "immediately (newest first), each card carrying ``enriched`` so the CRM "
+        "can badge one still processing. Staff-facing."
+    ),
+    responses={
+        200: {"description": "A page of the owner's added videos"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+    },
+)
+@inject
+async def get_gym_owner_videos(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> GymVideosFeed:
+    """Return one page of the gym's owner-added videos (ungated — shows a video
+    before it's enriched), newest add first. Gym-employee gated."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        page, total = await videos_service.load_owner_videos(
+            gym_id, limit=limit, offset=offset
+        )
+    except Exception:
+        logger.error(
+            "Failed to load owner videos for %s", gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load owner videos",
         ) from None
 
     return GymVideosFeed(total=total, limit=limit, offset=offset, videos=page)
@@ -296,6 +374,9 @@ async def remove_gym_video(
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
+    refine_runner: VideoFeedRefineRunner = Depends(
+        Provide[DependencyInjector.video_feed_refine_runner]
+    ),
 ) -> None:
     """Remove one video (idempotent → 204): ``owner=true`` ("Your videos")
     deletes it from the owner section (+ owned pool if it's a manual custom);
@@ -304,7 +385,7 @@ async def remove_gym_video(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await videos_service.remove_feed_video(
+        curated = await videos_service.remove_feed_video(
             gym_id,
             video_id,
             owner=owner,
@@ -321,6 +402,18 @@ async def remove_gym_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to remove gym video",
         ) from None
+
+    # After a manual REJECT (owner=False) that ACTUALLY curated a served row
+    # commits, fire a coalesced, best-effort feed-learning refine (mints a
+    # feed_update spec version from the gym's manual signals; the worker re-scans
+    # similar videos ≥1h later). Gated on ``curated`` so a no-op reject (video not
+    # in the served run, or already rejected) spawns no wasted refine — which would
+    # also risk consuming a genuinely-pending curation signal. An owner-section
+    # remove (owner=True) is NOT a keep/reject signal (``curated`` is always False).
+    # Router-level composition keeps VideoFeedService decoupled from the runner; a
+    # refine failure never surfaces here.
+    if curated:
+        refine_runner.start(gym_id)
 
 
 @videos_router.post(
@@ -349,13 +442,16 @@ async def keep_gym_video(
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
+    refine_runner: VideoFeedRefineRunner = Depends(
+        Provide[DependencyInjector.video_feed_refine_runner]
+    ),
 ) -> None:
     """Un-reject a video (back to the served feed); idempotent → 204."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await videos_service.keep_feed_video(
+        curated = await videos_service.keep_feed_video(
             gym_id,
             video_id,
             accept_reason=body.accept_reason if body else None,
@@ -368,6 +464,13 @@ async def keep_gym_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to keep gym video",
         ) from None
+
+    # After a keep (un-reject) that ACTUALLY un-rejected a served row commits, fire
+    # the same coalesced, best-effort feed-learning refine so the worker surfaces
+    # similar videos ≥1h later. Gated on ``curated`` so keeping an already-accepted
+    # video (or one not in the served run) fires no wasted refine.
+    if curated:
+        refine_runner.start(gym_id)
 
 
 @videos_router.get(
@@ -396,15 +499,16 @@ async def get_gym_videos_preview(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> GymFeedPreview:
-    """Power the "All" view in one request: hydrate the gym's latest-run feed once
-    (``rejected=true`` → the rejected list), group it by genre tag in feed order,
-    and return up to ``per_tag`` videos per genre."""
+    """Power the "All" view in one request: the service runs a single windowed
+    query (``rejected=true`` → the rejected list) that returns up to ``per_tag``
+    videos per genre in feed order, one ``GymFeedSection`` per genre."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        ids = await videos_service.load_feed_ids(gym_id, rejected=rejected)
-        videos = await videos_service.load_pool_videos(ids)
+        sections = await videos_service.load_feed_preview(
+            gym_id, per_tag=per_tag, rejected=rejected
+        )
     except Exception:
         logger.error(
             "Failed to build feed preview for %s", gym_id, exc_info=True
@@ -414,22 +518,6 @@ async def get_gym_videos_preview(
             detail="Failed to build feed preview",
         ) from None
 
-    # Group by the single genre tag, preserving first-appearance (feed) order,
-    # and cap each genre to `per_tag`. Untagged videos form no section.
-    order: list[VideoGenre] = []
-    by_tag: dict[VideoGenre, list] = {}
-    for v in videos:
-        if v.tag is None:
-            continue
-        if v.tag not in by_tag:
-            by_tag[v.tag] = []
-            order.append(v.tag)
-        if len(by_tag[v.tag]) < per_tag:
-            by_tag[v.tag].append(v)
-    sections = [
-        GymFeedSection(tag=t, videos=by_tag[t])
-        for t in order
-    ]
     return GymFeedPreview(sections=sections)
 
 
@@ -572,3 +660,118 @@ async def refine_video_spec_from_feed(
             detail="No new feed curation to learn from.",
         )
     return result
+
+
+# ── RAG read surface (member rec + rec click) ────────────────
+
+
+@videos_router.get(
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-rec",
+    response_model=MemberVideoRec,
+    summary="Get a member's next rotating-category video recommendation",
+    description=(
+        "The member's single next recommendation. The served genre category "
+        "rotates by the member's total served-rec count, and within it the pick "
+        "is the top of the unified served feed for that genre — cosine order to "
+        "the member's taste embedding (gym relevance when they have no profile "
+        "yet), with the decayed already-served penalty advancing the pick on a "
+        "re-serve. The served pick is recorded to ``member_video_recs`` and "
+        "returned with its ``rec_id`` (post it back to the click route). 404 "
+        "when the member has no recommendation available in any category."
+    ),
+    responses={
+        200: {"description": "The member's next recommendation"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found, or no recommendation available"},
+    },
+)
+@inject
+async def get_member_video_rec(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> MemberVideoRec:
+    """Return the member's next rotating-category recommendation. Gated by
+    ``verify_can_view_member`` (staff of the member's gym OR the member
+    themselves). 404 when the member isn't in the path gym, or when no category
+    yields a video."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        rec = await videos_service.get_video_rec(gym_id, member_id)
+    except MemberNotInGymError as exc:
+        # Only the ownership guard maps to 404 — any other ValueError (e.g.
+        # an embedding-dimension config mismatch) is a server fault -> 500.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to build video rec for member %s", member_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to build video recommendation",
+        ) from None
+    if rec is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No video recommendation available for this member",
+        )
+    return rec
+
+
+@videos_router.post(
+    "/api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click",
+    response_model=VideoRecClickResponse,
+    summary="Record a member opening (clicking) a recommendation",
+    description=(
+        "Stamp a served recommendation as clicked (first click only — "
+        "idempotent via ``clicked_at IS NULL``): logs a ``video_clicked`` "
+        "member activity and fires a fire-and-forget profile refresh. A repeat "
+        "click returns ``clicked=false`` without re-stamping / re-logging / "
+        "re-firing. Gated by ``verify_can_view_member``."
+    ),
+    responses={
+        200: {"description": "Click recorded (or an idempotent repeat)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Recommendation not found for this member"},
+    },
+)
+@inject
+async def click_member_video_rec(
+    gym_id: UUID,
+    member_id: UUID,
+    rec_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> VideoRecClickResponse:
+    """Record a member opening a rec. Gated by ``verify_can_view_member``
+    (staff of the member's gym OR the member themselves)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await videos_service.record_rec_click(gym_id, member_id, rec_id)
+    except RecNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to record rec click for member %s", member_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record recommendation click",
+        ) from None

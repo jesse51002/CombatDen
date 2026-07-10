@@ -100,11 +100,10 @@ class _YourVideosFeedState extends State<YourVideosFeed> {
       _errored = false;
     });
     try {
-      final page = await _repo.fetchVideos(
+      // "Your videos" is the owner section (run-independent, ungated); the
+      // imported (latest-run) videos live in the genre rows.
+      final page = await _repo.fetchOwnerVideos(
         widget.gymId,
-        // "Your videos" is the owner section (run-independent); the imported
-        // (latest-run) videos live in the genre rows.
-        owner: true,
         limit: _limit,
         offset: _dbOffset,
       );

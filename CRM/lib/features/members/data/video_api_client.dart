@@ -9,7 +9,7 @@ import 'package:crm/features/members/data/video_feed.dart';
 ///
 /// Base URL defaults to the FastApiBackend localhost; override at launch with
 /// `--dart-define=BACKEND_BASE_URL=http://<host>:8000`. The feed is fetched
-/// by **video_gym** slug ([gymId]) and paginated server-side, so the preview's
+/// by **template_gym** slug ([gymId]) and paginated server-side, so the preview's
 /// videos change with the selected gym.
 class VideoApiClient {
   VideoApiClient({

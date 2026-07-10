@@ -96,6 +96,11 @@ Table members {
   points_balance integer [not null, default: 0]
   current_rank_id uuid [note: 'nullable, FK to gym_ranks (composite with gym_id)']
   current_sub_index integer [note: 'nullable; leaf position within current_rank_id (NULL when sub_rank_count=0); written only by ranks endpoints']
+  // --- RAG video-taste profile (backend-built, service_role-only; NULL until first built) ---
+  video_profile_summary text
+  video_profile_embedding vector [note: 'vector(3072); same model+dim contract as video_rag.embedding']
+  video_profile_embedding_model text
+  video_profile_built_at timestamptz
   // --- merged billing/contact/Stripe (service_role-written; NULL for engagement-only members) ---
   photo_url varchar
   phone varchar
@@ -312,7 +317,7 @@ Table member_activities {
   activity_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
   gym_id uuid [not null]
-  activity_type varchar [not null]
+  activity_type member_activity_type [not null, note: 'enum: class_attended | rank_changed | video_clicked']
   activity_info jsonb [default: '{}']
   time timestamptz [not null, default: `now()`]
 }
@@ -698,7 +703,7 @@ Ref: task_items.target_price_id > membership_plan_prices_unfiltered.price_id
 // template keyed by a text id (e.g. 'boxing') — NOT the customer `gyms` table.
 // ============================================================
 
-Table video_gym {
+Table template_gym {
   gym_id text [primary key, note: 'text id == YAML filename stem']
   gym_type jsonb [not null, note: 'JSONB array of disciplines; [0] = primary (drives parent_gym_type)']
   theme varchar [not null, note: 'ThemeService design id']
@@ -710,13 +715,13 @@ Table video_gym {
   has_rewards boolean [not null, default: false]
 }
 
-Table video_gym_query {
+Table template_gym_query {
   query_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id text [not null]
   query text [not null]
 }
 
-Table video_gym_class {
+Table template_gym_class {
   class_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY name']
   gym_id text [not null]
   name text [not null]
@@ -727,7 +732,7 @@ Table video_gym_class {
   instructor_image_url text [not null]
 }
 
-Table video_gym_reward {
+Table template_gym_reward {
   reward_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY points_cost']
   gym_id text [not null]
   title text [not null]
@@ -754,16 +759,17 @@ Table video {
   relevance_index integer [not null]
   transcript_error text
   transcript text
+  failure_count integer [not null, default: 0, note: 'hard-error strike counter; worker bumps on step exception, resets to 0 on success, deletes video at 3 strikes']
   gym_id uuid [note: 'owning gym for a custom owner-added video (private); NULL = shared web-query/scraped']
   added_via video_source [not null, default: 'web_query', note: 'enum: web_query | manual — how it entered + whether deletable (web_query = reject only, manual = hard delete)']
 }
 
 Ref: video.gym_id > gyms.gym_id
 
-Table video_gym_feed {
+Table template_gym_feed {
   gym_id text [not null]
   video_id text [not null]
-  status video_gym_feed_status [not null, note: 'enum: good | rejected']
+  status template_gym_feed_status [not null, note: 'enum: good | rejected']
 
   indexes {
     (gym_id, video_id) [pk]
@@ -771,28 +777,35 @@ Table video_gym_feed {
   }
 }
 
-Table video_cost_log {
+// Generic spend ledger (replaces video_cost_log). source names the producing
+// system (only 'video' today; extensible); (source, run_id) matches a cost row
+// back to its source table's run. Service-role-written; public SELECT.
+Table cost_log {
   entry_id uuid [primary key, default: `uuid_generate_v4()`, note: 'append-only']
-  execution_type video_execution_type [not null, note: 'enum: search|transcript|tag|scan']
-  gym_id text [note: 'set on scan entries; NULL for pool-wide search/tag runs']
-  at timestamptz [not null]
+  source cost_source [not null, note: 'enum: video (extensible); producing system']
+  run_id text [note: 'the source run this spend belongs to (per-run cost = SUM per run_id, scoped by source); NULL outside a run']
+  gym_id uuid [note: 'FK to gyms.gym_id (real gym attribution); NULL for unattributed spend']
+  stage cost_stage [not null, note: 'enum: search|transcript|tag|enrich|embed|scan']
+  model text [note: 'model that produced the spend, when one applies']
+  cost_usd float8 [not null, default: 0, note: 'row total in USD']
   breakdown jsonb [not null, default: '{}', note: 'USD component map']
   note text
+  created_at timestamptz [not null, default: `now()`]
 }
 
-Ref: video_gym_query.gym_id > video_gym.gym_id
-Ref: video_gym_class.gym_id > video_gym.gym_id
-Ref: video_gym_reward.gym_id > video_gym.gym_id
+Ref: template_gym_query.gym_id > template_gym.gym_id
+Ref: template_gym_class.gym_id > template_gym.gym_id
+Ref: template_gym_reward.gym_id > template_gym.gym_id
 
-Ref: video_gym_feed.gym_id > video_gym.gym_id
-Ref: video_gym_feed.video_id > video.video_id
-Ref: video_cost_log.gym_id > video_gym.gym_id
+Ref: template_gym_feed.gym_id > template_gym.gym_id
+Ref: template_gym_feed.video_id > video.video_id
+Ref: cost_log.gym_id > gyms.gym_id
 
 // ============================================================
 // Real-gym video content (gym_video_* tables). These reference the
 // customer `gyms` table (UUID gym_id) and the shared `video` pool.
 // Written by the presets import (PresetsService); read by FastApiBackend
-// videos domain (VideosService). Separate from the template video_gym* tables.
+// videos domain (VideosService). Separate from the template_gym* tables.
 // ============================================================
 
 // gym_video_spec is APPEND-ONLY VERSIONED. Rows are never UPDATE'd.
@@ -819,6 +832,9 @@ Table gym_video_spec {
 Table video_run {
   run_id uuid [primary key, default: `gen_random_uuid()`]
   gym_id uuid [not null, note: 'FK to gyms.gym_id']
+  status video_run_status [not null, default: 'completed', note: 'enum: running | completed | failed; serve path selects latest COMPLETED; default keeps the preset import unchanged']
+  finished_at timestamptz [note: 'set at completed/failed; NULL while running']
+  error text [note: 'failure detail; "orphaned" when found dead on lock acquisition']
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -827,17 +843,63 @@ Table gym_video_feed {
   gym_id uuid [not null, note: 'FK to gyms.gym_id']
   video_id text [not null, note: 'FK to video.video_id']
   video_run_id uuid [note: 'NULL = owner "Your videos" section (always served); set = a scan run (served only while latest)']
-  scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected']
+  scan_status gym_video_scan_status [not null, default: 'accepted', note: 'enum: accepted | rejected | pending (worker-written candidate, not yet enrich+scan processed)']
   curation_type gym_video_curation_type [not null, default: 'automatic', note: 'enum: automatic | manual; how the current scan_status was set']
   curation_reason text [note: 'nullable; owner free-text reason for the latest manual curation; NULL for automatic rows']
   rejected_at timestamptz [note: 'last rejection time; retained across re-acceptance (history)']
   curated_at timestamptz [note: 'nullable; when the owner last manually curated this row (reject/keep/re-add)']
+  scanned_at timestamptz [note: 'nullable; when the worker scan last judged this row; the feed-learning re-scan compares the gym latest feed_update spec created_at against it']
 }
 
 // gym_video_query was DROPPED — queries now live in gym_video_spec.queries JSONB.
+
+// RAG sidecar: one row per ENRICHED pool video (worker's one multimodal
+// classify+summarize call). Lazy — un-enriched videos have no row and are
+// invisible to RAG. ONE embedding kind: the summary embedding (vector(3072)).
+Table video_rag {
+  video_id text [primary key, note: 'FK to video.video_id, ON DELETE CASCADE']
+  summary text [not null, note: 'prose summary incl. thumbnail visuals (gi vs no-gi etc.)']
+  facets jsonb [not null, default: '{}', note: 'structured attrs from the same call']
+  embedding vector [not null, note: 'vector(3072) of summary; model+dim pinned cross-service (one-way door)']
+  embedding_model text [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+// The per-member RAG video-taste profile lives on the members table
+// (video_profile_summary / video_profile_embedding / *_model / *_built_at) —
+// one summary + one embedding per member, built lazily by the backend. Recs are
+// grouped by the video's genre category (video.tag — the video_genre enum),
+// stored on member_video_recs.category; there is no separate bucket abstraction.
+
+// Rec-serve history: freshness partition (never-recommended first). Append-only
+// event log — one row PER SERVE (re-serves INSERT another row; times=COUNT,
+// last serve=MAX(recommended_at)). Written only when record=true (previews leave
+// no trace).
+Table member_video_recs {
+  rec_id uuid [primary key, default: `gen_random_uuid()`]
+  member_id uuid [not null, note: 'FK to members.member_id']
+  gym_id uuid [not null, note: 'FK to gyms.gym_id; composite FK (member_id, gym_id) -> members']
+  video_id text [not null, note: 'FK to video.video_id']
+  category video_genre [not null, note: 'the video genre it was served under at this event']
+  score float8 [not null, note: 'composite score at this serve']
+  recommended_at timestamptz [not null, default: `now()`, note: 'append-only serve log; times=COUNT, last serve=MAX(recommended_at)']
+  clicked_at timestamptz [note: 'nullable; NULL = served but not clicked; set (service_role) when the member opens the rec']
+
+  indexes {
+    (member_id, video_id) [note: 'already-recommended anti-join + per-video MAX(recommended_at)']
+  }
+}
+
+// No worker queue table: the VideoService worker derives which gym to run each
+// tick from run/spec/curation timestamps (last run vs last admin_update spec vs
+// last manual curation), tier-sorted, under per-gym (2/24h) + system (5/24h)
+// rolling caps. See VideoService/src/worker/sql/worker_select_due_gym.sql.
 
 Ref: gym_video_spec.gym_id > gyms.gym_id
 Ref: video_run.gym_id > gyms.gym_id
 Ref: gym_video_feed.gym_id > gyms.gym_id
 Ref: gym_video_feed.video_id > video.video_id
 Ref: gym_video_feed.video_run_id > video_run.run_id
+Ref: video_rag.video_id - video.video_id
+Ref: member_video_recs.member_id > members.member_id
+Ref: member_video_recs.video_id > video.video_id

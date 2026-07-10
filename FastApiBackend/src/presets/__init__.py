@@ -1,4 +1,4 @@
-"""Presets domain — import a video_gym template into a real gym's prod tables."""
+"""Presets domain — import a template_gym template into a real gym's prod tables."""
 
 from pathlib import Path
 

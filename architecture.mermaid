@@ -26,41 +26,35 @@ flowchart TB
   end
 
   %% ---------- VIDEO SERVICE: creation vs api (separate) ----------
-  subgraph VS_create["🎬 VideoService · CREATION (pipeline)"]
+  subgraph VS_create["🎬 VideoService · CREATION (worker + authoring)"]
     direction TB
-    VSc_skill["videoservice skill<br/>make-gym · scrape · scan"]
+    VSc_skill["videoservice skill<br/>gym authoring"]
     VSc_gym["gym_maker → gym YAML"]
-    VSc_scrape["scraper"]
-    VSc_scan["scan (keep / drop)"]
-    VSc_sync["sync_gyms · import_yaml · sql"]
-    VSc_writer["VideoDbWriter"]
+    VSc_sync["sync_gyms · import_yaml → template_gym* + pool + video_rag sidecar<br/>(vector(3072) · halfvec HNSW index)"]
+    VSc_worker["worker (src/worker) · self-scheduling loop<br/>tick = lock → cleanup (drop strike-maxed videos) → finalize (complete/fail running runs)<br/>→ ONE drained step, first-with-work: scan (multimodal verdict) → enrich (gym-agnostic RAG sweep) → scrape (YouTube Data API v3, the only quota-bound/run-opening step, still derives its due gym from timestamps)<br/>writes video pool · video_rag · gym_video_feed runs · cost_log"]
     VSc_skill -. "drives" .-> VSc_gym
-    VSc_gym --> VSc_scrape --> VSc_scan --> VSc_writer
-    VSc_sync --> VSc_writer
-  end
-  subgraph VS_api["🎬 VideoService · READ API (MobileApp source — transitional)"]
-    direction TB
-    VSa_api["read API<br/>/gyms · /gyms/{id} · /videos"]
-    VSa_svc["service layer<br/>feed · avatar fallback"]
-    VSa_api --> VSa_svc
+    VSc_gym --> VSc_sync
+    VSc_sync -. "seeds pool + video_rag" .-> VSc_worker
   end
 
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms (incl. gym profile + gym theme-design PUT) · classes · checkin<br/>ranks · rewards (approval flow + points) · waivers · memberships · plans<br/>discounts · payments · webhooks · tasks<br/>videos (real-gym feed + LLM spec/agent authoring · Pydantic AI)<br/>presets (template catalog + import, Settings-only)<br/>theme (gym showcase + public showcase-defaults) · uploads (S3 image proxy)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>CheckinClassResolver · CheckinMemberGate · CheckinReverser<br/>LiteLLMClient (shared) · VideosService · VideoSpecService<br/>VideoQueryGenerator · VideoSpecAuthoring · VideoFeedRefiner<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService<br/>ThemeShowcaseService · ThemeShowcaseDefaultsService · UploadsService"]
+    FB_r["routers<br/>members · gyms (incl. gym profile + gym theme-design PUT) · classes · checkin<br/>ranks · rewards (approval flow + points) · waivers · memberships · plans<br/>discounts · payments · webhooks · tasks<br/>videos (ONE unified feed [owner+latest-run merge · enriched+accepted gate · σ-boost + decayed-watch ranking] + ungated /videos/owner listing + spec/agent authoring + single rotating RAG rec)<br/>presets (template catalog + import, Settings-only)<br/>theme (gym showcase + public showcase-defaults) · uploads (S3 image proxy)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts<br/>CheckinClassResolver · CheckinMemberGate · CheckinReverser<br/>LiteLLMClient (shared) · VideosService (facade) · VideoFeedService (unified feed + owner listing)<br/>VideoSpecService · VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner · VideoFeedRefineRunner (coalesced feed_update auto-refine)<br/>VideoRecsService (single rotating-category pure-cosine rec, thin feed wrapper) · MemberVideoProfileService<br/>VideoRecClickService · MemberVideoProfileRefreshRunner (no semantic search)<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService<br/>ThemeShowcaseService · ThemeShowcaseDefaultsService · UploadsService"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth · pydantic schemas"]
     FB_r --> FB_s --> FB_q
   end
-  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract<br/>tables: member · gym · rank/reward · membership/billing · class · video_* · gym_video_*"]
+  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract · pgvector<br/>tables: member · gym · rank/reward · membership/billing · class<br/>video_* (failure_count strikes) · gym_video_* · template_gym* · video_rag (halfvec HNSW) · member_video_recs · members.video_profile_*"]
+  Deploy["📦 <b>deploy/</b> — combined image<br/>FastApiBackend API + VideoService worker<br/>always-on (ECS Express), NOT App Runner"]
 
   %% ---------- EXTERNAL ----------
   Stripe["Stripe"]
   LiteLLM["OpenAI / LiteLLM"]
   Gemini["Gemini"]
-  Apify["Apify"]
+  Apify["Apify<br/>supreme_coder/youtube-transcript-scraper (transcripts only · batched)"]
+  YouTube["📺 YouTube Data API v3<br/>search.list discovery + videos.list metadata"]
   GoogleFonts["Google Fonts"]
   Recraft["Recraft"]
   CDN["S3 + CloudFront CDN<br/>cdn.combatden.net"]
@@ -68,40 +62,42 @@ flowchart TB
 
   %% ---------- CROSS-SYSTEM (root siblings only) ----------
   MobileApp -->|"GET /apps/{id}/styles"| TS_api
-  MobileApp -->|"GET /gyms · /videos"| VS_api
   CRM -->|"GET /apps/{id}/styles (theme catalog) + live preview"| TS_api
   CRM -->|"authd API (billing + video content) · public showcase-defaults + gym theme PUT"| FastApiBackend
   CRM -->|"Supabase Auth (login)"| Database
   LandingPage -->|"links to themes.combatden.net"| CRM
   LandingPage -.->|"build-time screenshots"| MobileApp
-  LandingPage -.->|"build-time feed assets"| VS_api
+  LandingPage -.->|"build-time feed thumbnails (baked)"| VS_create
   TS_create -.->|"output.yaml"| TS_api
   VS_create -.->|"design_id + celebration img"| TS_create
   TS_create --> GoogleFonts
   TS_create --> Recraft
   TS_create --> LiteLLM
   TS_create -->|"uploads images / icons"| CDN
-  VS_create --> Apify
-  VS_create --> LiteLLM
-  VS_create --> Gemini
-  VS_create -->|"write video_* tables"| Database
-  VS_api -->|"read video_* tables"| Database
+  VS_create -->|"scrape: discovery + metadata"| YouTube
+  VS_create -->|"enrich: lazy transcripts"| Apify
+  VS_create -->|"enrich: summary embeddings"| LiteLLM
+  VS_create -->|"enrich + scan"| Gemini
+  VS_create -->|"derive due gym from timestamps · write video / video_rag / gym_video_feed"| Database
   FastApiBackend -->|"read/write · Supabase Auth"| Database
   FastApiBackend -->|"webhooks + payments"| Stripe
   FastApiBackend -->|"videos: agent (Pydantic AI) + regular LLM calls (litellm)"| LLMProvider
+  FastApiBackend -->|"videos: owner-add metadata"| YouTube
+  FastApiBackend -.->|"packaged into"| Deploy
+  VS_create -.->|"worker → combined image"| Deploy
   FastApiBackend -->|"image uploads (uploads domain)"| CDN
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   class MobileApp,CRM,LandingPage client;
-  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN,LLMProvider ext;
+  class Stripe,LiteLLM,Gemini,Apify,YouTube,GoogleFonts,Recraft,CDN,LLMProvider ext;
   style TS_create fill:#dff0e6,stroke:#2f8f53;
   style TS_api fill:#eafff2,stroke:#2f8f53;
   style VS_create fill:#dff0e6,stroke:#2f8f53;
-  style VS_api fill:#eafff2,stroke:#2f8f53;
   style TS_scripts fill:#fdf6d8,stroke:#caab2f;
   style FastApiBackend fill:#e6f7ec,stroke:#2f8f53,stroke-dasharray:4 3;
   style Database fill:#fff2e0,stroke:#c9781f;
+  style Deploy fill:#fdf6d8,stroke:#caab2f,stroke-dasharray:4 3;
   style MobileApp fill:#eaf2ff,stroke:#2f6fb0;
   style CRM fill:#eaf2ff,stroke:#2f6fb0;
   style LandingPage fill:#eaf2ff,stroke:#2f6fb0;

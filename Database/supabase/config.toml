@@ -90,15 +90,16 @@ schema_paths = [
     "./schemas/member_activities.sql",
     "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
-    "./schemas/video_gym.sql",
-    "./schemas/video_gym_query.sql",
-    "./schemas/video_gym_class.sql",
-    "./schemas/video_gym_reward.sql",
+    "./schemas/template_gym.sql",
+    "./schemas/template_gym_query.sql",
+    "./schemas/template_gym_class.sql",
+    "./schemas/template_gym_reward.sql",
     "./schemas/video.sql",
-    "./schemas/video_gym_feed.sql",
-    "./schemas/video_cost_log.sql",
+    "./schemas/template_gym_feed.sql",
+    # Generic spend ledger (FK gyms; replaces video_cost_log). gyms loads early.
+    "./schemas/cost_log.sql",
     # Per-gym live video content (UUID-keyed; the prod counterpart of the
-    # video_gym* template catalog). Loads after gyms + video (FK targets).
+    # template_gym* template catalog). Loads after gyms + video (FK targets).
     "./schemas/gym_video_spec.sql",
     "./schemas/video_run.sql",
     "./schemas/gym_video_feed.sql",

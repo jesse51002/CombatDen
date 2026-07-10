@@ -16,11 +16,11 @@ from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from schema.member_activity import MemberActivityType
+
+import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin.schema.checkin_schema import ResolvedClass
-from src.checkin.service.checkin_writer import (
-    CLASS_ATTENDED_ACTIVITY_TYPE,
-    CheckinWriter,
-)
+from src.checkin.service.checkin_writer import CheckinWriter
 
 
 def _resolved_class(
@@ -103,7 +103,7 @@ async def test_activity_info_shape_on_new_row() -> None:
     await writer.write_checkin(resolved_class, member_id, uuid4(), uuid4(), should_end=False)
 
     activity_params = session.execute.call_args_list[3].args[1]
-    assert activity_params["activity_type"] == CLASS_ATTENDED_ACTIVITY_TYPE
+    assert activity_params["activity_type"] == MemberActivityType.class_attended
     assert activity_params["m"] == str(member_id)
     assert activity_params["g"] == str(resolved_class.gym_id)
     info = json.loads(activity_params["info"])

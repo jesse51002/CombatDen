@@ -16,12 +16,12 @@ from schema.gym_rank import (
     rank_display_name,
     sub_rank_label,
 )
+from schema.member_activity import MemberActivityType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ranks import SQL_DIR
 from src.ranks.schema.ranks_schema import (
-    RANK_CHANGED_ACTIVITY_TYPE,
     RankMemberResponse,
     RankPromoteMemberRequest,
     RankResponse,
@@ -198,7 +198,7 @@ class RanksMembers(RanksBase):
             text(sql),
             {
                 "gym_id": str(gym_id),
-                "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
+                "activity_type": MemberActivityType.rank_changed.value,
                 "new_rank_name": new_rank_name,
             },
         )
@@ -410,6 +410,6 @@ class RanksMembers(RanksBase):
                 "new_rank_id": str(new_rank_id) if new_rank_id else None,
                 "old_rank_name": old_display,
                 "new_rank_name": new_display,
-                "activity_type": RANK_CHANGED_ACTIVITY_TYPE,
+                "activity_type": MemberActivityType.rank_changed.value,
             },
         )

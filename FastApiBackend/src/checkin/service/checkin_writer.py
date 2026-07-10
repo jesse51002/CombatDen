@@ -11,14 +11,13 @@ False with no membership to end).
 import json
 from uuid import UUID
 
+from schema.member_activity import MemberActivityType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.checkin import SQL_DIR
-from src.checkin.schema.checkin_schema import (
-    CLASS_ATTENDED_ACTIVITY_TYPE,
-    ResolvedClass,
-)
+from src.checkin.schema.checkin_schema import ResolvedClass
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
@@ -156,7 +155,7 @@ class CheckinWriter:
             {
                 "m": str(member_id),
                 "g": str(resolved_class.gym_id),
-                "activity_type": CLASS_ATTENDED_ACTIVITY_TYPE,
+                "activity_type": MemberActivityType.class_attended.value,
                 "info": info,
             },
         )

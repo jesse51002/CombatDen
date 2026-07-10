@@ -3,13 +3,16 @@
 -- versioned run (`video_run_id`) so the serve path can take only the gym's LATEST
 -- run; owner-added rows are run-independent (`video_run_id` NULL) and always
 -- serve. `scan_status` is the per-row keep/drop decision (the rejected list lives
--- here now, the prod counterpart of the template `video_gym_feed` good/rejected).
+-- here now, the prod counterpart of the template `template_gym_feed` good/rejected).
 -- Removability is a property of the VIDEO (`video.added_via`), not the feed:
 -- web_query videos are rejected (kept, `scan_status='rejected'`), manual videos
 -- are hard-deleted.
 
--- The scan keep/drop decision for one feed row.
-CREATE TYPE gym_video_scan_status AS ENUM ('accepted', 'rejected');
+-- The scan keep/drop decision for one feed row. 'pending' = a candidate row the
+-- worker has written but not yet enrich+scan processed (appended LAST so its
+-- ordinal matches the runtime `ALTER TYPE ... ADD VALUE`); it settles to
+-- 'accepted'/'rejected' once the scan stage judges it.
+CREATE TYPE gym_video_scan_status AS ENUM ('accepted', 'rejected', 'pending');
 
 -- How the row's current scan_status was set: automatic scan/import vs. manual
 -- owner/admin action in the UI. A single column covers all curation paths;
@@ -51,7 +54,14 @@ CREATE TABLE gym_video_feed (
     -- subsequent re-acceptance so the rejection timestamp is kept as history.
     -- Possible later cleanup: superseded by curation_type + curated_at for the
     -- manual case; kept here for now as an out-of-scope change.
-    rejected_at TIMESTAMPTZ
+    rejected_at TIMESTAMPTZ,
+    -- When the worker's scan step last JUDGED this row against the gym's spec —
+    -- stamped now() by every verdict write (worker_update_verdict.sql). NULL until
+    -- first scanned. The feed-learning re-scan compares a gym's latest 'feed_update'
+    -- spec version's created_at against this: an 'automatic' row whose scanned_at
+    -- predates a settled feed_update is re-judged in place against the new criteria
+    -- (never re-triggering for the same feed_update once stamped).
+    scanned_at TIMESTAMPTZ
 );
 
 -- A video appears at most once per scan run, and at most once in the owner

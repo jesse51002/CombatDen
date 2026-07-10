@@ -56,6 +56,9 @@ class GymVideoCard(BaseModel):
 
     model_config = ConfigDict(extra="ignore", from_attributes=True)
 
+    # The shared-pool video id (YouTube id). Required — every card carries it so
+    # the client can record a rec click / owner-delete by id.
+    video_id: str
     url: str
     title: str
     thumbnail_url: str
@@ -69,6 +72,14 @@ class GymVideoCard(BaseModel):
     # The video's single genre tag, assigned by the pool tagging pass. None
     # until the pool is tagged; clients group on it.
     tag: VideoGenre | None = None
+    # True when this card is an owner-added "Your videos" row (feed
+    # video_run_id IS NULL). The merged feed selects it; other read paths that
+    # don't carry it fall back to False (extra="ignore" + default).
+    owner_added: bool = False
+    # Whether the video has a video_rag embedding yet. The merged serve feed is
+    # enriched by construction (INNER JOIN video_rag) so it stays True; only the
+    # UNGATED owner management listing sets it False to badge "processing…".
+    enriched: bool = True
 
     @computed_field  # type: ignore[prop-decorator]
     @property

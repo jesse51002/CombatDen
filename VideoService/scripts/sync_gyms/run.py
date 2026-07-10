@@ -5,9 +5,9 @@
 
 The gym configs stay git-tracked YAML (`gyms/<gym_id>.yaml`) as the human source
 of truth; this loads + validates each against the ``Gym`` model and upserts it
-into ``video_gym`` + its query / class / reward child tables (replaced wholesale,
+into ``template_gym`` + its query / class / reward child tables (replaced wholesale,
 so the sync is idempotent). It does NOT touch a gym's curated feed
-(``video_gym_feed``) or cost log — those are owned by the scan / import.
+(``template_gym_feed``) or cost log — those are owned by the scan / import.
 
 Requires ``DATABASE_URL`` in ``.env`` (the shared Supabase Postgres). Run after
 the migration has created the ``video_*`` tables.

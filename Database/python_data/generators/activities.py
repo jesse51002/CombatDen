@@ -3,20 +3,21 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from schema.gym_rank import SubRankType, rank_display_name
-from schema.member_activity import MemberActivityCreate
+from schema.member_activity import MemberActivityCreate, MemberActivityType
 from utils import random_past_datetime
 
-ACTIVITY_TYPES = ["class_attended", "reward_redeemed", "check_in"]
+# Only class_attended is emitted in the random loop; rank_changed is stamped
+# once per ranked member below (the member-detail progress anchor). video_clicked
+# is a valid member_activity_type but is not seeded — there is no grounded
+# activity_info shape for it here (no video reference to point at).
+ACTIVITY_TYPES = [MemberActivityType.class_attended]
 
 CLASS_NAMES = ["Morning BJJ", "Evening MMA", "Kickboxing", "Open Mat", "Sparring"]
-REWARD_NAMES = ["T-Shirt", "Guest Pass", "Protein Shake"]
 
 
-def _make_info(activity_type: str) -> dict:
-    if activity_type == "class_attended":
+def _make_info(activity_type: MemberActivityType) -> dict:
+    if activity_type == MemberActivityType.class_attended:
         return {"class_name": random.choice(CLASS_NAMES)}
-    if activity_type == "reward_redeemed":
-        return {"reward": random.choice(REWARD_NAMES)}
     return {}
 
 
@@ -127,7 +128,7 @@ def generate(
             MemberActivityCreate(
                 member_id=member_id,
                 gym_id=gym_id,
-                activity_type="rank_changed",
+                activity_type=MemberActivityType.rank_changed,
                 activity_info={
                     "old_rank_id": None,
                     "new_rank_id": str(current_rank_id),

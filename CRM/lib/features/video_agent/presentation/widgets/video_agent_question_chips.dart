@@ -9,12 +9,14 @@ import 'package:crm/features/video_agent/data/models/video_agent_models.dart';
 
 /// Chip-based answer surface rendered when the agent asks an [AgentQuestion].
 ///
-/// Single-select ([AgentQuestion.multiSelect] == false): tapping a chip
-/// immediately sends that option as the next message and clears the question.
+/// Both modes select-then-send: a tap only selects, never sends. A "Send"
+/// button — disabled until at least one option is chosen — dispatches the
+/// selection as the next message and clears the question. The text input bar
+/// stays available so the owner may type a custom reply instead.
 ///
-/// Multi-select: chips toggle; a "Send" button sends the joined selection
-/// once at least one option is chosen. The text input bar remains available
-/// so the owner may type a custom reply instead.
+/// Single-select ([AgentQuestion.multiSelect] == false): a radio affordance
+/// (circle); tapping a chip replaces the current pick (one at a time).
+/// Multi-select: a checkbox affordance (square); chips toggle on and off.
 class VideoAgentQuestionChips extends StatefulWidget {
   final AgentQuestion question;
 
@@ -79,12 +81,13 @@ class _VideoAgentQuestionChipsState
             multiSelect: widget.question.multiSelect,
             selected: _selected,
             onTap: (i) {
-              if (!widget.question.multiSelect) {
-                final opt = widget.question.options[i];
-                _send(context, opt, [opt]);
-                return;
-              }
               setState(() {
+                if (!widget.question.multiSelect) {
+                  _selected
+                    ..clear()
+                    ..add(i);
+                  return;
+                }
                 if (_selected.contains(i)) {
                   _selected.remove(i);
                 } else {
@@ -93,14 +96,13 @@ class _VideoAgentQuestionChipsState
               });
             },
           ),
-          if (widget.question.multiSelect)
-            Align(
-              alignment: Alignment.centerRight,
-              child: _SendButton(
-                enabled: _selected.isNotEmpty,
-                onPressed: () => _sendSelected(context),
-              ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _SendButton(
+              enabled: _selected.isNotEmpty,
+              onPressed: () => _sendSelected(context),
             ),
+          ),
         ],
       ),
     );
@@ -151,6 +153,20 @@ class _Chip extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Radio glyph (circle) for single-select, checkbox glyph (square) for
+  /// multi-select — the affordance that signals the mode at a glance. The
+  /// filled variant marks the current selection.
+  IconData get _indicatorGlyph {
+    if (multiSelect) {
+      return isSelected
+          ? Symbols.check_box_sharp
+          : Symbols.check_box_outline_blank_sharp;
+    }
+    return isSelected
+        ? Symbols.radio_button_checked_sharp
+        : Symbols.radio_button_unchecked_sharp;
+  }
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -177,17 +193,14 @@ class _Chip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingSmall,
           children: [
-            if (multiSelect)
-              Icon(
-                isSelected
-                    ? Symbols.check_circle_sharp
-                    : Symbols.radio_button_unchecked_sharp,
-                size: DesignConstants.iconSizeSmall,
-                weight: DesignConstants.iconWeight,
-                color: isSelected
-                    ? DesignConstants.onAccent
-                    : DesignConstants.text3rd,
-              ),
+            Icon(
+              _indicatorGlyph,
+              size: DesignConstants.iconSizeSmall,
+              weight: DesignConstants.iconWeight,
+              color: isSelected
+                  ? DesignConstants.onAccent
+                  : DesignConstants.text3rd,
+            ),
             Text(
               label,
               style: DesignConstants.p.copyWith(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -104,3 +104,51 @@ class LiteLLMClient:
         raise LLMStructuredOutputError(
             f"{schema.__name__} never validated after {_MAX_ATTEMPTS} attempts"
         ) from last_error
+
+    async def embed(
+        self,
+        *,
+        texts: list[str],
+        model: str,
+    ) -> list[list[float]]:
+        """Embed a batch of texts, returning one vector per input in input order.
+
+        Calls ``litellm.aembedding(model=..., input=texts)`` with the provider
+        key resolved from the model prefix (same rule as
+        :meth:`complete_structured`). The response's per-item ``index`` is used
+        to restore the original input order regardless of how the provider
+        returns them.
+
+        Args:
+            texts: The input strings to embed (one vector produced per string).
+            model: A litellm ``provider/name`` model string (e.g.
+                ``openai/text-embedding-3-small``); the prefix selects the key.
+
+        Returns:
+            A list of embedding vectors aligned to ``texts`` (``result[i]`` is
+            the embedding of ``texts[i]``).
+        """
+        api_key = self._api_key_for_model(model)
+        resp = await litellm.aembedding(
+            model=model,
+            input=texts,
+            api_key=api_key,
+            timeout=_REQUEST_TIMEOUT,
+        )
+        ordered = sorted(
+            (self._embedding_item(item) for item in resp.data),
+            key=lambda pair: pair[0],
+        )
+        return [embedding for _, embedding in ordered]
+
+    @staticmethod
+    def _embedding_item(item: Any) -> tuple[int, list[float]]:
+        """(index, embedding) off one litellm embedding datum, tolerant of dict
+        OR attribute access across litellm response shapes (some versions return
+        plain dicts, some return objects). Mirrors VideoService's sibling
+        ``WorkerEnricher``/``LLMClient`` helper so both sides survive either shape
+        instead of raising ``TypeError`` on object data. Preserves the
+        sort-by-index that restores input order."""
+        if isinstance(item, dict):
+            return item["index"], item["embedding"]
+        return item.index, item.embedding

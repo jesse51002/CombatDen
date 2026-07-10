@@ -56,6 +56,12 @@ MEMBERS: frozenset[str] = frozenset(
         "card_exp_year",
         "freeze_start_date",  # managed by backend freeze/unfreeze logic
         "freeze_end_date",  # managed by backend freeze/unfreeze logic
+        # RAG video-taste profile — backend-built (service_role) derived
+        # artifacts, never client-written (like the Stripe columns above).
+        "video_profile_summary",
+        "video_profile_embedding",
+        "video_profile_embedding_model",
+        "video_profile_built_at",
     }
 )
 
@@ -457,27 +463,27 @@ STRIPE_WEBHOOK_EVENTS: frozenset[str] = frozenset(
 # (no user-facing updates), but kept in sync per the Database convention.
 # ============================================================
 
-VIDEO_GYM: frozenset[str] = frozenset(
+TEMPLATE_GYM: frozenset[str] = frozenset(
     {
         "gym_id",  # PK (text id == YAML filename stem)
     }
 )
 
-VIDEO_GYM_QUERY: frozenset[str] = frozenset(
+TEMPLATE_GYM_QUERY: frozenset[str] = frozenset(
     {
         "query_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
     }
 )
 
-VIDEO_GYM_CLASS: frozenset[str] = frozenset(
+TEMPLATE_GYM_CLASS: frozenset[str] = frozenset(
     {
         "class_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
     }
 )
 
-VIDEO_GYM_REWARD: frozenset[str] = frozenset(
+TEMPLATE_GYM_REWARD: frozenset[str] = frozenset(
     {
         "reward_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
@@ -489,6 +495,7 @@ VIDEO: frozenset[str] = frozenset(
         "video_id",  # PK (YouTube id)
         "gym_id",  # custom-video ownership; backend-set on add, never client-edited
         "added_via",  # web_query vs manual; backend-set, marks deletability
+        "failure_count",  # worker-managed hard-error strike counter
     }
 )
 
@@ -497,26 +504,34 @@ VIDEO_RUN: frozenset[str] = frozenset(
         "run_id",  # PK
         "gym_id",  # identity FK
         "created_at",  # auto-generated
+        "status",  # worker-run lifecycle, backend-managed
+        "finished_at",  # set by the worker at completion/failure
+        "error",  # failure detail, backend-managed
     }
 )
 
-VIDEO_GYM_FEED: frozenset[str] = frozenset(
+TEMPLATE_GYM_FEED: frozenset[str] = frozenset(
     {
         "gym_id",  # composite PK / identity FK
         "video_id",  # composite PK / identity FK
     }
 )
 
-VIDEO_COST_LOG: frozenset[str] = frozenset(
+COST_LOG: frozenset[str] = frozenset(
     {
+        # Generic append-only spend ledger (service-role-written; no client
+        # write path). Identity set only.
         "entry_id",  # PK, identity (append-only)
+        "source",  # producing system, set at insert (append-only)
+        "run_id",  # the source run this spend belongs to, set at insert
         "gym_id",  # identity FK, set at insert (append-only)
+        "created_at",  # auto-generated timestamp
     }
 )
 
 # ============================================================
 # Per-gym live video content (gym_video_* — the UUID-keyed prod counterpart of
-# the video_gym* template catalog). Written by the backend (preset import) at
+# the template_gym* template catalog). Written by the backend (preset import) at
 # service_role only; no user-facing update path, so identity + provenance columns
 # are listed for convention/parity.
 # ============================================================
@@ -547,5 +562,37 @@ GYM_VIDEO_FEED: frozenset[str] = frozenset(
         "gym_id",  # identity FK
         "video_id",  # identity FK
         "video_run_id",  # the run this row belongs to (NULL = owner section)
+    }
+)
+
+# ============================================================
+# Video worker RAG (video_rag, member_video_recs). Both are readable by their
+# subject member / gym staff (SELECT policy), but INSERT/UPDATE/DELETE are
+# revoked for authenticated — written only by the VideoService worker / backend
+# at service_role — so every column is listed, mirroring COST_LOG / VIDEO_RUN /
+# GYM_VIDEO_SPEC. The per-member video-taste profile lives on the `members`
+# table (video_profile_* columns in MEMBERS above), not a separate table.
+# ============================================================
+
+VIDEO_RAG: frozenset[str] = frozenset(
+    {
+        "video_id",  # PK, FK to video
+        "summary",  # multimodal enrich output
+        "facets",  # multimodal enrich output
+        "embedding",  # embedding of summary
+        "embedding_model",  # embedding provenance
+        "created_at",  # auto-generated timestamp
+    }
+)
+
+MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
+    {
+        "rec_id",  # PK, auto-generated UUID
+        "member_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "video_id",  # identity FK
+        "category",  # video genre served under at this event
+        "recommended_at",  # backend-stamped; append-only serve log
+        "clicked_at",  # backend-stamped click signal; NULL until opened
     }
 )

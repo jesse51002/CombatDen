@@ -1,6 +1,6 @@
-"""PresetsService — transactional import of a video_gym template into a real gym.
+"""PresetsService — transactional import of a template_gym template into a real gym.
 
-A preset import copies one of the 76 slug-keyed ``video_gym*`` templates into a
+A preset import copies one of the 76 slug-keyed ``template_gym*`` templates into a
 real gym's production tables in a single database transaction. It is re-pickable
 (calling it again on the same gym overwrites the prior import). No demo logic
 lives here — this is a real production write path, simply gated to an email
@@ -157,7 +157,7 @@ class _PastSeed(NamedTuple):
 
 
 class PresetsService:
-    """Transactionally imports a video_gym template into a real gym's tables."""
+    """Transactionally imports a template_gym template into a real gym's tables."""
 
     def __init__(
         self,
@@ -192,7 +192,7 @@ class PresetsService:
 
         Args:
             gym_id: The target real gym (UUID-keyed production tables).
-            video_gym_id: The slug of the ``video_gym`` template to import from.
+            video_gym_id: The slug of the ``template_gym`` template to import from.
 
         Returns:
             A :class:`PresetImportResponse` with counts of what was written.

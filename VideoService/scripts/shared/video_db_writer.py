@@ -15,10 +15,12 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from schema import CostEntry, Gym, VideoOutput
+from schema import CostEntry, CostSource, Gym, VideoOutput
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.shared.util.video_id import video_id_from_url
+
+from scripts.shared.video_rag_sidecar import VideoRagRecord, VideoRagSidecar
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
@@ -134,6 +136,28 @@ class VideoDbWriter:
             await session.commit()
         return len(rows)
 
+    async def upsert_video_rag(self, records: Sequence[VideoRagRecord]) -> int:
+        """Upsert enriched RAG rows from the template sidecar (FK-safe insert,
+        ON CONFLICT DO NOTHING — SEEDS video_rag, never clobbers a live worker
+        enrichment). Facets are JSON-encoded and the embedding floats are rendered
+        to the pgvector text literal here. Returns the number of rows attempted."""
+        rows = [
+            {
+                "video_id": r.video_id,
+                "summary": r.summary,
+                "facets": json.dumps(r.facets),
+                "embedding": VideoRagSidecar.to_pgvector(r.embedding),
+                "embedding_model": r.embedding_model,
+            }
+            for r in records
+        ]
+        if not rows:
+            return 0
+        async with self._db.session() as session:
+            await session.execute(text(_sql("insert_video_rag.sql")), rows)
+            await session.commit()
+        return len(rows)
+
     async def set_gym_feed(
         self, gym_id: str, good_ids: Sequence[str], rejected_ids: Sequence[str]
     ) -> None:
@@ -159,16 +183,22 @@ class VideoDbWriter:
             await session.commit()
 
     async def append_cost(self, entry: CostEntry, gym_id: str | None = None) -> None:
-        """Append one spend-ledger row. ``gym_id`` attributes per-gym scan spend."""
+        """Append one legacy spend-ledger row into ``cost_log``. ``gym_id``
+        attributes per-gym scan spend; no run is associated (the old global
+        ledger didn't record which run a scan belonged to)."""
         async with self._db.session() as session:
             await session.execute(
                 text(_sql("insert_cost.sql")),
                 {
-                    "execution_type": entry.execution_type.value,
+                    "source": CostSource.video.value,
+                    "run_id": None,
                     "gym_id": gym_id,
-                    "at": entry.at,
+                    "stage": entry.execution_type.value,
+                    "model": None,
+                    "cost_usd": entry.total_usd,
                     "breakdown": json.dumps(entry.breakdown),
                     "note": entry.note,
+                    "created_at": entry.at,
                 },
             )
             await session.commit()

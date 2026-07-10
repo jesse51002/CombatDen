@@ -2,7 +2,8 @@
 
 from schema.big_group import BigGroup
 from schema.class_output import ClassImage
-from schema.cost_log import CostEntry, ExecutionType
+from schema.cost import CostSource, CostStage
+from schema.cost_log import CostEntry
 from schema.gym import Gym, GymSpecifications, GymVideos, RewardCard, ScanCost
 from schema.gym_feed import GymCard, GymDetail, GymSpecificationView, GymsPage
 from schema.gym_type import GymType
@@ -18,7 +19,8 @@ __all__ = [
     "BigGroup",
     "ClassImage",
     "CostEntry",
-    "ExecutionType",
+    "CostSource",
+    "CostStage",
     "FeedPreview",
     "FeedSection",
     "Gym",

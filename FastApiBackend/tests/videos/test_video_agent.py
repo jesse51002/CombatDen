@@ -24,6 +24,10 @@ import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` im
 from src.shared.litellm_client import LiteLLMClient
 from src.videos.schema.video_agent_schema import AgentTurnRequest, SpecProposal
 from src.videos.schema.video_spec_schema import (
+    MAX_GENERATED_QUERIES,
+    MAX_LANDSCAPE_ITEMS,
+    LandscapeResult,
+    QueriesResult,
     VideoSpecDraft,
     VideoSpecView,
 )
@@ -41,6 +45,10 @@ from src.videos.service.videos_service import VideosService
 
 GYM_ID: UUID = uuid4()
 
+# The count VideoSpecAuthoring is constructed with in these tests (mirrors the
+# settings.video_query_count DI injection).
+_QUERY_COUNT = 30
+
 # Criteria-only draft args — no 'queries' field (removed from VideoSpecDraft).
 _DRAFT_ARGS: dict[str, Any] = {
     "disciplines": ["mma"],
@@ -57,6 +65,15 @@ _PROPOSAL_ARGS: dict[str, Any] = {
 }
 
 _QUERIES_JSON = json.dumps({"queries": ["mma technique", "mma knockouts"]})
+
+# Canned landscape-research output (call 1 of the two-call query generator).
+_LANDSCAPE_JSON = json.dumps(
+    {
+        "channels": ["UFC (fight promotion)", "BJJ Fanatics (instructionals)"],
+        "creators": ["Khabib Nurmagomedov", "Gordon Ryan"],
+        "series_events": ["ADCC", "UFC 300"],
+    }
+)
 
 
 def _emit_draft(messages: list, info: AgentInfo) -> ModelResponse:
@@ -132,20 +149,29 @@ def _mock_litellm_response(content: str) -> MagicMock:
     return resp
 
 
+def _acompletion_side_effect(*_args: Any, **kwargs: Any) -> MagicMock:
+    """Two-call stub for ``litellm.acompletion``: return the LandscapeResult JSON
+    for the landscape call and the QueriesResult JSON for the query call, keyed
+    off the ``response_format`` schema so call order doesn't matter."""
+    schema = kwargs["response_format"]
+    content = _LANDSCAPE_JSON if schema is LandscapeResult else _QUERIES_JSON
+    return _mock_litellm_response(content)
+
+
 # ---------------------------------------------------------------------------
 # 1. Query generator (litellm path)
 # ---------------------------------------------------------------------------
 
 
 async def test_query_generator_returns_expected_list() -> None:
-    """complete_structured mocked: the list of queries is returned."""
+    """Two-call flow mocked (landscape then queries): the query list is returned."""
     client = _make_litellm_client()
     gen = VideoQueryGenerator(
         litellm_client=client,
         model="anthropic/claude-sonnet-4-6",
     )
-    mock_resp = _mock_litellm_response(_QUERIES_JSON)
-    with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
+    mock_acompletion = AsyncMock(side_effect=_acompletion_side_effect)
+    with patch("litellm.acompletion", mock_acompletion):
         result = await gen.generate(
             disciplines=[GymType.MMA],
             videos_desc="technique and fun",
@@ -154,6 +180,38 @@ async def test_query_generator_returns_expected_list() -> None:
         )
 
     assert result == ["mma technique", "mma knockouts"]
+
+
+async def test_query_generator_two_call_flow() -> None:
+    """generate() runs landscape research then query gen: exactly two calls, and
+    the landscape names + count land in the SECOND (query) prompt while the
+    discipline text is in the FIRST (landscape) prompt."""
+    client = _make_litellm_client()
+    gen = VideoQueryGenerator(
+        litellm_client=client,
+        model="anthropic/claude-sonnet-4-6",
+    )
+    mock_acompletion = AsyncMock(side_effect=_acompletion_side_effect)
+    with patch("litellm.acompletion", mock_acompletion):
+        result = await gen.generate(
+            disciplines=[GymType.MMA],
+            videos_desc="technique and fun",
+            avoid_desc="no rage bait",
+            count=30,
+        )
+
+    assert result == ["mma technique", "mma knockouts"]
+    assert mock_acompletion.call_count == 2
+
+    first_prompt = mock_acompletion.call_args_list[0].kwargs["messages"][0]["content"]
+    second_prompt = mock_acompletion.call_args_list[1].kwargs["messages"][0]["content"]
+
+    # Call 1 is the landscape prompt (carries the discipline text).
+    assert "mma" in first_prompt.lower()
+    # Call 2 is the query prompt (carries the landscape names + the count).
+    assert "Gordon Ryan" in second_prompt
+    assert "UFC" in second_prompt
+    assert "30" in second_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +448,9 @@ async def test_authoring_commit_no_change_returns_none() -> None:
     spec_service = _make_spec_service_stub()
     query_gen = MagicMock(spec=VideoQueryGenerator)
     authoring = VideoSpecAuthoring(
-        spec_service=spec_service, query_generator=query_gen
+        spec_service=spec_service,
+        query_generator=query_gen,
+        query_count=_QUERY_COUNT,
     )
 
     current = _make_current_view()
@@ -419,7 +479,9 @@ async def test_authoring_commit_changed_generates_and_saves() -> None:
     query_gen = MagicMock(spec=VideoQueryGenerator)
     query_gen.generate = AsyncMock(return_value=["query1", "query2"])
     authoring = VideoSpecAuthoring(
-        spec_service=spec_service, query_generator=query_gen
+        spec_service=spec_service,
+        query_generator=query_gen,
+        query_count=_QUERY_COUNT,
     )
 
     current = _make_current_view()
@@ -450,7 +512,9 @@ async def test_authoring_commit_discipline_reorder_triggers_change() -> None:
     query_gen = MagicMock(spec=VideoQueryGenerator)
     query_gen.generate = AsyncMock(return_value=["q1"])
     authoring = VideoSpecAuthoring(
-        spec_service=spec_service, query_generator=query_gen
+        spec_service=spec_service,
+        query_generator=query_gen,
+        query_count=_QUERY_COUNT,
     )
 
     current = VideoSpecView(
@@ -487,7 +551,9 @@ async def test_authoring_commit_summary_only_reuses_queries() -> None:
     query_gen = MagicMock(spec=VideoQueryGenerator)
     query_gen.generate = AsyncMock(return_value=["new_q"])
     authoring = VideoSpecAuthoring(
-        spec_service=spec_service, query_generator=query_gen
+        spec_service=spec_service,
+        query_generator=query_gen,
+        query_count=_QUERY_COUNT,
     )
 
     current = _make_current_view()  # short_videos_desc=None, short_avoid_desc=None
@@ -520,7 +586,9 @@ async def test_authoring_commit_no_current_spec_always_saves() -> None:
     query_gen = MagicMock(spec=VideoQueryGenerator)
     query_gen.generate = AsyncMock(return_value=["q1"])
     authoring = VideoSpecAuthoring(
-        spec_service=spec_service, query_generator=query_gen
+        spec_service=spec_service,
+        query_generator=query_gen,
+        query_count=_QUERY_COUNT,
     )
 
     spec_service.load_latest = AsyncMock(return_value=None)  # type: ignore[method-assign]
@@ -539,6 +607,48 @@ async def test_authoring_commit_no_current_spec_always_saves() -> None:
 
     assert result is not None
     query_gen.generate.assert_called_once()
+
+
+async def test_authoring_commit_uses_settings_query_count(monkeypatch) -> None:
+    """The injected query_count (settings.video_query_count) flows through commit
+    into the generator's second (query) prompt."""
+    from src.core.config import settings
+
+    monkeypatch.setattr(settings, "video_query_count", 17)
+
+    client = _make_litellm_client()
+    gen = VideoQueryGenerator(
+        litellm_client=client,
+        model="anthropic/claude-sonnet-4-6",
+    )
+    spec_service = _make_spec_service_stub()
+    # No current spec -> commit always generates (no diff short-circuit).
+    spec_service.load_latest = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    spec_service.save_version = AsyncMock(  # type: ignore[method-assign]
+        return_value=_make_current_view()
+    )
+
+    authoring = VideoSpecAuthoring(
+        spec_service=spec_service,
+        query_generator=gen,
+        query_count=settings.video_query_count,
+    )
+    draft = VideoSpecDraft(
+        disciplines=[GymType.MMA],
+        videos_desc="brand new gym",
+        avoid_desc="nothing bad",
+    )
+
+    mock_acompletion = AsyncMock(side_effect=_acompletion_side_effect)
+    with patch("litellm.acompletion", mock_acompletion):
+        result = await authoring.commit(
+            GYM_ID, draft, source=GymVideoSpecSource.admin_update
+        )
+
+    assert result is not None
+    assert mock_acompletion.call_count == 2
+    second_prompt = mock_acompletion.call_args_list[1].kwargs["messages"][0]["content"]
+    assert "17" in second_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -693,3 +803,22 @@ def test_video_spec_draft_valid_round_trips() -> None:
     assert reloaded.short_avoid_desc == "nothing controversial"
     # Confirm queries field is absent from VideoSpecDraft (no queries authored by agent)
     assert "queries" not in VideoSpecDraft.model_fields
+
+
+def test_queries_result_truncates_runaway_lists() -> None:
+    """LLM list outputs are hard-capped (cost guard): a runaway model gets
+    truncated, never rejected (a reject would churn the structured-output
+    retry loop while every extra query is real Apify spend)."""
+    runaway = QueriesResult(
+        queries=[f"query {i}" for i in range(MAX_GENERATED_QUERIES + 40)]
+    )
+    assert len(runaway.queries) == MAX_GENERATED_QUERIES
+    assert runaway.queries[0] == "query 0"
+
+    landscape = LandscapeResult(
+        channels=[f"ch {i}" for i in range(MAX_LANDSCAPE_ITEMS + 10)],
+        creators=["a"],
+        series_events=[],
+    )
+    assert len(landscape.channels) == MAX_LANDSCAPE_ITEMS
+    assert landscape.creators == ["a"]

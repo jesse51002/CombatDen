@@ -1,0 +1,311 @@
+"""WorkerScanner global sweep — no DB, no network.
+
+Covers: the sweep drains ``worker_scan_targets`` grouped by gym; judges against the
+gym's LATEST spec (read at scan time); batches by ``scan_batch_size``; writes
+verdicts by UPDATE (guarded on ``scan_status = 'pending'``); resets strikes on a
+verdict; strikes-without-reject on failure (a batch LLM exception bumps every video
+in the batch and leaves them pending; a per-id omission bumps that id alone, still
+pending — NO default-to-rejected); drops hallucinated ids; renders each candidate's
+summary + structured fields (genre, disciplines, facets) as text with NO image
+attached; stamps rejected_at only on rejects; and logs one scan cost row per gym.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import re
+
+from src.core.errors import ProviderError
+from src.worker import worker_config, worker_scanner
+from src.worker.schema.scan_batch import ScanBatchResult, ScanVerdictItem
+from src.worker.worker_scanner import WorkerScanner
+from tests.worker_fakes import FakeLLM, RoutingFakeDb
+
+
+class FakeCostLog:
+    def __init__(self) -> None:
+        self.scans: list[tuple] = []
+
+    async def log_scan(self, gym_id, run_id, *, scan_usd, scanned):  # noqa: ANN001
+        self.scans.append((gym_id, run_id, scan_usd, scanned))
+
+
+def _abort() -> asyncio.Event:
+    return asyncio.Event()  # never set
+
+
+def _scanner(db, llm):
+    cost = FakeCostLog()
+    return WorkerScanner(db, llm, cost), cost
+
+
+def _candidate(
+    vid: str,
+    *,
+    gym_id: str = "gym-1",
+    run_id: str = "run-1",
+    disciplines: list[str] | None = None,
+    facets: dict | None = None,
+) -> dict:
+    return {
+        "gym_id": gym_id,
+        "video_run_id": run_id,
+        "video_id": vid,
+        "title": f"Title {vid}",
+        "channel_name": "Chan",
+        "genre": "educational",
+        "disciplines": disciplines if disciplines is not None else ["boxing"],
+        "summary": "summary text",
+        "facets": facets if facets is not None else {"skill_level": "beginner"},
+    }
+
+
+def _criteria() -> dict:
+    return {"videos_desc": "worth surfacing", "avoid_desc": "avoid"}
+
+
+def _handler(
+    good: set[str],
+    *,
+    omit: set[str] = frozenset(),
+    hallucinate: bool = False,
+    cost: float = 0.05,
+):
+    def handler(call: dict) -> tuple[ScanBatchResult, float]:
+        prompt = call["messages"][0]["content"]
+        ids = re.findall(r"video_id: (\S+)", prompt)
+        verdicts = [
+            ScanVerdictItem(video_id=i, is_good=(i in good))
+            for i in ids
+            if i not in omit
+        ]
+        if hallucinate:
+            verdicts.append(ScanVerdictItem(video_id="ZZZ", is_good=True))
+        return ScanBatchResult(verdicts=verdicts), cost
+
+    return handler
+
+
+def _verdict_rows(db: RoutingFakeDb) -> list[dict]:
+    lists = [p for n, _, p in db.writes if n == "update_verdict"]
+    return [row for batch in lists for row in batch]
+
+
+def _struck(db: RoutingFakeDb) -> set[str]:
+    lists = [p for n, _, p in db.writes if n == "bump_failure"]
+    return {row["video_id"] for batch in lists for row in batch}
+
+
+def _reset(db: RoutingFakeDb) -> set[str]:
+    lists = [p for n, _, p in db.writes if n == "reset_failure"]
+    return {row["video_id"] for batch in lists for row in batch}
+
+
+def test_empty_targets_is_noop() -> None:
+    db = RoutingFakeDb()  # scan_targets → []
+    llm = FakeLLM(structured=_handler(set()))
+    scanner, cost = _scanner(db, llm)
+
+    did_work = asyncio.run(scanner.drain(_abort()))
+
+    assert did_work is False
+    assert llm.structured_calls == []
+    assert cost.scans == []
+
+
+def test_batch_splitting_and_verdicts(monkeypatch) -> None:
+    monkeypatch.setattr(worker_config.settings, "scan_batch_size", 2)
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [
+        _candidate("a"), _candidate("b"), _candidate("c")
+    ]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a", "b", "c"}))
+    scanner, cost = _scanner(db, llm)
+
+    did_work = asyncio.run(scanner.drain(_abort()))
+
+    assert did_work is True
+    assert len(llm.structured_calls) == 2  # 3 candidates in batches of 2
+    assert {r["video_id"] for r in _verdict_rows(db)} == {"a", "b", "c"}
+    assert all(r["verdict"] == "accepted" for r in _verdict_rows(db))
+    assert _reset(db) == {"a", "b", "c"}  # verdicted → strikes cleared
+    assert "bump_failure" not in db.write_names()
+    assert cost.scans == [("gym-1", "run-1", 0.10, 3)]  # 0.05 × 2 batches
+
+
+def test_verdict_update_guards_manual_and_stamps_scanned() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a")]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a"}))
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    verdict_sql = [s for n, s, _ in db.writes if n == "update_verdict"][0]
+    # curation_type <> 'manual' is what stops an owner's explicit keep/reject
+    # being overwritten, while still re-judging an automatic (pending OR already
+    # accepted/rejected) row; scanned_at = now() marks the row judged so the same
+    # feed_update never re-triggers it.
+    assert "curation_type <> 'manual'" in verdict_sql
+    assert "scanned_at = now()" in verdict_sql
+    assert "scan_status = 'pending'" not in verdict_sql  # old guard is gone
+    row = _verdict_rows(db)[0]
+    assert row["gym_id"] == "gym-1" and row["video_run_id"] == "run-1"
+
+
+def test_scan_targets_bind_includes_rescan_delay(monkeypatch) -> None:
+    # The scan-targets fetch threads worker_feed_update_rescan_delay_hours as the
+    # :rescan_delay_hours bind (the ≥1h wait before a feed_update re-scan fires).
+    monkeypatch.setattr(
+        worker_config.settings, "worker_feed_update_rescan_delay_hours", 2.0
+    )
+    db = RoutingFakeDb()  # empty scan_targets → drain is a no-op
+    scanner, _ = _scanner(db, FakeLLM(structured=_handler(set())))
+
+    asyncio.run(scanner.drain(_abort()))
+
+    assert db.read_params("scan_targets") == [
+        {
+            "max_failures": worker_config.settings.worker_failure_max,
+            "rescan_delay_hours": 2.0,
+        }
+    ]
+
+
+def test_scan_targets_sql_has_feed_update_rescan_arm() -> None:
+    # Arm B of the target set: an AUTOMATIC row is re-judged against a settled
+    # feed_update version — a 'manual' row is NEVER selected by this arm.
+    sql = (
+        worker_scanner.SQL_DIR / "worker_scan_targets.sql"
+    ).read_text(encoding="utf-8")
+    assert "source = 'feed_update'" in sql  # arm B keys on a feed_update version
+    assert "curation_type = 'automatic'" in sql  # arm B excludes manual rows
+    assert "f.scan_status = 'pending'" in sql  # arm A (the first-scan path)
+    assert ":rescan_delay_hours" in sql  # the ≥1h settle wait
+    # arm B re-scans the SERVED run (latest completed), not the latest non-failed,
+    # so an in-flight running run never diverts the re-judge.
+    assert "latest_completed_run" in sql
+    assert "status = 'completed'" in sql
+
+
+def test_rescan_flips_accepted_to_rejected() -> None:
+    # A re-scan judges an auto row the SQL selected (e.g. a previously-accepted row
+    # a new feed_update made stale); the scanner writes whatever the new criteria
+    # yield — here a flip to 'rejected' with rejected_at stamped, in place.
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a")]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler(set()))  # 'a' now judged bad → rejected
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    row = _verdict_rows(db)[0]
+    assert row["verdict"] == "rejected"
+    assert row["rejected_at"] is not None
+
+
+def test_batch_exception_strikes_all_stays_pending() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a"), _candidate("b")]
+    db.ones["spec_latest"] = _criteria()
+
+    def boom(call: dict) -> tuple[ScanBatchResult, float]:
+        raise ProviderError("scan down")
+
+    scanner, cost = _scanner(db, FakeLLM(structured=boom))
+
+    asyncio.run(scanner.drain(_abort()))
+
+    # NO default-to-rejected: no verdict is written; every batch video is struck
+    # and left pending; cost is 0 for the failed batch.
+    assert "update_verdict" not in db.write_names()
+    assert _struck(db) == {"a", "b"}
+    assert "reset_failure" not in db.write_names()
+    assert cost.scans == [("gym-1", "run-1", 0.0, 2)]
+
+
+def test_missing_verdict_bumps_only_those_stays_pending() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a"), _candidate("b")]
+    db.ones["spec_latest"] = _criteria()
+    # 'b' gets no verdict from the model; there is no retry and no default-reject.
+    llm = FakeLLM(structured=_handler({"a"}, omit={"b"}))
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    assert len(llm.structured_calls) == 1  # no retry pass anymore
+    verdicts = {r["video_id"]: r for r in _verdict_rows(db)}
+    assert set(verdicts) == {"a"}  # only 'a' is verdicted
+    assert verdicts["a"]["verdict"] == "accepted"
+    assert _struck(db) == {"b"}  # 'b' struck, left pending (NOT rejected)
+    assert _reset(db) == {"a"}
+
+
+def test_hallucinated_ids_dropped() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a")]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a"}, hallucinate=True))
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    assert {r["video_id"] for r in _verdict_rows(db)} == {"a"}  # ZZZ dropped
+
+
+def test_rejected_stamps_rejected_at() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [_candidate("a"), _candidate("b")]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a"}))  # 'a' good, 'b' rejected
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    rows = {r["video_id"]: r for r in _verdict_rows(db)}
+    assert rows["a"]["verdict"] == "accepted" and rows["a"]["rejected_at"] is None
+    assert rows["b"]["verdict"] == "rejected"
+    assert rows["b"]["rejected_at"] is not None
+
+
+def test_text_only_prompt_has_structured_fields() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [
+        _candidate("a", disciplines=["boxing", "kickboxing"], facets={"gi": False}),
+    ]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a"}))
+    scanner, _ = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    call = llm.structured_calls[0]
+    # Text-only: no image is attached — the summary carries the visual detail.
+    assert call["image_urls"] is None
+    prompt = call["messages"][0]["content"]
+    assert "boxing, kickboxing" in prompt  # disciplines rendered
+    assert '"gi":false' in prompt  # facets rendered as compact JSON
+    assert "summary text" in prompt  # the summary, the primary signal
+    assert "worth surfacing" in prompt  # latest spec criteria in the prompt
+
+
+def test_per_gym_spec_and_cost() -> None:
+    db = RoutingFakeDb()
+    db.rows["scan_targets"] = [
+        _candidate("a", gym_id="g1", run_id="r1"),
+        _candidate("b", gym_id="g2", run_id="r2"),
+    ]
+    db.ones["spec_latest"] = _criteria()
+    llm = FakeLLM(structured=_handler({"a", "b"}))
+    scanner, cost = _scanner(db, llm)
+
+    asyncio.run(scanner.drain(_abort()))
+
+    # spec loaded once per gym; one scan cost row per gym keyed to its run.
+    assert len(db.read_params("spec_latest")) == 2
+    assert ("g1", "r1", 0.05, 1) in cost.scans
+    assert ("g2", "r2", 0.05, 1) in cost.scans

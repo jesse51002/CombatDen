@@ -3,23 +3,21 @@
 Python/Pydantic package. See `README.md` for what it does. (Formerly
 CustomYoutubeService — renamed when the scope expanded beyond YouTube.)
 
-> **Standalone by design.** This service owns the full gym-video lifecycle:
-> gym config authoring, video pool scraping + classification, feed scanning, and
-> a read-only API. Data lives in the **shared Supabase Postgres** (the `video_*`
-> tables defined in `../Database/`): the read API queries it, and the pipeline
-> scripts write it. The hand-authored gym configs stay git-tracked YAML
-> (`gyms/<id>.yaml`) and are loaded into SQL by `make sync-gyms`. All SQL lives in
-> `.sql` files read via `sql_loader` — never inline.
+> **Standalone by design.** This service owns the full gym-video lifecycle: gym
+> config authoring and the scrape + RAG-enrich + scan **background worker**. Data
+> lives in the **shared Supabase Postgres** (the `video_*` tables defined in
+> `../Database/`): the FastApiBackend queries it, the worker writes it, and
+> `make sync-gyms` loads the hand-authored gym configs (git-tracked YAML
+> `gyms/<id>.yaml`) into SQL. All SQL lives in `.sql` files read via `sql_loader`
+> — never inline.
 >
 > **The read API has been merged into the FastApiBackend** (`../FastApiBackend/src/videos`
 > — a re-authored port keyed by the real gym UUID, with a public slug-keyed
 > template catalog + a `presets` import that copies a template into a gym's real
 > prod tables; see `Business/pivots/2026-06-24-22-videoservice-api-merged-into-backend.md`).
-> The **CRM and the public theme browser now call that backend**, not this service.
-> This read API (`src/api`, port 8002, `video.combatden.net`) stays live only as
-> the source for the member **MobileApp**, which has not been repointed yet — once
-> it is, this read API can be retired. The **batch job** (scrape / classify / scan,
-> `scripts/`) and the gym-config YAML authoring remain owned here regardless.
+> The **CRM and the public theme browser call that backend**, not this service. The
+> **background worker** (`src/worker`, `make worker`) and the gym-config YAML
+> authoring are owned here.
 
 ---
 
@@ -81,8 +79,7 @@ from, not a per-gym value.
   for this monorepo (imports, enums, type hints, async, error handling). Apply
   those here unless this file overrides. Its `DirectDatabasePool` + `sql_loader`
   are the patterns this service copies (`src/shared/`).
-- `../ThemeService/` — modelled on its read-only `src/api`. Each gym's YAML
-  stores its chosen ThemeService design id.
+- `../ThemeService/` — each gym's YAML stores its chosen ThemeService design id.
 
 ---
 
@@ -108,19 +105,20 @@ from, not a per-gym value.
   prompt text.
 - **Never inline SQL in code.** Every query lives in its own `.sql` file and is
   read at use via `sql_loader.load_sql` (copied from `../FastApiBackend/` into
-  `src/shared/`). Read-path queries live in `src/api/sql/`; write-path queries in
-  `scripts/sql/`. Use `:param` bind params for values; `{var}` only for
-  structural parts (e.g. a WHERE clause).
+  `src/shared/`). The worker's pipeline queries live in `src/worker/sql/`; the
+  YAML-sync scripts' in `scripts/sql/`. Use `:param` bind params for values;
+  `{var}` only for structural parts (e.g. a WHERE clause).
 
 ---
 
 ## Async everywhere
 
 Every service method is `async`, matching the monorepo's FastAPI convention. The
-read path does real async I/O against Postgres via SQLAlchemy + asyncpg — see
+worker does real async I/O against Postgres via SQLAlchemy + asyncpg — see
 `src/shared/database.py` (`DirectDatabasePool`, copied from `../FastApiBackend/`).
 Do not introduce blocking I/O on a hot path. JSONB columns are read tolerantly
-(`_as_list` handles the driver returning either a decoded list or a JSON string).
+(`src/shared/util/jsonb.py`'s `as_list` handles the driver returning either a
+decoded list or a JSON string).
 
 ---
 
@@ -136,17 +134,13 @@ never a bare `python3` or the raw `.venv/bin/*` entrypoints.
 
 ## Tests
 
-Run the suite with `make test`. Two tiers:
-
-- **Fast unit tests** — no DB. Router/transform logic runs against the in-memory
-  `tests/fakes.py` `FakeVideosService`, plus the pure-logic tests (big_group,
-  parent_gym_type, avatar_fallback, models, …).
-- **DB-integration tests** (`tests/test_integration_db.py`) — exercise the real
-  `.sql` against a live Postgres. They **skip automatically unless `DATABASE_URL`
-  is set**, so `make test` stays green on a machine without a DB.
-
-Round-trip every gym file with `make gym-check GYM_ID=all` before committing.
-(The scrape/scan tests are skipped pending their SQL-writer migration.)
+Run the suite with `make test`. No live DB is required — every test is pure or
+runs against an in-memory fake. The worker stages are covered by
+`tests/test_worker_*.py` (pure transforms, funnel, enricher, scanner, the tick,
+and the resource lock) against `tests/worker_fakes.py` — no DB or provider key
+needed. Pure-logic tests (big_group, parent_gym_type, schema round-trips, the
+DB-URL normaliser, …) round out the suite. Round-trip every gym file with
+`make gym-check GYM_ID=all` before committing.
 
 ---
 
@@ -155,82 +149,253 @@ Round-trip every gym file with `make gym-check GYM_ID=all` before committing.
 - Do not hardcode gym-specific names, disciplines, or search prompts in Python.
   Anything specific to one gym belongs in `gyms/<gym_id>.yaml`.
 - Do not add `dict[str, Any]` escape hatches to dodge strict typing.
-- Do not add scraping or scoring calls to `src/api/` or `schema/` — fetching
-  lives in `scripts/scraper/`, scanning in `scripts/scan/`. The read path only
-  *reads* (via `.sql` in `src/api/sql/`); every write goes through the pipeline
-  scripts' `VideoDbWriter` (`scripts/shared/video_db_writer.py`).
+- Do not add scraping or scanning calls to `schema/` — the whole
+  scrape → funnel → enrich → scan → feed-write pipeline lives in `src/worker/`.
+  There are two write paths into the shared Postgres: the **worker** writes the
+  pool + RAG + feed + runs + cost log through its own `src/worker/sql/`, and
+  `make sync-gyms` (which also runs `scripts.import_yaml`) loads the YAML gym
+  configs + the pool + the **template RAG sidecar** (`video_rag/` → `video_rag`)
+  through `scripts/shared/video_db_writer.py` (`scripts/sql/`). The one-time
+  `make enrich-templates` run is NOT a DB write path — it READS the pool and WRITES
+  the untracked-local sidecar file that `import_yaml` then loads.
 
 ---
 
 ## Jobs / workflow
 
-Data lives in Postgres; the gym configs are authored as YAML and synced in. Each
-job is a `scripts/` module + `make` target:
+Two kinds of job. **Gym-config tooling** (author YAML + load it into SQL) runs as
+`scripts/` modules + `make` targets; the **content pipeline** runs as the background
+worker:
 
 1. **Make/edit a gym** (`make gym-check GYM_ID=<id|all>`) — author/update
    `gyms/<gym_id>.yaml` and validate it round-trips the `Gym` schema (YAML-only).
 2. **Sync gyms → SQL** (`make sync-gyms GYM_ID=<id|all>`) — upsert the authored
-   gym files into `video_gym` + its query/class/reward child tables, then load
-   the existing `videos/` pool + each gym's good/rejected feeds into SQL (pool
-   upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It runs the
-   import with `--skip-cost-log`, so the append-only `cost_log.yaml` is **not**
-   imported here (re-running would duplicate ledger rows); load it once by hand
-   with `poetry run python -m scripts.import_yaml.run` if you need the history.
-3. **Scrape + classify** (`make scrape`) and **Scan** (`make scan`) — fetch +
-   tag the pool, and run the per-gym keep/drop scan. ⚠️ **Not yet migrated to
-   SQL**: these still target the removed YAML write methods and are pending the
-   scrape/scan → SQL rewrite; their tests are skipped until then.
-
-Every write goes through `scripts/shared/video_db_writer.py` + `scripts/sql/`
-(no inline SQL). The write scripts pick their DB via the **`ENV_FILE`** flag
-(default `.env`; `ENV_FILE=.env.prod` targets prod) — see `scripts/shared/db_target.py`.
+   gym files into `template_gym` + its query/class/reward child tables, then load
+   the existing `videos/` pool + the **template RAG sidecar** (`video_rag/` →
+   `video_rag`, see below) + each gym's good/rejected feeds into SQL (pool +
+   video_rag upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It
+   runs the import with `--skip-cost-log`, so the append-only `cost_log.yaml` is
+   **not** imported here (re-running would duplicate ledger rows); load it once by
+   hand with `poetry run python -m scripts.import_yaml.run` if you need the history.
+   These write through `scripts/shared/video_db_writer.py` + `scripts/sql/` and
+   pick their DB via the **`ENV_FILE`** flag (default `.env`; `ENV_FILE=.env.prod`
+   targets prod) — see `scripts/shared/db_target.py`.
+3. **Enrich the templates → RAG sidecar** (`make enrich-templates`) — a **one-time,
+   PAID** run that builds the artifact step 2 loads. The unified feed gates on a
+   `video_rag` row (an embedding) being present, so a freshly-imported preset feed
+   would look empty until the worker's enrich sweep caught up. This run enriches
+   the **~18.9k unique template videos** referenced in `template_gym_feed` (both
+   verdicts) ONCE — reusing the worker enricher's per-video unit
+   (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call fed a
+   per-chunk BATCHED Apify transcript fetch — usually a no-op, templates are ~100% cached)
+   plus a summary embedding — and appends each to
+   the **untracked-local sidecar** `video_rag/video_rag.jsonl` (base64-packed
+   float32 embeddings; ~330 MB at 3072 dims, distributed to prod via S3 exactly like `videos/`).
+   `import_yaml` then reloads it into `video_rag` on every sync (upsert by
+   `video_id`, `ON CONFLICT DO NOTHING` — SEEDS, never clobbers a live worker
+   enrichment). Because `video_rag` is keyed by `video_id` and shared across the
+   template pool AND every real gym, seeding it for template videos enriches every
+   gym that later imports a preset **for free**. It only READS the DB (the pool
+   fields) and WRITES the sidecar file — never mutates the DB — and is
+   resumable/idempotent (skips videos already in the sidecar). Needs the keys the
+   configured `enrich_model` + `embedding_model` use — both Gemini now, so just
+   `GEMINI_API_KEY` — plus `APIFY_TOKEN` for the lazy transcript fetches, and a DB
+   already synced (pool + `template_gym_feed` loaded). The sidecar format is owned by
+   `scripts/shared/video_rag_sidecar.py`. **Smoke-test first:** `make
+   enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"` runs the whole
+   enrich→embed→sidecar pipeline on ONE video (into a throwaway root) to prove it
+   works before the full paid run.
+4. **The content worker** (`make worker` → `python -m src.worker.run`) — the
+   decoupled scrape / enrich / scan step worker (cleanup → finalize → one drained
+   step per tick), detailed in the next section. It **replaced** the old standalone
+   `scripts/scraper` + `scripts/scan` jobs (both deleted, along with
+   `src/classification`); it writes through its own `src/worker/sql/`, not
+   `VideoDbWriter`.
 
 ---
 
-## Read-only API (`src/api/`)
+## The background worker (`src/worker`)
 
-Gym-id-keyed, read-only, querying the `video_*` tables. Run with `make api`
-(port 8002); requires `DATABASE_URL` in `.env`.
+A standalone long-running process — `python -m src.worker.run` (`make worker`) — that
+keeps every gym's feed and the shared RAG layer current. **Not a web server, no port.** It
+is the video half of the combined `deploy/` container (the other half is FastApiBackend's
+uvicorn). **There is no job queue and no control surface** — the worker is fully
+self-scheduling: it derives its own work each tick straight from timestamps already in the
+schema (`video_run`, `gym_video_spec`, `gym_video_feed`). The FastApiBackend never triggers
+a run and there is **no worker status/control endpoint** — the two systems never call each
+other; the backend only *reads* the same `video_*` rows the worker writes. The flow is
+diagrammed in `worker.mermaid` at the VideoService root (a docs task owns that file; keep
+this section and the diagram in agreement, and edit the diagram with the `mermaid-creation`
+skill).
 
-- `GET /gyms` — a paginated page of the gym browser (`GymsPage`); `?query` /
-  `?limit` / `?offset`.
-- `GET /gyms/{gym_id}` — full `GymDetail` (spec, classes, rewards). The mobile
-  app loads this once on selection.
-- `GET /gyms/{gym_id}/videos` — paginated curated feed, served in
-  `relevance_index` order. `?video_type` / `?big_group` filter (mutually
-  exclusive → 400); `?rejected=true` serves the rejected list.
-- `GET /gyms/{gym_id}/videos/preview` — one-shot "All" preview (a few videos
-  per genre). `?rejected=true` previews the rejected list.
-- **Channel-avatar backfill (both feed endpoints).** The pool has no channel
-  avatars (Apify never returned them), so every `channel_avatar_url` is empty. At
-  serve time an empty avatar is filled with one of the gym's own instructor
-  headshots (`gym.classes[].instructor_image_url`), picked deterministically per
-  video (so it never flickers / stays cacheable). A real avatar, or a gym with no
-  classes, is left untouched. Pure read-path transform. See
-  `src/api/service/avatar_fallback.py`.
-- `/viewer` — internal dev-only HTML viewer (`viewer_router.py`); never expose
-  publicly. ⚠️ Still bundled in the App Runner image, so it's reachable at
-  `https://video.combatden.net/viewer` (read-only, but serves the rejected list);
-  gating it for prod is a pending decision — see `../DEPLOYMENT.md`.
+**The re-architecture: independent DB-backed steps, one per tick.** A tick no longer runs
+one gym end-to-end. Instead each step reads its own work from the DB and is idempotent, so
+the steps are decoupled and crash recovery is free. Feed rows are written at **scrape** time
+as `pending`; a global **enrich** sweep gives every un-enriched video a `video_rag` row; a
+global **scan** sweep settles each `pending` row to `accepted`/`rejected`.
 
----
+### The tick
 
-## Production deployment (read-only API)
+`run.py` is a loop: `WorkerService.run_tick`, then wait `worker_poll_seconds` (60). Each
+tick takes the global TTL lock `"video_worker_run"` on the shared `resource_locks` table
+(single-shot, non-blocking — a second worker no-ops the tick; TTL `worker_lock_ttl_seconds`
+1800s (30 min — long holds are expected), renewed by a `worker_heartbeat_seconds` (300s)
+heartbeat that MUST stay well under the TTL; a lost heartbeat sets the abort flag and the
+current drain stops between videos/batches/gyms). Then, under one lock hold, IN ORDER:
 
-The read-only API (`src/api/main.py`, `make api`, port 8002) ships to **AWS App
-Runner** as a Docker image at `https://video.combatden.net`. See `../DEPLOYMENT.md`
-for the full runbook (ARNs, DNS, redeploy, pause/resume).
+1. **Cleanup** (always, cheap) — `DELETE FROM video WHERE failure_count >= worker_failure_max`
+   (3). The FK cascades remove the video's feed rows, `video_rag` row, and member recs. Runs
+   FIRST so the finalize step's denominators reflect the shrunk feed.
+2. **Finalize** (always, cheap) — complete/fail every `running` run purely from its feed
+   rows (below). Runs are long-lived now, so a separate step decides when one is done.
+3. **One heavy step, first-with-work, drained fully** — check **scan**, then **enrich**, then
+   **scrape** (backlog first; scrape is the quota-bound ingest, so it goes last). The first
+   step that has work is DRAINED COMPLETELY this tick, then the tick ends. If none has work
+   the tick ends.
 
-- The `Dockerfile` builds a small `python:3.13-slim` image with **only `src/` +
-  `schema/`** — no baked data (the pool lives in Postgres now). It **requires
-  `DATABASE_URL`** at runtime (App Runner service env); a raw `postgresql://`
-  Supabase URL is accepted (normalised to asyncpg by `src/shared/database.py`).
-- `make docker-build` / `make ecr-push` build + push + trigger a redeploy;
-  `make pause` / `make resume` stop / start the deployed App Runner service
-  (a cost toggle for the live instance).
-- The pipeline scripts stay local and pick their DB via **`ENV_FILE`** (default
-  `.env`; `ENV_FILE=.env.prod` → prod). Prod helper: `make sync-gyms-prod
-  GYM_ID=all` (sync + pool/feed import against prod). Keep prod secrets in `.env.prod`
-  (gitignored). **Never `supabase db pull` while local schema is ahead of prod** —
-  it generates destructive migrations that drop the new tables.
-- Only the **read path** is containerized; scrape / scan / sync / import stay local.
+**There is NO orphan rule.** `running` is a legitimate long-lived multi-tick state (a run
+full of `pending` rows the sweeps are still chewing through), so a `running` run is never
+treated as dead. Crash recovery is free — every step is DB-derived + idempotent, and the
+finalize 0-row / TTL guards catch any pathologically stuck run.
+
+### Finalize (complete / fail runs from their feed rows)
+
+Two SQL passes, IN ORDER (completion beats the TTL fail):
+
+1. **complete** (`worker_finalize_complete.sql`) — a `running` run whose **terminal**
+   fraction reaches `worker_run_complete_fraction` (0.9) is completed. terminal = feed rows
+   with `scan_status IN ('accepted','rejected')`; denominator = ALL the run's feed rows.
+2. **fail** (`worker_finalize_fail.sql`) — a `running` run with **zero** feed rows older
+   than `worker_zero_row_grace_hours` (1h) → `failed`, `error='no feed rows'`; else a run
+   older than `worker_run_ttl_hours` (24h) that never reached the completion fraction →
+   `failed`, `error='run ttl exceeded'`.
+
+### The lifecycle: pending → enriched → scanned
+
+- **scrape** (per-gym, quota-bound — the ONLY step that opens runs, so the run caps bound
+  exactly the quota-limited work). It selects the due gym (`worker_select_due_gym.sql` — due
+  on a newer `admin_update` spec version than the last **COMPLETED** run (tier 1 — a FAILED
+  scrape does NOT suppress this trigger, so a transient error is retried, bounded by the run
+  caps) or the weekly refresh floor (tier 3, vs the last run of any status); a manual
+  `gym_video_feed` curation triggers no SCRAPE here — the feed-learning re-scan off a manual
+  curation is the SCAN step's arm B (below), an in-place re-judge of existing feed rows, not a
+  new scrape run; the query also excludes any gym with a `running`
+  run — never two in-flight runs. A scrape that raises after the run is opened marks that run
+  `failed` (`worker_fail_run.sql`) so no phantom `running` run strands the gym), loads the
+  latest spec + incremental context (`WorkerSpec`),
+  opens a `video_run` (`running`),
+  runs the **YouTube Data API v3** scrape (two calls per query, merge-upserted into the
+  `video` pool — `source_queries` accumulate, `tag`/`disciplines`/`transcript` never wiped),
+  and picks candidates via the two-tier **funnel** (tier-1 query+discipline overlap incl.
+  untagged fresh scrapes with incremental exclusion, tier-2 RAG probe up to
+  `scan_budget_per_run`). Then the **feed write** (`WorkerScraper.write_feed`): carry the
+  previous completed run's rows forward FIRST (ALL rows incremental / manual-only fresh —
+  `worker_carry_forward.sql`, which also carries each row's `scanned_at` watermark so arm B
+  does not re-judge the whole carried feed against an already-consumed `feed_update`), then
+  insert every candidate as a `pending` row
+  (`worker_insert_pending.sql`, `curation_type='automatic'`) `ON CONFLICT DO NOTHING` so a
+  carried row always wins. The run is left `running`; nothing is enriched, scanned, or
+  completed here.
+- **enrich** (global, gym-agnostic sweep — `WorkerEnricher.drain`). Targets
+  (`worker_enrich_targets.sql`) = videos that LACK a `video_rag` row and are under the strike
+  ceiling, drawn from each gym's **latest non-failed run** (`pending`/`accepted` rows — skip
+  `rejected`; `accepted`-without-rag are imported presets / pre-RAG carry-forwards that must
+  get an embedding) ∪ ALL owner-section rows (`video_run_id IS NULL`). Per chunk: a BATCHED
+  Apify transcript fetch of the chunk's cache-misses in ONE actor run (miss → placeholder,
+  NOT a strike), then per video ONE multimodal `enrich_model` call
+  (thumbnail + metadata + transcript slice → genre `tag`, disciplines, a **detailed**
+  summary, facets), tags written to `video`, summaries batch-embedded into `video_rag`
+  (concurrency `worker_enrich_concurrency`, 8). The enrich call is the ONLY step that sees
+  the thumbnail + transcript — its summary must fold in the visual + content detail because
+  scan reads only that summary (below).
+- **scan** (global sweep, per-gym batches, **TEXT-ONLY** — `WorkerScanner.drain`). Targets
+  (`worker_scan_targets.sql`) = enriched feed rows (video HAS a `video_rag` row) under the
+  strike ceiling, matching EITHER arm: **(A)** a `pending` row in the gym's **latest non-failed
+  run** (its first verdict), OR **(B)** the **feed-learning RE-SCAN** — a `curation_type='automatic'`
+  row in the gym's **latest COMPLETED (served) run** (arm B targets the served run, NOT the
+  latest non-failed, so an in-flight `running` run never diverts the re-judge from what members
+  see) whose `scanned_at` predates a gym `feed_update` `gym_video_spec`
+  version that has SETTLED ≥ `worker_feed_update_rescan_delay_hours` (1h) (`created_at <= now()
+  - the delay` AND `created_at > COALESCE(scanned_at, '-infinity')`). Per gym: load the
+  **latest** spec at scan time (judge against current criteria — the `feed_update` folded in the
+  owner's manual keep/avoid signals), batch by `scan_batch_size` (12), and run keep/drop on each
+  candidate's **summary + structured enrich outputs** (genre, disciplines, facets) — NO thumbnail
+  is re-sent, since enrich already folded the visual detail into the summary. Text-only is cheaper
+  AND matters because scan runs per-gym (a video in many feeds is scanned many times) while enrich
+  runs once per video. Verdicts are written by UPDATE (`worker_update_verdict.sql`) keyed by each
+  row's OWN `video_run_id` (arm A and arm B can select rows from different runs for the same gym)
+  and guarded on
+  `curation_type <> 'manual'` — an owner's explicit keep/reject verdict is never overwritten, and
+  a row is never flipped to `pending` (which would blank it from the served feed); the UPDATE
+  stamps `scanned_at = now()` so the same `feed_update` never re-triggers a row (arm B flips
+  accepted↔rejected only when the judgment changes). This zero-downtime in-place re-scan is the
+  worker half of the **`feed_update` auto-learn loop** — its backend half is the immediate,
+  coalesced auto-refine that mints the `feed_update` version on a manual curation (see the
+  FastApiBackend `videos` domain).
+
+### The strike / cleanup mechanic (`video.failure_count`)
+
+Hard errors only, and ONLY the expensive multimodal pass. In the enrich sweep a video whose
+multimodal call raises is bumped (`worker_bump_failure.sql`); a chunk whose EMBED call raises is
+**NOT** struck — the multimodal enrich already succeeded, so those videos are left un-enriched
+(no `video_rag` row) to retry the embed next sweep, since striking them for an embed flake would
+push an already-enriched video toward deletion. In the scan sweep a batch whose LLM call
+raises bumps EVERY video in the batch and leaves the rows `pending` (retried next sweep — **no
+default-to-rejected**), and a video the model omits from an otherwise-successful batch is
+bumped alone and stays `pending`. A missing transcript is **not** a strike. On success —
+enriched, or verdicted — the counter is reset to 0 (`worker_reset_failure.sql`). The cleanup
+step deletes a video at `worker_failure_max` (3) strikes.
+
+### Cost logging (`cost_log`, attributed per step)
+
+Spend goes to the generic **`cost_log`** table (shared across cost-bearing systems — see
+`../Database/CLAUDE.md`), each row stamped `source='video'`, `stage`, `model` (NULL for the
+free `search` stage and the Apify `transcript` stage), `cost_usd`, and a `breakdown` map.
+Attribution differs by step: **scrape** logs `search` (free; quota-units diagnostic) +
+`embed` (tier-2 probe), both keyed to that gym + run; **enrich** logs `transcript` +
+`enrich` + `embed` as **pool-level** rows (`gym_id` and `run_id` NULL — a swept video is
+shared across gyms, so per-gym attribution would be arbitrary); **scan** logs one `scan` row
+per gym per sweep, keyed to that gym + its latest run. **Cost logging is durable across abort:**
+the enrich sweep and each gym's scan accumulate spend and flush the cost row in a `finally`, and
+a failing scrape logs its incurred cost in a `finally` too — so an abort (lost lease) or an
+exception mid-step still records the dollars already spent rather than dropping the cost row.
+
+### Settings + the embedding contract
+
+Worker knobs live in `src/worker/worker_config.py` (`WorkerSettings`) — the models above,
+scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
+`worker_system_run_cap` (5), `worker_weekly_refresh_days` (7)), the strike ceiling + run finalize
+(`worker_failure_max` (3), `worker_run_complete_fraction` (0.9),
+`worker_run_ttl_hours` (24), `worker_zero_row_grace_hours` (1)), the feed-learning
+re-scan wait (`worker_feed_update_rescan_delay_hours` (1.0) — how long a `feed_update`
+spec version must settle before the scan sweep re-judges the gym's auto feed rows against
+it, threaded as the `:rescan_delay_hours` bind in `worker_scan_targets.sql`), budgets
+(`scan_budget_per_run`, `scan_batch_size`, `worker_enrich_batch_size` (64 — enrich sweep
+chunk == embed batch), `rag_probe_top_k`,
+`enrich_transcript_char_budget`), concurrency (`worker_scrape_concurrency`,
+`worker_enrich_concurrency` — the scan sweep is strictly sequential, no concurrency knob), the lock/loop
+timers, the LLM client knobs the worker's `LiteLLMClient` construction sites pass down
+(`llm_request_timeout_seconds` (90), `llm_num_retries` (5), `llm_retry_backoff_seconds`
+(5, 15) — `LiteLLMClient` itself only owns the module-level *defaults* used when a
+caller builds one with no overrides), the `youtube_api_key` (YouTube Data API v3,
+discovery + metadata) + `worker_youtube_timeout_seconds` (30s), and the
+Apify transcript knobs — `apify_token`, the batched actor pricing
+(`apify_transcript_cost_per_transcript_usd` $0.0005 + `apify_actor_start_cost_usd`
+$0.001), `apify_transcript_batch_size` (64), and the LONG/conservative
+`.call()` bounds `apify_run_wait_seconds` (900s) + `apify_fetch_deadline_seconds`
+(1200s) that stop the batched transcript fetch from hanging the worker (the enrich
+sweep batch-fetches a chunk's missing transcripts in ONE
+`supreme_coder/youtube-transcript-scraper` run). It reads `DATABASE_URL` from
+`src/shared/config.py` and the LLM provider keys
+(`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from `src/core/config.py` — three
+`Settings` classes over the one `.env`.
+
+The **embedding contract is cross-service.** The worker embeds with
+`embedding_model` (`gemini/gemini-embedding-001`, native 3072) into `video_rag.embedding` typed
+`vector(3072)`; `run.py` asserts `embedding_dim == 3072` at startup. The FastApiBackend RAG
+readers (member recs + personalized feed) rank against those same `video_rag` embeddings, so
+both sides pin the **same model + `vector(3072)` dimension** (`settings.video_embedding_dim`
+on the backend). The embedding is stored full precision; only the `video_rag` HNSW index runs on
+a `halfvec(3072)` cast (the `vector` type can't HNSW past 2000 dims), so the worker's Tier-2 funnel
+probe casts to `halfvec` to use it. Changing the model/dim is a one-way door — a coordinated
+re-embed of BOTH sides — and changing one without the other silently breaks similarity.

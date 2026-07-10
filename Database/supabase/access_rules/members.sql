@@ -41,6 +41,9 @@ REVOKE UPDATE (member_id, user_id, gym_id, created_at) ON TABLE members FROM aut
 -- mixes client-writable identity with service_role billing, gated per-column
 -- instead of per-table (see Database/CLAUDE.md). The unified table replaces the
 -- former service_role-only member_billing_profile table.
+-- The video-taste RAG profile columns (video_profile_*) are likewise
+-- service_role-written (built by the backend RAG path) and revoked here so a
+-- member can't poison their own taste embedding via direct PostgREST.
 REVOKE INSERT, UPDATE (
     photo_url,
     phone,
@@ -58,7 +61,11 @@ REVOKE INSERT, UPDATE (
     card_last_four,
     card_exp_month,
     card_exp_year,
-    total_monthly_recurring_price
+    total_monthly_recurring_price,
+    video_profile_summary,
+    video_profile_embedding,
+    video_profile_embedding_model,
+    video_profile_built_at
 ) ON TABLE members FROM authenticated;
 
 -- Filtered billing view: read-only for clients (writes go to the members

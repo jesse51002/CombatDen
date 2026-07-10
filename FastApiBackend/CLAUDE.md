@@ -476,22 +476,308 @@ how-to-work-here facts belong here:
 
 ## `videos` domain (`src/videos/`)
 
-Hosts the LLM-authored video spec + the conversational agent. The **full model** —
-append-only versioned spec (readers use the `gym_video_spec_latest` view, never the raw
-table), the three version `source`s, the zero-tool agent and its deterministic
-accept → diff-guard → query-gen → save path, the litellm-vs-Pydantic-AI split, the
-endpoints, schemas, SQL, and key files — lives in the **`video-spec-guide` skill**. Read it
-before touching this domain.
+The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
+agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
+(all `verify_gym_employee`-gated EXCEPT the member rec + rec-click routes, which are
+`verify_can_view_member`):
 
-How-to-work-here that isn't (only) in the skill:
+| Route | What it does |
+|---|---|
+| `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
+| `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
+| `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
+| `GET /api/v1/gyms/{id}/members/{member_id}/video-rec` | The member's next single rotating-category RAG rec — rotates the served genre by the member's served-rec count, records the pick, returns `{rec_id, category, video}` (`verify_can_view_member`; 404 when the member isn't in the path gym OR no category yields a video) |
+| `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 
-- The backend pins **Python 3.13** (`requires-python = ">=3.13,<3.14"`) because litellm won't
-  install on 3.14 — this constrains the whole backend env, not just videos.
-- **One-way layering:** `VideoAgentService` → `VideosService` (facade) → the regular services;
-  the regular services never call the agent back.
-- **Ownership guardrail:** the template catalog lives in the **presets** domain
-  (`PresetsTemplateService`), showcase reads in the **theme** domain — NOT in videos. Don't add
-  either here.
+**ONE unified feed read backs everything (`VideoFeedService.load_feed_page`).** `GET /api/v1/gyms/{id}/videos`
+(`verify_gym_employee`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
+COMPLETED run — there is **no owner/source param**. It serves **only enriched-AND-accepted** videos:
+the SQL **INNER JOIN**s `video_rag` (the enriched-only gate) so a row shows only once it has an
+embedding, and `?rejected` selects `scan_status` `accepted` vs `rejected`. `?member_id` is a read-only
+ranking hint (the candidate set is always the path gym's feed, so it can't leak — a member-facing route
+is a future concern, this stays staff-facing). **This same read backs the member rec** (`limit=1`,
+filtered to one genre).
+
+**Ranking — one axis, two σ-scaled nudges** (all in `videos_load_feed_page.sql`, wrapped in a CTE so a
+window stddev is available):
+- `axis` = cosine distance to the member embedding (`r.embedding <=> CAST(:member_embedding AS vector)`)
+  when one is bound, else gym `relevance_index`. A NULL `:member_embedding` is detected via
+  `CAST(:member_embedding AS text) IS NULL` (mirroring the CAST-to-text/CAST-to-vector pattern so
+  asyncpg binds a NULL cleanly — do NOT split into two SQL files for the null-embedding case).
+- `sigma` = `COALESCE(stddev_samp(axis) OVER (), 0)` over the whole candidate set.
+- `penalty_units` = `SUM(power(0.5, age_seconds / :half_life_seconds))` over the member's prior serves of
+  this video (`member_video_recs`), 0 rows when `:member_id` is NULL — a just-served video ≈ 1, an old
+  serve ≈ 0.
+- `adjusted` = `axis − owner·:bump_fraction·sigma + penalty_units·:bump_fraction·sigma`, `ORDER BY
+  adjusted ASC, relevance_index ASC, video_id ASC`. Owner videos nudged NEARER, already-served videos
+  nudged FARTHER, symmetric and σ-scaled. The penalty sums over `member_video_recs.recommended_at`
+  (SERVE time, no `clicked_at` filter — the rotation deliberately relies on serve-decay instead of an
+  already-served anti-join, so it is a served/recency penalty, not a "watch" one). Two `Settings`:
+  `video_feed_bump_sigma_fraction` (0.10) and `video_served_penalty_half_life_days` (7.0, ×86400 →
+  `:half_life_seconds`), injected into `VideoFeedService` (no `settings` import — DI constructor args).
+
+**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_employee`,
+`load_owner_videos` / `videos_load_owner_videos.sql`): owner-section rows only, **LEFT JOIN** `video_rag`
+(NOT the enriched gate) exposing `enriched` so the CRM can badge "processing…", `ORDER BY curated_at DESC
+NULLS LAST`. An owner-added video is visible here the INSTANT it's added — before enrichment — which the
+enriched-gated served feed can't show. `GymVideoCard` carries `video_id` (required), `owner_added`
+(feed selects `video_run_id IS NULL AS owner_added`), and `enriched` (default `True`; only the owner
+listing sets it `False`).
+
+There is **no semantic-search route** — it was removed (zero callers).
+
+**Agent interaction model — the agent does ONLY conversation; save/query-gen are deterministic.**
+
+The agent has **zero tools**. It converses to propose a spec; its proposal output
+(`SpecProposal`) **always** pairs a short chat `message` with the criteria `draft` (criteria
+only: disciplines + keep/avoid descriptions), so a proposal is never silent — the message is
+appended to the chat while the criteria show in the highlighted panel. When the owner presses Accept, the frontend sends
+`accepted_spec` in the next `AgentTurnRequest` and the backend commits it deterministically:
+diff guard → query generation → save. The agent is then run on a short outcome note so it can
+acknowledge and invite further changes (the conversation stays open, `saved=True`).
+
+**Services (flat in `service/`):**
+
+- **`VideoSpecService`** (`video_spec_service.py`) — spec DB read/write: `load_latest`,
+  `save_version(gym_id, draft, queries, *, source)`. `queries` is a separate arg — never in the draft.
+- **`VideoQueryGenerator`** (`video_query_generator.py`) — LLM structured query gen: `generate(disciplines, videos_desc, avoid_desc, count)`. A **two-call** flow: call 1 researches the niche's content landscape (`LandscapeResult` — channels / creators / series, hallucination tolerated, never validated), call 2 turns criteria + that rendered landscape into queries (roughly one third landscape-targeted, the 5-cluster spread still governs the whole set). `count` is required — `VideoSpecAuthoring` injects `settings.video_query_count`.
+- **`VideoSpecAuthoring`** (`video_spec_authoring.py`) — shared deterministic commit: diff guard → query gen → save.
+  `commit(gym_id, criteria, *, source) -> VideoSpecView | None`. Returns `None` when criteria are unchanged.
+  It only saves the new version — there is no enqueue step. An `admin_update` version it just saved is
+  picked up by the VideoService worker on its own next tick (the worker derives the due gym from
+  timestamps; see the VideoService CLAUDE.md).
+- **`VideoFeedRefiner`** (`video_feed_refiner.py`) — LLM feed→criteria refine; delegates commit to `VideoSpecAuthoring`.
+
+**The `feed_update` auto-learn loop — immediate coalesced auto-refine on manual curation.**
+The moment a gym owner manually curates the feed, the spec auto-learns and the VideoService worker
+prunes/surfaces similar videos within ~2h, with zero feed downtime. The BACKEND half is a
+**fire-and-forget, per-gym-coalesced runner**, **`VideoFeedRefineRunner`**
+(`video_feed_refine_runner.py`) — mirrors `MemberVideoProfileRefreshRunner` (a `ClassVar` task set +
+done-callback crash logger + `drain()` in the `main.py` lifespan), plus `ClassVar` in-flight + **dirty**
+gym sets: `start(gym_id)` fires `VideoFeedRefiner.refine_from_feed` detached, and when a refine for that
+gym is already in flight it DROPS the fire but marks the gym **dirty**; when the in-flight refine finishes,
+a dirty gym gets exactly ONE follow-up refine (which reloads and folds any signal that landed mid-flight).
+This closes a lost-signal hole — a curation arriving during a refine is dropped by the in-flight guard AND,
+once the refine commits a `feed_update` version, treated as consumed by the `MAX(spec.created_at)`-anchored
+signals query, so without the dirty re-run the last signal of a burst could be lost. So a burst of N rapid
+rejects → at most one in-flight refine + one coalesced follow-up (two refines), never N, never a dropped
+last signal. A refine failure NEVER surfaces to the curation caller. It is fired at **router-level
+composition** (keeps `VideoFeedService` decoupled from the runner) from the **reject** (`DELETE …/videos/{id}`
+with `owner=False`) and **keep** (`POST …/videos/{id}/keep`) endpoints **ONLY** — NOT owner-add
+(`POST …/videos`) and NOT owner-remove (`owner=True`), which aren't keep/avoid signals — and **only when the
+curation actually changed a served row** (the reject/keep service returns whether a row was curated; a no-op
+reject/keep, e.g. keeping an already-accepted video, fires no refine). The refine mints a `feed_update`
+`gym_video_spec` version from the gym's unconsumed `curation_type='manual'` signals; the WORKER half is
+the scan sweep's in-place re-scan (arm B — re-judges the gym's auto feed rows against the new criteria
+≥`worker_feed_update_rescan_delay_hours` (1h) later; the settle wait lives in the worker, see the
+VideoService CLAUDE.md). DI provider: `video_feed_refine_runner` (Singleton, injected into the router).
+
+**`VideosService` (`videos_service.py`) is a PURE-DELEGATING domain FACADE** — composes `VideoFeedService`,
+`VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`,
+`VideoRecsService`, and `VideoRecClickService`; every method is a one-liner to a concern
+(no business logic in the facade, and no business logic in the router either). Exposes: `load_latest_spec`,
+`load_gym_spec` (the legacy `GymVideoSpecView` — pure delegation to
+`VideoSpecService.load_latest_gym_view`, which owns the `disciplines`→`gym_type` projection),
+`save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
+`get_video_rec`, `record_rec_click`, plus all feed operations
+(`load_feed_preview` — the windowed per-genre "All" preview, `load_pool_videos` — used by the presets
+template preview, `load_feed_page` — which takes the optional `member_id`,
+`load_owner_videos`, owner add/remove/keep). The conversational agent uses it for
+the accept-path and first-turn state seeding (plain calls, not tools). Template catalog reads live
+in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
+
+**The "All" preview is ONE windowed query, in the service — not the router.** `GET
+/api/v1/gyms/{id}/videos/preview` (`verify_gym_employee`) returns a `GymFeedSection` list (one per genre,
+each capped to `per_tag`). `VideoFeedService.load_feed_preview` runs `videos_load_feed_preview.sql` — a
+`ROW_NUMBER() OVER (PARTITION BY tag ORDER BY relevance_index …) WHERE rn <= :per_tag` window over the
+SAME served candidate set as the feed page (no load-the-whole-feed-then-Python-slice); the router just
+wraps the sections in `GymFeedPreview`.
+
+**Serve-path invariant (feed + rec):** every "latest run" subselect on the serve path filters
+`AND status = 'completed'` so a mid-flight `running` run never becomes latest and blanks the feed —
+this covers the unified feed page (which the rec reuses at `limit=1`) and the owner keep/reject curation
+writes (which target the run currently being served). Beyond the completed-run filter, the serve path
+also gates on **enriched AND accepted** — the feed's `INNER JOIN video_rag` is THE serve invariant: an
+accepted row with no embedding is invisible until the worker enriches it (the ungated `/videos/owner`
+listing is the only read that shows an un-enriched owner video). The `video_run.status` column exists for exactly this
+(the VideoService worker sets it; the backend has no worker-control surface — the worker derives its
+own due gym from timestamps already in the schema, so there is nothing to enqueue and no status route).
+
+**RAG read surface — single rotating-category rec + optional personalized feed + rec-click.**
+
+The per-member RAG profile is **ONE LLM-written summary + ONE embedding stored on the `members` row**
+(`video_profile_summary` / `video_profile_embedding` / `video_profile_embedding_model` /
+`video_profile_built_at`, all nullable, service-role-written, in the `MEMBERS` immutable frozenset) —
+not a sidecar table. A small chat model (`video_profile_summary_model`) turns the member's facts (rank,
+gym disciplines, most-attended classes in a 90-day window, and recently `video_clicked` videos' title +
+`video_rag` summary) into a short taste paragraph; that paragraph is embedded once and its embedding is
+what the rec + the personalized feed rank against `video_rag.embedding`. The `vector(3072)` DDL is a
+**cross-service contract** — every produced vector is length-checked against `settings.video_embedding_dim`
+(a mismatch raises, not writes a wrong-width vector). Embeddings are pgvector text form (`'[0.1,0.2,...]'`),
+bound `CAST(:x AS vector)`. The gym-scoped feed/rec reads cosine-rank a few hundred candidates (one gym's
+feed) at full precision — no index needed; the `halfvec`-cast HNSW index on `video_rag` serves the
+worker's pool-wide funnel probe.
+
+**The profile is (re)built ONLY by `refresh_if_due` — reads never build.** There is no
+build-on-read: `refresh_if_due` (fired fire-and-forget by the click + class-booking triggers) is the
+only path that renders + embeds a new summary. Every read (`verify_member_in_gym`,
+`verify_and_load_embedding`, the rec, the personalized feed) tolerates a missing embedding by ranking
+without similarity. **There is no unguarded embedding read** — every embedding read verifies membership
+first (the feed's guarded read is `verify_and_load_embedding`).
+
+- **`MemberVideoProfileService`** (`member_video_profile_service.py`) — builds (refresh-only) + reads.
+  `verify_member_in_gym(member_id, gym_id)` is the **READ-ONLY guard-only ownership check**: it verifies the
+  member belongs to `gym_id` (raising `MemberNotInGymError`, a `ValueError` subclass, on a mismatch or missing
+  member — this stops a caller authorized to view a member, `verify_can_view_member` only checks the
+  member not the path `gym_id`, from ranking a DIFFERENT gym's feed) and NEVER builds. `refresh_if_due`
+  is the trigger gate — same guard, then rebuilds when the embedding is missing OR `video_profile_built_at`
+  is older than `video_profile_refresh_cooldown_days` (3d), a no-op within the cooldown. `_build` reads
+  member facts in ONE query — the trailing window + top-N knobs are the injected
+  `video_profile_attendance_window_days` / `_top_classes_limit` / `_recent_clicks_limit` Settings (no
+  `settings` import in the service) — → renders `prompts/member_profile_summary.md` → `complete_structured`
+  (summary model) → `embed` (embedding model) → dim-check → UPDATE the members row.
+  `verify_and_load_embedding(member_id, gym_id)` is the **GUARDED embedding read** the feed page uses: it
+  guards membership and returns the pgvector text (None when unbuilt) in the SAME single row read, so
+  `GET /videos?member_id=` 404s a member not in the path gym instead of ranking another gym's feed —
+  symmetric with the rec path. `MemberNotInGymError` maps to 404 at the route.
+- **`VideoRecsService`** (`video_recs_service.py`) — `get_rec(gym_id, member_id) -> MemberVideoRec | None`:
+  serves ONE video at a time, **rotating the served genre category** through
+  `settings.video_rec_category_rotation`. It is a **thin wrapper over the unified feed** — it drives the
+  rotation and records the pick, but the ranking + candidate query live in the ONE feed read (there is no
+  separate rec SQL). `verify_and_load_embedding` loads the member's embedding + guards membership in ONE
+  read up front, then `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks the
+  starting category; within a category it calls `feed_service.rank_page_for_member(gym_id,
+  member_id=member_id, member_embedding=<the once-resolved embedding>, video_type=category, limit=1,
+  offset=0)` and takes the first card if the page is non-empty (`rank_page_for_member` is the
+  embedding-already-resolved sibling of `load_feed_page`, so a rec issues ONE member/embedding fetch, not
+  one per category, and applies the owner-boost + decayed-served-penalty ranking above). A category that
+  yields **no** card falls through to the next in the rotation (wrapping); the first genre with a video
+  wins. **The rec advances on a re-serve via the decayed served penalty baked into the feed read — there
+  is NO already-served anti-join.** A just-served video is nudged back on the next call, so a category with
+  enough clustered candidates surfaces a different pick; a sparse category (one video) legitimately
+  re-serves the same one. The pick is APPENDED to `member_video_recs`
+  (`video_recs_record_insert.sql`, `RETURNING rec_id`) and returned as `MemberVideoRec{rec_id, category,
+  video}` (`video` is the `GymVideoCard`, carrying `video_id`). Returns `None` (→ route 404) when no
+  category anywhere yields a video. `MemberNotInGymError` propagates (→ 404).
+- **`VideoRecClickService`** (`video_rec_click_service.py`) — `record_click(gym_id, member_id, rec_id)`:
+  in one txn stamps `member_video_recs.clicked_at` (first click only — idempotent via `clicked_at IS
+  NULL`, scoped to member+gym) and logs a `video_clicked` `member_activities` row (carrying `video_id`
+  + `rec_id`); on the first click it fires `MemberVideoProfileRefreshRunner.start`. A repeat click is
+  idempotent (`clicked=false`, no re-stamp/re-log/re-fire); an unknown rec for this member+gym raises
+  `RecNotFoundError` → 404.
+- **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget,
+  **per-member-coalesced** runner (a `ClassVar` task set + done-callback + `drain()` in the `main.py`
+  lifespan, plus `ClassVar` in-flight + dirty **member** sets — the same coalescing shape as
+  `VideoFeedRefineRunner`). `start(member_id, gym_id)` fires `refresh_if_due` detached; if one is already
+  in flight for that member the fire is dropped-but-marks-dirty (so two concurrent first-signals — a click
+  + a class sign-up — spawn ONE paid summary+embedding build, not two, and no signal is lost). A refresh
+  failure NEVER surfaces to the caller, but a FAILED build is logged at ERROR with the member id (a silent
+  failure leaves `video_profile_embedding` NULL forever and personalization silently never turns on).
+  Two triggers wire it: the **video-click** (inside `VideoRecClickService`) and the **class sign-up**
+  (router-level composition in `checkin_router.py`'s `signup` handler, after a successful `create` — keeps
+  `SignupService` decoupled from the videos domain).
+
+There is **no semantic-search service** — `VideoSearchService` and the `/videos/search` route were
+removed (zero callers). The rec's `category` is typed as the existing `VideoGenre` enum (`schema.video`),
+never a separate abstraction (there is no mood-bucket map). Member activity writers use the shared
+`MemberActivityType` enum (`schema.member_activity`). Response schemas: `schema/video_recs_schema.py`
+(`MemberVideoRec` (`rec_id` / `category: VideoGenre` / `video: GymVideoCard`) and `VideoRecClickResponse`
+— there is no `RecCandidate` wrapper; the card already carries its `video_id`); the profile summary
+schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
+`sql/member_profile_load.sql` / `member_profile_source.sql` / `member_profile_update.sql`,
+`videos_load_feed_page.sql` (THE unified feed + rec read), `videos_load_owner_videos.sql` (the ungated
+owner listing), `videos_load_feed_preview.sql` (the windowed per-genre "All" preview),
+`videos_feed_candidate_source.sql` (the SHARED "what counts as served" FROM/JOIN/WHERE core — the SINGLE
+source, injected as the `candidate_source` template variable via `load_sql` into BOTH
+`videos_load_feed_page.sql` and `videos_load_feed_preview.sql`, so the serve predicate lives in one place),
+`video_recs_served_count.sql`, `video_recs_record_insert.sql` (`RETURNING rec_id`),
+`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`.
+
+The agent wrapper lives in `service/video_agent/`:
+
+- **`VideoAgentService`** (`video_agent_service.py`) — `agent_turn` only. No tools registered.
+  Accept-path calls `videos_service.save_accepted_spec`; normal first turn seeds current-spec
+  context by prepending it to the user message.
+
+**Schemas:**
+- `schema/video_spec_schema.py`: `VideoSpecDraft` (criteria only — no `queries` field),
+  `VideoSpecView` (read, includes queries/source/created_at), `LandscapeResult` (query-gen call 1),
+  `QueriesResult` (query-gen call 2).
+- `schema/video_agent_schema.py`: `AgentTurnRequest` (`message`, `history`, `accepted_spec`),
+  `AgentTurnResponse` (`reply`, `draft`, `question`, `history`, `saved`, `usage`).
+  `AgentQuestion` (`question`, `options` 2–6, `multi_select`) — the agent can ask a
+  multiple-choice question rendered as selectable chips in the CRM. `SpecProposal`
+  (`message` + criteria `draft`) — the agent's finished-proposal output; a proposed draft
+  **always** carries a `message` (mapped to `AgentTurnResponse.reply`, appended to the chat).
+
+**SQL:** `sql/video_spec_load_latest.sql`, `video_spec_insert_version.sql`, `video_feed_signals.sql`.
+
+**Prompts live in `src/videos/prompts/*.md`** (per the monorepo no-inline-prompt rule). Code holds
+the file path, never the prompt text.
+
+**LLM stack — litellm for regular calls; Pydantic AI for the conversational agent.**
+
+The backend runs **Python 3.13** (`requires-python = ">=3.13,<3.14"`). litellm can't install on
+3.14, so the backend moved to 3.13 to get both LLM frameworks.
+
+- **Regular structured litellm calls** (`VideoQueryGenerator` — a two-call landscape→query flow;
+  `VideoFeedRefiner` — one call) go through
+  **litellm** via `src/shared/litellm_client.py` (`LiteLLMClient.complete_structured(prompt, schema,
+  model)`). Model string is `settings.video_llm_model` in litellm's `provider/name` format (e.g.
+  `anthropic/claude-sonnet-4-6`); the `provider/` prefix selects which API key to use.
+- **The conversational agent** (`VideoAgentService`) uses **Pydantic AI** (`pydantic-ai-slim[anthropic]`)
+  with an explicit `AnthropicModel` constructed from `settings.video_agent_model` (bare model name,
+  e.g. `claude-sonnet-4-6`) and `settings.anthropic_api_key`. No env-variable writing,
+  no `video_agent_llm.py` (that file was removed — all provider wiring is in `video_agent_service.py`).
+
+**One-way layering rule:** `VideoAgentService` → `VideosService` (facade) → the regular services
+(`VideoSpecService`, `VideoQueryGenerator`, `VideoFeedRefiner`, `VideoSpecAuthoring`). The regular
+services **never** call `VideoAgentService`.
+
+Related settings: `video_llm_model` (litellm format), `video_agent_model` (bare model name),
+`anthropic_api_key`, `openai_api_key`, `gemini_api_key`, `video_agent_retries`,
+`video_query_count` (queries per commit, injected into `VideoSpecAuthoring`).
+
+RAG settings: `video_embedding_model` (litellm format, default `gemini/gemini-embedding-001` — native
+3072, pre-normalized, needs `gemini_api_key`), `video_embedding_dim` (3072, pinned to the `vector(3072)`
+DDL and shared by `video_rag.embedding` + `members.video_profile_embedding`), `video_profile_summary_model` (small chat
+model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuses `anthropic_api_key`),
+`video_profile_refresh_cooldown_days` (3), the summary-input knobs
+`video_profile_attendance_window_days` (90) / `video_profile_top_classes_limit` (3) /
+`video_profile_recent_clicks_limit` (10) — all injected into `MemberVideoProfileService` —,
+`video_rec_category_rotation` (ordered `VideoGenre` list —
+best-first genre order the single rec rotates through). The pick WITHIN a category is the top of the
+unified feed for that genre (`rank_page_for_member`, `limit=1`) — cosine order to the taste embedding with
+the owner boost + decayed served penalty, governed by `video_feed_bump_sigma_fraction` (0.10) and
+`video_served_penalty_half_life_days` (7.0), the two feed-ranking `Settings` injected into
+`VideoFeedService`. There is no per-rec score column and no rec-count setting.
+
+**Versioned spec — readers always use the view, not the table.**
+`gym_video_spec` is **append-only** (rows are never UPDATE'd; the table is a permanent version log).
+Three writers append new version rows, each stamped with a `gym_video_spec_source` enum value:
+
+- Agent accept / admin save → `admin_update` (via `POST /api/v1/gyms/{id}/video-agent` with `accepted_spec`)
+- Preset import (`PresetsService`) → `system_update`
+- Feed refiner → `feed_update` (via `POST /api/v1/gyms/{id}/video-agent/refine-from-feed`)
+
+Read paths (including the `GET` endpoint) **always** query the `gym_video_spec_latest` view, which
+surfaces the single most-recent version per gym. Do not `SELECT` directly from the raw
+`gym_video_spec` table in a read path. Queries are stored in the spec's `queries JSONB` column (the
+separate `gym_video_query` table was dropped when versioned spec shipped).
+
+**DI providers (videos domain):** `litellm_client`, `video_spec_service`, `video_query_generator`,
+`video_spec_authoring`, `video_feed_refiner`, `video_feed_refine_runner`
+(the coalesced auto-refine, injected into the router), `member_video_profile_service`
+(defined before `video_feed_service`, which reads the embedding), `video_feed_service`
+(defined before `video_recs_service`, which delegates the rec candidate query to it),
+`member_video_profile_refresh_runner`, `video_recs_service`,
+`video_rec_click_service`, `video_agent_service`, `videos_service`.
+
+**DI providers (presets domain):** `presets_service`, `presets_template_service`.
+
+**DI providers (theme domain):** `theme_showcase_service`.
+
+There is NO separate `video_config` router or module.
 
 ## Image upload domain (`src/uploads/`)
 

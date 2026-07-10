@@ -9,14 +9,6 @@ from schema.membership_plan import PlanType
 
 from src.checkin.schema.cycle_counts_schema import MembershipUsage
 
-# The ``member_activities.activity_type`` value stamped for a class check-in.
-# A plain string (``member_activities.activity_type`` is a free-text column, no
-# enum). Shared by the writer (stamps one row on check-in) and the reverser
-# (drops one matching row on reversal) so both agree on the exact value; lives
-# here, in a module free of ``src.classes`` imports, so the reverser can read it
-# without pulling ``src.classes`` into its import graph.
-CLASS_ATTENDED_ACTIVITY_TYPE = "class_attended"
-
 
 class CheckinWarning(StrEnum):
     """A gate condition that would block a kiosk check-in.

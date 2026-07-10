@@ -4,9 +4,12 @@
 
 Loads, in order:
   1. the shared pool ``videos/<id>.yaml`` -> ``video`` (streamed in batches),
-  2. each gym's existing ``good_video_ids`` / ``rejected_video_ids`` ->
-     ``video_gym_feed`` (ids not in the pool are skipped),
-  3. ``cost_log.yaml`` -> ``video_cost_log``.
+  2. the template enrich sidecar ``video_rag/video_rag.jsonl`` -> ``video_rag``
+     (the pre-paid summaries + embeddings, so a reset reproduces enriched
+     templates without re-running the LLM; absent sidecar -> warn + skip),
+  3. each gym's existing ``good_video_ids`` / ``rejected_video_ids`` ->
+     ``template_gym_feed`` (ids not in the pool are skipped),
+  4. ``cost_log.yaml`` -> ``cost_log`` (the generic spend-ledger table).
 
 Run AFTER the migration and ``sync-gyms`` (the gyms must already exist in SQL for
 the feed FK). Idempotent: videos upsert by id and feeds are rewritten per gym, so
@@ -33,6 +36,7 @@ from schema import CostEntry, VideoOutput
 from scripts.shared.db_target import build_write_pool
 from scripts.shared.gym_yaml_store import list_gym_ids, load_gym_yaml
 from scripts.shared.video_db_writer import VideoDbWriter
+from scripts.shared.video_rag_sidecar import VideoRagRecord, VideoRagSidecar
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +74,36 @@ async def _import_pool(writer: VideoDbWriter, root: Path) -> int:
     return written
 
 
+async def _import_video_rag(writer: VideoDbWriter, root: Path) -> int:
+    """Load the template enrich sidecar (``video_rag/video_rag.jsonl``) into
+    ``video_rag`` in batches. Absent sidecar (a fresh checkout without the
+    untracked-local artifact) -> warn + skip. Returns rows attempted."""
+    sidecar = VideoRagSidecar(root)
+    if not sidecar.exists():
+        logger.warning(
+            "no RAG sidecar at %s — skipping video_rag load (templates serve only "
+            "once the worker enriches; run enrich-templates or fetch the sidecar, "
+            "see VideoService/CLAUDE.md)",
+            sidecar.path,
+        )
+        return 0
+    logger.info("importing video_rag rows from %s ...", sidecar.path)
+    written = 0
+    batch: list[VideoRagRecord] = []
+    for record in sidecar.read_all():
+        batch.append(record)
+        if len(batch) >= BATCH_SIZE:
+            written += await writer.upsert_video_rag(batch)
+            batch.clear()
+            logger.info("  ... %d video_rag rows imported", written)
+    if batch:
+        written += await writer.upsert_video_rag(batch)
+    logger.info("video_rag import done: %d rows", written)
+    return written
+
+
 async def _import_feeds(writer: VideoDbWriter, root: Path) -> int:
-    """Load each gym's good/rejected id-lists from YAML into ``video_gym_feed``."""
+    """Load each gym's good/rejected id-lists from YAML into ``template_gym_feed``."""
     gym_ids = list_gym_ids(root)
     for gid in gym_ids:
         gym = load_gym_yaml(root, gid)
@@ -88,7 +120,7 @@ async def _import_feeds(writer: VideoDbWriter, root: Path) -> int:
 
 
 async def _import_cost_log(writer: VideoDbWriter, root: Path) -> int:
-    """Append ``cost_log.yaml`` entries into ``video_cost_log`` (no gym attribution
+    """Append ``cost_log.yaml`` entries into ``cost_log`` (no gym attribution
     — the old global log didn't record which gym a scan was for)."""
     log_file = root / COST_LOG_FILENAME
     if not log_file.is_file():
@@ -106,6 +138,7 @@ async def run(*, root: Path, skip_cost_log: bool) -> None:
     writer = VideoDbWriter(pool)
     try:
         await _import_pool(writer, root)
+        await _import_video_rag(writer, root)
         await _import_feeds(writer, root)
         if not skip_cost_log:
             await _import_cost_log(writer, root)
