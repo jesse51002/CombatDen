@@ -5,7 +5,9 @@
 An asyncio loop: exit cleanly when the worker is disabled, else call
 ``WorkerService.run_tick()`` every ``worker_poll_seconds``. A tick that raises is
 logged and the loop continues (the lock is released inside the tick's finally).
-SIGTERM / SIGINT stop the loop after the current tick finishes cleanly.
+SIGTERM / SIGINT set the ``stop`` event, which both ends the loop between ticks
+AND (passed into ``run_tick``) aborts an in-flight tick at its next ``check_abort``
+— so a long enrich/scan/scrape drain is killable mid-drain, not only between ticks.
 """
 
 from __future__ import annotations
@@ -70,7 +72,7 @@ async def _run_loop(service: WorkerService, stop: asyncio.Event) -> None:
     )
     while not stop.is_set():
         try:
-            await service.run_tick()
+            await service.run_tick(stop)
         except Exception:  # noqa: BLE001 - a tick failure must not kill the loop
             logger.error("worker tick raised", exc_info=True)
         with suppress(asyncio.TimeoutError):

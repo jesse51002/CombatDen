@@ -80,11 +80,16 @@ class WorkerCostLog:
         embed_usd: float,
         videos: int,
         transcripts_fetched: int,
+        actor_starts: int,
     ) -> None:
         """The enrich sweep's POOL-LEVEL rows (gym_id / run_id NULL): the Apify
-        ``transcript`` spend, the multimodal ``enrich`` spend, and the summary
-        ``embed`` spend."""
-        breakdown = {"videos": videos, "transcripts_fetched": transcripts_fetched}
+        ``transcript`` spend (batched — priced per transcript scraped + per actor
+        start), the multimodal ``enrich`` spend, and the summary ``embed`` spend."""
+        breakdown = {
+            "videos": videos,
+            "transcripts_fetched": transcripts_fetched,
+            "actor_starts": actor_starts,
+        }
         await self._insert(
             None,
             None,
@@ -114,12 +119,13 @@ class WorkerCostLog:
         )
         logger.info(
             "enrich sweep cost: transcript $%.4f enrich $%.4f embed $%.4f "
-            "(%d videos, %d transcripts fetched)",
+            "(%d videos, %d transcripts fetched, %d actor runs)",
             transcript_usd,
             enrich_usd,
             embed_usd,
             videos,
             transcripts_fetched,
+            actor_starts,
         )
 
     async def log_scan(

@@ -186,8 +186,9 @@ worker:
    would look empty until the worker's enrich sweep caught up. This run enriches
    the **~18.9k unique template videos** referenced in `video_gym_feed` (both
    verdicts) ONCE — reusing the worker enricher's per-video unit
-   (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call,
-   lazy Apify transcript on a miss) plus a summary embedding — and appends each to
+   (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call fed a
+   per-chunk BATCHED Apify transcript fetch — usually a no-op, templates are ~100% cached)
+   plus a summary embedding — and appends each to
    the **untracked-local sidecar** `video_rag/video_rag.jsonl` (base64-packed
    float32 embeddings; ~330 MB at 3072 dims, distributed to prod via S3 exactly like `videos/`).
    `import_yaml` then reloads it into `video_rag` on every sync (upsert by
@@ -289,8 +290,9 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   (`worker_enrich_targets.sql`) = videos that LACK a `video_rag` row and are under the strike
   ceiling, drawn from each gym's **latest non-failed run** (`pending`/`accepted` rows — skip
   `rejected`; `accepted`-without-rag are imported presets / pre-RAG carry-forwards that must
-  get an embedding) ∪ ALL owner-section rows (`video_run_id IS NULL`). Per video: lazy Apify
-  transcript (miss → placeholder, NOT a strike), ONE multimodal `enrich_model` call
+  get an embedding) ∪ ALL owner-section rows (`video_run_id IS NULL`). Per chunk: a BATCHED
+  Apify transcript fetch of the chunk's cache-misses in ONE actor run (miss → placeholder,
+  NOT a strike), then per video ONE multimodal `enrich_model` call
   (thumbnail + metadata + transcript slice → genre `tag`, disciplines, a **detailed**
   summary, facets), tags written to `video`, summaries batch-embedded into `video_rag`
   (concurrency `worker_enrich_concurrency`, 8). The enrich call is the ONLY step that sees
@@ -339,8 +341,14 @@ scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
 (`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
 `enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop
 timers, the `youtube_api_key` (YouTube Data API v3, discovery + metadata), and the
-`apify_token` + `apify_transcript_cost_per_video_usd` (the lazy transcript fetches at
-enrich). It reads `DATABASE_URL` from `src/shared/config.py` and the LLM provider keys
+Apify transcript knobs — `apify_token`, the batched actor pricing
+(`apify_transcript_cost_per_transcript_usd` $0.0005 + `apify_actor_start_cost_usd`
+$0.001), `apify_transcript_batch_size` (64), and the LONG/conservative
+`.call()` bounds `apify_run_wait_seconds` (900s) + `apify_fetch_deadline_seconds`
+(1200s) that stop the batched transcript fetch from hanging the worker (the enrich
+sweep batch-fetches a chunk's missing transcripts in ONE
+`supreme_coder/youtube-transcript-scraper` run). It reads `DATABASE_URL` from
+`src/shared/config.py` and the LLM provider keys
 (`gemini_api_key`, `openai_api_key`, `anthropic_api_key`) from `src/core/config.py` — three
 `Settings` classes over the one `.env`.
 

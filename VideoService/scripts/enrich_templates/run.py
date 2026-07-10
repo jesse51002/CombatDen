@@ -3,9 +3,11 @@
     poetry run python -m scripts.enrich_templates.run
 
 Selects the DISTINCT videos referenced by the template feeds (``video_gym_feed``,
-both 'good' and 'rejected' verdicts — ~18.9k), then for each REUSES the worker
-enricher's per-video unit (``WorkerEnricher.enrich_one`` — one multimodal
-summary+tag+disciplines+facets call, lazy Apify transcript on a miss) and embeds
+both 'good' and 'rejected' verdicts — ~18.9k). For each chunk it BATCH-fetches the
+missing transcripts up front (``WorkerEnricher.fetch_chunk_transcripts`` — usually
+a no-op, template videos are ~100% cached), then REUSES the worker enricher's
+per-video unit (``WorkerEnricher.enrich_one`` — one multimodal
+summary+tag+disciplines+facets call, fed the fetched transcript) and embeds
 the summary, writing the result to the append-only sidecar
 (``video_rag/video_rag.jsonl``). ``scripts/import_yaml`` later loads that sidecar
 into ``video_rag`` on every ``make sync-gyms``, so a DB reset reproduces the
@@ -63,11 +65,15 @@ class _Totals:
         self.enrich_usd = 0.0
         self.embed_usd = 0.0
         self.transcripts_fetched = 0
+        self.actor_starts = 0
 
     @property
     def transcript_usd(self) -> float:
         return round(
-            self.transcripts_fetched * settings.apify_transcript_cost_per_video_usd, 4
+            self.transcripts_fetched
+            * settings.apify_transcript_cost_per_transcript_usd
+            + self.actor_starts * settings.apify_actor_start_cost_usd,
+            4,
         )
 
     @property
@@ -133,16 +139,28 @@ class EnrichTemplatesRunner:
     async def _process_chunk(
         self, chunk: list[dict], sem: asyncio.Semaphore, totals: _Totals
     ) -> None:
-        """Enrich one chunk (fan out the vision calls), embed the successes in one
-        call, and append their records to the sidecar."""
+        """Batch-fetch the chunk's missing transcripts in ONE actor run up front
+        (template videos are ~100% cached, so the miss-list is usually empty → no
+        run), fan out the vision calls (each fed its transcript), embed the
+        successes in one call, and append their records to the sidecar."""
+        fetched, starts = await self._enricher.fetch_chunk_transcripts(chunk)
         outcomes = list(
             await asyncio.gather(
-                *(self._enricher.enrich_one(video, self._vocab, sem) for video in chunk)
+                *(
+                    self._enricher.enrich_one(
+                        video,
+                        self._vocab,
+                        sem,
+                        transcript=self._enricher.effective_transcript(video, fetched),
+                    )
+                    for video in chunk
+                )
             )
         )
         totals.processed += len(outcomes)
         totals.enrich_usd += sum(o.llm_usd for o in outcomes)
-        totals.transcripts_fetched += sum(1 for o in outcomes if o.attempted_fetch)
+        totals.transcripts_fetched += sum(1 for t in fetched.values() if t)
+        totals.actor_starts += starts
 
         rows = [o.row for o in outcomes if o.row is not None]
         totals.failed += sum(1 for o in outcomes if o.row is None)

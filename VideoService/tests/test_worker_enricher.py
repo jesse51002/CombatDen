@@ -6,10 +6,11 @@ stored thumbnail is attached as image_urls, falling back to a constructed
 ``hqdefault`` URL when the row has none; a ``maxresdefault``-style image-fetch
 failure is retried ONCE against the constructed ``hqdefault`` URL before striking,
 while a non-image-fetch failure is never retried; summaries embed in per-chunk
-batches; an embed failure strikes the whole chunk; the LAZY transcript fetch (used
-in the prompt + cached back + billed, not re-fetched when cached, miss degrades to
-the placeholder and is NOT a strike); a success resets the strike counter; and
-pool-level enrich cost is logged once.
+batches; an embed failure strikes the whole chunk; the BATCHED transcript fetch
+(one actor run per chunk's cache-misses — used in the prompt + cached back + billed
+per transcript scraped + per actor start, not re-fetched when cached, a miss
+degrades to the placeholder and is NOT a strike); a success resets the strike
+counter; and pool-level enrich cost is logged once.
 """
 
 from __future__ import annotations
@@ -294,16 +295,41 @@ def test_lazy_fetch_used_cached_and_billed() -> None:
     asyncio.run(enricher.drain(_abort()))
 
     assert transcript.fetched == ["v1"]
+    assert transcript.batches == [["v1"]]  # one batched run for the chunk's miss
     prompt = llm.structured_calls[0]["messages"][0]["content"]
     assert "the fetched transcript body" in prompt
     cache_rows = _writes(db, "cache_transcripts")[0]
     assert cache_rows == [
         {"video_id": "v1", "transcript": "the fetched transcript body"}
     ]
+    # one transcript scraped + one actor start.
     assert cost.enrich[0]["transcript_usd"] == round(
-        settings.apify_transcript_cost_per_video_usd, 4
+        settings.apify_transcript_cost_per_transcript_usd
+        + settings.apify_actor_start_cost_usd,
+        4,
     )
     assert cost.enrich[0]["transcripts_fetched"] == 1
+    assert cost.enrich[0]["actor_starts"] == 1
+
+
+def test_transcript_misses_split_into_multiple_actor_runs(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "apify_transcript_batch_size", 2)
+    db = RoutingFakeDb()
+    db.rows["enrich_targets"] = [
+        _video("v1", transcript=None),
+        _video("v2", transcript=None),
+        _video("v3", transcript=None),
+    ]
+    transcript = FakeTranscriptClient({"v1": "t1", "v2": "t2", "v3": "t3"})
+    llm = FakeLLM(structured=_handler())
+    enricher, cost = _enricher(db, llm, transcript)
+
+    asyncio.run(enricher.drain(_abort()))
+
+    # 3 misses, batch size 2 → two batched actor runs (2 + 1), each billed a start.
+    assert transcript.batches == [["v1", "v2"], ["v3"]]
+    assert cost.enrich[0]["actor_starts"] == 2
+    assert cost.enrich[0]["transcripts_fetched"] == 3
 
 
 def test_cached_transcript_not_refetched() -> None:
@@ -316,8 +342,10 @@ def test_cached_transcript_not_refetched() -> None:
     asyncio.run(enricher.drain(_abort()))
 
     assert transcript.fetched == []  # never fetched — the row already had one
+    assert transcript.batches == []  # no miss → no batched run at all
     assert "cache_transcripts" not in db.write_names()
     assert cost.enrich[0]["transcript_usd"] == 0.0
+    assert cost.enrich[0]["actor_starts"] == 0  # no run started
     assert "already have it" in llm.structured_calls[0]["messages"][0]["content"]
 
 
@@ -330,14 +358,17 @@ def test_fetch_miss_degrades_to_placeholder_not_a_strike() -> None:
 
     asyncio.run(enricher.drain(_abort()))
 
-    assert transcript.fetched == ["v1"]  # the fetch was attempted
+    assert transcript.fetched == ["v1"]  # the batched fetch was attempted
     prompt = llm.structured_calls[0]["messages"][0]["content"]
     assert NO_TRANSCRIPT_PLACEHOLDER in prompt  # degraded to the placeholder
     assert "cache_transcripts" not in db.write_names()  # nothing to cache
     # a missing transcript is NOT a strike — the enrich still succeeded.
     assert "bump_failure" not in db.write_names()
     assert [r["video_id"] for r in _writes(db, "reset_failure")[0]] == ["v1"]
-    # a missed fetch still ran the actor → still billed.
+    # the batch returned no transcript, but the actor still RAN → one start billed,
+    # zero transcripts scraped.
+    assert cost.enrich[0]["transcripts_fetched"] == 0
+    assert cost.enrich[0]["actor_starts"] == 1
     assert cost.enrich[0]["transcript_usd"] == round(
-        settings.apify_transcript_cost_per_video_usd, 4
+        settings.apify_actor_start_cost_usd, 4
     )

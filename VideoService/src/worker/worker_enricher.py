@@ -11,9 +11,11 @@ transcript slice) yields the genre ``tag`` + ``disciplines`` (written onto
 ``video_rag``. Targets are processed in chunks (one embed call per chunk), with the
 abort flag checked between chunks.
 
-Transcripts are fetched LAZILY: a target with no cached transcript triggers one
-Apify run, the result feeds the prompt AND is cached back onto ``video``; a
-miss/failure degrades to the placeholder and is NOT a strike.
+Transcripts are fetched LAZILY and BATCHED: each chunk's cache-MISS videos (rows
+with an empty stored ``transcript``) are fetched in ONE Apify actor run BEFORE the
+per-video enrich fan-out, and each fetched transcript is passed into
+``enrich_one`` AND cached back onto ``video``; a miss/failure degrades to the
+placeholder and is NOT a strike.
 
 Strike semantics — HARD errors only: a video whose multimodal call OR whose chunk's
 embed call raises gets ``failure_count += 1`` (``worker_bump_failure.sql``) and is
@@ -56,12 +58,11 @@ logger = logging.getLogger(__name__)
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 ENRICH_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "worker_enrich.md"
 
-# Videos per sweep chunk == texts per embed call. The provider caps batch
-# size / tokens; 64 short summaries per call keeps well under it while amortising
-# the request overhead. Also the granularity at which the abort flag is checked.
+# Videos per sweep chunk == texts per embed call == the transcript batch fetched
+# up front per chunk. The provider caps batch size / tokens; 64 short summaries
+# per call keeps well under it while amortising the request overhead. Also the
+# granularity at which the abort flag is checked.
 EMBED_BATCH_SIZE = 64
-# Language requested from the transcript actor for the lazy fetch.
-TRANSCRIPT_LANGUAGE = "en"
 NO_TRANSCRIPT_PLACEHOLDER = (
     "(no transcript available — judge from the title, description, and thumbnail)"
 )
@@ -86,15 +87,13 @@ class EnrichResultRow:
 
 @dataclass(frozen=True)
 class EnrichOutcome:
-    """One video's enrich attempt: the row (None when the multimodal call failed),
-    the LLM spend, whether a transcript fetch was attempted (billable), and the
-    transcript actually fetched (to cache), if any."""
+    """One video's enrich attempt: the row (None when the multimodal call failed)
+    and the LLM spend. Transcript fetching is now a per-chunk batch upstream, so
+    the fetch bookkeeping no longer rides on the per-video outcome."""
 
     video_id: str
     row: EnrichResultRow | None
     llm_usd: float
-    attempted_fetch: bool
-    fetched_transcript: str | None
 
 
 @dataclass
@@ -105,7 +104,10 @@ class _SweepTotals:
     enriched: int = 0
     enrich_usd: float = 0.0
     embed_usd: float = 0.0
+    # Transcripts actually returned by the batch fetches (billed per transcript).
     transcripts_fetched: int = 0
+    # Batched actor runs actually started (billed per start).
+    actor_starts: int = 0
 
 
 class WorkerEnricher:
@@ -142,7 +144,8 @@ class WorkerEnricher:
 
         transcript_usd = round(
             totals.transcripts_fetched
-            * settings.apify_transcript_cost_per_video_usd,
+            * settings.apify_transcript_cost_per_transcript_usd
+            + totals.actor_starts * settings.apify_actor_start_cost_usd,
             4,
         )
         await self._cost_log.log_enrich(
@@ -151,6 +154,7 @@ class WorkerEnricher:
             embed_usd=totals.embed_usd,
             videos=totals.processed,
             transcripts_fetched=totals.transcripts_fetched,
+            actor_starts=totals.actor_starts,
         )
         logger.info(
             "enrich sweep: %d processed, %d enriched, %d transcripts fetched",
@@ -167,15 +171,29 @@ class WorkerEnricher:
         sem: asyncio.Semaphore,
         totals: _SweepTotals,
     ) -> None:
-        """Enrich one chunk: fan out the vision calls, cache transcripts, embed
-        the successes in one call, then strike / heal the video rows."""
+        """Enrich one chunk: batch-fetch the chunk's missing transcripts in ONE
+        actor run up front, fan out the vision calls (each fed its transcript),
+        cache the fetched transcripts, embed the successes in one call, then strike
+        / heal the video rows."""
+        fetched, starts = await self.fetch_chunk_transcripts(chunk)
         outcomes = list(
-            await asyncio.gather(*(self.enrich_one(v, vocab, sem) for v in chunk))
+            await asyncio.gather(
+                *(
+                    self.enrich_one(
+                        v,
+                        vocab,
+                        sem,
+                        transcript=self.effective_transcript(v, fetched),
+                    )
+                    for v in chunk
+                )
+            )
         )
-        await self._cache_transcripts(outcomes)
+        await self._cache_transcripts(fetched)
         totals.processed += len(outcomes)
         totals.enrich_usd += sum(o.llm_usd for o in outcomes)
-        totals.transcripts_fetched += sum(1 for o in outcomes if o.attempted_fetch)
+        totals.transcripts_fetched += sum(1 for t in fetched.values() if t)
+        totals.actor_starts += starts
 
         rows = [o.row for o in outcomes if o.row is not None]
         struck = [o.video_id for o in outcomes if o.row is None]
@@ -197,11 +215,19 @@ class WorkerEnricher:
             await self._bump_failure(struck)
 
     async def enrich_one(
-        self, video: dict, vocab: str, sem: asyncio.Semaphore
+        self,
+        video: dict,
+        vocab: str,
+        sem: asyncio.Semaphore,
+        *,
+        transcript: str | None,
     ) -> EnrichOutcome:
-        """One video's enrich call under the gate, fetching its transcript lazily
-        if the pool row has none. A fetch miss/failure or a failed multimodal call
-        never aborts the sweep (the latter becomes a strike upstream).
+        """One video's enrich call under the gate. The transcript is RECEIVED (the
+        caller batch-fetches a chunk's misses up front via
+        ``fetch_chunk_transcripts`` and passes each in via ``effective_transcript``
+        — the cached one, the freshly-fetched one, or None → the placeholder); this
+        unit never fetches. A failed multimodal call never aborts the sweep (it
+        becomes a strike upstream).
 
         The stored ``thumbnail_url`` is the primary image (constructed
         ``hqdefault`` when the pool row has none at all). When the multimodal call
@@ -218,16 +244,6 @@ class WorkerEnricher:
         ``description``, ``thumbnail_url``, ``duration_seconds``, ``transcript``."""
         async with sem:
             video_id = video["video_id"]
-            transcript = video["transcript"]
-            attempted_fetch = False
-            fetched: str | None = None
-            if not transcript or not str(transcript).strip():
-                attempted_fetch = True
-                fetched = await self._transcript.fetch(
-                    video_id, language=TRANSCRIPT_LANGUAGE
-                )
-                transcript = fetched
-
             prompt = Template(
                 ENRICH_PROMPT_PATH.read_text(encoding="utf-8")
             ).safe_substitute(
@@ -256,7 +272,7 @@ class WorkerEnricher:
                     logger.warning(
                         "enrich failed for %s (strike): %s", video_id, exc
                     )
-                    return self._struck(video_id, attempted_fetch, fetched)
+                    return self._struck(video_id)
 
                 logger.info(
                     "enrich %s: thumbnail fetch failed on %s — retrying with "
@@ -278,23 +294,57 @@ class WorkerEnricher:
                         video_id,
                         retry_exc,
                     )
-                    return self._struck(video_id, attempted_fetch, fetched)
+                    return self._struck(video_id)
 
             return EnrichOutcome(
                 video_id=video_id,
                 row=EnrichResultRow(video_id, result),
                 llm_usd=cost,
-                attempted_fetch=attempted_fetch,
-                fetched_transcript=fetched,
             )
 
-    async def _cache_transcripts(self, outcomes: list[EnrichOutcome]) -> None:
+    async def fetch_chunk_transcripts(
+        self, videos: list[dict]
+    ) -> tuple[dict[str, str | None], int]:
+        """Batch-fetch transcripts for a chunk's cache-MISS videos (rows with an
+        empty stored ``transcript``) in one actor run per ``apify_transcript_batch_size``
+        slice. Returns ``(video_id -> fetched-transcript-or-None for the misses,
+        number of actor runs started)``. No misses → no run, 0 starts (so a
+        ~100%-cached template chunk pays nothing). Public so the enrich-templates
+        run reuses the exact miss-detection + batching + start-count logic."""
+        misses = [v["video_id"] for v in videos if not self._has_transcript(v)]
+        fetched: dict[str, str | None] = {}
+        starts = 0
+        size = settings.apify_transcript_batch_size
+        for start in range(0, len(misses), size):
+            batch = misses[start : start + size]
+            fetched.update(await self._transcript.fetch_batch(batch))
+            starts += 1
+        return fetched, starts
+
+    @staticmethod
+    def effective_transcript(
+        video: dict, fetched: dict[str, str | None]
+    ) -> str | None:
+        """The transcript to enrich ``video`` with: its cached one if present, else
+        the batch's freshly-fetched one (which may be None → the placeholder)."""
+        cached = video["transcript"]
+        if cached and str(cached).strip():
+            return cached
+        return fetched.get(video["video_id"])
+
+    @staticmethod
+    def _has_transcript(video: dict) -> bool:
+        """Whether the pool row already carries a usable cached transcript."""
+        transcript = video["transcript"]
+        return bool(transcript and str(transcript).strip())
+
+    async def _cache_transcripts(self, fetched: dict[str, str | None]) -> None:
         """Persist every transcript we actually fetched onto its pool video, so a
         later sweep reuses it instead of re-paying Apify."""
         params = [
-            {"video_id": o.video_id, "transcript": o.fetched_transcript}
-            for o in outcomes
-            if o.fetched_transcript
+            {"video_id": vid, "transcript": transcript}
+            for vid, transcript in fetched.items()
+            if transcript
         ]
         if not params:
             return
@@ -400,18 +450,10 @@ class WorkerEnricher:
         return IMAGE_FETCH_ERROR_MARKER in str(exc)
 
     @staticmethod
-    def _struck(
-        video_id: str, attempted_fetch: bool, fetched: str | None
-    ) -> EnrichOutcome:
+    def _struck(video_id: str) -> EnrichOutcome:
         """The strike outcome for a video whose enrich call(s) failed — no row,
         no spend billed for this failed attempt."""
-        return EnrichOutcome(
-            video_id=video_id,
-            row=None,
-            llm_usd=0.0,
-            attempted_fetch=attempted_fetch,
-            fetched_transcript=fetched,
-        )
+        return EnrichOutcome(video_id=video_id, row=None, llm_usd=0.0)
 
     @staticmethod
     def _vector_literal(vector: list[float]) -> str:

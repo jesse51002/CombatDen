@@ -51,22 +51,37 @@ non-failed run (`pending`/`accepted` rows — `rejected` rows are skipped;
 still need an embedding) **∪ ALL owner-section rows** (`video_run_id IS NULL`). Not
 tied to any single gym or run.
 
-Per video, ONE multimodal call (`enrich_model`, `gemini/gemini-2.5-flash-lite`)
-over the thumbnail image + metadata + a transcript slice
+The sweep processes targets in chunks (`EMBED_BATCH_SIZE`, 64). **Transcripts are
+fetched BATCHED, up front, per chunk**: the chunk's cache-MISS videos (rows with an
+empty stored `transcript`) are fetched in ONE **Apify**
+`supreme_coder/youtube-transcript-scraper` actor run — a batched actor that takes a
+LIST of watch urls and returns one dataset item per url, mapped back to its video by
+the `?v=<id>` in `inputUrl` (`WorkerEnricher.fetch_chunk_transcripts`; a miss-list
+longer than `apify_transcript_batch_size` (64) is split into multiple runs). The
+`.call()` is bounded — `apify_run_wait_seconds` (900s) caps the server-side wait and
+`asyncio.wait_for` wraps the whole fetch with `apify_fetch_deadline_seconds` (1200s);
+BOTH are long/conservative because one batched run of up to ~64 videos can take
+several minutes (the old un-bounded single-video `.call()` waited indefinitely and
+froze the whole worker run). Each fetched transcript is **cached back onto
+`video.transcript`** so a later sweep reuses it instead of re-paying Apify. A
+transcript miss/failure/timeout degrades that video to a no-transcript placeholder
+and is **NOT a strike**.
+
+Then per video, ONE multimodal call (`enrich_model`, `gemini/gemini-2.5-flash-lite`)
+over the thumbnail image + metadata + its transcript slice
 (`enrich_transcript_char_budget`, 8000 chars) → `{genre tag, disciplines, prose
-summary, facets}`. The primary thumbnail is the pool's stored `thumbnail_url`
-(scrape prefers YouTube's `maxres` variant — see `scraper.md`), falling back to
-a constructed `hqdefault` URL when the row has none. `maxresdefault` only exists
-for HD uploads, so a non-HD/older video 404s on it — litellm surfaces that as an
-image-fetch `BadRequestError`, which `WorkerEnricher.enrich_one` catches and
-retries ONCE against the constructed `hqdefault` URL (YouTube always serves that
-resolution) before treating the video as a hard failure. A candidate whose pool
-row has **no cached transcript** triggers ONE lazy **Apify**
-`pintostudio/youtube-transcript-scraper` run here
-(`apify_transcript_cost_per_video_usd` ≈ $0.01/video); the fetched transcript
-feeds this video's prompt AND is **cached back onto `video.transcript`** so a
-later sweep reuses it instead of re-paying Apify. A transcript miss/failure
-degrades to a no-transcript placeholder and is **NOT a strike**.
+summary, facets}` — `enrich_one` RECEIVES the transcript (it no longer fetches its
+own). The primary thumbnail is the pool's stored `thumbnail_url` (scrape prefers
+YouTube's `maxres` variant — see `scraper.md`), falling back to a constructed
+`hqdefault` URL when the row has none. `maxresdefault` only exists for HD uploads,
+so a non-HD/older video 404s on it — litellm surfaces that as an image-fetch
+`BadRequestError`, which `WorkerEnricher.enrich_one` catches and retries ONCE against
+the constructed `hqdefault` URL (YouTube always serves that resolution) before
+treating the video as a hard failure.
+
+Transcript spend is priced per the batched actor: `apify_transcript_cost_per_transcript_usd`
+($0.0005) per transcript actually scraped + `apify_actor_start_cost_usd` ($0.001)
+per actor run started.
 
 The tag + disciplines are written back onto the pool `video` row; summaries are
 batch-embedded (`embedding_model`, `gemini/gemini-embedding-001` → `vector(3072)`,

@@ -52,6 +52,7 @@ def test_log_enrich_rows_are_pool_level_null_keyed() -> None:
             embed_usd=0.02,
             videos=10,
             transcripts_fetched=3,
+            actor_starts=2,
         )
     )
 
@@ -68,6 +69,7 @@ def test_log_enrich_rows_are_pool_level_null_keyed() -> None:
         assert json.loads(p["breakdown"]) == {
             "videos": 10,
             "transcripts_fetched": 3,
+            "actor_starts": 2,
         }
 
     assert by_stage[CostStage.transcript.value]["cost_usd"] == 0.05

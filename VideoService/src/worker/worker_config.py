@@ -94,12 +94,28 @@ class WorkerSettings(BaseSettings):
     # Google Cloud API key for the YouTube Data API v3 (discovery + metadata).
     # Free within the daily quota (10k units/day; search.list = 100 units).
     youtube_api_key: str = ""
-    # Apify token for the transcript actor (transcripts are fetched lazily at
-    # enrich, one actor run per video).
+    # Apify token for the transcript actor. Transcripts are fetched lazily at
+    # enrich, BATCHED: one actor run per chunk of cache-miss videos
+    # (supreme_coder/youtube-transcript-scraper takes a list of urls).
     apify_token: str = ""
-    # pintostudio/youtube-transcript-scraper price per fetched video
-    # ($10 / 1,000 results).
-    apify_transcript_cost_per_video_usd: float = 0.01
+    # supreme_coder/youtube-transcript-scraper pricing: $0.0005 per transcript
+    # scraped + $0.001 per actor start (per run). A batch costs
+    # (transcripts_returned × per-transcript) + (1 × per-start).
+    apify_transcript_cost_per_transcript_usd: float = 0.0005
+    apify_actor_start_cost_usd: float = 0.001
+    # Max video urls per batched transcript actor run — a chunk's miss-list is
+    # split into runs of this size.
+    apify_transcript_batch_size: int = 64
+    # LONG/conservative Apify timeouts — one batched run of up to ~64 videos may
+    # take several minutes and the ceiling is unknown, so both are generous.
+    # Server-side wait passed to the actor `.call()` (the .call() default is to
+    # wait INDEFINITELY, which froze the whole worker run — this bounds it).
+    apify_run_wait_seconds: int = 900
+    # Client-side deadline wrapping the whole fetch_batch (belt to the .call()
+    # wait): on expiry the batch degrades to all-placeholder, no strike.
+    apify_fetch_deadline_seconds: int = 1200
+    # Generous retry count for the Apify HTTP client (transient API failures).
+    apify_max_retries: int = 5
 
     # --- models --------------------------------------------------------------
     # Multimodal classify+summarize call; provider-prefixed for litellm routing.

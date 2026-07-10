@@ -77,9 +77,15 @@ class WorkerService:
         self._finalizer = finalizer
         self._cost_log = cost_log
 
-    async def run_tick(self) -> None:
+    async def run_tick(self, stop: asyncio.Event | None = None) -> None:
         """Cleanup → finalize → the first heavy step with work, drained fully.
-        No-op when the lock is held elsewhere."""
+        No-op when the lock is held elsewhere.
+
+        ``stop`` is the process-wide SIGINT/SIGTERM event: while a tick is in
+        flight it is mirrored onto the tick's abort flag so a long drain stops at
+        the next ``check_abort`` (between chunks / videos / gyms), not only between
+        ticks — otherwise a mid-drain worker is unkillable. The abort is also set
+        by the heartbeat on a lost lease; both share one flag."""
         token = uuid4()
         acquired = await self._lock.acquire_once(
             LOCK_KEY, token, ttl_seconds=settings.worker_lock_ttl_seconds
@@ -88,17 +94,34 @@ class WorkerService:
             return
         abort = asyncio.Event()
         heartbeat = asyncio.create_task(self._heartbeat(token, abort))
+        stop_watch = (
+            asyncio.create_task(self._mirror_stop(stop, abort))
+            if stop is not None
+            else None
+        )
         try:
             await self._cleanup.run()
             await self._finalizer.finalize()
             await self._run_one_step(abort)
         except WorkerAborted:
-            logger.warning("tick aborted mid-step — heartbeat lost the lock")
+            logger.warning("tick aborted mid-step — stop signal or lost lock")
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat
+            if stop_watch is not None:
+                stop_watch.cancel()
+                with suppress(asyncio.CancelledError):
+                    await stop_watch
             await self._lock.release(LOCK_KEY, token)
+
+    @staticmethod
+    async def _mirror_stop(stop: asyncio.Event, abort: asyncio.Event) -> None:
+        """Set this tick's abort once the process stop signal fires, so an
+        in-flight drain stops at the next ``check_abort`` rather than running to
+        completion. Cancelled in the tick's finally when the tick ends first."""
+        await stop.wait()
+        abort.set()
 
     async def _run_one_step(self, abort: asyncio.Event) -> None:
         """Drain the FIRST heavy step that has work: scan, else enrich, else

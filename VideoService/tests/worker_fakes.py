@@ -163,8 +163,10 @@ class FakeYouTube:
 
 
 class FakeTranscriptClient:
-    """Transcript client stand-in: returns a canned transcript per video id (or
-    None for a miss), recording every fetch. ``fail=True`` misses on every id."""
+    """Batched transcript client stand-in: one ``fetch_batch`` run returns a canned
+    transcript per requested video id (or None for a miss), recording every batch
+    fetched (as an ordered id list) and the flat list of ids fetched.
+    ``fail=True`` misses on every id (all-None, as a real error/timeout would)."""
 
     def __init__(
         self, transcripts: dict[str, str] | None = None, *, fail: bool = False
@@ -172,12 +174,14 @@ class FakeTranscriptClient:
         self._transcripts = transcripts or {}
         self._fail = fail
         self.fetched: list[str] = []
+        self.batches: list[list[str]] = []
 
-    async def fetch(self, video_id: str, *, language: str) -> str | None:
-        self.fetched.append(video_id)
+    async def fetch_batch(self, video_ids: list[str]) -> dict[str, str | None]:
+        self.batches.append(list(video_ids))
+        self.fetched.extend(video_ids)
         if self._fail:
-            return None
-        return self._transcripts.get(video_id)
+            return {vid: None for vid in video_ids}
+        return {vid: self._transcripts.get(vid) for vid in video_ids}
 
 
 class FakeLLM:
