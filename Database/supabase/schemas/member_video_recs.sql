@@ -2,7 +2,7 @@
 -- video) SERVE. There is no stored score and NO already-served anti-join, and
 -- nothing is hard-partitioned. Freshness is enforced at READ time by the unified
 -- feed query (FastApiBackend/src/videos/sql/videos_load_feed_page.sql) as a
--- σ-scaled DECAYED WATCH PENALTY: for each candidate the feed sums
+-- σ-scaled DECAYED SERVED (RECENCY) PENALTY: for each candidate the feed sums
 -- power(0.5, age_seconds / half_life) over this member's prior serves of that
 -- video (a just-served video ≈ 1, an old serve ≈ 0; half-life 7d) and nudges the
 -- video FARTHER by penalty_units·bump_fraction·sigma. So a served video is pushed
@@ -47,7 +47,7 @@ CREATE TABLE member_video_recs (
         REFERENCES members (member_id, gym_id)
 );
 
--- Backs the feed's decayed-watch-penalty lookup: for each candidate the feed
+-- Backs the feed's decayed-served-penalty lookup: for each candidate the feed
 -- sums this member's decayed prior serves of one video — a correlated aggregate
 -- filtered by member and video — so the index keys on exactly that pair.
 CREATE INDEX idx_member_video_recs_member_video

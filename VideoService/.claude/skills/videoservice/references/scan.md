@@ -147,7 +147,7 @@ the enrich sweep reaches it). A **separate, ungated** owner-management listing
 (`GET /gyms/{id}/videos/owner`) shows an owner-added video the instant it's added,
 before enrichment, so the CRM can badge it "processing…" while the worker catches
 up. See `FastApiBackend/CLAUDE.md`'s `videos` domain section for the full ranking
-model (σ-scaled owner boost + decayed watch-penalty).
+model (σ-scaled owner boost + decayed served-penalty).
 
 ## Sequential by design (within a gym; global across sweeps)
 
