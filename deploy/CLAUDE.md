@@ -56,13 +56,14 @@ plus a long tail of tuning knobs (reconciler cadence, lock TTLs, invoice-fetch
 retries, etc.) — see `Settings` for the full set.
 
 **VideoService worker** (`src/worker/`): `DATABASE_URL` (same shared Postgres as
-FastApiBackend — read from `src/api/config.py`), `APIFY_TOKEN` (the scrape stage),
-`GEMINI_API_KEY` (enrich + scan — default `gemini/gemini-2.5-flash-lite`), and
-`OPENAI_API_KEY` (summary + query embeddings — default
-`openai/text-embedding-3-small`). The provider keys resolve via VideoService's
-`src/core/config.py`; the worker knobs (models, budgets, lock TTLs) live in
-`src/worker/worker_config.py` with safe defaults. `ANTHROPIC_API_KEY` is accepted
-but unused by the default worker models. See `VideoService/.env.example`.
+FastApiBackend — read from `src/shared/config.py`), `APIFY_TOKEN` (the enrich
+stage's lazy batched transcript fetch), and `GEMINI_API_KEY` (enrich + scan +
+embed — enrich/scan default `gemini/gemini-2.5-flash-lite`, embeddings default
+`gemini/gemini-embedding-001` → `vector(3072)`). The provider keys resolve via
+VideoService's `src/core/config.py`; the worker knobs (models, budgets, lock
+TTLs) live in `src/worker/worker_config.py` with safe defaults. `OPENAI_API_KEY`
+and `ANTHROPIC_API_KEY` are accepted but unused by the default worker models
+(all default to Gemini). See `VideoService/.env.example`.
 
 ## Platform note
 

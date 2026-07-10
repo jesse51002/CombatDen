@@ -82,14 +82,19 @@ be called directly from routes:
   delegates commit to **`VideoSpecAuthoring`** (not directly to `VideoSpecService`).
 
 **`VideosService` (`service/videos_service.py`) is the domain FACADE** — it composes
-`VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`, and `VideoFeedRefiner`
+**six** concern services: `VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`,
+`VideoFeedRefiner`, `VideoRecsService`, and `VideoRecClickService`
 (it does NOT inject `VideoQueryGenerator` directly; query gen is an internal of
 `VideoSpecAuthoring`). Key methods: `load_latest_spec`, `save_accepted_spec` (→
-`VideoSpecAuthoring.commit`), `refine_from_feed` (→ `VideoFeedRefiner`), plus all feed
-operations (`load_feed_ids`, `load_pool_videos`, `load_feed_page` — the unified served
-feed, enriched-AND-accepted only — `load_owner_videos` — the separate UNGATED owner
-"Your videos" listing, `GET /gyms/{id}/videos/owner`, showing a video before it's
-enriched — and owner add/remove/keep). Template catalog reads
+`VideoSpecAuthoring.commit`), `refine_from_feed` (→ `VideoFeedRefiner`), `get_video_rec`
++ `record_rec_click` (→ the RAG read surface — `VideoRecsService` / `VideoRecClickService`;
+the single rotating-category member rec + the click record, deep detail in
+`FastApiBackend/CLAUDE.md`, out of scope here), plus all feed operations
+(`load_feed_preview`, `load_pool_videos`, `load_feed_page` — the unified served
+feed, enriched-AND-accepted only, which also backs the member rec at `limit=1` —
+`load_owner_videos` — the separate UNGATED owner "Your videos" listing,
+`GET /gyms/{id}/videos/owner`, showing a video before it's enriched — and owner
+add/remove/keep). Template catalog reads
 live in `PresetsTemplateService` (`src/presets/`); showcase (class/reward cards) lives in
 `ThemeShowcaseService` (`src/theme/`). The router goes through the facade for all non-agent
 video operations.
@@ -113,12 +118,14 @@ general/regular services (`VideoSpecService`, `VideoQueryGenerator`, `VideoFeedR
 Pydantic AI (`pydantic-ai-slim[anthropic]`) for `VideoAgentService` only. Python 3.13
 (`requires-python = ">=3.13,<3.14"`) — litellm cannot install on 3.14.
 
-DI providers (videos domain, spec/agent only): `litellm_client`, `video_spec_service`,
+DI providers (videos domain, spec/agent + feed-refine): `litellm_client`, `video_spec_service`,
 `video_query_generator`, `video_spec_authoring`, `video_feed_refiner`,
+`video_feed_refine_runner` (the coalesced `feed_update` auto-refine runner — §4),
 `video_agent_service`, `videos_service` (facade). There is no worker-status provider — the backend has
 no worker-control surface at all (not even read-only status; the worker is fully self-scheduling). (The
-domain also wires the RAG read surface — `member_video_profile_service`, `video_recs_service`,
-`video_feed_service` — out of scope for this skill; see `FastApiBackend/CLAUDE.md`.)
+domain also wires the RAG read surface — `member_video_profile_service`, `video_feed_service`,
+`video_recs_service`, `video_rec_click_service`, `member_video_profile_refresh_runner` — out of scope
+for this skill; see `FastApiBackend/CLAUDE.md`.)
 DI providers (presets domain): `presets_service`, `presets_template_service`.
 DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
 No `video_config_*`, `video_template_service`, or `video_showcase_service` providers remain.
@@ -353,9 +360,9 @@ agent/generator/refiner logic use stubs. See `tests/videos/`.
   stable for CRM). `videos_insert_feed_video.sql` writes `curation_type = 'manual'`.
   `presets_insert_feed.sql` / `presets_insert_rejected_feed.sql` write
   `curation_type = 'automatic'`.
-- DI: `src/core/dependencies.py` providers: `litellm_client`, `video_spec_service`,
-  `video_query_generator`, `video_spec_authoring`,
-  `video_feed_refiner`, `video_agent_service`, `videos_service`; settings in
+- DI: `src/core/dependencies.py` providers (spec/agent + feed-refine): `litellm_client`,
+  `video_spec_service`, `video_query_generator`, `video_spec_authoring`,
+  `video_feed_refiner`, `video_feed_refine_runner`, `video_agent_service`, `videos_service`; settings in
   `src/core/config.py`: `video_llm_model` (litellm format), `video_agent_model`
   (bare model name), `video_query_count` (30), `video_agent_retries`,
   `anthropic_api_key`, `openai_api_key`, `gemini_api_key`.
