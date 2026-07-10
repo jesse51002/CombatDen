@@ -12,8 +12,10 @@
 -- template_gym_reward.sql, template_gym_feed.sql and their access_rules.
 --
 -- Order: rename the enum type, then the tables, then each table's constraints
--- (referenced by their new table name), then each index. A PK/UNIQUE constraint
--- and its backing index are independent names in Postgres, so both are renamed.
+-- (referenced by their new table name), then the plain btree indexes. A PK/UNIQUE
+-- constraint and its backing index share one identity in Postgres, so renaming the
+-- constraint renames its index too — only the standalone CREATE INDEX btrees are
+-- renamed explicitly below.
 
 -- 1. Enum type (the template_gym_feed.status type)
 ALTER TYPE video_gym_feed_status RENAME TO template_gym_feed_status;
@@ -63,15 +65,11 @@ ALTER TABLE template_gym_feed RENAME CONSTRAINT pk_video_gym_feed TO pk_template
 ALTER TABLE template_gym_feed RENAME CONSTRAINT fk_video_gym_feed_gym TO fk_template_gym_feed_gym;
 ALTER TABLE template_gym_feed RENAME CONSTRAINT fk_video_gym_feed_video TO fk_template_gym_feed_video;
 
--- 4. Indexes. PK/UNIQUE backing indexes share the constraint name in Postgres
---    but are NOT renamed by RENAME CONSTRAINT, so rename them explicitly; then
---    the plain btree indexes.
-ALTER INDEX pk_video_gym RENAME TO pk_template_gym;
-ALTER INDEX pk_video_gym_query RENAME TO pk_template_gym_query;
-ALTER INDEX pk_video_gym_class RENAME TO pk_template_gym_class;
-ALTER INDEX pk_video_gym_reward RENAME TO pk_template_gym_reward;
-ALTER INDEX pk_video_gym_feed RENAME TO pk_template_gym_feed;
-
+-- 4. Indexes. A PK/UNIQUE constraint and its backing index share one identity in
+--    Postgres, so the RENAME CONSTRAINT calls above ALREADY renamed the pk_*
+--    backing indexes (pk_video_gym -> pk_template_gym, etc.) — renaming them again
+--    here would error on the now-missing old name. Only the plain CREATE INDEX
+--    btrees (not constraint-backed) still carry the old prefix and need renaming.
 ALTER INDEX idx_video_gym_query_gym RENAME TO idx_template_gym_query_gym;
 ALTER INDEX idx_video_gym_class_gym RENAME TO idx_template_gym_class_gym;
 ALTER INDEX idx_video_gym_reward_gym RENAME TO idx_template_gym_reward_gym;
