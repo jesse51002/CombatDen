@@ -22,6 +22,7 @@ from src.shared.interfaces.llm_client import LLMClient
 from src.shared.sql_loader import load_sql
 from src.worker.worker_config import settings
 from src.worker.worker_spec import SpecData
+from src.worker.worker_util import vector_literal
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +49,10 @@ class WorkerFunnel:
     async def select(self, spec: SpecData) -> FunnelResult:
         """Compute this run's budgeted candidate set for ``spec``."""
         excluded = await self._incremental_excluded(spec)
-        tier1 = await self._tier1(spec, excluded)
-
         budget = settings.scan_budget_per_run
+        tier1 = await self._tier1(spec, excluded, budget)
+
         if len(tier1) >= budget:
-            tier1 = tier1[:budget]
             logger.info(
                 "gym %s funnel: %d tier-1 candidates (budget-capped, no probes)",
                 spec.gym_id,
@@ -93,13 +93,23 @@ class WorkerFunnel:
         )
         return {r["video_id"] for r in rows}
 
-    async def _tier1(self, spec: SpecData, excluded: set[str]) -> list[str]:
-        """Tier-1 candidate ids in relevance order, minus the incremental set."""
+    async def _tier1(
+        self, spec: SpecData, excluded: set[str], budget: int
+    ) -> list[str]:
+        """Tier-1 candidate ids in relevance order — the incremental exclusion and
+        the per-run budget are both applied IN-DB (``:exclude_ids`` + ``LIMIT
+        :budget``), so at most ``budget`` ids come back already minus the excluded
+        set."""
         rows = await self._db.fetch_all(
             load_sql(SQL_DIR / "worker_funnel_tier1.sql"),
-            {"queries": spec.queries, "disciplines": spec.disciplines},
+            {
+                "queries": spec.queries,
+                "disciplines": spec.disciplines,
+                "exclude_ids": list(excluded),
+                "budget": budget,
+            },
         )
-        return [r["video_id"] for r in rows if r["video_id"] not in excluded]
+        return [r["video_id"] for r in rows]
 
     async def _tier2(
         self, spec: SpecData, *, exclude: set[str], limit: int
@@ -135,15 +145,9 @@ class WorkerFunnel:
         return await self._db.fetch_all(
             load_sql(SQL_DIR / "worker_funnel_tier2.sql"),
             {
-                "vec": self._vector_literal(vector),
+                "vec": vector_literal(vector),
                 "disciplines": disciplines,
                 "exclude_ids": exclude_ids,
                 "top_k": settings.rag_probe_top_k,
             },
         )
-
-    @staticmethod
-    def _vector_literal(vector: list[float]) -> str:
-        """A float list as the pgvector text form ``[f1,f2,...]`` (cast to
-        ``vector`` in SQL)."""
-        return "[" + ",".join(repr(float(f)) for f in vector) + "]"

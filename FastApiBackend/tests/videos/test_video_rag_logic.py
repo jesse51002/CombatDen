@@ -6,12 +6,14 @@ NEVER builds), ``refresh_if_due`` (cooldown no-op vs stale rebuild + the
 embedding-dimension guard), ``verify_and_load_embedding`` (guarded read), the
 rotating single-rec
 ``get_rec`` (rotation index by served count, empty-category fall-through,
-forwards the member_id to the feed, records + returns rec_id with the video as a
-``GymVideoCard``, None when nothing available, propagates the ownership error —
-the rec is now a thin wrapper over a faked ``VideoFeedService.load_feed_page``),
-and the unified feed page (``VideoFeedService.load_feed_page`` always binds the
-member_embedding — text or NULL — plus the member_id / rank knobs, and reads the
-embedding only when a member_id is supplied).
+forwards the member_id + the ONCE-resolved embedding to the feed, records +
+returns rec_id with the video as a ``GymVideoCard``, None when nothing available,
+propagates the ownership error — the rec is a thin wrapper over a faked
+``VideoFeedService.rank_page_for_member``, resolving the member embedding a single
+time up front rather than once per rotation category), and the unified feed page
+(``VideoFeedService.load_feed_page`` always binds the member_embedding — text or
+NULL — plus the member_id / rank knobs, and reads the embedding only when a
+member_id is supplied).
 """
 
 from __future__ import annotations
@@ -353,25 +355,29 @@ def _rec_id_result(rec_id: object) -> _FakeResult:
 
 
 class _FakeFeed:
-    """A stand-in for VideoFeedService: ``load_feed_page`` returns a one-card
+    """A stand-in for VideoFeedService: ``rank_page_for_member`` returns a one-card
     page (``[card], 1``) for each category present in the mapping (an empty page
     otherwise), and records every call so the rotation + the forwarded member_id
-    can be asserted. The rec calls it filtered to one genre with ``limit=1``."""
+    and once-resolved embedding can be asserted. The rec calls it filtered to one
+    genre with ``limit=1``, passing the member embedding it resolved ONCE up front."""
 
     def __init__(self, by_category: dict[VideoGenre, GymVideoCard]):
         self._by_category = by_category
         self.calls: list[tuple] = []
 
-    async def load_feed_page(
+    async def rank_page_for_member(
         self,
         gym_id: object,
         *,
-        video_type: VideoGenre,
         member_id: object,
+        member_embedding: object,
+        video_type: VideoGenre,
         limit: int,
         offset: int,
     ) -> tuple[list[GymVideoCard], int]:
-        self.calls.append((gym_id, member_id, video_type, limit, offset))
+        self.calls.append(
+            (gym_id, member_id, video_type, limit, offset, member_embedding)
+        )
         card = self._by_category.get(video_type)
         return ([card], 1) if card is not None else ([], 0)
 
@@ -405,16 +411,20 @@ async def test_get_rec_rotation_index_by_served_count() -> None:
 
     rec = await svc.get_rec(uuid4(), member_id)
 
-    profile.verify_member_in_gym.assert_awaited_once()
-    # get_rec no longer reads the embedding itself — load_feed_page does.
-    profile.verify_and_load_embedding.assert_not_called()
+    # get_rec resolves the embedding ONCE up front (this guards membership too);
+    # verify_member_in_gym is no longer used.
+    profile.verify_and_load_embedding.assert_awaited_once()
+    profile.verify_member_in_gym.assert_not_called()
     assert isinstance(rec, MemberVideoRec)
     assert rec.category == VideoGenre.professional
     assert rec.rec_id == rec_id
-    # Only the professional category was queried (start index 1), member_id passed.
+    # Only the professional category was queried (start index 1), member_id passed,
+    # and the once-resolved embedding forwarded to the ranking read.
     assert [c[2] for c in feed.calls] == [VideoGenre.professional]
     assert feed.calls[0][1] == member_id
-    # DB touched twice only: served-count read + record insert.
+    assert feed.calls[0][5] == "[0.9]"
+    # DB touched twice only: served-count read + record insert (NOT one member read
+    # per rotation category — the embedding was resolved a single time).
     assert len(session.executed) == 2
 
 
@@ -503,10 +513,11 @@ async def test_get_rec_returns_none_when_no_category_yields() -> None:
 async def test_get_rec_propagates_member_not_in_gym() -> None:
     pool, session = _make_pool([])
     profile = AsyncMock()
-    profile.verify_member_in_gym = AsyncMock(
+    # The single up-front embedding read is also the membership guard — it raises.
+    profile.verify_and_load_embedding = AsyncMock(
         side_effect=MemberNotInGymError("Member not found in this gym")
     )
-    profile.verify_and_load_embedding = AsyncMock()
+    profile.verify_member_in_gym = AsyncMock()
     feed = _FakeFeed({})
     svc = _recs_service(pool, profile, feed)
 
@@ -515,7 +526,7 @@ async def test_get_rec_propagates_member_not_in_gym() -> None:
 
     assert len(session.executed) == 0
     assert len(feed.calls) == 0
-    profile.verify_and_load_embedding.assert_not_called()
+    profile.verify_member_in_gym.assert_not_called()
 
 
 # ── unified feed page: one SQL, always binds the rank params ─────────
@@ -548,7 +559,7 @@ def _feed_service(pool: MagicMock, embedding: str | None) -> VideoFeedService:
         youtube_client=MagicMock(),
         profile_service=profile,
         bump_sigma_fraction=_BUMP_FRACTION,
-        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
+        served_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
 
 
@@ -583,7 +594,7 @@ async def test_feed_page_binds_null_embedding_when_no_profile() -> None:
     assert total == 1 and len(cards) == 1
     sql, params = session.executed[0]
     # Same SQL — the embedding is just bound NULL; member_id still bound for the
-    # decayed watch penalty subquery.
+    # decayed served-penalty subquery.
     assert "<=>" in sql
     assert params["member_embedding"] is None
     assert params["member_id"] == str(member_id)
@@ -598,7 +609,7 @@ async def test_feed_page_skips_embedding_read_when_no_member_id() -> None:
         youtube_client=MagicMock(),
         profile_service=profile,
         bump_sigma_fraction=_BUMP_FRACTION,
-        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
+        served_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
 
     await svc.load_feed_page(uuid4(), limit=10, offset=0)

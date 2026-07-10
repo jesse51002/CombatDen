@@ -136,7 +136,7 @@ def _make_feed_service(mock_rows: list[dict]) -> tuple[VideoFeedService, MagicMo
         youtube_client=MagicMock(),
         profile_service=MagicMock(),
         bump_sigma_fraction=_BUMP_FRACTION,
-        watch_penalty_half_life_days=_HALF_LIFE_DAYS,
+        served_penalty_half_life_days=_HALF_LIFE_DAYS,
     )
     return svc, mock_session
 

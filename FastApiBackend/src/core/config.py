@@ -138,21 +138,22 @@ class Settings(BaseSettings):
         VideoGenre.clips,
         VideoGenre.memes,
     ]
-    # ── Unified feed ranking (owner boost + decayed watch penalty) ────
+    # ── Unified feed ranking (owner boost + decayed served penalty) ────
     # The one feed read serves ONLY enriched+accepted videos, merging the owner
     # section with the latest completed run, ranked on a single axis (cosine
     # distance to the member's taste embedding when built, else gym relevance).
     # Two nudges, each scaled by the axis's own sample standard deviation (sigma)
     # so they stay proportional to the spread: an owner-added video is pulled
-    # ~this fraction of a sigma NEARER, and an already-watched video is pushed the
-    # same fraction FARTHER per prior serve (each serve exponentially decayed by
-    # recency — a just-served video contributes ≈1 unit, an old serve ≈0). This
+    # ~this fraction of a sigma NEARER, and an already-SERVED video is pushed the
+    # same fraction FARTHER per prior serve (the penalty sums over each serve's
+    # recommended_at — SERVE time, no clicked_at filter — exponentially decayed by
+    # recency: a just-served video contributes ≈1 unit, an old serve ≈0). This
     # same read backs the member rec, so the decayed penalty is what advances the
     # rec on a re-serve (no anti-join). ~10% of the cosine spread.
     video_feed_bump_sigma_fraction: float = 0.10
-    # Half-life (days) of the already-watched penalty: a serve this many days old
+    # Half-life (days) of the served (recency) penalty: a serve this many days old
     # counts half as much toward pushing its video back as a serve just now.
-    video_watch_penalty_half_life_days: float = 7.0
+    video_served_penalty_half_life_days: float = 7.0
 
     # Asset storage (S3 + CloudFront CDN) — the same bucket ThemeService's
     # build-time asset pipeline populates (theme images, fonts, etc.). This

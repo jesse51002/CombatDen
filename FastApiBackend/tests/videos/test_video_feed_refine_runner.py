@@ -3,12 +3,15 @@
 Pure unit tests (no DB / network):
 
 * ``VideoFeedRefineRunner`` — ``start`` fires a detached refine; per-gym
-  COALESCED (a second ``start`` for an in-flight gym is dropped, and the guard
-  clears when the refine finishes so a later curation fires afresh); a refine
-  failure never propagates; ``drain`` cancels + clears in-flight work.
+  COALESCED with a dirty flag (a ``start`` for an in-flight gym is dropped but
+  marks it dirty, so exactly ONE follow-up refine runs when the in-flight one
+  finishes — the mid-flight signal is coalesced, never lost); the guard clears
+  when the refine finishes so a later curation fires afresh; a refine failure
+  never propagates; ``drain`` cancels + clears in-flight/dirty work.
 * The router wiring — a manual REJECT (``remove_gym_video`` ``owner=False``) and a
-  KEEP (``keep_gym_video``) fire the runner; an owner-section remove
-  (``owner=True``) does NOT; owner-add spawns no refine at all.
+  KEEP (``keep_gym_video``) fire the runner ONLY when the service reports the
+  write actually curated a row (a no-op reject/keep does NOT); an owner-section
+  remove (``owner=True``) does NOT; owner-add spawns no refine at all.
 """
 
 from __future__ import annotations
@@ -28,9 +31,10 @@ from src.videos.videos_router import (
 
 
 def _reset_runner() -> None:
-    """Clear the ClassVar-backed task + in-flight sets between tests."""
+    """Clear the ClassVar-backed task + in-flight + dirty sets between tests."""
     VideoFeedRefineRunner._background_runs.clear()
     VideoFeedRefineRunner._in_flight_gyms.clear()
+    VideoFeedRefineRunner._dirty_gyms.clear()
 
 
 async def _await_background() -> None:
@@ -38,6 +42,18 @@ async def _await_background() -> None:
     runs = list(VideoFeedRefineRunner._background_runs)
     for run in runs:
         await asyncio.gather(run, return_exceptions=True)
+
+
+async def _drain_until_idle() -> None:
+    """Await tasks repeatedly until none remain — a coalesced follow-up refine is
+    scheduled as a NEW task while its predecessor finishes, so one gather pass
+    isn't enough to reach quiescence."""
+    for _ in range(100):
+        runs = list(VideoFeedRefineRunner._background_runs)
+        if not runs:
+            return
+        await asyncio.gather(*runs, return_exceptions=True)
+    raise AssertionError("runner never became idle")
 
 
 class _CountingRefiner:
@@ -86,22 +102,33 @@ async def test_start_fires_refine_and_reclears_after() -> None:
 
 
 @pytest.mark.asyncio
-async def test_start_coalesces_concurrent_same_gym() -> None:
+async def test_start_coalesces_and_reruns_once_for_mid_flight_signal() -> None:
+    # The lost-signal path: a curation arriving WHILE a refine is in flight is
+    # dropped by the in-flight guard, but marks the gym dirty so exactly ONE
+    # follow-up refine runs when the in-flight one finishes — the mid-flight
+    # signal is coalesced, never lost, and a burst is never one-refine-per-drop.
     _reset_runner()
     refiner = _GatedRefiner()
     runner = VideoFeedRefineRunner(refiner)
     gym = uuid4()
 
     runner.start(gym)
-    runner.start(gym)  # dropped — a refine for this gym is already in flight
-    runner.start(gym)  # dropped
+    runner.start(gym)  # mid-flight → dropped-but-marks-dirty (NOT lost)
+    runner.start(gym)  # mid-flight → still just dirty (coalesced)
     await asyncio.sleep(0)  # let the one scheduled task reach its gate
 
-    assert refiner.calls == [gym]  # coalesced to a single in-flight refine
+    assert refiner.calls == [gym]  # only one refine in flight so far
     assert len(VideoFeedRefineRunner._background_runs) == 1
+    assert gym in VideoFeedRefineRunner._dirty_gyms
 
-    refiner.gate.set()
-    await _await_background()
+    refiner.gate.set()  # let the in-flight refine (and its follow-up) finish
+    await _drain_until_idle()
+
+    # Exactly ONE follow-up refine ran for the mid-flight signal — two total, not
+    # five (one per dropped start) and not one (the last signal dropped forever).
+    assert refiner.calls == [gym, gym]
+    assert VideoFeedRefineRunner._in_flight_gyms == set()
+    assert VideoFeedRefineRunner._dirty_gyms == set()
 
 
 @pytest.mark.asyncio
@@ -170,7 +197,8 @@ def _auth() -> MagicMock:
 async def test_reject_fires_refine_runner() -> None:
     auth = _auth()
     svc = MagicMock()
-    svc.remove_feed_video = AsyncMock(return_value=None)
+    # A reject that actually curated a served row → the service returns True.
+    svc.remove_feed_video = AsyncMock(return_value=True)
     runner = MagicMock()
     gym = uuid4()
 
@@ -189,10 +217,36 @@ async def test_reject_fires_refine_runner() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reject_noop_does_not_fire_refine_runner() -> None:
+    # A no-op reject (video not in the served run, or already rejected) → the
+    # service returns False → no wasted refine (which could also consume a
+    # genuinely-pending signal).
+    auth = _auth()
+    svc = MagicMock()
+    svc.remove_feed_video = AsyncMock(return_value=False)
+    runner = MagicMock()
+
+    await remove_gym_video(
+        gym_id=uuid4(),
+        video_id="vid00000001",
+        credentials=MagicMock(),
+        owner=False,
+        body=None,
+        auth=auth,
+        videos_service=svc,
+        refine_runner=runner,
+    )
+
+    runner.start.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_owner_remove_does_not_fire_refine_runner() -> None:
     auth = _auth()
     svc = MagicMock()
-    svc.remove_feed_video = AsyncMock(return_value=None)
+    # An owner-section delete is never a curation signal → the service returns
+    # False, and the router also gates owner-removes out regardless.
+    svc.remove_feed_video = AsyncMock(return_value=False)
     runner = MagicMock()
 
     await remove_gym_video(
@@ -213,7 +267,8 @@ async def test_owner_remove_does_not_fire_refine_runner() -> None:
 async def test_keep_fires_refine_runner() -> None:
     auth = _auth()
     svc = MagicMock()
-    svc.keep_feed_video = AsyncMock(return_value=None)
+    # A keep that actually un-rejected a served row → the service returns True.
+    svc.keep_feed_video = AsyncMock(return_value=True)
     runner = MagicMock()
     gym = uuid4()
 
@@ -228,6 +283,28 @@ async def test_keep_fires_refine_runner() -> None:
     )
 
     runner.start.assert_called_once_with(gym)
+
+
+@pytest.mark.asyncio
+async def test_keep_noop_does_not_fire_refine_runner() -> None:
+    # Keeping an already-accepted video (or one not in the served run) curates 0
+    # rows → the service returns False → no wasted refine.
+    auth = _auth()
+    svc = MagicMock()
+    svc.keep_feed_video = AsyncMock(return_value=False)
+    runner = MagicMock()
+
+    await keep_gym_video(
+        gym_id=uuid4(),
+        video_id="vid00000001",
+        credentials=MagicMock(),
+        body=None,
+        auth=auth,
+        videos_service=svc,
+        refine_runner=runner,
+    )
+
+    runner.start.assert_not_called()
 
 
 @pytest.mark.asyncio

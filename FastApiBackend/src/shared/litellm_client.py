@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -135,5 +135,20 @@ class LiteLLMClient:
             api_key=api_key,
             timeout=_REQUEST_TIMEOUT,
         )
-        ordered = sorted(resp.data, key=lambda item: item["index"])
-        return [item["embedding"] for item in ordered]
+        ordered = sorted(
+            (self._embedding_item(item) for item in resp.data),
+            key=lambda pair: pair[0],
+        )
+        return [embedding for _, embedding in ordered]
+
+    @staticmethod
+    def _embedding_item(item: Any) -> tuple[int, list[float]]:
+        """(index, embedding) off one litellm embedding datum, tolerant of dict
+        OR attribute access across litellm response shapes (some versions return
+        plain dicts, some return objects). Mirrors VideoService's sibling
+        ``WorkerEnricher``/``LLMClient`` helper so both sides survive either shape
+        instead of raising ``TypeError`` on object data. Preserves the
+        sort-by-index that restores input order."""
+        if isinstance(item, dict):
+            return item["index"], item["embedding"]
+        return item.index, item.embedding

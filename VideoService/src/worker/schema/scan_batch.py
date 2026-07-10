@@ -7,8 +7,9 @@ up to ``scan_budget_per_run`` candidates.
 
 ``extra="forbid"`` on both models so a malformed reply is rejected and re-asked.
 The caller validates that the returned ids are a subset of the batch's ids
-(hallucinated ids are dropped) and that every batch id got a verdict (a missing
-id is retried once, then defaulted to rejected).
+(hallucinated ids are dropped); a batch id the model omits gets NO verdict — it is
+struck once (``failure_count += 1``) and left ``pending`` to retry on a later sweep.
+There is no default-to-rejected and no per-id retry loop.
 """
 
 from __future__ import annotations

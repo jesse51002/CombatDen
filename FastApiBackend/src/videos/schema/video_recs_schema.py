@@ -5,9 +5,9 @@ A rec is a single served feed card (:class:`GymVideoCard`) wrapped in a
 back on a click) and the video's genre ``category``. The rec surface serves ONE
 video at a time, rotating through the genre categories in
 ``settings.video_rec_category_rotation`` so a member sees a spread over time. The
-pick is the top of the unified feed read (``VideoFeedService.load_feed_page``,
+pick is the top of the unified feed read (``VideoFeedService.rank_page_for_member``,
 ``limit=1``) for that genre — cosine order to the member's taste embedding (gym
-relevance when they have no embedding yet), with the decayed already-watched
+relevance when they have no embedding yet), with the decayed already-served
 penalty advancing the pick on a re-serve. The card already carries its
 ``video_id``, so no separate candidate wrapper is needed.
 """

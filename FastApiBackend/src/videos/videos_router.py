@@ -385,7 +385,7 @@ async def remove_gym_video(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await videos_service.remove_feed_video(
+        curated = await videos_service.remove_feed_video(
             gym_id,
             video_id,
             owner=owner,
@@ -403,13 +403,16 @@ async def remove_gym_video(
             detail="Failed to remove gym video",
         ) from None
 
-    # After a manual REJECT (owner=False) commits, fire a coalesced, best-effort
-    # feed-learning refine (mints a feed_update spec version from the gym's manual
-    # signals; the worker re-scans similar videos ≥1h later). An owner-section
-    # remove (owner=True) is NOT a keep/reject curation signal, so it does not
-    # learn. Router-level composition keeps VideoFeedService decoupled from the
-    # runner; a refine failure never surfaces here.
-    if not owner:
+    # After a manual REJECT (owner=False) that ACTUALLY curated a served row
+    # commits, fire a coalesced, best-effort feed-learning refine (mints a
+    # feed_update spec version from the gym's manual signals; the worker re-scans
+    # similar videos ≥1h later). Gated on ``curated`` so a no-op reject (video not
+    # in the served run, or already rejected) spawns no wasted refine — which would
+    # also risk consuming a genuinely-pending curation signal. An owner-section
+    # remove (owner=True) is NOT a keep/reject signal (``curated`` is always False).
+    # Router-level composition keeps VideoFeedService decoupled from the runner; a
+    # refine failure never surfaces here.
+    if curated:
         refine_runner.start(gym_id)
 
 
@@ -448,7 +451,7 @@ async def keep_gym_video(
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await videos_service.keep_feed_video(
+        curated = await videos_service.keep_feed_video(
             gym_id,
             video_id,
             accept_reason=body.accept_reason if body else None,
@@ -462,9 +465,12 @@ async def keep_gym_video(
             detail="Failed to keep gym video",
         ) from None
 
-    # After the keep (un-reject) commits, fire the same coalesced, best-effort
-    # feed-learning refine so the worker surfaces similar videos ≥1h later.
-    refine_runner.start(gym_id)
+    # After a keep (un-reject) that ACTUALLY un-rejected a served row commits, fire
+    # the same coalesced, best-effort feed-learning refine so the worker surfaces
+    # similar videos ≥1h later. Gated on ``curated`` so keeping an already-accepted
+    # video (or one not in the served run) fires no wasted refine.
+    if curated:
+        refine_runner.start(gym_id)
 
 
 @videos_router.get(
@@ -668,7 +674,7 @@ async def refine_video_spec_from_feed(
         "rotates by the member's total served-rec count, and within it the pick "
         "is the top of the unified served feed for that genre — cosine order to "
         "the member's taste embedding (gym relevance when they have no profile "
-        "yet), with the decayed already-watched penalty advancing the pick on a "
+        "yet), with the decayed already-served penalty advancing the pick on a "
         "re-serve. The served pick is recorded to ``member_video_recs`` and "
         "returned with its ``rec_id`` (post it back to the click route). 404 "
         "when the member has no recommendation available in any category."

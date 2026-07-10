@@ -61,7 +61,7 @@ def _vec(nonzero: dict[int, float]) -> str:
 #   _VEC_NEAR2 → ~0.0012 (a 0.05 nudge on axis 1)
 #   _VEC_FAR   → 1.0     (orthogonal)
 # A tight #1↔#2 gap (~0.0012) with a fat spread (the far cluster) is what lets
-# 0.1σ (~0.06) exceed the gap so the owner boost / watch penalty can flip #1↔#2.
+# 0.1σ (~0.06) exceed the gap so the owner boost / served penalty can flip #1↔#2.
 _MEMBER_VEC = _vec({0: 1.0})
 _VEC_NEAR = _vec({0: 1.0})
 _VEC_NEAR2 = _vec({0: 1.0, 1: 0.05})
@@ -516,11 +516,11 @@ async def test_pending_invisible_in_all_lists(
 # ── personalized ranking (needs members.video_profile_*) ──────────────
 
 
-async def test_personalized_watch_penalty_flips_top_pick(
+async def test_personalized_served_penalty_flips_top_pick(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
     """With a member embedding bound, A (cosine 0) leads B (cosine ~0.0012). After
-    A is served once (a fresh member_video_recs row), the decayed watch penalty
+    A is served once (a fresh member_video_recs row), the decayed served penalty
     (~0.1σ) exceeds the tiny A↔B gap and B becomes the top pick. Three far videos
     (cosine 1.0) inflate σ. Migration-gated on members.video_profile_*."""
     member_id = await _insert_member(db_pool, gym_id)
@@ -553,7 +553,7 @@ async def test_personalized_watch_penalty_flips_top_pick(
 
         after = await rag_client.get(url, headers=_AUTH_HEADERS)
         ids_after = [v["video_id"] for v in after.json()["videos"]]
-        assert ids_after[0] == b  # A pushed back by the fresh watch penalty
+        assert ids_after[0] == b  # A pushed back by the fresh served penalty
         assert ids_after.index(b) < ids_after.index(a)
     finally:
         await _delete_member_and_videos(db_pool, member_id, [a, b, *far])
@@ -563,7 +563,7 @@ async def test_rec_advances_across_consecutive_calls(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
     """Two consecutive rec GETs return DIFFERENT videos: the first serves A (the
-    closest educational pick), and the decayed watch penalty it records pushes A
+    closest educational pick), and the decayed served penalty it records pushes A
     below B on the next serve (needed ~5 clustered candidates — 2 near at cosine
     0/0.0012 plus 3 orthogonal at cosine 1.0 to fatten σ — for 0.1σ to clear the
     #1↔#2 gap). No already-served anti-join. Migration-gated on

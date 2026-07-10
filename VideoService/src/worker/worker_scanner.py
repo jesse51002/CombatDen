@@ -1,26 +1,30 @@
 """Scan sweep — a gym-agnostic keep/drop pass that settles + re-judges feed rows.
 
-The target set (``worker_scan_targets.sql``) is the feed rows in each gym's latest
-non-failed run whose video is already enriched (a ``video_rag`` row) and is under
-the strike ceiling, grouped by gym, matching EITHER arm: (A) a ``pending`` row (its
-first-ever verdict), OR (B) an ``automatic`` row (pending/accepted/rejected) whose
-``scanned_at`` predates a gym ``feed_update`` spec version that has settled ≥
-``worker_feed_update_rescan_delay_hours`` — the feed-learning RE-SCAN. The sweep
-DRAINS it: per gym, it loads that gym's LATEST spec at scan time (judge against the
-current criteria — the ``feed_update`` folded in the owner's manual signals), batches
-the candidates, and runs a TEXT-ONLY keep/drop against each candidate's summary +
-structured enrich outputs (genre, disciplines, facets). The enrich step already did
-the multimodal (thumbnail) pass ONCE and folded the visual detail into the summary,
-so scan never re-fetches the thumbnail — cheaper, and it matters because scan runs
-per-gym (a video in many feeds is scanned many times) while enrich runs once per
-video.
+The target set (``worker_scan_targets.sql``) is enriched feed rows (a ``video_rag``
+row) under the strike ceiling, grouped by gym, matching EITHER arm: (A) a ``pending``
+row in the gym's LATEST NON-FAILED run (its first-ever verdict), OR (B) an
+``automatic`` row in the gym's LATEST COMPLETED (SERVED) run whose ``scanned_at``
+predates a gym ``feed_update`` spec version that has settled ≥
+``worker_feed_update_rescan_delay_hours`` — the feed-learning RE-SCAN. Arm B targets
+the SERVED run, not the latest non-failed one, so an in-flight ``running`` run never
+diverts the re-judge from what members actually see. The sweep DRAINS it: per gym, it
+loads that gym's LATEST spec at scan time (judge against the current criteria — the
+``feed_update`` folded in the owner's manual signals), batches the candidates, and
+runs a TEXT-ONLY keep/drop against each candidate's summary + structured enrich
+outputs (genre, disciplines, facets). The enrich step already did the multimodal
+(thumbnail) pass ONCE and folded the visual detail into the summary, so scan never
+re-fetches the thumbnail — cheaper, and it matters because scan runs per-gym (a video
+in many feeds is scanned many times) while enrich runs once per video.
 
 Verdicts are written by UPDATE (``worker_update_verdict.sql``): an automatic row is
 flipped to accepted/rejected (arm B flips accepted<->rejected only when the judgment
 changes) and stamped ``scanned_at = now()``, guarded by ``curation_type <> 'manual'``
 so an owner's explicit keep/reject verdict is never overwritten and the row is never
-flipped to ``pending`` (which would blank it from the served feed). A verdicted video
-gets its strike counter reset.
+flipped to ``pending`` (which would blank it from the served feed). Because arm A and
+arm B can select rows from DIFFERENT runs for the same gym (arm A the fresh running
+run, arm B the served completed one), each verdict is keyed by ITS OWN row's
+``video_run_id`` — never a single per-gym run — so a verdict always lands on the row
+it judged. A verdicted video gets its strike counter reset.
 
 Strike semantics — there is NO default-to-rejected: a batch whose LLM call raises
 bumps ``failure_count`` for EVERY video in the batch and leaves the rows ``pending``
@@ -34,7 +38,6 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from string import Template
@@ -47,6 +50,7 @@ from src.worker.schema.scan_batch import ScanBatchResult
 from src.worker.worker_abort import check_abort
 from src.worker.worker_config import settings
 from src.worker.worker_cost_log import WorkerCostLog
+from src.worker.worker_util import chunks
 
 logger = logging.getLogger(__name__)
 
@@ -96,31 +100,40 @@ class WorkerScanner:
     async def _scan_gym(
         self, gym_id: str, rows: list[dict], abort: asyncio.Event
     ) -> None:
-        """Scan one gym's pending candidates against its latest spec."""
+        """Scan one gym's candidates against its latest spec. The accumulated LLM
+        spend is logged in a ``finally`` so an abort between batches still records
+        what was already spent (one ``scan`` row per gym per sweep)."""
         criteria = await self._load_criteria(gym_id)
         if criteria is None:
             logger.warning("gym %s has no spec at scan time — skipped", gym_id)
             return
-        run_id = str(rows[0]["video_run_id"])
+        # An attribution pointer for the single per-gym cost row (rows may span two
+        # runs — arm A's running run and arm B's completed run — but the cost row is
+        # per-gym-per-sweep, so any of the gym's runs is a fine pointer).
+        cost_run_id = str(rows[0]["video_run_id"])
         total_cost = 0.0
-        for batch in self._chunks(rows, settings.scan_batch_size):
-            check_abort(abort)
-            total_cost += await self._scan_batch(criteria, gym_id, run_id, batch)
-        await self._cost_log.log_scan(
-            gym_id, run_id, scan_usd=total_cost, scanned=len(rows)
-        )
+        scanned = 0
+        try:
+            for batch in chunks(rows, settings.scan_batch_size):
+                check_abort(abort)
+                total_cost += await self._scan_batch(criteria, gym_id, batch)
+                scanned += len(batch)
+        finally:
+            if scanned:
+                await self._cost_log.log_scan(
+                    gym_id, cost_run_id, scan_usd=total_cost, scanned=scanned
+                )
         logger.info(
-            "gym %s scan: %d pending judged; LLM $%.4f",
-            gym_id,
-            len(rows),
-            total_cost,
+            "gym %s scan: %d judged; LLM $%.4f", gym_id, scanned, total_cost
         )
 
     async def _scan_batch(
-        self, criteria: tuple[str, str], gym_id: str, run_id: str, batch: list[dict]
+        self, criteria: tuple[str, str], gym_id: str, batch: list[dict]
     ) -> float:
         """One batch's text-only keep/drop. On an LLM exception the whole batch is
-        struck and left pending; a per-id miss is struck alone and left pending."""
+        struck and left pending; a per-id miss is struck alone and left pending.
+        Each verdict is keyed by its OWN row's ``video_run_id`` (arm A and arm B may
+        select rows from different runs for the same gym)."""
         prompt = self._build_batch(criteria, batch)
         try:
             result, cost = await self._llm.complete_structured_with_cost(
@@ -133,20 +146,20 @@ class WorkerScanner:
             await self._bump_failure([r["video_id"] for r in batch])
             return 0.0
 
-        batch_ids = {r["video_id"] for r in batch}
+        run_by_id = {r["video_id"]: str(r["video_run_id"]) for r in batch}
         verdicts = {
             v.video_id: v.is_good
             for v in result.verdicts
-            if v.video_id in batch_ids
+            if v.video_id in run_by_id
         }
         dropped = len(result.verdicts) - len(verdicts)
         if dropped:
             logger.warning(
                 "scan batch returned %d id(s) not in the batch (dropped)", dropped
             )
-        await self._write_verdicts(gym_id, run_id, verdicts)
+        await self._write_verdicts(gym_id, run_by_id, verdicts)
         await self._reset_failure(list(verdicts))
-        missing = [vid for vid in batch_ids if vid not in verdicts]
+        missing = [vid for vid in run_by_id if vid not in verdicts]
         if missing:
             logger.warning(
                 "no verdict for %d id(s) — struck, left pending", len(missing)
@@ -155,10 +168,11 @@ class WorkerScanner:
         return cost
 
     async def _write_verdicts(
-        self, gym_id: str, run_id: str, verdicts: dict[str, bool]
+        self, gym_id: str, run_by_id: dict[str, str], verdicts: dict[str, bool]
     ) -> None:
-        """Flip each verdicted auto row to accepted/rejected by UPDATE."""
-        params = self._verdict_params(gym_id, run_id, verdicts)
+        """Flip each verdicted auto row to accepted/rejected by UPDATE, each keyed
+        by its own row's ``video_run_id``."""
+        params = self._verdict_params(gym_id, run_by_id, verdicts)
         if not params:
             return
         await self._db.execute_with_retry(
@@ -195,15 +209,16 @@ class WorkerScanner:
 
     @staticmethod
     def _verdict_params(
-        gym_id: str, run_id: str, verdicts: dict[str, bool]
+        gym_id: str, run_by_id: dict[str, str], verdicts: dict[str, bool]
     ) -> list[dict]:
-        """Bind rows for the verdict UPDATE; rejected rows stamp rejected_at."""
+        """Bind rows for the verdict UPDATE; each keyed by its own row's
+        ``video_run_id``; rejected rows stamp rejected_at."""
         now = datetime.now(timezone.utc)
         return [
             {
                 "gym_id": gym_id,
                 "video_id": video_id,
-                "video_run_id": run_id,
+                "video_run_id": run_by_id[video_id],
                 "verdict": (
                     SCAN_STATUS_ACCEPTED if is_good else SCAN_STATUS_REJECTED
                 ),
@@ -249,9 +264,3 @@ class WorkerScanner:
         if facets:
             return json.dumps(facets, separators=(",", ":"))
         return "{}"
-
-    @staticmethod
-    def _chunks(seq: Sequence[dict], size: int) -> Iterator[list[dict]]:
-        """Yield ``seq`` in lists of at most ``size``."""
-        for start in range(0, len(seq), size):
-            yield list(seq[start : start + size])

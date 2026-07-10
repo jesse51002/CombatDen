@@ -21,6 +21,7 @@ def route(sql: str) -> str:
         ("DELETE FROM video", "cleanup_videos"),
         (":complete_fraction", "finalize_complete"),
         ("'no feed rows'", "finalize_fail"),
+        ("error = :error", "fail_run"),
         ("INSERT INTO video_run", "insert_run"),
         ("gym_video_spec_latest", "spec_latest"),
         ("SELECT run_id, created_at", "prev_run"),

@@ -102,7 +102,7 @@ class VideosService:
         ALWAYS merges the owner section with the latest completed run and serves
         only enriched+accepted videos. ``member_id`` optionally personalizes the
         ranking to that member's video-taste embedding (read-only; gym relevance
-        when they have no profile) and decays their watch penalty.
+        when they have no profile) and decays their served (recency) penalty.
         """
         return await self._feed.load_feed_page(
             gym_id,
@@ -147,7 +147,7 @@ class VideosService:
         *,
         owner: bool = False,
         reason: str | None = None,
-    ) -> None:
+    ) -> bool:
         return await self._feed.remove_feed_video(
             gym_id, video_id, owner=owner, reason=reason
         )
@@ -158,7 +158,7 @@ class VideosService:
         video_id: str,
         *,
         accept_reason: str | None = None,
-    ) -> None:
+    ) -> bool:
         return await self._feed.keep_feed_video(
             gym_id, video_id, accept_reason=accept_reason
         )

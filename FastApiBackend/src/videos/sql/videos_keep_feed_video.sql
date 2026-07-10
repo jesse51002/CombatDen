@@ -11,6 +11,10 @@ SET scan_status = 'accepted',
     curated_at = now()
 WHERE gym_id = CAST(:gym_id AS UUID)
   AND video_id = :video_id
+  -- Only an actually-rejected row is a real "keep" (un-reject): keeping an
+  -- already-accepted video is a no-op that must curate 0 rows (rowcount = 0) so
+  -- the caller fires no wasted feed-learning refine.
+  AND scan_status <> 'accepted'
   -- Target the run currently being SERVED (latest COMPLETED): an owner's keep
   -- during an in-flight run must curate the served feed, not the 'running' one.
   AND video_run_id = (

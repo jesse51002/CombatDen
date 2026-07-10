@@ -35,7 +35,9 @@ from src.videos.service.member_video_profile_service import (
 )
 from src.videos.service.youtube_metadata import YouTubeMetadataClient
 
-# Half-life days → seconds for the watch penalty decay (config carries days).
+# Half-life days → seconds for the served-recency penalty decay (config carries
+# days). The penalty sums over member_video_recs.recommended_at (SERVE time, no
+# clicked_at filter) — it's a served/recency penalty, not a "watched" one.
 SECONDS_PER_DAY = 86400
 
 # A YouTube video id is always 11 chars from this alphabet.
@@ -64,13 +66,15 @@ class VideoFeedService:
         youtube_client: YouTubeMetadataClient,
         profile_service: MemberVideoProfileService,
         bump_sigma_fraction: float,
-        watch_penalty_half_life_days: float,
+        served_penalty_half_life_days: float,
     ) -> None:
         self._db = db_pool
         self._youtube = youtube_client
         self._profiles = profile_service
         self._bump_fraction = bump_sigma_fraction
-        self._half_life_seconds = watch_penalty_half_life_days * SECONDS_PER_DAY
+        self._half_life_seconds = (
+            served_penalty_half_life_days * SECONDS_PER_DAY
+        )
 
     # ── helpers ──────────────────────────────────────────────────
 
@@ -192,7 +196,7 @@ class VideoFeedService:
         ALWAYS merges the owner "Your videos" section with the gym's latest
         COMPLETED run (no owner/source param), serves ONLY enriched-AND-accepted
         videos (INNER JOIN ``video_rag``), and ranks on a single axis with a
-        σ-scaled owner boost + a decayed already-watched penalty. Returns
+        σ-scaled owner boost + a decayed already-served (recency) penalty. Returns
         ``(page, total)`` in one round-trip.
 
         The rank axis is cosine distance to the member's video-taste embedding
@@ -204,7 +208,7 @@ class VideoFeedService:
         The embedding is READ-ONLY (never built here); ``member_id`` is only a
         ranking hint — the candidate set is always this gym's feed, so it can't
         leak (the route is already gym-employee gated). The per-member decayed
-        watch penalty (from ``member_video_recs``) is what advances the rec on a
+        served penalty (from ``member_video_recs``) is what advances the rec on a
         re-serve; it is 0 when ``member_id`` is None.
 
         ``total`` is the count of all matching rows before pagination (via
@@ -212,17 +216,80 @@ class VideoFeedService:
         exceeds the match count — callers should not request pages past the
         ``total`` returned by the first response.
         """
+        embedding = (
+            await self._profiles.verify_and_load_embedding(member_id, gym_id)
+            if member_id is not None
+            else None
+        )
+        return await self._ranked_page(
+            gym_id,
+            member_id=member_id,
+            member_embedding=embedding,
+            rejected=rejected,
+            video_type=video_type,
+            big_group=big_group,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def rank_page_for_member(
+        self,
+        gym_id: UUID,
+        *,
+        member_id: UUID,
+        member_embedding: str | None,
+        rejected: bool = False,
+        video_type: VideoGenre | None = None,
+        big_group: BigGroup | None = None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[GymVideoCard], int]:
+        """Rank a feed page for a member whose embedding the caller ALREADY
+        resolved — WITHOUT re-reading the member row.
+
+        The rec loop resolves the member's embedding ONCE (via
+        ``verify_and_load_embedding``, which also guards membership) and calls this
+        per rotation category, so a rec issues a SINGLE member/embedding read
+        instead of one per category. Membership is NOT re-verified here — the
+        caller must have already guarded it. Same ranking as ``load_feed_page``.
+        """
+        return await self._ranked_page(
+            gym_id,
+            member_id=member_id,
+            member_embedding=member_embedding,
+            rejected=rejected,
+            video_type=video_type,
+            big_group=big_group,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def _ranked_page(
+        self,
+        gym_id: UUID,
+        *,
+        member_id: UUID | None,
+        member_embedding: str | None,
+        rejected: bool,
+        video_type: VideoGenre | None,
+        big_group: BigGroup | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[GymVideoCard], int]:
+        """Build + run the unified feed SQL against an ALREADY-resolved embedding.
+
+        The single place the feed-page ranking query is assembled and executed;
+        both ``load_feed_page`` (which resolves the embedding first) and
+        ``rank_page_for_member`` (which receives it) funnel here so the SQL + param
+        binding live in one spot. ``member_id`` is still bound for the decayed
+        served-penalty subquery even when the embedding is None.
+        """
         scan_status = (
             GymVideoScanStatus.rejected
             if rejected
             else GymVideoScanStatus.accepted
         )
         educational_genres = [g.value for g in EDUCATIONAL_GENRES]
-        embedding = (
-            await self._profiles.verify_and_load_embedding(member_id, gym_id)
-            if member_id is not None
-            else None
-        )
         params: dict = {
             "gym_id": str(gym_id),
             "scan_status": scan_status.value,
@@ -233,7 +300,7 @@ class VideoFeedService:
                 big_group.value if big_group is not None else None
             ),
             "educational_genres": educational_genres,
-            "member_embedding": embedding,
+            "member_embedding": member_embedding,
             "member_id": str(member_id) if member_id is not None else None,
             "bump_fraction": self._bump_fraction,
             "half_life_seconds": self._half_life_seconds,
@@ -378,7 +445,7 @@ class VideoFeedService:
         *,
         owner: bool = False,
         reason: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Remove one video — behaviour set by the section it's removed from.
 
         * **owner=True** ("Your videos"): DELETE the owner-section feed row. If
@@ -387,6 +454,12 @@ class VideoFeedService:
           row to ``scan_status='rejected'`` with ``curation_type='manual'``.
 
         Idempotent: a no-op when the video isn't in that section.
+
+        Returns ``True`` iff a REJECT actually curated a served row (owner=False,
+        a still-accepted latest-completed-run row existed) — the caller fires the
+        feed-learning refine only then, so a no-op reject (video not in the run,
+        no completed run, or already rejected) spawns no wasted refine. An
+        owner-section delete (owner=True) is never a keep/avoid signal → ``False``.
         """
         params = {"gym_id": str(gym_id), "video_id": video_id}
         async with self._db.session() as session, session.begin():
@@ -410,11 +483,12 @@ class VideoFeedService:
                         ),
                         params,
                     )
-            else:
-                await session.execute(
-                    text(load_sql(SQL_DIR / "videos_reject_feed_video.sql")),
-                    {**params, "reason": reason},
-                )
+                return False
+            result = await session.execute(
+                text(load_sql(SQL_DIR / "videos_reject_feed_video.sql")),
+                {**params, "reason": reason},
+            )
+            return result.rowcount > 0
 
     async def keep_feed_video(
         self,
@@ -422,7 +496,7 @@ class VideoFeedService:
         video_id: str,
         *,
         accept_reason: str | None = None,
-    ) -> None:
+    ) -> bool:
         """"Keep" a rejected video: flip its served row(s) back to accepted.
 
         ``accept_reason`` is persisted as ``curation_reason`` on the feed row
@@ -431,10 +505,15 @@ class VideoFeedService:
         param is named ``accept_reason`` to match the CRM-facing request body
         (``VideoKeepRequest.accept_reason``); the SQL bind maps it to the
         ``curation_reason`` column.
+
+        Returns ``True`` iff a row was actually un-rejected (a still-rejected row
+        existed in the latest completed run) — the caller fires the feed-learning
+        refine only then, so keeping an already-accepted video (or one not in the
+        run) is a no-op that spawns no wasted refine.
         """
         keep_sql = load_sql(SQL_DIR / "videos_keep_feed_video.sql")
         async with self._db.session() as session, session.begin():
-            await session.execute(
+            result = await session.execute(
                 text(keep_sql),
                 {
                     "gym_id": str(gym_id),
@@ -442,3 +521,4 @@ class VideoFeedService:
                     "accept_reason": accept_reason,
                 },
             )
+            return result.rowcount > 0

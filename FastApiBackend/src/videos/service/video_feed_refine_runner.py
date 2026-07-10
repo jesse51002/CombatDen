@@ -9,15 +9,21 @@ worker's scan sweep then re-judges the gym's auto feed rows against it ≥1h lat
 (that wait lives in the worker, not here).
 
 **Per-gym COALESCED.** If a refine for a gym is already in flight, a second trigger
-for that gym is DROPPED — the in-flight run folds the newest manual signals when it
-loads them, and the worker's ≥1h re-scan wait plus the next curation cover any lag.
-So 5 rapid rejects spawn at most one concurrent refine per gym, not five.
+for that gym is DROPPED but marks the gym DIRTY; when the in-flight refine finishes,
+a dirty gym gets exactly ONE more refine — which reloads and folds any signal that
+arrived mid-flight. This closes a lost-signal hole: a curation that lands while a
+refine is running is dropped by the in-flight guard, and once the refine commits a
+``feed_update`` version the signals query (anchored on the latest spec's
+``created_at``) can treat it as consumed — so without the dirty re-run its signal
+could be lost permanently. So a burst of N rapid rejects spawns at most one
+in-flight refine plus one coalesced follow-up per gym (two refines), never N, and
+never zero-that-drops-the-last-signal.
 
 Best-effort: ``refine_from_feed`` is a no-op when there are no new signals, and a
 refine failure NEVER surfaces to the curation caller (the reject/keep already
 succeeded). Mirrors ``MemberVideoProfileRefreshRunner`` — a ``ClassVar`` task set so
-``drain()`` sees every task, plus a done-callback crash logger — with an added
-``ClassVar`` in-flight-gym set for the coalescing guard.
+``drain()`` sees every task, plus a done-callback crash logger — with the added
+``ClassVar`` in-flight + dirty gym sets for the coalescing guard.
 """
 
 import asyncio
@@ -33,18 +39,25 @@ logger = logging.getLogger(__name__)
 class VideoFeedRefineRunner:
     """Kicks off + tracks detached, per-gym-coalesced feed-learning refines."""
 
-    # ClassVars so drain() AND the coalescing guard see every task / in-flight gym
-    # regardless of which DI instance fired the start().
+    # ClassVars so drain() AND the coalescing guard see every task / in-flight /
+    # dirty gym regardless of which DI instance fired the start().
     _background_runs: ClassVar[set[asyncio.Task]] = set()
     _in_flight_gyms: ClassVar[set[UUID]] = set()
+    _dirty_gyms: ClassVar[set[UUID]] = set()
 
     def __init__(self, feed_refiner: VideoFeedRefiner) -> None:
         self._refiner = feed_refiner
 
     def start(self, gym_id: UUID) -> None:
-        """Fire a detached refine for one gym unless one is already in flight for
-        it (coalesced, best-effort)."""
+        """Fire a detached refine for one gym (coalesced, best-effort).
+
+        If a refine for this gym is already in flight the fire is dropped, but the
+        gym is marked dirty so exactly one follow-up refine runs when the in-flight
+        one finishes — reloading and folding any signal that arrived mid-flight, so
+        the last curation of a burst is never lost.
+        """
         if gym_id in self._in_flight_gyms:
+            self._dirty_gyms.add(gym_id)
             return
         self._in_flight_gyms.add(gym_id)
         run = asyncio.create_task(self._run(gym_id))
@@ -52,12 +65,19 @@ class VideoFeedRefineRunner:
         run.add_done_callback(self._done)
 
     async def _run(self, gym_id: UUID) -> None:
-        """Run the refine, always clearing the in-flight guard so the next curation
-        can fire a fresh refine that folds any newer signals."""
+        """Run the refine, then always clear the in-flight guard and honor the
+        dirty flag with exactly one follow-up refine (so a signal that arrived
+        mid-flight — and would otherwise be dropped then consumed by the anchor —
+        is still folded). The re-run fires from ``finally`` so it happens even when
+        the refine raised; the original exception still propagates to ``_done`` for
+        the crash log."""
         try:
             await self._refiner.refine_from_feed(gym_id)
         finally:
             self._in_flight_gyms.discard(gym_id)
+            if gym_id in self._dirty_gyms:
+                self._dirty_gyms.discard(gym_id)
+                self.start(gym_id)
 
     @staticmethod
     def _done(task: asyncio.Task) -> None:
@@ -85,3 +105,4 @@ class VideoFeedRefineRunner:
                 )
         cls._background_runs.clear()
         cls._in_flight_gyms.clear()
+        cls._dirty_gyms.clear()

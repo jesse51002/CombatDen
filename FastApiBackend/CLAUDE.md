@@ -509,10 +509,12 @@ window stddev is available):
   this video (`member_video_recs`), 0 rows when `:member_id` is NULL — a just-served video ≈ 1, an old
   serve ≈ 0.
 - `adjusted` = `axis − owner·:bump_fraction·sigma + penalty_units·:bump_fraction·sigma`, `ORDER BY
-  adjusted ASC, relevance_index ASC, video_id ASC`. Owner videos nudged NEARER, watched videos nudged
-  FARTHER, symmetric and σ-scaled. Two `Settings`: `video_feed_bump_sigma_fraction` (0.10) and
-  `video_watch_penalty_half_life_days` (7.0, ×86400 → `:half_life_seconds`), injected into
-  `VideoFeedService` (no `settings` import — DI constructor args).
+  adjusted ASC, relevance_index ASC, video_id ASC`. Owner videos nudged NEARER, already-served videos
+  nudged FARTHER, symmetric and σ-scaled. The penalty sums over `member_video_recs.recommended_at`
+  (SERVE time, no `clicked_at` filter — the rotation deliberately relies on serve-decay instead of an
+  already-served anti-join, so it is a served/recency penalty, not a "watch" one). Two `Settings`:
+  `video_feed_bump_sigma_fraction` (0.10) and `video_served_penalty_half_life_days` (7.0, ×86400 →
+  `:half_life_seconds`), injected into `VideoFeedService` (no `settings` import — DI constructor args).
 
 **Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_employee`,
 `load_owner_videos` / `videos_load_owner_videos.sql`): owner-section rows only, **LEFT JOIN** `video_rag`
@@ -551,13 +553,20 @@ The moment a gym owner manually curates the feed, the spec auto-learns and the V
 prunes/surfaces similar videos within ~2h, with zero feed downtime. The BACKEND half is a
 **fire-and-forget, per-gym-coalesced runner**, **`VideoFeedRefineRunner`**
 (`video_feed_refine_runner.py`) — mirrors `MemberVideoProfileRefreshRunner` (a `ClassVar` task set +
-done-callback crash logger + `drain()` in the `main.py` lifespan), plus a `ClassVar` in-flight-gym set:
-`start(gym_id)` fires `VideoFeedRefiner.refine_from_feed` detached, DROPPING the fire when a refine for
-that gym is already in flight (5 rapid rejects → one refine, which folds the newest manual signals). A
-refine failure NEVER surfaces to the curation caller. It is fired at **router-level composition** (keeps
-`VideoFeedService` decoupled from the runner) from the **reject** (`DELETE …/videos/{id}` with `owner=False`)
-and **keep** (`POST …/videos/{id}/keep`) endpoints **ONLY** — NOT owner-add (`POST …/videos`) and NOT
-owner-remove (`owner=True`), which aren't keep/avoid signals. The refine mints a `feed_update`
+done-callback crash logger + `drain()` in the `main.py` lifespan), plus `ClassVar` in-flight + **dirty**
+gym sets: `start(gym_id)` fires `VideoFeedRefiner.refine_from_feed` detached, and when a refine for that
+gym is already in flight it DROPS the fire but marks the gym **dirty**; when the in-flight refine finishes,
+a dirty gym gets exactly ONE follow-up refine (which reloads and folds any signal that landed mid-flight).
+This closes a lost-signal hole — a curation arriving during a refine is dropped by the in-flight guard AND,
+once the refine commits a `feed_update` version, treated as consumed by the `MAX(spec.created_at)`-anchored
+signals query, so without the dirty re-run the last signal of a burst could be lost. So a burst of N rapid
+rejects → at most one in-flight refine + one coalesced follow-up (two refines), never N, never a dropped
+last signal. A refine failure NEVER surfaces to the curation caller. It is fired at **router-level
+composition** (keeps `VideoFeedService` decoupled from the runner) from the **reject** (`DELETE …/videos/{id}`
+with `owner=False`) and **keep** (`POST …/videos/{id}/keep`) endpoints **ONLY** — NOT owner-add
+(`POST …/videos`) and NOT owner-remove (`owner=True`), which aren't keep/avoid signals — and **only when the
+curation actually changed a served row** (the reject/keep service returns whether a row was curated; a no-op
+reject/keep, e.g. keeping an already-accepted video, fires no refine). The refine mints a `feed_update`
 `gym_video_spec` version from the gym's unconsumed `curation_type='manual'` signals; the WORKER half is
 the scan sweep's in-place re-scan (arm B — re-judges the gym's auto feed rows against the new criteria
 ≥`worker_feed_update_rescan_delay_hours` (1h) later; the settle wait lives in the worker, see the
@@ -634,14 +643,16 @@ first (the feed's guarded read is `verify_and_load_embedding`).
 - **`VideoRecsService`** (`video_recs_service.py`) — `get_rec(gym_id, member_id) -> MemberVideoRec | None`:
   serves ONE video at a time, **rotating the served genre category** through
   `settings.video_rec_category_rotation`. It is a **thin wrapper over the unified feed** — it drives the
-  rotation and records the pick, but the ranking + candidate query live in the ONE
-  `VideoFeedService.load_feed_page` (there is no separate rec SQL). `verify_member_in_gym` →
-  `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks the starting category;
-  within a category it calls `feed_service.load_feed_page(gym_id, video_type=category, member_id=member_id,
-  limit=1, offset=0)` and takes the first card if the page is non-empty (the feed itself reads the
-  embedding once and applies the owner-boost + decayed-watch-penalty ranking above). A category that
+  rotation and records the pick, but the ranking + candidate query live in the ONE feed read (there is no
+  separate rec SQL). `verify_and_load_embedding` loads the member's embedding + guards membership in ONE
+  read up front, then `idx = (COUNT of the member's member_video_recs rows) % len(rotation)` picks the
+  starting category; within a category it calls `feed_service.rank_page_for_member(gym_id,
+  member_id=member_id, member_embedding=<the once-resolved embedding>, video_type=category, limit=1,
+  offset=0)` and takes the first card if the page is non-empty (`rank_page_for_member` is the
+  embedding-already-resolved sibling of `load_feed_page`, so a rec issues ONE member/embedding fetch, not
+  one per category, and applies the owner-boost + decayed-served-penalty ranking above). A category that
   yields **no** card falls through to the next in the rotation (wrapping); the first genre with a video
-  wins. **The rec advances on a re-serve via the decayed watch penalty baked into `load_feed_page` — there
+  wins. **The rec advances on a re-serve via the decayed served penalty baked into the feed read — there
   is NO already-served anti-join.** A just-served video is nudged back on the next call, so a category with
   enough clustered candidates surfaces a different pick; a sparse category (one video) legitimately
   re-serves the same one. The pick is APPENDED to `member_video_recs`
@@ -654,12 +665,17 @@ first (the feed's guarded read is `verify_and_load_embedding`).
   + `rec_id`); on the first click it fires `MemberVideoProfileRefreshRunner.start`. A repeat click is
   idempotent (`clicked=false`, no re-stamp/re-log/re-fire); an unknown rec for this member+gym raises
   `RecNotFoundError` → 404.
-- **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget
-  runner (mirrors `MembershipsInvoiceFetchRunner`: a `ClassVar` task set, a done-callback crash logger,
-  `drain()` in the `main.py` lifespan). `start(member_id, gym_id)` fires `refresh_if_due` detached; a
-  refresh failure NEVER surfaces to the caller. Two triggers wire it: the **video-click** (inside
-  `VideoRecClickService`) and the **class sign-up** (router-level composition in `checkin_router.py`'s
-  `signup` handler, after a successful `create` — keeps `SignupService` decoupled from the videos domain).
+- **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget,
+  **per-member-coalesced** runner (a `ClassVar` task set + done-callback + `drain()` in the `main.py`
+  lifespan, plus `ClassVar` in-flight + dirty **member** sets — the same coalescing shape as
+  `VideoFeedRefineRunner`). `start(member_id, gym_id)` fires `refresh_if_due` detached; if one is already
+  in flight for that member the fire is dropped-but-marks-dirty (so two concurrent first-signals — a click
+  + a class sign-up — spawn ONE paid summary+embedding build, not two, and no signal is lost). A refresh
+  failure NEVER surfaces to the caller, but a FAILED build is logged at ERROR with the member id (a silent
+  failure leaves `video_profile_embedding` NULL forever and personalization silently never turns on).
+  Two triggers wire it: the **video-click** (inside `VideoRecClickService`) and the **class sign-up**
+  (router-level composition in `checkin_router.py`'s `signup` handler, after a successful `create` — keeps
+  `SignupService` decoupled from the videos domain).
 
 There is **no semantic-search service** — `VideoSearchService` and the `/videos/search` route were
 removed (zero callers). The rec's `category` is typed as the existing `VideoGenre` enum (`schema.video`),
@@ -731,9 +747,9 @@ model that writes the taste summary, default `anthropic/claude-haiku-4-5`, reuse
 `video_profile_recent_clicks_limit` (10) — all injected into `MemberVideoProfileService` —,
 `video_rec_category_rotation` (ordered `VideoGenre` list —
 best-first genre order the single rec rotates through). The pick WITHIN a category is the top of the
-unified feed for that genre (`load_feed_page`, `limit=1`) — cosine order to the taste embedding with the
-owner boost + decayed watch penalty, governed by `video_feed_bump_sigma_fraction` (0.10) and
-`video_watch_penalty_half_life_days` (7.0), the two feed-ranking `Settings` injected into
+unified feed for that genre (`rank_page_for_member`, `limit=1`) — cosine order to the taste embedding with
+the owner boost + decayed served penalty, governed by `video_feed_bump_sigma_fraction` (0.10) and
+`video_served_penalty_half_life_days` (7.0), the two feed-ranking `Settings` injected into
 `VideoFeedService`. There is no per-rec score column and no rec-count setting.
 
 **Versioned spec — readers always use the view, not the table.**

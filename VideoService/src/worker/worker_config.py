@@ -31,10 +31,11 @@ class WorkerSettings(BaseSettings):
     worker_enabled: bool = True
     # Seconds between ticks when idle.
     worker_poll_seconds: int = 60
-    # Lease TTL for the global video-worker lock. Long enough to cover a tick's
-    # setup, short enough that a crashed holder self-heals; the run is kept alive
-    # past it by the heartbeat (renew).
-    worker_lock_ttl_seconds: int = 900
+    # Lease TTL for the global video-worker lock (30 min). Long enough to cover a
+    # long heavy-step drain, short enough that a crashed holder self-heals; the run
+    # is kept alive past it by the heartbeat (renew), which MUST stay well under the
+    # TTL (heartbeat 300s < TTL 1800s) so a live holder never lets the lease lapse.
+    worker_lock_ttl_seconds: int = 1800
     # Heartbeat interval — renew the lease this often while a run is in flight.
     worker_heartbeat_seconds: int = 300
 
@@ -79,7 +80,6 @@ class WorkerSettings(BaseSettings):
     # --- concurrency ---------------------------------------------------------
     worker_scrape_concurrency: int = 4
     worker_enrich_concurrency: int = 8
-    worker_scan_concurrency: int = 8
 
     # --- budgets -------------------------------------------------------------
     # Cap per query on the YouTube search (the API's search.list maxResults, ≤50).
@@ -88,6 +88,11 @@ class WorkerSettings(BaseSettings):
     scan_budget_per_run: int = 1000
     # Videos judged per scan LLM call.
     scan_batch_size: int = 12
+    # Enrich sweep batch: videos per sweep chunk == texts per embed call == the
+    # transcript batch fetched up front per chunk. The provider caps batch size /
+    # tokens; 64 short summaries per call keeps well under it while amortising the
+    # request overhead. Also the granularity at which the abort flag is checked.
+    worker_enrich_batch_size: int = 64
     # Per-query top-k for the tier-2 RAG probes.
     rag_probe_top_k: int = 40
     # Head characters of transcript fed to the enrich call.

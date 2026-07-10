@@ -215,6 +215,28 @@ def test_scrape_drain_processes_multiple_gyms() -> None:
     assert db.write_names().count("insert_run") == 2
 
 
+def test_scrape_failure_fails_run_and_logs_incurred_cost() -> None:
+    # A transient scrape error AFTER the run is opened must fail the run (so no
+    # phantom 'running' run strands the gym) AND still log the already-incurred
+    # embed spend — the exception then propagates for the tick loop to log.
+    db = RoutingFakeDb()
+    db.ones["insert_run"] = {"run_id": "run-1"}
+    lock = FakeLock()
+    service, parts = _service(db, lock)
+
+    async def boom(spec, run_id, candidate_ids):  # noqa: ANN001
+        raise RuntimeError("write_feed boom")
+
+    parts["scraper"].write_feed = boom
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(service._scrape_gym("gym-1"))
+
+    assert "fail_run" in db.write_names()  # the run is failed, not left running
+    # the funnel embed spend (incurred before write_feed raised) is still recorded.
+    assert parts["cost_log"].scrape_logs == [("gym-1", "run-1", 100, 0.01)]
+
+
 def test_scrape_skipped_when_system_cap_reached() -> None:
     db = RoutingFakeDb()
     db.ones["system_count"] = {"runs_in_window": 5}  # == default cap of 5

@@ -21,20 +21,28 @@ docker build -f deploy/Dockerfile -t combatden-backend-worker .
 
 1. **FastApiBackend** — `uvicorn src.main:app` on `:8000` (the CRM-facing API).
 2. **VideoService worker** — `python -m src.worker.run`, a self-scheduling
-   background loop (no job queue) that derives the highest-priority due gym
-   from timestamps already in the schema each tick and runs its scrape →
-   funnel → enrich → scan → feed-write pipeline (not a web server, no exposed
-   port).
+   background loop (no job queue) that derives its work from timestamps already
+   in the schema each tick and runs DECOUPLED DB-backed steps — cleanup +
+   finalize (always), then ONE drained heavy step (scan, else enrich, else the
+   quota-bound scrape). Only scrape is per-gym + run-opening; enrich and scan are
+   global gym-agnostic sweeps that build the RAG layer and settle feed verdicts
+   (not a web server, no exposed port).
 
 Each app installs into its **own** poetry venv inside the image (different
 fastapi/uvicorn version pins between the two projects), and the entrypoint
 runs each process through its own venv's python.
 
-## What does NOT run inside
+## The former VideoService read API (merged into FastApiBackend, runs inside)
 
-**VideoService's read API** (`src/api`, port 8002) — that stays on its
-existing standalone App Runner service serving the MobileApp, until that
-client is repointed at FastApiBackend. This image only ships the worker.
+The old standalone **VideoService read API** (`VideoService/src/api`, port 8002)
+that served the MobileApp's video content has been **removed** — it was
+re-authored and merged into **FastApiBackend's `src/videos` domain**
+(`GET /api/v1/gyms/{gym_id}/videos` for the paginated served feed, plus the
+per-member `.../video-rec` + `.../video-rec/{rec_id}/click` endpoints). That
+domain is served by the FastApiBackend uvicorn process **inside this image** on
+`:8000`, so the MobileApp's video reads now come from FastApiBackend like the
+CRM's do — there is no separate VideoService read service or port 8002 anymore.
+This image ships that read API (as part of FastApiBackend) **and** the worker.
 
 ## Runtime environment variables
 
@@ -71,8 +79,9 @@ Target is an **always-on service** (ECS Express Mode direction), **not App
 Runner** — App Runner's CPU throttling on scale-to-idle would starve a
 background worker process that needs to keep running between requests. The
 Dockerfile itself is platform-agnostic; only the deployment target differs
-from `ThemeService`/VideoService's read API (both still on App Runner — see
-`../DEPLOYMENT.md`).
+from `ThemeService` (still on App Runner — see `../DEPLOYMENT.md`).
+VideoService's former standalone read API is gone (merged into FastApiBackend,
+above), so it is no longer a separate App Runner service.
 
 ## Supervisor behavior (`entrypoint.sh`)
 

@@ -239,9 +239,14 @@ record `curated_at`). Two triggers fire it:
 1. **Immediate, coalesced, on curation** (the `feed_update` auto-learn loop). The
    reject and keep endpoints fire a **fire-and-forget, per-gym-coalesced**
    `VideoFeedRefineRunner.start(gym_id)` right after the curation write commits (router-level
-   composition; NOT owner-add / owner-remove). It runs `refine_from_feed` detached, dropping the
-   fire when a refine for that gym is already in flight — so a burst of rejects mints one
-   `feed_update` version, not many. A refine failure never surfaces to the curation caller.
+   composition; NOT owner-add / owner-remove) — but **only when the write actually curated a served
+   row** (the reject/keep service returns whether a row changed; a no-op like keeping an
+   already-accepted video fires nothing). It runs `refine_from_feed` detached; when a refine for that
+   gym is already in flight the fire is **dropped-but-marks-the-gym-dirty**, and the in-flight refine,
+   on finishing, runs exactly one follow-up that reloads and folds any signal that landed mid-flight
+   (so a burst of rejects mints one `feed_update` version plus at most one follow-up — never many, and
+   the last signal of a burst is never lost to the drop-then-anchor-consumes race). A refine failure
+   never surfaces to the curation caller.
 2. **Pre-agent-view-open.** The CRM calls `POST …/video-agent/refine-from-feed` right before the
    owner starts editing, so the spec already reflects recent curation.
 

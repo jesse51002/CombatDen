@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 LOCK_KEY = "video_worker_run"
+# Max chars of a failed scrape's exception stored in video_run.error (a summary,
+# not the full traceback).
+RUN_ERROR_MAX_CHARS = 500
 
 __all__ = ["WorkerAborted", "WorkerService"]
 
@@ -152,20 +155,39 @@ class WorkerService:
 
     async def _scrape_gym(self, gym_id: str) -> None:
         """One gym's scrape: load spec → open a run → scrape the pool → funnel
-        candidates → carry-forward + write them as 'pending'. Logs the scrape
-        cost. Does NOT enrich, scan, or complete the run — the sweeps + finalizer
-        take it from here."""
+        candidates → carry-forward + write them as 'pending'. Does NOT enrich,
+        scan, or complete the run — the sweeps + finalizer take it from here.
+
+        The run is opened FIRST, then the failure-prone scrape / funnel / feed-write
+        runs guarded: on ANY exception the run is marked 'failed' (so no phantom
+        zero-row 'running' run strands the gym — a 'running' run blocks the gym from
+        being re-selected until the finalizer's grace elapses, delaying the owner's
+        edited criteria until the weekly refresh) and the exception re-raised (the
+        tick loop logs it and moves on). Either way — success OR failure — the
+        already-incurred scrape cost (the tier-2 funnel embed spend, the free
+        YouTube quota) is logged in the ``finally`` so no incurred spend loses its
+        cost row."""
         spec = await self._spec.load(gym_id)
         run_id = await self._start_run(gym_id)
-        scrape = await self._scraper.scrape(spec)
-        funnel = await self._funnel.select(spec)
-        await self._scraper.write_feed(spec, run_id, funnel.candidate_ids)
-        await self._cost_log.log_scrape(
-            gym_id,
-            run_id,
-            youtube_quota_units=scrape.youtube_quota_units,
-            embed_usd=funnel.embed_usd,
-        )
+        quota_units = 0
+        embed_usd = 0.0
+        try:
+            scrape = await self._scraper.scrape(spec)
+            quota_units = scrape.youtube_quota_units
+            funnel = await self._funnel.select(spec)
+            embed_usd = funnel.embed_usd
+            await self._scraper.write_feed(spec, run_id, funnel.candidate_ids)
+        except Exception as exc:  # noqa: BLE001 - fail the run, don't strand it
+            logger.warning("scrape failed for gym %s (run failed): %s", gym_id, exc)
+            await self._fail_run(run_id, exc)
+            raise
+        finally:
+            await self._cost_log.log_scrape(
+                gym_id,
+                run_id,
+                youtube_quota_units=quota_units,
+                embed_usd=embed_usd,
+            )
 
     async def _heartbeat(self, token: UUID, abort: asyncio.Event) -> None:
         """Renew the lease every interval; on a lost lease set the abort flag."""
@@ -209,3 +231,12 @@ class WorkerService:
         if row is None:
             raise RuntimeError(f"failed to open a run for gym {gym_id}")
         return str(row["run_id"])
+
+    async def _fail_run(self, run_id: str, exc: BaseException) -> None:
+        """Mark a scrape run 'failed' (with an error summary) so a transient scrape
+        error leaves no phantom 'running' run behind — the gym is re-selectable next
+        tick, bounded by the rolling run caps."""
+        await self._db.execute_with_retry(
+            load_sql(SQL_DIR / "worker_fail_run.sql"),
+            {"run_id": run_id, "error": f"scrape failed: {exc}"[:RUN_ERROR_MAX_CHARS]},
+        )

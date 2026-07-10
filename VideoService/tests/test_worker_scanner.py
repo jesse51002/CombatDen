@@ -184,6 +184,10 @@ def test_scan_targets_sql_has_feed_update_rescan_arm() -> None:
     assert "curation_type = 'automatic'" in sql  # arm B excludes manual rows
     assert "f.scan_status = 'pending'" in sql  # arm A (the first-scan path)
     assert ":rescan_delay_hours" in sql  # the ≥1h settle wait
+    # arm B re-scans the SERVED run (latest completed), not the latest non-failed,
+    # so an in-flight running run never diverts the re-judge.
+    assert "latest_completed_run" in sql
+    assert "status = 'completed'" in sql
 
 
 def test_rescan_flips_accepted_to_rejected() -> None:

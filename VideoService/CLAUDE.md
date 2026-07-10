@@ -239,9 +239,9 @@ global **scan** sweep settles each `pending` row to `accepted`/`rejected`.
 `run.py` is a loop: `WorkerService.run_tick`, then wait `worker_poll_seconds` (60). Each
 tick takes the global TTL lock `"video_worker_run"` on the shared `resource_locks` table
 (single-shot, non-blocking — a second worker no-ops the tick; TTL `worker_lock_ttl_seconds`
-900s, renewed by a `worker_heartbeat_seconds` (300s) heartbeat; a lost heartbeat sets the
-abort flag and the current drain stops between videos/batches/gyms). Then, under one lock
-hold, IN ORDER:
+1800s (30 min — long holds are expected), renewed by a `worker_heartbeat_seconds` (300s)
+heartbeat that MUST stay well under the TTL; a lost heartbeat sets the abort flag and the
+current drain stops between videos/batches/gyms). Then, under one lock hold, IN ORDER:
 
 1. **Cleanup** (always, cheap) — `DELETE FROM video WHERE failure_count >= worker_failure_max`
    (3). The FK cascades remove the video's feed rows, `video_rag` row, and member recs. Runs
@@ -274,11 +274,15 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
 
 - **scrape** (per-gym, quota-bound — the ONLY step that opens runs, so the run caps bound
   exactly the quota-limited work). It selects the due gym (`worker_select_due_gym.sql` — due
-  on a newer `admin_update` spec version or the weekly refresh floor; a manual
+  on a newer `admin_update` spec version than the last **COMPLETED** run (tier 1 — a FAILED
+  scrape does NOT suppress this trigger, so a transient error is retried, bounded by the run
+  caps) or the weekly refresh floor (tier 3, vs the last run of any status); a manual
   `gym_video_feed` curation triggers no SCRAPE here — the feed-learning re-scan off a manual
-  curation is the SCAN step's arm B (above), an in-place re-judge of existing feed rows, not a
+  curation is the SCAN step's arm B (below), an in-place re-judge of existing feed rows, not a
   new scrape run; the query also excludes any gym with a `running`
-  run — never two in-flight runs), loads the latest spec + incremental context (`WorkerSpec`),
+  run — never two in-flight runs. A scrape that raises after the run is opened marks that run
+  `failed` (`worker_fail_run.sql`) so no phantom `running` run strands the gym), loads the
+  latest spec + incremental context (`WorkerSpec`),
   opens a `video_run` (`running`),
   runs the **YouTube Data API v3** scrape (two calls per query, merge-upserted into the
   `video` pool — `source_queries` accumulate, `tag`/`disciplines`/`transcript` never wiped),
@@ -286,7 +290,9 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   untagged fresh scrapes with incremental exclusion, tier-2 RAG probe up to
   `scan_budget_per_run`). Then the **feed write** (`WorkerScraper.write_feed`): carry the
   previous completed run's rows forward FIRST (ALL rows incremental / manual-only fresh —
-  `worker_carry_forward.sql`), then insert every candidate as a `pending` row
+  `worker_carry_forward.sql`, which also carries each row's `scanned_at` watermark so arm B
+  does not re-judge the whole carried feed against an already-consumed `feed_update`), then
+  insert every candidate as a `pending` row
   (`worker_insert_pending.sql`, `curation_type='automatic'`) `ON CONFLICT DO NOTHING` so a
   carried row always wins. The run is left `running`; nothing is enriched, scanned, or
   completed here.
@@ -303,10 +309,12 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   the thumbnail + transcript — its summary must fold in the visual + content detail because
   scan reads only that summary (below).
 - **scan** (global sweep, per-gym batches, **TEXT-ONLY** — `WorkerScanner.drain`). Targets
-  (`worker_scan_targets.sql`) = each gym's latest-non-failed-run feed rows whose video HAS a
-  `video_rag` row and is under the strike ceiling, matching EITHER arm: **(A)** a `pending`
-  row (its first verdict), OR **(B)** the **feed-learning RE-SCAN** — a `curation_type='automatic'`
-  row (pending/accepted/rejected) whose `scanned_at` predates a gym `feed_update` `gym_video_spec`
+  (`worker_scan_targets.sql`) = enriched feed rows (video HAS a `video_rag` row) under the
+  strike ceiling, matching EITHER arm: **(A)** a `pending` row in the gym's **latest non-failed
+  run** (its first verdict), OR **(B)** the **feed-learning RE-SCAN** — a `curation_type='automatic'`
+  row in the gym's **latest COMPLETED (served) run** (arm B targets the served run, NOT the
+  latest non-failed, so an in-flight `running` run never diverts the re-judge from what members
+  see) whose `scanned_at` predates a gym `feed_update` `gym_video_spec`
   version that has SETTLED ≥ `worker_feed_update_rescan_delay_hours` (1h) (`created_at <= now()
   - the delay` AND `created_at > COALESCE(scanned_at, '-infinity')`). Per gym: load the
   **latest** spec at scan time (judge against current criteria — the `feed_update` folded in the
@@ -314,7 +322,9 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   candidate's **summary + structured enrich outputs** (genre, disciplines, facets) — NO thumbnail
   is re-sent, since enrich already folded the visual detail into the summary. Text-only is cheaper
   AND matters because scan runs per-gym (a video in many feeds is scanned many times) while enrich
-  runs once per video. Verdicts are written by UPDATE (`worker_update_verdict.sql`) guarded on
+  runs once per video. Verdicts are written by UPDATE (`worker_update_verdict.sql`) keyed by each
+  row's OWN `video_run_id` (arm A and arm B can select rows from different runs for the same gym)
+  and guarded on
   `curation_type <> 'manual'` — an owner's explicit keep/reject verdict is never overwritten, and
   a row is never flipped to `pending` (which would blank it from the served feed); the UPDATE
   stamps `scanned_at = now()` so the same `feed_update` never re-triggers a row (arm B flips
@@ -325,8 +335,11 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
 
 ### The strike / cleanup mechanic (`video.failure_count`)
 
-Hard errors only. In the enrich sweep a video whose multimodal call OR whose chunk's embed
-call raises is bumped (`worker_bump_failure.sql`); in the scan sweep a batch whose LLM call
+Hard errors only, and ONLY the expensive multimodal pass. In the enrich sweep a video whose
+multimodal call raises is bumped (`worker_bump_failure.sql`); a chunk whose EMBED call raises is
+**NOT** struck — the multimodal enrich already succeeded, so those videos are left un-enriched
+(no `video_rag` row) to retry the embed next sweep, since striking them for an embed flake would
+push an already-enriched video toward deletion. In the scan sweep a batch whose LLM call
 raises bumps EVERY video in the batch and leaves the rows `pending` (retried next sweep — **no
 default-to-rejected**), and a video the model omits from an otherwise-successful batch is
 bumped alone and stays `pending`. A missing transcript is **not** a strike. On success —
@@ -342,7 +355,10 @@ Attribution differs by step: **scrape** logs `search` (free; quota-units diagnos
 `embed` (tier-2 probe), both keyed to that gym + run; **enrich** logs `transcript` +
 `enrich` + `embed` as **pool-level** rows (`gym_id` and `run_id` NULL — a swept video is
 shared across gyms, so per-gym attribution would be arbitrary); **scan** logs one `scan` row
-per gym per sweep, keyed to that gym + its latest run.
+per gym per sweep, keyed to that gym + its latest run. **Cost logging is durable across abort:**
+the enrich sweep and each gym's scan accumulate spend and flush the cost row in a `finally`, and
+a failing scrape logs its incurred cost in a `finally` too — so an abort (lost lease) or an
+exception mid-step still records the dollars already spent rather than dropping the cost row.
 
 ### Settings + the embedding contract
 
@@ -354,8 +370,10 @@ scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
 re-scan wait (`worker_feed_update_rescan_delay_hours` (1.0) — how long a `feed_update`
 spec version must settle before the scan sweep re-judges the gym's auto feed rows against
 it, threaded as the `:rescan_delay_hours` bind in `worker_scan_targets.sql`), budgets
-(`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
-`enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop
+(`scan_budget_per_run`, `scan_batch_size`, `worker_enrich_batch_size` (64 — enrich sweep
+chunk == embed batch), `rag_probe_top_k`,
+`enrich_transcript_char_budget`), concurrency (`worker_scrape_concurrency`,
+`worker_enrich_concurrency` — the scan sweep is strictly sequential, no concurrency knob), the lock/loop
 timers, the LLM client knobs the worker's `LiteLLMClient` construction sites pass down
 (`llm_request_timeout_seconds` (90), `llm_num_retries` (5), `llm_retry_backoff_seconds`
 (5, 15) — `LiteLLMClient` itself only owns the module-level *defaults* used when a

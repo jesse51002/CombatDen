@@ -69,7 +69,7 @@ async def test_load_feed_page_prepares_against_live_db(
         youtube_client=MagicMock(),
         profile_service=MagicMock(),
         bump_sigma_fraction=0.10,
-        watch_penalty_half_life_days=7.0,
+        served_penalty_half_life_days=7.0,
     )
 
     cards, total = await service.load_feed_page(
@@ -106,7 +106,7 @@ async def test_load_feed_preview_prepares_against_live_db(
         youtube_client=MagicMock(),
         profile_service=MagicMock(),
         bump_sigma_fraction=0.10,
-        watch_penalty_half_life_days=7.0,
+        served_penalty_half_life_days=7.0,
     )
 
     sections = await service.load_feed_preview(

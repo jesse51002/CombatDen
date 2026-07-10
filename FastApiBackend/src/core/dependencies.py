@@ -487,14 +487,16 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Concern services — stateless, composed by the facade. The feed service
     # reads a member's profile embedding (read-only) for the unified feed's
     # optional personalized ordering when passed a member_id, and applies the
-    # σ-scaled owner boost + decayed watch penalty from these two settings.
+    # σ-scaled owner boost + decayed served penalty from these two settings.
     video_feed_service = providers.Factory(
         VideoFeedService,
         db_pool=db_pool,
         youtube_client=youtube_metadata_client,
         profile_service=member_video_profile_service,
         bump_sigma_fraction=settings.video_feed_bump_sigma_fraction,
-        watch_penalty_half_life_days=settings.video_watch_penalty_half_life_days,
+        served_penalty_half_life_days=(
+            settings.video_served_penalty_half_life_days
+        ),
     )
     # Fire-and-forget profile refresh (class-booking + video-click triggers).
     # Singleton so drain() on shutdown sees every in-flight refresh task.

@@ -6,7 +6,8 @@ stored thumbnail is attached as image_urls, falling back to a constructed
 ``hqdefault`` URL when the row has none; a ``maxresdefault``-style image-fetch
 failure is retried ONCE against the constructed ``hqdefault`` URL before striking,
 while a non-image-fetch failure is never retried; summaries embed in per-chunk
-batches; an embed failure strikes the whole chunk; the BATCHED transcript fetch
+batches; an embed-only failure leaves the chunk to retry WITHOUT a strike (the
+multimodal enrich already succeeded); the BATCHED transcript fetch
 (one actor run per chunk's cache-misses — used in the prompt + cached back + billed
 per transcript scraped + per actor start, not re-fetched when cached, a miss
 degrades to the placeholder and is NOT a strike); a success resets the strike
@@ -20,7 +21,6 @@ import asyncio
 from schema.gym_type import GymType
 from schema.video_type import VideoType
 from src.core.errors import ProviderError
-from src.worker import worker_enricher
 from src.worker.schema.enrich_result import EnrichResult
 from src.worker.worker_config import settings
 from src.worker.worker_enricher import (
@@ -250,7 +250,7 @@ def test_non_image_fetch_failure_is_not_retried() -> None:
 
 
 def test_summaries_embed_in_batches(monkeypatch) -> None:
-    monkeypatch.setattr(worker_enricher, "EMBED_BATCH_SIZE", 2)
+    monkeypatch.setattr(settings, "worker_enrich_batch_size", 2)
     db = RoutingFakeDb()
     db.rows["enrich_targets"] = [_video("v1"), _video("v2"), _video("v3")]
     llm = FakeLLM(structured=_handler(cost=0.01), embed_cost=0.005)
@@ -266,7 +266,7 @@ def test_summaries_embed_in_batches(monkeypatch) -> None:
     assert cost.enrich[0]["embed_usd"] == 0.01  # 0.005 × 2 chunks
 
 
-def test_embed_failure_strikes_chunk() -> None:
+def test_embed_only_failure_leaves_chunk_for_retry_no_strike() -> None:
     class EmbedFailLLM(FakeLLM):
         async def embed(self, texts, model):  # noqa: ANN001
             raise ProviderError("embed down")
@@ -278,11 +278,14 @@ def test_embed_failure_strikes_chunk() -> None:
 
     asyncio.run(enricher.drain(_abort()))
 
-    # the multimodal call succeeded (tags written) but the embed raised, so the
-    # chunk's video is struck and never gets a video_rag row.
+    # the multimodal call succeeded (tags written) but the embed raised. The video
+    # is left un-enriched (no video_rag row) to retry the embed next sweep, and is
+    # NOT struck — an embed flake must not push an already-enriched video toward
+    # deletion. It is not a success either, so the strike counter is left as-is.
+    assert "update_tags" in db.write_names()  # enrich succeeded → tags persisted
     assert "insert_rag" not in db.write_names()
-    assert [r["video_id"] for r in _writes(db, "bump_failure")[0]] == ["v1"]
-    assert "reset_failure" not in db.write_names()
+    assert "bump_failure" not in db.write_names()  # NO strike on embed-only failure
+    assert "reset_failure" not in db.write_names()  # not a success either
 
 
 def test_lazy_fetch_used_cached_and_billed() -> None:

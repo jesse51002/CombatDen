@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from src.worker import worker_config
+from src.worker import worker_config, worker_funnel
 from src.worker.worker_funnel import WorkerFunnel
 from src.worker.worker_spec import SpecData
 from tests.worker_fakes import FakeLLM, RoutingFakeDb
@@ -49,10 +49,12 @@ def test_tier1_first_then_tier2() -> None:
 def test_budget_caps_tier1_and_skips_probes(monkeypatch) -> None:
     monkeypatch.setattr(worker_config.settings, "scan_budget_per_run", 2)
     db = RoutingFakeDb()
+    # The SQL applies ORDER BY relevance + LIMIT :budget in-DB, so the fake returns
+    # the already-capped set (2 rows). When tier-1 fills the budget, probes are
+    # skipped and no embed spend is paid.
     db.rows["tier1"] = [
         {"video_id": "a", "relevance_index": 0},
         {"video_id": "b", "relevance_index": 1},
-        {"video_id": "c", "relevance_index": 2},
     ]
     db.rows["tier2"] = [{"video_id": "z", "distance": 0.01}]
     llm = FakeLLM()
@@ -60,9 +62,10 @@ def test_budget_caps_tier1_and_skips_probes(monkeypatch) -> None:
 
     result = asyncio.run(funnel.select(_spec()))
 
-    assert result.candidate_ids == ["a", "b"]  # truncated by relevance
+    assert result.candidate_ids == ["a", "b"]
     assert result.tier2_count == 0
-    assert llm.embed_calls == []  # no remaining budget → no embed spend
+    assert llm.embed_calls == []  # tier-1 filled the budget → no probes
+    assert db.read_params("tier1")[0]["budget"] == 2  # budget pushed into SQL
 
 
 def test_budget_fills_remaining_with_tier2(monkeypatch) -> None:
@@ -86,10 +89,10 @@ def test_budget_fills_remaining_with_tier2(monkeypatch) -> None:
 
 def test_incremental_excludes_prior_verdicted() -> None:
     db = RoutingFakeDb()
-    db.rows["tier1"] = [
-        {"video_id": "a", "relevance_index": 0},
-        {"video_id": "b", "relevance_index": 1},
-    ]
+    # The prior run's verdicted ids are excluded IN-DB (the :exclude_ids bind), so
+    # the fake returns the already-filtered tier-1 set ('a' gone); the test asserts
+    # the exclude bind carries the prior run's verdicts.
+    db.rows["tier1"] = [{"video_id": "b", "relevance_index": 1}]
     db.rows["prev_verdicts"] = [{"video_id": "a"}]  # a was scanned last run
     db.rows["tier2"] = []
     funnel = WorkerFunnel(db, FakeLLM())
@@ -98,10 +101,22 @@ def test_incremental_excludes_prior_verdicted() -> None:
         funnel.select(_spec(criteria_changed=False, prev_run_id="prev-1"))
     )
 
-    assert "a" not in result.candidate_ids  # carried forward, not rescanned
-    assert result.candidate_ids == ["b"]
-    # the exclude set is read from the previous run's verdicts.
+    assert result.candidate_ids == ["b"]  # 'a' carried forward, not rescanned
+    # the exclude set is read from the previous run's verdicts...
     assert db.read_params("prev_verdicts")[0] == {"prev_run_id": "prev-1"}
+    # ...and threaded into tier-1 as the :exclude_ids bind.
+    assert db.read_params("tier1")[0]["exclude_ids"] == ["a"]
+
+
+def test_tier1_sql_pushes_budget_and_exclude() -> None:
+    # The budget + incremental exclusion are pushed INTO the SQL (LIMIT + an
+    # anti-condition) rather than loading the whole query-overlap pool into Python
+    # to slice/filter.
+    sql = (worker_funnel.SQL_DIR / "worker_funnel_tier1.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "LIMIT :budget" in sql
+    assert "NOT (video_id = ANY(:exclude_ids))" in sql
 
 
 def test_fresh_run_does_not_read_prior_verdicts() -> None:

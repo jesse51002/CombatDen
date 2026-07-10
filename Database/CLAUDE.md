@@ -161,10 +161,12 @@ exception, resets it to 0 on success, and its cleanup step deletes the video at 
   `recommended_at`, plus `clicked_at TIMESTAMPTZ` (nullable click signal — NULL = served but not clicked;
   set by the backend when the member opens the rec). There is no stored score, no stored counters, and
   **no already-served anti-join** — ranking is computed entirely at READ time by the unified feed query:
-  cosine distance to the member's taste embedding, nudged by a σ-scaled **decayed watch penalty** —
-  `SUM(power(0.5, age_seconds / half_life_seconds))` over this member's prior serves of a candidate video
-  (a just-served video's penalty is near its full σ-scaled weight, decaying toward 0 as the serve ages,
-  half-life `video_watch_penalty_half_life_days` = 7d) — so a served video is nudged back immediately
+  cosine distance to the member's taste embedding, nudged by a σ-scaled **decayed served (recency)
+  penalty** — `SUM(power(0.5, age_seconds / half_life_seconds))` over this member's prior serves of a
+  candidate video (sums over `recommended_at`, SERVE time, no `clicked_at` filter — the rotation relies on
+  this serve-decay, so it is a served/recency penalty, not a "watch" one; a just-served video's penalty is
+  near its full σ-scaled weight, decaying toward 0 as the serve ages, half-life
+  `video_served_penalty_half_life_days` = 7d) — so a served video is nudged back immediately
   after and drifts forward again over the following week, rather than being hard-excluded. A re-serve
   INSERTs another row (no UPDATE, no UNIQUE); "times recommended" = `COUNT(*)` and "last recommended" =
   `MAX(recommended_at)`, both derived by aggregate. Index `(member_id, video_id)` backs that per-video
@@ -176,13 +178,16 @@ exception, resets it to 0 on success, and its cleanup step deletes the video at 
 **No worker queue table, and step-selection is not a per-gym pipeline.** Only the **scrape** step (the
 sole per-gym, quota-bound, run-opening step) ever selects a gym; it *derives* the due gym from
 timestamps already in these tables (`VideoService/src/worker/sql/worker_select_due_gym.sql`): a gym is
-DUE when its latest `gym_video_spec` **`admin_update`** version (tier 1), its latest **manual**
-`gym_video_feed.curated_at` settled ≥ 1h ago (tier 2), or its last run ≥ 7 days ago (tier 3) is newer
-than its last `video_run`, excluding any gym with a `running` run. Tier-sorted, one gym drained per
-scrape pass, under a per-gym **2 / 24h** and system-wide **5 / 24h** rolling run cap (both counting runs
-of any status — the poison-loop guard, since a failed run still advances the last-run watermark). A
-committed spec change no longer enqueues anything; the scrape step notices the new `admin_update`
-version whenever it next runs. The **enrich** and **scan** steps never select a gym at all — they are
+DUE when its latest `gym_video_spec` **`admin_update`** version is newer than its last **COMPLETED**
+`video_run` (tier 1 — a FAILED run does NOT count, so a transient scrape error is retried rather than
+suppressed until the weekly refresh), or its last run of any status is ≥ 7 days old (tier 3), excluding
+any gym with a `running` run. A **manual** `gym_video_feed` curation does NOT trigger a scrape at all —
+its signal drives the worker's **scan** step arm-B in-place re-judge (below), not a new run. Tier-sorted,
+one gym drained per scrape pass, under a per-gym **2 / 24h** and system-wide **5 / 24h** rolling run cap
+(both counting runs of any status — the poison-loop guard: a failed run does not advance the tier-1
+completed-run watermark, but it DOES count against these caps, so a persistently-broken gym still cannot
+hot-loop). A committed spec change no longer enqueues anything; the scrape step notices the new
+`admin_update` version whenever it next runs. The **enrich** and **scan** steps never select a gym at all — they are
 global, gym-agnostic sweeps that drain whatever the DB shows as their target set (an un-enriched video;
 a `pending` feed row) across every gym in one pass.
 

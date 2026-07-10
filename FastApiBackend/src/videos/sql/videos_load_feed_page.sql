@@ -2,8 +2,8 @@
 -- backs the member rec: it ALWAYS merges the owner "Your videos" section with
 -- the gym's latest COMPLETED run, serves ONLY enriched-AND-accepted videos
 -- (INNER JOIN video_rag), and ranks on a single axis with an owner boost and a
--- decayed already-watched penalty. There is no owner/source param — the owner
--- rows and the run rows are one candidate set.
+-- decayed already-served (recency) penalty. There is no owner/source param — the
+-- owner rows and the run rows are one candidate set.
 --
 -- The candidate FROM/JOIN/WHERE core is injected (as the candidate_source
 -- variable) from the shared videos_feed_candidate_source.sql (the single source
@@ -19,9 +19,9 @@
 --   :member_embedding   the member's taste embedding (pgvector text form) or NULL
 --   :member_id          the member (UUID) whose watch history decays the penalty,
 --                       or NULL (no penalty)
---   :bump_fraction      owner boost / watch penalty as a fraction of the axis's
+--   :bump_fraction      owner boost / served penalty as a fraction of the axis's
 --                       sample stddev (sigma)
---   :half_life_seconds  half-life (seconds) of the per-serve watch penalty
+--   :half_life_seconds  half-life (seconds) of the per-serve served penalty
 --   :limit              page size
 --   :offset             0-based start index
 --
@@ -33,8 +33,8 @@
 --                 video to this member (a just-served video ≈ 1, an old one ≈ 0);
 --                 0 rows when :member_id is NULL.
 --   adjusted      axis, owner videos nudged NEARER by bump_fraction*sigma and
---                 watched videos nudged FARTHER by penalty_units*bump_fraction*
---                 sigma. Lower sorts first.
+--                 already-served videos nudged FARTHER by penalty_units*
+--                 bump_fraction*sigma. Lower sorts first.
 --
 -- NOTE: COUNT(*) OVER() returns 0 rows (and therefore total=0) when the
 -- requested offset is beyond the last matching row.
