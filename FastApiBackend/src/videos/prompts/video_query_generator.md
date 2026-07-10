@@ -56,7 +56,8 @@ teach/how-to with the rest across enjoy + human + peak.
 
 ## Your task
 
-Produce about **$count** distinct search queries for this gym — roughly one third
-targeted at the landscape names above, the rest generic — with the full set
-spread across the clusters (~half teach, the rest enjoy + human + peak). Return
-only the queries.
+Produce **exactly $count** distinct search queries for this gym — a few more or
+fewer is fine, but **never more than $max_queries**. Roughly one third targeted
+at the landscape names above, the rest generic, with the full set spread across
+the clusters (~half teach, the rest enjoy + human + peak). Return only the
+queries.

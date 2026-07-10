@@ -82,10 +82,11 @@ class Settings(BaseSettings):
     # Bare Anthropic model name for the Pydantic AI VideoAgentService.
     video_agent_model: str = "claude-sonnet-4-6"
     video_agent_retries: int = 3
-    # Number of YouTube search queries VideoQueryGenerator produces per spec
-    # commit (VideoSpecAuthoring injects this into the generator's second call).
-    # Roughly one third land as landscape-targeted queries, the rest generic.
-    video_query_count: int = 30
+    # Target number of YouTube search queries VideoQueryGenerator produces per
+    # spec commit (VideoSpecAuthoring injects this into the generator's second
+    # call). The prompt asks for ~this many; MAX_GENERATED_QUERIES is the hard
+    # ceiling above it. Roughly one third land as landscape-targeted queries.
+    video_query_count: int = 25
 
     # ── Video RAG read surface (member recs + personalized feed) ──────
     # Embedding model + dimension for the member's video-taste profile embedding

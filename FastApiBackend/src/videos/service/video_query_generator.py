@@ -15,6 +15,7 @@ from string import Template
 from src.shared.litellm_client import LiteLLMClient
 from src.videos import PROMPTS_DIR
 from src.videos.schema.video_spec_schema import (
+    MAX_GENERATED_QUERIES,
     LandscapeResult,
     QueriesResult,
 )
@@ -84,6 +85,7 @@ class VideoQueryGenerator:
             avoid_desc=avoid_desc,
             landscape=self._render_landscape(landscape),
             count=count,
+            max_queries=MAX_GENERATED_QUERIES,
         )
         result = await self._litellm_client.complete_structured(
             prompt=query_prompt,

@@ -19,11 +19,14 @@ from schema.video import GymVideoSpecSource
 
 from src.videos.schema.videos_gym_type import GymType
 
-# Hard caps on LLM list outputs (cost guards, not prompt targets). Queries
-# drive real Apify scrape spend per query, so a misbehaving model returning
-# hundreds is TRUNCATED (never rejected — a reject would just churn the
-# structured-output retry loop). ~2x the prompt's asks for headroom.
-MAX_GENERATED_QUERIES = 60
+# Hard caps on LLM list outputs. MAX_GENERATED_QUERIES caps the query-
+# GENERATION output only (QueriesResult) — purely agent-gen side, NOT a
+# per-gym limit (a gym's stored spec may accumulate more via manual edits).
+# A generator returning too many is TRUNCATED, never rejected (a reject just
+# churns the structured-output retry loop). It is also sent to the query
+# prompt as $max_queries — the ceiling above the video_query_count (~25)
+# target, so 30 is the hard backstop.
+MAX_GENERATED_QUERIES = 30
 MAX_LANDSCAPE_ITEMS = 25
 
 
