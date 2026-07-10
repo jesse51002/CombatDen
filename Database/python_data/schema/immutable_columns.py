@@ -593,5 +593,6 @@ MEMBER_VIDEO_RECS: frozenset[str] = frozenset(
         "video_id",  # identity FK
         "category",  # video genre served under at this event
         "recommended_at",  # backend-stamped; append-only serve log
+        "clicked_at",  # backend-stamped click signal; NULL until opened
     }
 )

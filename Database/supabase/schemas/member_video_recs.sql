@@ -1,17 +1,21 @@
 -- Recommendation history: an APPEND-ONLY event log — one row per (member,
--- video) SERVE. Freshness is the point — the rec ranking hard-partitions
--- unrecommended videos first, then previously-recommended by oldest last serve
--- (the per-video MAX(recommended_at)) — so the same video is never repeatedly
--- pushed while unseen candidates exist. "Already recommended" is global per
--- member (not per-category): a video served under any genre category counts as
--- seen.
+-- video) SERVE. There is no stored score and NO already-served anti-join, and
+-- nothing is hard-partitioned. Freshness is enforced at READ time by the unified
+-- feed query (FastApiBackend/src/videos/sql/videos_load_feed_page.sql) as a
+-- σ-scaled DECAYED WATCH PENALTY: for each candidate the feed sums
+-- power(0.5, age_seconds / half_life) over this member's prior serves of that
+-- video (a just-served video ≈ 1, an old serve ≈ 0; half-life 7d) and nudges the
+-- video FARTHER by penalty_units·bump_fraction·sigma. So a served video is pushed
+-- back immediately after and drifts forward again over the following week, rather
+-- than being excluded or hard-partitioned. "Already recommended" is global per
+-- member (not per-category): a video served under any genre category counts.
 --
 -- Recs are grouped by the video's genre CATEGORY (its `video.tag` — the
 -- `video_genre` enum created in schemas/video.sql). There is no separate
 -- abstraction over the genre: `category` stores the video's actual genre and
 -- RAG ranks WITHIN a category. Consumed by this table's `category` column and
--- by the backend recs/search path; the member's video-taste profile lives on
--- `members` (video_profile_summary / video_profile_embedding).
+-- by the backend rec + personalized-feed read path; the member's video-taste
+-- profile lives on `members` (video_profile_summary / video_profile_embedding).
 --
 -- No stored counters: a re-serve INSERTs another row rather than bumping a
 -- column, so "times recommended" = COUNT(*) and "last recommended" =
@@ -43,7 +47,8 @@ CREATE TABLE member_video_recs (
         REFERENCES members (member_id, gym_id)
 );
 
--- The rec query's "already recommended" anti-join and the per-video last-serve
--- aggregate (MAX(recommended_at)) both filter by member and group by video.
+-- Backs the feed's decayed-watch-penalty lookup: for each candidate the feed
+-- sums this member's decayed prior serves of one video — a correlated aggregate
+-- filtered by member and video — so the index keys on exactly that pair.
 CREATE INDEX idx_member_video_recs_member_video
     ON member_video_recs (member_id, video_id);

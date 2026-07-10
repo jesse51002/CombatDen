@@ -63,7 +63,12 @@ CREATE TYPE video_run_status AS ENUM ('running', 'completed', 'failed');
 ALTER TABLE video_run
     ADD COLUMN status video_run_status NOT NULL DEFAULT 'completed',
     ADD COLUMN finished_at TIMESTAMPTZ,
-    ADD COLUMN error TEXT;
+    ADD COLUMN error TEXT,
+    -- A run is 'running' exactly while it has no finish time; completing or
+    -- failing it stamps finished_at. Mirrors member_reward_redemptions'
+    -- resolved_matches_status (finished_at is the analog of resolved_at).
+    ADD CONSTRAINT video_run_finished_matches_status
+        CHECK ((status = 'running') = (finished_at IS NULL));
 
 -- ============================================================
 -- 3. cost_log: a generic spend ledger that REPLACES video_cost_log.
@@ -181,6 +186,17 @@ ALTER TABLE members
     ADD COLUMN video_profile_embedding_model TEXT,
     ADD COLUMN video_profile_built_at TIMESTAMPTZ;
 
+-- Service-role-only, like the Stripe billing columns: `members` has an
+-- authenticated UPDATE policy, so without this a member could poison their own
+-- taste embedding via direct PostgREST (bypassing the backend's immutable_columns
+-- guard). Mirrors access_rules/members.sql.
+REVOKE INSERT, UPDATE (
+    video_profile_summary,
+    video_profile_embedding,
+    video_profile_embedding_model,
+    video_profile_built_at
+) ON TABLE members FROM authenticated;
+
 -- ============================================================
 -- 6. New table: member_video_recs (grouped by the video's genre category —
 --    video_genre, the type of video.tag, created in the baseline migration)
@@ -209,8 +225,9 @@ CREATE TABLE member_video_recs (
         REFERENCES members (member_id, gym_id)
 );
 
--- Append-only event log: one row per serve. "Already recommended" anti-join +
--- per-video MAX(recommended_at) last-serve aggregate both key on (member, video).
+-- Append-only event log: one row per serve. The (member, video) index backs the
+-- feed's per-member decayed watch penalty (SUM(power(0.5, age/half_life)) over a
+-- member's prior serves of a candidate) — no anti-join, no hard partition.
 CREATE INDEX idx_member_video_recs_member_video
     ON member_video_recs (member_id, video_id);
 

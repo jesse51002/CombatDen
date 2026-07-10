@@ -24,7 +24,12 @@ CREATE TABLE video_run (
     -- Failure detail for a 'failed' run (exception summary or 'orphaned' when
     -- the worker found it dead on lock acquisition).
     error TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- A run is 'running' exactly while it has no finish time; completing or
+    -- failing it stamps finished_at. Mirrors member_reward_redemptions'
+    -- resolved_matches_status (finished_at is the analog of resolved_at).
+    CONSTRAINT video_run_finished_matches_status
+        CHECK ((status = 'running') = (finished_at IS NULL))
 );
 
 -- "Latest run for a gym": ORDER BY created_at DESC LIMIT 1 per gym (the serve
