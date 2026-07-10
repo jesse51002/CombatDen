@@ -54,8 +54,15 @@ tied to any single gym or run.
 Per video, ONE multimodal call (`enrich_model`, `gemini/gemini-2.5-flash-lite`)
 over the thumbnail image + metadata + a transcript slice
 (`enrich_transcript_char_budget`, 8000 chars) → `{genre tag, disciplines, prose
-summary, facets}`. A candidate whose pool row has **no cached transcript**
-triggers ONE lazy **Apify** `pintostudio/youtube-transcript-scraper` run here
+summary, facets}`. The primary thumbnail is the pool's stored `thumbnail_url`
+(scrape prefers YouTube's `maxres` variant — see `scraper.md`), falling back to
+a constructed `hqdefault` URL when the row has none. `maxresdefault` only exists
+for HD uploads, so a non-HD/older video 404s on it — litellm surfaces that as an
+image-fetch `BadRequestError`, which `WorkerEnricher.enrich_one` catches and
+retries ONCE against the constructed `hqdefault` URL (YouTube always serves that
+resolution) before treating the video as a hard failure. A candidate whose pool
+row has **no cached transcript** triggers ONE lazy **Apify**
+`pintostudio/youtube-transcript-scraper` run here
 (`apify_transcript_cost_per_video_usd` ≈ $0.01/video); the fetched transcript
 feeds this video's prompt AND is **cached back onto `video.transcript`** so a
 later sweep reuses it instead of re-paying Apify. A transcript miss/failure

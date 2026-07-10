@@ -20,6 +20,14 @@ embed call raises gets ``failure_count += 1`` (``worker_bump_failure.sql``) and 
 skipped; a video that enriches successfully gets ``failure_count`` reset to 0
 (``worker_reset_failure.sql``). A missing transcript is not an error. Spend is
 logged as POOL-LEVEL cost rows (gym_id / run_id NULL) once at the end.
+
+Thumbnail fallback: the pool's stored ``thumbnail_url`` is whatever resolution the
+scrape found (``worker_transforms._best_thumbnail`` prefers YouTube's ``maxres``
+variant), but ``maxresdefault`` only exists for HD uploads — an older/non-HD video
+404s on it, which litellm surfaces as an image-fetch ``BadRequestError`` on the
+multimodal call. YouTube always serves ``hqdefault`` for a live video, so a call
+that fails on the stored thumbnail is retried ONCE against the constructed
+``hqdefault`` URL before the video is struck (see ``enrich_one``).
 """
 
 from __future__ import annotations
@@ -57,6 +65,15 @@ TRANSCRIPT_LANGUAGE = "en"
 NO_TRANSCRIPT_PLACEHOLDER = (
     "(no transcript available — judge from the title, description, and thumbnail)"
 )
+# YouTube always serves this resolution for a live video (unlike ``maxresdefault``,
+# which 404s for non-HD uploads) — the enrich fallback thumbnail, and the primary
+# when the pool row has no stored ``thumbnail_url`` at all.
+HQDEFAULT_THUMBNAIL_URL = "https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+# Substring of litellm's image-fetch ``BadRequestError`` message (e.g. "Unable to
+# fetch image from URL. Status code: 404 ...maxresdefault.jpg"). ``LiteLLMClient``
+# wraps every provider exception in ``ProviderError``, losing the original type but
+# keeping its message, so the marker is matched against the stringified error.
+IMAGE_FETCH_ERROR_MARKER = "Unable to fetch image"
 
 
 @dataclass(frozen=True)
@@ -186,6 +203,14 @@ class WorkerEnricher:
         if the pool row has none. A fetch miss/failure or a failed multimodal call
         never aborts the sweep (the latter becomes a strike upstream).
 
+        The stored ``thumbnail_url`` is the primary image (constructed
+        ``hqdefault`` when the pool row has none at all). When the multimodal call
+        fails because litellm couldn't fetch that image — the stored
+        ``maxresdefault`` 404s for a non-HD upload — the call is retried ONCE
+        against the constructed ``hqdefault`` URL, which YouTube always serves.
+        Only a failure of that retry (or a non-image-fetch failure) strikes the
+        video.
+
         This is the PUBLIC per-video enrich unit — the sweep drives it in chunks,
         and the one-time ``scripts/enrich_templates`` run reuses it to produce the
         template RAG sidecar (same summary pass, sidecar sink instead of the DB).
@@ -213,24 +238,48 @@ class WorkerEnricher:
                 transcript=self._truncate(transcript),
                 gym_type_vocab=vocab,
             )
+            messages = [{"role": "user", "content": prompt}]
+            hqdefault_url = self._hqdefault_url(video_id)
+            thumbnail_url = video["thumbnail_url"] or hqdefault_url
+
             try:
                 result, cost = await self._llm.complete_structured_with_cost(
-                    [{"role": "user", "content": prompt}],
+                    messages,
                     schema=EnrichResult,
                     model=settings.enrich_model,
-                    image_urls=self._image_urls(video["thumbnail_url"]),
+                    image_urls=self._image_urls(thumbnail_url),
                 )
-            except Exception as exc:  # noqa: BLE001 - one bad video is a strike
-                logger.warning(
-                    "enrich failed for %s (strike): %s", video_id, exc
+            except Exception as exc:  # noqa: BLE001 - retried once below, else a strike
+                if not (
+                    self._is_image_fetch_error(exc) and thumbnail_url != hqdefault_url
+                ):
+                    logger.warning(
+                        "enrich failed for %s (strike): %s", video_id, exc
+                    )
+                    return self._struck(video_id, attempted_fetch, fetched)
+
+                logger.info(
+                    "enrich %s: thumbnail fetch failed on %s — retrying with "
+                    "hqdefault fallback",
+                    video_id,
+                    thumbnail_url,
                 )
-                return EnrichOutcome(
-                    video_id=video_id,
-                    row=None,
-                    llm_usd=0.0,
-                    attempted_fetch=attempted_fetch,
-                    fetched_transcript=fetched,
-                )
+                try:
+                    result, cost = await self._llm.complete_structured_with_cost(
+                        messages,
+                        schema=EnrichResult,
+                        model=settings.enrich_model,
+                        image_urls=self._image_urls(hqdefault_url),
+                    )
+                except Exception as retry_exc:  # noqa: BLE001 - hqdefault also failed
+                    logger.warning(
+                        "enrich failed for %s (strike, hqdefault retry also "
+                        "failed): %s",
+                        video_id,
+                        retry_exc,
+                    )
+                    return self._struck(video_id, attempted_fetch, fetched)
+
             return EnrichOutcome(
                 video_id=video_id,
                 row=EnrichResultRow(video_id, result),
@@ -335,6 +384,34 @@ class WorkerEnricher:
         if thumbnail_url and thumbnail_url.startswith(("http://", "https://")):
             return [thumbnail_url]
         return None
+
+    @staticmethod
+    def _hqdefault_url(video_id: str) -> str:
+        """The always-available ``hqdefault`` YouTube thumbnail URL for
+        ``video_id`` — the enrich fallback (see module docstring)."""
+        return HQDEFAULT_THUMBNAIL_URL.format(video_id=video_id)
+
+    @staticmethod
+    def _is_image_fetch_error(exc: Exception) -> bool:
+        """Whether a failed multimodal call was litellm choking on fetching the
+        thumbnail image (vs. a genuine provider/schema failure), matched against
+        the stringified error since ``LiteLLMClient`` wraps every litellm
+        exception in ``ProviderError``."""
+        return IMAGE_FETCH_ERROR_MARKER in str(exc)
+
+    @staticmethod
+    def _struck(
+        video_id: str, attempted_fetch: bool, fetched: str | None
+    ) -> EnrichOutcome:
+        """The strike outcome for a video whose enrich call(s) failed — no row,
+        no spend billed for this failed attempt."""
+        return EnrichOutcome(
+            video_id=video_id,
+            row=None,
+            llm_usd=0.0,
+            attempted_fetch=attempted_fetch,
+            fetched_transcript=fetched,
+        )
 
     @staticmethod
     def _vector_literal(vector: list[float]) -> str:
