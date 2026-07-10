@@ -197,7 +197,6 @@ class WorkerService:
             {
                 "cap_window_hours": settings.worker_cap_window_hours,
                 "gym_run_cap": settings.worker_gym_run_cap,
-                "curation_batch_hours": settings.worker_curation_batch_hours,
                 "weekly_days": settings.worker_weekly_refresh_days,
             },
         )

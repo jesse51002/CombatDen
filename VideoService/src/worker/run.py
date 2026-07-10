@@ -45,7 +45,11 @@ def _build_service(db_pool: DirectDatabasePool) -> WorkerService:
     """Wire the worker's dependencies: one LLM client shared across the steps, the
     YouTube Data API client (discovery + metadata) for the scraper, the Apify
     transcript client (lazy fetch) for the enrich sweep, and the shared cost log."""
-    llm = LiteLLMClient()
+    llm = LiteLLMClient(
+        timeout_seconds=settings.llm_request_timeout_seconds,
+        num_retries=settings.llm_num_retries,
+        retry_backoff=settings.llm_retry_backoff_seconds,
+    )
     lock = ResourceLock(db_pool)
     youtube = WorkerYouTubeClient(settings.youtube_api_key)
     transcript = WorkerTranscriptClient(settings.apify_token)

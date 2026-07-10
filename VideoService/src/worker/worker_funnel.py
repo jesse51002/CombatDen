@@ -1,4 +1,4 @@
-"""Stage 3 — build the scan-candidate set (two tiers, budgeted, incremental).
+"""Build the scan-candidate set (two tiers, budgeted, incremental).
 
 Tier 1 (always in): pool videos this gym's own queries surfaced, discipline-
 filtered (untagged fresh scrapes included so they reach enrich+scan). Tier 2 (RAG

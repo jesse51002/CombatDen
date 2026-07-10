@@ -1,4 +1,4 @@
-"""Stage 1 — load the gym's latest spec and decide fresh vs incremental.
+"""Load the gym's latest spec and decide fresh vs incremental.
 
 Reads the gym's criteria + queries from the append-only ``gym_video_spec_latest``
 view, and derives ``criteria_changed``: did (videos_desc, avoid_desc) change since

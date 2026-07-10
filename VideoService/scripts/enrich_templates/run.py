@@ -199,7 +199,11 @@ class EnrichTemplatesRunner:
 
 async def run(*, root: Path, limit: int | None = None) -> _Totals:
     pool = build_write_pool()
-    llm = LiteLLMClient()
+    llm = LiteLLMClient(
+        timeout_seconds=settings.llm_request_timeout_seconds,
+        num_retries=settings.llm_num_retries,
+        retry_backoff=settings.llm_retry_backoff_seconds,
+    )
     transcript = WorkerTranscriptClient(settings.apify_token)
     enricher = WorkerEnricher(pool, llm, transcript, WorkerCostLog(pool))
     sidecar = VideoRagSidecar(root)

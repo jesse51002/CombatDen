@@ -273,9 +273,12 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
 ### The lifecycle: pending → enriched → scanned
 
 - **scrape** (per-gym, quota-bound — the ONLY step that opens runs, so the run caps bound
-  exactly the quota-limited work). It selects the due gym (`worker_select_due_gym.sql`,
-  which now also excludes any gym with a `running` run — never two in-flight runs), loads
-  the latest spec + incremental context (`WorkerSpec`), opens a `video_run` (`running`),
+  exactly the quota-limited work). It selects the due gym (`worker_select_due_gym.sql` — due
+  on a newer `admin_update` spec version or the weekly refresh floor; a manual
+  `gym_video_feed` curation triggers nothing here — the feed-learning re-scan off a manual
+  curation is a separate, later mechanism; the query also excludes any gym with a `running`
+  run — never two in-flight runs), loads the latest spec + incremental context (`WorkerSpec`),
+  opens a `video_run` (`running`),
   runs the **YouTube Data API v3** scrape (two calls per query, merge-upserted into the
   `video` pool — `source_queries` accumulate, `tag`/`disciplines`/`transcript` never wiped),
   and picks candidates via the two-tier **funnel** (tier-1 query+discipline overlap incl.
@@ -334,13 +337,16 @@ per gym per sweep, keyed to that gym + its latest run.
 
 Worker knobs live in `src/worker/worker_config.py` (`WorkerSettings`) — the models above,
 scheduling (`worker_cap_window_hours` (24), `worker_gym_run_cap` (2),
-`worker_system_run_cap` (5), `worker_curation_batch_hours` (1),
-`worker_weekly_refresh_days` (7)), the strike ceiling + run finalize
+`worker_system_run_cap` (5), `worker_weekly_refresh_days` (7)), the strike ceiling + run finalize
 (`worker_failure_max` (3), `worker_run_complete_fraction` (0.9),
 `worker_run_ttl_hours` (24), `worker_zero_row_grace_hours` (1)), budgets
 (`scan_budget_per_run`, `scan_batch_size`, `rag_probe_top_k`,
 `enrich_transcript_char_budget`), concurrency (`worker_*_concurrency`), the lock/loop
-timers, the `youtube_api_key` (YouTube Data API v3, discovery + metadata), and the
+timers, the LLM client knobs the worker's `LiteLLMClient` construction sites pass down
+(`llm_request_timeout_seconds` (90), `llm_num_retries` (5), `llm_retry_backoff_seconds`
+(5, 15) — `LiteLLMClient` itself only owns the module-level *defaults* used when a
+caller builds one with no overrides), the `youtube_api_key` (YouTube Data API v3,
+discovery + metadata) + `worker_youtube_timeout_seconds` (30s), and the
 Apify transcript knobs — `apify_token`, the batched actor pricing
 (`apify_transcript_cost_per_transcript_usd` $0.0005 + `apify_actor_start_cost_usd`
 $0.001), `apify_transcript_batch_size` (64), and the LONG/conservative

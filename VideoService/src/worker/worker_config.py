@@ -40,8 +40,8 @@ class WorkerSettings(BaseSettings):
 
     # --- scheduling / run caps ----------------------------------------------
     # There is no queue: each tick derives the highest-priority DUE gym from
-    # run / spec / curation timestamps (worker_select_due_gym.sql). These knobs
-    # tune that derivation.
+    # run / spec timestamps (worker_select_due_gym.sql). These knobs tune that
+    # derivation. A manual gym_video_feed curation does not trigger a run.
     # Rolling window (hours) over which BOTH run caps below are counted.
     worker_cap_window_hours: int = 24
     # Max runs per gym within the window (a 3rd waits for the window to roll).
@@ -49,12 +49,8 @@ class WorkerSettings(BaseSettings):
     # Max runs across ALL gyms within the window — the global YouTube-quota /
     # Apify-transcript budget guard, separate from the per-gym cap.
     worker_system_run_cap: int = 5
-    # Tier-2 batch settle: a manual curation triggers a run only once the most
-    # recent manual curation is at least this old (owners curate in bursts, so
-    # the delay batches a burst into a single run).
-    worker_curation_batch_hours: int = 1
     # Tier-3 refresh floor: a gym whose last run is at least this many days old
-    # is re-run even with no pending edit or curation.
+    # is re-run even with no pending edit.
     worker_weekly_refresh_days: int = 7
 
     # --- strike ceiling + run finalize --------------------------------------
@@ -90,10 +86,24 @@ class WorkerSettings(BaseSettings):
     # Head characters of transcript fed to the enrich call.
     enrich_transcript_char_budget: int = 8000
 
+    # --- LLM client (litellm, src/shared/services/llm_client.py) -------------
+    # Per-attempt request timeout for every completion/embed call. Overrides
+    # LiteLLMClient's DEFAULT_REQUEST_TIMEOUT_SECONDS for the worker's clients.
+    llm_request_timeout_seconds: float = 90
+    # Transport-level retries (litellm's own backoff) for a transient provider
+    # failure. Overrides LiteLLMClient's DEFAULT_LLM_NUM_RETRIES.
+    llm_num_retries: int = 5
+    # Backoff (seconds) before each schema re-ask after a miss. Overrides
+    # LiteLLMClient's DEFAULT_RETRY_BACKOFF_SECONDS.
+    llm_retry_backoff_seconds: tuple[int, int] = (5, 15)
+
     # --- YouTube Data API + Apify transcripts --------------------------------
     # Google Cloud API key for the YouTube Data API v3 (discovery + metadata).
     # Free within the daily quota (10k units/day; search.list = 100 units).
     youtube_api_key: str = ""
+    # Per-request timeout for the YouTube Data API httpx client (search.list /
+    # videos.list).
+    worker_youtube_timeout_seconds: float = 30.0
     # Apify token for the transcript actor. Transcripts are fetched lazily at
     # enrich, BATCHED: one actor run per chunk of cache-miss videos
     # (supreme_coder/youtube-transcript-scraper takes a list of urls).

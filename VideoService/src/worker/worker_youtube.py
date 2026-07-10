@@ -21,13 +21,14 @@ import logging
 
 import httpx
 
+from src.worker.worker_config import settings
+
 logger = logging.getLogger(__name__)
 
 SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 # The API caps a single search / videos page (and a videos.list id batch) at 50.
 MAX_PAGE_SIZE = 50
-REQUEST_TIMEOUT_SECONDS = 30.0
 
 
 class WorkerYouTubeClient:
@@ -37,7 +38,9 @@ class WorkerYouTubeClient:
         self._api_key = api_key
         # One reusable async client for the worker's lifetime; httpx clients are
         # safe under the scrape concurrency gate and pool their connections.
-        self._client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        self._client = httpx.AsyncClient(
+            timeout=settings.worker_youtube_timeout_seconds
+        )
 
     async def search(
         self, query: str, *, max_results: int, language: str

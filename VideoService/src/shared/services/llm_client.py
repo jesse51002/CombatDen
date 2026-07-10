@@ -42,9 +42,13 @@ SCHEMA_CORRECTION_PROMPT_PATH = (
     Path(__file__).parent / "prompts" / "schema_correction.md"
 )
 
+# Defaults for the three instance knobs below (``LiteLLMClient.__init__``). A
+# caller that wants different values (the worker, from ``WorkerSettings``)
+# passes them explicitly; everyone else (tests, the classify pass) gets these.
+#
 # Backoff (seconds) before each schema re-ask after a miss: wait 5s, then 15s.
 # Its length is the retry budget — len + 1 total attempts (here: 3).
-RETRY_BACKOFF_SECONDS = (5, 15)
+DEFAULT_RETRY_BACKOFF_SECONDS = (5, 15)
 
 # Transport-level retries (litellm's own exponential backoff) for transient
 # provider failures — chiefly Gemini RateLimitError under the classify fan-out,
@@ -54,12 +58,12 @@ RETRY_BACKOFF_SECONDS = (5, 15)
 # call below (they were previously defined but never wired — so calls ran with
 # no retries AND no timeout, letting a hung Gemini connection stall a whole
 # gather forever).
-LLM_NUM_RETRIES = 5
+DEFAULT_LLM_NUM_RETRIES = 5
 # Per-attempt request timeout. A hung provider connection otherwise blocks the
 # awaiting task indefinitely (no timeout → asyncio.gather freezes on it → the
 # whole enrich chunk stalls). Generous enough not to cut a legitimately slow
 # multimodal call; a true hang times out → retries → finally strikes the video.
-REQUEST_TIMEOUT_SECONDS = 90
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 90
 
 # Logged prompts elide base64 data URLs so a vision call's image payload
 # isn't dumped into the logs.
@@ -158,12 +162,30 @@ def _call_cost(resp: Any, model: str) -> float:
 
 class LiteLLMClient(LLMClient):
     """Concrete LLM client that calls providers directly via litellm. Tracks a
-    running USD estimate of every call it makes (litellm's own pricing)."""
+    running USD estimate of every call it makes (litellm's own pricing).
+
+    ``timeout_seconds`` / ``num_retries`` / ``retry_backoff`` default to this
+    module's ``DEFAULT_*`` constants but are overridable per instance — kept
+    here (not read from a ``Settings`` object) so this shared module never
+    imports ``src.worker`` (layering: shared → worker is one-way). The worker's
+    construction sites pass ``WorkerSettings`` values instead of the defaults.
+    """
+
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        num_retries: int = DEFAULT_LLM_NUM_RETRIES,
+        retry_backoff: tuple[int, ...] = DEFAULT_RETRY_BACKOFF_SECONDS,
+    ) -> None:
+        self._timeout_seconds = timeout_seconds
+        self._num_retries = num_retries
+        self._retry_backoff = retry_backoff
 
     @property
     def cost(self) -> float:
-        """Running USD spent this run, via litellm's pricing. Lazy (no
-        __init__) — reads/initialises ``_cost`` on demand."""
+        """Running USD spent this run, via litellm's pricing. Lazily
+        initialises ``_cost`` on first bump."""
         return getattr(self, "_cost", 0.0)
 
     def _bump_cost(self, cost: float) -> None:
@@ -183,8 +205,8 @@ class LiteLLMClient(LLMClient):
             "model": model_name,
             "messages": messages,
             "api_key": self._api_key(model_name),
-            "timeout": REQUEST_TIMEOUT_SECONDS,
-            "num_retries": LLM_NUM_RETRIES,
+            "timeout": self._timeout_seconds,
+            "num_retries": self._num_retries,
         }
 
     async def _acompletion(self, kwargs: dict, model_name: str) -> Any:
@@ -285,16 +307,16 @@ class LiteLLMClient(LLMClient):
         """Shared constrained-generation retry loop.
 
         Runs the call, validates the reply against ``schema``, and re-asks on a
-        miss (backing off ``RETRY_BACKOFF_SECONDS`` — 5s, then 15s). Every
-        billed attempt (success *or* miss) invokes ``record_cost`` with that
-        attempt's USD, so this core never touches instance state — the caller
-        decides whether to stash the cost or return it.
+        miss (backing off ``self._retry_backoff`` — 5s, then 15s by default).
+        Every billed attempt (success *or* miss) invokes ``record_cost`` with
+        that attempt's USD, so this core never touches instance state — the
+        caller decides whether to stash the cost or return it.
 
         Raises ``SchemaValidationError`` when no attempt validates, or
         ``ProviderError`` on a transport failure.
         """
         last_error: Exception | None = None
-        total_attempts = len(RETRY_BACKOFF_SECONDS) + 1
+        total_attempts = len(self._retry_backoff) + 1
 
         for attempt in range(total_attempts):
             kwargs = self._completion_kwargs(model, convo)
@@ -322,8 +344,8 @@ class LiteLLMClient(LLMClient):
                 last_error = exc
                 convo = convo + self._correction_turns(content, exc)
                 # No backoff after the final attempt — fall through to raise.
-                if attempt < len(RETRY_BACKOFF_SECONDS):
-                    wait = RETRY_BACKOFF_SECONDS[attempt]
+                if attempt < len(self._retry_backoff):
+                    wait = self._retry_backoff[attempt]
                     logger.warning(
                         "%s schema miss (attempt %d/%d): %s — retrying in %ds",
                         schema.__name__,
@@ -352,8 +374,8 @@ class LiteLLMClient(LLMClient):
         When ``image_urls`` is set, the last user message's content is rebuilt
         into litellm's multi-part ``[{"type": "text", ...}, {"type":
         "image_url", ...}]`` shape (a vision call). A schema miss is fed back and
-        re-asked, backing off ``RETRY_BACKOFF_SECONDS`` (5s, then 15s), then
-        raises ``SchemaValidationError``; ``ProviderError`` on a transport
+        re-asked, backing off ``self._retry_backoff`` (5s, then 15s by default),
+        then raises ``SchemaValidationError``; ``ProviderError`` on a transport
         failure.
 
         Cost is accumulated on the instance (``self.cost``) for the existing
@@ -404,8 +426,8 @@ class LiteLLMClient(LLMClient):
                 model=model,
                 input=texts,
                 api_key=self._api_key(model),
-                timeout=REQUEST_TIMEOUT_SECONDS,
-                num_retries=LLM_NUM_RETRIES,
+                timeout=self._timeout_seconds,
+                num_retries=self._num_retries,
             )
         except Exception as exc:
             raise ProviderError(

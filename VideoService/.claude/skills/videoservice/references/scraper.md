@@ -59,14 +59,15 @@ touch a run cap.
 
 No job queue: `worker_select_due_gym.sql` *derives* the single highest-priority
 DUE gym straight from timestamps already in the schema — a gym is due when its
-latest `gym_video_spec` **`admin_update`** version (tier 1), its latest **manual**
-`gym_video_feed.curated_at` settled ≥ 1h ago (tier 2), or its last run ≥ 7 days ago
-(tier 3) is newer than its last `video_run`, **and it has no `running` run**
-(never two in-flight runs for the same gym). Tier-sorted; per-gym (2/24h) and
-system-wide (5/24h) rolling run caps (counting runs of any status — the
-poison-loop guard, since a failed run still advances the last-run watermark) stop
-the drain. The drain loop repeats — select, scrape, select again — until the
-system cap is hit or no gym is due, so one tick can drain several gyms' scrapes.
+latest `gym_video_spec` **`admin_update`** version (tier 1) or its last run ≥ 7
+days ago (tier 3) is newer than its last `video_run`, **and it has no `running`
+run** (never two in-flight runs for the same gym). A manual `gym_video_feed`
+curation does not trigger a scrape run — only an `admin_update` spec edit or the
+weekly refresh floor do. Tier-sorted; per-gym (2/24h) and system-wide (5/24h)
+rolling run caps (counting runs of any status — the poison-loop guard, since a
+failed run still advances the last-run watermark) stop the drain. The drain loop
+repeats — select, scrape, select again — until the system cap is hit or no gym is
+due, so one tick can drain several gyms' scrapes.
 
 ### Spec + incremental context
 
