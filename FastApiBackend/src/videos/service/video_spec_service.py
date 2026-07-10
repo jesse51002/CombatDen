@@ -17,6 +17,7 @@ from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.videos import SQL_DIR
 from src.videos.schema.video_spec_schema import VideoSpecDraft, VideoSpecView
+from src.videos.schema.videos_schema import GymVideoSpecView
 
 
 class VideoSpecService:
@@ -35,6 +36,31 @@ class VideoSpecService:
                 .fetchone()
             )
         return self._row_to_view(row) if row is not None else None
+
+    async def load_latest_gym_view(
+        self, gym_id: UUID
+    ) -> GymVideoSpecView | None:
+        """The gym's latest spec as the legacy ``GymVideoSpecView`` projection.
+
+        Remaps the latest :class:`VideoSpecView` into the shape the CRM
+        content-focus card consumes (``GET /gyms/{id}/videos/spec``):
+        ``disciplines`` → ``gym_type``, the short/long keep+avoid descriptions,
+        and ``imported_from`` (dropping ``queries`` / ``source`` / ``created_at``).
+        ``None`` when no spec has been authored yet. Owning the projection here
+        keeps the facade a pure delegator.
+        """
+        spec = await self.load_latest(gym_id)
+        if spec is None:
+            return None
+        return GymVideoSpecView(
+            gym_id=spec.gym_id,
+            gym_type=spec.disciplines,
+            short_videos_desc=spec.short_videos_desc,
+            short_avoid_desc=spec.short_avoid_desc,
+            videos_desc=spec.videos_desc,
+            avoid_desc=spec.avoid_desc,
+            imported_from=spec.imported_from,
+        )
 
     async def save_version(
         self,

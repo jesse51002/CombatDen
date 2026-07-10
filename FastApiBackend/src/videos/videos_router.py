@@ -57,7 +57,6 @@ from src.videos.schema.video_spec_schema import VideoSpecView
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
     GymFeedPreview,
-    GymFeedSection,
     GymVideoCard,
     GymVideosFeed,
     GymVideoSpecView,
@@ -109,6 +108,7 @@ PREVIEW_PER_TAG = 10
         400: {"description": "`video_type` and `big_group` are mutually exclusive"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not an employee of this gym"},
+        404: {"description": "`member_id` is not a member of this gym"},
     },
 )
 @inject
@@ -152,6 +152,12 @@ async def get_gym_videos(
             limit=limit,
             offset=offset,
         )
+    except MemberNotInGymError as exc:
+        # A member_id not in the path gym must 404 (symmetric with the rec path),
+        # never silently rank a different gym's feed.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
     except Exception:
         logger.error(
             "Failed to load gym videos for %s", gym_id, exc_info=True
@@ -467,15 +473,16 @@ async def get_gym_videos_preview(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> GymFeedPreview:
-    """Power the "All" view in one request: hydrate the gym's latest-run feed once
-    (``rejected=true`` → the rejected list), group it by genre tag in feed order,
-    and return up to ``per_tag`` videos per genre."""
+    """Power the "All" view in one request: the service runs a single windowed
+    query (``rejected=true`` → the rejected list) that returns up to ``per_tag``
+    videos per genre in feed order, one ``GymFeedSection`` per genre."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        ids = await videos_service.load_feed_ids(gym_id, rejected=rejected)
-        videos = await videos_service.load_pool_videos(ids)
+        sections = await videos_service.load_feed_preview(
+            gym_id, per_tag=per_tag, rejected=rejected
+        )
     except Exception:
         logger.error(
             "Failed to build feed preview for %s", gym_id, exc_info=True
@@ -485,22 +492,6 @@ async def get_gym_videos_preview(
             detail="Failed to build feed preview",
         ) from None
 
-    # Group by the single genre tag, preserving first-appearance (feed) order,
-    # and cap each genre to `per_tag`. Untagged videos form no section.
-    order: list[VideoGenre] = []
-    by_tag: dict[VideoGenre, list] = {}
-    for v in videos:
-        if v.tag is None:
-            continue
-        if v.tag not in by_tag:
-            by_tag[v.tag] = []
-            order.append(v.tag)
-        if len(by_tag[v.tag]) < per_tag:
-            by_tag[v.tag].append(v)
-    sections = [
-        GymFeedSection(tag=t, videos=by_tag[t])
-        for t in order
-    ]
     return GymFeedPreview(sections=sections)
 
 

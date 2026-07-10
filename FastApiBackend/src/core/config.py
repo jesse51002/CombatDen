@@ -112,6 +112,13 @@ class Settings(BaseSettings):
     # member's facts into the one-paragraph taste summary; reuses
     # `anthropic_api_key`.
     video_profile_summary_model: str = "anthropic/claude-haiku-4-5"
+    # Which member facts the taste-summary prompt is built from: the trailing
+    # window (days) of attendance folded in, how many most-attended classes and
+    # how many most-recent `video_clicked` videos to surface. Injected into
+    # `MemberVideoProfileService` (no `settings` import in the service).
+    video_profile_attendance_window_days: int = 90
+    video_profile_top_classes_limit: int = 3
+    video_profile_recent_clicks_limit: int = 10
     # The member rec surface serves ONE video at a time, rotating the served
     # genre category through this best-first order: the member's total served-rec
     # count modulo the list length picks the starting category, and a category

@@ -25,6 +25,7 @@ from src.shared.sql_loader import load_sql
 from src.videos import SQL_DIR
 from src.videos.schema.videos_big_group import EDUCATIONAL_GENRES, BigGroup
 from src.videos.schema.videos_schema import (
+    GymFeedSection,
     GymVideoCard,
     YouTubeVideoMetadata,
     build_feed_page_result,
@@ -107,36 +108,65 @@ class VideoFeedService:
             raise ValueError(f"could not extract a YouTube id from {url!r}")
         return candidate
 
-    # ── feed id reads ─────────────────────────────────────────────
+    # ── feed reads ────────────────────────────────────────────────
 
-    async def load_feed_ids(
-        self, gym_id: UUID, *, rejected: bool = False
-    ) -> list[str]:
-        """A real gym's served feed ids, in pool-relevance order — the merged,
-        enriched-only candidate set the feed page serves (owner section + latest
-        completed run, INNER JOIN video_rag). ``rejected=True`` returns the
-        rejected list instead of the served (accepted) videos."""
+    async def load_feed_preview(
+        self, gym_id: UUID, *, per_tag: int, rejected: bool = False
+    ) -> list[GymFeedSection]:
+        """The "All" preview — up to ``per_tag`` videos per genre in one query.
+
+        Runs the same served candidate set as the feed page (shared
+        ``videos_feed_candidate_source.sql``), restricted to tagged videos and
+        windowed per genre (``ROW_NUMBER() … WHERE rn <= :per_tag``) so no genre
+        is starved and the whole feed is never loaded to slice in Python.
+        ``rejected=True`` previews the rejected list. Sections come back in
+        first-appearance (feed) order; untagged videos form no section.
+        """
         scan_status = (
             GymVideoScanStatus.rejected
             if rejected
             else GymVideoScanStatus.accepted
         )
-        sql = load_sql(SQL_DIR / "videos_load_feed_ids.sql")
+        candidate_source = load_sql(
+            SQL_DIR / "videos_feed_candidate_source.sql"
+        )
+        sql = load_sql(
+            SQL_DIR / "videos_load_feed_preview.sql",
+            {"candidate_source": candidate_source},
+        )
+        params = {
+            "gym_id": str(gym_id),
+            "scan_status": scan_status.value,
+            "per_tag": per_tag,
+        }
         async with self._db.session() as session:
             rows = (
-                (
-                    await session.execute(
-                        text(sql),
-                        {
-                            "gym_id": str(gym_id),
-                            "scan_status": scan_status.value,
-                        },
-                    )
-                )
-                .mappings()
-                .all()
+                (await session.execute(text(sql), params)).mappings().all()
             )
-        return [r["video_id"] for r in rows]
+        return self._build_preview_sections(rows)
+
+    @staticmethod
+    def _build_preview_sections(rows: list) -> list[GymFeedSection]:
+        """Group the ordered preview rows into one section per genre.
+
+        The SQL orders rows so each genre's rows are contiguous and in
+        first-appearance (feed) order, so a single pass preserving first-seen
+        order rebuilds the sections. A row that fails ``GymVideoCard`` validation
+        is skipped (one bad row never breaks the preview)."""
+        order: list[VideoGenre] = []
+        by_tag: dict[VideoGenre, list[GymVideoCard]] = {}
+        for row in rows:
+            try:
+                card = GymVideoCard.model_validate(dict(row))
+            except ValueError:
+                continue
+            if card.tag is None:  # defensive — the SQL already excludes these
+                continue
+            if card.tag not in by_tag:
+                by_tag[card.tag] = []
+                order.append(card.tag)
+            by_tag[card.tag].append(card)
+        return [GymFeedSection(tag=t, videos=by_tag[t]) for t in order]
 
     async def load_pool_videos(
         self, video_ids: list[str]
@@ -167,11 +197,15 @@ class VideoFeedService:
 
         The rank axis is cosine distance to the member's video-taste embedding
         when ``member_id`` is supplied AND that member has a built embedding, else
-        gym ``relevance_index``. The embedding is READ-ONLY (never built here);
-        ``member_id`` is only a ranking hint — the candidate set is always this
-        gym's feed, so it can't leak (the route is already gym-employee gated).
-        The per-member decayed watch penalty (from ``member_video_recs``) is what
-        advances the rec on a re-serve; it is 0 when ``member_id`` is None.
+        gym ``relevance_index``. Passing a ``member_id`` first verifies that
+        member belongs to ``gym_id`` (``MemberNotInGymError`` → 404 otherwise) in
+        the SAME row read that loads the embedding, so a member_id not in the path
+        gym can never rank a DIFFERENT gym's feed (symmetric with the rec path).
+        The embedding is READ-ONLY (never built here); ``member_id`` is only a
+        ranking hint — the candidate set is always this gym's feed, so it can't
+        leak (the route is already gym-employee gated). The per-member decayed
+        watch penalty (from ``member_video_recs``) is what advances the rec on a
+        re-serve; it is 0 when ``member_id`` is None.
 
         ``total`` is the count of all matching rows before pagination (via
         ``COUNT(*) OVER()``). It will be 0 when the requested ``offset``
@@ -185,7 +219,7 @@ class VideoFeedService:
         )
         educational_genres = [g.value for g in EDUCATIONAL_GENRES]
         embedding = (
-            await self._profiles.load_embedding(member_id)
+            await self._profiles.verify_and_load_embedding(member_id, gym_id)
             if member_id is not None
             else None
         )
@@ -206,7 +240,13 @@ class VideoFeedService:
             "limit": limit,
             "offset": offset,
         }
-        sql = load_sql(SQL_DIR / "videos_load_feed_page.sql")
+        candidate_source = load_sql(
+            SQL_DIR / "videos_feed_candidate_source.sql"
+        )
+        sql = load_sql(
+            SQL_DIR / "videos_load_feed_page.sql",
+            {"candidate_source": candidate_source},
+        )
         async with self._db.session() as session:
             rows = (
                 (await session.execute(text(sql), params)).mappings().all()

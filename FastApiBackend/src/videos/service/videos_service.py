@@ -32,6 +32,7 @@ from src.videos.schema.video_spec_schema import (
 )
 from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import (
+    GymFeedSection,
     GymVideoCard,
     GymVideoSpecView,
 )
@@ -68,14 +69,21 @@ class VideosService:
 
     # ── live gym feed ─────────────────────────────────────────────
 
-    async def load_feed_ids(
-        self, gym_id: UUID, *, rejected: bool = False
-    ) -> list[str]:
-        return await self._feed.load_feed_ids(gym_id, rejected=rejected)
+    async def load_feed_preview(
+        self, gym_id: UUID, *, per_tag: int, rejected: bool = False
+    ) -> list[GymFeedSection]:
+        """The "All" preview — up to ``per_tag`` videos per genre in one windowed
+        query. Delegates to VideoFeedService (the router just returns the sections
+        wrapped in ``GymFeedPreview``)."""
+        return await self._feed.load_feed_preview(
+            gym_id, per_tag=per_tag, rejected=rejected
+        )
 
     async def load_pool_videos(
         self, video_ids: list[str]
     ) -> list[GymVideoCard]:
+        """Hydrate the named pooled videos by id (used by the presets template
+        preview, which supplies its own id list)."""
         return await self._feed.load_pool_videos(video_ids)
 
     async def load_feed_page(
@@ -119,25 +127,10 @@ class VideosService:
     # ── live gym spec (legacy projection) ────────────────────────
 
     async def load_gym_spec(self, gym_id: UUID) -> GymVideoSpecView | None:
-        """A real gym's live spec as a ``GymVideoSpecView``.
-
-        Delegates to ``VideoSpecService.load_latest`` and converts the result
-        to the legacy ``GymVideoSpecView`` shape (``gym_type`` field name,
-        no ``queries`` / ``source`` / ``created_at``). Returns ``None`` when
-        no spec has been authored yet.
-        """
-        spec = await self._spec_service.load_latest(gym_id)
-        if spec is None:
-            return None
-        return GymVideoSpecView(
-            gym_id=spec.gym_id,
-            gym_type=spec.disciplines,
-            short_videos_desc=spec.short_videos_desc,
-            short_avoid_desc=spec.short_avoid_desc,
-            videos_desc=spec.videos_desc,
-            avoid_desc=spec.avoid_desc,
-            imported_from=spec.imported_from,
-        )
+        """A real gym's live spec as the legacy ``GymVideoSpecView`` — pure
+        delegation. The projection (``disciplines`` → ``gym_type`` etc.) lives in
+        ``VideoSpecService.load_latest_gym_view``. ``None`` when none authored."""
+        return await self._spec_service.load_latest_gym_view(gym_id)
 
     # ── owner feed edits ──────────────────────────────────────────
 

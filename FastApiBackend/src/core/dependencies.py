@@ -469,6 +469,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         embedding_dim=settings.video_embedding_dim,
         summary_model=settings.video_profile_summary_model,
         refresh_cooldown_days=settings.video_profile_refresh_cooldown_days,
+        attendance_window_days=settings.video_profile_attendance_window_days,
+        top_classes_limit=settings.video_profile_top_classes_limit,
+        recent_clicks_limit=settings.video_profile_recent_clicks_limit,
     )
     # Concern services — stateless, composed by the facade. The feed service
     # reads a member's profile embedding (read-only) for the unified feed's

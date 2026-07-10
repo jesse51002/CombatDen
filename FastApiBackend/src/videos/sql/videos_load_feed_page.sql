@@ -5,6 +5,11 @@
 -- decayed already-watched penalty. There is no owner/source param — the owner
 -- rows and the run rows are one candidate set.
 --
+-- The candidate FROM/JOIN/WHERE core is injected (as the candidate_source
+-- variable) from the shared videos_feed_candidate_source.sql (the single source
+-- of "what counts as served", also used by videos_load_feed_preview.sql); this
+-- query adds its ranking SELECT + the video_type / big_group filters + ranking.
+--
 -- Parameters:
 --   :gym_id             UUID of the gym
 --   :scan_status        'accepted' | 'rejected'  (gym_video_scan_status enum)
@@ -67,22 +72,7 @@ WITH candidates AS (
             WHERE mr.member_id = CAST(:member_id AS UUID)
               AND mr.video_id = v.video_id
         ), 0) AS penalty_units
-    FROM gym_video_feed f
-    JOIN video v ON v.video_id = f.video_id
-    JOIN video_rag r ON r.video_id = v.video_id
-    WHERE f.gym_id = CAST(:gym_id AS UUID)
-      AND f.scan_status = CAST(:scan_status AS gym_video_scan_status)
-      AND (
-        f.video_run_id IS NULL
-        -- Serve the latest COMPLETED run only: a mid-flight 'running' run must
-        -- never become "latest" or the feed would blank until it finishes.
-        OR f.video_run_id = (
-            SELECT run_id FROM video_run
-            WHERE gym_id = CAST(:gym_id AS UUID)
-              AND status = 'completed'
-            ORDER BY created_at DESC
-            LIMIT 1)
-      )
+    {candidate_source}
       AND (
         CAST(:video_type AS text) IS NULL
         OR v.tag::text = CAST(:video_type AS text)

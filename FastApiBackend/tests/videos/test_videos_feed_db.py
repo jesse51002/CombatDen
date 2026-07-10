@@ -38,7 +38,7 @@ from schema.video import VideoGenre
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
 from src.shared.database import DirectDatabasePool
 from src.videos.schema.videos_big_group import BigGroup
-from src.videos.schema.videos_schema import GymVideoCard
+from src.videos.schema.videos_schema import GymFeedSection, GymVideoCard
 from src.videos.service.video_feed_service import VideoFeedService
 
 # (video_type, big_group) — every nullable/branch combination the router can
@@ -85,3 +85,33 @@ async def test_load_feed_page_prepares_against_live_db(
     assert all(isinstance(c, GymVideoCard) for c in cards)
     assert isinstance(total, int)
     assert total >= 0
+
+
+@pytest.mark.parametrize("rejected", [False, True])
+async def test_load_feed_preview_prepares_against_live_db(
+    db_pool: DirectDatabasePool,
+    gym_id: UUID,
+    rejected: bool,
+) -> None:
+    """The windowed per-genre preview query prepares + executes on the live DB.
+
+    The mocked logic tests never let Postgres PREPARE
+    ``videos_load_feed_preview.sql`` (the ROW_NUMBER / FIRST_VALUE window + the
+    injected shared ``{candidate_source}`` core), so this executes it for real to
+    catch a broken CTE/window or a param-typing regression. It asserts only the
+    shape (list of ``GymFeedSection``), not row content — the seeded gym may have
+    no enriched feed rows."""
+    service = VideoFeedService(
+        db_pool=db_pool,
+        youtube_client=MagicMock(),
+        profile_service=MagicMock(),
+        bump_sigma_fraction=0.10,
+        watch_penalty_half_life_days=7.0,
+    )
+
+    sections = await service.load_feed_preview(
+        gym_id, per_tag=10, rejected=rejected
+    )
+
+    assert isinstance(sections, list)
+    assert all(isinstance(s, GymFeedSection) for s in sections)

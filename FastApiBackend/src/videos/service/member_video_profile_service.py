@@ -11,9 +11,11 @@ is what recommendations rank against.
 The profile is (re)built ONLY by ``refresh_if_due`` — the trigger gate that
 rebuilds when the profile is missing or older than the refresh cooldown, fired
 fire-and-forget by the class-booking / video-click triggers. Reads never build:
-``verify_member_in_gym`` is the ownership guard the rec path calls before reading
-the embedding, and ``load_embedding`` returns None when the profile has not been
-built yet (the rec path then ranks without similarity). Every guard first
+``verify_member_in_gym`` is the guard-only ownership check the rec path calls
+before its loop, and ``verify_and_load_embedding`` is the GUARDED embedding read
+the feed page uses — one row read that both verifies membership and returns the
+embedding (None when the profile has not been built yet, so the feed then ranks
+without similarity). There is no unguarded embedding read. Every guard first
 verifies the member belongs to the gym they were asked about
 (``MemberNotInGymError`` otherwise). Embeddings are
 stored/read as pgvector text form and every produced vector is length-checked
@@ -35,13 +37,6 @@ from src.shared.litellm_client import LiteLLMClient
 from src.shared.sql_loader import load_sql
 from src.videos import PROMPTS_DIR, SQL_DIR
 from src.videos.schema.member_profile_schema import MemberProfileSummary
-
-# Trailing window (days) for the attendance facts folded into the summary.
-ATTENDANCE_WINDOW_DAYS = 90
-# Most-attended classes surfaced to the summary prompt.
-TOP_CLASSES_LIMIT = 3
-# Most-recently-clicked videos surfaced to the summary prompt.
-RECENT_CLICKS_LIMIT = 10
 
 _SUMMARY_PROMPT_PATH = PROMPTS_DIR / "member_profile_summary.md"
 
@@ -67,6 +62,9 @@ class MemberVideoProfileService:
         embedding_dim: int,
         summary_model: str,
         refresh_cooldown_days: int,
+        attendance_window_days: int,
+        top_classes_limit: int,
+        recent_clicks_limit: int,
     ) -> None:
         self._db = db_pool
         self._litellm = litellm_client
@@ -74,6 +72,9 @@ class MemberVideoProfileService:
         self._embedding_dim = embedding_dim
         self._summary_model = summary_model
         self._refresh_cooldown_days = refresh_cooldown_days
+        self._attendance_window_days = attendance_window_days
+        self._top_classes_limit = top_classes_limit
+        self._recent_clicks_limit = recent_clicks_limit
         self._prompt_template = _SUMMARY_PROMPT_PATH.read_text(encoding="utf-8")
 
     # ── public API ────────────────────────────────────────────────
@@ -105,17 +106,22 @@ class MemberVideoProfileService:
         if self._needs_rebuild(row):
             await self._build(member_id, gym_id)
 
-    async def load_embedding(self, member_id: UUID) -> str | None:
-        """The member's profile embedding (pgvector text form), or None.
+    async def verify_and_load_embedding(
+        self, member_id: UUID, gym_id: UUID
+    ) -> str | None:
+        """Guard membership, then return the member's profile embedding (or None).
 
-        None when the profile has not been built yet (the rec service then ranks
-        without similarity via its no-embedding candidate query). Never triggers
-        a build.
+        The GUARDED embedding read the feed page uses: it verifies the member
+        belongs to ``gym_id`` (``MemberNotInGymError`` otherwise, so a member_id
+        not in the path gym never ranks a DIFFERENT gym's feed) and returns the
+        pgvector text embedding in the SAME single row read — None when the
+        profile has not been built yet (the feed then ranks without similarity).
+        Never triggers a build. There is no unguarded embedding read: every read
+        of the embedding goes through this membership guard.
         """
         row = await self._load_row(member_id)
-        if row is None:
-            return None
-        return row["embedding"]
+        self._guard(row, gym_id)
+        return row["embedding"]  # type: ignore[index]  # _guard ensures non-None
 
     # ── ownership + rebuild decision ──────────────────────────────
 
@@ -189,9 +195,9 @@ class MemberVideoProfileService:
                         text(sql),
                         {
                             "member_id": str(member_id),
-                            "window_days": ATTENDANCE_WINDOW_DAYS,
-                            "class_limit": TOP_CLASSES_LIMIT,
-                            "click_limit": RECENT_CLICKS_LIMIT,
+                            "window_days": self._attendance_window_days,
+                            "class_limit": self._top_classes_limit,
+                            "click_limit": self._recent_clicks_limit,
                         },
                     )
                 )
