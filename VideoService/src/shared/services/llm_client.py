@@ -50,8 +50,16 @@ RETRY_BACKOFF_SECONDS = (5, 15)
 # provider failures — chiefly Gemini RateLimitError under the classify fan-out,
 # which otherwise drops the tag outright. Distinct from the schema-correction
 # re-asks above (those handle a bad *response*, not a failed *call*). Genuine
-# 400s (BadRequest) are not retried by litellm.
+# 400s (BadRequest) are not retried by litellm. Passed on EVERY completion/embed
+# call below (they were previously defined but never wired — so calls ran with
+# no retries AND no timeout, letting a hung Gemini connection stall a whole
+# gather forever).
 LLM_NUM_RETRIES = 5
+# Per-attempt request timeout. A hung provider connection otherwise blocks the
+# awaiting task indefinitely (no timeout → asyncio.gather freezes on it → the
+# whole enrich chunk stalls). Generous enough not to cut a legitimately slow
+# multimodal call; a true hang times out → retries → finally strikes the video.
+REQUEST_TIMEOUT_SECONDS = 90
 
 # Logged prompts elide base64 data URLs so a vision call's image payload
 # isn't dumped into the logs.
@@ -175,6 +183,8 @@ class LiteLLMClient(LLMClient):
             "model": model_name,
             "messages": messages,
             "api_key": self._api_key(model_name),
+            "timeout": REQUEST_TIMEOUT_SECONDS,
+            "num_retries": LLM_NUM_RETRIES,
         }
 
     async def _acompletion(self, kwargs: dict, model_name: str) -> Any:
@@ -394,6 +404,8 @@ class LiteLLMClient(LLMClient):
                 model=model,
                 input=texts,
                 api_key=self._api_key(model),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                num_retries=LLM_NUM_RETRIES,
             )
         except Exception as exc:
             raise ProviderError(
