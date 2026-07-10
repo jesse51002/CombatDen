@@ -703,7 +703,7 @@ Ref: task_items.target_price_id > membership_plan_prices_unfiltered.price_id
 // template keyed by a text id (e.g. 'boxing') — NOT the customer `gyms` table.
 // ============================================================
 
-Table video_gym {
+Table template_gym {
   gym_id text [primary key, note: 'text id == YAML filename stem']
   gym_type jsonb [not null, note: 'JSONB array of disciplines; [0] = primary (drives parent_gym_type)']
   theme varchar [not null, note: 'ThemeService design id']
@@ -715,13 +715,13 @@ Table video_gym {
   has_rewards boolean [not null, default: false]
 }
 
-Table video_gym_query {
+Table template_gym_query {
   query_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id text [not null]
   query text [not null]
 }
 
-Table video_gym_class {
+Table template_gym_class {
   class_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY name']
   gym_id text [not null]
   name text [not null]
@@ -732,7 +732,7 @@ Table video_gym_class {
   instructor_image_url text [not null]
 }
 
-Table video_gym_reward {
+Table template_gym_reward {
   reward_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY points_cost']
   gym_id text [not null]
   title text [not null]
@@ -766,10 +766,10 @@ Table video {
 
 Ref: video.gym_id > gyms.gym_id
 
-Table video_gym_feed {
+Table template_gym_feed {
   gym_id text [not null]
   video_id text [not null]
-  status video_gym_feed_status [not null, note: 'enum: good | rejected']
+  status template_gym_feed_status [not null, note: 'enum: good | rejected']
 
   indexes {
     (gym_id, video_id) [pk]
@@ -793,19 +793,19 @@ Table cost_log {
   created_at timestamptz [not null, default: `now()`]
 }
 
-Ref: video_gym_query.gym_id > video_gym.gym_id
-Ref: video_gym_class.gym_id > video_gym.gym_id
-Ref: video_gym_reward.gym_id > video_gym.gym_id
+Ref: template_gym_query.gym_id > template_gym.gym_id
+Ref: template_gym_class.gym_id > template_gym.gym_id
+Ref: template_gym_reward.gym_id > template_gym.gym_id
 
-Ref: video_gym_feed.gym_id > video_gym.gym_id
-Ref: video_gym_feed.video_id > video.video_id
+Ref: template_gym_feed.gym_id > template_gym.gym_id
+Ref: template_gym_feed.video_id > video.video_id
 Ref: cost_log.gym_id > gyms.gym_id
 
 // ============================================================
 // Real-gym video content (gym_video_* tables). These reference the
 // customer `gyms` table (UUID gym_id) and the shared `video` pool.
 // Written by the presets import (PresetsService); read by FastApiBackend
-// videos domain (VideosService). Separate from the template video_gym* tables.
+// videos domain (VideosService). Separate from the template_gym* tables.
 // ============================================================
 
 // gym_video_spec is APPEND-ONLY VERSIONED. Rows are never UPDATE'd.

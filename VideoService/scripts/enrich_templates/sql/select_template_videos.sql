@@ -1,4 +1,4 @@
--- Every DISTINCT video referenced by the template feeds (video_gym_feed — the 76
+-- Every DISTINCT video referenced by the template feeds (template_gym_feed — the 76
 -- demo templates), BOTH verdicts ('good' AND 'rejected'), joined to the shared
 -- pool for the fields the enrich call needs. This is the target set the one-time
 -- enrich-templates run summarises + embeds into the RAG sidecar. Because these
@@ -15,6 +15,6 @@ SELECT DISTINCT
     v.thumbnail_url,
     v.duration_seconds,
     v.transcript
-FROM video_gym_feed f
+FROM template_gym_feed f
 JOIN video v ON v.video_id = f.video_id
 ORDER BY v.video_id;

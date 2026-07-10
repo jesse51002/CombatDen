@@ -21,7 +21,7 @@ stop:
 
 seed:
 	python python_data/main.py
-	# VideoService keys on its own video_gym ids in a SEPARATE DB, so seeding the
+	# VideoService keys on its own template_gym ids in a SEPARATE DB, so seeding the
 	# main DB leaves the video_* tables empty → every video surface 404s ("video
 	# service unreachable", blank CRM video tabs). Sync the whole video catalog so
 	# those surfaces populate. Targets VideoService's local .env DB.

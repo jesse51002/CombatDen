@@ -62,7 +62,7 @@ This file is a living document — exactly like a skill, it must track reality. 
 ## Real-gym video content schema (`gym_video_*`)
 
 The `gym_video_*` tables hold real customer gym video content (UUID-keyed by `gyms.gym_id`), separate
-from the `video_gym*` template tables (text-keyed demo content).
+from the `template_gym*` template tables (text-keyed demo content).
 
 **`gym_video_spec` is append-only and versioned.** Every change appends a new row; existing rows are
 never UPDATE'd. The `spec_id uuid` is the PK; `gym_id` is NOT unique. Columns:

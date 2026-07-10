@@ -2,7 +2,7 @@
 
     poetry run python -m scripts.enrich_templates.run
 
-Selects the DISTINCT videos referenced by the template feeds (``video_gym_feed``,
+Selects the DISTINCT videos referenced by the template feeds (``template_gym_feed``,
 both 'good' and 'rejected' verdicts — ~18.9k). For each chunk it BATCH-fetches the
 missing transcripts up front (``WorkerEnricher.fetch_chunk_transcripts`` — usually
 a no-op, template videos are ~100% cached), then REUSES the worker enricher's
@@ -18,7 +18,7 @@ This only READS the DB (the pool fields it enriches) and WRITES the sidecar file
 sidecar are skipped, so a crashed run just re-runs. Concurrency mirrors the
 worker's enrich sweep (``worker_enrich_concurrency``, 8).
 
-Requires a DB already synced (``make sync-gyms`` — the pool + ``video_gym_feed``
+Requires a DB already synced (``make sync-gyms`` — the pool + ``template_gym_feed``
 present), the keys the configured ``enrich_model`` + ``embedding_model`` use (by
 default ``GEMINI_API_KEY`` + ``OPENAI_API_KEY``), and ``APIFY_TOKEN`` for the lazy
 transcript fetches of the ~16% of pool videos with no cached transcript. Targets

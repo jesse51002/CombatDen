@@ -1,10 +1,10 @@
 -- Paginated template video feed page.
--- Joins video_gym_feed → video, applies status and tag filters, orders by
+-- Joins template_gym_feed → video, applies status and tag filters, orders by
 -- relevance, and returns the page plus the total match count in one round-trip.
 --
 -- Parameters:
---   :video_gym_id       slug-keyed template id (video_gym.gym_id)
---   :status             'good' | 'rejected'  (video_gym_feed_status enum)
+--   :video_gym_id       slug-keyed template id (template_gym.gym_id)
+--   :status             'good' | 'rejected'  (template_gym_feed_status enum)
 --   :video_type         a single video_genre string or NULL (exact tag match)
 --   :filter_big_group   'educational' | 'entertainment' | NULL (big-group filter)
 --   :educational_genres list[str]  the genre strings that map to EDUCATIONAL
@@ -33,10 +33,10 @@ SELECT
     v.transcript_error,
     v.transcript,
     COUNT(*) OVER() AS total
-FROM video_gym_feed f
+FROM template_gym_feed f
 JOIN video v ON v.video_id = f.video_id
 WHERE f.gym_id = :video_gym_id
-  AND f.status = CAST(:status AS video_gym_feed_status)
+  AND f.status = CAST(:status AS template_gym_feed_status)
   AND (
     :video_type IS NULL
     OR v.tag::text = :video_type

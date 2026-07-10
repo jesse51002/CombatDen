@@ -20,7 +20,7 @@ worker:
 gym-check:
 	poetry run python -m scripts.gym_maker.run check $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
 
-# Sync the authored gym YAML files into SQL (video_gym + query/class/reward
+# Sync the authored gym YAML files into SQL (template_gym + query/class/reward
 # tables), then load the existing videos/ pool + each gym's good/rejected feeds
 # into SQL (pool upserts, feeds rewrite per gym — both idempotent, no re-scrape).
 # The append-only cost_log is intentionally NOT imported here (--skip-cost-log)
@@ -47,7 +47,7 @@ sync-gyms-prod:
 # can seed video_rag on any DB without re-paying the LLM. Reuses the worker
 # enricher's per-video unit; resumable/idempotent (skips videos already in the
 # sidecar), so a crashed run just re-runs. Run AFTER `make sync-gyms` (needs the
-# pool + video_gym_feed loaded). Requires the keys the configured enrich_model +
+# pool + template_gym_feed loaded). Requires the keys the configured enrich_model +
 # embedding_model use (by default GEMINI_API_KEY + OPENAI_API_KEY) and
 # APIFY_TOKEN (lazy transcript fetches for the ~16% of videos with none) in .env.
 # Targets the DB in ENV_FILE (default .env). Cost ~ $30-150 for the summary pass.

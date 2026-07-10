@@ -8,7 +8,7 @@ Loads, in order:
      (the pre-paid summaries + embeddings, so a reset reproduces enriched
      templates without re-running the LLM; absent sidecar -> warn + skip),
   3. each gym's existing ``good_video_ids`` / ``rejected_video_ids`` ->
-     ``video_gym_feed`` (ids not in the pool are skipped),
+     ``template_gym_feed`` (ids not in the pool are skipped),
   4. ``cost_log.yaml`` -> ``cost_log`` (the generic spend-ledger table).
 
 Run AFTER the migration and ``sync-gyms`` (the gyms must already exist in SQL for
@@ -103,7 +103,7 @@ async def _import_video_rag(writer: VideoDbWriter, root: Path) -> int:
 
 
 async def _import_feeds(writer: VideoDbWriter, root: Path) -> int:
-    """Load each gym's good/rejected id-lists from YAML into ``video_gym_feed``."""
+    """Load each gym's good/rejected id-lists from YAML into ``template_gym_feed``."""
     gym_ids = list_gym_ids(root)
     for gid in gym_ids:
         gym = load_gym_yaml(root, gid)

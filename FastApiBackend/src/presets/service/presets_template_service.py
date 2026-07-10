@@ -1,4 +1,4 @@
-"""PresetsTemplateService — the slug-keyed video_gym* template catalog reads.
+"""PresetsTemplateService — the slug-keyed template_gym* template catalog reads.
 
 Serves the public template catalog: list all templates (paginated, filterable),
 fetch one template's full detail, and load a template's feed ids (approved or
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from schema.video import VideoGenre, VideoGymFeedStatus
+from schema.video import TemplateGymFeedStatus, VideoGenre
 from sqlalchemy import text
 
 from src.presets import SQL_DIR
@@ -30,7 +30,7 @@ from src.videos.schema.videos_schema import GymVideoCard, build_feed_page_result
 
 
 class PresetsTemplateService:
-    """Read-only access to the slug-keyed ``video_gym*`` template catalog."""
+    """Read-only access to the slug-keyed ``template_gym*`` template catalog."""
 
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db = db_pool
@@ -148,7 +148,7 @@ class PresetsTemplateService:
         """A template's feed ids in pool-relevance order. ``rejected=True``
         serves the scan's rejected list."""
         status = (
-            VideoGymFeedStatus.rejected if rejected else VideoGymFeedStatus.good
+            TemplateGymFeedStatus.rejected if rejected else TemplateGymFeedStatus.good
         )
         sql = load_sql(SQL_DIR / "presets_load_template_feed_ids.sql")
         async with self._db.session() as session:
@@ -176,7 +176,7 @@ class PresetsTemplateService:
     ) -> tuple[list[GymVideoCard], int]:
         """Paginated template feed page with in-DB filtering.
 
-        Joins ``video_gym_feed`` → ``video``, applies status + optional tag
+        Joins ``template_gym_feed`` → ``video``, applies status + optional tag
         filters at the DB level, and returns ``(page, total)`` in one
         round-trip.
 
@@ -186,7 +186,7 @@ class PresetsTemplateService:
         ``total`` returned by the first response.
         """
         status = (
-            VideoGymFeedStatus.rejected if rejected else VideoGymFeedStatus.good
+            TemplateGymFeedStatus.rejected if rejected else TemplateGymFeedStatus.good
         )
         educational_genres = [g.value for g in EDUCATIONAL_GENRES]
         sql = load_sql(SQL_DIR / "presets_load_template_feed_page.sql")

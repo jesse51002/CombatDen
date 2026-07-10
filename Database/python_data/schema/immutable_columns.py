@@ -463,27 +463,27 @@ STRIPE_WEBHOOK_EVENTS: frozenset[str] = frozenset(
 # (no user-facing updates), but kept in sync per the Database convention.
 # ============================================================
 
-VIDEO_GYM: frozenset[str] = frozenset(
+TEMPLATE_GYM: frozenset[str] = frozenset(
     {
         "gym_id",  # PK (text id == YAML filename stem)
     }
 )
 
-VIDEO_GYM_QUERY: frozenset[str] = frozenset(
+TEMPLATE_GYM_QUERY: frozenset[str] = frozenset(
     {
         "query_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
     }
 )
 
-VIDEO_GYM_CLASS: frozenset[str] = frozenset(
+TEMPLATE_GYM_CLASS: frozenset[str] = frozenset(
     {
         "class_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
     }
 )
 
-VIDEO_GYM_REWARD: frozenset[str] = frozenset(
+TEMPLATE_GYM_REWARD: frozenset[str] = frozenset(
     {
         "reward_id",  # PK, identity
         "gym_id",  # identity FK, per-gym resource
@@ -510,7 +510,7 @@ VIDEO_RUN: frozenset[str] = frozenset(
     }
 )
 
-VIDEO_GYM_FEED: frozenset[str] = frozenset(
+TEMPLATE_GYM_FEED: frozenset[str] = frozenset(
     {
         "gym_id",  # composite PK / identity FK
         "video_id",  # composite PK / identity FK
@@ -531,7 +531,7 @@ COST_LOG: frozenset[str] = frozenset(
 
 # ============================================================
 # Per-gym live video content (gym_video_* — the UUID-keyed prod counterpart of
-# the video_gym* template catalog). Written by the backend (preset import) at
+# the template_gym* template catalog). Written by the backend (preset import) at
 # service_role only; no user-facing update path, so identity + provenance columns
 # are listed for convention/parity.
 # ============================================================

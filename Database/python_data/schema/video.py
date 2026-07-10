@@ -28,8 +28,8 @@ class VideoGenre(StrEnum):
     memes = "memes"
 
 
-class VideoGymFeedStatus(StrEnum):
-    """Mirrors the Postgres `video_gym_feed_status` enum in schemas/video_gym_feed.sql."""
+class TemplateGymFeedStatus(StrEnum):
+    """Mirrors the Postgres `template_gym_feed_status` enum in schemas/template_gym_feed.sql."""
 
     good = "good"
     rejected = "rejected"

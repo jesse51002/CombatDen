@@ -154,7 +154,7 @@ authored), `created_at`.
 | source | minted by | how |
 |---|---|---|
 | `admin_update` | the conversational agent accept-path | `POST /api/v1/gyms/{id}/video-agent` with `accepted_spec` in body → `VideosService.save_accepted_spec` → `VideoSpecAuthoring.commit` → `VideoSpecService.save_version` |
-| `system_update` | the preset import | `PresetsService` → `presets_insert_spec_version.sql` (one versioned row, queries folded from the `video_gym` template) |
+| `system_update` | the preset import | `PresetsService` → `presets_insert_spec_version.sql` (one versioned row, queries folded from the `template_gym` template) |
 | `feed_update` | the feed-learning refiner | `VideoFeedRefiner.refine_from_feed` → `VideoSpecAuthoring.commit` → `VideoSpecService.save_version` |
 
 All three write at **service_role** (clients never write the table; RLS revokes

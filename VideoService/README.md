@@ -12,16 +12,16 @@ video pool, each gym's curated feed, the spend ledger) lives only in Postgres:
 
 ```
 gyms/<gym_id>.yaml   one gym — git-tracked source of truth, synced into SQL
-video_gym + children (Postgres)   gyms, queries, classes, rewards
+template_gym + children (Postgres)   gyms, queries, classes, rewards
 video                (Postgres)   the shared video pool (one row per video)
-video_gym_feed       (Postgres)   each gym's curated good/rejected feed
+template_gym_feed       (Postgres)   each gym's curated good/rejected feed
 cost_log             (Postgres)   generic append-only spend ledger (source='video')
 ```
 
 The **background worker** (`src/worker`) writes the shared `video` pool, per-video
 `video_rag` (summary + embedding), and each real gym's `gym_video_feed` runs;
 `make sync-gyms` loads the authored templates. The FastApiBackend's `videos`
-domain queries the `video_gym*` template tables and the worker's output to serve
+domain queries the `template_gym*` template tables and the worker's output to serve
 the CRM and the public theme browser. There is **no tenant layer, no
 `app_id`**. The theme→gym link is just each gym's `theme` field (a ThemeService
 design id), so VideoService never reads ThemeService. (The legacy flat `videos/` +
@@ -87,7 +87,7 @@ Two independent halves over the shared Postgres — they never call each other:
 flowchart TD
     human(["Operator"]) --> maker["gym_maker<br/>(author gyms/&lt;id&gt;.yaml)"]
     maker --> gym[("gyms/&lt;id&gt;.yaml<br/>gym_type · theme · spec · queries")]
-    gym -->|make sync-gyms| tmpl[("video_gym* templates<br/>+ video pool + video_rag sidecar (Postgres)")]
+    gym -->|make sync-gyms| tmpl[("template_gym* templates<br/>+ video pool + video_rag sidecar (Postgres)")]
 
     backend(["FastApiBackend<br/>spec save (admin_update)"]) -->|writes| real[("gym_video_spec · video pool · video_rag<br/>gym_video_feed · video_run (Postgres)")]
     real -.->|"scrape step: derive due gym from timestamps (no queue)"| worker["worker (src/worker)<br/>tick = cleanup → finalize → one drained step<br/>(scan → enrich → scrape)"]

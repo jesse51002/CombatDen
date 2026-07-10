@@ -3,7 +3,7 @@
 -- versioned run (`video_run_id`) so the serve path can take only the gym's LATEST
 -- run; owner-added rows are run-independent (`video_run_id` NULL) and always
 -- serve. `scan_status` is the per-row keep/drop decision (the rejected list lives
--- here now, the prod counterpart of the template `video_gym_feed` good/rejected).
+-- here now, the prod counterpart of the template `template_gym_feed` good/rejected).
 -- Removability is a property of the VIDEO (`video.added_via`), not the feed:
 -- web_query videos are rejected (kept, `scan_status='rejected'`), manual videos
 -- are hard-deleted.

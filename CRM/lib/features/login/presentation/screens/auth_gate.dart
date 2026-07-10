@@ -132,10 +132,10 @@ class _AuthenticatedGateState
   /// Make [gym] the active admin gym (its real UUID scopes every CRM
   /// member query) and seed the read-only content surfaces.
   ///
-  /// The **content** gym is a default VideoService `video_gym`
+  /// The **content** gym is a default VideoService `template_gym`
   /// ([AppConstants.defaultVideoGymId]) recorded as [selectedGym]'s
   /// `videoGymId` — NOT the real `gym.gymId`. The real gym id (a UUID)
-  /// and the VideoService `video_gym` id (a string like `boxing`) are
+  /// and the VideoService `template_gym` id (a string like `boxing`) are
   /// separate id spaces with no mapping, so passing the real UUID 404s
   /// the VideoService and breaks every content surface. The real gym's
   /// name shows in the admin chrome via `gymName` (the public theme

@@ -551,7 +551,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         anthropic_api_key=settings.anthropic_api_key,
     )
 
-    # Presets: transactional import of a video_gym template into a real gym's
+    # Presets: transactional import of a template_gym template into a real gym's
     # production tables. Owner-gated + email allowlist. No Stripe. Reuses the
     # canonical classes_expander to seed each imported class's past month of
     # attendance + sign-ups (so the demo gym shows realistic counts).

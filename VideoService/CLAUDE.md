@@ -170,7 +170,7 @@ worker:
 1. **Make/edit a gym** (`make gym-check GYM_ID=<id|all>`) — author/update
    `gyms/<gym_id>.yaml` and validate it round-trips the `Gym` schema (YAML-only).
 2. **Sync gyms → SQL** (`make sync-gyms GYM_ID=<id|all>`) — upsert the authored
-   gym files into `video_gym` + its query/class/reward child tables, then load
+   gym files into `template_gym` + its query/class/reward child tables, then load
    the existing `videos/` pool + the **template RAG sidecar** (`video_rag/` →
    `video_rag`, see below) + each gym's good/rejected feeds into SQL (pool +
    video_rag upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It
@@ -184,7 +184,7 @@ worker:
    PAID** run that builds the artifact step 2 loads. The unified feed gates on a
    `video_rag` row (an embedding) being present, so a freshly-imported preset feed
    would look empty until the worker's enrich sweep caught up. This run enriches
-   the **~18.9k unique template videos** referenced in `video_gym_feed` (both
+   the **~18.9k unique template videos** referenced in `template_gym_feed` (both
    verdicts) ONCE — reusing the worker enricher's per-video unit
    (`WorkerEnricher.enrich_one`: one multimodal summary+tag+disciplines+facets call fed a
    per-chunk BATCHED Apify transcript fetch — usually a no-op, templates are ~100% cached)
@@ -200,7 +200,7 @@ worker:
    resumable/idempotent (skips videos already in the sidecar). Needs the keys the
    configured `enrich_model` + `embedding_model` use — both Gemini now, so just
    `GEMINI_API_KEY` — plus `APIFY_TOKEN` for the lazy transcript fetches, and a DB
-   already synced (pool + `video_gym_feed` loaded). The sidecar format is owned by
+   already synced (pool + `template_gym_feed` loaded). The sidecar format is owned by
    `scripts/shared/video_rag_sidecar.py`. **Smoke-test first:** `make
    enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"` runs the whole
    enrich→embed→sidecar pipeline on ONE video (into a throwaway root) to prove it

@@ -65,7 +65,7 @@ PREVIEW_PER_TAG = 10
     status_code=status.HTTP_200_OK,
     summary="Import a video template into a gym's production tables",
     description=(
-        "Transactionally copies the chosen ``video_gym`` template's spec, "
+        "Transactionally copies the chosen ``template_gym`` template's spec, "
         "queries, feed, classes, instructors, and rewards into the gym's "
         "real production tables. Re-pickable: calling again overwrites the "
         "prior import. Restricted to gym owners AND the preset-import "
@@ -87,7 +87,7 @@ async def import_preset(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     presets_service=Depends(Provide[DependencyInjector.presets_service]),
 ) -> PresetImportResponse:
-    """Import a video_gym template into the gym's production tables."""
+    """Import a template_gym template into the gym's production tables."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_owner(gym_id, user_payload)
 
@@ -134,7 +134,7 @@ async def import_preset(
     response_model=VideoTemplateCatalogPage,
     summary="Page the video template catalog (public)",
     description=(
-        "A page of slim template cards (the slug-keyed ``video_gym`` catalog "
+        "A page of slim template cards (the slug-keyed ``template_gym`` catalog "
         "the preset import copies from). Each carries its theme; ``total`` is "
         "the template count before pagination. ``query`` filters on slug / "
         "theme / discipline. Public (no auth)."

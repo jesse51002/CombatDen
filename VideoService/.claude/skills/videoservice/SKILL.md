@@ -70,7 +70,7 @@ worker` runs the loop locally against `.env`.
    **and the template RAG sidecar** (`video_rag/video_rag.jsonl` → `video_rag`), so
    imported preset feeds serve instantly instead of waiting for the worker to
    enrich. That sidecar is built once by the PAID `make enrich-templates` run
-   (enriches the ~18.9k unique `video_gym_feed` videos, reusing
+   (enriches the ~18.9k unique `template_gym_feed` videos, reusing
    `WorkerEnricher.enrich_one`; untracked-local like `videos/`, ~330 MB, S3 to
    prod). See the CLAUDE.md "Jobs / workflow" for the full flow.
 3. **The worker runs** — its tick is three DECOUPLED DB-backed steps, not a single

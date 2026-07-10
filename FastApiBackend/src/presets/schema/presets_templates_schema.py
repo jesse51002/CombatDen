@@ -1,6 +1,6 @@
 """Pydantic models for the video-gym template catalog.
 
-The template catalog is the set of slug-keyed ``video_gym*`` templates that the
+The template catalog is the set of slug-keyed ``template_gym*`` templates that the
 preset import copies FROM. These schemas are used by the public-read template
 endpoints under ``/api/v1/presets/templates``.
 """
@@ -16,14 +16,14 @@ from src.videos.schema.videos_parent_gym_type import ParentGymType
 class VideoTemplateCard(BaseModel):
     """One template, exactly the fields a template picker renders.
 
-    Slug catalog card. ``video_gym_id`` is the template slug (the ``video_gym``
+    Slug catalog card. ``video_gym_id`` is the template slug (the ``template_gym``
     catalog key), renamed from the generic ``gym_id`` for clarity now that real
     UUID-keyed gyms live alongside the templates.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    video_gym_id: str  # the template slug (video_gym catalog key)
+    video_gym_id: str  # the template slug (template_gym catalog key)
     gym_type: list[GymType]  # the template's fine discipline(s)
     # The coarse parent bucket (the 8-bucket category) the picker filters by,
     # derived from the template's primary discipline.

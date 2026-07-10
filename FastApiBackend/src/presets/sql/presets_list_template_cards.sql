@@ -1,4 +1,4 @@
--- Slim template-browser cards for every video_gym template, sorted by id. The
+-- Slim template-browser cards for every template_gym template, sorted by id. The
 -- query/discipline substring filter and pagination are applied in Python (only
 -- ~76 templates), exactly matching the prior YAML behaviour.
 SELECT
@@ -9,8 +9,8 @@ SELECT
     g.has_rewards,
     (
         SELECT count(*)
-        FROM video_gym_feed f
+        FROM template_gym_feed f
         WHERE f.gym_id = g.gym_id AND f.status = 'good'
     ) AS video_count
-FROM video_gym g
+FROM template_gym g
 ORDER BY g.gym_id
