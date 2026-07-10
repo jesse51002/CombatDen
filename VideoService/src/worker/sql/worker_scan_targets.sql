@@ -48,7 +48,7 @@ WHERE v.failure_count < :max_failures
                 AND s.source = 'feed_update'
                 AND s.created_at > COALESCE(f.scanned_at, '-infinity'::timestamptz)
                 AND s.created_at <= now()
-                    - make_interval(hours => :rescan_delay_hours)
+                    - (:rescan_delay_hours * interval '1 hour')
           )
       )
   )
