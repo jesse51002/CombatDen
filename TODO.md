@@ -5,10 +5,6 @@ see chat history / `docs/` vault for the business-side validation gaps
 (pricing re-derivation, switch-friendly-CRM list, validation bar) that are
 tracked separately, not here.
 
-## In progress
-
-- **Video worker / member video recommendation pipeline** (VideoService, PR #53 area) — RAG-based per-member video recs, worker pipeline.
-
 ## Not started / stubbed
 
 - **Charging gym owners** — 0% built. No subscription/tier/platform-fee concept anywhere in the `gyms` schema or Stripe wiring. `gyms.stripe_account_id` is Connect routing for *member* payments only, unrelated. Needs: pricing model decided, schema, Stripe wiring, CRM/ops surface.
@@ -35,8 +31,6 @@ tracked separately, not here.
 - **Mobile app — member auth** — 0% built. No login/session code exists anywhere in `MobileApp/lib` (confirmed via grep — only hit is unrelated `video_api_client.dart`). This blocks check-in QR scan-to-self-checkin, member self-service, and anything member-identity-scoped in the app.
 
 - **Mobile app — core flows** — per `MobileApp/CLAUDE.md`, this is a **visual-only prototype**. Only the video feed and gym detail (classes/rewards, read-only) are live against VideoService/FastApiBackend. Home, booking, and profile are still mock. Needs real backend wiring to graduate out of prototype status — a substantial build, not a small task.
-
-- **Refund/dispute admin view** — webhooks/reconciler already handle refunds server-side, but there's no CRM-facing view of disputes/refund state for staff.
 
 - **Landing page / one-pager rework for the full CRM** — not deeply audited yet; flagged as needed by Jesse, scope TBD.
 
