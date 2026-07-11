@@ -1,0 +1,46 @@
+# PlanServer — always-on, loopback-only, single-user, offline Plans app + MCP.
+# See PlanServer/CLAUDE.md for the full operator guide and gotchas.
+services:
+  planserver:
+    build:
+      context: .
+    image: planserver:local
+    container_name: planserver
+
+    # Autostart: come back up on boot / after a crash. NOTE: this only survives
+    # a reboot if the Docker daemon itself is enabled at boot
+    # (`sudo systemctl enable --now docker`). See CLAUDE.md "Autostart on boot".
+    restart: always
+
+    # Host networking + HOST=127.0.0.1 (baked into the image) is what makes the
+    # request socket peer appear as loopback INSIDE the container. That loopback
+    # peer is required for the MCP endpoint's no-token "dev-open" auth. With
+    # bridge networking + a published port, the container would instead see the
+    # docker gateway IP (not loopback) and the MCP endpoint would return 401.
+    # Because the app binds 127.0.0.1 only, host networking still exposes it on
+    # loopback ONLY — never on any external interface. (Linux-only feature.)
+    network_mode: host
+
+    environment:
+      # Loopback bind + port. Kept here (as well as in the image) so an operator
+      # can see/override them without rebuilding.
+      HOST: 127.0.0.1
+      NITRO_HOST: 127.0.0.1
+      PORT: 3939
+      NITRO_PORT: 3939
+      DO_NOT_TRACK: 1
+      AGENT_NATIVE_TELEMETRY_DISABLED: 1
+      # DATABASE_URL intentionally UNSET -> defaults to file:./data/app.db.
+      # NODE_ENV intentionally UNSET -> see the CRITICAL gotcha in CLAUDE.md.
+      # Any extra knobs come from the optional .env file below.
+
+    # Optional overrides. `.env` is gitignored; copy .env.example to .env to use.
+    env_file:
+      - path: .env
+        required: false
+
+    volumes:
+      # SQLite DB + uploads (file:./data/app.db). Plans persist here.
+      - ./data:/app/data
+      # Local MDX mirror (PLAN_LOCAL_DIR default <cwd>/plans) for exported plans.
+      - ./plans:/app/plans

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "plans": {
+      "type": "http",
+      "url": "http://localhost:3939/_agent-native/mcp"
+    }
+  }
+}

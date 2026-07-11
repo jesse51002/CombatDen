@@ -94,6 +94,12 @@ The main session acts as an **orchestrator and advisor, not the line implementer
 
 Pick each subagent's model by the task using the *Workflow / sub-agent model defaults* section below (Sonnet for mechanical volume, Opus for well-defined substantial builds and design passes, Fable for the initial/major explore and for planning agents — always a fresh agent given its context, never a fork; implementation stays Opus and below). Never run two subagents concurrently over the same files — parallelize only across disjoint systems/domains.
 
+### Handoff packets — brief every subagent as if it has no chat context
+Write each delegation as a self-contained packet; the subagent sees only what you hand it at creation. Include: the repo path and exact objective; the files/systems in scope and anything explicitly out of scope; the evidence to return (files, line refs, commands run, diffs, failures, uncertainties); the verification to run (lint + tests + analyze + the live flow the change touches) and what success looks like; and **stop conditions** — if the code doesn't match the brief, a command keeps failing after a reasonable retry, or the task needs out-of-scope files, STOP and report instead of improvising.
+
+### Vet delegated work — reports are leads, not facts
+Treat every subagent report as a lead to confirm, not a fact to trust. Before you act on a high-impact finding, open a PR, or tell the user something is done: reopen the important cited files, confirm the relevant line refs / failures, and review the final diff against the task. Lighter agents gather the signal; truth-judgment stays in the main session.
+
 ## Workflow / sub-agent model defaults
 Pick the sub-agent/workflow model by the TASK, not by habit:
 - **Sonnet — small tweaks and simple, mechanical work.** Contract ports, per-file edits, data passes, broad read-only recon/searches, straightforward test updates — anything where the steps are obvious and volume is the cost driver. Use the 1M-context variant (`model: 'sonnet[1m]'` on `agent()` calls / subagent launches, or the phase/run model override; plain `'sonnet'` only where the harness rejects the `[1m]` variant) so large passes don't compact mid-task. Sonnet is also the fan-out default: workflows spawn many agents at once, and an Opus burst is far more expensive and **hits rate limits** fast (a 75-agent Opus fan-out got rate-limited mid-run) — prefer Sonnet + batching over a huge Opus burst.
