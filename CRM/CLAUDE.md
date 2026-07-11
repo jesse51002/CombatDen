@@ -12,7 +12,7 @@ This is the CombatDen **gym admin web app** (CRM) — staff and owners managing 
 
 **Theme/design rules are not relaxed for any reason.** See *Theming System*.
 
-**Impeccable before UI/visual changes.** Before any non-trivial UI/visual change here, run the `impeccable` design pass first — ideally in a dedicated Opus subagent so it can focus. A small, unambiguous tweak (copy fix, single token correction, wiring an already-designed component) can be done directly; anything with visual ambiguity or non-trivial size goes through `impeccable`. See the codebase-root `CLAUDE.md` "Impeccable before UI/visual changes" section for the full rule.
+**Impeccable before UI/visual changes.** Before any non-trivial UI/visual change here, run the `impeccable` design pass first — ideally in a dedicated Opus subagent so it can focus. A small, unambiguous tweak (copy fix, single token correction, wiring an already-designed component) can be done directly; anything with visual ambiguity or non-trivial size goes through `impeccable`. This applies at every fidelity, including planning — wireframe-level design for this app inside a visual plan is also authored by a dedicated Opus `impeccable` subagent. See the codebase-root `CLAUDE.md` "Impeccable before UI/visual changes" section for the full rule.
 
 ## Hybrid state-management model (documented and deliberate)
 
