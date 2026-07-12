@@ -41,7 +41,7 @@ class ClassDetailsSection extends StatelessWidget {
             category: 'class',
             imageUrl: imageUrl,
             defaultImageUrl: AppConstants.defaultClassImageUrl,
-            onUploaded: onImageChanged,
+            onImageChosen: onImageChanged,
           ),
           CustomTextField(
             controller: nameController,

@@ -48,5 +48,68 @@ class AppConstants {
       'https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg'
       '?auto=compress&cs=tinysrgb&w=1200';
 
+  /// Curated default member portrait photos shown in the add/edit-member
+  /// photo pool. Assets are uploaded post-curation via the preset uploader
+  /// script; until then these URLs 404 and the field's Image.network
+  /// errorBuilders render blank placeholders. Kept in one place — never
+  /// inline these URLs at a call site.
+  static const List<String> memberDefaultPhotoUrls = [
+    'https://cdn.combatden.net/member/presets/portrait-01.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-02.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-03.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-04.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-05.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-06.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-07.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-08.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-09.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-10.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-11.jpg',
+    'https://cdn.combatden.net/member/presets/portrait-12.jpg',
+  ];
+
+  /// Curated default activity photos shared by the membership-plan and class
+  /// image pools. Assets are uploaded post-curation via the preset uploader
+  /// script; until then these URLs 404 and the field's Image.network
+  /// errorBuilders render blank placeholders. Kept in one place — never
+  /// inline these URLs at a call site.
+  static const List<String> activityDefaultImageUrls = [
+    'https://cdn.combatden.net/membership/presets/activity-01.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-02.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-03.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-04.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-05.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-06.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-07.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-08.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-09.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-10.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-11.jpg',
+    'https://cdn.combatden.net/membership/presets/activity-12.jpg',
+  ];
+
+  /// Curated default rank belt art (ten belt colors + five medallions) shown
+  /// in the rank-edit belt-image pool. Assets are uploaded post-curation via
+  /// the preset uploader script; until then these URLs 404 and the field's
+  /// Image.network errorBuilders render blank placeholders. Kept in one
+  /// place — never inline these URLs at a call site.
+  static const List<String> rankBeltDefaultUrls = [
+    'https://cdn.combatden.net/rank/presets/white.png',
+    'https://cdn.combatden.net/rank/presets/gray.png',
+    'https://cdn.combatden.net/rank/presets/yellow.png',
+    'https://cdn.combatden.net/rank/presets/orange.png',
+    'https://cdn.combatden.net/rank/presets/green.png',
+    'https://cdn.combatden.net/rank/presets/blue.png',
+    'https://cdn.combatden.net/rank/presets/purple.png',
+    'https://cdn.combatden.net/rank/presets/brown.png',
+    'https://cdn.combatden.net/rank/presets/red.png',
+    'https://cdn.combatden.net/rank/presets/black.png',
+    'https://cdn.combatden.net/rank/presets/medallion-01.png',
+    'https://cdn.combatden.net/rank/presets/medallion-02.png',
+    'https://cdn.combatden.net/rank/presets/medallion-03.png',
+    'https://cdn.combatden.net/rank/presets/medallion-04.png',
+    'https://cdn.combatden.net/rank/presets/medallion-05.png',
+  ];
+
   AppConstants._();
 }

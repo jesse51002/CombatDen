@@ -328,6 +328,10 @@ class DesignConstants {
   static const double rewardThumbnailHeight = 80.0;
   static const double rewardAvatarSize = 72.0;
   static const double qrThumbnailSize = 120.0;
+  // A default-image chip in the ImageUploadPickerField pool tray. The chip
+  // width follows the field's aspectRatio, so belts render square (64x64)
+  // and photos landscape at this height.
+  static const double poolChipHeight = 64.0;
 
   // Rank belt art sizes (square, width == height). A coherent T-shirt scale on
   // the 8pt grid — a legible proportional ladder, not one value per call site.

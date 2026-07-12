@@ -219,7 +219,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       aspectRatio: 1,
                       previewFit: BoxFit.contain,
                       imageUrl: _mainImageUrl,
-                      onUploaded: (url) =>
+                      onImageChosen: (url) =>
                           setState(() => _mainImageUrl = url),
                     ),
                     CustomTextField(
@@ -259,7 +259,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
                             previewFit: BoxFit.contain,
                             imageUrl: _overrides[i.toString()],
                             defaultImageUrl: _mainImageUrl,
-                            onUploaded: (url) => setState(
+                            onImageChosen: (url) => setState(
                               () => _overrides[i.toString()] = url,
                             ),
                           ),

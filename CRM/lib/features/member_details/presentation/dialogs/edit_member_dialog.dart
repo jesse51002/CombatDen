@@ -214,7 +214,7 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
               label: 'Member photo',
               category: 'member',
               imageUrl: widget.member.photoUrl,
-              onUploaded: (url) =>
+              onImageChosen: (url) =>
                   setState(() => _uploadedPhotoUrl = url),
             ),
           ],

@@ -221,7 +221,7 @@ class _FormBody extends StatelessWidget {
             imageUrl: imageUrl,
             defaultImageUrl: AppConstants.defaultRewardImageUrl,
             prominentUpload: true,
-            onUploaded: onImageUploaded,
+            onImageChosen: onImageUploaded,
           ),
           CustomTextField(
             controller: titleCtrl,
