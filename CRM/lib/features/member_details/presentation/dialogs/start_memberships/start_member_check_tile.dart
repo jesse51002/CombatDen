@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/shared/widgets/member_avatar.dart';
 
 /// One multi-select row in the members step: avatar, name,
 /// payer/linked subtitle and the selection checkbox.
@@ -20,9 +21,6 @@ class StartMemberCheckTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = participant.name.isNotEmpty
-        ? participant.name[0].toUpperCase()
-        : '?';
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(
@@ -43,31 +41,19 @@ class StartMemberCheckTile extends StatelessWidget {
             color: selected
                 ? DesignConstants.primaryColor
                 : DesignConstants.divider,
-            width: selected ? 2 : 1,
+            width: selected
+                ? DesignConstants.buttonBorder
+                : DesignConstants.dividerThickness,
           ),
         ),
         child: Row(
           spacing: DesignConstants.spacingMedium,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: DesignConstants.card,
-              backgroundImage:
-                  participant.photoUrl != null
-                      ? NetworkImage(
-                          participant.photoUrl!,
-                        )
-                      : null,
-              child: participant.photoUrl == null
-                  ? Text(
-                      initial,
-                      style:
-                          DesignConstants.p.copyWith(
-                        color: DesignConstants.text,
-                      ),
-                    )
-                  : null,
+            MemberAvatar(
+              name: participant.name,
+              photoUrl: participant.photoUrl,
+              size: DesignConstants.iconSizeBig,
             ),
             Expanded(
               child: Column(

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/shared/widgets/member_avatar.dart';
 
-/// "Name" column cell — the member's full name with
-/// optional avatar.
+/// "Name" column cell — the member's full name with an avatar.
+/// The avatar is the shared [MemberAvatar]: the photo, or the
+/// member's initials on a soft accent fill when there is none.
 class MemberNameCell extends StatelessWidget {
   final String name;
   final String? avatarUrl;
@@ -20,19 +21,10 @@ class MemberNameCell extends StatelessWidget {
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
-        SizedBox(
-          width: DesignConstants.iconSizeLarge,
-          height: DesignConstants.iconSizeLarge,
-          child: ClipOval(
-            child: avatarUrl != null
-                ? Image.network(
-                    avatarUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, stack) =>
-                        _fallbackAvatar(),
-                  )
-                : _fallbackAvatar(),
-          ),
+        MemberAvatar(
+          name: name,
+          photoUrl: avatarUrl,
+          size: DesignConstants.iconSizeLarge,
         ),
         Flexible(
           child: Text(
@@ -43,20 +35,6 @@ class MemberNameCell extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _fallbackAvatar() {
-    return Container(
-      color: DesignConstants.card,
-      child: Center(
-        child: Icon(
-          Symbols.person_sharp,
-          size: DesignConstants.iconSizeSmall,
-          color: DesignConstants.text3rd,
-          weight: DesignConstants.iconWeight,
-        ),
-      ),
     );
   }
 }

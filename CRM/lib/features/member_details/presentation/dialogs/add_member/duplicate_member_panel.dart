@@ -132,7 +132,9 @@ class _MatchCard extends StatelessWidget {
           color: highlight
               ? DesignConstants.primaryColor
               : DesignConstants.divider,
-          width: highlight ? 2 : 1,
+          width: highlight
+              ? DesignConstants.buttonBorder
+              : DesignConstants.dividerThickness,
         ),
       ),
       child: Row(

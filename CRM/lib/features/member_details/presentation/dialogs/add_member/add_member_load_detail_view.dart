@@ -30,7 +30,7 @@ class AddMemberLoadDetailView extends StatelessWidget {
           icon: Symbols.error_sharp,
           color: DesignConstants.badRed,
           title: "We couldn't load the new member.",
-          body: 'They were saved — retry, or open their profile to '
+          body: 'They were saved. Retry, or open their profile to '
               'set up a membership later.',
         );
       case AddMemberLoadState.frozen:

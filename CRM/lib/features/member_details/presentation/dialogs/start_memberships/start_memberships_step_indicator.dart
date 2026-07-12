@@ -85,40 +85,50 @@ class _GroupSegment extends StatelessWidget {
           ? DesignConstants.goodGreen
           : DesignConstants.text3rd;
 
+  String get _stateLabel => active
+      ? 'current step'
+      : done
+          ? 'completed'
+          : 'upcoming';
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        if (active && group.substepCount > 1)
-          Row(
-            spacing: DesignConstants.spacingTiny,
-            children: [
-              for (var i = 0;
-                  i < group.substepCount;
-                  i++)
-                Expanded(
-                  child: _Bar(
-                    color: i <= substepIndex
-                        ? _color
-                        : DesignConstants.text3rd,
+    return Semantics(
+      label: 'Step $number, ${group.title}, $_stateLabel',
+      excludeSemantics: true,
+      child: Column(
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          if (active && group.substepCount > 1)
+            Row(
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                for (var i = 0;
+                    i < group.substepCount;
+                    i++)
+                  Expanded(
+                    child: _Bar(
+                      color: i <= substepIndex
+                          ? _color
+                          : DesignConstants.text3rd,
+                    ),
                   ),
-                ),
-            ],
-          )
-        else
-          _Bar(color: _color),
-        Text(
-          '$number · ${group.title}',
-          style: active
-              ? DesignConstants.pSmallSemibold
-                  .copyWith(color: _color)
-              : DesignConstants.pSmall
-                  .copyWith(color: _color),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+              ],
+            )
+          else
+            _Bar(color: _color),
+          Text(
+            '$number · ${group.title}',
+            style: active
+                ? DesignConstants.pSmallSemibold
+                    .copyWith(color: _color)
+                : DesignConstants.pSmall
+                    .copyWith(color: _color),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -51,33 +51,30 @@ class _StepButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(
-        DesignConstants.radiusSmall,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(
-          DesignConstants.spacingTiny,
-        ),
-        decoration: BoxDecoration(
+    // IconButton keeps a >=48px (kMinInteractiveDimension) tap target while
+    // the bordered box stays compact, so the +/- is easy to hit on a busy
+    // front-desk screen without dominating the card.
+    return IconButton(
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(
             DesignConstants.radiusSmall,
           ),
-          border: Border.all(
-            color: enabled
-                ? DesignConstants.text2nd
-                : DesignConstants.divider,
-          ),
         ),
-        child: Icon(
-          icon,
-          weight: DesignConstants.iconWeight,
-          size: DesignConstants.iconSizeSmall,
+        side: BorderSide(
           color: enabled
-              ? DesignConstants.text
-              : DesignConstants.text3rd,
+              ? DesignConstants.text2nd
+              : DesignConstants.divider,
         ),
+      ),
+      icon: Icon(
+        icon,
+        weight: DesignConstants.iconWeight,
+        size: DesignConstants.iconSizeSmall,
+        color: enabled
+            ? DesignConstants.text
+            : DesignConstants.text3rd,
       ),
     );
   }

@@ -44,7 +44,7 @@ class AddMemberCreatedView extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         Text(
-          'You can set up their membership now, or finish here — a '
+          'You can set up their membership now, or finish here. A '
           'member with no membership is fine.',
           style: DesignConstants.p.copyWith(
             color: DesignConstants.text2nd,

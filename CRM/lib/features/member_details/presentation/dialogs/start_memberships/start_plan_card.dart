@@ -50,7 +50,7 @@ class StartPlanCard extends StatelessWidget {
           color: selected
               ? DesignConstants.primaryColor
               : DesignConstants.line,
-          width: selected ? 2 : DesignConstants.buttonBorder,
+          width: DesignConstants.buttonBorder,
         ),
       ),
       child: Column(
@@ -76,10 +76,14 @@ class StartPlanCard extends StatelessWidget {
       ),
     );
     final wrapped = disabled ? Opacity(opacity: 0.6, child: card) : card;
-    return InkWell(
-      onTap: disabled ? null : onToggle,
-      borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-      child: wrapped,
+    return Semantics(
+      button: !disabled,
+      selected: selected,
+      child: InkWell(
+        onTap: disabled ? null : onToggle,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        child: wrapped,
+      ),
     );
   }
 }
