@@ -7,7 +7,7 @@ CREATE POLICY "Users and gym staff can view members"
     ON members
     FOR SELECT
     USING (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     );
 
@@ -17,11 +17,11 @@ CREATE POLICY "Users and gym staff can update members"
     ON members
     FOR UPDATE
     USING (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     )
     WITH CHECK (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     );
 
@@ -33,7 +33,7 @@ CREATE POLICY "Gym staff can insert members"
     WITH CHECK (is_gym_admin_or_owner(members.gym_id));
 
 -- Identity columns stay immutable (PK / FK / created_at).
-REVOKE UPDATE (member_id, user_id, gym_id, created_at) ON TABLE members FROM authenticated;
+REVOKE UPDATE (member_id, gym_id, created_at) ON TABLE members FROM authenticated;
 
 -- Column-level Stripe gating. The merged contact / freeze / Stripe billing
 -- columns are written by service_role only — never by the client.

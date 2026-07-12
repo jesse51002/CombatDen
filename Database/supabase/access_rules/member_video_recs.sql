@@ -8,7 +8,7 @@ CREATE POLICY "Members and gym staff can view rec history"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_video_recs.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
         OR is_gym_admin_or_owner(member_video_recs.gym_id)
     );

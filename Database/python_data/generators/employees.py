@@ -2,11 +2,9 @@ import random
 import uuid
 
 from faker import Faker
-from schema.gym_employee import GymEmployeeCreate
+from schema.gym_employee import EmployeeType, GymEmployeeCreate
 
 fake = Faker()
-
-EMPLOYEE_TYPES = ["admin", "trainer"]
 
 EMPLOYEE_DESCRIPTIONS = [
     "Passionate coach with years of competition experience.",
@@ -27,15 +25,17 @@ EMPLOYEE_PIC_URLS = [
 
 def generate_owner(
     gym_id: uuid.UUID,
-    user_id: uuid.UUID,
     email: str,
     employee_id: uuid.UUID | None = None,
 ) -> GymEmployeeCreate:
+    """The gym owner. Access is granted purely by a verified Supabase auth
+    account whose email matches ``email`` (there is no more user_id FK) —
+    the caller is responsible for creating that auth account with the same
+    address."""
     return GymEmployeeCreate(
         employee_id=employee_id or uuid.uuid4(),
-        user_id=user_id,
         gym_id=gym_id,
-        employee_type="owner",
+        employee_type=EmployeeType.owner,
         first_name=fake.first_name(),
         last_name=fake.last_name(),
         phone=fake.phone_number(),
@@ -45,29 +45,50 @@ def generate_owner(
     )
 
 
-def generate_staff(
+def generate_accounted(
     gym_id: uuid.UUID,
-    count: int,
-    user_id: uuid.UUID | None = None,
-) -> list[GymEmployeeCreate]:
-    staff = []
-    for _ in range(count):
-        staff.append(
-            GymEmployeeCreate(
-                employee_id=uuid.uuid4(),
-                user_id=user_id,
-                gym_id=gym_id,
-                employee_type=random.choice(EMPLOYEE_TYPES),
-                first_name=fake.first_name(),
-                last_name=fake.last_name(),
-                phone=fake.phone_number(),
-                email=fake.email(),
-                employee_pic_url=random.choice(EMPLOYEE_PIC_URLS)
-                if random.random() < 0.7
-                else None,
-                employee_public_description=random.choice(EMPLOYEE_DESCRIPTIONS)
-                if random.random() < 0.7
-                else None,
-            )
-        )
-    return staff
+    email: str,
+    employee_type: EmployeeType,
+    employee_id: uuid.UUID | None = None,
+) -> GymEmployeeCreate:
+    """A staff row (admin / front_desk / trainer) whose email matches a
+    verified Supabase auth account created separately via
+    ``generators.auth.create_user`` — the sole identity link now that
+    gym_employees has no user_id column."""
+    return GymEmployeeCreate(
+        employee_id=employee_id or uuid.uuid4(),
+        gym_id=gym_id,
+        employee_type=employee_type,
+        first_name=fake.first_name(),
+        last_name=fake.last_name(),
+        phone=fake.phone_number(),
+        email=email,
+        employee_pic_url=random.choice(EMPLOYEE_PIC_URLS),
+        employee_public_description=random.choice(EMPLOYEE_DESCRIPTIONS),
+    )
+
+
+def generate_pending_trainer(
+    gym_id: uuid.UUID,
+    email: str,
+    employee_id: uuid.UUID | None = None,
+) -> GymEmployeeCreate:
+    """A trainer row with NO verified auth account — instructor DATA
+    (name/photo shown on classes), never a login principal. Exercises the
+    'pending / no verified account' state: the row carries an email, but no
+    Supabase auth user is ever created for it, so no login can ever match."""
+    return GymEmployeeCreate(
+        employee_id=employee_id or uuid.uuid4(),
+        gym_id=gym_id,
+        employee_type=EmployeeType.trainer,
+        first_name=fake.first_name(),
+        last_name=fake.last_name(),
+        phone=fake.phone_number(),
+        email=email,
+        employee_pic_url=random.choice(EMPLOYEE_PIC_URLS)
+        if random.random() < 0.7
+        else None,
+        employee_public_description=random.choice(EMPLOYEE_DESCRIPTIONS)
+        if random.random() < 0.7
+        else None,
+    )

@@ -1,10 +1,11 @@
 ALTER TABLE gym_video_feed ENABLE ROW LEVEL SECURITY;
 
--- Gym staff can view their gym's feed.
+-- Gym staff can view their gym's feed. Defense-in-depth: admin/owner only
+-- (tightened from the general is_gym_employee staff check).
 CREATE POLICY "Gym employees can view video feed"
     ON gym_video_feed
     FOR SELECT
-    USING (is_gym_employee(gym_video_feed.gym_id));
+    USING (is_gym_admin_or_owner(gym_video_feed.gym_id));
 
 -- Members can view their gym's feed (member app video surfaces).
 CREATE POLICY "Members can view video feed"
@@ -14,7 +15,7 @@ CREATE POLICY "Members can view video feed"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.gym_id = gym_video_feed.gym_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 
