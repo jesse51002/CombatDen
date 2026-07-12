@@ -107,6 +107,12 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   _ClassAction _action = _ClassAction.create;
   String? _inlineError;
 
+  /// Field-level error shown under the class image picker on a failed submit
+  /// (no image chosen). The image is required — an explicit pool pick or
+  /// upload. Cleared the moment an image is chosen. Edit mode starts
+  /// satisfied by the class's existing image.
+  String? _imageError;
+
   /// `actionSuccessCount` snapshot taken when a mutation is dispatched; a later
   /// increase means our write committed.
   int _successBaseline = 0;
@@ -412,10 +418,17 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
 
   Future<void> _save() async {
     final err = _validate();
-    if (err != null) {
-      setState(() => _inlineError = err);
+    // The image is required — the form must not submit without an explicit
+    // pool pick or upload (edit mode starts satisfied by the existing image).
+    final imageOk = _imageUrl != null && _imageUrl!.isNotEmpty;
+    if (err != null || !imageOk) {
+      setState(() {
+        _inlineError = err;
+        _imageError = imageOk ? null : 'Choose a class image.';
+      });
       return;
     }
+    setState(() => _imageError = null);
     final gymId = selectedGym.gymId ?? '';
     if (gymId.isEmpty) {
       setState(() => _inlineError = 'No active gym selected.');
@@ -576,7 +589,11 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             nameController: _nameController,
             descriptionController: _descriptionController,
             imageUrl: _imageUrl,
-            onImageChanged: (url) => setState(() => _imageUrl = url),
+            errorText: _imageError,
+            onImageChanged: (url) => setState(() {
+              _imageUrl = url;
+              _imageError = null;
+            }),
           ),
           ClassRewardsSection(
             pointsController: _pointsController,

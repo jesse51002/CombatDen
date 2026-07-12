@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
@@ -55,6 +56,12 @@ class _EditRankScreenState extends State<EditRankScreen> {
   late Future<RankLadder> _ladderFuture;
 
   String? _mainImageUrl;
+
+  /// Field-level error shown under the main belt picker on a failed submit
+  /// (no belt image chosen). The main belt is required — an explicit pool
+  /// pick or upload. Cleared the moment a belt is chosen. Edit mode starts
+  /// satisfied by the rank's existing image.
+  String? _mainImageError;
   int _subRankCount = 0;
 
   /// Write-only per-sub image map (`"0" -> url`). Seeded from the rank
@@ -96,7 +103,12 @@ class _EditRankScreenState extends State<EditRankScreen> {
   }
 
   Future<void> _save(int nextOrder) async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final formOk = _formKey.currentState?.validate() ?? false;
+    // The main belt image is required — a save is blocked until an explicit
+    // pool pick or upload (edit mode starts satisfied by the existing image).
+    final imageOk = _mainImageUrl != null && _mainImageUrl!.isNotEmpty;
+    setState(() => _mainImageError = imageOk ? null : 'Choose a belt image.');
+    if (!formOk || !imageOk) return;
     setState(() {
       _saving = true;
       _error = null;
@@ -213,14 +225,19 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       key: const ValueKey('main-belt'),
                       label: 'Belt image',
                       category: 'rank',
+                      poolImages: AppConstants.rankBeltDefaultUrls,
+                      isRequired: true,
                       // Belts are square art — preview 1:1 and contained so
                       // the image never crops or stretches (matches how
                       // RankBeltImage renders it on the ladder + detail).
                       aspectRatio: 1,
                       previewFit: BoxFit.contain,
                       imageUrl: _mainImageUrl,
-                      onImageChosen: (url) =>
-                          setState(() => _mainImageUrl = url),
+                      errorText: _mainImageError,
+                      onImageChosen: (url) => setState(() {
+                        _mainImageUrl = url;
+                        _mainImageError = null;
+                      }),
                     ),
                     CustomTextField(
                       controller: _classesController,

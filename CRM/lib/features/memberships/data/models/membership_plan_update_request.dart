@@ -19,6 +19,10 @@ part 'membership_plan_update_request.g.dart';
 )
 class MembershipPlanUpdateData {
   final String? planName;
+
+  /// The plan's catalog image (CDN URL). Optional — sent only when the
+  /// owner changes it (`includeIfNull: false` drops it otherwise).
+  final String? imageUrl;
   final int? classCount;
   final int? durationAmount;
   final DurationUnit? durationUnit;
@@ -27,6 +31,7 @@ class MembershipPlanUpdateData {
 
   const MembershipPlanUpdateData({
     this.planName,
+    this.imageUrl,
     this.classCount,
     this.durationAmount,
     this.durationUnit,

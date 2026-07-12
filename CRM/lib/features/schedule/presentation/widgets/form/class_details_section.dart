@@ -15,10 +15,14 @@ class ClassDetailsSection extends StatelessWidget {
   /// platform default is previewed instead).
   final String? imageUrl;
 
-  /// Called with the CDN URL after the owner uploads a class image. The
-  /// URL is bubbled up into the form state so the create/update request
-  /// carries the chosen image.
+  /// Called with the CDN URL after the owner picks a pool image or uploads
+  /// their own. The URL is bubbled up into the form state so the
+  /// create/update request carries the chosen image.
   final ValueChanged<String> onImageChanged;
+
+  /// Field-level error from the host form on a failed submit (no image
+  /// chosen). Null when the image is valid.
+  final String? errorText;
 
   const ClassDetailsSection({
     super.key,
@@ -26,6 +30,7 @@ class ClassDetailsSection extends StatelessWidget {
     required this.descriptionController,
     required this.onImageChanged,
     this.imageUrl,
+    this.errorText,
   });
 
   @override
@@ -39,8 +44,10 @@ class ClassDetailsSection extends StatelessWidget {
           ImageUploadPickerField(
             label: 'Class image',
             category: 'class',
+            poolImages: AppConstants.activityDefaultImageUrls,
+            isRequired: true,
             imageUrl: imageUrl,
-            defaultImageUrl: AppConstants.defaultClassImageUrl,
+            errorText: errorText,
             onImageChosen: onImageChanged,
           ),
           CustomTextField(

@@ -19,11 +19,14 @@ from schema.gym_rank import (
     SubRankType,
 )
 
-# placeholder belt art; the founder uploads the real PNGs to
-# s3://combatden-assets/rank/presets/{white,blue}.png (CDN cdn.combatden.net);
-# alternating white/blue until real art is supplied.
-_BELT_IMG_EVEN = "https://cdn.combatden.net/rank/presets/white.png"
-_BELT_IMG_ODD = "https://cdn.combatden.net/rank/presets/blue.png"
+# Preset belt / medallion art lives at cdn.combatden.net/rank/presets/{name}.png
+# (private S3 combatden-assets/rank/presets, served through the CDN). BJJ ladders
+# map each rank to its real adult belt color; the flat tier ladder uses numbered
+# medallions.
+_PRESET_BASE = "https://cdn.combatden.net/rank/presets"
+
+# BJJ adult belt colors, white -> black, index-aligned with _BJJ_BELT_NAMES.
+_BJJ_BELT_COLORS = ["white", "blue", "purple", "brown", "black"]
 
 
 @dataclass(frozen=True)
@@ -43,9 +46,9 @@ _BJJ_BELT_NAMES = ["White Belt", "Blue Belt", "Purple Belt", "Brown Belt", "Blac
 _BJJ_THRESHOLDS = [100, 150, 200, 250, 0]
 
 
-def _belt_image(idx: int) -> str:
-    """Alternating placeholder belt art (even -> white, odd -> blue)."""
-    return _BELT_IMG_EVEN if idx % 2 == 0 else _BELT_IMG_ODD
+def _bjj_belt_image(idx: int) -> str:
+    """The real BJJ belt color art for rank `idx` (white -> black)."""
+    return f"{_PRESET_BASE}/{_BJJ_BELT_COLORS[idx]}.png"
 
 
 def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
@@ -55,17 +58,26 @@ def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
             name=name,
             classes_to_next_major=_BJJ_THRESHOLDS[i],
             sub_rank_count=sub_rank_count,
-            image_url=_belt_image(i),
+            image_url=_bjj_belt_image(i),
         )
         for i, name in enumerate(_BJJ_BELT_NAMES)
     ]
 
 
-# Flat: 5 skill tiers Beginner -> Elite (order 0..4), no sub-ranks. Left without
-# preset art (placeholder belt PNGs are BJJ-specific); a gym uploads its own on
-# the edit page. Switch to `_belt_image(i)` here if generic tier art is added.
+# Flat: 5 skill tiers Beginner -> Elite (order 0..4), no sub-ranks. Each tier
+# carries a numbered medallion (medallion-01..05.png), cycled by rank order so
+# every preset-created rank ships with an image (a gym can override on the edit
+# page).
 _FLAT_NAMES = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"]
 _FLAT_THRESHOLDS = [20, 30, 50, 80, 0]
+
+# How many numbered medallion images exist in the preset set (medallion-01..05).
+_MEDALLION_COUNT = 5
+
+
+def _medallion_image(idx: int) -> str:
+    """Numbered medallion art for tier `idx`, cycling medallion-01..05."""
+    return f"{_PRESET_BASE}/medallion-{idx % _MEDALLION_COUNT + 1:02d}.png"
 
 
 def _flat_rows() -> list[_PresetRow]:
@@ -75,7 +87,7 @@ def _flat_rows() -> list[_PresetRow]:
             name=name,
             classes_to_next_major=_FLAT_THRESHOLDS[i],
             sub_rank_count=0,
-            image_url=None,
+            image_url=_medallion_image(i),
         )
         for i, name in enumerate(_FLAT_NAMES)
     ]

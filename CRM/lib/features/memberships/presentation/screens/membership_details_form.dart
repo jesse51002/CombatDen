@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
@@ -22,6 +23,7 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
+import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 
 /// The Membership Details create/edit form. Performs the create /
 /// update / delete directly via [MembershipsRepository] and pops
@@ -67,6 +69,15 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   bool _unlimited = true;
   final Set<String> _waiverIds = {};
 
+  /// CDN URL of the chosen plan image (upload or pool pick). Required — a
+  /// save is blocked until one is set. Edit mode starts satisfied by the
+  /// plan's existing image; create mode starts null.
+  String? _imageUrl;
+
+  /// Field-level error shown under the image picker on a failed submit
+  /// (no image chosen). Cleared the moment an image is picked.
+  String? _imageError;
+
   List<WaiverResponse> _waivers = const [];
   bool _loadingWaivers = true;
   bool _saving = false;
@@ -88,6 +99,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     final plan = widget.plan;
     if (plan == null) return;
     _name.text = plan.planName;
+    _imageUrl = plan.imageUrl;
     _type =
         plan.planType == PlanType.unknown ? PlanType.recurring : plan.planType;
     _unlimited = plan.classCount == null;
@@ -179,7 +191,11 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   }
 
   Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final formOk = _formKey.currentState?.validate() ?? false;
+    final image = _imageUrl;
+    final imageOk = image != null && image.isNotEmpty;
+    setState(() => _imageError = imageOk ? null : 'Choose a plan image.');
+    if (!formOk || !imageOk) return;
     final name = _name.text.trim();
     final duration = _duration;
     final waiverIds = _waiverIds.toList();
@@ -194,6 +210,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           gymId: widget.gymId,
           data: MembershipPlanUpdateData(
             planName: name,
+            imageUrl: image,
             classCount: _resolvedClassCount,
             durationAmount: duration.amount,
             durationUnit: duration.unit,
@@ -209,6 +226,9 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
         await widget.repository.createPlan(MembershipPlanCreateRequest(
           gymId: widget.gymId,
           planName: name,
+          // The save guard above blocks submit until an image is chosen, so
+          // `image` is promoted non-null here.
+          imageUrl: image,
           planType: _type,
           classCount: _resolvedClassCount,
           durationAmount: duration.amount,
@@ -297,6 +317,18 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
               label: 'Name',
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+            ),
+            ImageUploadPickerField(
+              label: 'Plan image',
+              category: 'membership',
+              poolImages: AppConstants.activityDefaultImageUrls,
+              isRequired: true,
+              imageUrl: _imageUrl,
+              errorText: _imageError,
+              onImageChosen: (url) => setState(() {
+                _imageUrl = url;
+                _imageError = null;
+              }),
             ),
             _membershipTypeField(),
             _priceField(),
