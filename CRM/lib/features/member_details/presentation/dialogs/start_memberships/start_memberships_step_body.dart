@@ -18,6 +18,8 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_header.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_indicator.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_label.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_step_name_line.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_payer_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_payment_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plans_step.dart';
@@ -76,10 +78,21 @@ class StartMembershipsStepBody extends StatelessWidget {
   /// payment.
   final ValueChanged<WaiverGateException> onWaiverGate;
 
+  /// Wizard-chrome context for the step-name line + group indicator. The
+  /// add-member flow shows the leading "Add member" group and shifts the
+  /// "Step N of M" numbering by one; [memberIndex] positions the per-member
+  /// loop, [hasWaiver] counts the conditional sign-waivers step.
+  final bool showAddMemberGroup;
+  final int memberIndex;
+  final bool hasWaiver;
+
   final ValueChanged<StartMembershipParticipant>
       onPayerSelected;
   final ValueChanged<String> onMemberToggle;
   final VoidCallback onLinkFirst;
+
+  /// Opens the in-run "New member" dialog from the members step.
+  final VoidCallback onNewMember;
   final ValueChanged<MembershipPlanResponse> onPlanToggle;
 
   /// Applies [change] to the current member's draft for
@@ -135,9 +148,13 @@ class StartMembershipsStepBody extends StatelessWidget {
     this.unsignedWaivers,
     this.onWaiversSigned,
     required this.onWaiverGate,
+    required this.showAddMemberGroup,
+    required this.memberIndex,
+    required this.hasWaiver,
     required this.onPayerSelected,
     required this.onMemberToggle,
     required this.onLinkFirst,
+    required this.onNewMember,
     required this.onPlanToggle,
     required this.onDraftChanged,
     required this.onPreviewLoaded,
@@ -165,7 +182,19 @@ class StartMembershipsStepBody extends StatelessWidget {
       // content area read as distinct surfaces.
       spacing: DesignConstants.spacingBig,
       children: [
-        StartMembershipsStepIndicator(step: step),
+        StartMembershipsStepIndicator(
+          step: step,
+          showAddMemberGroup: showAddMemberGroup,
+        ),
+        StartStepNameLine(
+          text: startStepLabel(
+            step: step,
+            memberIndex: memberIndex,
+            memberCount: configMembers.length,
+            hasWaiver: hasWaiver,
+            showAddMemberGroup: showAddMemberGroup,
+          ),
+        ),
         if (step != StartMembershipsStep.payer)
           StartMembershipsHeader(
             payer: payer,
@@ -206,6 +235,7 @@ class StartMembershipsStepBody extends StatelessWidget {
           payer: payer,
           selectedMemberIds: selectedMemberIds,
           onToggle: onMemberToggle,
+          onNewMember: onNewMember,
           onLinkFirst: onLinkFirst,
         );
       case StartMembershipsStep.plans:

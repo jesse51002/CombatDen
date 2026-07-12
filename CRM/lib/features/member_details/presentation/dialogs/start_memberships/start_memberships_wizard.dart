@@ -24,6 +24,7 @@ import 'package:crm/features/member_details/presentation/dialogs/member_detail_b
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_new_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_footer.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_body.dart';
@@ -57,16 +58,24 @@ class StartMembershipsWizard extends StatefulWidget {
   /// results step's "view member" link on created rows.
   final ValueChanged<String>? onViewMember;
 
+  /// Shows the leading "Add member" group in the step indicator and shifts the
+  /// "Step N of M" numbering by one — true only when the wizard is embedded in
+  /// the add-member flow (the create already happened). Member-detail launches
+  /// leave it false, so that context stays exactly three groups.
+  final bool showAddMemberGroup;
+
   const StartMembershipsWizard({
     super.key,
     required this.member,
     this.onViewMember,
+    this.showAddMemberGroup = false,
   });
 
   static Future<void> show({
     required BuildContext context,
     required MemberDetailResponse member,
     ValueChanged<String>? onViewMember,
+    bool showAddMemberGroup = false,
   }) {
     return showDialog<void>(
       context: context,
@@ -75,6 +84,7 @@ class StartMembershipsWizard extends StatefulWidget {
         child: StartMembershipsWizard(
           member: member,
           onViewMember: onViewMember,
+          showAddMemberGroup: showAddMemberGroup,
         ),
       ),
     );
@@ -591,6 +601,37 @@ class _StartMembershipsWizardState
     await _loadPayerDetail(alsoSelect: linkedId);
   }
 
+  /// "New member" adder: create someone new (or reuse an existing duplicate)
+  /// and authorize the payer for them, then add them to this run. When the
+  /// dialog committed an authorization it mirrors [_onLinkFirst]'s sequencing;
+  /// a direct select of an already-authorized member just adds them.
+  Future<void> _onNewMember() async {
+    final s = _bloc.state;
+    final tokenBefore =
+        s is MemberDetailLoaded ? s.refreshToken : -1;
+    final authorizedIds = <String>{
+      _payer.memberId,
+      ...?_payerDetail?.authorizedToPayFor
+          .map((a) => a.memberId),
+    };
+    final result = await StartNewMemberDialog.show(
+      context: context,
+      payerMemberId: _payer.memberId,
+      payerName: _payer.name,
+      gymId: widget.member.gymId,
+      authorizedIds: authorizedIds,
+    );
+    if (result == null || !mounted) return;
+    if (result.committedLink) {
+      await awaitMemberDetailSettle(_bloc, tokenBefore);
+      if (!mounted) return;
+      await _loadPayerDetail(alsoSelect: result.memberId);
+    } else {
+      // Already authorized — just include them in the run.
+      setState(() => _selectedMemberIds.add(result.memberId));
+    }
+  }
+
   Future<void> _onAddNewCard() async {
     // The saved card always belongs to the PAYER. Target
     // them explicitly so it can be added/replaced from any
@@ -697,6 +738,9 @@ class _StartMembershipsWizardState
             step: _step,
             launchMember: widget.member,
             repository: _repository,
+            showAddMemberGroup: widget.showAddMemberGroup,
+            memberIndex: _memberIndex,
+            hasWaiver: _waiverGate != null,
             payer: _payer,
             payerDetail: _payerDetail,
             currentMember: _currentMember,
@@ -731,6 +775,7 @@ class _StartMembershipsWizardState
             onPayerSelected: _onPayerSelected,
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,
+            onNewMember: _onNewMember,
             onPlanToggle: _onPlanToggle,
             onDraftChanged: _updateDraft,
             onPreviewLoaded: (p) =>

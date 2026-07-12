@@ -5,6 +5,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_first_tile.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_member_check_tile.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_new_member_tile.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// Step 2 — who's getting memberships. Multi-select over the payer plus
@@ -22,6 +23,9 @@ class StartMembersStep extends StatelessWidget {
   final StartMembershipParticipant payer;
   final Set<String> selectedMemberIds;
   final ValueChanged<String> onToggle;
+
+  /// Opens the in-run "New member" dialog (create + authorize the payer).
+  final VoidCallback onNewMember;
   final VoidCallback onLinkFirst;
 
   const StartMembersStep({
@@ -30,6 +34,7 @@ class StartMembersStep extends StatelessWidget {
     required this.payer,
     required this.selectedMemberIds,
     required this.onToggle,
+    required this.onNewMember,
     required this.onLinkFirst,
   });
 
@@ -87,6 +92,10 @@ class StartMembersStep extends StatelessWidget {
                 selected: selectedMemberIds.contains(c.memberId),
                 onTap: () => onToggle(c.memberId),
               ),
+            ),
+            StartNewMemberTile(
+              payerFirstName: payer.name.split(' ').first,
+              onTap: onNewMember,
             ),
             StartLinkFirstTile(onTap: onLinkFirst),
           ],

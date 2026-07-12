@@ -3,25 +3,42 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 
-/// Horizontal progress bar across the wizard's three
-/// top-level groups (Select payer · Select memberships ·
-/// Confirmation). Completed groups read done (green), the
-/// active group is emphasised, and its bar splits into one
-/// mini-segment per substep so progress within the group
-/// stays visible without eight flat labels.
+/// Horizontal progress bar across the wizard's top-level groups. Completed
+/// groups read done (green), the active group is emphasised, and its bar
+/// splits into one mini-segment per substep so progress within the group
+/// stays visible.
+///
+/// When [showAddMemberGroup] is true a leading always-completed "Add member"
+/// segment is prepended (the add-member flow). A null [step] means the flow is
+/// on its own add-member phases (before the wizard mounts) — the add-member
+/// group renders ACTIVE and the rest upcoming; once the wizard is running a
+/// non-null [step] makes add-member done and `step.group` active.
 class StartMembershipsStepIndicator
     extends StatelessWidget {
-  final StartMembershipsStep step;
+  final StartMembershipsStep? step;
+  final bool showAddMemberGroup;
 
   const StartMembershipsStepIndicator({
     super.key,
     required this.step,
+    this.showAddMemberGroup = false,
   });
+
+  List<StartMembershipsStepGroup> get _groups {
+    final all = StartMembershipsStepGroup.values;
+    if (showAddMemberGroup) return all;
+    return all
+        .where((g) => g != StartMembershipsStepGroup.addMember)
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final groups = StartMembershipsStepGroup.values;
-    final activeIndex = groups.indexOf(step.group);
+    final groups = _groups;
+    final activeIndex = step == null
+        // The flow's own add-member phases: the add-member group is active.
+        ? groups.indexOf(StartMembershipsStepGroup.addMember)
+        : groups.indexOf(step!.group);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       spacing: DesignConstants.spacingLarge,
@@ -34,7 +51,7 @@ class StartMembershipsStepIndicator
               done: i < activeIndex,
               active: i == activeIndex,
               substepIndex: i == activeIndex
-                  ? step.substepIndex
+                  ? (step?.substepIndex ?? 0)
                   : 0,
             ),
           ),

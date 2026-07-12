@@ -40,13 +40,22 @@ enum StartMembershipsStep {
   results,
 }
 
-/// The three top-level groups the step indicator presents.
+/// The top-level groups the step indicator presents.
 ///
 /// Pure presentation — navigation still walks
 /// [StartMembershipsStep] one step at a time; the indicator
-/// just rolls the eight steps up into three legible
-/// segments, each carrying its substep progress.
+/// just rolls the wizard steps up into legible segments,
+/// each carrying its substep progress.
+///
+/// [addMember] is a leading, always-completed segment shown ONLY when the
+/// wizard is launched from the add-member flow (the create already happened
+/// before the wizard mounts). No [StartMembershipsStep] maps to it — the
+/// indicator renders it as done-chrome. Member-detail launches omit it, so
+/// that context stays exactly three groups.
 enum StartMembershipsStepGroup {
+  /// Group 0 — add-member-flow only; always shown completed.
+  addMember('Add member', 1),
+
   /// Group 1 — substep: payer.
   selectPayer('Select payer', 1),
 

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/member_details/presentation/dialogs/add_member/add_member_flow.dart';
+import 'package:crm/features/members_list/bloc/members_list_bloc.dart';
+import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 
@@ -8,8 +13,9 @@ import 'package:crm/shared/widgets/app_search_box.dart';
 /// Members list screen.
 ///
 /// Drives [onSearchChanged] on every keystroke; debounce
-/// lives in [MembersListBloc]. The Add New Member button
-/// is a no-op stub (out-of-scope this pass).
+/// lives in [MembersListBloc]. "Add New Member" opens the
+/// [AddMemberFlow]; when it closes the list reloads so a new
+/// member appears.
 class MembersListControls extends StatefulWidget {
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -56,6 +62,15 @@ class _MembersListControlsState
     super.dispose();
   }
 
+  /// Opens the add-member flow, then reloads the list so the new member
+  /// surfaces (mirrors the People screen's init/retry load).
+  Future<void> _onAddMember() async {
+    final bloc = context.read<MembersListBloc>();
+    await AddMemberFlow.show(context);
+    if (!mounted) return;
+    bloc.add(MembersListInitRequested(selectedGym.gymId ?? ''));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -75,9 +90,7 @@ class _MembersListControlsState
             horizontal: DesignConstants.paddingBig,
             vertical: DesignConstants.spacingMedium,
           ),
-          onPressed: () => debugPrint(
-            'Add Member flow is out of scope this pass',
-          ),
+          onPressed: _onAddMember,
         ),
       ],
     );
