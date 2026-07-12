@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
 /// "Name" column cell — the employee's headshot (or initials fallback)
@@ -18,7 +18,7 @@ class EmployeeNameCell extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         InstructorAvatar(
-          photoUrl: employee.photoUrl,
+          photoUrl: employee.employeePicUrl,
           name: employee.fullName,
           diameter: 28,
         ),

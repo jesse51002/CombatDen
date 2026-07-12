@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
@@ -67,6 +69,10 @@ class _PaymentAuthorizationsDialogState
         final isPay = _section == 0;
         final accounts =
             isPay ? member.authorizedToPayFor : member.authorizedPayers;
+        // Removing an authorized-payer link (which cascades a cancellation) is
+        // owner/admin-only; adding a link + viewing the roster stay open to
+        // front desk.
+        final canRemove = selectedGym.role?.canRemovePayerLink ?? false;
         return AppDialog(
           title: 'Payment authorizations',
           maxWidth: DesignConstants.dialogContentMaxWidth,
@@ -87,6 +93,7 @@ class _PaymentAuthorizationsDialogState
                 isPay: isPay,
                 accounts: accounts,
                 member: member,
+                canRemove: canRemove,
                 onRemove: (a) => _onRemove(member, a, isPay),
               ),
               AppOutlineButton(
@@ -218,12 +225,17 @@ class _SectionList extends StatelessWidget {
   final bool isPay;
   final List<LinkedAccount> accounts;
   final MemberDetailResponse member;
+
+  /// Whether the caller may remove a link (owner/admin). When false the
+  /// per-row Remove action is hidden; the roster itself stays visible.
+  final bool canRemove;
   final ValueChanged<LinkedAccount> onRemove;
 
   const _SectionList({
     required this.isPay,
     required this.accounts,
     required this.member,
+    required this.canRemove,
     required this.onRemove,
   });
 
@@ -257,6 +269,7 @@ class _SectionList extends StatelessWidget {
             (a) => _AuthRow(
               account: a,
               planNames: _fundedPlanNames(member, a, isPay),
+              canRemove: canRemove,
               onRemove: () => onRemove(a),
             ),
           )
@@ -268,11 +281,15 @@ class _SectionList extends StatelessWidget {
 class _AuthRow extends StatelessWidget {
   final LinkedAccount account;
   final List<String> planNames;
+
+  /// Whether the Remove action shows (owner/admin only).
+  final bool canRemove;
   final VoidCallback onRemove;
 
   const _AuthRow({
     required this.account,
     required this.planNames,
+    required this.canRemove,
     required this.onRemove,
   });
 
@@ -332,21 +349,22 @@ class _AuthRow extends StatelessWidget {
               ],
             ),
           ),
-          TextButton.icon(
-            onPressed: onRemove,
-            icon: Icon(
-              Symbols.close_sharp,
-              size: DesignConstants.iconSizeSmall,
-              weight: DesignConstants.iconWeight,
-              color: DesignConstants.badRed,
-            ),
-            label: Text(
-              'Remove',
-              style: DesignConstants.pSmall.copyWith(
+          if (canRemove)
+            TextButton.icon(
+              onPressed: onRemove,
+              icon: Icon(
+                Symbols.close_sharp,
+                size: DesignConstants.iconSizeSmall,
+                weight: DesignConstants.iconWeight,
                 color: DesignConstants.badRed,
               ),
+              label: Text(
+                'Remove',
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.badRed,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );

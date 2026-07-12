@@ -260,3 +260,51 @@ class ScheduleRangeExceptionDeleted extends ScheduleEvent {
   @override
   List<Object?> get props => [classId, exceptionId];
 }
+
+/// Cancel the single occurrence of [classId] on [originalDate] + [originalTime]
+/// via the DEDICATED staff endpoint (`DELETE …/occurrences/{date}`) — the path
+/// front desk is allowed to call, distinct from [ScheduleInstanceCancelled]
+/// (the owner/admin-only `exceptions/instance` override). Then reload the board
+/// so the cancelled day shows its badge. The occurrence is addressed by its
+/// IDENTITY slot ([originalDate] + [originalTime]), not its display date/time.
+class ScheduleOccurrenceCancelled extends ScheduleEvent {
+  final String classId;
+  final DateTime originalDate;
+  final String originalTime;
+
+  const ScheduleOccurrenceCancelled({
+    required this.classId,
+    required this.originalDate,
+    required this.originalTime,
+  });
+
+  @override
+  List<Object?> get props => [classId, originalDate, originalTime];
+}
+
+/// Move the single occurrence of [classId] on [originalDate] + [originalTime]
+/// to [newDate] (DATE ONLY — the occurrence keeps its original start time) via
+/// the DEDICATED staff endpoint (`POST …/occurrences/{date}/reschedule`) — the
+/// path front desk is allowed to call, distinct from the owner/admin-only
+/// [ScheduleInstanceOverridden] `exceptions/instance` reschedule. A collision
+/// with an existing non-cancelled occurrence at the exact target instant comes
+/// back as a 409 whose detail lands on `actionError`. Then reload the board so
+/// the moved day updates. Addressed by the IDENTITY slot, not the display
+/// date/time.
+class ScheduleOccurrenceRescheduled extends ScheduleEvent {
+  final String classId;
+  final DateTime originalDate;
+  final String originalTime;
+  final DateTime newDate;
+
+  const ScheduleOccurrenceRescheduled({
+    required this.classId,
+    required this.originalDate,
+    required this.originalTime,
+    required this.newDate,
+  });
+
+  @override
+  List<Object?> get props =>
+      [classId, originalDate, originalTime, newDate];
+}

@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Base class for login events
 sealed class LoginEvent extends Equatable {
@@ -44,4 +45,28 @@ class LoginSignOutRequested extends LoginEvent {
 /// Event to check authentication status
 class LoginStatusChecked extends LoginEvent {
   const LoginStatusChecked();
+}
+
+/// Event to re-send the sign-up confirmation email (from the
+/// "check your email" screen).
+class LoginResendConfirmationRequested extends LoginEvent {
+  final String email;
+
+  const LoginResendConfirmationRequested(this.email);
+
+  @override
+  List<Object?> get props => [email];
+}
+
+/// Internal event: a Supabase session arrived from outside the login form — a
+/// persisted session on boot, the email-confirmation link landing on web, a
+/// token refresh, or password recovery. Carries the [user] so the bloc can
+/// mark the app authenticated without re-reading the client.
+class LoginExternalSessionDetected extends LoginEvent {
+  final User user;
+
+  const LoginExternalSessionDetected(this.user);
+
+  @override
+  List<Object?> get props => [user.id];
 }

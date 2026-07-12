@@ -60,6 +60,27 @@ class ServerException implements Exception {
       detail != null ? '$message — $detail' : message;
 }
 
+/// Thrown when the backend returns `403 Forbidden` — the signed-in user's
+/// role lacks permission for the action. Distinct from a `401` (an expired
+/// session, recovered by the interceptor's refresh-and-retry): a 403 means
+/// the user is authenticated but not allowed, so it never triggers a
+/// sign-out. A subtype of [ServerException], so existing `on ServerException`
+/// handlers still catch it; catch [ForbiddenException] first to show the
+/// role-specific message.
+class ForbiddenException extends ServerException {
+  const ForbiddenException({
+    int? statusCode = 403,
+    String? detail,
+    Map<String, dynamic>? data,
+  }) : super(
+          'You don\'t have permission to do that. Your role may have '
+          'changed — sign out and back in if this persists.',
+          statusCode: statusCode,
+          detail: detail,
+          data: data,
+        );
+}
+
 /// Thrown by the gym repository when the backend
 /// returns a `409 Conflict` on gym creation. The
 /// `detail` string is part of the API contract and

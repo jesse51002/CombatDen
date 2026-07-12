@@ -53,13 +53,18 @@ class ApiClient {
   }
 
   /// Sends a POST request to [path] with optional
-  /// [data] body.
+  /// [data] body and/or [queryParameters].
   Future<Response<T>> post<T>(
     String path, {
     Object? data,
+    Map<String, dynamic>? queryParameters,
   }) async {
     return _handleRequest(
-      () => _dio.post<T>(path, data: data),
+      () => _dio.post<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      ),
     );
   }
 
@@ -129,15 +134,27 @@ class ApiClient {
       }
       if (e.response != null) {
         final body = e.response?.data;
+        final statusCode = e.response?.statusCode;
+        final data =
+            body is Map ? body.cast<String, dynamic>() : null;
+        // A 403 is an authorization failure (role not allowed), NOT a session
+        // expiry — the 401 refresh/retry path in [_AuthInterceptor] is
+        // untouched. Surface it as a distinct, friendlier exception; never
+        // sign the user out on it.
+        if (statusCode == 403) {
+          throw ForbiddenException(
+            statusCode: statusCode,
+            detail: _extractDetail(body),
+            data: data,
+          );
+        }
         throw ServerException(
           'Server error '
-          '${e.response?.statusCode}: '
+          '$statusCode: '
           '${e.response?.statusMessage}',
-          statusCode: e.response?.statusCode,
+          statusCode: statusCode,
           detail: _extractDetail(body),
-          data: body is Map
-              ? body.cast<String, dynamic>()
-              : null,
+          data: data,
         );
       }
       throw NetworkException(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
@@ -105,17 +106,24 @@ void _openOccurrenceScreen(BuildContext context, ScheduleClassEntry entry) {
   );
 }
 
-/// Tapping a board card opens a small **chooser dialog** first: "This
-/// occurrence" (the occurrence-edit screen) or "All future occurrences" (the
-/// class definition editor). Resolves the card's class id to its real
-/// [GymClassResponse] from the loaded catalog first (needed for the
-/// definition-editor path); a miss (the class vanished from a concurrent
-/// reload) is ignored.
+/// Tapping a board card. For **owner/admin** (`canEditSchedule`) it opens the
+/// small **chooser dialog** first: "This occurrence" (the occurrence-edit
+/// screen) or "All future occurrences" (the class definition editor) — resolving
+/// the card's class id to its real [GymClassResponse] from the loaded catalog
+/// (needed for the definition-editor path); a miss (the class vanished from a
+/// concurrent reload) is ignored. For **front desk + trainer** (who can't edit
+/// the recurring definition) it skips the chooser and goes straight to the
+/// occurrence screen — the only destination they have access to.
 void _onInstanceTap(
   BuildContext context,
   List<GymClassResponse> classes,
   ScheduleClassEntry entry,
 ) {
+  final canEditSchedule = selectedGym.role?.canEditSchedule ?? false;
+  if (!canEditSchedule) {
+    _openOccurrenceScreen(context, entry);
+    return;
+  }
   for (final c in classes) {
     if (c.classId == entry.classId) {
       ClassOccurrenceChooserDialog.show(
@@ -166,6 +174,7 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
           onPrevious: () => _shiftWeek(-1),
           onNext: () => _shiftWeek(1),
           onAddClass: () => _openClassForm(context),
+          showAddClass: selectedGym.role?.canEditSchedule ?? false,
         ),
         _ScheduleBoard(weekStart: _weekStart),
       ],

@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 
 /// One entry in the app's primary navigation, shared by the desktop rail
@@ -85,3 +87,19 @@ const List<NavSection> kNavSections = [
     route: AppRoutes.settings,
   ),
 ];
+
+/// [kNavSections] filtered to what [role] may see, driving both the desktop
+/// rail and the mobile dropdown so a role never renders a nav item it can't
+/// open. The "Add New Member" CTA (the only routeless entry) shows iff the
+/// role may create members; every routed entry shows iff the role may access
+/// its route. A null [role] (pre-activation) hides everything — nav renders
+/// only inside the activated workspace, where the role is always known.
+List<NavSection> visibleNavSections(EmployeeRole? role) {
+  bool isVisible(NavSection section) {
+    final route = section.route;
+    if (route == null) return role?.canCreateMembers ?? false;
+    return role != null && role.canAccessRoute(route);
+  }
+
+  return kNavSections.where(isVisible).toList();
+}

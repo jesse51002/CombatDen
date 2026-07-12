@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/state/theme_controller.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/settings/bloc/settings_bloc.dart';
 import 'package:crm/features/settings/bloc/settings_event.dart';
 import 'package:crm/features/settings/bloc/settings_state.dart';

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/employees/data/repositories/employees_repository.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
@@ -15,6 +20,7 @@ import 'package:crm/features/schedule/data/occurrence_windows.dart';
 import 'package:crm/features/schedule/data/models/instructor_option.dart';
 import 'package:crm/features/schedule/data/range_exception_helpers.dart';
 import 'package:crm/features/schedule/presentation/dialogs/check_in/class_batch_check_in_dialog.dart';
+import 'package:crm/features/schedule/presentation/dialogs/class_move_day_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/class_range_dates_dialog.dart';
 import 'package:crm/features/schedule/presentation/dialogs/schedule_cancel_views.dart';
 import 'package:crm/features/schedule/presentation/dialogs/signup/class_signup_dialog.dart';
@@ -24,14 +30,29 @@ import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occu
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_header.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_override_section.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_read_only_details.dart';
+import 'package:crm/features/schedule/presentation/widgets/occurrence/class_occurrence_staff_actions.dart';
 import 'package:crm/features/schedule/presentation/widgets/occurrence/occurrence_mutation_overlay.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 
+/// Full, human date used in the "class moved to …" success copy.
+final DateFormat _movedDateLabel = DateFormat('EEEE, MMM d, yyyy');
+
 /// Which mutation the screen is running (drives the success copy).
-enum _Action { override, cancelInstance, editRange, removeRangeCancellation }
+///
+/// [override] / [cancelInstance] are the owner/admin `exceptions/instance`
+/// paths; [cancelOccurrence] / [moveOccurrence] are the front-desk DEDICATED
+/// occurrence endpoints.
+enum _Action {
+  override,
+  cancelInstance,
+  editRange,
+  removeRangeCancellation,
+  cancelOccurrence,
+  moveOccurrence,
+}
 
 /// The screen's run state: idle, or processing (a mutation + board reload in
 /// flight). Only gates the [OccurrenceMutationOverlay] now — the real content
@@ -82,10 +103,60 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   int _successBaseline = 0;
   bool _completing = false;
 
+  /// The day a front-desk "Move to another day" is heading to — captured
+  /// before dispatch so the success copy can name it. Only read for
+  /// [_Action.moveOccurrence].
+  DateTime? _movedToDate;
+
+  /// The gym's staff roster, side-read once so the override's instructor
+  /// picker lists real employees (not only instructors already assigned on a
+  /// class), matching the class-definition form. Best-effort: a failure leaves
+  /// it empty and the picker falls back to the from-classes instructors. Only
+  /// the owner/admin override path renders the picker.
+  List<Employee> _employees = const [];
+
+  /// Editing the schedule (single-occurrence override, cancel, range ops) is
+  /// owner/admin only.
+  bool get _canEditSchedule => selectedGym.role?.canEditSchedule ?? false;
+
+  /// The two DEDICATED single-occurrence staff ops (cancel + move to another
+  /// day) are open to owner/admin/front desk. They render ONLY for the reduced
+  /// (front-desk) surface — `... && !_canEditSchedule` — so owner/admin keep
+  /// only their full override form and never get a duplicate affordance.
+  bool get _canEditSingleOccurrence =>
+      selectedGym.role?.canEditSingleOccurrence ?? false;
+
+  /// Whether to render the reduced front-desk cancel/move block: the caller may
+  /// run the dedicated occurrence ops but is NOT an owner/admin (who edit via
+  /// the override form), and the occurrence isn't already cancelled.
+  bool get _showStaffOccurrenceActions =>
+      _canEditSingleOccurrence &&
+      !_canEditSchedule &&
+      !widget.entry.isCancelled;
+
+  /// Check-in / reservation / roster-remove actions are open to
+  /// owner/admin/front desk; a trainer's occurrence view is read-only.
+  bool get _canCheckInMembers =>
+      selectedGym.role?.canCheckInMembers ?? false;
+
   @override
   void initState() {
     super.initState();
     _resetFields();
+    _loadEmployees();
+  }
+
+  Future<void> _loadEmployees() async {
+    final gymId = selectedGym.gymId;
+    if (gymId == null || gymId.isEmpty) return;
+    try {
+      final employees =
+          await EmployeesRepository(apiClient: ApiClient()).listEmployees(gymId);
+      if (!mounted) return;
+      setState(() => _employees = employees);
+    } catch (_) {
+      // Best-effort: the picker degrades to the from-classes instructors.
+    }
   }
 
   @override
@@ -150,6 +221,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       classId: widget.entry.classId,
       occurrenceDate: widget.entry.originalDate,
       occurrenceTime: widget.entry.originalTime,
+      canManage: _canCheckInMembers,
     );
   }
 
@@ -312,6 +384,83 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
     ));
   }
 
+  /// Front-desk "Cancel this class" — the DEDICATED staff cancel endpoint
+  /// (`ScheduleOccurrenceCancelled`), NOT the owner/admin `exceptions/instance`
+  /// override [_cancelThisClass] rides. Same confirm copy ([_cancelMessage]),
+  /// same processing → success/error terminal lifecycle as every other action.
+  Future<void> _cancelOccurrence() async {
+    final confirmed = await ConfirmationModal.show(
+      context: context,
+      title: 'Cancel this class?',
+      message: _cancelMessage,
+      confirmLabel: 'Cancel this class',
+      confirmColor: DesignConstants.badRed,
+    );
+    if (!confirmed || !mounted) return;
+    final bloc = context.read<ScheduleBloc>();
+    _action = _Action.cancelOccurrence;
+    _beginMutation(bloc);
+    bloc.add(ScheduleOccurrenceCancelled(
+      classId: widget.entry.classId,
+      originalDate: widget.entry.originalDate,
+      originalTime: widget.entry.originalTime,
+    ));
+  }
+
+  /// Front-desk "Move to another day (same time)" — the DEDICATED staff
+  /// reschedule endpoint (`ScheduleOccurrenceRescheduled`). Picks a new day
+  /// (the endpoint moves only the date; the original start time is preserved),
+  /// warns before a move the backend treats as check-in-wiping (a FUTURE
+  /// target instant clears the occurrence's check-ins and reverses their
+  /// points — same instant rule as the override path; a past/today target
+  /// keeps them re-dated), then rides the shared processing → success/error
+  /// terminal lifecycle. A 409 target-instant collision surfaces its `detail`
+  /// as the inline error.
+  Future<void> _moveOccurrence() async {
+    final picked = await ClassMoveDayDialog.show(
+      context: context,
+      className: widget.entry.name,
+      timeLabel: widget.entry.timeLabel,
+      initialDate: widget.entry.classDate,
+    );
+    if (picked == null || !mounted) return;
+    final checkIns = widget.entry.attendeeCount ?? 0;
+    final time = parseHmsTime(widget.entry.resolvedClassTime);
+    final targetStart = time == null
+        ? null
+        : DateTime(
+            picked.year,
+            picked.month,
+            picked.day,
+            time.hour,
+            time.minute,
+          );
+    if (checkIns > 0 &&
+        targetStart != null &&
+        targetStart.isAfter(DateTime.now())) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Move this class?',
+        message: 'Moving it to a time that hasn\'t happened yet clears its '
+            '$checkIns check-in${checkIns == 1 ? '' : 's'} and reverses '
+            'their points. Reservations move with the class.',
+        confirmLabel: 'Move class',
+        confirmColor: DesignConstants.badRed,
+      );
+      if (!confirmed || !mounted) return;
+    }
+    final bloc = context.read<ScheduleBloc>();
+    _action = _Action.moveOccurrence;
+    _movedToDate = picked;
+    _beginMutation(bloc);
+    bloc.add(ScheduleOccurrenceRescheduled(
+      classId: widget.entry.classId,
+      originalDate: widget.entry.originalDate,
+      originalTime: widget.entry.originalTime,
+      newDate: picked,
+    ));
+  }
+
   /// "Edit range" on the "Cancelled by a range" section: pick new dates for
   /// the governing [range], warn if the move WIDENS its coverage (newly
   /// covered upcoming dates lose their reservations/check-ins), then run the
@@ -416,6 +565,8 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
         _Action.cancelInstance => 'Class cancelled',
         _Action.editRange => 'Range updated',
         _Action.removeRangeCancellation => 'Cancellation removed',
+        _Action.cancelOccurrence => 'Class cancelled',
+        _Action.moveOccurrence => 'Class moved',
       };
 
   String get _successMessage => switch (_action) {
@@ -424,6 +575,11 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
         _Action.editRange => 'The cancelled range now covers new dates.',
         _Action.removeRangeCancellation =>
           'This class\'s dates are back on the schedule.',
+        _Action.cancelOccurrence => 'This class is cancelled for that day.',
+        _Action.moveOccurrence => _movedToDate != null
+            ? 'This class moved to ${_movedDateLabel.format(_movedToDate!)}. '
+                'The time stays the same.'
+            : 'This class moved to another day. The time stays the same.',
       };
 
   @override
@@ -442,7 +598,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
           // blank page.
           return Stack(
             children: [
-              _content(InstructorOption.fromClasses(classes)),
+              _content(InstructorOption.merged(_employees, classes)),
               if (_step == _Step.processing)
                 const Positioned.fill(child: OccurrenceMutationOverlay()),
             ],
@@ -472,8 +628,14 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
             ClassOccurrenceCancellingRangeSection(
               classId: widget.entry.classId,
               cancellingRangeId: rangeId,
+              canEdit: _canEditSchedule,
               onEdit: _editCancellingRange,
               onRemove: _removeRangeCancellation,
+            ),
+          if (_showStaffOccurrenceActions)
+            ClassOccurrenceStaffActions(
+              onMoveDay: _moveOccurrence,
+              onCancel: _cancelOccurrence,
             ),
           ClassOccurrenceActions(
             occurrenceDate: widget.entry.classDate,
@@ -482,6 +644,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
             onSignUpMembers: _signUpMembers,
             canCheckIn: _checkInOpen,
             onUpdateAttendees: _updateAttendees,
+            canManage: _canCheckInMembers,
             roster: _rosterFor(),
           ),
         ],
@@ -494,6 +657,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       _DetailsMode.view => ClassOccurrenceReadOnlyDetails(
           entry: widget.entry,
           onEdit: _startEdit,
+          canEdit: _canEditSchedule,
           cancellable: _cancellable,
           onCancel: _cancelThisClass,
         ),
