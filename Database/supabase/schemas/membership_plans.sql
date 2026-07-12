@@ -2,6 +2,10 @@ CREATE TABLE membership_plans_unfiltered (
     plan_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_plan_gym REFERENCES gyms(gym_id),
     plan_name VARCHAR NOT NULL CHECK (plan_name <> ''),
+    -- Every plan HAS an image (the plan card leans on it), mirroring
+    -- gym_classes.image_url: writers supply one at create time, so NULL
+    -- never reaches the row.
+    image_url VARCHAR NOT NULL,
     plan_type VARCHAR NOT NULL CHECK (plan_type IN ('trial', 'recurring', 'one_time')),
     class_count INTEGER CHECK (class_count > 0),
     duration_amount INTEGER CHECK (duration_amount > 0),

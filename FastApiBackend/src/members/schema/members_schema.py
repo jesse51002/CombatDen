@@ -32,6 +32,12 @@ class MemberCreateRequest(BaseModel):
     # created (see MembersManagementCreate.create_member); when this is set the
     # payment method is attached as the customer's default at the same time.
     payment_method_id: str | None = None
+    # When False (default), a create with a non-null email is gated against
+    # same-identity duplicates (same gym + case/space-insensitive first name,
+    # last name, and email): a match raises HTTP 409 with the candidate rows
+    # BEFORE any row is written. The client re-sends True to confirm and
+    # create anyway. A null-email create is never gated (no reliable identity).
+    allow_duplicate: bool = False
 
 
 class MemberUpdateData(BaseModel):

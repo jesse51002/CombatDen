@@ -1,6 +1,7 @@
 INSERT INTO membership_plans_unfiltered (
     gym_id,
     plan_name,
+    image_url,
     plan_type,
     class_count,
     duration_amount,
@@ -11,6 +12,7 @@ INSERT INTO membership_plans_unfiltered (
 ) VALUES (
     :gym_id,
     :plan_name,
+    :image_url,
     :plan_type,
     :class_count,
     :duration_amount,

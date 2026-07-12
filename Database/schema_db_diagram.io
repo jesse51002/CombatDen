@@ -403,6 +403,7 @@ Table membership_plans_unfiltered {
   plan_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   plan_name varchar [not null]
+  image_url varchar [not null, note: 'every plan has an image -- writers supply one at create time (mirrors gym_classes.image_url)']
   plan_type varchar [not null, note: 'CHECK: trial | recurring | one_time']
   class_count integer [note: 'nullable; required for class-count plans']
   duration_amount integer [note: 'nullable; must pair with duration_unit']

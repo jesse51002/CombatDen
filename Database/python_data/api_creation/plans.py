@@ -46,6 +46,20 @@ PLAN_TEMPLATES = [
 ]
 
 
+# Placeholder plan-card art; the founder uploads the real preset JPGs to
+# s3://combatden-assets/membership/presets/activity-NN.jpg (CDN
+# cdn.combatden.net). Cycled by plan index so each gym's plans vary.
+_PLAN_IMAGES = [
+    f"https://cdn.combatden.net/membership/presets/activity-{i:02d}.jpg"
+    for i in range(1, 13)
+]
+
+
+def _plan_image(idx: int) -> str:
+    """Preset plan-card image for the idx-th plan (cycles the 12-URL pool)."""
+    return _PLAN_IMAGES[idx % len(_PLAN_IMAGES)]
+
+
 def create_all(
     api: GymApiClient,
     client: Client,
@@ -75,6 +89,7 @@ def create_all(
         payload: dict = {
             "gym_id": str(gym_id),
             "plan_name": tmpl["plan_name"],
+            "image_url": _plan_image(idx),
             "plan_type": tmpl["plan_type"],
             "price": tmpl["price"],
             "is_public": True,

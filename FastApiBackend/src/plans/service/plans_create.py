@@ -153,6 +153,7 @@ class MembershipPlansCreate(MembershipPlansBase):
         params = {
             "gym_id": str(request.gym_id),
             "plan_name": request.plan_name,
+            "image_url": request.image_url,
             "plan_type": request.plan_type.value,
             "class_count": request.class_count,
             "duration_amount": request.duration_amount,

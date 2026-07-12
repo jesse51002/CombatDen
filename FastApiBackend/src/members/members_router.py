@@ -88,6 +88,15 @@ members_router = APIRouter(
         400: {"description": "Invalid request, or gym has no Stripe account"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
+        409: {
+            "description": (
+                "A same-identity member already exists at this gym (same "
+                "name + email). The detail is "
+                '{"code": "duplicate_member", "matches": [...]} listing the '
+                "candidate rows; re-send with allow_duplicate=true to create "
+                "anyway. Only fires when the request has an email."
+            )
+        },
     },
 )
 @inject
@@ -104,12 +113,21 @@ async def create_member(
     Every member is created with a Stripe customer. The gym must have a
     Stripe Connect account; otherwise the request is rejected (400) and no
     member row is written.
+
+    When the request has an email and ``allow_duplicate`` is not set, a
+    same-identity member already at the gym (same name + email, normalized)
+    is rejected with 409 and the candidate rows before anything is written;
+    the client re-sends ``allow_duplicate=true`` to confirm.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
 
     try:
         return await management_service.create_member(request)
+    except HTTPException:
+        # The duplicate gate raises HTTPException(409) directly — re-raise it
+        # as-is instead of letting the generic handler mask it as a 500.
+        raise
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

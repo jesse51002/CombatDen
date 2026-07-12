@@ -46,6 +46,9 @@ class MembershipPlanCreateRequest(BaseModel):
 
     gym_id: UUID
     plan_name: str
+    # Every plan HAS an image (the plan card leans on it), mirroring
+    # gym_classes.image_url — required at create time.
+    image_url: str
     plan_type: PlanType
     class_count: int | None = None
     duration_amount: int | None = None
@@ -85,6 +88,7 @@ class MembershipPlanUpdateData(BaseModel):
     """
 
     plan_name: str | None = None
+    image_url: str | None = None
     class_count: int | None = None
     duration_amount: int | None = None
     duration_unit: DurationUnit | None = None
@@ -151,6 +155,7 @@ class MembershipPlanResponse(BaseModel):
     plan_id: UUID
     gym_id: UUID
     plan_name: str
+    image_url: str
     plan_type: PlanType
     class_count: int | None = None
     duration_amount: int | None = None

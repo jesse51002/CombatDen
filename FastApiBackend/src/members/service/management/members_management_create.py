@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import text
 
 from src.members import SQL_DIR
@@ -64,7 +65,15 @@ class MembersManagementCreate(MembersManagementBase):
 
         Raises:
             ValueError: If the gym has no Stripe Connect account configured.
+            HTTPException: 409 when a same-identity member already exists at the
+                gym and ``allow_duplicate`` is not set (nothing is written).
         """
+        # 0. Duplicate gate — BEFORE anything is written. When the request has
+        #    an email and the caller has not opted to allow duplicates, reject
+        #    a same-identity member (same gym + name + email) with a 409 that
+        #    carries the candidate rows so the client can confirm or cancel.
+        await self._check_duplicate(request)
+
         # 1. Block-strict: the gym MUST have a Stripe Connect account before any
         #    row is written, so we never strand a member without a customer.
         stripe_account_id = await self._get_gym_stripe_account_id(request.gym_id)
@@ -99,6 +108,56 @@ class MembersManagementCreate(MembersManagementBase):
         return await self._get_member(member.member_id)
 
     # ── Helpers ────────────────────────────────────────────────
+
+    async def _check_duplicate(self, request: MemberCreateRequest) -> None:
+        """Reject a same-identity duplicate create with a 409 (nothing written).
+
+        A no-op when ``request.email`` is None (no reliable identity to dedupe
+        on) or ``request.allow_duplicate`` is True (the caller confirmed).
+        Otherwise, on ≥1 same-gym match by name + email, raise ``HTTPException``
+        409 whose ``detail`` carries the candidate rows.
+        """
+        if request.email is None or request.allow_duplicate:
+            return
+
+        matches = await self._find_duplicates(request)
+        if not matches:
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "duplicate_member",
+                "matches": matches,
+            },
+        )
+
+    async def _find_duplicates(
+        self,
+        request: MemberCreateRequest,
+    ) -> list[dict[str, str | None]]:
+        """Return same-identity members at the gym (name + email, normalized)."""
+        sql = load_sql(SQL_DIR / "find_members_by_identity.sql")
+        params = {
+            "gym_id": str(request.gym_id),
+            "first_name": request.first_name,
+            "last_name": request.last_name,
+            "email": request.email,
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            rows = result.mappings().all()
+
+        return [
+            {
+                "member_id": str(row["member_id"]),
+                "first_name": row["first_name"],
+                "last_name": row["last_name"],
+                "email": row["email"],
+                "photo_url": row["photo_url"],
+            }
+            for row in rows
+        ]
 
     async def _insert_shell(self, request: MemberCreateRequest) -> MemberResponse:
         """Insert the member identity + contact row (no Stripe columns yet)."""

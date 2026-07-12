@@ -19,6 +19,8 @@ from src.plans.plans_schema import (
 from src.waivers.schema.waivers_schema import WaiverCreateRequest
 from src.waivers.service.waivers_service import WaiversService
 
+_PLAN_IMG = "https://cdn.combatden.net/membership/presets/activity-01.jpg"
+
 
 async def _fetch_product(stripe_client, product_id, connect_opts):
     return await stripe_client.client.v1.products.retrieve_async(
@@ -52,6 +54,7 @@ async def test_create_recurring_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Monthly Recurring",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -101,6 +104,7 @@ async def test_create_one_time_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Drop-In",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.one_time,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -136,6 +140,7 @@ async def test_update_plan_name(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Before Update",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -189,6 +194,7 @@ async def test_update_plan_with_waiver_ids(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Waiver Update",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -260,6 +266,7 @@ async def test_delete_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Delete Me",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -294,6 +301,7 @@ async def test_list_plans(plans_service, gym_id, created):
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="List Test A",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -305,6 +313,7 @@ async def test_list_plans(plans_service, gym_id, created):
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="List Test B",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -331,6 +340,7 @@ async def test_set_price(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Price Change",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
@@ -387,6 +397,7 @@ async def test_list_prices(plans_service, gym_id, created):
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Versioned Price",
+            image_url=_PLAN_IMG,
             plan_type=PlanType.recurring,
             duration_amount=1,
             duration_unit=DurationUnit.month,
