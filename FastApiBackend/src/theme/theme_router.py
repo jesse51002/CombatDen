@@ -1,7 +1,7 @@
 """API routes for the theme domain.
 
     * ``GET /api/v1/gyms/{gym_id}/showcase`` — a gym's branded class/reward
-      cards (gym-employee gated).
+      cards (admin/owner gated).
     * ``GET /api/v1/theme/showcase-defaults`` — category-keyed static demo
       class/reward cards for the standalone theme browser (PUBLIC).
 """
@@ -35,7 +35,7 @@ theme_router = APIRouter(tags=["theme"])
     description=(
         "The gym's branded class cards and points-store reward cards. "
         "``classes`` / ``rewards`` are possibly-empty lists. "
-        "Gym-employee gated."
+        "Admin/owner gated."
     ),
     responses={
         200: {"description": "The gym's showcase"},
@@ -54,7 +54,7 @@ async def get_gym_showcase(
 ) -> GymShowcase:
     """Return the gym's showcase: its class cards and reward cards."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         classes, rewards = await asyncio.gather(

@@ -49,7 +49,7 @@ from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.signup_service import SignupService
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import ALL_EMPLOYEES, STAFF, Auth, security
 from src.videos.service.member_video_profile_refresh_runner import (
     MemberVideoProfileRefreshRunner,
 )
@@ -105,7 +105,9 @@ async def checkin(
 ) -> CheckinResponse:
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_can_view_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         resolved_class = await resolver.resolve(
@@ -165,8 +167,8 @@ async def checkin(
         "below capacity — reverses the auto-end (clears the pack's "
         "``end_date``). The occurrence itself is kept (the class still "
         "happened). A member who was not checked in returns "
-        "``removed = false`` with a 200. Admin / owner "
-        "only."
+        "``removed = false`` with a 200. Staff only "
+        "(owner/admin/front_desk)."
     ),
     responses={
         200: {"description": "Removal result (removed true / false)"},
@@ -188,7 +190,7 @@ async def remove_checkin(
 ) -> CheckinRemoveResponse:
     """Reverse one member's check-in (staff)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await remover.remove(
@@ -261,7 +263,9 @@ async def signup(
 ) -> SignupResponse:
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_can_view_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         result = await signup_service.create(
@@ -325,7 +329,7 @@ async def remove_signup(
 ) -> SignupRemoveResponse:
     """Cancel a member's sign-up (staff or the member themselves)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
 
     try:
         return await signup_service.remove(
@@ -362,7 +366,7 @@ async def remove_signup(
         "batch) records a clean member and holds a warned one as "
         "``needs_confirmation`` (not recorded) unless ``ignore_warnings = true`` "
         "overrides; ``true`` runs the strict kiosk gate per member, skipping the "
-        "uncovered / over-capacity. Admin/owner only."
+        "uncovered / over-capacity. Staff only (owner/admin/front_desk)."
     ),
     responses={
         207: {
@@ -390,7 +394,7 @@ async def checkin_batch(
 ) -> JSONResponse:
     """Batch staff check-in — 207 on any processed mix, 500 on total failure."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+    await auth.verify_roles(request.gym_id, user_payload, STAFF)
 
     try:
         response, all_failed = await batch_service.batch_checkin(
@@ -482,7 +486,7 @@ async def list_attendees(
 ) -> AttendeeListResponse:
     """Everyone signed up or attended for one occurrence (may be empty)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
 
     try:
         return await attendees_service.list_attendees(
@@ -539,7 +543,7 @@ async def get_member_class_history(
 ) -> MemberClassHistoryResponse:
     """One member's reservations + attended + no-show feed."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
 
     try:
         return await history_service.get_history(
@@ -577,7 +581,7 @@ async def get_streak(
 ) -> StreakResponse:
     """Weeks of consecutive class attendance."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
 
     try:
         weeks = await streak_service.get_streak(member_id, gym_id)

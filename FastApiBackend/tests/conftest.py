@@ -16,7 +16,10 @@ import pytest
 import stripe
 from fastapi.testclient import TestClient
 
-import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
+# (isort: skip stops import-sorting from reordering `schema` ahead of it).
+import src.shared.db_schema_path  # noqa: F401  # isort: skip
+from schema.gym_employee import EmployeeType  # isort: skip
+
 from src.core.config import settings
 from src.main import app
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
@@ -82,21 +85,37 @@ def fake_rank_id() -> str:
 
 
 @pytest.fixture
-def auth_mock(fake_user_id: str) -> AsyncMock:
+def fake_employee_id() -> str:
+    """A stable fake employee id for ``get_employee_id*`` returns."""
+    return str(uuid4())
+
+
+@pytest.fixture
+def auth_mock(fake_user_id: str, fake_employee_id: str) -> MagicMock:
     """An ``Auth`` double that always succeeds.
 
-    ``get_current_user`` returns a payload whose ``sub`` matches
-    ``fake_user_id``. ``verify_*`` methods are no-ops.
+    ``get_current_user`` returns a payload carrying both ``sub``
+    (=``fake_user_id``) and an ``email`` claim — identity is the verified
+    email now. The gates are async no-ops, except ``verify_roles`` which
+    returns a concrete ``EmployeeType`` so handlers that use the matched
+    role keep working, and ``get_employee_id`` / ``get_employee_id_for_member``
+    which return a fixed fake employee UUID.
     """
     auth = MagicMock(spec=Auth)
     auth.get_current_user.return_value = {
         "sub": fake_user_id,
         "email": "test@example.com",
     }
-    auth.verify_gym_employee = AsyncMock(return_value=None)
+    auth.verify_roles = AsyncMock(return_value=EmployeeType.owner)
     auth.verify_gym_owner = AsyncMock(return_value=None)
+    auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
     auth.verify_can_view_member = AsyncMock(return_value=None)
     auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+    auth.verify_staff_principal = AsyncMock(return_value=None)
+    auth.get_employee_id = AsyncMock(return_value=UUID(fake_employee_id))
+    auth.get_employee_id_for_member = AsyncMock(
+        return_value=UUID(fake_employee_id)
+    )
     return auth
 
 
@@ -144,7 +163,6 @@ def make_member_row(
     *,
     member_id: str,
     gym_id: str,
-    user_id: str | None = None,
     first_name: str = "Ada",
     last_name: str = "Lovelace",
     email: str = "ada@example.com",
@@ -163,7 +181,6 @@ def make_member_row(
     return {
         "member_id": member_id,
         "gym_id": gym_id,
-        "user_id": user_id,
         "first_name": first_name,
         "last_name": last_name,
         "email": email,
@@ -318,9 +335,10 @@ class CreatedResources:
         data_factory / stripe_clock helpers that create AND track in one
         call.
       * ``created.track_customer(id)`` / ``track_product`` / ``track_price``
-        / ``track_coupon`` / ``track_reward`` / ``track_redemption`` — for
-        tests that drive services directly (or call the live API) and get
-        ids back on the response.
+        / ``track_coupon`` / ``track_reward`` / ``track_redemption`` /
+        ``track_employee`` / ``track_auth_user`` — for tests that drive
+        services directly (or call the live API) and get ids back on the
+        response.
     """
 
     db_pool: DirectDatabasePool
@@ -341,6 +359,11 @@ class CreatedResources:
     # A redemption row FKs both a member and a reward — always deleted
     # first in cleanup(), before either.
     reward_redemptions: list[UUID] = field(default_factory=list)
+    # Gym staff rows + the Supabase auth logins created for them. Neither
+    # carries a Stripe object, and there is no FK between the two (identity is
+    # email-based), so both are removed independently at teardown.
+    employees: list[UUID] = field(default_factory=list)
+    auth_users: list[str] = field(default_factory=list)
 
     # ── create-and-track wrappers ──────────────────────────────
 
@@ -427,6 +450,12 @@ class CreatedResources:
     def track_redemption(self, redemption_id: UUID) -> None:
         self.reward_redemptions.append(redemption_id)
 
+    def track_employee(self, employee_id: UUID) -> None:
+        self.employees.append(employee_id)
+
+    def track_auth_user(self, user_id: str) -> None:
+        self.auth_users.append(user_id)
+
     # ── teardown ───────────────────────────────────────────────
 
     async def cleanup(self) -> None:
@@ -478,6 +507,13 @@ class CreatedResources:
 
         for reward_id in self.rewards:
             await _safe(cleanup.delete_reward(self.db_pool, reward_id))
+
+        # Staff rows + their auth logins — independent of member/Stripe data
+        # (email-based identity, no FK between the two), so order is free.
+        for employee_id in self.employees:
+            await _safe(cleanup.delete_employee(self.db_pool, employee_id))
+        for user_id in self.auth_users:
+            await _safe(cleanup.delete_auth_user(self.db_pool, user_id))
 
         for customer_id in self.stripe_customers:
             await _safe(

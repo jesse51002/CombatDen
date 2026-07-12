@@ -135,7 +135,7 @@ async def get_gym_videos(
     can't leak; a member-facing route is a future concern, this stays
     gym-employee gated). The ungated owner-management view is ``/videos/owner``."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     if video_type is not None and big_group is not None:
         raise HTTPException(
@@ -201,7 +201,7 @@ async def get_gym_owner_videos(
     """Return one page of the gym's owner-added videos (ungated — shows a video
     before it's enriched), newest add first. Gym-employee gated."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         page, total = await videos_service.load_owner_videos(
@@ -252,7 +252,7 @@ async def lookup_gym_video(
 ) -> GymVideoCard:
     """Return a YouTube link's details for the add confirmation — no write."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         card = await videos_service.lookup_feed_video(body.url)
@@ -315,7 +315,7 @@ async def add_gym_video(
     """Add one YouTube video to the gym's feed (with real metadata fetched from
     the YouTube Data API) and return its card."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         card = await videos_service.add_feed_video(gym_id, body.url)
@@ -382,7 +382,7 @@ async def remove_gym_video(
     deletes it from the owner section (+ owned pool if it's a manual custom);
     else it rejects the latest-run row (with the optional reason)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         curated = await videos_service.remove_feed_video(
@@ -448,7 +448,7 @@ async def keep_gym_video(
 ) -> None:
     """Un-reject a video (back to the served feed); idempotent → 204."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         curated = await videos_service.keep_feed_video(
@@ -503,7 +503,7 @@ async def get_gym_videos_preview(
     query (``rejected=true`` → the rejected list) that returns up to ``per_tag``
     videos per genre in feed order, one ``GymFeedSection`` per genre."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         sections = await videos_service.load_feed_preview(
@@ -547,7 +547,7 @@ async def get_gym_videos_spec(
 ) -> GymVideoSpecView:
     """Return the gym's live video spec, 404 when no spec row exists."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         spec = await videos_service.load_gym_spec(gym_id)
@@ -586,7 +586,7 @@ async def get_video_spec(
 ) -> VideoSpecView:
     """The gym's latest spec version. 404 when no spec has been authored yet."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     spec = await videos_service.load_latest_spec(gym_id)
     if spec is None:
@@ -615,7 +615,7 @@ async def video_agent_turn(
     """Run one turn: the agent replies with text (its next question) or a finished
     draft to review, plus the serialized history to send back next turn."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await service.agent_turn(gym_id, body)
@@ -644,7 +644,7 @@ async def refine_video_spec_from_feed(
     """Fold unconsumed manual curation signals into a new ``feed_update`` spec
     version. 404 when there is no existing spec or no new signals to learn from."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         result = await videos_service.refine_from_feed(gym_id)

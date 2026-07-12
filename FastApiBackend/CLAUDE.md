@@ -410,7 +410,8 @@ how-to-work-here facts belong here:
 - Validate Supabase JWT tokens in FastAPI using dependency injection
 - Use dependency injection for auth checks
 - Use Supabase RLS (Row Level Security) for authorization at the database level
-- **Staff principals are owner/admin ONLY — trainers have no accounts.** A `gym_employees` row with `employee_type='trainer'` is instructor DATA (a name/photo shown on classes), never a login: the DB forbids a trainer `user_id` (`chk_trainer_has_no_account`), and every staff auth check in `src/shared/auth.py` (`verify_gym_employee`, `verify_can_view_member`'s staff branch, and the `_for_member` variants) filters to owner/admin explicitly. Never design a feature around a trainer logging in.
+- **Identity is verified email, not an auth-user id.** A gym is accessed by a person whose Supabase JWT `email` claim (lowercased) matches a `gym_employees` row's `email` at that row's `employee_type` (`chk_principal_has_email` requires an email on every login role — owner/admin/front_desk; only a `trainer` row may stay email-less instructor DATA). Stored emails are lowercase, so the lowercased claim is an exact match. An `archived_at` row is soft-archived and grants NO access.
+- **Trainers CAN log in now — access is role-set-gated per route, not a blanket owner/admin cut.** `src/shared/auth.py` exports role-set constants — `OWNER_ONLY`, `OWNER_ADMIN`, `STAFF` (owner/admin/front_desk), `ALL_EMPLOYEES` (all four) — and the core check `Auth.verify_roles(gym_id, user_payload, allowed)` (plus `get_employee_id`, `verify_staff_principal`, `verify_can_view_member`, `verify_gym_employee_for_member`, `get_employee_id_for_member`, all taking an explicit role-set param) admits the caller only when their non-archived `gym_employees` row's `employee_type` is in `allowed`. Every route documents exactly which roles it admits — a route gating a trainer-visible read passes `ALL_EMPLOYEES`; gym-config writes and money-moving ops stay `OWNER_ADMIN` / `STAFF`; owner-only actions (Stripe Connect onboarding) use `verify_gym_owner` (`OWNER_ONLY`). `verify_gym_admin_or_owner` is the thin `OWNER_ADMIN` wrapper mirroring the DB's `is_gym_admin_or_owner` RLS function.
 
 **Input Validation**
 - Always validate with Pydantic
@@ -478,7 +479,7 @@ how-to-work-here facts belong here:
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
 agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
-(all `verify_gym_employee`-gated EXCEPT the member rec + rec-click routes, which are
+(all `verify_gym_admin_or_owner`-gated EXCEPT the member rec + rec-click routes, which are
 `verify_can_view_member`):
 
 | Route | What it does |
@@ -490,7 +491,7 @@ agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
 | `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
 
 **ONE unified feed read backs everything (`VideoFeedService.load_feed_page`).** `GET /api/v1/gyms/{id}/videos`
-(`verify_gym_employee`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
+(`verify_gym_admin_or_owner`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
 COMPLETED run — there is **no owner/source param**. It serves **only enriched-AND-accepted** videos:
 the SQL **INNER JOIN**s `video_rag` (the enriched-only gate) so a row shows only once it has an
 embedding, and `?rejected` selects `scan_status` `accepted` vs `rejected`. `?member_id` is a read-only
@@ -516,7 +517,7 @@ window stddev is available):
   `video_feed_bump_sigma_fraction` (0.10) and `video_served_penalty_half_life_days` (7.0, ×86400 →
   `:half_life_seconds`), injected into `VideoFeedService` (no `settings` import — DI constructor args).
 
-**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_employee`,
+**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_admin_or_owner`,
 `load_owner_videos` / `videos_load_owner_videos.sql`): owner-section rows only, **LEFT JOIN** `video_rag`
 (NOT the enriched gate) exposing `enriched` so the CRM can badge "processing…", `ORDER BY curated_at DESC
 NULLS LAST`. An owner-added video is visible here the INSTANT it's added — before enrichment — which the
@@ -587,7 +588,7 @@ the accept-path and first-turn state seeding (plain calls, not tools). Template 
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
 
 **The "All" preview is ONE windowed query, in the service — not the router.** `GET
-/api/v1/gyms/{id}/videos/preview` (`verify_gym_employee`) returns a `GymFeedSection` list (one per genre,
+/api/v1/gyms/{id}/videos/preview` (`verify_gym_admin_or_owner`) returns a `GymFeedSection` list (one per genre,
 each capped to `per_tag`). `VideoFeedService.load_feed_preview` runs `videos_load_feed_preview.sql` — a
 `ROW_NUMBER() OVER (PARTITION BY tag ORDER BY relevance_index …) WHERE rn <= :per_tag` window over the
 SAME served candidate set as the feed page (no load-the-whole-feed-then-Python-slice); the router just

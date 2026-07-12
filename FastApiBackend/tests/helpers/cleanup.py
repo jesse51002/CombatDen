@@ -208,6 +208,44 @@ async def delete_reward(db_pool: DirectDatabasePool, reward_id: UUID) -> None:
         await session.commit()
 
 
+async def delete_employee(
+    db_pool: DirectDatabasePool, employee_id: UUID
+) -> None:
+    """Hard-delete a ``gym_employees`` row created by a test.
+
+    Production soft-archives employees (``archived_at``); test teardown wants
+    the row physically gone so created rows don't accumulate under the seeded
+    gym across runs. Deletes regardless of ``archived_at`` (so it also removes
+    a row a test already archived). A freshly-created test employee has no
+    instructor / waiver-operator references, so a plain DELETE is safe. This
+    hard DELETE is intentional and confined to the test suite.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_employee.sql")),
+            {"id": str(employee_id)},
+        )
+        await session.commit()
+
+
+async def delete_auth_user(db_pool: DirectDatabasePool, user_id: str) -> None:
+    """Delete a Supabase ``auth.users`` row created by a test.
+
+    A verified login is created for an employee via the admin API; teardown
+    removes it by id directly on the local DB (the auth schema cascades the
+    user's identities / sessions). There is no FK between ``auth.users`` and
+    ``gym_employees`` (identity is email-based, no ``user_id`` column), so the
+    order relative to ``delete_employee`` does not matter. Confined to the
+    test suite.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_auth_user.sql")),
+            {"id": str(user_id)},
+        )
+        await session.commit()
+
+
 async def delete_discount_preset(
     db_pool: DirectDatabasePool, discount_id: UUID
 ) -> None:

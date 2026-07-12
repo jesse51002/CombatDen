@@ -80,7 +80,7 @@ async def list_ranks(
 ) -> RankListResponse:
     """List a gym's ladder (one row per main rank) plus its sub_rank_type."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await ranks_service.list_ranks(gym_id)
@@ -123,7 +123,7 @@ async def create_rank(
 ) -> RankResponse:
     """Create a rank."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.create_rank(request)
@@ -171,7 +171,7 @@ async def seed_from_preset(
 ) -> RankListResponse:
     """Seed gym ranks from a preset ladder."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.from_preset(request)
@@ -276,7 +276,7 @@ async def get_rank_enabled(
 ) -> RankEnabledResponse:
     """Get the gym's rank-enabled state."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await ranks_service.get_rank_enabled(gym_id)
@@ -323,7 +323,7 @@ async def set_rank_enabled(
 ) -> RankEnabledResponse:
     """Set the gym's rank-enabled state."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.set_rank_enabled(request)
@@ -376,7 +376,7 @@ async def promote_member(
 ) -> RankMemberResponse:
     """Promote a member one leaf up the ladder."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.promote_member(request)
@@ -424,7 +424,7 @@ async def set_member_rank(
 ) -> RankMemberResponse:
     """Set a member's rank explicitly."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.set_member_rank(request)
@@ -471,7 +471,7 @@ async def reorder_ranks(
 ) -> RankListResponse:
     """Reorder a gym's rank ladder atomically."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await ranks_service.reorder_ranks(request)
@@ -519,7 +519,7 @@ async def list_ready_to_promote(
 ) -> MembersReadyToPromoteResponse:
     """List members closest to their next promotion."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await ranks_service.list_ready_to_promote(
@@ -578,7 +578,7 @@ async def list_members_in_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_employee(rank.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
 
     try:
         return await ranks_service.list_members_in_rank(
@@ -642,7 +642,7 @@ async def count_members_by_sub_index(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_employee(rank.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
 
     try:
         return await ranks_service.count_members_by_sub_index(
@@ -693,7 +693,7 @@ async def get_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_employee(rank.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
     return rank
 
 
@@ -728,7 +728,7 @@ async def update_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_employee(existing.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
 
     try:
         return await ranks_service.update_rank(rank_id, request.data)
@@ -790,7 +790,7 @@ async def delete_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_employee(existing.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
 
     try:
         await ranks_service.delete_rank(rank_id)

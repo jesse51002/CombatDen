@@ -38,6 +38,7 @@ from src.classes.service.classes_versions_service import (
 )
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
+from src.employees.service.employees_service import EmployeesService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
@@ -216,6 +217,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.ranks.ranks_router",
             "src.rewards.rewards_router",
             "src.waivers.waivers_router",
+            "src.employees.employees_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
             "src.memberships.memberships_router",
@@ -412,6 +414,11 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Waivers: plain gym config (versioned documents + read-only e-sign
     # tracking), no Stripe.
     waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
+
+    # Employees: plain gym config (live staff-roster CRUD), no Stripe.
+    # Identity is the lowercase email column matched to a verified auth account
+    # (no user_id); archiving is a soft-delete, no auth-system interaction.
+    employees_service = providers.Factory(EmployeesService, db_pool=db_pool)
 
     # Videos: the slug-keyed template catalog + a real gym's live
     # feed/spec/showcase from the gym_video_* tables, plus the owner's feed

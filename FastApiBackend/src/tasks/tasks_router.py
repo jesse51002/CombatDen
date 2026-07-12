@@ -54,7 +54,7 @@ async def list_ongoing_tasks(
 ) -> list[TaskResponse]:
     """List the gym's unfinished tasks (the CRM's memberships-screen poll)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await tasks_service.list_ongoing_tasks(gym_id)
@@ -94,7 +94,7 @@ async def get_task(
 ) -> TaskResponse:
     """Get one task + items (gym-scoped)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         task = await tasks_service.get_task(task_id, gym_id)

@@ -1,7 +1,9 @@
--- All gyms the authenticated user may administer, annotated with
--- their role. Owners and admins can view/manage a gym in the admin
--- app; trainers are excluded. UNIQUE (user_id, gym_id) guarantees
--- one row per gym, so no de-duplication is needed.
+-- All gyms the authenticated user is an employee of, annotated with
+-- their role. Identity is the caller's verified email (stored lowercase);
+-- ALL roles enter the CRM, so there is no role filter here — the response
+-- carries ge.employee_type. Archived employees are excluded. UNIQUE
+-- (email, gym_id) guarantees one row per gym, so no de-duplication is
+-- needed.
 SELECT g.gym_id,
        g.gym_name,
        g.gym_description,
@@ -13,6 +15,6 @@ SELECT g.gym_id,
        ge.theme_preference
 FROM gyms g
 JOIN gym_employees ge ON ge.gym_id = g.gym_id
-WHERE ge.user_id = :user_id
-  AND ge.employee_type IN ('owner', 'admin')
+WHERE lower(ge.email) = :email
+  AND ge.archived_at IS NULL
 ORDER BY ge.created_at ASC;

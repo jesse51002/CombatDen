@@ -7,7 +7,7 @@ members_crm_members_list_schema and members_billing_schema.
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class MemberCreateRequest(BaseModel):
@@ -17,7 +17,6 @@ class MemberCreateRequest(BaseModel):
     first_name: str = Field(min_length=1)
     last_name: str = Field(min_length=1)
     email: EmailStr | None = None
-    user_id: UUID | None = None
     current_rank_id: UUID | None = None
     # Contact / profile columns (client-editable; written by the backend's
     # privileged connection, not the authenticated role). NULL for
@@ -32,6 +31,17 @@ class MemberCreateRequest(BaseModel):
     # created (see MembersManagementCreate.create_member); when this is set the
     # payment method is attached as the customer's default at the same time.
     payment_method_id: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str | None) -> str | None:
+        """Normalize email to lowercase (identity normalization).
+
+        A member's email is now identity: a verified auth account whose
+        email matches it (compared lowercase) is that person's access, so
+        the stored value must be lowercase.
+        """
+        return v.lower() if v is not None else v
 
 
 class MemberUpdateData(BaseModel):
@@ -54,6 +64,17 @@ class MemberUpdateData(BaseModel):
     emergency_contact_email: EmailStr | None = None
     photo_url: str | None = None
 
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str | None) -> str | None:
+        """Normalize email to lowercase (identity normalization).
+
+        A member's email is now identity: a verified auth account whose
+        email matches it (compared lowercase) is that person's access, so
+        the stored value must be lowercase.
+        """
+        return v.lower() if v is not None else v
+
 
 class MemberUpdateRequest(BaseModel):
     """Body for PUT /api/v1/members/{member_id}."""
@@ -66,7 +87,6 @@ class MemberResponse(BaseModel):
 
     member_id: UUID
     gym_id: UUID
-    user_id: UUID | None
     first_name: str
     last_name: str
     email: str | None

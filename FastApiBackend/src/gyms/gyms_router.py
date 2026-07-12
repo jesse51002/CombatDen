@@ -45,7 +45,7 @@ from src.payments.payments_exceptions import (
     PaymentsStripeError,
     StripeOrphanError,
 )
-from src.shared.auth import Auth, security
+from src.shared.auth import ALL_EMPLOYEES, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +85,10 @@ async def create_gym(
 ) -> GymCreateResponse:
     """Create a new gym and start Stripe Express onboarding."""
     user_payload = auth.get_current_user(credentials)
-    user_id = UUID(user_payload["sub"])
     user_email: str | None = user_payload.get("email")
 
     if not user_email:
-        logger.error(
-            "JWT payload missing email claim for user_id=%s",
-            user_id,
-        )
+        logger.error("JWT payload missing email claim")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="JWT missing email claim",
@@ -101,7 +97,6 @@ async def create_gym(
     try:
         return await gyms_service.create_gym(
             request=request,
-            user_id=user_id,
             user_email=user_email,
         )
     except ValueError as exc:
@@ -111,8 +106,8 @@ async def create_gym(
         ) from None
     except StripeOrphanError:
         logger.error(
-            "Stripe account orphaned while creating gym for user_id=%s",
-            user_id,
+            "Stripe account orphaned while creating gym for email=%s",
+            user_email,
             exc_info=True,
         )
         raise HTTPException(
@@ -121,8 +116,8 @@ async def create_gym(
         ) from None
     except PaymentsStripeError as exc:
         logger.error(
-            "Stripe error while creating gym for user_id=%s",
-            user_id,
+            "Stripe error while creating gym for email=%s",
+            user_email,
             exc_info=True,
         )
         raise HTTPException(
@@ -131,8 +126,8 @@ async def create_gym(
         ) from None
     except Exception:
         logger.error(
-            "Failed to create gym for user_id=%s",
-            user_id,
+            "Failed to create gym for email=%s",
+            user_email,
             exc_info=True,
         )
         raise HTTPException(
@@ -147,15 +142,16 @@ async def create_gym(
 @gyms_router.get(
     "/",
     response_model=list[GymWithRoleResponse],
-    summary="List the gyms the caller may administer",
+    summary="List the gyms the caller is an employee of",
     description=(
-        "Returns every gym the authenticated user owns or admins, "
-        "each annotated with the caller's role (``employee_type``). "
-        "Trainers are excluded. Returns an empty list when the user "
-        "administers no gyms."
+        "Returns every gym the authenticated user is an employee of "
+        "(any role), each annotated with the caller's role "
+        "(``employee_type``). Returns an empty list when the caller is "
+        "an employee of no gyms."
     ),
     responses={
         200: {"description": "Gyms retrieved (possibly empty)"},
+        400: {"description": "JWT missing email claim"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -165,16 +161,23 @@ async def list_my_gyms(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     gyms_service: GymsService = Depends(Provide[DependencyInjector.gyms_service]),
 ) -> list[GymWithRoleResponse]:
-    """Return the gyms the caller owns or admins."""
+    """Return the gyms the caller is an employee of."""
     user_payload = auth.get_current_user(credentials)
-    user_id = UUID(user_payload["sub"])
+    user_email: str | None = user_payload.get("email")
+
+    if not user_email:
+        logger.error("JWT payload missing email claim")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="JWT missing email claim",
+        ) from None
 
     try:
-        return await gyms_service.list_gyms_for_user(user_id)
+        return await gyms_service.list_gyms_for_user(user_email)
     except Exception:
         logger.error(
-            "Failed to list gyms for user_id=%s",
-            user_id,
+            "Failed to list gyms for email=%s",
+            user_email,
             exc_info=True,
         )
         raise HTTPException(
@@ -350,7 +353,7 @@ async def update_gym(
 ) -> GymResponse:
     """Update a gym's mutable fields."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await gyms_service.update_gym(gym_id, request.data)
@@ -407,7 +410,7 @@ async def update_gym_theme(
 ) -> GymThemeResponse:
     """Save the gym's chosen ThemeService design id."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await gyms_service.update_gym_theme(
@@ -460,13 +463,20 @@ async def update_my_theme(
 ) -> EmployeeThemeResponse:
     """Save the caller's CRM theme preference for this gym."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
-    user_id = UUID(user_payload["sub"])
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
+    user_email: str | None = user_payload.get("email")
+
+    if not user_email:
+        logger.error("JWT payload missing email claim")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="JWT missing email claim",
+        ) from None
 
     try:
         return await gyms_service.update_employee_theme(
             gym_id=gym_id,
-            user_id=user_id,
+            user_email=user_email,
             theme_preference=request.data.theme_preference,
         )
     except ValueError as exc:

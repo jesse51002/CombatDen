@@ -844,7 +844,7 @@ class TestAttendees:
         self, api: httpx.Client
     ) -> None:
         """An unknown gym_id is rejected — employee auth
-        (``verify_gym_employee``) runs before the service, so an unknown gym
+        (``verify_roles``) runs before the service, so an unknown gym
         403s (the service itself no longer checks gym existence directly:
         occurrence resolution is keyed by (class_id, original_date,
         original_time), with no separate gym-timezone read)."""

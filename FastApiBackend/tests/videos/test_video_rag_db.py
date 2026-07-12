@@ -180,7 +180,7 @@ def _always_pass_auth() -> MagicMock:
         "sub": str(uuid4()),
         "email": "test@example.com",
     }
-    auth.verify_gym_employee = AsyncMock(return_value=None)
+    auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
     auth.verify_can_view_member = AsyncMock(return_value=None)
     return auth
 

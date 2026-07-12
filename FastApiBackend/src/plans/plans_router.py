@@ -21,7 +21,7 @@ from src.plans.plans_schema import (
 from src.plans.service.plans_service import (
     MembershipPlansService,
 )
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +274,7 @@ async def list_plans(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await plans_service.list_plans(gym_id)
@@ -329,7 +329,7 @@ async def get_plan(
         HTTPException: 401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await plans_service.get_plan(plan_id, gym_id)
@@ -393,7 +393,7 @@ async def list_plan_prices(
         HTTPException: 401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await plans_service.list_prices(plan_id, gym_id)
