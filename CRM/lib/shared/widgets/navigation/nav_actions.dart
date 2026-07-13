@@ -44,11 +44,22 @@ void onNavSectionTap(BuildContext context, NavSection section) {
 /// Opens the add-member flow from the primary nav CTA. When it closes without
 /// having navigated to a member itself, jump to the People section if anyone
 /// was added (so the new member is visible); otherwise stay put.
+///
+/// The navigator and launch route are captured BEFORE the await: the tapped
+/// rail item's element can be rebuilt away during the long-lived dialog, so a
+/// post-await `context.mounted` guard would silently swallow the redirect.
+/// The section [NavigatorState] outlives the dialog, so navigation goes
+/// through it directly.
 Future<void> _openAddMemberFlow(BuildContext context) async {
+  final navigator = Navigator.of(context);
+  final launchRoute = ModalRoute.of(context)?.settings.name;
   final outcome = await AddMemberFlow.show(context);
-  if (!context.mounted) return;
   if (outcome.navigatedToMember) return;
-  if (outcome.createdCount > 0) goToSection(context, AppRoutes.members);
+  if (outcome.createdCount == 0) return;
+  if (!navigator.mounted) return;
+  // Same skip goToSection applies: don't re-push the section we're on.
+  if (launchRoute == AppRoutes.members) return;
+  navigator.pushReplacementNamed(AppRoutes.members);
 }
 
 /// Confirm, then sign out. Reads the [LoginBloc] *before* the await so the
