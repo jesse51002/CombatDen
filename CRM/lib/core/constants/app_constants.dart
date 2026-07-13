@@ -39,26 +39,6 @@ class AppConstants {
       'https://images.pexels.com/photos/5493207/pexels-photo-5493207.jpeg'
       '?auto=compress&cs=tinysrgb&w=1200';
 
-  /// Curated default member portrait photos shown in the add/edit-member
-  /// photo pool. Assets are uploaded post-curation via the preset uploader
-  /// script; until then these URLs 404 and the field's Image.network
-  /// errorBuilders render blank placeholders. Kept in one place — never
-  /// inline these URLs at a call site.
-  static const List<String> memberDefaultPhotoUrls = [
-    'https://cdn.combatden.net/member/presets/portrait-01.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-02.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-03.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-04.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-05.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-06.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-07.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-08.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-09.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-10.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-11.jpg',
-    'https://cdn.combatden.net/member/presets/portrait-12.jpg',
-  ];
-
   /// Curated default activity photos shared by the membership-plan and class
   /// image pools. Assets are uploaded post-curation via the preset uploader
   /// script; until then these URLs 404 and the field's Image.network

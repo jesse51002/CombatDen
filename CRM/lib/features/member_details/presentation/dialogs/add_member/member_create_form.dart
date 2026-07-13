@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/validators.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
@@ -143,10 +142,11 @@ class MemberCreateFormState extends State<MemberCreateForm> {
               validator: _optionalEmail,
             ),
           ]),
+          // A member photo is a UNIQUE upload of the actual
+          // person — deliberately no default pool here.
           ImageUploadPickerField(
             label: 'Member photo',
             category: 'member',
-            poolImages: AppConstants.memberDefaultPhotoUrls,
             onImageChosen: (url) =>
                 setState(() => _photoUrl = url),
           ),
