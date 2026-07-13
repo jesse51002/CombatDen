@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
+import 'package:crm/shared/widgets/existing_member_pill.dart';
 import 'package:crm/shared/widgets/member_avatar.dart';
 
 /// The duplicate-review body shared by the add-member flow and the in-run
@@ -163,7 +164,7 @@ class _MatchCard extends StatelessWidget {
               ],
             ),
           ),
-          const _ExistingPill(),
+          const ExistingMemberPill(),
         ],
       ),
     );
@@ -172,32 +173,6 @@ class _MatchCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       child: card,
-    );
-  }
-}
-
-/// A soft accent pill marking the row as an already-existing member.
-class _ExistingPill extends StatelessWidget {
-  const _ExistingPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.spacingSmall,
-        vertical: DesignConstants.spacingTiny,
-      ),
-      decoration: BoxDecoration(
-        color: DesignConstants.primaryColor10,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-        border: Border.all(color: DesignConstants.primaryColor),
-      ),
-      child: Text(
-        'Existing member',
-        style: DesignConstants.pSmallBold.copyWith(
-          color: DesignConstants.primaryColor,
-        ),
-      ),
     );
   }
 }

@@ -62,13 +62,16 @@ class _MembersListControlsState
     super.dispose();
   }
 
-  /// Opens the add-member flow, then reloads the list so the new member
-  /// surfaces (mirrors the People screen's init/retry load).
+  /// Opens the add-member flow, then reloads the list so any new member
+  /// surfaces (mirrors the People screen's init/retry load) — unless the flow
+  /// already navigated to a member's detail page.
   Future<void> _onAddMember() async {
     final bloc = context.read<MembersListBloc>();
-    await AddMemberFlow.show(context);
+    final outcome = await AddMemberFlow.show(context);
     if (!mounted) return;
-    bloc.add(MembersListInitRequested(selectedGym.gymId ?? ''));
+    if (outcome.createdCount > 0 && !outcome.navigatedToMember) {
+      bloc.add(MembersListInitRequested(selectedGym.gymId ?? ''));
+    }
   }
 
   @override

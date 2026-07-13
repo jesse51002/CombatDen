@@ -7,8 +7,8 @@ import 'package:crm/core/navigation/app_routes.dart';
 /// ([SectionsBar]) and the mobile dropdown ([SectionsMobileMenu]) so both
 /// render the exact same items in the same order — change the nav once, here.
 ///
-/// [route] is `null` only for the primary "Add New Member" CTA (not wired yet);
-/// the chrome renders that as a no-op. Every other item navigates.
+/// [route] is `null` only for the primary "Add New Member" CTA, which opens
+/// the add-member flow instead of navigating. Every other item navigates.
 class NavSection {
   final IconData icon;
 
@@ -20,7 +20,8 @@ class NavSection {
   /// Falls back to [label] when the rail label is identical.
   final String? railLabel;
 
-  /// Target route, or `null` for a not-yet-wired no-op item.
+  /// Target route, or `null` for the primary CTA (opens the add-member flow
+  /// rather than navigating to a route).
   final String? route;
 
   /// The always-sapphire primary CTA ("Add New Member") — painted like the

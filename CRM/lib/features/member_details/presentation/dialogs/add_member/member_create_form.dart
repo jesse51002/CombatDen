@@ -7,7 +7,7 @@ import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 
 /// Reusable new-member form — mirrors `EditMemberDialog`'s fields, but email
-/// is REQUIRED and the photo is an optional curated-pool pick or upload.
+/// is REQUIRED and the photo is an optional unique upload (never a pool).
 ///
 /// It does NOT own submission: a host holds a `GlobalKey<MemberCreateFormState>`,
 /// calls [MemberCreateFormState.validate], then
@@ -49,6 +49,22 @@ class MemberCreateFormState extends State<MemberCreateForm> {
 
   /// Runs form validation and returns whether every field passed.
   bool validate() => _formKey.currentState?.validate() ?? false;
+
+  /// Resets every field back to empty — used by the add-member flow's "Add
+  /// another person" so the next person starts from a clean form. (A "back to
+  /// edit" round-trip deliberately does NOT call this, preserving values.)
+  void clear() {
+    _firstName.clear();
+    _lastName.clear();
+    _email.clear();
+    _phone.clear();
+    _address.clear();
+    _ecName.clear();
+    _ecPhone.clear();
+    _ecEmail.clear();
+    _formKey.currentState?.reset();
+    setState(() => _photoUrl = null);
+  }
 
   /// The trimmed value, or null when empty (an omitted optional field).
   String? _opt(TextEditingController c) {

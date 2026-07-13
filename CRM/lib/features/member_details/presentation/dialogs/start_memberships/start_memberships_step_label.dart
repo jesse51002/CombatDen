@@ -27,8 +27,9 @@ String startStepTitle(StartMembershipsStep step) {
 
 /// Total number of linear wizard steps for a run of [memberCount] members
 /// (each member contributes a plans + discounts pair). [hasWaiver] adds the
-/// conditional sign-waivers step once the gate is hit. Excludes the
-/// add-member step — see [addMemberFlowStepCount].
+/// conditional sign-waivers step once the gate is hit. Excludes the add-member
+/// build phases (the add-member flow drives those with its own phase-aware
+/// step-name line, not a numbered "Step N of M").
 int wizardStepCount({
   required int memberCount,
   required bool hasWaiver,
@@ -36,14 +37,6 @@ int wizardStepCount({
     // payer + members (2) + plans/discounts per member (2N) + review +
     // preview + payment + results (4), plus the conditional waiver step.
     6 + 2 * memberCount + (hasWaiver ? 1 : 0);
-
-/// Total steps for the whole add-member flow (the leading create step plus
-/// the wizard). Used for the "Step 1 of M" line on the create phase.
-int addMemberFlowStepCount({
-  required int memberCount,
-  required bool hasWaiver,
-}) =>
-    1 + wizardStepCount(memberCount: memberCount, hasWaiver: hasWaiver);
 
 /// The 1-based global position (n) and total (m) of a wizard [step].
 ///

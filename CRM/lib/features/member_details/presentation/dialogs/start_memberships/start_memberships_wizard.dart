@@ -64,11 +64,18 @@ class StartMembershipsWizard extends StatefulWidget {
   /// leave it false, so that context stays exactly three groups.
   final bool showAddMemberGroup;
 
+  /// Seeds which members start selected on the "who joins" step. The add-member
+  /// group flow passes the whole group's ids (payer included) so everyone the
+  /// payer just authorized is pre-checked. Null (detail-page launches) falls
+  /// back to selecting only the viewed member.
+  final Set<String>? initialSelectedMemberIds;
+
   const StartMembershipsWizard({
     super.key,
     required this.member,
     this.onViewMember,
     this.showAddMemberGroup = false,
+    this.initialSelectedMemberIds,
   });
 
   static Future<void> show({
@@ -76,6 +83,7 @@ class StartMembershipsWizard extends StatefulWidget {
     required MemberDetailResponse member,
     ValueChanged<String>? onViewMember,
     bool showAddMemberGroup = false,
+    Set<String>? initialSelectedMemberIds,
   }) {
     return showDialog<void>(
       context: context,
@@ -85,6 +93,7 @@ class StartMembershipsWizard extends StatefulWidget {
           member: member,
           onViewMember: onViewMember,
           showAddMemberGroup: showAddMemberGroup,
+          initialSelectedMemberIds: initialSelectedMemberIds,
         ),
       ),
     );
@@ -172,9 +181,15 @@ class _StartMembershipsWizardState
     // without this the "Already has" block and already-on-plan guard
     // silently have no data in the payer-launched flow.
     _loadFamilyDetails(viewed);
-    // Sensible default: the member whose page launched the
-    // wizard is getting the membership.
-    _selectedMemberIds.add(viewed.memberId);
+    // Sensible default: the member whose page launched the wizard is getting
+    // the membership. The add-member group flow overrides this with the whole
+    // group (payer + everyone the payer just authorized).
+    final initial = widget.initialSelectedMemberIds;
+    if (initial != null && initial.isNotEmpty) {
+      _selectedMemberIds.addAll(initial);
+    } else {
+      _selectedMemberIds.add(viewed.memberId);
+    }
   }
 
   Future<void> _loadPayerDetail({
