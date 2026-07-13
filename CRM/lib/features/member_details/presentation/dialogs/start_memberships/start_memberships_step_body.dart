@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
+import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
@@ -42,6 +43,11 @@ class StartMembershipsStepBody extends StatelessWidget {
   final MemberRepository repository;
   final StartMembershipParticipant payer;
   final MemberDetailResponse? payerDetail;
+
+  /// The launch member's authorized payers — the payer-step candidate list,
+  /// held by the wizard so a just-added payer surfaces after the authorize
+  /// chain refreshes it.
+  final List<LinkedAccount> payerCandidates;
   final StartMembershipParticipant? currentMember;
   final Set<String> selectedMemberIds;
   final List<MembershipDraft> currentDrafts;
@@ -93,6 +99,11 @@ class StartMembershipsStepBody extends StatelessWidget {
 
   /// Opens the in-run "New member" dialog from the members step.
   final VoidCallback onNewMember;
+
+  /// Payer-step adders (inverse direction): authorize a brand-new member, or an
+  /// existing one, as a PAYER for the launch member.
+  final VoidCallback onNewPayer;
+  final VoidCallback onLinkPayer;
   final ValueChanged<MembershipPlanResponse> onPlanToggle;
 
   /// Applies [change] to the current member's draft for
@@ -126,6 +137,7 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.repository,
     required this.payer,
     required this.payerDetail,
+    required this.payerCandidates,
     required this.currentMember,
     required this.selectedMemberIds,
     required this.currentDrafts,
@@ -155,6 +167,8 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.onMemberToggle,
     required this.onLinkFirst,
     required this.onNewMember,
+    required this.onNewPayer,
+    required this.onLinkPayer,
     required this.onPlanToggle,
     required this.onDraftChanged,
     required this.onPreviewLoaded,
@@ -224,10 +238,13 @@ class StartMembershipsStepBody extends StatelessWidget {
       case StartMembershipsStep.payer:
         return StartPayerStep(
           member: launchMember,
+          candidates: payerCandidates,
           payerMemberId: payer.memberId,
           payerName: payer.name,
           selectedMemberId: payer.memberId,
           onSelected: onPayerSelected,
+          onNewPayer: onNewPayer,
+          onLinkPayer: onLinkPayer,
         );
       case StartMembershipsStep.members:
         return StartMembersStep(

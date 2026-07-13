@@ -16,6 +16,7 @@ import 'package:crm/features/member_details/data/repositories/member_repository.
 import 'package:crm/features/member_details/presentation/dialogs/add_member/duplicate_footer.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/duplicate_member_panel.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/member_create_form.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/payer_waiver_sign_body.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
@@ -24,9 +25,9 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 enum _Phase { create, duplicate, sign, success, error }
 
 /// What [StartNewMemberDialog] returns: the chosen member plus whether an
-/// authorization was just committed. [committedLink] true means the payer
-/// detail must be reloaded (a new payee appeared); false is a direct select
-/// of an already-authorized member (just add them to the run).
+/// authorization was just committed. [committedLink] true means the wizard
+/// must reload (a new relationship appeared); false is a direct select of an
+/// already-related member (just add them to the run/selection).
 class StartNewMemberResult {
   final String memberId;
   final bool committedLink;
@@ -38,37 +39,55 @@ class StartNewMemberResult {
 }
 
 /// In-run "New member" dialog: create a brand-new member (with duplicate
-/// handling), then authorize the wizard's payer to pay for them (the payee is
-/// always the just-created member — the roster-pick step is skipped). On the
-/// duplicate branch, "use existing" either selects an already-payable member
-/// directly or runs the same authorize chain for them.
+/// handling), then authorize the new payer↔payee relationship with the fixed
+/// [anchorMemberId]. [direction] decides which side the created/picked person
+/// is:
+///
+/// - [AuthorizeDirection.addPayee] (members step): the anchor is the payer; the
+///   new person is a payee the anchor pays for.
+/// - [AuthorizeDirection.addPayer] (payer step): the anchor is the payee; the
+///   new person is an authorized payer for the anchor.
+///
+/// The PAYER signs the payee's authorized-payer waiver. On the duplicate
+/// branch, "use existing" either selects an already-related member directly or
+/// runs the same authorize chain for them.
 ///
 /// Composes the SAME shared pieces as [StartLinkMemberDialog]
 /// ([PayerWaiverSignBody] + `LinkParentRequested` + the settle detection);
 /// no waiver-render logic is duplicated. Returns the new/selected member id.
 class StartNewMemberDialog extends StatefulWidget {
-  final String payerMemberId;
-  final String payerName;
+  final AuthorizeDirection direction;
+
+  /// The FIXED party of the authorization (the wizard's payer for
+  /// [AuthorizeDirection.addPayee], the launch member for
+  /// [AuthorizeDirection.addPayer]).
+  final String anchorMemberId;
+  final String anchorName;
   final String gymId;
 
-  /// Member ids the payer can already pay for (their authorized payees). Used
-  /// on the duplicate branch to decide select-directly vs. authorize-first.
-  final Set<String> authorizedIds;
+  /// Member ids already in the anchor's relationship on the CREATED side —
+  /// used on the duplicate "use existing" branch to decide select-directly vs.
+  /// authorize-first (includes the anchor id itself). For
+  /// [AuthorizeDirection.addPayee] these are the payer's existing payees; for
+  /// [AuthorizeDirection.addPayer] the payee's existing payers.
+  final Set<String> relatedIds;
 
   const StartNewMemberDialog({
     super.key,
-    required this.payerMemberId,
-    required this.payerName,
+    required this.direction,
+    required this.anchorMemberId,
+    required this.anchorName,
     required this.gymId,
-    required this.authorizedIds,
+    required this.relatedIds,
   });
 
   static Future<StartNewMemberResult?> show({
     required BuildContext context,
-    required String payerMemberId,
-    required String payerName,
+    required AuthorizeDirection direction,
+    required String anchorMemberId,
+    required String anchorName,
     required String gymId,
-    required Set<String> authorizedIds,
+    required Set<String> relatedIds,
   }) {
     final detailBloc = context.read<MemberDetailBloc>();
     return showDialog<StartNewMemberResult>(
@@ -83,10 +102,11 @@ class StartNewMemberDialog extends StatefulWidget {
           ),
         ],
         child: StartNewMemberDialog(
-          payerMemberId: payerMemberId,
-          payerName: payerName,
+          direction: direction,
+          anchorMemberId: anchorMemberId,
+          anchorName: anchorName,
           gymId: gymId,
-          authorizedIds: authorizedIds,
+          relatedIds: relatedIds,
         ),
       ),
     );
@@ -107,9 +127,10 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   List<DuplicateMemberMatch> _matches = const [];
   String? _selectedMatchId;
 
-  // Sign phase.
-  String? _payeeId;
-  String _payeeName = '';
+  // Sign phase — the created/picked "other" person (their side of the
+  // relationship is resolved from [widget.direction]).
+  String? _otherId;
+  String _otherName = '';
   String _waiverBody = '';
   String? _waiverVersionId;
   bool _fetchingWaiver = false;
@@ -120,6 +141,20 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   int _tokenBefore = 0;
 
   String? _errorMessage;
+
+  /// The resolved (payer, payee) pair for the created/picked person — null
+  /// until [_enterSign] has set the "other" member.
+  AuthorizeParties? get _parties {
+    final id = _otherId;
+    if (id == null) return null;
+    return resolveAuthorizeParties(
+      direction: widget.direction,
+      anchorId: widget.anchorMemberId,
+      anchorName: widget.anchorName,
+      otherId: id,
+      otherName: _otherName,
+    );
+  }
 
   // ----- Create-bloc reactions -----
 
@@ -133,7 +168,7 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
           _phase = _Phase.duplicate;
         });
       case MemberCreated():
-        // A freshly created member — always authorize the payer for them.
+        // A freshly created member — always authorize the relationship.
         _enterSign(state.memberId, _pendingName);
       case MemberCreateFailure():
         setState(() {
@@ -164,8 +199,12 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   void _onUseExisting() {
     final matchId = _selectedMatchId;
     if (matchId == null) return;
-    if (widget.authorizedIds.contains(matchId) ||
-        matchId == widget.payerMemberId) {
+    if (isAlreadyRelated(
+      anchorId: widget.anchorMemberId,
+      relatedIds: widget.relatedIds,
+      memberId: matchId,
+    )) {
+      // Already on the anchor's relationship — select directly, no new link.
       Navigator.of(context).pop(
         StartNewMemberResult(matchId, committedLink: false),
       );
@@ -178,10 +217,17 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
 
   // ----- Sign phase -----
 
-  void _enterSign(String payeeId, String payeeName) {
+  void _enterSign(String otherId, String otherName) {
+    final parties = resolveAuthorizeParties(
+      direction: widget.direction,
+      anchorId: widget.anchorMemberId,
+      anchorName: widget.anchorName,
+      otherId: otherId,
+      otherName: otherName,
+    );
     setState(() {
-      _payeeId = payeeId;
-      _payeeName = payeeName;
+      _otherId = otherId;
+      _otherName = otherName;
       _phase = _Phase.sign;
       _fetchingWaiver = true;
       _waiverError = null;
@@ -189,7 +235,7 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
       _signerName = '';
       _consent = false;
     });
-    _fetchWaiver(payeeId);
+    _fetchWaiver(parties.payeeId);
   }
 
   Future<void> _fetchWaiver(String payeeId) async {
@@ -217,16 +263,16 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
       !_submitting;
 
   void _confirmSign() {
-    final payeeId = _payeeId;
+    final parties = _parties;
     final versionId = _waiverVersionId;
-    if (payeeId == null || versionId == null || !_canSign) return;
+    if (parties == null || versionId == null || !_canSign) return;
     final bloc = context.read<MemberDetailBloc>();
     final s = bloc.state;
     if (s is MemberDetailLoaded) _tokenBefore = s.refreshToken;
     setState(() => _submitting = true);
     bloc.add(LinkParentRequested(
-      memberId: payeeId,
-      payerMemberId: widget.payerMemberId,
+      memberId: parties.payeeId,
+      payerMemberId: parties.payerId,
       waiverVersionId: versionId,
       signerName: _signerName,
       consentAcknowledged: true,
@@ -236,15 +282,15 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   void _onDetailSettle(MemberDetailState state) {
     if (!_submitting || state is! MemberDetailLoaded) return;
     if (state.refreshToken > _tokenBefore && !state.isMutating) {
-      final payeeId = _payeeId;
+      final otherId = _otherId;
       setState(() {
         _submitting = false;
         _phase = _Phase.success;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && payeeId != null) {
+        if (mounted && otherId != null) {
           Navigator.of(context).pop(
-            StartNewMemberResult(payeeId, committedLink: true),
+            StartNewMemberResult(otherId, committedLink: true),
           );
         }
       });
@@ -277,6 +323,11 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
           final creating = createState is MemberCreateSubmitting;
           return AppDialog(
             title: _title,
+            // The wide surface, hugging its content height: the create form
+            // was designed at the entry flow's 760 content measure (three
+            // fields to a row), and the width lets the three-button duplicate
+            // footer fit — 480 cramped both.
+            maxWidth: DesignConstants.dialogMaxWidthWide,
             body: _body(),
             actions: _actions(context, creating),
           );
@@ -301,36 +352,46 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   }
 
   Widget _body() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // The create form stays mounted so entered values survive a
-        // "back to edit" round-trip from the duplicate step.
-        Offstage(
-          offstage: _phase != _Phase.create,
-          child: MemberCreateForm(key: _formKey),
+    final parties = _parties;
+    // Centered at the entry flow's content measure so the form reads
+    // identically to AddMemberChrome's create phase; the Center also pins
+    // the wide surface to a stable width across phases.
+    return Center(
+      child: SizedBox(
+        width: DesignConstants.dialogContentMaxWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // The create form stays mounted so entered values survive a
+            // "back to edit" round-trip from the duplicate step.
+            Offstage(
+              offstage: _phase != _Phase.create,
+              child: MemberCreateForm(key: _formKey),
+            ),
+            if (_phase == _Phase.duplicate)
+              DuplicateMemberPanel(
+                matches: _matches,
+                selectedMatchId: _selectedMatchId ?? '',
+                onSelect: (id) => setState(() => _selectedMatchId = id),
+              ),
+            if (_phase == _Phase.sign) _signBody(),
+            if (_phase == _Phase.success)
+              _Terminal(
+                icon: Symbols.check_circle_sharp,
+                color: DesignConstants.goodGreen,
+                message: '${parties?.payerName ?? 'The payer'} is now '
+                    'authorized to pay for '
+                    '${parties?.payeeName ?? 'this member'}.',
+              ),
+            if (_phase == _Phase.error)
+              _Terminal(
+                icon: Symbols.error_sharp,
+                color: DesignConstants.badRed,
+                message: _errorMessage ?? 'An unexpected error occurred.',
+              ),
+          ],
         ),
-        if (_phase == _Phase.duplicate)
-          DuplicateMemberPanel(
-            matches: _matches,
-            selectedMatchId: _selectedMatchId ?? '',
-            onSelect: (id) => setState(() => _selectedMatchId = id),
-          ),
-        if (_phase == _Phase.sign) _signBody(),
-        if (_phase == _Phase.success)
-          _Terminal(
-            icon: Symbols.check_circle_sharp,
-            color: DesignConstants.goodGreen,
-            message: '${widget.payerName} is now authorized to pay for '
-                '$_payeeName.',
-          ),
-        if (_phase == _Phase.error)
-          _Terminal(
-            icon: Symbols.error_sharp,
-            color: DesignConstants.badRed,
-            message: _errorMessage ?? 'An unexpected error occurred.',
-          ),
-      ],
+      ),
     );
   }
 
@@ -348,9 +409,10 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
         message: _waiverError!,
       );
     }
+    final parties = _parties;
     return PayerWaiverSignBody(
-      payerName: widget.payerName,
-      payeeName: _payeeName,
+      payerName: parties?.payerName ?? 'The payer',
+      payeeName: parties?.payeeName ?? 'this member',
       gymName: selectedGym.gymName ?? '',
       waiverBody: _waiverBody,
       enabled: !_submitting,

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/shared/widgets/muted_add_tile.dart';
 
 /// "Someone missing?" — unlinked members can't receive a
 /// membership in this run; staff link them first via the
-/// existing link flow, then return here.
+/// existing link flow, then return here. Composes the shared
+/// [MutedAddTile] muted-adder idiom.
 class StartLinkFirstTile extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -16,56 +16,11 @@ class StartLinkFirstTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return MutedAddTile(
+      title: 'Someone missing? Authorize them first',
+      subtitle: 'Members the payer isn’t authorized to pay for '
+          'can’t be enrolled here.',
       onTap: onTap,
-      borderRadius: BorderRadius.circular(
-        DesignConstants.radiusSmall,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(
-          DesignConstants.paddingSmall,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(
-            DesignConstants.radiusSmall,
-          ),
-          border: Border.all(
-            color: DesignConstants.divider,
-          ),
-        ),
-        child: Row(
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            Icon(
-              Symbols.person_add_sharp,
-              weight: DesignConstants.iconWeight,
-              size: DesignConstants.iconSizeMedium,
-              color: DesignConstants.text2nd,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                spacing: DesignConstants.spacingTiny,
-                children: [
-                  Text(
-                    'Someone missing? Authorize them first',
-                    style: DesignConstants.pSemibold,
-                  ),
-                  Text(
-                    'Members the payer isn’t authorized to '
-                    'pay for can’t be enrolled here.',
-                    style: DesignConstants.pSmall
-                        .copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

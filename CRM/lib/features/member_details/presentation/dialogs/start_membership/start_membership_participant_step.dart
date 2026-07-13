@@ -48,6 +48,11 @@ class StartMembershipParticipantStep extends StatelessWidget {
   final String Function(StartMembershipParticipant)?
       subtitleBuilder;
 
+  /// Extra widgets rendered below the participant tiles, in the same
+  /// medium-gap column — the caller's adder tiles (e.g. the payer step's
+  /// "New member" / "Link someone"). Empty for callers with no adders.
+  final List<Widget> trailing;
+
   const StartMembershipParticipantStep({
     super.key,
     required this.member,
@@ -59,6 +64,7 @@ class StartMembershipParticipantStep extends StatelessWidget {
     this.subtitle,
     this.payerMemberId,
     this.subtitleBuilder,
+    this.trailing = const [],
   });
 
   @override
@@ -104,16 +110,19 @@ class StartMembershipParticipantStep extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingMedium,
-          children: participants.map((p) {
-            final disabledReason = disabledMemberIds[p.memberId];
-            return _ParticipantTile(
-              participant: p,
-              selected: p.memberId == selectedMemberId,
-              subtitle: disabledReason ?? subtitleBuilder?.call(p),
-              disabled: disabledReason != null,
-              onTap: () => onSelected(p),
-            );
-          }).toList(),
+          children: [
+            ...participants.map((p) {
+              final disabledReason = disabledMemberIds[p.memberId];
+              return _ParticipantTile(
+                participant: p,
+                selected: p.memberId == selectedMemberId,
+                subtitle: disabledReason ?? subtitleBuilder?.call(p),
+                disabled: disabledReason != null,
+                onTap: () => onSelected(p),
+              );
+            }),
+            ...trailing,
+          ],
         ),
       ],
     );
