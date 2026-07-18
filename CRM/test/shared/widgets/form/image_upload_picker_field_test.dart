@@ -27,6 +27,8 @@ Finder _chip(String url) => find.byWidgetPredicate(
 Future<void> _pumpField(
   WidgetTester tester, {
   required ValueChanged<String> onImageChosen,
+  BoxFit previewFit = BoxFit.cover,
+  double aspectRatio = 16 / 9,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -35,6 +37,8 @@ Future<void> _pumpField(
           label: 'Member photo',
           category: 'member',
           poolImages: const [_urlA, _urlB],
+          previewFit: previewFit,
+          aspectRatio: aspectRatio,
           onImageChosen: onImageChosen,
         ),
       ),
@@ -83,6 +87,37 @@ void main() {
       expect(chosen, _urlB);
       expect(_selectedChips, findsOneWidget);
       expect(find.byIcon(Symbols.check_sharp), findsOneWidget);
+    });
+  });
+
+  testWidgets('a contain-fit field renders its pool chips contained',
+      (tester) async {
+    // Rank belt fields pass previewFit: contain — the transparent PNG chips
+    // must render BoxFit.contain (padded, no fill) rather than cover-cropped.
+    await withFakeNetworkImages(() async {
+      await _pumpField(
+        tester,
+        onImageChosen: (_) {},
+        previewFit: BoxFit.contain,
+        aspectRatio: 1,
+      );
+      await tester.pump();
+
+      expect(tester.widget<Image>(_chip(_urlA)).fit, BoxFit.contain);
+      expect(tester.widget<Image>(_chip(_urlB)).fit, BoxFit.contain);
+    });
+  });
+
+  testWidgets('a cover-fit field keeps its pool chips edge-to-edge',
+      (tester) async {
+    // The default (photo) path is unchanged: chips stay BoxFit.cover so the
+    // founder's image-prominent photo cards keep their look.
+    await withFakeNetworkImages(() async {
+      await _pumpField(tester, onImageChosen: (_) {});
+      await tester.pump();
+
+      expect(tester.widget<Image>(_chip(_urlA)).fit, BoxFit.cover);
+      expect(tester.widget<Image>(_chip(_urlB)).fit, BoxFit.cover);
     });
   });
 

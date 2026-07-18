@@ -9,16 +9,18 @@ import 'package:crm/core/constants/design_constants.dart';
 /// everywhere.
 ///
 /// Belt colour was removed from the model: a belt is an IMAGE now
-/// ([imageUrl], a themed belt/crest PNG the backend generates). This
-/// widget renders that image on a rounded tile and degrades gracefully
-/// when it is missing — a gym mid-migration with no art yet still shows
-/// an intentional, neutral belt glyph rather than a broken box or a bare
-/// gap. There is deliberately **no** colour swatch fallback.
+/// ([imageUrl], a transparent belt/crest PNG served from the CDN). This
+/// widget renders that image and degrades gracefully when it is missing —
+/// a gym mid-migration with no art yet still shows an intentional, neutral
+/// belt glyph rather than a broken box or a bare gap. There is deliberately
+/// **no** colour swatch fallback.
 ///
-/// The tile is a square of [size] with rounded corners and no border —
-/// the belt art sits flush, not boxed in an outlined container. Loading
-/// and error both resolve to the same calm neutral placeholder so the
-/// layout never jumps between states.
+/// The art renders as JUST the image: [BoxFit.contain] so the whole belt
+/// stays visible un-cropped, a size-proportional inner padding so it never
+/// touches the tile edge, and **no background fill** behind the transparent
+/// PNG. The tile is a square of [size] with rounded corners (a clip, not a
+/// painted surface) and no border. Loading and error both resolve to the
+/// same calm neutral placeholder so the layout never jumps between states.
 class RankBeltImage extends StatelessWidget {
   /// The belt art URL (already leaf-resolved by the caller — a per-sub
   /// override or the main rank's image). Null / empty renders the
@@ -41,6 +43,19 @@ class RankBeltImage extends StatelessWidget {
 
   bool get _hasImage => imageUrl != null && imageUrl!.isNotEmpty;
 
+  // Inner breathing room so the contained belt never butts against the tile
+  // edge. Scales across the belt T-shirt sizes, snapped to spacing tokens:
+  // big belts get a little more air, tiny sub-tiles stay tight.
+  double get _padding {
+    if (size >= DesignConstants.rankBeltLarge) {
+      return DesignConstants.spacingMedium;
+    }
+    if (size >= DesignConstants.rankBeltMedium) {
+      return DesignConstants.spacingSmall;
+    }
+    return DesignConstants.spacingTiny;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -48,16 +63,18 @@ class RankBeltImage extends StatelessWidget {
       height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: DesignConstants.backgroundAlt,
         borderRadius: BorderRadius.circular(radius),
       ),
       child: _hasImage
-          ? Image.network(
-              imageUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _Placeholder(size: size),
-              loadingBuilder: (context, child, progress) =>
-                  progress == null ? child : _Placeholder(size: size),
+          ? Padding(
+              padding: EdgeInsets.all(_padding),
+              child: Image.network(
+                imageUrl!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => _Placeholder(size: size),
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : _Placeholder(size: size),
+              ),
             )
           : _Placeholder(size: size),
     );

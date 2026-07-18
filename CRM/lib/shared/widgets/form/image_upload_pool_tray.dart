@@ -17,6 +17,13 @@ import 'package:crm/shared/widgets/horizontal_scroller.dart';
 class ImageUploadPoolTray extends StatefulWidget {
   final List<String> poolImages;
   final double aspectRatio;
+
+  /// How each chip's image fits its box, mirrored from the picker field's
+  /// `previewFit`. [BoxFit.contain] marks transparent belt art: the chip
+  /// then renders JUST the image — inner-padded off its border and with no
+  /// card fill behind it. The default [BoxFit.cover] keeps photo chips
+  /// filled and edge to edge.
+  final BoxFit chipFit;
   final String? selectedUrl;
   final bool disabled;
   final ValueChanged<String> onPick;
@@ -30,6 +37,7 @@ class ImageUploadPoolTray extends StatefulWidget {
     required this.disabled,
     required this.onPick,
     required this.onUpload,
+    this.chipFit = BoxFit.cover,
   });
 
   @override
@@ -62,6 +70,7 @@ class _ImageUploadPoolTrayState extends State<ImageUploadPoolTray> {
               key: ValueKey<String>(url),
               imageUrl: url,
               aspectRatio: widget.aspectRatio,
+              fit: widget.chipFit,
               selected: url == widget.selectedUrl,
               onTap: widget.disabled ? null : () => widget.onPick(url),
               onError: () => _markFailed(url),
@@ -76,10 +85,14 @@ class _ImageUploadPoolTrayState extends State<ImageUploadPoolTray> {
 }
 
 /// A single tappable pool image. Selected: a sapphire ring + a check badge;
-/// unselected: the same neutral hairline the preview box uses.
+/// unselected: the same neutral hairline the preview box uses. Transparent
+/// belt art ([fit] == [BoxFit.contain]) renders JUST the image — inner-padded
+/// off the ring and with no card fill behind it; photo chips ([BoxFit.cover])
+/// stay filled and edge to edge.
 class _PoolChip extends StatelessWidget {
   final String imageUrl;
   final double aspectRatio;
+  final BoxFit fit;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -92,6 +105,7 @@ class _PoolChip extends StatelessWidget {
     super.key,
     required this.imageUrl,
     required this.aspectRatio,
+    required this.fit,
     required this.selected,
     required this.onTap,
     required this.onError,
@@ -99,6 +113,21 @@ class _PoolChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final contained = fit == BoxFit.contain;
+    Widget image = Image.network(
+      imageUrl,
+      fit: fit,
+      errorBuilder: (_, _, _) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => onError());
+        return ColoredBox(color: DesignConstants.card);
+      },
+    );
+    if (contained) {
+      image = Padding(
+        padding: const EdgeInsets.all(DesignConstants.spacingSmall),
+        child: image,
+      );
+    }
     return Semantics(
       button: true,
       selected: selected,
@@ -115,7 +144,7 @@ class _PoolChip extends StatelessWidget {
                 Container(
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: DesignConstants.card,
+                    color: contained ? null : DesignConstants.card,
                     borderRadius:
                         BorderRadius.circular(DesignConstants.radiusSmall),
                     border: Border.all(
@@ -125,15 +154,7 @@ class _PoolChip extends StatelessWidget {
                       width: DesignConstants.buttonBorder,
                     ),
                   ),
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) {
-                      WidgetsBinding.instance
-                          .addPostFrameCallback((_) => onError());
-                      return ColoredBox(color: DesignConstants.card);
-                    },
-                  ),
+                  child: image,
                 ),
                 if (selected) const _CheckBadge(),
               ],

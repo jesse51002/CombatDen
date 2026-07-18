@@ -241,6 +241,11 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
   @override
   Widget build(BuildContext context) {
     final hasError = widget.errorText != null;
+    // Contain-fit means transparent belt art (the rank fields): the preview
+    // shows JUST the image — no card fill painted behind it and inner padding
+    // off the border. Cover-fit photo previews keep the filled, edge-to-edge
+    // look. This one flag flows down to the pool tray's chips too.
+    final contained = widget.previewFit == BoxFit.contain;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
@@ -265,7 +270,7 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                     child: Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: DesignConstants.card,
+                        color: contained ? null : DesignConstants.card,
                         borderRadius: BorderRadius.circular(
                           DesignConstants.radiusBig,
                         ),
@@ -283,11 +288,13 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                                   imageUrl: _effectiveUrl,
                                   asset: widget.imageAsset,
                                   fit: widget.previewFit,
+                                  padded: contained,
                                 )
                               : _showDefault
                                   ? _Preview(
                                       imageUrl: widget.defaultImageUrl,
                                       fit: widget.previewFit,
+                                      padded: contained,
                                     )
                                   : const _UploadPrompt(),
                     ),
@@ -297,6 +304,7 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                   ImageUploadPoolTray(
                     poolImages: widget.poolImages,
                     aspectRatio: widget.aspectRatio,
+                    chipFit: widget.previewFit,
                     selectedUrl: _selectedPoolUrl,
                     disabled: _isUploading,
                     onPick: _onPoolPick,
@@ -380,7 +388,17 @@ class _Preview extends StatelessWidget {
   final String? asset;
   final BoxFit fit;
 
-  const _Preview({this.imageUrl, this.asset, this.fit = BoxFit.cover});
+  /// Inset the image off the box border. Set for contain-fit belt art so the
+  /// transparent PNG breathes inside the outlined preview; left off for
+  /// cover-fit photos, which fill the box edge to edge.
+  final bool padded;
+
+  const _Preview({
+    this.imageUrl,
+    this.asset,
+    this.fit = BoxFit.cover,
+    this.padded = false,
+  });
 
   Widget _image() {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
@@ -402,10 +420,16 @@ class _Preview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget image = padded
+        ? Padding(
+            padding: const EdgeInsets.all(DesignConstants.spacingLarge),
+            child: _image(),
+          )
+        : _image();
     return Stack(
       fit: StackFit.expand,
       children: [
-        _image(),
+        image,
         Positioned(
           right: DesignConstants.spacingMedium,
           bottom: DesignConstants.spacingMedium,
