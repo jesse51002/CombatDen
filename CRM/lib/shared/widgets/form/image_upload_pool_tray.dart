@@ -9,7 +9,12 @@ import 'package:crm/shared/widgets/horizontal_scroller.dart';
 /// its `poolImages` list is non-empty. Composed by the picker; picking a chip
 /// is synchronous (no upload) and fires [onPick], while the trailing tile
 /// opens the same file picker as the main preview via [onUpload].
-class ImageUploadPoolTray extends StatelessWidget {
+///
+/// A chip whose image fails to load (the preset CDN asset isn't uploaded yet,
+/// or any future CDN failure) collapses out of the strip rather than rendering
+/// as a dead gray tile — see [_ImageUploadPoolTrayState._failed]. The upload
+/// tile always stays; if every pool image fails, only it remains.
+class ImageUploadPoolTray extends StatefulWidget {
   final List<String> poolImages;
   final double aspectRatio;
   final String? selectedUrl;
@@ -28,20 +33,42 @@ class ImageUploadPoolTray extends StatelessWidget {
   });
 
   @override
+  State<ImageUploadPoolTray> createState() => _ImageUploadPoolTrayState();
+}
+
+class _ImageUploadPoolTrayState extends State<ImageUploadPoolTray> {
+  // URLs whose Image.network failed to load. A failed URL is filtered out of
+  // the rendered strip so a broken chip never lingers as a dead gray tile.
+  // The chip reports its failure from an errorBuilder (which fires during
+  // build) via a post-frame callback; this set is the "report once" guard —
+  // the first report adds the URL and rebuilds, dropping the chip, so the
+  // errorBuilder stops firing for it. A failed pool URL is dropped even when
+  // it is the caller's current selection; the caller keeps its stored value.
+  final Set<String> _failed = <String>{};
+
+  void _markFailed(String url) {
+    if (!mounted || _failed.contains(url)) return;
+    setState(() => _failed.add(url));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return HorizontalScroller(
       spacing: DesignConstants.spacingMedium,
       children: [
-        for (final url in poolImages)
-          _PoolChip(
-            imageUrl: url,
-            aspectRatio: aspectRatio,
-            selected: url == selectedUrl,
-            onTap: disabled ? null : () => onPick(url),
-          ),
+        for (final url in widget.poolImages)
+          if (!_failed.contains(url))
+            _PoolChip(
+              key: ValueKey<String>(url),
+              imageUrl: url,
+              aspectRatio: widget.aspectRatio,
+              selected: url == widget.selectedUrl,
+              onTap: widget.disabled ? null : () => widget.onPick(url),
+              onError: () => _markFailed(url),
+            ),
         _UploadTile(
-          aspectRatio: aspectRatio,
-          onTap: disabled ? null : onUpload,
+          aspectRatio: widget.aspectRatio,
+          onTap: widget.disabled ? null : widget.onUpload,
         ),
       ],
     );
@@ -56,11 +83,18 @@ class _PoolChip extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
 
+  /// Fired when [imageUrl] fails to load so the tray can drop this chip. The
+  /// errorBuilder runs during build, so the report is deferred to a post-frame
+  /// callback — never a direct `setState`.
+  final VoidCallback onError;
+
   const _PoolChip({
+    super.key,
     required this.imageUrl,
     required this.aspectRatio,
     required this.selected,
     required this.onTap,
+    required this.onError,
   });
 
   @override
@@ -94,8 +128,11 @@ class _PoolChip extends StatelessWidget {
                   child: Image.network(
                     imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) =>
-                        ColoredBox(color: DesignConstants.card),
+                    errorBuilder: (_, _, _) {
+                      WidgetsBinding.instance
+                          .addPostFrameCallback((_) => onError());
+                      return ColoredBox(color: DesignConstants.card);
+                    },
                   ),
                 ),
                 if (selected) const _CheckBadge(),
