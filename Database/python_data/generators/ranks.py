@@ -72,8 +72,10 @@ def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
 _FLAT_NAMES = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"]
 _FLAT_THRESHOLDS = [20, 30, 50, 80, 0]
 
-# Belt-color progression for the flat tiers, light -> dark like a real ladder.
-_FLAT_BELT_COLORS = ["white", "green", "blue", "red", "black"]
+# Belt-color progression for the flat tiers: a warm, vivid heat ladder
+# (white -> yellow -> orange -> red -> black) drawing on the wider belt
+# palette, deliberately distinct from the BJJ kinds' cool progression.
+_FLAT_BELT_COLORS = ["white", "yellow", "orange", "red", "black"]
 
 
 def _flat_belt_image(idx: int) -> str:

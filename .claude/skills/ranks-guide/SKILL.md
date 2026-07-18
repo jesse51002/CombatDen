@@ -212,8 +212,10 @@ sets the gym's `sub_rank_type` to the preset's implied style (every kind implies
 - **`flat`** — Beginner→Elite tiers, `sub_rank_count = 0`,
   `implied_sub_rank_type = none`.
 
-The BJJ presets seed alternating placeholder belt images
-(`cdn.combatden.net/ranks/presets/{white,blue}.png` — real art uploaded later).
+Every preset row carries real belt art from the curated 11-color set at
+`cdn.combatden.net/rank/presets/{color}.png`: the BJJ kinds map each rank to
+its actual adult belt (white/blue/purple/brown/black) and the flat tiers use a
+warm heat ladder (white/yellow/orange/red/black).
 The preset *data* is authored in the seed generators (`generators/ranks.py`), but
 rank presets are a **first-class ranks feature** (a real CRM picker screen backed
 by `GET /ranks/presets[/grouped]` + `POST /ranks/from-preset`) — NOT part of the
