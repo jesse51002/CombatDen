@@ -6,7 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 /// A tappable "muted" adder tile: a plain divider-bordered row with a leading
 /// glyph and a title + subtitle. The quiet counterpart to [DashedAddTile] (the
 /// accent adder) — the shared idiom behind the members-step "authorize first"
-/// affordance and the payer-step "Link someone" adder. One muted-tile layout,
+/// affordance and the payer-step "Add an existing member" adder. One muted-tile layout,
 /// not several.
 class MutedAddTile extends StatelessWidget {
   final String title;

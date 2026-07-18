@@ -62,18 +62,18 @@ void main() {
       (t) async {
     await t.pumpWidget(wrap(build()));
 
-    // Accent "New member" adder + muted "Link someone" adder, launch member's
+    // Accent "New member" adder + muted "Add an existing member" adder, launch member's
     // first name woven into both subtitles.
     expect(find.byType(DashedAddTile), findsOneWidget);
     expect(find.byType(MutedAddTile), findsOneWidget);
     expect(find.text('New member'), findsOneWidget);
-    expect(find.text('Link someone'), findsOneWidget);
+    expect(find.text('Add an existing member'), findsOneWidget);
     expect(
       find.text('Create someone new who pays for Lee.'),
       findsOneWidget,
     );
     expect(
-      find.text('Choose an existing member to pay for Lee.'),
+      find.text('Choose someone who’s already a member to pay for Lee.'),
       findsOneWidget,
     );
   });
@@ -86,11 +86,11 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('tapping "Link someone" fires onLinkPayer', (t) async {
+  testWidgets('tapping "Add an existing member" fires onLinkPayer', (t) async {
     var tapped = false;
     await t.pumpWidget(wrap(build(onLinkPayer: () => tapped = true)));
 
-    await t.tap(find.text('Link someone'));
+    await t.tap(find.text('Add an existing member'));
     expect(tapped, isTrue);
   });
 }

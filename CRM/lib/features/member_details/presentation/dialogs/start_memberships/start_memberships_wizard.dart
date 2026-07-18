@@ -690,7 +690,7 @@ class _StartMembershipsWizardState
     }
   }
 
-  /// "Link someone" adder on the PAYER step (inverse of [_onLinkFirst]): pick a
+  /// "Add an existing member" adder on the PAYER step (inverse of [_onLinkFirst]): pick a
   /// roster member and authorize them as a payer for the launch member, then
   /// refresh the candidates and auto-select the added payer.
   Future<void> _onLinkPayer() async {

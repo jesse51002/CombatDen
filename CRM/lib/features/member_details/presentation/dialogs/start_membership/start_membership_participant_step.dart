@@ -50,7 +50,7 @@ class StartMembershipParticipantStep extends StatelessWidget {
 
   /// Extra widgets rendered below the participant tiles, in the same
   /// medium-gap column — the caller's adder tiles (e.g. the payer step's
-  /// "New member" / "Link someone"). Empty for callers with no adders.
+  /// "New member" / "Add an existing member"). Empty for callers with no adders.
   final List<Widget> trailing;
 
   const StartMembershipParticipantStep({

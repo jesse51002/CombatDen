@@ -42,7 +42,7 @@ class StartPayerStep extends StatelessWidget {
   /// them as a payer for the launch member.
   final VoidCallback onNewPayer;
 
-  /// Opens the "Link someone" dialog: pick an existing member to authorize as
+  /// Opens the "Add an existing member" dialog: pick an existing member to authorize as
   /// a payer for the launch member.
   final VoidCallback onLinkPayer;
 
@@ -87,9 +87,9 @@ class StartPayerStep extends StatelessWidget {
           onTap: onNewPayer,
         ),
         MutedAddTile(
-          title: 'Link someone',
-          subtitle: 'Choose an existing member to pay for '
-              '$launchFirstName.',
+          title: 'Add an existing member',
+          subtitle: 'Choose someone who’s already a member to '
+              'pay for $launchFirstName.',
           onTap: onLinkPayer,
         ),
       ],
