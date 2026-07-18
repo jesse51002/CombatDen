@@ -8,6 +8,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/constants/waiver_parameters.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/data/models/waiver_create_request.dart';
@@ -196,7 +197,7 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
       );
       if (!leave) return;
     }
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) popOrGoTo(context, AppRoutes.membershipsWaivers);
   }
 
   Future<void> _save() async {
@@ -300,7 +301,9 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     try {
       await widget.repository.deleteWaiver(_waiver!.waiverId, widget.gymId);
       _dirty = false;
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        popOrGoTo(context, AppRoutes.membershipsWaivers, result: true);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);

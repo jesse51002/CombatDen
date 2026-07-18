@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
@@ -242,7 +243,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           _isEdit ? 'Membership saved.' : 'Membership created.',
           isError: false,
         );
-        Navigator.of(context).pop(true);
+        popOrGoTo(context, AppRoutes.memberships, result: true);
       }
     } catch (e) {
       if (mounted) {
@@ -264,14 +265,16 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
       confirmColor: DesignConstants.badRed,
       cancelLabel: 'Keep editing',
     );
-    if (leave && mounted) Navigator.of(context).pop();
+    if (leave && mounted) popOrGoTo(context, AppRoutes.memberships);
   }
 
   Future<void> _delete() async {
     setState(() => _saving = true);
     try {
       await widget.repository.deletePlan(widget.plan!.planId, widget.gymId);
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        popOrGoTo(context, AppRoutes.memberships, result: true);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);

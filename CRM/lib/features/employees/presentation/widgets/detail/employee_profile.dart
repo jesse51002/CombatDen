@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/features/employees/data/mock_employees.dart';
 import 'package:crm/features/employees/presentation/widgets/detail/employee_about_section.dart';
 import 'package:crm/features/employees/presentation/widgets/detail/employee_classes_section.dart';
@@ -27,7 +28,7 @@ class EmployeeProfile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        BackLink(onTap: () => _onBack(context)),
+        BackLink(onTap: () => popOrGoTo(context, AppRoutes.employees)),
         EmployeeProfileHeader(employee: employee),
         const Hairline(),
         SubtitleSection(
@@ -55,13 +56,5 @@ class EmployeeProfile extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  void _onBack(BuildContext context) {
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.employees);
-    }
   }
 }

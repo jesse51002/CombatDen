@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -168,7 +169,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
         ));
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      popOrGoTo(context, AppRoutes.membershipsRanks, result: true);
     } catch (e, st) {
       log('Failed to save rank', error: e, stackTrace: st);
       if (!mounted) return;
@@ -211,7 +212,8 @@ class _EditRankScreenState extends State<EditRankScreen> {
                     AppOutlineButton(
                       text: 'Back',
                       borderRadius: DesignConstants.radiusSmall,
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () =>
+                          popOrGoTo(context, AppRoutes.membershipsRanks),
                     ),
                   ],
                 ),
@@ -238,7 +240,8 @@ class _EditRankScreenState extends State<EditRankScreen> {
               spacing: DesignConstants.spacingBig,
               children: [
                     _BackButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () =>
+                          popOrGoTo(context, AppRoutes.membershipsRanks),
                     ),
                     Text(
                       _isEdit ? 'Edit rank' : 'New rank',
@@ -333,7 +336,10 @@ class _EditRankScreenState extends State<EditRankScreen> {
                             AppOutlineButton(
                               text: 'Cancel',
                               borderRadius: DesignConstants.radiusSmall,
-                              onPressed: () => Navigator.of(context).pop(),
+                              onPressed: () => popOrGoTo(
+                                context,
+                                AppRoutes.membershipsRanks,
+                              ),
                             ),
                             AppPrimaryButton(
                               text: _isEdit ? 'Save' : 'Create',
