@@ -26,13 +26,22 @@ import 'package:crm/shared/widgets/hairline.dart';
 
 /// Create or edit a main rank — a full-screen, repository-direct form
 /// (mirrors the plan / waiver editors). Name, belt image,
-/// classes-to-next-belt, sub-position count, and a per-sub belt image
-/// that defaults to the main belt.
+/// classes-to-next-belt, sub-position count, and — behind a
+/// "Custom sub-rank images" switch — a per-sub belt image.
 ///
-/// Per-sub overrides are **write-only**: shrinking the count never
-/// prunes the map, so a dormant sub image survives a count change and
+/// The switch gates both the override pickers and the save payload: OFF
+/// sends an empty overrides map (every sub-position falls back to the
+/// main belt via the backend COALESCE), ON sends the entered overrides.
+/// It defaults ON in edit mode when the rank already has overrides, OFF
+/// otherwise. Entered values live in the overrides map independent of
+/// the switch, so toggling OFF then ON restores them — only the payload
+/// respects the switch.
+///
+/// Within the map, overrides are **write-only**: shrinking the count
+/// never prunes it, so a dormant sub image survives a count change and
 /// revives if the count grows back. Uploads use the `rank` image
-/// category (S3 `rank/` prefix).
+/// category (S3 `rank/` prefix); each override field also offers the
+/// curated belt pool.
 class EditRankScreen extends StatefulWidget {
   /// The rank being edited, or null to create a new one.
   final MainRank? rank;
@@ -68,6 +77,16 @@ class _EditRankScreenState extends State<EditRankScreen> {
   /// in edit mode; never has a key removed (persist-only).
   final Map<String, String> _overrides = {};
 
+  /// Whether per-sub belt images are customized — the "Custom sub-rank
+  /// images" switch. Gates the override pickers AND the save payload:
+  /// OFF sends an empty overrides map (the effective belt image falls
+  /// back to the main belt via the backend COALESCE), ON sends
+  /// [_overrides]. Auto-ON in edit mode when the rank already has
+  /// overrides, OFF otherwise (always OFF for create). Kept independent
+  /// of [_overrides] so toggling OFF then ON restores the entered values
+  /// — only the SAVE payload respects the switch.
+  bool _customSubImages = false;
+
   bool _saving = false;
   String? _error;
 
@@ -83,6 +102,9 @@ class _EditRankScreenState extends State<EditRankScreen> {
       _mainImageUrl = r.imageUrl;
       _subRankCount = r.subRankCount;
       _overrides.addAll(r.subRankImageOverrides);
+      // Auto-enable the custom-images section when the rank already has
+      // per-sub overrides; a rank with none opens with the switch off.
+      _customSubImages = _overrides.isNotEmpty;
     }
     _ladderFuture = _repository.listRanks(_gymId);
   }
@@ -116,6 +138,13 @@ class _EditRankScreenState extends State<EditRankScreen> {
     try {
       final name = _nameController.text.trim();
       final classes = int.parse(_classesController.text.trim());
+      // The switch gates the payload: ON sends the entered overrides,
+      // OFF sends an explicit empty map so the backend clears any prior
+      // overrides (the effective image falls back to the main belt via
+      // COALESCE). The in-state _overrides map is untouched, so a toggle
+      // back to ON restores what was entered.
+      final overrides =
+          _customSubImages ? _overrides : const <String, String>{};
       if (_isEdit) {
         await _repository.updateRank(
           widget.rank!.rankId,
@@ -124,7 +153,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
             classesToNextMajor: classes,
             subRankCount: _subRankCount,
             imageUrl: _mainImageUrl,
-            subRankImageOverrides: _overrides,
+            subRankImageOverrides: overrides,
           ),
         );
       } else {
@@ -135,7 +164,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
           classesToNextMajor: classes,
           subRankCount: _subRankCount,
           imageUrl: _mainImageUrl,
-          subRankImageOverrides: _overrides,
+          subRankImageOverrides: overrides,
         ));
       }
       if (!mounted) return;
@@ -259,27 +288,38 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       ),
                       if (_subRankCount > 0) ...[
                         const Hairline(),
-                        Text('Sub-rank belts', style: DesignConstants.h2),
-                        Text(
-                          'Each position defaults to the main belt image. '
-                          'Upload a distinct image to override it.',
-                          style: DesignConstants.pSmall.copyWith(
-                            color: DesignConstants.text2nd,
-                          ),
+                        _CustomSubImagesSwitch(
+                          value: _customSubImages,
+                          onChanged: (v) =>
+                              setState(() => _customSubImages = v),
                         ),
-                        for (var i = 0; i < _subRankCount; i++)
-                          ImageUploadPickerField(
-                            key: ValueKey('sub-$i'),
-                            label: subRankType.subLabel(i, showBase: true),
-                            category: 'rank',
-                            aspectRatio: 1,
-                            previewFit: BoxFit.contain,
-                            imageUrl: _overrides[i.toString()],
-                            defaultImageUrl: _mainImageUrl,
-                            onImageChosen: (url) => setState(
-                              () => _overrides[i.toString()] = url,
+                        if (_customSubImages) ...[
+                          Text('Sub-rank belts',
+                              style: DesignConstants.h2),
+                          Text(
+                            'Each position defaults to the main belt '
+                            'image. Pick or upload a distinct image to '
+                            'override it.',
+                            style: DesignConstants.pSmall.copyWith(
+                              color: DesignConstants.text2nd,
                             ),
                           ),
+                          for (var i = 0; i < _subRankCount; i++)
+                            ImageUploadPickerField(
+                              key: ValueKey('sub-$i'),
+                              label:
+                                  subRankType.subLabel(i, showBase: true),
+                              category: 'rank',
+                              poolImages: AppConstants.rankBeltDefaultUrls,
+                              aspectRatio: 1,
+                              previewFit: BoxFit.contain,
+                              imageUrl: _overrides[i.toString()],
+                              defaultImageUrl: _mainImageUrl,
+                              onImageChosen: (url) => setState(
+                                () => _overrides[i.toString()] = url,
+                              ),
+                            ),
+                        ],
                       ],
                     ],
                     if (_error != null) ErrorMessage(message: _error!),
@@ -399,6 +439,40 @@ class _StepButton extends StatelessWidget {
               weight: DesignConstants.iconWeight,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gates the per-sub-position belt override section. OFF (the default,
+/// and edit mode with no existing overrides) uses the main belt image
+/// for every sub-position; ON reveals a belt picker per sub-position.
+/// Styled like the payment step's cash toggle.
+class _CustomSubImagesSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CustomSubImagesSwitch({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      activeThumbColor: DesignConstants.primaryColor,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        'Custom sub-rank images',
+        style: DesignConstants.p,
+      ),
+      subtitle: Text(
+        'Off: every sub-position uses the main belt image.',
+        style: DesignConstants.pSmall.copyWith(
+          color: DesignConstants.text2nd,
         ),
       ),
     );
