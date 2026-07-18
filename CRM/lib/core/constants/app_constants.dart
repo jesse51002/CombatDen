@@ -72,14 +72,10 @@ class AppConstants {
     'https://cdn.combatden.net/rank/presets/green.png',
     'https://cdn.combatden.net/rank/presets/blue.png',
     'https://cdn.combatden.net/rank/presets/purple.png',
+    'https://cdn.combatden.net/rank/presets/pink.png',
     'https://cdn.combatden.net/rank/presets/brown.png',
     'https://cdn.combatden.net/rank/presets/red.png',
     'https://cdn.combatden.net/rank/presets/black.png',
-    'https://cdn.combatden.net/rank/presets/medallion-01.png',
-    'https://cdn.combatden.net/rank/presets/medallion-02.png',
-    'https://cdn.combatden.net/rank/presets/medallion-03.png',
-    'https://cdn.combatden.net/rank/presets/medallion-04.png',
-    'https://cdn.combatden.net/rank/presets/medallion-05.png',
   ];
 
   AppConstants._();

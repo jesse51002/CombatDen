@@ -19,10 +19,11 @@ from schema.gym_rank import (
     SubRankType,
 )
 
-# Preset belt / medallion art lives at cdn.combatden.net/rank/presets/{name}.png
-# (private S3 combatden-assets/rank/presets, served through the CDN). BJJ ladders
-# map each rank to its real adult belt color; the flat tier ladder uses numbered
-# medallions.
+# Preset belt art lives at cdn.combatden.net/rank/presets/{color}.png
+# (private S3 combatden-assets/rank/presets, served through the CDN). Every
+# preset rank uses a real belt color: BJJ ladders map each rank to its actual
+# adult belt, and the flat tier ladder cycles an evenly-spaced belt-color
+# progression (there is no non-belt preset art).
 _PRESET_BASE = "https://cdn.combatden.net/rank/presets"
 
 # BJJ adult belt colors, white -> black, index-aligned with _BJJ_BELT_NAMES.
@@ -65,19 +66,19 @@ def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
 
 
 # Flat: 5 skill tiers Beginner -> Elite (order 0..4), no sub-ranks. Each tier
-# carries a numbered medallion (medallion-01..05.png), cycled by rank order so
-# every preset-created rank ships with an image (a gym can override on the edit
+# carries a belt color from an evenly-spaced progression so every
+# preset-created rank ships with an image (a gym can override on the edit
 # page).
 _FLAT_NAMES = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"]
 _FLAT_THRESHOLDS = [20, 30, 50, 80, 0]
 
-# How many numbered medallion images exist in the preset set (medallion-01..05).
-_MEDALLION_COUNT = 5
+# Belt-color progression for the flat tiers, light -> dark like a real ladder.
+_FLAT_BELT_COLORS = ["white", "green", "blue", "red", "black"]
 
 
-def _medallion_image(idx: int) -> str:
-    """Numbered medallion art for tier `idx`, cycling medallion-01..05."""
-    return f"{_PRESET_BASE}/medallion-{idx % _MEDALLION_COUNT + 1:02d}.png"
+def _flat_belt_image(idx: int) -> str:
+    """Belt-color art for flat tier `idx` (white -> black progression)."""
+    return f"{_PRESET_BASE}/{_FLAT_BELT_COLORS[idx % len(_FLAT_BELT_COLORS)]}.png"
 
 
 def _flat_rows() -> list[_PresetRow]:
@@ -87,7 +88,7 @@ def _flat_rows() -> list[_PresetRow]:
             name=name,
             classes_to_next_major=_FLAT_THRESHOLDS[i],
             sub_rank_count=0,
-            image_url=_medallion_image(i),
+            image_url=_flat_belt_image(i),
         )
         for i, name in enumerate(_FLAT_NAMES)
     ]
