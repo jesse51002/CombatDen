@@ -46,18 +46,11 @@ PLAN_TEMPLATES = [
 ]
 
 
-# Placeholder plan-card art; the founder uploads the real preset JPGs to
-# s3://combatden-assets/membership/presets/activity-NN.jpg (CDN
-# cdn.combatden.net). Cycled by plan index so each gym's plans vary.
-_PLAN_IMAGES = [
-    f"https://cdn.combatden.net/membership/presets/activity-{i:02d}.jpg"
-    for i in range(1, 13)
-]
-
-
-def _plan_image(idx: int) -> str:
-    """Preset plan-card image for the idx-th plan (cycles the 12-URL pool)."""
-    return _PLAN_IMAGES[idx % len(_PLAN_IMAGES)]
+# One fixed plan-card image for every seeded plan (the migration backfill
+# default). The 12-image activity pool is a CRM picker affordance for real
+# owners, deliberately NOT cycled by the seed; a gym's plan images get
+# re-pointed at its class images by the presets template import anyway.
+_PLAN_IMAGE_URL = "https://cdn.combatden.net/membership/presets/activity-01.jpg"
 
 
 def create_all(
@@ -89,7 +82,7 @@ def create_all(
         payload: dict = {
             "gym_id": str(gym_id),
             "plan_name": tmpl["plan_name"],
-            "image_url": _plan_image(idx),
+            "image_url": _PLAN_IMAGE_URL,
             "plan_type": tmpl["plan_type"],
             "price": tmpl["price"],
             "is_public": True,
