@@ -264,8 +264,8 @@ class _StartLinkMemberDialogState
   String get _selectIntro {
     if (widget.direction == AuthorizeDirection.addPayee) {
       return "The picked member joins ${widget.anchorName}'s paying "
-          'account, so they can be enrolled in this run. The '
-          'payer signs their waiver next.';
+          'account. ${widget.anchorName} signs an authorization '
+          'for them next.';
     }
     return 'The picked member becomes an authorized payer for '
         "${widget.anchorName} and signs ${widget.anchorName}'s "

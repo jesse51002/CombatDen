@@ -21,8 +21,8 @@ class StartNewMemberTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return DashedAddTile(
       title: 'New member',
-      subtitle: 'Create someone new, authorize $payerFirstName as payer, '
-          'add them to this run.',
+      subtitle: 'Create a new member $payerFirstName will '
+          'purchase a membership for.',
       onTap: onTap,
     );
   }

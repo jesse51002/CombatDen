@@ -73,9 +73,8 @@ class StartMembersStep extends StatelessWidget {
               style: DesignConstants.h2,
             ),
             Text(
-              'Pick everyone to enroll in this run — the payer '
-              'themselves and the members they’re authorized to pay '
-              'for.',
+              'Pick everyone getting a membership: the payer '
+              'themselves and the people they pay for.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -97,7 +96,10 @@ class StartMembersStep extends StatelessWidget {
               payerFirstName: payer.name.split(' ').first,
               onTap: onNewMember,
             ),
-            StartLinkFirstTile(onTap: onLinkFirst),
+            StartLinkFirstTile(
+              payerFirstName: payer.name.split(' ').first,
+              onTap: onLinkFirst,
+            ),
           ],
         ),
       ],
