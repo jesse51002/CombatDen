@@ -20,6 +20,7 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
@@ -37,6 +38,10 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// otherwise. Entered values live in the overrides map independent of
 /// the switch, so toggling OFF then ON restores them — only the payload
 /// respects the switch.
+///
+/// Turning the switch OFF on a rank that had overrides saved is a
+/// permanent, full JSONB wipe of every stored per-sub image (no merge,
+/// unrecoverable), so [_save] confirms it first — see [_savedOverrideCount].
 ///
 /// Within the map, overrides are **write-only**: shrinking the count
 /// never prunes it, so a dormant sub image survives a count change and
@@ -88,6 +93,15 @@ class _EditRankScreenState extends State<EditRankScreen> {
   /// — only the SAVE payload respects the switch.
   bool _customSubImages = false;
 
+  /// How many per-sub belt overrides were PERSISTED on the rank at load
+  /// time. Zero for create mode and for a rank that never had any. Drives
+  /// the wipe-confirmation gate in [_save]: turning the switch OFF sends an
+  /// empty overrides map, which permanently clears these saved images, so
+  /// the save is confirmed first only when this is > 0 (i.e. the rank had
+  /// saved overrides). A never-saved override added and removed this
+  /// session leaves it at 0, so no confirm fires.
+  int _savedOverrideCount = 0;
+
   bool _saving = false;
   String? _error;
 
@@ -103,6 +117,9 @@ class _EditRankScreenState extends State<EditRankScreen> {
       _mainImageUrl = r.imageUrl;
       _subRankCount = r.subRankCount;
       _overrides.addAll(r.subRankImageOverrides);
+      // Remember how many overrides were saved, so [_save] can confirm the
+      // permanent wipe if the switch is later turned off.
+      _savedOverrideCount = r.subRankImageOverrides.length;
       // Auto-enable the custom-images section when the rank already has
       // per-sub overrides; a rank with none opens with the switch off.
       _customSubImages = _overrides.isNotEmpty;
@@ -132,6 +149,22 @@ class _EditRankScreenState extends State<EditRankScreen> {
     final imageOk = _mainImageUrl != null && _mainImageUrl!.isNotEmpty;
     setState(() => _mainImageError = imageOk ? null : 'Choose a belt image.');
     if (!formOk || !imageOk) return;
+    // Turning the switch OFF on a rank that had saved sub-rank images sends
+    // an empty overrides map, permanently wiping every stored per-sub image
+    // (full JSONB replace, no merge, unrecoverable). Confirm before the wipe.
+    if (_savedOverrideCount > 0 && !_customSubImages) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Delete custom sub-rank images?',
+        message: 'The $_savedOverrideCount saved custom sub-rank image(s) '
+            'for this rank will be permanently deleted, and every '
+            'sub-position will fall back to the main belt image. '
+            'This cannot be undone.',
+        confirmLabel: 'Delete',
+        confirmColor: DesignConstants.badRed,
+      );
+      if (!confirmed || !mounted) return;
+    }
     setState(() {
       _saving = true;
       _error = null;
