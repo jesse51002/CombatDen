@@ -323,7 +323,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
             ),
             ImageUploadPickerField(
               label: 'Plan image',
-              category: 'membership',
+              category: 'plan',
               poolImages: AppConstants.activityDefaultImageUrls,
               isRequired: true,
               imageUrl: _imageUrl,

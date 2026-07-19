@@ -27,6 +27,8 @@ from src.members.schema.members_billing_schema import (
     MembersBillingProfileResponse,
 )
 from src.members.schema.members_schema import (
+    DuplicateMemberConflict,
+    DuplicateMemberMatch,
     MemberCreateRequest,
     MemberResponse,
 )
@@ -126,16 +128,13 @@ class MembersManagementCreate(MembersManagementBase):
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "duplicate_member",
-                "matches": matches,
-            },
+            detail=DuplicateMemberConflict(matches=matches).model_dump(),
         )
 
     async def _find_duplicates(
         self,
         request: MemberCreateRequest,
-    ) -> list[dict[str, str | None]]:
+    ) -> list[DuplicateMemberMatch]:
         """Return same-identity members at the gym (name + email, normalized)."""
         sql = load_sql(SQL_DIR / "find_members_by_identity.sql")
         params = {
@@ -149,13 +148,13 @@ class MembersManagementCreate(MembersManagementBase):
             rows = result.mappings().all()
 
         return [
-            {
-                "member_id": str(row["member_id"]),
-                "first_name": row["first_name"],
-                "last_name": row["last_name"],
-                "email": row["email"],
-                "photo_url": row["photo_url"],
-            }
+            DuplicateMemberMatch(
+                member_id=str(row["member_id"]),
+                first_name=row["first_name"],
+                last_name=row["last_name"],
+                email=row["email"],
+                photo_url=row["photo_url"],
+            )
             for row in rows
         ]
 

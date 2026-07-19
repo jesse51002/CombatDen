@@ -30,7 +30,7 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
     description=(
         "Accepts a multipart image upload and a ``category`` form field "
         "(``reward``, ``member``, ``class``, ``gym``, ``rank``, or "
-        "``membership``). Proxies the bytes to the private S3 "
+        "``plan``). Proxies the bytes to the private S3 "
         "bucket and returns the CloudFront CDN URL with a content-hash "
         "cache-buster. Requires a staff principal (owner/admin of at "
         "least one gym)."

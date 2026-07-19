@@ -178,6 +178,56 @@ async def test_duplicate_gate_409_then_allow_duplicate(
     assert await _count_members_by_email(db_pool, gym_id, email) == 2
 
 
+async def test_duplicate_gate_normalizes_case_and_whitespace(
+    management_service,
+    gym_id,
+    created,
+):
+    """A case- and whitespace-varied identity still trips the 409 gate.
+
+    ``find_members_by_identity.sql`` matches on
+    ``lower(trim(first_name / last_name / email))``, so a second create with the
+    same identity in different case + surrounding whitespace (and a case-varied
+    email) is rejected as a duplicate. ``lower()`` of an uppercased hex suffix
+    returns the original suffix, so reusing it across both creates is safe.
+    EmailStr strips surrounding whitespace and lowercases only the domain
+    (preserving local-part case), so the email variant is CASE-only — padding
+    would be normalized away before the gate ever saw it, but an uppercased
+    local part reaches the DB and genuinely exercises the SQL ``lower(email)``.
+    """
+    suffix = uuid4().hex[:8]
+
+    first = await management_service.create_member(
+        MemberCreateRequest(
+            gym_id=gym_id,
+            first_name=f"Ada{suffix}",
+            last_name="Lovelace",
+            email=f"ada.{suffix}@example.com",
+        ),
+    )
+    created.track_member(first.member_id)
+    created.track_customer(first.stripe_customer_id)
+
+    # Same identity, mixed case + surrounding whitespace on the names and a
+    # case-varied email — the normalized gate must still reject it (nothing
+    # new is written, so only ``first`` needs cleanup).
+    with pytest.raises(HTTPException) as exc_info:
+        await management_service.create_member(
+            MemberCreateRequest(
+                gym_id=gym_id,
+                first_name=f"  ADA{suffix.upper()}  ",
+                last_name="  lovelace ",
+                email=f"ADA.{suffix.upper()}@EXAMPLE.COM",
+            ),
+        )
+
+    assert exc_info.value.status_code == 409
+    detail = exc_info.value.detail
+    assert detail["code"] == "duplicate_member"
+    match_ids = {m["member_id"] for m in detail["matches"]}
+    assert str(first.member_id) in match_ids
+
+
 async def test_null_email_create_never_gated(
     management_service,
     gym_id,

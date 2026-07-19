@@ -24,6 +24,7 @@ from src.members.schema.members_crm_members_list_schema import (
     MembersListTotalCounts,
 )
 from src.members.schema.members_schema import (
+    DuplicateMemberConflict,
     MemberCreateRequest,
     MemberResponse,
     MemberUpdateRequest,
@@ -89,13 +90,14 @@ members_router = APIRouter(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         409: {
+            "model": DuplicateMemberConflict,
             "description": (
                 "A same-identity member already exists at this gym (same "
                 "name + email). The detail is "
                 '{"code": "duplicate_member", "matches": [...]} listing the '
                 "candidate rows; re-send with allow_duplicate=true to create "
                 "anyway. Only fires when the request has an email."
-            )
+            ),
         },
     },
 )

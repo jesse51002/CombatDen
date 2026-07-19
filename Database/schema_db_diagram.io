@@ -403,7 +403,6 @@ Table membership_plans_unfiltered {
   plan_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   plan_name varchar [not null]
-  image_url varchar [not null, note: 'every plan has an image -- writers supply one at create time (mirrors gym_classes.image_url)']
   plan_type varchar [not null, note: 'CHECK: trial | recurring | one_time']
   class_count integer [note: 'nullable; required for class-count plans']
   duration_amount integer [note: 'nullable; must pair with duration_unit']
@@ -413,6 +412,7 @@ Table membership_plans_unfiltered {
   stripe_product_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
   waiver_ids jsonb [not null, default: `'[]'`, note: 'array of waiver_id strings (multi-select; no FK)']
   created_at timestamptz [not null, default: `now()`]
+  image_url varchar [not null, note: 'every plan has an image -- writers supply one at create time (mirrors gym_classes.image_url); physically last, appended by migration 20260711000000']
 
   indexes {
     (plan_id, gym_id) [unique]

@@ -5,6 +5,7 @@ members_crm_members_list_schema and members_billing_schema.
 """
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -86,3 +87,32 @@ class MemberResponse(BaseModel):
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
     photo_url: str | None = None
+
+
+class DuplicateMemberMatch(BaseModel):
+    """One same-identity member the create duplicate gate already has on file.
+
+    Serialized into the 409 conflict body's ``matches`` list. The field names
+    are the wire keys the CRM's own ``DuplicateMemberMatch`` model parses;
+    ``member_id`` is a ``str`` (not ``UUID``) so ``model_dump()`` yields a
+    JSON-native body byte-identical to the prior ad-hoc dict.
+    """
+
+    member_id: str
+    first_name: str
+    last_name: str
+    email: str | None = None
+    photo_url: str | None = None
+
+
+class DuplicateMemberConflict(BaseModel):
+    """Typed body of the 409 raised when a same-identity member exists.
+
+    ``code`` is the fixed ``"duplicate_member"`` discriminator the CRM
+    switches on (the ``Literal[...] = ...`` constant-discriminator house
+    style, as in the Stripe metadata schemas); ``matches`` carries the
+    candidate rows so the client can confirm-anyway or use-existing.
+    """
+
+    code: Literal["duplicate_member"] = "duplicate_member"
+    matches: list[DuplicateMemberMatch]
