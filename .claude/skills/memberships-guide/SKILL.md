@@ -84,6 +84,7 @@ itself carries no amount.
 | `plan_id` | PK |
 | `gym_id` | scope (composite `UNIQUE (plan_id, gym_id)` for downstream composite FKs) |
 | `plan_name` | editable; `CHECK (plan_name <> '')` |
+| `image_url` | plan-card image, NOT NULL; required at create, user-editable via update (not in the `MEMBERSHIP_PLANS` immutable frozenset); mirrors `gym_classes.image_url`. The presets template import re-points it at the imported class photos |
 | `plan_type` | `trial` / `recurring` / `one_time` (`CHECK plan_type IN (...)`; mirrors `PlanType`) |
 | `class_count` | optional, `CHECK class_count > 0` |
 | `duration_amount` / `duration_unit` | optional span; `duration_unit IN ('week','month','year')` (the `DurationUnit` enum — week/month/year, distinct from the discount duration unit's day/week/month) |

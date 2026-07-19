@@ -96,15 +96,19 @@ async def test_archive_strips_waiver_id_from_plans(db_pool, gym_id):
             result = await session.execute(
                 text(
                     "INSERT INTO membership_plans_unfiltered "
-                    "(gym_id, plan_name, plan_type, class_count, "
-                    " stripe_product_id, waiver_ids) "
-                    "VALUES (:g, :n, 'one_time', 5, :sp, "
+                    "(gym_id, plan_name, image_url, plan_type, "
+                    " class_count, stripe_product_id, waiver_ids) "
+                    "VALUES (:g, :n, :img, 'one_time', 5, :sp, "
                     " CAST(:w AS JSONB)) "
                     "RETURNING plan_id",
                 ),
                 {
                     "g": str(gym_id),
                     "n": f"Strip Test {uuid.uuid4().hex[:8]}",
+                    "img": (
+                        "https://cdn.combatden.net/membership/presets/"
+                        "activity-01.jpg"
+                    ),
                     "sp": f"prod_test_{uuid.uuid4().hex[:12]}",
                     "w": json.dumps(
                         [str(doomed.waiver_id), str(keeper.waiver_id)],
