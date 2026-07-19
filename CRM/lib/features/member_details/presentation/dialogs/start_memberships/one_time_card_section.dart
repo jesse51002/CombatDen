@@ -92,7 +92,7 @@ class _CapturedCardTile extends StatelessWidget {
         ),
         border: Border.all(
           color: DesignConstants.primaryColor,
-          width: 2,
+          width: DesignConstants.buttonBorder,
         ),
       ),
       child: Row(

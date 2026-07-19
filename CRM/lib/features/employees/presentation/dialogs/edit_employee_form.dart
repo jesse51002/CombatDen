@@ -113,7 +113,7 @@ class EditEmployeeForm extends StatelessWidget {
             category: 'employee',
             aspectRatio: 1,
             imageUrl: photoUrl,
-            onUploaded: onPhotoUploaded,
+            onImageChosen: onPhotoUploaded,
           ),
         if (error != null)
           Text(

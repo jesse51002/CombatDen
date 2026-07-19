@@ -53,7 +53,8 @@ class _GymProfileSectionState extends State<GymProfileSection> {
   late final TextEditingController _nameCtrl;
 
   // The logo URL the section will persist. Seeded from the active gym; the
-  // upload widget uploads on pick and hands back the CDN URL via [onUploaded].
+  // upload widget uploads on pick and hands back the CDN URL via
+  // [onImageChosen].
   String? _logoUrl;
 
   @override
@@ -132,7 +133,7 @@ class _GymProfileSectionState extends State<GymProfileSection> {
               label: 'Gym logo',
               category: 'gym',
               imageUrl: _logoUrl,
-              onUploaded: (url) => setState(() => _logoUrl = url),
+              onImageChosen: (url) => setState(() => _logoUrl = url),
             ),
             BlocBuilder<SettingsBloc, SettingsState>(
               buildWhen: (prev, curr) =>

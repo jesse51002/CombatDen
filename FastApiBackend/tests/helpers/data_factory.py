@@ -188,6 +188,7 @@ async def create_plan(
     price_cents: int = 5000,
     duration_amount: int | None = None,
     duration_unit: str | None = None,
+    image_url: str = "https://cdn.combatden.net/membership/presets/activity-01.jpg",
 ) -> TestPlan:
     """Create a membership plan + price (DB-first).
 
@@ -208,9 +209,11 @@ async def create_plan(
     # Step 1: Insert pending plan row
     insert_plan_sql = """
         INSERT INTO membership_plans_unfiltered (
-            gym_id, plan_name, plan_type, duration_amount, duration_unit, is_public
+            gym_id, plan_name, image_url, plan_type,
+            duration_amount, duration_unit, is_public
         ) VALUES (
-            :gym_id, :plan_name, :plan_type, :duration_amount, :duration_unit, true
+            :gym_id, :plan_name, :image_url, :plan_type,
+            :duration_amount, :duration_unit, true
         )
         RETURNING plan_id
     """
@@ -220,6 +223,7 @@ async def create_plan(
             {
                 "gym_id": str(gym_id),
                 "plan_name": plan_name,
+                "image_url": image_url,
                 "plan_type": plan_type,
                 "duration_amount": duration_amount,
                 "duration_unit": duration_unit,

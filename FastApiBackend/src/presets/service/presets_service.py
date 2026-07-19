@@ -6,6 +6,14 @@ real gym's production tables in a single database transaction. It is re-pickable
 lives here — this is a real production write path, simply gated to an email
 allowlist in the router for now.
 
+The classes it imports carry cohesive template photos. To keep a demoed gym's
+membership plan cards visually consistent with its class cards, the import also
+re-images the gym's EXISTING membership plans — it cycles the imported class
+photos onto them in import order (plan 0 ← class 0's image, plan 1 ← class 1's,
+wrapping with modulo; see ``_sync_plan_images`` / ``_cycle_plan_images``). It
+never creates a plan — it only overwrites the ``image_url`` of the plans already
+on the gym, with the same overwrite semantics as the rest of the import.
+
 Transaction rollback: the entire import uses one ``async with session.begin()``
 block. Any unhandled exception — including a CHECK violation (e.g. a template
 reward with ``points_cost = 0`` violating ``gym_rewards.point_cost > 0``) —
@@ -189,6 +197,9 @@ class PresetsService:
         All writes execute in a single transaction that rolls back automatically
         on any error (including DB-level CHECK violations). The import is
         re-pickable: calling it again on the same gym replaces the prior import.
+        After the classes are imported, the gym's existing membership plans are
+        re-imaged by cycling the imported class photos onto them (see
+        ``_sync_plan_images``).
 
         Args:
             gym_id: The target real gym (UUID-keyed production tables).
@@ -356,6 +367,9 @@ class PresetsService:
                 self._as_list(row["classes"]) if row["has_classes"] else []
             )
             expander_classes: list[ExpanderClass] = []
+            # The resolved image_url (post-fallback) of each inserted class,
+            # in import order — the cycle the plan-image sync walks below.
+            class_image_urls: list[str] = []
             # The class's effective max_capacity (always NULL today — see
             # presets_insert_class.sql — but read from the row rather than
             # assumed, so the sign-up capacity respect below stays correct if
@@ -391,6 +405,9 @@ class PresetsService:
                 # imported class additionally gets a genuine second same-day
                 # slot (see _MULTI_SLOT_CLASS_INDEX).
                 weekday_slots = self._build_weekday_slots(i, emp_id)
+                class_image_url = (
+                    c["image_url"] or self._default_class_image_url
+                )
                 inserted = (
                     await session.execute(
                         text(insert_class_sql),
@@ -398,13 +415,13 @@ class PresetsService:
                             "gym_id": gym_id_str,
                             "class_name": c["name"],
                             "class_description": c["description"],
-                            "image_url": c["image_url"]
-                            or self._default_class_image_url,
+                            "image_url": class_image_url,
                             "points_worth": _DEFAULT_POINTS_WORTH,
                         },
                     )
                 ).mappings().fetchone()
                 class_id: UUID = inserted["class_id"]
+                class_image_urls.append(class_image_url)
                 await session.execute(
                     text(insert_class_schedule_sql),
                     {
@@ -428,6 +445,14 @@ class PresetsService:
                     )
                 )
                 class_capacities[class_id] = inserted["max_capacity"]
+
+            # ── Membership plan images (cycle imported class photos) ──────
+            # Re-image the gym's EXISTING plans with the just-imported class
+            # photos so a demoed gym's plan cards match its class cards. A
+            # no-op when the import wrote no classes or the gym has no plans.
+            await self._sync_plan_images(
+                session, gym_id_str, class_image_urls
+            )
 
             # Seed the past month of member_attendance (real check-in records,
             # keyed by original slot) plus a mirrored mix of class_signups
@@ -467,6 +492,71 @@ class PresetsService:
             rewards_imported=len(rewards),
             theme_design_id=row["theme"],
         )
+
+    # ── Membership plan images ───────────────────────────────────────────────
+
+    async def _sync_plan_images(
+        self,
+        session: AsyncSession,
+        gym_id_str: str,
+        class_image_urls: list[str],
+    ) -> None:
+        """Re-image the gym's membership plans with the imported class photos.
+
+        Cycles the imported classes' image URLs (in import order) onto the
+        gym's existing plans so a demoed gym's plan cards match its class
+        cards: plan 0 ← class 0's image, plan 1 ← class 1's, wrapping with
+        modulo. Plans are taken in the CRM's display order (newest first,
+        matching ``membership_plans_list.sql``) and only the owner-facing ones
+        (the ``membership_plans`` view = ``stripe_product_id IS NOT NULL``,
+        plus ``is_deleted = false``) are touched, so a soft-deleted or
+        half-synced plan is never re-imaged. Same overwrite semantics as the
+        rest of the import (re-pickable). A clean no-op when the import wrote
+        no classes OR the gym has no plans.
+        """
+        if not class_image_urls:
+            return
+        list_plans_sql = load_sql(SQL_DIR / "presets_list_plans.sql")
+        update_plan_image_sql = load_sql(
+            SQL_DIR / "presets_update_plan_image.sql"
+        )
+        plan_rows = (
+            await session.execute(
+                text(list_plans_sql), {"gym_id": gym_id_str}
+            )
+        ).mappings().all()
+        plan_ids = [row["plan_id"] for row in plan_rows]
+        for plan_id, image_url in self._cycle_plan_images(
+            plan_ids, class_image_urls
+        ):
+            await session.execute(
+                text(update_plan_image_sql),
+                {
+                    "gym_id": gym_id_str,
+                    "plan_id": str(plan_id),
+                    "image_url": image_url,
+                },
+            )
+
+    @staticmethod
+    def _cycle_plan_images(
+        plan_ids: Sequence[UUID],
+        class_image_urls: Sequence[str],
+    ) -> list[tuple[UUID, str]]:
+        """Map each plan to an imported class image, cycling the class images
+        in import order (plan i ← class i, wrapping with modulo).
+
+        Pure and side-effect-free — the testable core of the plan-image sync.
+        Returns an empty list when either input is empty, so zero imported
+        classes OR zero plans is a clean no-op.
+        """
+        if not plan_ids or not class_image_urls:
+            return []
+        count = len(class_image_urls)
+        return [
+            (plan_id, class_image_urls[index % count])
+            for index, plan_id in enumerate(plan_ids)
+        ]
 
     # ── Attendance + sign-up seeding ─────────────────────────────────────────
 

@@ -178,6 +178,7 @@ class MembershipPlansBase:
             plan_id=plan_row["plan_id"],
             gym_id=plan_row["gym_id"],
             plan_name=plan_row["plan_name"],
+            image_url=plan_row["image_url"],
             plan_type=plan_row["plan_type"],
             class_count=plan_row["class_count"],
             duration_amount=plan_row["duration_amount"],

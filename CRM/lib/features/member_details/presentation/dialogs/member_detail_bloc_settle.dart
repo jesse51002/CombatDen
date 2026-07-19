@@ -18,15 +18,19 @@ Future<void> awaitMemberDetailSettle(
   MemberDetailBloc bloc,
   int tokenBefore,
 ) async {
+  bool settled(MemberDetailState st) =>
+      st is MemberDetailLoaded &&
+      !st.isMutating &&
+      (st.refreshToken != tokenBefore || st.actionError != null);
+  // The mutation may have fully landed BEFORE this subscribes — a nested
+  // dialog that detects its own commit and pops afterwards (link/authorize)
+  // resumes the caller only after the final state was emitted, and a bloc
+  // stream does not replay the current state to new listeners. Without this
+  // check the wait can only end at the timeout, so the caller's refetch —
+  // and the UI it feeds — lags a full [_settleTimeout] behind the commit.
+  if (settled(bloc.state)) return;
   try {
-    await bloc.stream
-        .firstWhere(
-          (st) =>
-              st is MemberDetailLoaded &&
-              !st.isMutating &&
-              (st.refreshToken != tokenBefore || st.actionError != null),
-        )
-        .timeout(_settleTimeout);
+    await bloc.stream.firstWhere(settled).timeout(_settleTimeout);
   } catch (_) {
     // Timed out / stream closed — fall through to the refetch.
   }

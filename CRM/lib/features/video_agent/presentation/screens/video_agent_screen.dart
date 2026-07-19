@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/video_agent_repository.dart';
@@ -135,7 +136,8 @@ class _TopBar extends StatelessWidget {
               size: DesignConstants.iconSizeMedium,
               weight: DesignConstants.iconWeight,
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () =>
+                popOrGoTo(context, AppRoutes.memberAppPreviewVideos),
             tooltip: 'Back',
           ),
           Expanded(

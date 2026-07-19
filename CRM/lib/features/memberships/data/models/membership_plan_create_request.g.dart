@@ -11,6 +11,7 @@ Map<String, dynamic> _$MembershipPlanCreateRequestToJson(
 ) => <String, dynamic>{
   'gym_id': instance.gymId,
   'plan_name': instance.planName,
+  'image_url': instance.imageUrl,
   'plan_type': instance.planType.toJson(),
   'class_count': instance.classCount,
   'duration_amount': instance.durationAmount,

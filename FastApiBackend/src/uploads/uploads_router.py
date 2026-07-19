@@ -29,7 +29,8 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
     summary="Upload an image to the CDN",
     description=(
         "Accepts a multipart image upload and a ``category`` form field "
-        "(``reward``, ``member``, ``class``, or ``gym``). Proxies the bytes to the private S3 "
+        "(``reward``, ``member``, ``class``, ``gym``, ``rank``, or "
+        "``plan``). Proxies the bytes to the private S3 "
         "bucket and returns the CloudFront CDN URL with a content-hash "
         "cache-buster. Requires a staff principal (owner/admin/front_desk "
         "of at least one gym)."

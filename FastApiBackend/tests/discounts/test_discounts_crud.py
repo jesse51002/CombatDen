@@ -369,12 +369,19 @@ async def _seed_membership_with_applied_discount(db_pool, gym_id, value_id):
         plan_row = await session.execute(
             text(
                 "INSERT INTO membership_plans_unfiltered "
-                "(gym_id, plan_name, plan_type, duration_amount, duration_unit, "
-                " is_public, stripe_product_id) "
-                "VALUES (:gym_id, 'Snap Plan', 'recurring', 1, 'month', true, "
-                " :sp) RETURNING plan_id"
+                "(gym_id, plan_name, image_url, plan_type, duration_amount, "
+                " duration_unit, is_public, stripe_product_id) "
+                "VALUES (:gym_id, 'Snap Plan', :img, 'recurring', 1, 'month', "
+                " true, :sp) RETURNING plan_id"
             ),
-            {"gym_id": str(gym_id), "sp": f"prod_{uuid4().hex[:16]}"},
+            {
+                "gym_id": str(gym_id),
+                "img": (
+                    "https://cdn.combatden.net/membership/presets/"
+                    "activity-01.jpg"
+                ),
+                "sp": f"prod_{uuid4().hex[:16]}",
+            },
         )
         plan_id = plan_row.mappings().fetchone()["plan_id"]
 

@@ -19,11 +19,15 @@ from schema.gym_rank import (
     SubRankType,
 )
 
-# placeholder belt art; the founder uploads the real PNGs to
-# s3://combatden-assets/rank/presets/{white,blue}.png (CDN cdn.combatden.net);
-# alternating white/blue until real art is supplied.
-_BELT_IMG_EVEN = "https://cdn.combatden.net/rank/presets/white.png"
-_BELT_IMG_ODD = "https://cdn.combatden.net/rank/presets/blue.png"
+# Preset belt art lives at cdn.combatden.net/rank/presets/{color}.png
+# (private S3 combatden-assets/rank/presets, served through the CDN). Every
+# preset rank uses a real belt color: BJJ ladders map each rank to its actual
+# adult belt, and the flat tier ladder cycles an evenly-spaced belt-color
+# progression (there is no non-belt preset art).
+_PRESET_BASE = "https://cdn.combatden.net/rank/presets"
+
+# BJJ adult belt colors, white -> black, index-aligned with _BJJ_BELT_NAMES.
+_BJJ_BELT_COLORS = ["white", "blue", "purple", "brown", "black"]
 
 
 @dataclass(frozen=True)
@@ -43,9 +47,9 @@ _BJJ_BELT_NAMES = ["White Belt", "Blue Belt", "Purple Belt", "Brown Belt", "Blac
 _BJJ_THRESHOLDS = [100, 150, 200, 250, 0]
 
 
-def _belt_image(idx: int) -> str:
-    """Alternating placeholder belt art (even -> white, odd -> blue)."""
-    return _BELT_IMG_EVEN if idx % 2 == 0 else _BELT_IMG_ODD
+def _bjj_belt_image(idx: int) -> str:
+    """The real BJJ belt color art for rank `idx` (white -> black)."""
+    return f"{_PRESET_BASE}/{_BJJ_BELT_COLORS[idx]}.png"
 
 
 def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
@@ -55,17 +59,28 @@ def _bjj_rows(sub_rank_count: int) -> list[_PresetRow]:
             name=name,
             classes_to_next_major=_BJJ_THRESHOLDS[i],
             sub_rank_count=sub_rank_count,
-            image_url=_belt_image(i),
+            image_url=_bjj_belt_image(i),
         )
         for i, name in enumerate(_BJJ_BELT_NAMES)
     ]
 
 
-# Flat: 5 skill tiers Beginner -> Elite (order 0..4), no sub-ranks. Left without
-# preset art (placeholder belt PNGs are BJJ-specific); a gym uploads its own on
-# the edit page. Switch to `_belt_image(i)` here if generic tier art is added.
+# Flat: 5 skill tiers Beginner -> Elite (order 0..4), no sub-ranks. Each tier
+# carries a belt color from an evenly-spaced progression so every
+# preset-created rank ships with an image (a gym can override on the edit
+# page).
 _FLAT_NAMES = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"]
 _FLAT_THRESHOLDS = [20, 30, 50, 80, 0]
+
+# Belt-color progression for the flat tiers: a warm, vivid heat ladder
+# (white -> yellow -> orange -> red -> black) drawing on the wider belt
+# palette, deliberately distinct from the BJJ kinds' cool progression.
+_FLAT_BELT_COLORS = ["white", "yellow", "orange", "red", "black"]
+
+
+def _flat_belt_image(idx: int) -> str:
+    """Belt-color art for flat tier `idx` (white -> black progression)."""
+    return f"{_PRESET_BASE}/{_FLAT_BELT_COLORS[idx % len(_FLAT_BELT_COLORS)]}.png"
 
 
 def _flat_rows() -> list[_PresetRow]:
@@ -75,7 +90,7 @@ def _flat_rows() -> list[_PresetRow]:
             name=name,
             classes_to_next_major=_FLAT_THRESHOLDS[i],
             sub_rank_count=0,
-            image_url=None,
+            image_url=_flat_belt_image(i),
         )
         for i, name in enumerate(_FLAT_NAMES)
     ]

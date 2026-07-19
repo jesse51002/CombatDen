@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/shared/widgets/member_avatar.dart';
 
 /// The wizard's persistent context header: who is PAYING
 /// and — on the per-member configuration steps — which
@@ -74,26 +75,14 @@ class _HeaderLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial =
-        name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Row(
       spacing: DesignConstants.spacingMedium,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: DesignConstants.card,
-          backgroundImage: photoUrl != null
-              ? NetworkImage(photoUrl!)
-              : null,
-          child: photoUrl == null
-              ? Text(
-                  initial,
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text,
-                  ),
-                )
-              : null,
+        MemberAvatar(
+          name: name,
+          photoUrl: photoUrl,
+          size: DesignConstants.iconSizeLarge,
         ),
         Expanded(
           child: RichText(

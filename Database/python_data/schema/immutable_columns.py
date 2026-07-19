@@ -271,6 +271,8 @@ MEMBERSHIP_PLANS: frozenset[str] = frozenset(
         "plan_type",
         # Stripe columns — always set by backend
         "stripe_product_id",
+        # image_url is intentionally NOT listed — it is a user-writable field
+        # (editable via the plan update path), like gym_ranks.image_url.
     }
 )
 

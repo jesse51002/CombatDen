@@ -172,6 +172,7 @@ def _existing_plan() -> dict:
         "plan_id": uuid4(),
         "gym_id": uuid4(),
         "plan_name": "Old Name",
+        "image_url": "https://cdn.combatden.net/membership/presets/activity-01.jpg",
         "plan_type": "recurring",
         "class_count": None,
         "duration_amount": 1,

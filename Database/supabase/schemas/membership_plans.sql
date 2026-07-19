@@ -29,6 +29,12 @@ CREATE TABLE membership_plans_unfiltered (
         CONSTRAINT chk_plan_waiver_ids_array
         CHECK (jsonb_typeof(waiver_ids) = 'array'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Every plan HAS an image (the plan card leans on it), mirroring
+    -- gym_classes.image_url: writers supply one at create time, so NULL
+    -- never reaches the row. Declared last to match physical column order —
+    -- migration 20260711000000 appends it (the CREATE OR REPLACE VIEW
+    -- recreate requires the new column at the end).
+    image_url VARCHAR NOT NULL,
     PRIMARY KEY (plan_id),
     UNIQUE (plan_id, gym_id)
 );

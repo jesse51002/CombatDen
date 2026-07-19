@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
+import 'package:crm/features/member_details/presentation/dialogs/add_member/add_member_flow.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/navigation/nav_sections.dart';
 
@@ -24,15 +26,40 @@ void goToSection(BuildContext context, String route) {
   Navigator.of(context).pushReplacementNamed(route);
 }
 
-/// Tap handler for a [NavSection]: navigate if it has a route, otherwise log
-/// that it's out of scope (the primary CTA + Settings are not wired yet).
+/// Tap handler for a [NavSection]: the primary CTA opens the add-member flow;
+/// any other section navigates to its route.
 void onNavSectionTap(BuildContext context, NavSection section) {
+  if (section.isPrimary) {
+    _openAddMemberFlow(context);
+    return;
+  }
   final route = section.route;
   if (route == null) {
     debugPrint('${section.label} is out of scope this pass');
     return;
   }
   goToSection(context, route);
+}
+
+/// Opens the add-member flow from the primary nav CTA. When it closes without
+/// having navigated to a member itself, jump to the People section if anyone
+/// was added (so the new member is visible); otherwise stay put.
+///
+/// The navigator and launch route are captured BEFORE the await: the tapped
+/// rail item's element can be rebuilt away during the long-lived dialog, so a
+/// post-await `context.mounted` guard would silently swallow the redirect.
+/// The section [NavigatorState] outlives the dialog, so navigation goes
+/// through it directly.
+Future<void> _openAddMemberFlow(BuildContext context) async {
+  final navigator = Navigator.of(context);
+  final launchRoute = ModalRoute.of(context)?.settings.name;
+  final outcome = await AddMemberFlow.show(context);
+  if (outcome.navigatedToMember) return;
+  if (outcome.createdCount == 0) return;
+  if (!navigator.mounted) return;
+  // Same skip goToSection applies: don't re-push the section we're on.
+  if (launchRoute == AppRoutes.members) return;
+  navigator.pushReplacementNamed(AppRoutes.members);
 }
 
 /// Confirm, then sign out. Reads the [LoginBloc] *before* the await so the

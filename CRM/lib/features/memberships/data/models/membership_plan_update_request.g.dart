@@ -10,6 +10,7 @@ Map<String, dynamic> _$MembershipPlanUpdateDataToJson(
   MembershipPlanUpdateData instance,
 ) => <String, dynamic>{
   'plan_name': ?instance.planName,
+  'image_url': ?instance.imageUrl,
   'class_count': ?instance.classCount,
   'duration_amount': ?instance.durationAmount,
   'duration_unit': ?instance.durationUnit?.toJson(),
