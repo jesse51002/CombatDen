@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/existing_member_pill.dart';
-import 'package:crm/shared/widgets/member_avatar.dart';
+import 'package:crm/shared/widgets/member_identity_card.dart';
 
 /// A single-select payer row for the choose-payer step: avatar + name (+ an
 /// existing-member pill) with a trailing radio glyph. The selected tile lifts
@@ -34,8 +34,10 @@ class PayerRadioTile extends StatelessWidget {
         onTap: onTap,
         borderRadius:
             BorderRadius.circular(DesignConstants.radiusSmall),
-        child: Container(
-          padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+        child: MemberIdentityCard(
+          name: name,
+          photoUrl: photoUrl,
+          avatarSize: DesignConstants.iconSizeBig,
           decoration: BoxDecoration(
             color: selected
                 ? DesignConstants.primaryColor10
@@ -51,17 +53,10 @@ class PayerRadioTile extends StatelessWidget {
                   : DesignConstants.dividerThickness,
             ),
           ),
-          child: Row(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingMedium,
             children: [
-              MemberAvatar(
-                name: name,
-                photoUrl: photoUrl,
-                size: DesignConstants.iconSizeBig,
-              ),
-              Expanded(
-                child: Text(name, style: DesignConstants.h3),
-              ),
               if (wasExisting) const ExistingMemberPill(),
               Icon(
                 selected

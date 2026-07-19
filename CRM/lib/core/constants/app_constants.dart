@@ -40,10 +40,10 @@ class AppConstants {
       '?auto=compress&cs=tinysrgb&w=1200';
 
   /// Curated default activity photos shared by the membership-plan and class
-  /// image pools. Assets are uploaded post-curation via the preset uploader
-  /// script; until then these URLs 404 and the field's Image.network
-  /// errorBuilders render blank placeholders. Kept in one place — never
-  /// inline these URLs at a call site.
+  /// image pools. The assets are uploaded (preset uploader script) and served
+  /// from the CDN; the field's Image.network errorBuilders keep any missing
+  /// slot as a blank placeholder. Kept in one place — never inline these URLs
+  /// at a call site.
   static const List<String> activityDefaultImageUrls = [
     'https://cdn.combatden.net/membership/presets/activity-01.jpg',
     'https://cdn.combatden.net/membership/presets/activity-02.jpg',

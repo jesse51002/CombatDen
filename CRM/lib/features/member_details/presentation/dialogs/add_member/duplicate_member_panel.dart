@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
 import 'package:crm/shared/widgets/existing_member_pill.dart';
-import 'package:crm/shared/widgets/member_avatar.dart';
+import 'package:crm/shared/widgets/member_identity_card.dart';
+import 'package:crm/shared/widgets/warning_message.dart';
 
 /// The duplicate-review body shared by the add-member flow and the in-run
 /// new-member dialog: a warning callout, the matched member card(s), and a
@@ -32,7 +32,12 @@ class DuplicateMemberPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
-        const _WarnCallout(),
+        const WarningMessage(
+          title: 'This member may already exist',
+          message: 'Someone with the same name and email is already '
+              'in this gym. Use the existing record instead of '
+              'creating a duplicate.',
+        ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingMedium,
@@ -58,55 +63,6 @@ class DuplicateMemberPanel extends StatelessWidget {
   }
 }
 
-class _WarnCallout extends StatelessWidget {
-  const _WarnCallout();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-      decoration: BoxDecoration(
-        color: DesignConstants.okYellow.withValues(alpha: 0.12),
-        borderRadius:
-            BorderRadius.circular(DesignConstants.radiusSmall),
-        border: Border.all(color: DesignConstants.okYellow),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Icon(
-            Symbols.warning_sharp,
-            weight: DesignConstants.iconWeight,
-            size: DesignConstants.iconSizeMedium,
-            color: DesignConstants.okYellow,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingTiny,
-              children: [
-                Text(
-                  'This member may already exist',
-                  style: DesignConstants.pSemibold,
-                ),
-                Text(
-                  'Someone with the same name and email is already '
-                  'in this gym. Use the existing record instead of '
-                  'creating a duplicate.',
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text2nd,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MatchCard extends StatelessWidget {
   final DuplicateMemberMatch match;
   final bool selectable;
@@ -123,8 +79,11 @@ class _MatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final highlight = selectable && selected;
-    final card = Container(
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+    final card = MemberIdentityCard(
+      name: match.fullName,
+      email: match.email,
+      photoUrl: match.photoUrl,
+      trailing: const ExistingMemberPill(),
       decoration: BoxDecoration(
         color: DesignConstants.card,
         borderRadius:
@@ -137,35 +96,6 @@ class _MatchCard extends StatelessWidget {
               ? DesignConstants.buttonBorder
               : DesignConstants.dividerThickness,
         ),
-      ),
-      child: Row(
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          MemberAvatar(
-            name: match.fullName,
-            photoUrl: match.photoUrl,
-            size: DesignConstants.rankBeltSmall,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingTiny,
-              children: [
-                Text(match.fullName, style: DesignConstants.h3),
-                if (match.email != null && match.email!.isNotEmpty)
-                  Text(
-                    match.email!,
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          const ExistingMemberPill(),
-        ],
       ),
     );
     if (!selectable) return card;

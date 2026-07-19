@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/existing_member_pill.dart';
-import 'package:crm/shared/widgets/member_avatar.dart';
+import 'package:crm/shared/widgets/member_identity_card.dart';
 
 /// One member in the add-member group roster: avatar + name + email, mirroring
 /// the confirmation identity card. Trailing marks an [ExistingMemberPill] for a
@@ -26,43 +26,11 @@ class GroupRosterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-      decoration: BoxDecoration(
-        color: DesignConstants.card,
-        borderRadius:
-            BorderRadius.circular(DesignConstants.radiusSmall),
-        border: Border.all(color: DesignConstants.divider),
-      ),
-      child: Row(
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          MemberAvatar(
-            name: name,
-            photoUrl: photoUrl,
-            size: DesignConstants.rankBeltSmall,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: DesignConstants.spacingTiny,
-              children: [
-                Text(name, style: DesignConstants.h3),
-                if (email != null && email!.isNotEmpty)
-                  Text(
-                    email!,
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          _Trailing(wasExisting: wasExisting, isLast: isLast),
-        ],
-      ),
+    return MemberIdentityCard(
+      name: name,
+      email: email,
+      photoUrl: photoUrl,
+      trailing: _Trailing(wasExisting: wasExisting, isLast: isLast),
     );
   }
 }
