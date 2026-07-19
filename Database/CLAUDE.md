@@ -16,6 +16,18 @@ This file is a living document — exactly like a skill, it must track reality. 
 - **Never run the migration script** (`supabase db reset`, `supabase migration`, etc.) — the user always runs migrations manually because they need to reset the data. **Do not execute these commands under any circumstances.**
 - **Never run the seeding script** (`python python_data/main.py`, etc.) — the user will seed data manually. **Do not execute these commands under any circumstances.**
 
+## Migration versioning & merge safety
+Every migration filename starts with a `YYYYMMDDHHMMSS` version prefix, and that prefix is the **primary key** of Supabase's `supabase_migrations.schema_migrations` bookkeeping table. **Two migration files that share one version prefix are a hard error:** `supabase db reset` and `supabase migration up` both run the migration's DDL and then die at the tracking `INSERT` with `duplicate key value violates unique constraint "schema_migrations_pkey" ... Key (version)=(…) already exists`.
+
+- **A version collision is a SILENT merge hazard — git will NOT flag it.** The two colliding migrations are *separate files*, so a merge (main ↔ feature branch) combines both cleanly with no conflict marker; the collision only detonates later, at `make reset` / `make start`. Parallel branches easily grab the same day-hour slot (e.g. both author a `20260711000000_*`), and nothing surfaces it until both land in one tree.
+- **After ANY merge that brings in migrations, check for duplicate versions before running anything:**
+  ```
+  cd Database/supabase/migrations && for f in *.sql; do echo "${f%%_*}"; done | sort | uniq -d
+  ```
+  Any output is a duplicated version prefix — resolve it before `make reset`/`make start`.
+- **Resolve a collision by renumbering the UNMERGED side, never a migration already on `main`/applied.** A migration on `main` may already be recorded in a hosted or teammate's `schema_migrations`; renaming it makes it re-run there and fail. Renumber the not-yet-merged branch's migration(s) to a unique, later prefix (`git mv`), **preserving their intended apply order and any inter-migration ordering dependency** (e.g. an `ADD VALUE` enum step must still precede a migration that uses the value). Update every internal cross-reference comment and any doc/PR that cites the old numbers in the same change, then re-run the `uniq -d` check to confirm it's clean.
+- **Prevent it up front:** stamp a new migration with its real birth-hour (or bump the `HHMMSS`) rather than reusing a round `…000000` slot another in-flight branch is likely to have taken.
+
 ## Security
 - Always enable Row Level Security (RLS) on every table.
 - Always use `REVOKE UPDATE` on immutable columns (e.g. PKs, FKs, created_at) for the `authenticated` role.
