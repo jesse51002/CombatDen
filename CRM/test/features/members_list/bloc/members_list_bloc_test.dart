@@ -39,6 +39,7 @@ final _plan = MembershipPlanResponse(
   planId: 'plan-gold',
   gymId: 'gym-1',
   planName: 'Gold',
+  imageUrl: 'https://cdn.combatden.net/membership/presets/activity-01.jpg',
   planType: PlanType.recurring,
   isPublic: true,
   createdAt: DateTime(2026, 1, 1),

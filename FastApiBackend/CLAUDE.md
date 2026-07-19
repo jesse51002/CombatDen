@@ -782,7 +782,7 @@ There is NO separate `video_config` router or module.
 ## Image upload domain (`src/uploads/`)
 
 `POST /api/v1/uploads/image` — a multipart image plus a `category` **form field** (`reward`,
-`member`, `class`, `gym`, `rank`; not a query param) → stored in the `combatden-assets` S3
+`member`, `class`, `gym`, `rank`, `plan`; not a query param) → stored in the `combatden-assets` S3
 bucket under a `category`-named key prefix → returns a CDN URL
 (`cdn.combatden.net/...?v=<content-hash>`). Used by the CRM's `ImageUploadPickerField`. Gated by
 `Auth.verify_staff_principal` (owner/admin of ≥1 gym; no `gym_id` to scope). The 5 MB cap is

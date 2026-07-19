@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
@@ -162,7 +163,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
   static bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  void _close() => Navigator.of(context).pop();
+  void _close() => popOrGoTo(context, AppRoutes.schedule);
 
   void _startEdit() => setState(() => _mode = _DetailsMode.edit);
 
@@ -408,7 +409,7 @@ class _ClassOccurrenceScreenState extends State<ClassOccurrenceScreen> {
       primaryOnPressed: (ctx) => Navigator.of(ctx).pop(),
       secondaryLabel: null,
     );
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) popOrGoTo(context, AppRoutes.schedule);
   }
 
   String get _successTitle => switch (_action) {

@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/rank_detail/rank_detail_bloc.dart';
@@ -77,7 +78,8 @@ class _RankDetailView extends StatelessWidget {
           prev is RankDetailLoaded &&
           curr is RankDetailLoaded &&
           curr.deleteSuccessCount != prev.deleteSuccessCount,
-      listener: (context, _) => Navigator.of(context).pop(),
+      listener: (context, _) =>
+          popOrGoTo(context, AppRoutes.membershipsRanks),
       child: BlocConsumer<RankDetailBloc, RankDetailState>(
         // Both clauses are transition checks (not just an absolute
         // `actionError != null`) so an unrelated later emit that happens
@@ -337,7 +339,7 @@ class _Hero extends StatelessWidget {
         Row(
           children: [
             InkWell(
-              onTap: () => Navigator.of(context).pop(),
+              onTap: () => popOrGoTo(context, AppRoutes.membershipsRanks),
               borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
               child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.spacingSmall),

@@ -46,6 +46,13 @@ PLAN_TEMPLATES = [
 ]
 
 
+# One fixed plan-card image for every seeded plan (the migration backfill
+# default). The 12-image activity pool is a CRM picker affordance for real
+# owners, deliberately NOT cycled by the seed; a gym's plan images get
+# re-pointed at its class images by the presets template import anyway.
+_PLAN_IMAGE_URL = "https://cdn.combatden.net/membership/presets/activity-01.jpg"
+
+
 def create_all(
     api: GymApiClient,
     client: Client,
@@ -75,6 +82,7 @@ def create_all(
         payload: dict = {
             "gym_id": str(gym_id),
             "plan_name": tmpl["plan_name"],
+            "image_url": _PLAN_IMAGE_URL,
             "plan_type": tmpl["plan_type"],
             "price": tmpl["price"],
             "is_public": True,

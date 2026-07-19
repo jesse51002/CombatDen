@@ -534,3 +534,91 @@ async def test_ensure_no_shows_gives_every_pool_member_at_least_one() -> None:
     # A top-up never lands where the member attended or already signed up.
     for seed in seeds:
         assert seed.no_shows.isdisjoint(seed.attended)
+
+
+# ── plan-image cycle: imported class photos onto the gym's plans ─────────
+
+
+def test_cycle_plan_images_one_to_one() -> None:
+    # Equal counts: each plan takes the class image at its own index, in order.
+    plans = [uuid4(), uuid4(), uuid4()]
+    images = ["a.jpg", "b.jpg", "c.jpg"]
+    assert PresetsService._cycle_plan_images(plans, images) == [
+        (plans[0], "a.jpg"),
+        (plans[1], "b.jpg"),
+        (plans[2], "c.jpg"),
+    ]
+
+
+def test_cycle_plan_images_wraps_when_more_plans_than_classes() -> None:
+    # More plans than class images: the class images repeat with modulo, and
+    # the plan order is preserved exactly.
+    plans = [uuid4() for _ in range(5)]
+    images = ["a.jpg", "b.jpg"]
+    result = PresetsService._cycle_plan_images(plans, images)
+    assert [img for _, img in result] == [
+        "a.jpg", "b.jpg", "a.jpg", "b.jpg", "a.jpg"
+    ]
+    assert [pid for pid, _ in result] == plans
+
+
+def test_cycle_plan_images_more_classes_than_plans_uses_first_images() -> None:
+    # Fewer plans than class images: only the first N class images are used,
+    # in import order (no wrap needed).
+    plans = [uuid4(), uuid4()]
+    images = ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+    result = PresetsService._cycle_plan_images(plans, images)
+    assert [img for _, img in result] == ["a.jpg", "b.jpg"]
+
+
+def test_cycle_plan_images_zero_classes_is_noop() -> None:
+    # Zero imported classes → clean no-op, even with plans present.
+    plans = [uuid4(), uuid4()]
+    assert PresetsService._cycle_plan_images(plans, []) == []
+
+
+def test_cycle_plan_images_zero_plans_is_noop() -> None:
+    # Zero plans → clean no-op, even with imported class images present.
+    assert PresetsService._cycle_plan_images([], ["a.jpg", "b.jpg"]) == []
+
+
+async def test_sync_plan_images_noop_when_no_classes() -> None:
+    # No imported class images → not even the plan-list query runs (no writes).
+    svc = _make_presets_service()
+    session = AsyncMock()
+    await svc._sync_plan_images(session, str(uuid4()), [])
+    session.execute.assert_not_awaited()
+
+
+async def test_sync_plan_images_cycles_images_onto_listed_plans() -> None:
+    # With classes + plans: one list query, then one image UPDATE per plan in
+    # the listed order, with the class images cycled (wrapping) onto them and
+    # gym_id forwarded on every write.
+    svc = _make_presets_service()
+    gym_id = str(uuid4())
+    plan_a, plan_b, plan_c = uuid4(), uuid4(), uuid4()
+
+    list_result = MagicMock()
+    list_result.mappings.return_value.all.return_value = [
+        {"plan_id": plan_a},
+        {"plan_id": plan_b},
+        {"plan_id": plan_c},
+    ]
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=list_result)
+
+    await svc._sync_plan_images(session, gym_id, ["c0.jpg", "c1.jpg"])
+
+    # 1 list call + one UPDATE per plan.
+    assert session.execute.await_count == 4
+    update_calls = session.execute.await_args_list[1:]
+    seen = [
+        (call.args[1]["plan_id"], call.args[1]["image_url"])
+        for call in update_calls
+    ]
+    assert seen == [
+        (str(plan_a), "c0.jpg"),
+        (str(plan_b), "c1.jpg"),
+        (str(plan_c), "c0.jpg"),  # wraps back to the first class image
+    ]
+    assert all(call.args[1]["gym_id"] == gym_id for call in update_calls)

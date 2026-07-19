@@ -67,9 +67,11 @@ PREVIEW_PER_TAG = 10
     description=(
         "Transactionally copies the chosen ``template_gym`` template's spec, "
         "queries, feed, classes, instructors, and rewards into the gym's "
-        "real production tables. Re-pickable: calling again overwrites the "
-        "prior import. Restricted to gym owners AND the preset-import "
-        "email allowlist (``preset_import_allowed_emails`` setting)."
+        "real production tables, and re-images the gym's existing membership "
+        "plans with the imported class photos. Re-pickable: calling again "
+        "overwrites the prior import. Restricted to gym owners AND the "
+        "preset-import email allowlist (``preset_import_allowed_emails`` "
+        "setting)."
     ),
     responses={
         200: {"description": "Import complete — counts in the response body"},

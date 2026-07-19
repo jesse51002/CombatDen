@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
@@ -70,7 +71,8 @@ class _RankPresetsScreenState extends State<RankPresetsScreen> {
     context
         .read<RanksBloc>()
         .add(RankPresetSeeded(gymId: widget.gymId, presetKind: kind));
-    Navigator.of(context).pop();
+    if (!mounted) return;
+    popOrGoTo(context, AppRoutes.membershipsRanks);
   }
 
   @override
@@ -90,7 +92,8 @@ class _RankPresetsScreenState extends State<RankPresetsScreen> {
               spacing: DesignConstants.spacingBig,
               children: [
                 _BackButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () =>
+                      popOrGoTo(context, AppRoutes.membershipsRanks),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

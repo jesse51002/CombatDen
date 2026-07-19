@@ -10,6 +10,7 @@ import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
+import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
@@ -19,11 +20,13 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/member_detail_bloc_settle.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_new_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_footer.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_body.dart';
@@ -57,16 +60,32 @@ class StartMembershipsWizard extends StatefulWidget {
   /// results step's "view member" link on created rows.
   final ValueChanged<String>? onViewMember;
 
+  /// Shows the leading "Add member" group in the step indicator and shifts the
+  /// "Step N of M" numbering by one — true only when the wizard is embedded in
+  /// the add-member flow (the create already happened). Member-detail launches
+  /// leave it false, so that context stays exactly three groups.
+  final bool showAddMemberGroup;
+
+  /// Seeds which members start selected on the "who joins" step. The add-member
+  /// group flow passes the whole group's ids (payer included) so everyone the
+  /// payer just authorized is pre-checked. Null (detail-page launches) falls
+  /// back to selecting only the viewed member.
+  final Set<String>? initialSelectedMemberIds;
+
   const StartMembershipsWizard({
     super.key,
     required this.member,
     this.onViewMember,
+    this.showAddMemberGroup = false,
+    this.initialSelectedMemberIds,
   });
 
   static Future<void> show({
     required BuildContext context,
     required MemberDetailResponse member,
     ValueChanged<String>? onViewMember,
+    bool showAddMemberGroup = false,
+    Set<String>? initialSelectedMemberIds,
   }) {
     return showDialog<void>(
       context: context,
@@ -75,6 +94,8 @@ class StartMembershipsWizard extends StatefulWidget {
         child: StartMembershipsWizard(
           member: member,
           onViewMember: onViewMember,
+          showAddMemberGroup: showAddMemberGroup,
+          initialSelectedMemberIds: initialSelectedMemberIds,
         ),
       ),
     );
@@ -93,6 +114,11 @@ class _StartMembershipsWizardState
   late final MemberDetailBloc _bloc;
   late StartMembershipParticipant _payer;
   MemberDetailResponse? _payerDetail;
+
+  /// The payer-step candidate list — the launch member's authorized payers.
+  /// Seeded from the immutable [widget.member] snapshot and refreshed from the
+  /// reloaded launch member after a new payer is authorized in-flow.
+  late List<LinkedAccount> _payerCandidates;
 
   var _step = StartMembershipsStep.payer;
   int _memberIndex = 0;
@@ -157,14 +183,21 @@ class _StartMembershipsWizardState
       isPayer: true,
     );
     _payerDetail = viewed;
+    _payerCandidates = viewed.authorizedPayers;
     // The viewed member's own page already carries their detail, but
     // the details of the people they may pay for still need fetching —
     // without this the "Already has" block and already-on-plan guard
     // silently have no data in the payer-launched flow.
     _loadFamilyDetails(viewed);
-    // Sensible default: the member whose page launched the
-    // wizard is getting the membership.
-    _selectedMemberIds.add(viewed.memberId);
+    // Sensible default: the member whose page launched the wizard is getting
+    // the membership. The add-member group flow overrides this with the whole
+    // group (payer + everyone the payer just authorized).
+    final initial = widget.initialSelectedMemberIds;
+    if (initial != null && initial.isNotEmpty) {
+      _selectedMemberIds.addAll(initial);
+    } else {
+      _selectedMemberIds.add(viewed.memberId);
+    }
   }
 
   Future<void> _loadPayerDetail({
@@ -581,14 +614,155 @@ class _StartMembershipsWizardState
         s is MemberDetailLoaded ? s.refreshToken : -1;
     final linkedId = await StartLinkMemberDialog.show(
       context: context,
-      payerMemberId: _payer.memberId,
-      payerName: _payer.name,
+      direction: AuthorizeDirection.addPayee,
+      anchorMemberId: _payer.memberId,
+      anchorName: _payer.name,
       candidates: candidates,
     );
     if (linkedId == null || !mounted) return;
     await awaitMemberDetailSettle(_bloc, tokenBefore);
     if (!mounted) return;
     await _loadPayerDetail(alsoSelect: linkedId);
+  }
+
+  /// "New member" adder: create someone new (or reuse an existing duplicate)
+  /// and authorize the payer for them, then add them to this run. When the
+  /// dialog committed an authorization it mirrors [_onLinkFirst]'s sequencing;
+  /// a direct select of an already-authorized member just adds them.
+  Future<void> _onNewMember() async {
+    final s = _bloc.state;
+    final tokenBefore =
+        s is MemberDetailLoaded ? s.refreshToken : -1;
+    final authorizedIds = <String>{
+      _payer.memberId,
+      ...?_payerDetail?.authorizedToPayFor
+          .map((a) => a.memberId),
+    };
+    final result = await StartNewMemberDialog.show(
+      context: context,
+      direction: AuthorizeDirection.addPayee,
+      anchorMemberId: _payer.memberId,
+      anchorName: _payer.name,
+      gymId: widget.member.gymId,
+      relatedIds: authorizedIds,
+    );
+    if (result == null || !mounted) return;
+    if (result.committedLink) {
+      await awaitMemberDetailSettle(_bloc, tokenBefore);
+      if (!mounted) return;
+      await _loadPayerDetail(alsoSelect: result.memberId);
+    } else {
+      // Already authorized — just include them in the run.
+      setState(() => _selectedMemberIds.add(result.memberId));
+    }
+  }
+
+  /// "New member" adder on the PAYER step (inverse of [_onNewMember]): create
+  /// someone new (or reuse a duplicate) and authorize THEM as a payer for the
+  /// launch member (the payee). On a committed authorization it mirrors
+  /// [_onNewMember]'s sequencing, then refreshes the payer candidates and
+  /// auto-selects the added payer; a direct select of an already-authorized
+  /// payer just selects them.
+  Future<void> _onNewPayer() async {
+    final s = _bloc.state;
+    final tokenBefore =
+        s is MemberDetailLoaded ? s.refreshToken : -1;
+    final relatedIds = <String>{
+      widget.member.memberId,
+      ..._payerCandidates.map((a) => a.memberId),
+    };
+    final result = await StartNewMemberDialog.show(
+      context: context,
+      direction: AuthorizeDirection.addPayer,
+      anchorMemberId: widget.member.memberId,
+      anchorName: widget.member.fullName,
+      gymId: widget.member.gymId,
+      relatedIds: relatedIds,
+    );
+    if (result == null || !mounted) return;
+    if (result.committedLink) {
+      await awaitMemberDetailSettle(_bloc, tokenBefore);
+      if (!mounted) return;
+      _refreshPayerCandidates(select: result.memberId);
+    } else {
+      // Already an authorized payer (or the launch member) — just select them.
+      _selectPayerById(result.memberId);
+    }
+  }
+
+  /// "Add an existing member" adder on the PAYER step (inverse of [_onLinkFirst]): pick a
+  /// roster member and authorize them as a payer for the launch member, then
+  /// refresh the candidates and auto-select the added payer.
+  Future<void> _onLinkPayer() async {
+    final s = _bloc.state;
+    final roster = s is MemberDetailLoaded
+        ? s.allMembers
+        : const <MemberSummary>[];
+    final exclude = <String>{
+      widget.member.memberId,
+      ..._payerCandidates.map((a) => a.memberId),
+    };
+    final candidates = roster
+        .where((m) => !exclude.contains(m.memberId))
+        .toList();
+    final tokenBefore =
+        s is MemberDetailLoaded ? s.refreshToken : -1;
+    final linkedId = await StartLinkMemberDialog.show(
+      context: context,
+      direction: AuthorizeDirection.addPayer,
+      anchorMemberId: widget.member.memberId,
+      anchorName: widget.member.fullName,
+      candidates: candidates,
+    );
+    if (linkedId == null || !mounted) return;
+    await awaitMemberDetailSettle(_bloc, tokenBefore);
+    if (!mounted) return;
+    _refreshPayerCandidates(select: linkedId);
+  }
+
+  /// Rebuilds the payer candidate list from the reloaded LAUNCH member (the
+  /// bloc's viewed member, whose `authorizedPayers` now carries the new payer)
+  /// and auto-selects the added payer via [_onPayerSelected].
+  void _refreshPayerCandidates({required String select}) {
+    final s = _bloc.state;
+    if (s is MemberDetailLoaded) {
+      setState(() {
+        _payerCandidates = s.member.authorizedPayers;
+      });
+    }
+    _selectPayerById(select);
+  }
+
+  /// Selects the payer with [memberId] (a launch-member self-pay or a payer
+  /// candidate) via the existing [_onPayerSelected], which resets the run's
+  /// downstream selection to the launch member.
+  void _selectPayerById(String memberId) {
+    final p = _payerParticipantFor(memberId);
+    if (p != null) _onPayerSelected(p);
+  }
+
+  StartMembershipParticipant? _payerParticipantFor(
+    String memberId,
+  ) {
+    if (memberId == widget.member.memberId) {
+      return StartMembershipParticipant(
+        memberId: widget.member.memberId,
+        name: widget.member.fullName,
+        photoUrl: widget.member.photoUrl,
+        isPayer: true,
+      );
+    }
+    for (final a in _payerCandidates) {
+      if (a.memberId == memberId) {
+        return StartMembershipParticipant(
+          memberId: a.memberId,
+          name: a.fullName,
+          photoUrl: a.photoUrl,
+          isPayer: true,
+        );
+      }
+    }
+    return null;
   }
 
   Future<void> _onAddNewCard() async {
@@ -697,8 +871,12 @@ class _StartMembershipsWizardState
             step: _step,
             launchMember: widget.member,
             repository: _repository,
+            showAddMemberGroup: widget.showAddMemberGroup,
+            memberIndex: _memberIndex,
+            hasWaiver: _waiverGate != null,
             payer: _payer,
             payerDetail: _payerDetail,
+            payerCandidates: _payerCandidates,
             currentMember: _currentMember,
             selectedMemberIds: _selectedMemberIds,
             currentDrafts: _currentDrafts,
@@ -731,6 +909,9 @@ class _StartMembershipsWizardState
             onPayerSelected: _onPayerSelected,
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,
+            onNewMember: _onNewMember,
+            onNewPayer: _onNewPayer,
+            onLinkPayer: _onLinkPayer,
             onPlanToggle: _onPlanToggle,
             onDraftChanged: _updateDraft,
             onPreviewLoaded: (p) =>

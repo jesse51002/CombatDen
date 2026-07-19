@@ -15,6 +15,11 @@ part 'membership_plan_create_request.g.dart';
 class MembershipPlanCreateRequest {
   final String gymId;
   final String planName;
+
+  /// The plan's catalog image (CDN URL). Required by the backend
+  /// (`membership_plans.image_url`, NOT NULL) — an explicit pool pick or
+  /// upload, never omitted.
+  final String imageUrl;
   final PlanType planType;
   final int? classCount;
   final int? durationAmount;
@@ -26,6 +31,7 @@ class MembershipPlanCreateRequest {
   const MembershipPlanCreateRequest({
     required this.gymId,
     required this.planName,
+    required this.imageUrl,
     required this.planType,
     this.classCount,
     this.durationAmount,

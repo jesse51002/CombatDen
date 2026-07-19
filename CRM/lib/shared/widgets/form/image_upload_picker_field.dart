@@ -8,6 +8,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/uploads/image_upload_repository.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
+import 'package:crm/shared/widgets/form/image_upload_pool_tray.dart';
 
 /// Default aspect ratio + max width for the upload preview. Landscape
 /// photos (reward / member / class / gym) preview at 16:9; square art
@@ -20,8 +21,15 @@ const double _kMaxWidth = 360;
 /// On tap: opens the system file picker, uploads the chosen
 /// image to the CDN via [category] (`'reward'`, `'member'`,
 /// `'class'`, `'gym'`, or `'rank'`), shows a loading spinner during the
-/// upload, then calls [onUploaded] with the returned CDN URL and shows
+/// upload, then calls [onImageChosen] with the returned CDN URL and shows
 /// the uploaded preview.  Inline error text is shown on failure.
+///
+/// When [poolImages] is non-empty, a horizontally-scrollable tray of
+/// tappable default-image chips (plus a trailing upload tile) renders
+/// below the preview. Tapping a chip is synchronous — no upload — and
+/// fires [onImageChosen] with that pool URL, so the same callback carries
+/// both an upload result and a pool pick. An upload always overrides a
+/// prior pool pick, and a pool tap clears a prior upload.
 ///
 /// An optional current [imageUrl] or bundled [imageAsset] is
 /// displayed as the initial preview before any upload. When
@@ -29,6 +37,10 @@ const double _kMaxWidth = 360;
 /// instead (with a "choose your own" caption) so the caller can
 /// show the platform default the record will get if the user
 /// never uploads their own.
+///
+/// The field does not validate itself. A host form that marks it
+/// [isRequired] passes an [errorText] on a failed submit; that text
+/// renders below the preview and the preview border turns red.
 class ImageUploadPickerField extends StatefulWidget {
   final String label;
 
@@ -36,8 +48,25 @@ class ImageUploadPickerField extends StatefulWidget {
   /// or `'rank'`.
   final String category;
 
-  /// Called with the CDN URL after a successful upload.
-  final void Function(String url) onUploaded;
+  /// Called with the chosen CDN URL — fired both when an upload finishes
+  /// and when a pool image is tapped.
+  final void Function(String url) onImageChosen;
+
+  /// Optional pool of default CDN image URLs. When non-empty, they render
+  /// as a tray of tappable chips below the preview; a tap selects one
+  /// synchronously (no upload) and fires [onImageChosen]. Empty by default,
+  /// so call sites that only upload are visually unchanged.
+  final List<String> poolImages;
+
+  /// Whether the host form treats this field as required. The widget itself
+  /// never validates — this only marks the label; the host decides what
+  /// counts as filled (a [defaultImageUrl] preview never does) and, on a
+  /// failed submit, passes an [errorText].
+  final bool isRequired;
+
+  /// Validation error supplied by the host form on a failed submit. When
+  /// set, the preview border turns red and this text renders below it.
+  final String? errorText;
 
   /// Preview box aspect ratio (width / height). Defaults to 16:9 for the
   /// landscape photo call sites; the rank belt fields pass `1` so a
@@ -58,8 +87,8 @@ class ImageUploadPickerField extends StatefulWidget {
 
   /// Optional placeholder image previewed (with a caption) when the
   /// user has chosen no image yet. Purely a preview: it is NOT bubbled
-  /// up via [onUploaded] — the caller only receives a URL once the user
-  /// actually uploads one.
+  /// up via [onImageChosen] — the caller only receives a URL once the
+  /// user actually uploads or picks one.
   final String? defaultImageUrl;
 
   /// When true, a full-width tonal upload button sits below the preview so
@@ -74,7 +103,10 @@ class ImageUploadPickerField extends StatefulWidget {
     super.key,
     required this.label,
     required this.category,
-    required this.onUploaded,
+    required this.onImageChosen,
+    this.poolImages = const [],
+    this.isRequired = false,
+    this.errorText,
     this.imageUrl,
     this.imageAsset,
     this.defaultImageUrl,
@@ -90,6 +122,7 @@ class ImageUploadPickerField extends StatefulWidget {
 class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
   late final ImageUploadRepository _repo;
   String? _uploadedUrl;
+  String? _selectedPoolUrl;
   bool _isUploading = false;
   String? _error;
 
@@ -99,7 +132,11 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
     _repo = ImageUploadRepository(ApiClient());
   }
 
-  String? get _effectiveUrl => _uploadedUrl ?? widget.imageUrl;
+  // An upload wins over a pool pick, which wins over the initial [imageUrl].
+  // The two in-session sources are kept mutually exclusive (each clears the
+  // other on selection), so at most one chip ever shows the selected ring.
+  String? get _effectiveUrl =>
+      _uploadedUrl ?? _selectedPoolUrl ?? widget.imageUrl;
 
   bool get _hasImage =>
       (_effectiveUrl?.isNotEmpty ?? false) ||
@@ -134,9 +171,10 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
       if (!mounted) return;
       setState(() {
         _uploadedUrl = url;
+        _selectedPoolUrl = null;
         _isUploading = false;
       });
-      widget.onUploaded(url);
+      widget.onImageChosen(url);
     } catch (e, st) {
       log('Image upload failed', error: e, stackTrace: st);
       if (!mounted) return;
@@ -145,6 +183,18 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
         _error = 'Upload failed — please try again.';
       });
     }
+  }
+
+  /// Synchronous pool-chip pick — no upload. Selects [url], clears any
+  /// prior upload so the pick wins, and bubbles it via [onImageChosen].
+  void _onPoolPick(String url) {
+    if (_isUploading) return;
+    setState(() {
+      _selectedPoolUrl = url;
+      _uploadedUrl = null;
+      _error = null;
+    });
+    widget.onImageChosen(url);
   }
 
   /// The prominent full-width upload CTA (opt-in via
@@ -166,13 +216,41 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
     );
   }
 
+  /// The field label, with a red required marker appended when the host
+  /// form marks the field [ImageUploadPickerField.isRequired].
+  Widget _label() {
+    if (!widget.isRequired) {
+      return Text(widget.label, style: DesignConstants.h2);
+    }
+    return Text.rich(
+      TextSpan(
+        text: widget.label,
+        style: DesignConstants.h2,
+        children: [
+          TextSpan(
+            text: ' *',
+            style: DesignConstants.h2.copyWith(
+              color: DesignConstants.badRed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasError = widget.errorText != null;
+    // Contain-fit means transparent belt art (the rank fields): the preview
+    // shows JUST the image — no card fill painted behind it and inner padding
+    // off the border. Cover-fit photo previews keep the filled, edge-to-edge
+    // look. This one flag flows down to the pool tray's chips too.
+    final contained = widget.previewFit == BoxFit.contain;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(widget.label, style: DesignConstants.h2),
+        _label(),
         Align(
           alignment: Alignment.centerLeft,
           child: ConstrainedBox(
@@ -192,12 +270,14 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                     child: Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: DesignConstants.card,
+                        color: contained ? null : DesignConstants.card,
                         borderRadius: BorderRadius.circular(
                           DesignConstants.radiusBig,
                         ),
                         border: Border.all(
-                          color: DesignConstants.text3rd,
+                          color: hasError
+                              ? DesignConstants.badRed
+                              : DesignConstants.text3rd,
                           width: DesignConstants.buttonBorder,
                         ),
                       ),
@@ -208,16 +288,28 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                                   imageUrl: _effectiveUrl,
                                   asset: widget.imageAsset,
                                   fit: widget.previewFit,
+                                  padded: contained,
                                 )
                               : _showDefault
                                   ? _Preview(
                                       imageUrl: widget.defaultImageUrl,
                                       fit: widget.previewFit,
+                                      padded: contained,
                                     )
                                   : const _UploadPrompt(),
                     ),
                   ),
                 ),
+                if (widget.poolImages.isNotEmpty)
+                  ImageUploadPoolTray(
+                    poolImages: widget.poolImages,
+                    aspectRatio: widget.aspectRatio,
+                    chipFit: widget.previewFit,
+                    selectedUrl: _selectedPoolUrl,
+                    disabled: _isUploading,
+                    onPick: _onPoolPick,
+                    onUpload: _onTap,
+                  ),
                 if (widget.prominentUpload) _uploadButton(),
                 if (_showDefault && !widget.prominentUpload)
                   Text(
@@ -229,6 +321,13 @@ class _ImageUploadPickerFieldState extends State<ImageUploadPickerField> {
                 if (_error != null)
                   Text(
                     _error!,
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.badRed,
+                    ),
+                  ),
+                if (hasError)
+                  Text(
+                    widget.errorText!,
                     style: DesignConstants.pSmall.copyWith(
                       color: DesignConstants.badRed,
                     ),
@@ -289,7 +388,17 @@ class _Preview extends StatelessWidget {
   final String? asset;
   final BoxFit fit;
 
-  const _Preview({this.imageUrl, this.asset, this.fit = BoxFit.cover});
+  /// Inset the image off the box border. Set for contain-fit belt art so the
+  /// transparent PNG breathes inside the outlined preview; left off for
+  /// cover-fit photos, which fill the box edge to edge.
+  final bool padded;
+
+  const _Preview({
+    this.imageUrl,
+    this.asset,
+    this.fit = BoxFit.cover,
+    this.padded = false,
+  });
 
   Widget _image() {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
@@ -311,10 +420,16 @@ class _Preview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget image = padded
+        ? Padding(
+            padding: const EdgeInsets.all(DesignConstants.spacingLarge),
+            child: _image(),
+          )
+        : _image();
     return Stack(
       fit: StackFit.expand,
       children: [
-        _image(),
+        image,
         Positioned(
           right: DesignConstants.spacingMedium,
           bottom: DesignConstants.spacingMedium,

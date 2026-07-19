@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
@@ -106,6 +107,12 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   _Step _step = _Step.editing;
   _ClassAction _action = _ClassAction.create;
   String? _inlineError;
+
+  /// Field-level error shown under the class image picker on a failed submit
+  /// (no image chosen). The image is required — an explicit pool pick or
+  /// upload. Cleared the moment an image is chosen. Edit mode starts
+  /// satisfied by the class's existing image.
+  String? _imageError;
 
   /// `actionSuccessCount` snapshot taken when a mutation is dispatched; a later
   /// increase means our write committed.
@@ -222,7 +229,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     });
   }
 
-  void _close() => Navigator.of(context).pop();
+  void _close() => popOrGoTo(context, AppRoutes.schedule);
 
   // ---- form-model <-> request conversions ---------------------------------
 
@@ -412,10 +419,17 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
 
   Future<void> _save() async {
     final err = _validate();
-    if (err != null) {
-      setState(() => _inlineError = err);
+    // The image is required — the form must not submit without an explicit
+    // pool pick or upload (edit mode starts satisfied by the existing image).
+    final imageOk = _imageUrl != null && _imageUrl!.isNotEmpty;
+    if (err != null || !imageOk) {
+      setState(() {
+        _inlineError = err;
+        _imageError = imageOk ? null : 'Choose a class image.';
+      });
       return;
     }
+    setState(() => _imageError = null);
     final gymId = selectedGym.gymId ?? '';
     if (gymId.isEmpty) {
       setState(() => _inlineError = 'No active gym selected.');
@@ -514,7 +528,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
       primaryOnPressed: (ctx) => Navigator.of(ctx).pop(),
       secondaryLabel: null,
     );
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) popOrGoTo(context, AppRoutes.schedule);
   }
 
   String get _successTitle {
@@ -576,7 +590,11 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             nameController: _nameController,
             descriptionController: _descriptionController,
             imageUrl: _imageUrl,
-            onImageChanged: (url) => setState(() => _imageUrl = url),
+            errorText: _imageError,
+            onImageChanged: (url) => setState(() {
+              _imageUrl = url;
+              _imageError = null;
+            }),
           ),
           ClassRewardsSection(
             pointsController: _pointsController,

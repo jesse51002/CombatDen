@@ -13,12 +13,15 @@ import pytest
 
 BASE = "/api/v1/membership_plans"
 
+PLAN_IMG = "https://cdn.combatden.net/membership/presets/activity-01.jpg"
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 PLAN_RESPONSE_REQUIRED_KEYS = {
     "plan_id",
     "gym_id",
     "plan_name",
+    "image_url",
     "plan_type",
     "is_public",
     "created_at",
@@ -268,6 +271,7 @@ class TestCreatePlanValidation:
         payload = {
             "gym_id": gym_id,
             "plan_name": "Monthly Membership",
+            "image_url": PLAN_IMG,
             "plan_type": "recurring",
             "duration_amount": 1,
             "duration_unit": "month",
@@ -293,6 +297,7 @@ class TestCreatePlanValidation:
             payload = {
                 "gym_id": gym_id,
                 "plan_name": "Test",
+                "image_url": PLAN_IMG,
                 "plan_type": "recurring",
                 "duration_amount": 1,
                 "duration_unit": "month",

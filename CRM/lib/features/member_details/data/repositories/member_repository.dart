@@ -5,6 +5,7 @@ import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
+import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
@@ -17,6 +18,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_remov
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
+import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
@@ -112,6 +114,55 @@ class MemberRepository {
   }
 
   // ----- Member profile / billing management -----
+
+  /// `POST /api/v1/members/` — create a member shell (and its Stripe
+  /// customer). Returns the new member's id (from the 201
+  /// `MembersBillingProfileResponse`).
+  ///
+  /// Throws [DuplicateMemberException] on a 409 whose
+  /// `detail.code == "duplicate_member"` — a same-identity member already
+  /// exists and [MembersManagementCreateRequest.allowDuplicate] is false;
+  /// nothing was written, so the caller offers create-anyway / use-existing.
+  /// A 400 (the gym has no Stripe Connect account) rethrows as a
+  /// [ServerException] the caller surfaces.
+  Future<String> createMember(
+    MembersManagementCreateRequest req,
+  ) async {
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/members/',
+        data: req.toJson(),
+      );
+      final data = response.data as Map<String, dynamic>;
+      return data['member_id'] as String;
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        final dup = _parseDuplicateMember(e.data);
+        if (dup != null) throw dup;
+      }
+      rethrow;
+    }
+  }
+
+  /// Parses `{"detail": {"code": "duplicate_member", "matches": [...]}}` from
+  /// a 409 body into a [DuplicateMemberException]. Returns null when the shape
+  /// doesn't match (a plain 409 should still propagate as a
+  /// [ServerException]). Mirrors [_parseWaiverGate].
+  DuplicateMemberException? _parseDuplicateMember(
+    Map<String, dynamic>? data,
+  ) {
+    if (data == null) return null;
+    final detail = data['detail'];
+    if (detail is! Map) return null;
+    if (detail['code'] != 'duplicate_member') return null;
+    final matchesRaw = detail['matches'];
+    if (matchesRaw is! List) return null;
+    final matches = matchesRaw
+        .whereType<Map<String, dynamic>>()
+        .map(DuplicateMemberMatch.fromJson)
+        .toList();
+    return DuplicateMemberException(matches);
+  }
 
   /// `PUT /api/v1/members/{member_id}` — update member
   /// identity + lifecycle fields (the request already

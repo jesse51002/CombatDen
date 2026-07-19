@@ -12,6 +12,7 @@ MembershipPlanResponse _$MembershipPlanResponseFromJson(
   planId: json['plan_id'] as String,
   gymId: json['gym_id'] as String,
   planName: json['plan_name'] as String,
+  imageUrl: json['image_url'] as String,
   planType: PlanType.fromJson(json['plan_type'] as String),
   classCount: (json['class_count'] as num?)?.toInt(),
   durationAmount: (json['duration_amount'] as num?)?.toInt(),

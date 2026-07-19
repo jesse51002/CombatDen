@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/nav_pop.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -18,6 +20,7 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
@@ -25,13 +28,26 @@ import 'package:crm/shared/widgets/hairline.dart';
 
 /// Create or edit a main rank — a full-screen, repository-direct form
 /// (mirrors the plan / waiver editors). Name, belt image,
-/// classes-to-next-belt, sub-position count, and a per-sub belt image
-/// that defaults to the main belt.
+/// classes-to-next-belt, sub-position count, and — behind a
+/// "Custom sub-rank images" switch — a per-sub belt image.
 ///
-/// Per-sub overrides are **write-only**: shrinking the count never
-/// prunes the map, so a dormant sub image survives a count change and
+/// The switch gates both the override pickers and the save payload: OFF
+/// sends an empty overrides map (every sub-position falls back to the
+/// main belt via the backend COALESCE), ON sends the entered overrides.
+/// It defaults ON in edit mode when the rank already has overrides, OFF
+/// otherwise. Entered values live in the overrides map independent of
+/// the switch, so toggling OFF then ON restores them — only the payload
+/// respects the switch.
+///
+/// Turning the switch OFF on a rank that had overrides saved is a
+/// permanent, full JSONB wipe of every stored per-sub image (no merge,
+/// unrecoverable), so [_save] confirms it first — see [_savedOverrideCount].
+///
+/// Within the map, overrides are **write-only**: shrinking the count
+/// never prunes it, so a dormant sub image survives a count change and
 /// revives if the count grows back. Uploads use the `rank` image
-/// category (S3 `rank/` prefix).
+/// category (S3 `rank/` prefix); each override field also offers the
+/// curated belt pool.
 class EditRankScreen extends StatefulWidget {
   /// The rank being edited, or null to create a new one.
   final MainRank? rank;
@@ -55,11 +71,36 @@ class _EditRankScreenState extends State<EditRankScreen> {
   late Future<RankLadder> _ladderFuture;
 
   String? _mainImageUrl;
+
+  /// Field-level error shown under the main belt picker on a failed submit
+  /// (no belt image chosen). The main belt is required — an explicit pool
+  /// pick or upload. Cleared the moment a belt is chosen. Edit mode starts
+  /// satisfied by the rank's existing image.
+  String? _mainImageError;
   int _subRankCount = 0;
 
   /// Write-only per-sub image map (`"0" -> url`). Seeded from the rank
   /// in edit mode; never has a key removed (persist-only).
   final Map<String, String> _overrides = {};
+
+  /// Whether per-sub belt images are customized — the "Custom sub-rank
+  /// images" switch. Gates the override pickers AND the save payload:
+  /// OFF sends an empty overrides map (the effective belt image falls
+  /// back to the main belt via the backend COALESCE), ON sends
+  /// [_overrides]. Auto-ON in edit mode when the rank already has
+  /// overrides, OFF otherwise (always OFF for create). Kept independent
+  /// of [_overrides] so toggling OFF then ON restores the entered values
+  /// — only the SAVE payload respects the switch.
+  bool _customSubImages = false;
+
+  /// How many per-sub belt overrides were PERSISTED on the rank at load
+  /// time. Zero for create mode and for a rank that never had any. Drives
+  /// the wipe-confirmation gate in [_save]: turning the switch OFF sends an
+  /// empty overrides map, which permanently clears these saved images, so
+  /// the save is confirmed first only when this is > 0 (i.e. the rank had
+  /// saved overrides). A never-saved override added and removed this
+  /// session leaves it at 0, so no confirm fires.
+  int _savedOverrideCount = 0;
 
   bool _saving = false;
   String? _error;
@@ -76,6 +117,12 @@ class _EditRankScreenState extends State<EditRankScreen> {
       _mainImageUrl = r.imageUrl;
       _subRankCount = r.subRankCount;
       _overrides.addAll(r.subRankImageOverrides);
+      // Remember how many overrides were saved, so [_save] can confirm the
+      // permanent wipe if the switch is later turned off.
+      _savedOverrideCount = r.subRankImageOverrides.length;
+      // Auto-enable the custom-images section when the rank already has
+      // per-sub overrides; a rank with none opens with the switch off.
+      _customSubImages = _overrides.isNotEmpty;
     }
     _ladderFuture = _repository.listRanks(_gymId);
   }
@@ -96,7 +143,28 @@ class _EditRankScreenState extends State<EditRankScreen> {
   }
 
   Future<void> _save(int nextOrder) async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final formOk = _formKey.currentState?.validate() ?? false;
+    // The main belt image is required — a save is blocked until an explicit
+    // pool pick or upload (edit mode starts satisfied by the existing image).
+    final imageOk = _mainImageUrl != null && _mainImageUrl!.isNotEmpty;
+    setState(() => _mainImageError = imageOk ? null : 'Choose a belt image.');
+    if (!formOk || !imageOk) return;
+    // Turning the switch OFF on a rank that had saved sub-rank images sends
+    // an empty overrides map, permanently wiping every stored per-sub image
+    // (full JSONB replace, no merge, unrecoverable). Confirm before the wipe.
+    if (_savedOverrideCount > 0 && !_customSubImages) {
+      final confirmed = await ConfirmationModal.show(
+        context: context,
+        title: 'Delete custom sub-rank images?',
+        message: 'The $_savedOverrideCount saved custom sub-rank image(s) '
+            'for this rank will be permanently deleted, and every '
+            'sub-position will fall back to the main belt image. '
+            'This cannot be undone.',
+        confirmLabel: 'Delete',
+        confirmColor: DesignConstants.badRed,
+      );
+      if (!confirmed || !mounted) return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -104,6 +172,13 @@ class _EditRankScreenState extends State<EditRankScreen> {
     try {
       final name = _nameController.text.trim();
       final classes = int.parse(_classesController.text.trim());
+      // The switch gates the payload: ON sends the entered overrides,
+      // OFF sends an explicit empty map so the backend clears any prior
+      // overrides (the effective image falls back to the main belt via
+      // COALESCE). The in-state _overrides map is untouched, so a toggle
+      // back to ON restores what was entered.
+      final overrides =
+          _customSubImages ? _overrides : const <String, String>{};
       if (_isEdit) {
         await _repository.updateRank(
           widget.rank!.rankId,
@@ -112,7 +187,7 @@ class _EditRankScreenState extends State<EditRankScreen> {
             classesToNextMajor: classes,
             subRankCount: _subRankCount,
             imageUrl: _mainImageUrl,
-            subRankImageOverrides: _overrides,
+            subRankImageOverrides: overrides,
           ),
         );
       } else {
@@ -123,11 +198,11 @@ class _EditRankScreenState extends State<EditRankScreen> {
           classesToNextMajor: classes,
           subRankCount: _subRankCount,
           imageUrl: _mainImageUrl,
-          subRankImageOverrides: _overrides,
+          subRankImageOverrides: overrides,
         ));
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      popOrGoTo(context, AppRoutes.membershipsRanks, result: true);
     } catch (e, st) {
       log('Failed to save rank', error: e, stackTrace: st);
       if (!mounted) return;
@@ -170,7 +245,8 @@ class _EditRankScreenState extends State<EditRankScreen> {
                     AppOutlineButton(
                       text: 'Back',
                       borderRadius: DesignConstants.radiusSmall,
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () =>
+                          popOrGoTo(context, AppRoutes.membershipsRanks),
                     ),
                   ],
                 ),
@@ -197,7 +273,8 @@ class _EditRankScreenState extends State<EditRankScreen> {
               spacing: DesignConstants.spacingBig,
               children: [
                     _BackButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () =>
+                          popOrGoTo(context, AppRoutes.membershipsRanks),
                     ),
                     Text(
                       _isEdit ? 'Edit rank' : 'New rank',
@@ -213,14 +290,19 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       key: const ValueKey('main-belt'),
                       label: 'Belt image',
                       category: 'rank',
+                      poolImages: AppConstants.rankBeltDefaultUrls,
+                      isRequired: true,
                       // Belts are square art — preview 1:1 and contained so
                       // the image never crops or stretches (matches how
                       // RankBeltImage renders it on the ladder + detail).
                       aspectRatio: 1,
                       previewFit: BoxFit.contain,
                       imageUrl: _mainImageUrl,
-                      onUploaded: (url) =>
-                          setState(() => _mainImageUrl = url),
+                      errorText: _mainImageError,
+                      onImageChosen: (url) => setState(() {
+                        _mainImageUrl = url;
+                        _mainImageError = null;
+                      }),
                     ),
                     CustomTextField(
                       controller: _classesController,
@@ -242,27 +324,38 @@ class _EditRankScreenState extends State<EditRankScreen> {
                       ),
                       if (_subRankCount > 0) ...[
                         const Hairline(),
-                        Text('Sub-rank belts', style: DesignConstants.h2),
-                        Text(
-                          'Each position defaults to the main belt image. '
-                          'Upload a distinct image to override it.',
-                          style: DesignConstants.pSmall.copyWith(
-                            color: DesignConstants.text2nd,
-                          ),
+                        _CustomSubImagesSwitch(
+                          value: _customSubImages,
+                          onChanged: (v) =>
+                              setState(() => _customSubImages = v),
                         ),
-                        for (var i = 0; i < _subRankCount; i++)
-                          ImageUploadPickerField(
-                            key: ValueKey('sub-$i'),
-                            label: subRankType.subLabel(i, showBase: true),
-                            category: 'rank',
-                            aspectRatio: 1,
-                            previewFit: BoxFit.contain,
-                            imageUrl: _overrides[i.toString()],
-                            defaultImageUrl: _mainImageUrl,
-                            onUploaded: (url) => setState(
-                              () => _overrides[i.toString()] = url,
+                        if (_customSubImages) ...[
+                          Text('Sub-rank belts',
+                              style: DesignConstants.h2),
+                          Text(
+                            'Each position defaults to the main belt '
+                            'image. Pick or upload a distinct image to '
+                            'override it.',
+                            style: DesignConstants.pSmall.copyWith(
+                              color: DesignConstants.text2nd,
                             ),
                           ),
+                          for (var i = 0; i < _subRankCount; i++)
+                            ImageUploadPickerField(
+                              key: ValueKey('sub-$i'),
+                              label:
+                                  subRankType.subLabel(i, showBase: true),
+                              category: 'rank',
+                              poolImages: AppConstants.rankBeltDefaultUrls,
+                              aspectRatio: 1,
+                              previewFit: BoxFit.contain,
+                              imageUrl: _overrides[i.toString()],
+                              defaultImageUrl: _mainImageUrl,
+                              onImageChosen: (url) => setState(
+                                () => _overrides[i.toString()] = url,
+                              ),
+                            ),
+                        ],
                       ],
                     ],
                     if (_error != null) ErrorMessage(message: _error!),
@@ -276,7 +369,10 @@ class _EditRankScreenState extends State<EditRankScreen> {
                             AppOutlineButton(
                               text: 'Cancel',
                               borderRadius: DesignConstants.radiusSmall,
-                              onPressed: () => Navigator.of(context).pop(),
+                              onPressed: () => popOrGoTo(
+                                context,
+                                AppRoutes.membershipsRanks,
+                              ),
                             ),
                             AppPrimaryButton(
                               text: _isEdit ? 'Save' : 'Create',
@@ -382,6 +478,40 @@ class _StepButton extends StatelessWidget {
               weight: DesignConstants.iconWeight,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gates the per-sub-position belt override section. OFF (the default,
+/// and edit mode with no existing overrides) uses the main belt image
+/// for every sub-position; ON reveals a belt picker per sub-position.
+/// Styled like the payment step's cash toggle.
+class _CustomSubImagesSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CustomSubImagesSwitch({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      activeThumbColor: DesignConstants.primaryColor,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        'Custom sub-rank images',
+        style: DesignConstants.p,
+      ),
+      subtitle: Text(
+        'Off: every sub-position uses the main belt image.',
+        style: DesignConstants.pSmall.copyWith(
+          color: DesignConstants.text2nd,
         ),
       ),
     );

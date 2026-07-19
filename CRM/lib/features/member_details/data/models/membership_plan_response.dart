@@ -17,6 +17,11 @@ class MembershipPlanResponse extends Equatable {
   final String planId;
   final String gymId;
   final String planName;
+
+  /// The plan's catalog image (CDN URL). Every plan carries one — it leads
+  /// the plan card on the buying page. Required by the backend contract
+  /// (`membership_plans.image_url`, NOT NULL).
+  final String imageUrl;
   @JsonKey(fromJson: PlanType.fromJson)
   final PlanType planType;
   final int? classCount;
@@ -42,6 +47,7 @@ class MembershipPlanResponse extends Equatable {
     required this.planId,
     required this.gymId,
     required this.planName,
+    required this.imageUrl,
     required this.planType,
     this.classCount,
     this.durationAmount,
@@ -69,6 +75,7 @@ class MembershipPlanResponse extends Equatable {
         planId,
         gymId,
         planName,
+        imageUrl,
         planType,
         classCount,
         durationAmount,

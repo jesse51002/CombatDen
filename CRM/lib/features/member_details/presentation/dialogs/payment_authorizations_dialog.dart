@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/remove_authorization_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
@@ -158,8 +159,9 @@ class _PaymentAuthorizationsDialogState
       // This member is the payer; pick who they will pay for (they sign).
       await StartLinkMemberDialog.show(
         context: context,
-        payerMemberId: member.memberId,
-        payerName: member.fullName,
+        direction: AuthorizeDirection.addPayee,
+        anchorMemberId: member.memberId,
+        anchorName: member.fullName,
         candidates: candidates,
       );
     } else {
