@@ -33,6 +33,13 @@ class MainRankCard extends StatelessWidget {
   final int index;
   final bool isTop;
 
+  /// Whether the reorder drag handle is shown. False for a read-only
+  /// (front-desk) ladder — the card stays tappable (rank detail is
+  /// viewable), only the drag affordance is gone. It must be false whenever
+  /// the card is NOT hosted in a [ReorderableListView], since the handle's
+  /// [ReorderableDragStartListener] requires that ancestor.
+  final bool reorderable;
+
   const MainRankCard({
     super.key,
     required this.rank,
@@ -40,6 +47,7 @@ class MainRankCard extends StatelessWidget {
     required this.subRankType,
     required this.index,
     required this.isTop,
+    this.reorderable = true,
   });
 
   Future<void> _openDetail(BuildContext context) async {
@@ -128,23 +136,24 @@ class MainRankCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Positioned(
-                top: DesignConstants.spacingMedium,
-                right: DesignConstants.spacingMedium,
-                child: ReorderableDragStartListener(
-                  index: index,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(DesignConstants.spacingSmall),
-                    child: Icon(
-                      Symbols.drag_indicator_sharp,
-                      size: DesignConstants.iconSizeMedium,
-                      color: DesignConstants.text3rd,
-                      weight: DesignConstants.iconWeight,
+              if (reorderable)
+                Positioned(
+                  top: DesignConstants.spacingMedium,
+                  right: DesignConstants.spacingMedium,
+                  child: ReorderableDragStartListener(
+                    index: index,
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.all(DesignConstants.spacingSmall),
+                      child: Icon(
+                        Symbols.drag_indicator_sharp,
+                        size: DesignConstants.iconSizeMedium,
+                        color: DesignConstants.text3rd,
+                        weight: DesignConstants.iconWeight,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
@@ -36,6 +38,8 @@ class RankEnabledSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Front desk sees whether ranks are on, but can't flip the switch.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: DesignConstants.card,
@@ -64,7 +68,7 @@ class RankEnabledSection extends StatelessWidget {
             ),
             Switch(
               value: state.isRankEnabled,
-              onChanged: state.isMutating
+              onChanged: (state.isMutating || !canConfigure)
                   ? null
                   : (v) => _onChanged(context, v),
             ),

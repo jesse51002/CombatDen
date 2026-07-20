@@ -10,7 +10,7 @@ const Map<String, bool Function(EmployeeRole)> _staffAdminCapabilities = {
   'canConfigureCatalog': _canConfigureCatalog,
   'canManageMemberApp': _canManageMemberApp,
   'canManageGymSettings': _canManageGymSettings,
-  'canViewDashboard': _canViewDashboard,
+  'canViewGymAnalytics': _canViewGymAnalytics,
   'canViewGrowth': _canViewGrowth,
   'canAdjustPoints': _canAdjustPoints,
   'canPromoteRank': _canPromoteRank,
@@ -24,7 +24,7 @@ bool _canManageStaff(EmployeeRole r) => r.canManageStaff;
 bool _canConfigureCatalog(EmployeeRole r) => r.canConfigureCatalog;
 bool _canManageMemberApp(EmployeeRole r) => r.canManageMemberApp;
 bool _canManageGymSettings(EmployeeRole r) => r.canManageGymSettings;
-bool _canViewDashboard(EmployeeRole r) => r.canViewDashboard;
+bool _canViewGymAnalytics(EmployeeRole r) => r.canViewGymAnalytics;
 bool _canViewGrowth(EmployeeRole r) => r.canViewGrowth;
 bool _canAdjustPoints(EmployeeRole r) => r.canAdjustPoints;
 bool _canPromoteRank(EmployeeRole r) => r.canPromoteRank;
@@ -49,8 +49,12 @@ const Map<String, bool Function(EmployeeRole)> _staffCapabilities = {
   'canEditSingleOccurrence': _canEditSingleOccurrence,
   'canOperateKiosk': _canOperateKiosk,
   'canUseAppearanceSettings': _canUseAppearanceSettings,
+  'canViewDashboard': _canViewDashboard,
+  'canViewCatalog': _canViewCatalog,
 };
 
+bool _canViewDashboard(EmployeeRole r) => r.canViewDashboard;
+bool _canViewCatalog(EmployeeRole r) => r.canViewCatalog;
 bool _canViewMembers(EmployeeRole r) => r.canViewMembers;
 bool _canCreateMembers(EmployeeRole r) => r.canCreateMembers;
 bool _canEditMemberProfile(EmployeeRole r) => r.canEditMemberProfile;
@@ -119,12 +123,75 @@ void main() {
   });
 
   group('RolePolicy.canAccessRoute', () {
+    // The catalog view tabs (front desk MAY open) vs the editor/detail-form
+    // routes (owner/admin only). The rank DETAIL view is a VIEW route.
+    const catalogViewRoutes = [
+      AppRoutes.memberships,
+      AppRoutes.membershipsDiscounts,
+      AppRoutes.membershipsWaivers,
+      AppRoutes.membershipsRanks,
+      AppRoutes.membershipsRankDetail,
+    ];
+    const catalogEditorRoutes = [
+      AppRoutes.membershipDetails,
+      AppRoutes.membershipsWaiverEditor,
+      AppRoutes.membershipsRankEditor,
+      AppRoutes.membershipsRankPresets,
+    ];
+
     test(
-      'regression guard: /memberships is NOT accessible to front desk — '
-      'the /members slash-bounded prefix must not swallow /memberships',
+      'front desk gets a READ-ONLY catalog: every /memberships view tab '
+      '(including the rank DETAIL view) is accessible; every editor / '
+      'detail-form route is NOT',
+      () {
+        for (final route in catalogViewRoutes) {
+          expect(
+            EmployeeRole.frontDesk.canAccessRoute(route),
+            isTrue,
+            reason: 'view route=$route',
+          );
+        }
+        for (final route in catalogEditorRoutes) {
+          expect(
+            EmployeeRole.frontDesk.canAccessRoute(route),
+            isFalse,
+            reason: 'editor route=$route',
+          );
+        }
+      },
+    );
+
+    test(
+      'catalog VIEW routes are staff (owner/admin/front desk); EDITOR routes '
+      'are staff-admin (owner/admin) only',
+      () {
+        for (final route in catalogViewRoutes) {
+          for (final role in EmployeeRole.values) {
+            expect(
+              role.canAccessRoute(route),
+              _staffRoles.contains(role),
+              reason: 'view route=$route role=${role.name}',
+            );
+          }
+        }
+        for (final route in catalogEditorRoutes) {
+          for (final role in EmployeeRole.values) {
+            expect(
+              role.canAccessRoute(route),
+              _staffAdminRoles.contains(role),
+              reason: 'editor route=$route role=${role.name}',
+            );
+          }
+        }
+      },
+    );
+
+    test(
+      'regression guard: the /members slash-bounded prefix must not swallow '
+      '/memberships (a distinct catalog section) — trainer may view neither',
       () {
         expect(
-          EmployeeRole.frontDesk.canAccessRoute(AppRoutes.memberships),
+          EmployeeRole.trainer.canAccessRoute(AppRoutes.memberships),
           isFalse,
         );
       },
@@ -179,33 +246,28 @@ void main() {
       expect(EmployeeRole.trainer.canAccessRoute(AppRoutes.settings), isFalse);
     });
 
-    test('/growth and / (dashboard) are owner/admin only', () {
-      for (final role in _staffAdminRoles) {
+    test('/growth is owner/admin only', () {
+      for (final role in EmployeeRole.values) {
         expect(
           role.canAccessRoute(AppRoutes.growth),
-          isTrue,
-          reason: 'role=${role.name}',
-        );
-        expect(
-          role.canAccessRoute(AppRoutes.home),
-          isTrue,
-          reason: 'role=${role.name}',
-        );
-      }
-      for (final role in EmployeeRole.values.where(
-        (r) => !_staffAdminRoles.contains(r),
-      )) {
-        expect(
-          role.canAccessRoute(AppRoutes.growth),
-          isFalse,
-          reason: 'role=${role.name}',
-        );
-        expect(
-          role.canAccessRoute(AppRoutes.home),
-          isFalse,
+          _staffAdminRoles.contains(role),
           reason: 'role=${role.name}',
         );
       }
     });
+
+    test(
+      '/ (dashboard) is now staff — owner/admin AND front desk reach it; '
+      'trainer/unknown are denied',
+      () {
+        for (final role in EmployeeRole.values) {
+          expect(
+            role.canAccessRoute(AppRoutes.home),
+            _staffRoles.contains(role),
+            reason: 'role=${role.name}',
+          );
+        }
+      },
+    );
   });
 }

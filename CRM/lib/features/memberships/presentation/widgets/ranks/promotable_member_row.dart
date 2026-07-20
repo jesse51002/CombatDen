@@ -13,10 +13,15 @@ import 'package:crm/shared/widgets/rank_belt_image.dart';
 
 /// One promotable member, rendered identically wherever staff act on a
 /// member's rank: their belt, avatar, name, a **current → next**
-/// progression label, the shared [RankProgressBar], then two trailing
+/// progression label, the shared [RankProgressBar], then its trailing
 /// affordances — the primary **Promote** button (green once eligible)
 /// that opens the full promotion dialog, and a quiet chevron that opens
 /// the member's detail page.
+///
+/// **Promote is a WRITE affordance (owner/admin).** A null [onPromote]
+/// hides the button entirely — the read-only (front-desk) roster still shows
+/// each member and their progress, and the chevron into member detail, but
+/// no promote action.
 ///
 /// Deliberately **bloc-agnostic** — it takes the row's display fields,
 /// the gym ladder + sub-rank type, and the member's current leaf, then
@@ -60,8 +65,9 @@ class PromotableMemberRow extends StatelessWidget {
   /// Classes needed to reach the next leaf, or null at the top.
   final int? stepDenominator;
 
-  /// Open the full promotion dialog (the row's primary affordance).
-  final VoidCallback onPromote;
+  /// Open the full promotion dialog (the row's primary affordance). Null on
+  /// a read-only roster (front desk) — the Promote button is then hidden.
+  final VoidCallback? onPromote;
 
   /// Navigate to this member's detail page (the quiet chevron). Wired by
   /// each caller with the member id it already holds, so the row stays
@@ -79,8 +85,8 @@ class PromotableMemberRow extends StatelessWidget {
     required this.currentSubIndex,
     required this.classesSince,
     required this.stepDenominator,
-    required this.onPromote,
     required this.onViewMember,
+    this.onPromote,
   });
 
   @override
@@ -151,17 +157,18 @@ class PromotableMemberRow extends StatelessWidget {
               ],
             ),
           ),
-          AppOutlineButton(
-            text: 'Promote',
-            borderRadius: DesignConstants.radiusSmall,
-            borderColor:
-                eligible ? DesignConstants.goodGreen : DesignConstants.text,
-            textStyle: DesignConstants.h3.copyWith(
-              color:
+          if (onPromote case final onPromote?)
+            AppOutlineButton(
+              text: 'Promote',
+              borderRadius: DesignConstants.radiusSmall,
+              borderColor:
                   eligible ? DesignConstants.goodGreen : DesignConstants.text,
+              textStyle: DesignConstants.h3.copyWith(
+                color:
+                    eligible ? DesignConstants.goodGreen : DesignConstants.text,
+              ),
+              onPressed: onPromote,
             ),
-            onPressed: onPromote,
-          ),
           _ViewMemberButton(onTap: onViewMember),
         ],
       ),

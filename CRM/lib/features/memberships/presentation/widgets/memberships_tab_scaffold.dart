@@ -8,30 +8,36 @@ import 'package:crm/shared/widgets/error_message.dart';
 /// (a shrink-wrapped `AppDataTable` rendered flat on the page
 /// background, matching the members list) with the "Add New … +"
 /// [addRow] beneath it, in a scroll view.
+///
+/// [addRow] is null for a read-only (front-desk) catalog — the create
+/// affordance is a WRITE surface, so the tab omits it and only the table
+/// renders.
 class MembershipsTabScaffold extends StatelessWidget {
   final Widget table;
-  final Widget addRow;
+  final Widget? addRow;
 
   const MembershipsTabScaffold({
     super.key,
     required this.table,
-    required this.addRow,
+    this.addRow,
   });
 
   @override
   Widget build(BuildContext context) {
+    final addRow = this.addRow;
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: DesignConstants.paddingBig),
       child: Column(
         spacing: DesignConstants.spacingMedium,
         children: [
           table,
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: DesignConstants.screenHorizontalPadding,
+          if (addRow != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: DesignConstants.screenHorizontalPadding,
+              ),
+              child: addRow,
             ),
-            child: addRow,
-          ),
         ],
       ),
     );

@@ -27,14 +27,21 @@ void main() {
     });
 
     test(
-      'front desk sees exactly the Add New Member CTA, People, Schedule, '
-      'and Settings — Dashboard, Growth, Gym, and Member App are hidden',
+      'front desk sees the Add New Member CTA, Dashboard, People, Schedule, '
+      'Gym, and Settings — Growth and Member App are hidden',
       () {
         final routes =
             visibleNavSections(EmployeeRole.frontDesk).map((s) => s.route);
         expect(
           routes,
-          [null, AppRoutes.members, AppRoutes.schedule, AppRoutes.settings],
+          [
+            null,
+            AppRoutes.home,
+            AppRoutes.members,
+            AppRoutes.schedule,
+            AppRoutes.memberships,
+            AppRoutes.settings,
+          ],
         );
       },
     );

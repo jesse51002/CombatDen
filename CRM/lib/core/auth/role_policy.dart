@@ -22,10 +22,11 @@ extension RolePolicy on EmployeeRole {
 
   // ── Staff-admin capabilities (owner / admin only) ──
   bool get canManageStaff => _isStaffAdmin;
+  // WRITE gate for the gym catalog (create / edit / delete / promote / toggle
+  // / reorder). Reading the catalog is the separate [canViewCatalog] (staff).
   bool get canConfigureCatalog => _isStaffAdmin;
   bool get canManageMemberApp => _isStaffAdmin;
   bool get canManageGymSettings => _isStaffAdmin;
-  bool get canViewDashboard => _isStaffAdmin;
   bool get canViewGrowth => _isStaffAdmin;
   bool get canAdjustPoints => _isStaffAdmin;
   bool get canPromoteRank => _isStaffAdmin;
@@ -33,6 +34,10 @@ extension RolePolicy on EmployeeRole {
   bool get canSetCustomMembershipPrice => _isStaffAdmin;
   bool get canBulkReprice => _isStaffAdmin;
   bool get canRemovePayerLink => _isStaffAdmin;
+  // The Dashboard's overview / financial cards (the Total Members hero now, a
+  // gym-income module later) — owner/admin only, even though front desk can
+  // reach the Dashboard itself for its operational cards ([canViewDashboard]).
+  bool get canViewGymAnalytics => _isStaffAdmin;
 
   // ── Staff capabilities (owner / admin / front desk) ──
   bool get canViewMembers => _isStaff;
@@ -48,6 +53,13 @@ extension RolePolicy on EmployeeRole {
   bool get canEditSingleOccurrence => _isStaff;
   bool get canOperateKiosk => _isStaff;
   bool get canUseAppearanceSettings => _isStaff;
+  // Front desk reaches the Dashboard for its OPERATIONAL cards (live
+  // attendance, overdue payments, upcoming classes); the overview/financial
+  // cards on it are separately gated by [canViewGymAnalytics] (owner/admin).
+  bool get canViewDashboard => _isStaff;
+  // READ-only access to the gym catalog (the /memberships view tabs). WRITING
+  // it is the separate [canConfigureCatalog] (owner/admin) gate.
+  bool get canViewCatalog => _isStaff;
 
   // ── Everyone (trainer is read-only, gated at the affordance layer) ──
   bool get canViewSchedule => true;
@@ -70,7 +82,8 @@ extension RolePolicy on EmployeeRole {
   /// Order matters: more specific prefixes must be tested before the broader
   /// ones they sit under. The member-app preview lives under `/members`, so it
   /// is checked first; and the `/members` test is slash-bounded so it cannot
-  /// swallow `/memberships` (which is a distinct, staff-admin-only section).
+  /// swallow `/memberships` (a distinct catalog section — staff can VIEW it,
+  /// only owner/admin can reach its editors).
   bool canAccessRoute(String path) {
     if (path.startsWith(AppRoutes.memberAppPreview)) {
       return canManageMemberApp;
@@ -85,7 +98,17 @@ extension RolePolicy on EmployeeRole {
     if (path == AppRoutes.home) return canViewDashboard;
     if (path.startsWith(AppRoutes.employees)) return canManageStaff;
     if (path.startsWith(AppRoutes.growth)) return canViewGrowth;
-    if (path.startsWith(AppRoutes.memberships)) return canConfigureCatalog;
+    // Catalog editors/detail = WRITE surfaces (owner/admin). Tested BEFORE the
+    // broad /memberships view prefix so a deep-link can't reach an editor.
+    // The rank DETAIL view (/memberships/ranks/detail) is deliberately absent
+    // here — it is a read surface, so it falls through to [canViewCatalog].
+    if (path.startsWith(AppRoutes.membershipDetails) ||
+        path.startsWith(AppRoutes.membershipsWaiverEditor) ||
+        path.startsWith(AppRoutes.membershipsRankEditor) ||
+        path.startsWith(AppRoutes.membershipsRankPresets)) {
+      return canConfigureCatalog;
+    }
+    if (path.startsWith(AppRoutes.memberships)) return canViewCatalog;
     if (path.startsWith(AppRoutes.schedule)) return canViewSchedule;
     if (path == AppRoutes.settings) {
       return canUseAppearanceSettings ||

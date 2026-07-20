@@ -20,9 +20,19 @@ void main() {
         redirectRouteFor(AppRoutes.growth, EmployeeRole.trainer),
         EmployeeRole.trainer.landingRoute,
       );
+      // Front desk gets a READ-ONLY catalog: a catalog EDITOR deep-link
+      // redirects to their landing route (they can't reach an editor).
       expect(
-        redirectRouteFor(AppRoutes.memberships, EmployeeRole.frontDesk),
+        redirectRouteFor(
+          AppRoutes.membershipsRankEditor,
+          EmployeeRole.frontDesk,
+        ),
         EmployeeRole.frontDesk.landingRoute,
+      );
+      // Trainer may not view the catalog at all.
+      expect(
+        redirectRouteFor(AppRoutes.memberships, EmployeeRole.trainer),
+        EmployeeRole.trainer.landingRoute,
       );
       expect(
         redirectRouteFor(AppRoutes.settings, EmployeeRole.trainer),
@@ -37,6 +47,23 @@ void main() {
       );
       expect(
         redirectRouteFor(AppRoutes.members, EmployeeRole.frontDesk),
+        isNull,
+      );
+      // Front desk reaches the catalog VIEW tabs, the rank DETAIL view, and
+      // the Dashboard.
+      expect(
+        redirectRouteFor(AppRoutes.memberships, EmployeeRole.frontDesk),
+        isNull,
+      );
+      expect(
+        redirectRouteFor(
+          AppRoutes.membershipsRankDetail,
+          EmployeeRole.frontDesk,
+        ),
+        isNull,
+      );
+      expect(
+        redirectRouteFor(AppRoutes.home, EmployeeRole.frontDesk),
         isNull,
       );
       expect(
