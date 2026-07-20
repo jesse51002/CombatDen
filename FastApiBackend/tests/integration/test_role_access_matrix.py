@@ -75,6 +75,18 @@ def seeded_member_id(owner_api, gym_id: str) -> str:
     return rows[0]["member_id"]
 
 
+@pytest.fixture(scope="module")
+def seeded_rank_id(owner_api, gym_id: str) -> str:
+    """A rank id from the seeded gym's ladder (needed for the rank-detail
+    reads, which derive gym_id from the rank BEFORE the role check)."""
+    resp = owner_api.get("/api/v1/ranks/", params={"gym_id": gym_id})
+    resp.raise_for_status()
+    items = resp.json()["items"]
+    if not items:
+        pytest.skip("No seeded ranks to target")
+    return items[0]["rank_id"]
+
+
 # ── GET /api/v1/gyms/ — every role sees the seeded gym ─────────────
 
 
@@ -146,6 +158,73 @@ def test_front_desk_cannot_adjust_points(front_desk_api, seeded_member_id):
     """Manual points adjustment is owner/admin only."""
     resp = front_desk_api.post(
         f"/api/v1/members/{seeded_member_id}/points", json={"amount": 10}
+    )
+    assert resp.status_code == 403, resp.text
+
+
+# ── front_desk (STAFF) — allowed: ranks reads ─────────────────────
+
+
+def test_front_desk_can_list_ranks(front_desk_api, gym_id: str):
+    resp = front_desk_api.get("/api/v1/ranks/", params={"gym_id": gym_id})
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_read_rank_enabled(front_desk_api, gym_id: str):
+    resp = front_desk_api.get(
+        "/api/v1/ranks/enabled", params={"gym_id": gym_id}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_read_ready_to_promote(front_desk_api, gym_id: str):
+    resp = front_desk_api.get(
+        "/api/v1/ranks/ready-to-promote", params={"gym_id": gym_id}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_read_members_in_rank(front_desk_api, seeded_rank_id):
+    resp = front_desk_api.get(f"/api/v1/ranks/{seeded_rank_id}/members")
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_read_sub_rank_counts(front_desk_api, seeded_rank_id):
+    resp = front_desk_api.get(
+        f"/api/v1/ranks/{seeded_rank_id}/sub-rank-counts"
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_read_rank_detail(front_desk_api, seeded_rank_id):
+    resp = front_desk_api.get(f"/api/v1/ranks/{seeded_rank_id}")
+    assert resp.status_code == 200, resp.text
+
+
+# ── front_desk (STAFF) — forbidden: ranks write (OWNER_ADMIN-only) ─
+
+
+def test_front_desk_cannot_create_rank(front_desk_api, gym_id: str):
+    """Rank create is owner/admin only — a schema-valid body still 403s."""
+    resp = front_desk_api.post(
+        "/api/v1/ranks/",
+        json={
+            "gym_id": gym_id,
+            "main_rank_num_order": 9999,
+            "name": "Matrix Test Rank",
+            "classes_to_next_major": 10,
+        },
+    )
+    assert resp.status_code == 403, resp.text
+
+
+def test_front_desk_cannot_promote_member(
+    front_desk_api, gym_id: str, seeded_member_id
+):
+    """Promote is owner/admin only — a schema-valid body still 403s."""
+    resp = front_desk_api.post(
+        "/api/v1/ranks/promote-member",
+        json={"gym_id": gym_id, "member_id": seeded_member_id},
     )
     assert resp.status_code == 403, resp.text
 

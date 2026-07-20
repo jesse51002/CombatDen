@@ -31,7 +31,7 @@ from src.ranks.schema.ranks_schema import (
     RankUpdateRequest,
 )
 from src.ranks.service.ranks_service import RanksService
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ async def list_ranks(
 ) -> RankListResponse:
     """List a gym's ladder (one row per main rank) plus its sub_rank_type."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await ranks_service.list_ranks(gym_id)
@@ -276,7 +276,7 @@ async def get_rank_enabled(
 ) -> RankEnabledResponse:
     """Get the gym's rank-enabled state."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await ranks_service.get_rank_enabled(gym_id)
@@ -519,7 +519,7 @@ async def list_ready_to_promote(
 ) -> MembersReadyToPromoteResponse:
     """List members closest to their next promotion."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await ranks_service.list_ready_to_promote(
@@ -578,7 +578,7 @@ async def list_members_in_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
+    await auth.verify_roles(rank.gym_id, user_payload, STAFF)
 
     try:
         return await ranks_service.list_members_in_rank(
@@ -642,7 +642,7 @@ async def count_members_by_sub_index(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
+    await auth.verify_roles(rank.gym_id, user_payload, STAFF)
 
     try:
         return await ranks_service.count_members_by_sub_index(
@@ -693,7 +693,7 @@ async def get_rank(
             detail="Rank not found",
         ) from None
 
-    await auth.verify_gym_admin_or_owner(rank.gym_id, user_payload)
+    await auth.verify_roles(rank.gym_id, user_payload, STAFF)
     return rank
 
 

@@ -394,6 +394,14 @@ how-to-work-here facts belong here:
   `current_rank_id` / `current_sub_index` are `MEMBERS`-immutable (ranks
   endpoints are the only rank-change path). `image_url` and
   `sub_rank_image_overrides` are ordinary user-writable fields.
+- **Read vs. write auth.** Every ranks READ — the ladder (`GET /`),
+  `enabled`, `ready-to-promote`, `{id}/members`, `{id}/sub-rank-counts`,
+  and the `{id}` detail — passes `STAFF`, so **front desk views the
+  read-only ranks tab** (ladder + ready-to-promote board + rank detail).
+  Every WRITE — create/update/delete rank, `reorder`, the enable toggle,
+  sub-type set, `promote` / `set-member-rank`, and `seed-from-preset` —
+  stays `verify_gym_admin_or_owner` (`OWNER_ADMIN`). Preset reads
+  (`/presets*`) are any-authenticated (global catalog, no gym scope).
 - **SQL + DI edge.** Every query is its own `.sql` (`load_sql`), bound
   `CAST(:x AS T)` never `:x::t` (`update_rank` builds a dynamic SET of
   per-column casts). The `gyms → ranks_members` edge: `GymsService.update_gym`
