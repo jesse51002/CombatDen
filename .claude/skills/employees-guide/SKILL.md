@@ -73,9 +73,11 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 
 | Area | Owner | Admin | Front desk | Trainer |
 |---|---|---|---|---|
-| Dashboard / KPIs | ✅ | ✅ | ❌ | ❌ |
+| Dashboard — operational cards (live attendance, overdue payments, upcoming classes) | ✅ | ✅ | ✅ | ❌ |
+| Dashboard — overview/income cards (Total Members hero now, gym-income module later) | ✅ | ✅ | ❌ | ❌ |
 | Growth / analytics | ✅ | ✅ | ❌ | ❌ |
-| Gym config (plans, discounts, waivers, ranks admin) | ✅ | ✅ | ❌ | ❌ |
+| Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
+| Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
 | Member-app management (theme, showcase) | ✅ | ✅ | ❌ | ❌ |
 | Employees tab (manage staff) | ✅ | ✅ | ❌ | ❌ |
 | Gym settings | ✅ | ✅ | ❌ | ❌ |
@@ -101,9 +103,14 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Delete gym | ✅ | ❌ | ❌ | ❌ |
 
 **Front desk is deliberately wide on member/money operations** (this was the final, expanded scope — see
-context below) and **narrow on config/analytics/staff**. The rule of thumb: anything that touches "run
-the front counter for a member who's standing there" is front-desk-accessible; anything that reshapes gym
-config, staffing, or reporting is owner/admin-only.
+context below), can **VIEW gym config read-only** (the plans/discounts/waivers/ranks tabs + rank detail)
+and the **operational** Dashboard cards, but stays **narrow on config-writes/analytics/staff**. The rule
+of thumb: anything that touches "run the front counter for a member who's standing there" — or just
+*looking at* how the gym is set up — is front-desk-accessible; anything that **reshapes** gym config
+(create/edit/delete/promote/reorder/toggle), or that is staffing, reporting, or gym-income/overview
+analytics, is owner/admin-only. The read/write split is enforced by two capabilities: `canViewCatalog`
+(staff, read) vs `canConfigureCatalog` (owner/admin, write); the Dashboard's overview/income cards sit
+behind `canViewGymAnalytics` (owner/admin) while `canViewDashboard` itself is staff.
 
 **Trainer** is READ-ONLY: the full schedule and every roster, plus their own theme preference — nothing
 else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
@@ -248,7 +255,16 @@ domain itself pass `OWNER_ADMIN`; Stripe Connect onboarding passes `OWNER_ONLY` 
 - **`lib/core/auth/role_policy.dart`** — the `RolePolicy` extension on `EmployeeRole`: one boolean getter
   per capability (see §2's table), plus `landingRoute` (where a role lands after gym activation, and where
   a denied route redirects) and `canAccessRoute(path)` (the route-level gate, checked with
-  slash-bounded prefix matching so e.g. `/members` doesn't swallow `/memberships`).
+  slash-bounded prefix matching so e.g. `/members` doesn't swallow `/memberships`). The gym catalog is
+  split into a **read** gate `canViewCatalog` (staff) and a **write** gate `canConfigureCatalog`
+  (owner/admin): `canAccessRoute` tests the catalog **editor** routes (`membershipDetails`,
+  `membershipsWaiverEditor`, `membershipsRankEditor`, `membershipsRankPresets`) **before** the broad
+  `/memberships*` view prefix — so those need `canConfigureCatalog` while the tabs + the read-only
+  `membershipsRankDetail` fall through to `canViewCatalog`, and a front-desk deep-link can't reach an
+  editor. Every catalog mutation affordance hides at the widget layer behind
+  `selectedGym.role?.canConfigureCatalog`. The Dashboard is gated `canViewDashboard` (staff) for its
+  operational cards, with `canViewGymAnalytics` (owner/admin) separately gating its overview/income cards
+  (the Total Members hero, a gym-income module later).
 - **`lib/core/navigation/route_guard.dart`** — `redirectRouteFor(path, role)`, a pure function wrapping
   `role.canAccessRoute`; returns the role's `landingRoute` to redirect to on a denied path, or `null` to
   allow. Shared by `main.dart`'s `_onGenerateRoute` and the auth gate's initial-route resolution.
