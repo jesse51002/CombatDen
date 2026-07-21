@@ -135,6 +135,10 @@ def test_front_desk_cannot_create_plan(front_desk_api, gym_id: str):
             "duration_amount": 1,
             "duration_unit": "month",
             "price": 5000,
+            # Required by the plan schema. Without it FastAPI 422s during body
+            # validation — before the handler's role check runs — so the test
+            # would pass/fail for a reason unrelated to authorization.
+            "image_url": "https://cdn.combatden.net/test/plan.jpg",
         },
     )
     assert resp.status_code == 403, resp.text
