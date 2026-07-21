@@ -42,6 +42,11 @@ from tests.seed_constants import SEEDED_GYM_ID
 # directly in tests/reconciler/ by calling the services.
 settings.reconciler_enabled = False
 
+# Same for the growth-compute scheduler, which additionally fires IMMEDIATELY
+# at startup (next_run_time=now) — it would race every TestClient boot against
+# the mocked db_pool. tests/growth/ drives GrowthComputeService directly.
+settings.growth_enabled = False
+
 
 @pytest.fixture(autouse=True)
 def _disable_on_demand_invoice_fetch() -> Generator[None]:

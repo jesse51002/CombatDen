@@ -88,7 +88,6 @@ schema_paths = [
     # member_waiver_signatures (the gating signature), so loads after both.
     "./schemas/member_authorized_payers.sql",
     "./schemas/member_activities.sql",
-    "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
     "./schemas/template_gym.sql",
     "./schemas/template_gym_query.sql",

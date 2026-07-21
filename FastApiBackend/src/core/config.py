@@ -188,6 +188,24 @@ class Settings(BaseSettings):
     # must age past any in-flight op before it can be judged an orphan.
     reconciler_orphan_min_age_seconds: int = 3600
 
+    # Growth metrics (the per-gym analytics cache in gym_growth_metrics —
+    # see src/growth/). One interval job recomputes every gym at app launch
+    # and then every interval; the lock key guards the sweep across app
+    # instances. The two window knobs are the analytics definitions shared by
+    # every dormancy / at-risk metric: how long without a check-in makes a
+    # short-plan member dormant, and how long without a check-in puts a paying
+    # member on the at-risk list.
+    growth_enabled: bool = True
+    growth_compute_interval_minutes: int = 60
+    member_dormancy_days: int = 30
+    growth_at_risk_days: int = 14
+    growth_compute_lock_key: str = "growth_compute"
+    # The sweep's own lease. Deliberately NOT lock_ttl_seconds (60s): that is
+    # sized for a single billing op, while a sweep walks every metric for every
+    # gym. A lease that expires mid-sweep lets a second container start a
+    # duplicate one, so this is sized to outlive a full run.
+    growth_compute_lock_ttl_seconds: int = 1800
+
     # Check-in early window: how many hours BEFORE a class's start time check-in
     # opens. A check-in (single or batch "update attendees") for an occurrence
     # whose start is further than this in the future is rejected. 2h (not the

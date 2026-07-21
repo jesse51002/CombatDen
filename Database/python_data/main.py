@@ -32,7 +32,6 @@ Flow:
           class_signups (past + future reservations), rewards + redemptions,
           activities.
        j. Invoice + charge history (direct DB, synthetic Stripe IDs).
-       k. gym_history rollup.
 
 Requires the backend running (`make run` in FastApiBackend), a Stripe test
 key, and Supabase password sign-in enabled. The user runs migrations + seed
@@ -54,7 +53,6 @@ from api_creation import plans as api_plans
 from bootstrap import activities as bs_activities
 from bootstrap import classes as bs_classes
 from bootstrap import gyms as bs_gyms
-from bootstrap import history as bs_history
 from bootstrap import ranks as bs_ranks
 from bootstrap import rewards as bs_rewards
 from bootstrap import waivers as bs_waivers
@@ -278,9 +276,6 @@ def seed() -> None:
                     [r.to_insert_dict() for r in ch]
                 ).execute()
             progress.log(f"  {len(inv)} invoices, {len(li)} line items, {len(ch)} charges")
-
-        progress.log("Creating gym history...")
-        bs_history.create(client, gym_id, member_count=len(members))
 
         gym_elapsed = time.perf_counter() - gym_start
         progress.log(f"=== {bundle.gym_name} done in {gym_elapsed:.1f}s ===")

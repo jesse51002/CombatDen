@@ -38,6 +38,8 @@ from src.classes.service.classes_versions_service import (
 )
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
+from src.growth.service.growth_compute_service import GrowthComputeService
+from src.growth.service.growth_service import GrowthService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
@@ -211,6 +213,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.main",
             "src.checkin.checkin_router",
             "src.classes.classes_router",
+            "src.growth.growth_router",
             "src.gyms.gyms_router",
             "src.members.members_router",
             "src.ranks.ranks_router",
@@ -909,6 +912,20 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
+    # ── Growth metrics ───────────────────────────────────────────
+    # Read path: pure cache read, no compute. Write path: the scheduled
+    # sweep, guarded across app instances by the generic resource lock.
+    growth_service = providers.Factory(GrowthService, db_pool=db_pool)
+    growth_compute_service = providers.Factory(
+        GrowthComputeService,
+        db_pool=db_pool,
+        resource_lock=resource_lock,
+        dormancy_days=settings.member_dormancy_days,
+        at_risk_days=settings.growth_at_risk_days,
+        lock_key=settings.growth_compute_lock_key,
+        lock_ttl_seconds=settings.growth_compute_lock_ttl_seconds,
+    )
+
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,

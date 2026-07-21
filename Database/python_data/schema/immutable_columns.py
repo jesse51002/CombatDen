@@ -239,13 +239,6 @@ MEMBER_AUTHORIZED_PAYERS: frozenset[str] = frozenset(
     }
 )
 
-GYM_HISTORY: frozenset[str] = frozenset(
-    {
-        "gym_id",  # composite PK
-        "date",  # composite PK
-    }
-)
-
 MEMBER_ACTIVITIES: frozenset[str] = frozenset(
     {
         "activity_id",  # PK, auto-generated UUID

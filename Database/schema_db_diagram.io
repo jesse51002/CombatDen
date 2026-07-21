@@ -322,19 +322,6 @@ Table member_activities {
   time timestamptz [not null, default: `now()`]
 }
 
-Table gym_history {
-  gym_id uuid [not null]
-  date date [not null]
-  total_active integer [not null]
-  total_inactive integer [not null]
-  went_inactive integer [not null]
-  became_active integer [not null]
-
-  indexes {
-    (gym_id, date) [pk]
-  }
-}
-
 // Foreign keys
 Ref: gym_employees.user_id > auth_users.id
 Ref: gym_employees.gym_id > gyms.gym_id
@@ -390,8 +377,6 @@ Ref: member_authorized_payers.signature_id > member_waiver_signatures.signature_
 
 Ref: member_activities.member_id > members.member_id
 Ref: member_activities.gym_id > gyms.gym_id
-
-Ref: gym_history.gym_id > gyms.gym_id
 
 // ============================================================
 // CRM billing layer
@@ -698,6 +683,22 @@ Ref: task_items.member_id > members.member_id
 Ref: task_items.old_item_id > member_memberships_unfiltered.item_id
 Ref: task_items.new_item_id > member_memberships_unfiltered.item_id
 Ref: task_items.target_price_id > membership_plan_prices_unfiltered.price_id
+
+Table gym_growth_metrics {
+  metric_id uuid [primary key, default: `gen_random_uuid()`]
+  gym_id uuid [not null]
+  key text [not null, note: 'registry key, e.g. members_trend']
+  type text [not null, note: 'renderer selector; write-time debug copy, the backend registry wins on read']
+  data jsonb [not null, note: 'type-shaped payload; validated on read, misfits skipped']
+  computed_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (gym_id, key) [unique]
+    gym_id
+  }
+}
+
+Ref: gym_growth_metrics.gym_id > gyms.gym_id
 
 // ============================================================
 // VideoService demo content (video_* tables). The gym here is a gym-TYPE
