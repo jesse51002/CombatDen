@@ -172,16 +172,24 @@ class ClassHeatmap(BaseModel):
 
     class_id: str
     class_name: str
-    cells: list[list[float]]
+    cells: list[list[float | None]]
 
 
 class HeatmapData(BaseModel):
-    """Payload for ``heatmap`` — a ``rows`` x ``cols`` grid of values."""
+    """Payload for ``heatmap`` — a ``rows`` x ``cols`` grid of values.
+
+    A cell is ``None`` when the value is genuinely UNKNOWN rather than zero —
+    a cohort too young to have reached that age, say. The distinction matters:
+    rendering an immature cohort as 0% would read as total churn. A renderer
+    must draw ``None`` as an absent cell, never as the bottom of the scale.
+    Grids where every cell is measurable (attendance density) simply never
+    emit one.
+    """
 
     unit: MetricUnit
     rows: list[str]
     cols: list[str]
-    cells: list[list[float]]
+    cells: list[list[float | None]]
     by_class: list[ClassHeatmap] | None = None
 
 

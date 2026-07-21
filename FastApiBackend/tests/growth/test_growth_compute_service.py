@@ -5,13 +5,15 @@ the sweep: a missing SQL file, a failing query and an invalid payload must each
 cost exactly one metric.
 
 These tests deliberately use REAL registry entries and REAL SQL files (only the
-database is mocked), so they also prove the starter files load and template
-cleanly through ``load_sql``. ``retention_kpis`` is used as the
-not-yet-written metric — its ``.sql`` genuinely does not exist yet.
+database is mocked), so they also prove those files load and template cleanly
+through ``load_sql``. The "no file yet" case is the one exception: it uses a
+SYNTHESISED entry pointing at a file name that can never exist, because naming
+a real metric would make the test flip the moment that metric's SQL landed.
 """
 
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -108,6 +110,22 @@ def one_definition(key: str) -> GrowthMetricDef:
     return next(item for item in GROWTH_REGISTRY if item.key == key)
 
 
+def definition_without_sql() -> GrowthMetricDef:
+    """A registered metric whose .sql file provably does not exist.
+
+    Synthesised rather than borrowed from the real registry on purpose: every
+    registered metric eventually gets its file, so a test that named a real
+    key would silently start passing for the wrong reason (or fail) the moment
+    that file landed. The behaviour under test is "registered but no file",
+    which needs a file name that can never exist.
+    """
+    return replace(
+        one_definition("members_by_plan"),
+        key="__no_such_metric__",
+        sql_file="__no_such_metric__.sql",
+    )
+
+
 def upserted_keys(db_pool: MagicMock) -> list[str]:
     """The metric keys the run actually wrote (prune calls excluded)."""
     return [
@@ -153,7 +171,7 @@ async def test_missing_sql_file_is_skipped(
     monkeypatch.setattr(
         compute_module,
         "GROWTH_REGISTRY",
-        (one_definition("retention_kpis"),),
+        (definition_without_sql(),),
     )
     db_pool = make_db_pool(lambda *args, **kwargs: result_with([]))
 
