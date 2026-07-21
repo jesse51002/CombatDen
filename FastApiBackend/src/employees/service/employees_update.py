@@ -8,12 +8,13 @@ edited by the owner themselves, and its ``employee_type`` can never change
 
 from __future__ import annotations
 
-import logging
+from typing import Any
 from uuid import UUID
 
 from schema.gym_employee import EmployeeType
 from schema.immutable_columns import GYM_EMPLOYEES
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from src.employees import SQL_DIR
 from src.employees.employees_exceptions import (
@@ -28,9 +29,22 @@ from src.employees.service.employees_base import EmployeesBase
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.sql_loader import load_sql
 
-logger = logging.getLogger(__name__)
-
 _ENUM_COLUMN = "employee_type"
+
+# The columns a client may update, mirroring EmployeeUpdateData's fields. The
+# SET clause is built from this set explicitly so the guarantee is structural:
+# a future change to the schema model can never widen what reaches the SQL.
+_UPDATABLE_COLUMNS = frozenset(
+    {
+        "employee_type",
+        "first_name",
+        "last_name",
+        "phone",
+        "email",
+        "employee_pic_url",
+        "employee_public_description",
+    }
+)
 
 
 class EmployeesUpdate(EmployeesBase):
@@ -63,6 +77,7 @@ class EmployeesUpdate(EmployeesBase):
 
         target = await self._get_employee(gym_id, employee_id)
         self._enforce_owner_rules(target, employee_id, data, caller_employee_id)
+        self._enforce_login_role_has_email(target, data)
 
         if changes:
             await self._apply_update(gym_id, employee_id, changes)
@@ -92,11 +107,37 @@ class EmployeesUpdate(EmployeesBase):
                 "owner's role cannot be changed."
             )
 
+    @staticmethod
+    def _enforce_login_role_has_email(
+        target: EmployeeResponse,
+        data: EmployeeUpdateData,
+    ) -> None:
+        """Reject promoting an email-less row to a login role.
+
+        Mirrors the DB's ``chk_principal_has_email`` (only a ``trainer``
+        row may have a NULL email) so the case surfaces as a clean 400
+        rather than an IntegrityError the router turns into a 500.
+
+        Raises:
+            ValueError: If the resulting row would be a login role with
+                no email.
+        """
+        resulting_type = data.employee_type or target.employee_type
+        resulting_email = (
+            data.email if data.email is not None else target.email
+        )
+        if resulting_type is EmployeeType.trainer or resulting_email:
+            return
+        raise ValueError(
+            "An owner, admin, or front_desk employee must have an email — "
+            "set one in the same update."
+        )
+
     async def _apply_update(
         self,
         gym_id: UUID,
         employee_id: UUID,
-        changes: dict,
+        changes: dict[str, Any],
     ) -> None:
         """Build + run the dynamic SET clause over the provided fields.
 
@@ -107,8 +148,14 @@ class EmployeesUpdate(EmployeesBase):
         Raises:
             EmployeeNotFoundError: If the row disappeared before the write.
         """
+        unknown = set(changes) - _UPDATABLE_COLUMNS
+        if unknown:
+            raise ValueError(
+                f"Not updatable: {', '.join(sorted(unknown))}"
+            )
+
         set_parts: list[str] = []
-        params: dict = {
+        params: dict[str, Any] = {
             "employee_id": str(employee_id),
             "gym_id": str(gym_id),
         }
@@ -125,10 +172,13 @@ class EmployeesUpdate(EmployeesBase):
             SQL_DIR / "employees_update.sql",
             {"set_clause": ", ".join(set_parts)},
         )
-        async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            if not result.mappings().fetchone():
-                raise EmployeeNotFoundError(
-                    f"Employee {employee_id} not found"
-                )
-            await session.commit()
+        try:
+            async with self._db_pool.session() as session:
+                result = await session.execute(text(sql), params)
+                if not result.mappings().fetchone():
+                    raise EmployeeNotFoundError(
+                        f"Employee {employee_id} not found"
+                    )
+                await session.commit()
+        except IntegrityError as exc:
+            self._raise_for_integrity_error(exc)

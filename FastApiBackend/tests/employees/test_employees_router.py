@@ -26,6 +26,7 @@ from src.employees.schema.employees_schema import (
     InviteStatus,
 )
 from src.main import app
+from src.shared.auth import OWNER_ADMIN
 
 
 def _employee_response(
@@ -162,10 +163,12 @@ def test_update_employee_returns_200(
     )
 
     assert resp.status_code == 200, resp.text
-    auth_mock.verify_roles.assert_awaited()
-    # The PUT path resolves the caller's own employee id for the owner-self
-    # rule — assert that seam was awaited too.
+    # get_employee_id IS the PUT's authorization step: it applies the same
+    # owner/admin gate as verify_roles and additionally returns the caller's
+    # own employee id for the owner-self rule, so the route calls only it.
     auth_mock.get_employee_id.assert_awaited()
+    assert auth_mock.get_employee_id.await_args.args[2] == OWNER_ADMIN
+    auth_mock.verify_roles.assert_not_awaited()
 
 
 def test_update_employee_owner_protected_maps_403(

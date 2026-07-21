@@ -8,13 +8,17 @@ read, create, update, and archive.
 
 from __future__ import annotations
 
-import logging
+from typing import Any, NoReturn
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from src.employees import SQL_DIR
-from src.employees.employees_exceptions import EmployeeNotFoundError
+from src.employees.employees_exceptions import (
+    DuplicateEmployeeError,
+    EmployeeNotFoundError,
+)
 from src.employees.schema.employees_schema import (
     EmployeeResponse,
     InviteStatus,
@@ -22,7 +26,10 @@ from src.employees.schema.employees_schema import (
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
-logger = logging.getLogger(__name__)
+# The partial unique index on (gym_id, lower(email)); its name appears in the
+# Postgres unique-violation message, distinguishing a duplicate email from any
+# other integrity failure. Shared so create and update map it identically.
+_EMAIL_UNIQUE_CONSTRAINT = "unique_employee_email_gym"
 
 
 class EmployeesBase:
@@ -41,12 +48,31 @@ class EmployeesBase:
     # ── Shared helpers ─────────────────────────────────────────
 
     @staticmethod
-    def _row_to_response(row: dict) -> EmployeeResponse:
+    def _raise_for_integrity_error(exc: IntegrityError) -> NoReturn:
+        """Translate a write's integrity failure into a domain error.
+
+        A duplicate email at the gym is a 409; anything else is bad input
+        (400) rather than an uncaught 500. Both writers use this so create
+        and update answer a duplicate email identically.
+
+        Raises:
+            DuplicateEmployeeError: On the email unique-index violation.
+            ValueError: On any other integrity failure.
+        """
+        if _EMAIL_UNIQUE_CONSTRAINT in str(exc.orig):
+            raise DuplicateEmployeeError(
+                "An employee with this email already exists at this gym."
+            ) from exc
+        raise ValueError("Invalid employee data") from exc
+
+    @staticmethod
+    def _row_to_response(row: dict[str, Any]) -> EmployeeResponse:
         """Map a ``gym_employees`` read row to a response.
 
         Derives ``invite_status`` from the row: no email → ``none``; else
-        the ``has_verified_account`` flag from the ``auth.users`` LEFT JOIN
-        → ``active`` when a verified account exists, else ``pending``.
+        the ``has_verified_account`` flag (a scalar ``EXISTS`` over
+        ``auth.users``) → ``active`` when a verified account exists, else
+        ``pending``.
         """
         email = row["email"]
         if email is None:

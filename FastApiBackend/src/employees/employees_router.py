@@ -158,6 +158,7 @@ async def create_employee(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized / owner-row protected"},
         404: {"description": "Employee not found"},
+        409: {"description": "Email already used at this gym"},
     },
 )
 @inject
@@ -177,9 +178,10 @@ async def update_employee(
         HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_roles(gym_id, user_payload, OWNER_ADMIN)
-    # The acting owner/admin's own employee id — needed for the
-    # owner-self-edit rule (an owner may edit only their own row).
+    # get_employee_id applies the SAME owner/admin gate as verify_roles and
+    # additionally returns the id, so it is the whole authorization step —
+    # needed for the owner-self-edit rule (an owner may edit only their own
+    # row). Calling verify_roles first would just repeat the query.
     caller_employee_id = await auth.get_employee_id(
         gym_id, user_payload, OWNER_ADMIN
     )
@@ -199,6 +201,11 @@ async def update_employee(
     except EmployeeNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except DuplicateEmployeeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from None
     except ValueError as exc:

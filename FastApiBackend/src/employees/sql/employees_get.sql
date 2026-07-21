@@ -9,9 +9,16 @@ SELECT
     ge.employee_pic_url,
     ge.employee_public_description,
     ge.created_at,
-    (u.email_confirmed_at IS NOT NULL) AS has_verified_account
+    -- A scalar EXISTS, never a LEFT JOIN: auth.users is unique on email only
+    -- WHERE is_sso_user = false, so a join could match several rows and make
+    -- this single-row read non-deterministic. EXISTS cannot fan out.
+    EXISTS (
+        SELECT 1
+        FROM auth.users u
+        WHERE lower(u.email) = ge.email
+          AND u.email_confirmed_at IS NOT NULL
+    ) AS has_verified_account
 FROM gym_employees ge
-LEFT JOIN auth.users u ON lower(u.email) = ge.email
 WHERE ge.gym_id = CAST(:gym_id AS UUID)
   AND ge.employee_id = CAST(:employee_id AS UUID)
   AND ge.archived_at IS NULL
