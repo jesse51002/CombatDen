@@ -68,7 +68,8 @@ REVOKE INSERT, UPDATE (
     video_profile_built_at
 ) ON TABLE members FROM authenticated;
 
--- Filtered billing view: read-only for clients (writes go to the members
--- table via service_role). security_invoker propagates members' RLS.
-GRANT SELECT ON member_billing_profile TO authenticated;
+-- Filtered billing view (writes go to the members table via service_role).
+-- No client grant: `authenticated` holds no privileges on any table or view
+-- (see zz_client_privileges.sql). security_invoker propagates members' RLS
+-- to whichever role does read it.
 REVOKE INSERT, UPDATE, DELETE ON member_billing_profile FROM authenticated;

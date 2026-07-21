@@ -46,6 +46,69 @@
 -- schedule/roster/staff-list reads -- stays widened; not touched here).
 
 -- ============================================================
+-- 0. PRE-FLIGHT GUARDS -- run BEFORE any write statement.
+--
+--    Steps 5 below add `chk_principal_has_email` and the partial unique
+--    index `unique_employee_email_gym`, but the OLD schema allowed both a
+--    NULL email on an owner/admin row (identity was `user_id`) and repeated
+--    emails within a gym. On a database holding either shape, the migration
+--    would die PART-WAY -- after `DROP COLUMN user_id` -- with an opaque
+--    "check constraint is violated by some row" / "could not create unique
+--    index" error, leaving a half-migrated schema.
+--
+--    These two blocks are pure reads that RAISE before anything is applied,
+--    naming the exact offending rows. There is deliberately NO backfill from
+--    auth.users: the correct fix is a human setting the right email (or
+--    demoting the row to 'trainer'), not a guess.
+-- ============================================================
+
+DO $$
+DECLARE
+    v_offenders TEXT;
+BEGIN
+    SELECT string_agg(
+               format('employee_id=%s gym_id=%s employee_type=%s', e.employee_id, e.gym_id, e.employee_type),
+               '; ' ORDER BY e.gym_id, e.employee_id
+           )
+      INTO v_offenders
+      FROM gym_employees e
+     WHERE e.employee_type <> 'trainer'
+       AND e.email IS NULL;
+
+    IF v_offenders IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Cannot apply 20260711010001: login-carrying gym_employees row(s) have a NULL email, which chk_principal_has_email forbids. Offending rows: %',
+            v_offenders
+        USING HINT = 'Set the real (verified) email on every owner/admin/front_desk row, or demote a data-only row to employee_type = ''trainer'', then re-run.';
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    v_dupes TEXT;
+BEGIN
+    SELECT string_agg(
+               format('gym_id=%s email=%s (%s rows)', d.gym_id, d.email_lc, d.n),
+               '; ' ORDER BY d.gym_id, d.email_lc
+           )
+      INTO v_dupes
+      FROM (
+        SELECT gym_id, lower(email) AS email_lc, count(*) AS n
+          FROM gym_employees
+         WHERE email IS NOT NULL
+         GROUP BY gym_id, lower(email)
+        HAVING count(*) > 1
+      ) d;
+
+    IF v_dupes IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Cannot apply 20260711010001: duplicate (gym_id, lower(email)) pairs in gym_employees, which unique_employee_email_gym forbids. Offending pairs: %',
+            v_dupes
+        USING HINT = 'One employee row per email per gym -- archive or delete the extra rows (or give them their own email) before re-running.';
+    END IF;
+END $$;
+
+-- ============================================================
 -- 1. Normalize existing emails to lowercase (the new identity key)
 -- ============================================================
 
