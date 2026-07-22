@@ -26,7 +26,11 @@ class MembersListHeader extends StatelessWidget {
           '${totalCounts.active} active'
           ', ${totalCounts.trial} trial'
           ', ${totalCounts.frozen} frozen'
-          ', ${totalCounts.overdue} overdue',
+          ', ${totalCounts.overdue} overdue'
+          // Only when there are any: a gym with none should not read a
+          // permanent ", 0 dormant", but a gym that HAS quiet pack-holders
+          // should see them without opening the filter.
+          '${totalCounts.dormant > 0 ? ', ${totalCounts.dormant} dormant' : ''}',
           style: DesignConstants.h1Regular.copyWith(
             color: DesignConstants.text2nd,
           ),

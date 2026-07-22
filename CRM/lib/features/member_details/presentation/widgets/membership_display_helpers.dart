@@ -27,7 +27,11 @@ Color statusColor(MembershipStatus status) {
   return switch (status) {
     MembershipStatus.active => DesignConstants.goodGreen,
     MembershipStatus.trial => DesignConstants.goodGreen,
+    // Same severity grouping the members-list status cell uses: amber is
+    // "not currently training, worth a look", which covers both a
+    // deliberate freeze and a pack that has gone unused.
     MembershipStatus.frozen => DesignConstants.okYellow,
+    MembershipStatus.dormant => DesignConstants.okYellow,
     MembershipStatus.overdue => DesignConstants.badRed,
     MembershipStatus.cancelled => DesignConstants.badRed,
     MembershipStatus.ended => DesignConstants.badRed,

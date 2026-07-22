@@ -74,6 +74,9 @@ class _AlreadyHasRow extends StatelessWidget {
       case MembershipStatus.trial:
         return InvoiceChipTone.good;
       case MembershipStatus.frozen:
+      // Dormant is still a LIVE pack, just an unused one — the member does
+      // already have this membership, which is what this dialog warns about.
+      case MembershipStatus.dormant:
         return InvoiceChipTone.warning;
       case MembershipStatus.overdue:
         return InvoiceChipTone.bad;
