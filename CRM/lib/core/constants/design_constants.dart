@@ -351,6 +351,15 @@ class DesignConstants {
   // Height of the vertical status accent bar beside a status label.
   static const double statusAccentBarHeight = 22.0;
 
+  // Chart geometry. The stroke of a painted data line — distinct from
+  // `dividerThickness` (a hairline), `progressBarThickness` (a progress rail)
+  // and `buttonBorder` (a control border). The cap on a bar's thickness is
+  // likewise its own token: it coincides with `iconSizeLarge`, but icon sizes
+  // are reserved for `Icon()` (the same rule that keeps `legendDotSize` and
+  // `spinnerSizeSmall` separate from `iconSize*`).
+  static const double chartStroke = 2.0;
+  static const double chartBarMaxWidth = 24.0;
+
   // Line widths — the standard hairline, the heavier table-row separator, the
   // thin progress / step bar, and the short inline vertical rule's length.
   static const double dividerThickness = 1.0;
