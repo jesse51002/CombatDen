@@ -209,8 +209,16 @@ class TestListPresets:
             assert preset["preset_kind"] == preset_kind
             UUID(preset["preset_id"])
             assert isinstance(preset["sub_rank_count"], int)
-            # A stripes preset implies a sub-rank type; a flat one doesn't.
-            assert preset["implied_sub_rank_type"] in (None, "stripes", "div")
+            # Every preset implies one of the three sub_rank_type values: a
+            # stripes preset implies "stripes", while flat / plain-belt presets
+            # imply "none" (the enum's own value for "sub-ranks are off", which
+            # is the per-gym DB default) rather than SQL NULL.
+            assert preset["implied_sub_rank_type"] in (
+                None,
+                "none",
+                "stripes",
+                "div",
+            )
 
     def test_list_presets_invalid_kind_returns_422(
         self, api: httpx.Client

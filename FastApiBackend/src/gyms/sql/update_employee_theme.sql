@@ -7,4 +7,5 @@ UPDATE gym_employees
 SET theme_preference = CAST(:theme_preference AS theme_mode)
 WHERE lower(email) = :email
   AND gym_id = :gym_id
+  AND archived_at IS NULL
 RETURNING gym_id, theme_preference

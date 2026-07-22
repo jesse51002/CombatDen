@@ -110,7 +110,7 @@ class Auth:
                 detail="Invalid token",
             ) from None
 
-    def _require_email(self, user_payload: dict) -> str:
+    def require_email(self, user_payload: dict) -> str:
         """Return the caller's email claim, lowercased.
 
         Identity is the ``email`` claim (stored emails are lowercase, so
@@ -118,6 +118,11 @@ class Auth:
         ``members.email`` exactly). This is the CLAIM only — that the
         address is confirmed is proven by the ``auth.users`` predicate
         every identity-resolving query carries.
+
+        Public so a route that has ALREADY passed a role gate can read the
+        caller's email without paying a second round-trip. A route with no
+        prior gate must use ``verify_verified_account`` instead, which also
+        proves the account is confirmed.
 
         Raises:
             HTTPException: 401 if the token carries no ``email`` claim.
@@ -145,7 +150,7 @@ class Auth:
             HTTPException: 401 if the token has no ``email`` claim, 403 if
                 no confirmed Supabase auth account exists for it.
         """
-        email = self._require_email(user_payload)
+        email = self.require_email(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
@@ -187,7 +192,7 @@ class Auth:
             HTTPException: 401 if the token has no email claim, 403 if no
                 matching non-archived, verified row exists for the caller.
         """
-        email = self._require_email(user_payload)
+        email = self.require_email(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
@@ -289,7 +294,7 @@ class Auth:
             HTTPException: 401 if the token has no email claim, 403 if the
                 caller holds no allowed role at any gym.
         """
-        email = self._require_email(user_payload)
+        email = self.require_email(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
@@ -382,7 +387,7 @@ class Auth:
                 token has no email claim, 403 if the caller is not that
                 member, is unverified, or the member is at another gym.
         """
-        email = self._require_email(user_payload)
+        email = self.require_email(user_payload)
 
         async with self._db_pool.session() as session:
             row = (

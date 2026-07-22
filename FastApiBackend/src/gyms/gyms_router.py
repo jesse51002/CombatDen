@@ -161,14 +161,11 @@ async def list_my_gyms(
 ) -> list[GymWithRoleResponse]:
     """Return the gyms the caller is an employee of."""
     user_payload = auth.get_current_user(credentials)
-    user_email: str | None = user_payload.get("email")
-
-    if not user_email:
-        logger.error("JWT payload missing email claim")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="JWT missing email claim",
-        ) from None
+    # No prior gate on this route (it is what DISCOVERS the caller's gyms),
+    # so prove the account is confirmed here: 401 without an email claim,
+    # 403 when the address backs no verified account. The SQL carries the
+    # same predicate, so an unverified caller can never see a gym either way.
+    user_email = await auth.verify_verified_account(user_payload)
 
     try:
         return await gyms_service.list_gyms_for_user(user_email)
@@ -462,14 +459,10 @@ async def update_my_theme(
     """Save the caller's CRM theme preference for this gym."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
-    user_email: str | None = user_payload.get("email")
-
-    if not user_email:
-        logger.error("JWT payload missing email claim")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="JWT missing email claim",
-        ) from None
+    # verify_roles already proved the account is confirmed and holds a live
+    # employee row at this gym, so the claim is trustworthy here — read it
+    # directly rather than paying a second identity round-trip.
+    user_email = auth.require_email(user_payload)
 
     try:
         return await gyms_service.update_employee_theme(
