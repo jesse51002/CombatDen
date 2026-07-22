@@ -15,7 +15,7 @@ tracked separately, not here.
   - No invite/access-grant flow for an owner to give a trainer a CRM login.
   - No roles/permissions enforcement anywhere in CRM — any authenticated employee currently sees everything regardless of role.
 
-- **Growth / analytics page** — CRM screen exists (`features/growth/`, KPI tiles, donut stats, trend chart) but reads only `mock_growth.dart`. No backend `growth`/`analytics` domain exists. Docs vault confirms this matches committed scope ("engagement reporting" in `CombatDen_Strategy.md`).
+- **Growth / analytics page** — backend DONE, CRM in progress. `FastApiBackend/src/growth/` computes 34 per-gym metrics at app launch + hourly into the `gym_growth_metrics` jsonb cache and serves them from `GET /api/v1/growth/`; display metadata is registry-owned, so adding a metric is one `.sql` file plus one registry line. Remaining: the CRM's six tabs render the live envelopes (removing `mock_growth.dart`). Deferred by decision: alerting on thresholds, CSV export (below), an earned-points chart (blocked — `members.points_balance` is a bare counter with no ledger, so points-over-time is unbuildable), and industry benchmarks.
 
 - **Kiosk mode** — no kiosk UI/screen exists in CRM or MobileApp. Backend building block already exists: `checkin_member_gate.py` implements `is_member` true/false gating (member kiosk-reject vs staff-confirm) — reusable, not a rebuild.
 

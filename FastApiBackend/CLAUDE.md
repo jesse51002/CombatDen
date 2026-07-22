@@ -370,6 +370,23 @@ When you add a similar derived field, prefer extending an existing
 `*_status` view or adding a new view — never duplicate the
 derivation across SQL files.
 
+**The one sanctioned exception: a MEMBER-level rule that aggregates over
+all of a member's memberships.** `dormant` (the CRM members list) is true
+only when EVERY live membership is a trial/one_time pack and the member has
+gone quiet — a `HAVING` over the member's whole membership set, which a
+per-membership view like `member_memberships_status` cannot express. It
+therefore lives as a shared SQL **fragment**,
+`src/members/sql/crm_views/_member_dormant.sql`: one self-contained
+correlated boolean, injected via `load_sql`'s structural template variables
+into the badge column (`all_view.sql`), the tally (`total_counts.sql`) and
+the list filter. That still honours the rule this section exists for — ONE
+text, so badge / tally / filter can never disagree — it just uses a fragment
+instead of a view because the derivation is member-level, not row-level.
+The analytics side mirrors the same rule in
+`src/growth/sql/_dormant_members.sql` (which additionally treats
+all-memberships-terminal as lost, deliberately — see that file's header);
+the two must be kept in agreement.
+
 ## Ranks domain
 
 `src/ranks/` owns the per-gym rank ladder. **The full model lives in the
