@@ -21,7 +21,7 @@ flowchart TB
 
   ThemeService["🎨 ThemeService<br/>AI theme generator + read API"]
   VideoService["🎬 VideoService<br/>video worker: cleanup → finalize → one drained step (scan → enrich → scrape) + RAG<br/>+ gym-config YAML tooling · no read API"]
-  FastApiBackend["⚙️ FastApiBackend<br/>CRM / billing + video content API<br/>(spec agent · RAG recs; not deployed)"]
+  FastApiBackend["⚙️ FastApiBackend<br/>CRM / billing + video content API<br/>(spec agent · RAG recs · growth analytics sweep; not deployed)"]
 
   Database["🗄️ Database<br/>Supabase Postgres"]
   Deploy["📦 deploy/<br/>combined image: FastApiBackend + VideoService worker<br/>always-on (ECS), NOT App Runner"]
