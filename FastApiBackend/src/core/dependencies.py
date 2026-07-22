@@ -806,10 +806,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     crm_members_list_service = providers.Factory(
         CrmMembersListService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
     crm_total_counts_service = providers.Factory(
         CrmTotalCountsService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
 
     # ── Members billing/management ───────────────────────────────
