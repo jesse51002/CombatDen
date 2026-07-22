@@ -25,13 +25,19 @@ const String kPresetAdminEmail = 'owner1@test.com';
 class GymPresetsSection extends StatelessWidget {
   const GymPresetsSection({super.key});
 
+  /// Whether the preset import tool is available to the current user — the
+  /// preset-admin email AND the owner role at the active gym. The single
+  /// source of truth for the gate, so the Settings screen can decide whether
+  /// to render this section (and its leading separator) at all rather than
+  /// leaving a dangling hairline when it collapses to nothing.
+  static bool get isAvailableForCurrentUser {
+    final email = Supabase.instance.client.auth.currentUser?.email;
+    return email == kPresetAdminEmail && selectedGym.role == EmployeeRole.owner;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final email =
-        Supabase.instance.client.auth.currentUser?.email;
-    final role = selectedGym.role;
-
-    if (email != kPresetAdminEmail || role != EmployeeRole.owner) {
+    if (!isAvailableForCurrentUser) {
       return const SizedBox.shrink();
     }
 

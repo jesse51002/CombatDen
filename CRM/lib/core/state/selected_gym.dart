@@ -42,6 +42,7 @@ class SelectedGym extends ChangeNotifier {
   String? _timezone;
   String? _gymName;
   String? _logoUrl;
+  DateTime? _createdAt;
 
   /// The gym's persisted ThemeService design id (`gyms.theme_design_id`),
   /// hydrated at login. The "Set as app theme" action compares the previewed
@@ -86,6 +87,12 @@ class SelectedGym extends ChangeNotifier {
   /// timezone save commits.
   String? get timezone => _timezone;
 
+  /// When the active gym was created (`gyms.created_at`); null until
+  /// [setActiveGym], or when an older backend doesn't return the field. The
+  /// Settings → Reports & exports month picker floors its year list at this
+  /// year.
+  DateTime? get createdAt => _createdAt;
+
   /// The gym's persisted ThemeService design id; null until it loads (or until
   /// a theme has ever been saved). Updated in place by [updateSavedThemeDesignId]
   /// when the "Set as app theme" save commits.
@@ -122,6 +129,7 @@ class SelectedGym extends ChangeNotifier {
     required String timezone,
     required String? logoUrl,
     String? savedThemeDesignId,
+    DateTime? createdAt,
   }) {
     _gymId = gymId;
     _gymName = displayName;
@@ -129,6 +137,7 @@ class SelectedGym extends ChangeNotifier {
     _timezone = timezone;
     _logoUrl = logoUrl;
     _savedThemeDesignId = savedThemeDesignId;
+    _createdAt = createdAt;
     notifyListeners();
   }
 
@@ -198,6 +207,7 @@ class SelectedGym extends ChangeNotifier {
     _timezone = null;
     _gymName = null;
     _logoUrl = null;
+    _createdAt = null;
     _savedThemeDesignId = null;
     _videoGymId = null;
     _designId = null;

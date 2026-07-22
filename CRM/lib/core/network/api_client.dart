@@ -8,6 +8,11 @@ import 'package:crm/core/constants/env_constants.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:dio/dio.dart';
 
+/// A binary download from [ApiClient.getBytes]: the raw response [bytes] and
+/// the server-provided download [filename] parsed from `Content-Disposition`
+/// (null when the header is absent — the caller supplies a fallback name).
+typedef BytesResponse = ({Uint8List bytes, String? filename});
+
 /// Authenticated HTTP client for backend API calls.
 ///
 /// Automatically attaches the Supabase JWT token
@@ -107,6 +112,66 @@ class ApiClient {
         options: Options(contentType: 'multipart/form-data'),
       ),
     );
+  }
+
+  /// Sends a GET request that downloads a **binary** body (a report / export
+  /// zip) at [path], returning the raw [BytesResponse.bytes] plus the download
+  /// [BytesResponse.filename] parsed from the `Content-Disposition` header
+  /// (null when the header is absent — the caller supplies a fallback name).
+  ///
+  /// Unlike [get], this calls `_dio.get` directly with a per-request
+  /// [Options]: `ResponseType.bytes` so the body isn't JSON-decoded, and a
+  /// **2-minute** `receiveTimeout` because a full-history export can take far
+  /// longer than the shared 30s default (which would false-fail it). It still
+  /// runs through [_handleRequest], so the JWT attach + 401 refresh-and-retry
+  /// and the typed error mapping are preserved unchanged.
+  Future<BytesResponse> getBytes(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    final response = await _handleRequest(
+      () => _dio.get<List<int>>(
+        path,
+        queryParameters: queryParameters,
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      ),
+    );
+    final data = response.data ?? const <int>[];
+    final bytes = data is Uint8List ? data : Uint8List.fromList(data);
+    final filename = _filenameFromContentDisposition(
+      response.headers.value('content-disposition'),
+    );
+    return (bytes: bytes, filename: filename);
+  }
+
+  /// Parses the download filename out of a `Content-Disposition` header value,
+  /// preferring the RFC 5987 `filename*=UTF-8''<pct-encoded>` form over a plain
+  /// `filename="..."`. Returns null when [header] is null or carries no
+  /// filename (the backend exposes this header via CORS, but it may still be
+  /// absent — the caller then falls back to a client-side name).
+  String? _filenameFromContentDisposition(String? header) {
+    if (header == null) return null;
+    final extended = RegExp(
+      "filename\\*=(?:UTF-8'')?([^;]+)",
+      caseSensitive: false,
+    ).firstMatch(header);
+    if (extended != null) {
+      final raw = extended.group(1)!.trim();
+      try {
+        return Uri.decodeComponent(raw);
+      } catch (_) {
+        return raw.isEmpty ? null : raw;
+      }
+    }
+    final quoted = RegExp(
+      'filename="?([^";]+)"?',
+      caseSensitive: false,
+    ).firstMatch(header);
+    final name = quoted?.group(1)?.trim();
+    return (name == null || name.isEmpty) ? null : name;
   }
 
   Future<Response<T>> _handleRequest<T>(
