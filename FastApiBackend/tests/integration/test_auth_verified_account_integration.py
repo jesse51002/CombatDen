@@ -39,11 +39,17 @@ def _unique_email() -> str:
     return f"itest-verif-{uuid4().hex[:12]}@example.com"
 
 
-def _sees_gym(client, gym_id: str) -> bool:
-    """Whether ``GET /api/v1/gyms/`` lists the seeded gym for this caller."""
+def _gyms_list(client) -> tuple[int, set[str]]:
+    """``(status, gym_ids)`` for ``GET /api/v1/gyms/``.
+
+    The route runs ``verify_verified_account``, so an unverified caller gets a
+    403 rather than a 200 carrying an empty list — an explicit answer beats a
+    silently empty one. The ids are only meaningful on a 200.
+    """
     resp = client.get("/api/v1/gyms/")
-    assert resp.status_code == 200, resp.text
-    return gym_id in {g["gym_id"] for g in resp.json()}
+    if resp.status_code != 200:
+        return resp.status_code, set()
+    return 200, {g["gym_id"] for g in resp.json()}
 
 
 def _members_list_status(client, gym_id: str) -> int:
@@ -81,19 +87,25 @@ async def test_unverified_account_loses_access_with_the_same_jwt(
     try:
         # 1. Verified: the gym-scoped staff read passes and the gym is listed.
         assert _members_list_status(client, gym_id) == 200
-        assert _sees_gym(client, gym_id)
+        status, gym_ids = _gyms_list(client)
+        assert status == 200
+        assert gym_id in gym_ids
 
         # 2. Un-confirm the inbox. The JWT is untouched and still unexpired.
         await set_auth_email_confirmed(db_pool, user_id, confirmed=False)
 
         assert _members_list_status(client, gym_id) == 403
-        assert not _sees_gym(client, gym_id)
+        # 403, not an empty 200: the route resolves identity up front via
+        # verify_verified_account rather than leaning on the SQL predicate.
+        assert _gyms_list(client)[0] == 403
 
         # 3. Re-confirm: access returns. Proves the 403 came from the
         #    verified-account predicate, not from the token going stale.
         await set_auth_email_confirmed(db_pool, user_id, confirmed=True)
 
         assert _members_list_status(client, gym_id) == 200
-        assert _sees_gym(client, gym_id)
+        status, gym_ids = _gyms_list(client)
+        assert status == 200
+        assert gym_id in gym_ids
     finally:
         client.close()

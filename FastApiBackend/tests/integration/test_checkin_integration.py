@@ -26,6 +26,7 @@ not a code defect.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -40,6 +41,7 @@ from src.checkin import SQL_DIR
 from src.checkin.service.streak_service import StreakService
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from tests.helpers.waiver_compliance import WaiverCompliance
 from tests.seed_constants import SEEDED_GYM_ID
 
 GYM_ID = SEEDED_GYM_ID
@@ -186,8 +188,15 @@ def _pick_target(
 
 
 @pytest.fixture(scope="session")
-def seed_ids(api: httpx.Client) -> dict:
-    """Discover usable ids from the live seeded DB + board; skip if unavailable."""
+def seed_ids(api: httpx.Client) -> Iterator[dict]:
+    """Discover usable ids from the live seeded DB + board; skip if unavailable.
+
+    The picked ``covered`` member is then made WAIVER-COMPLIANT (see
+    ``tests/helpers/waiver_compliance.py``): the seed deliberately leaves every
+    member unsigned, and the check-in gate warns + records nothing for an
+    unsigned member, so the recording tests must establish that precondition
+    themselves. The signatures created here are deleted at session end.
+    """
 
     async def _discover() -> dict:
         conn = await asyncpg.connect(_get_db_url())
@@ -225,7 +234,14 @@ def seed_ids(api: httpx.Client) -> dict:
     ids["too_early"] = _pick_target(
         occurrences, ids["covering"], checkin_open=False
     )
-    return ids
+
+    compliance = WaiverCompliance(api, GYM_ID)
+    if ids["covered"] is not None:
+        compliance.ensure_signed(ids["covered"]["member_id"])
+    try:
+        yield ids
+    finally:
+        compliance.cleanup()
 
 
 def _member_points(member_id: str) -> int:

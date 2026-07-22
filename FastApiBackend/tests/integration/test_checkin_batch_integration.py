@@ -27,6 +27,7 @@ It is intentionally NOT asserted here.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 
@@ -35,6 +36,7 @@ import httpx
 import pytest
 from dotenv import dotenv_values
 
+from tests.helpers.waiver_compliance import WaiverCompliance
 from tests.seed_constants import SEEDED_GYM_ID
 
 GYM_ID = SEEDED_GYM_ID
@@ -140,8 +142,15 @@ def _multi_covered_target(
 
 
 @pytest.fixture(scope="session")
-def batch_ids(api: httpx.Client) -> dict:
-    """Discover a multi-cover class + occurrence + a no-membership member."""
+def batch_ids(api: httpx.Client) -> Iterator[dict]:
+    """Discover a multi-cover class + occurrence + a no-membership member.
+
+    Both picked covering members are then made WAIVER-COMPLIANT (see
+    ``tests/helpers/waiver_compliance.py``): the seed deliberately leaves every
+    member unsigned, and the check-in gate warns + records nothing for an
+    unsigned member, so the recording tests must establish that precondition
+    themselves. The signatures created here are deleted at session end.
+    """
 
     async def _discover() -> dict:
         conn = await asyncpg.connect(_get_db_url())
@@ -170,7 +179,15 @@ def batch_ids(api: httpx.Client) -> dict:
     except Exception as exc:  # noqa: BLE001 — any DB issue means skip, not fail
         pytest.skip(f"Seeded DB not reachable for discovery: {exc}")
     ids["target"] = _multi_covered_target(api, ids["by_class"])
-    return ids
+
+    compliance = WaiverCompliance(api, GYM_ID)
+    if ids["target"] is not None:
+        for member_id in ids["target"]["members"]:
+            compliance.ensure_signed(member_id)
+    try:
+        yield ids
+    finally:
+        compliance.cleanup()
 
 
 def _member_points(member_id: str) -> int:
