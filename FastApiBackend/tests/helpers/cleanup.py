@@ -34,6 +34,8 @@ _SQL_DIR = Path(__file__).resolve().parent / "sql"
 # and a signature row, and ``member_waiver_signatures`` FKs members, so both go
 # before ``members`` — the junction before the signatures it points at. The
 # gym-config waivers themselves (gym_waivers / _versions) are left intact.
+# ``member_activities`` FKs members with no cascade, so it goes last before
+# ``members`` too.
 _GYM_TABLES = (
     "stripe_webhook_events",
     "member_charges",
@@ -45,6 +47,7 @@ _GYM_TABLES = (
     "membership_plans_unfiltered",
     "member_authorized_payers",
     "member_waiver_signatures",
+    "member_activities",
     "members",
 )
 
@@ -137,6 +140,16 @@ async def delete_member_data(
         )
         await session.execute(
             text(load_sql(_SQL_DIR / "delete_member_memberships.sql")),
+            {"id": str(member_id)},
+        )
+        # member_activities FKs the member with NO cascade
+        # (fk_activity_member_gym), so any activity the member accrued blocks
+        # the delete below. Points adjustments, rank changes and check-ins all
+        # write one, so this is not an edge case — without this step the member
+        # row survives teardown, orphaned in the shared seeded gym, and the
+        # test that created it goes red on a ForeignKeyViolationError.
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_member_activities.sql")),
             {"id": str(member_id)},
         )
         # Authorization rows + waiver signatures FK the member (the junction also

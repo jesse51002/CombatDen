@@ -1,9 +1,10 @@
 -- All gyms the authenticated user is an employee of, annotated with
 -- their role. Identity is the caller's verified email (stored lowercase);
 -- ALL roles enter the CRM, so there is no role filter here — the response
--- carries ge.employee_type. Archived employees are excluded. UNIQUE
--- (email, gym_id) guarantees one row per gym, so no de-duplication is
--- needed.
+-- carries ge.employee_type. Archived employees are excluded. The partial
+-- unique index unique_employee_email_gym on (gym_id, lower(email))
+-- WHERE email IS NOT NULL guarantees one row per email per gym, so no
+-- de-duplication is needed.
 --
 -- This is a ROLE-RESOLUTION query (it hands the caller their role at each
 -- gym), so it carries the same verified-account predicate as every other

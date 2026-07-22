@@ -425,7 +425,7 @@ how-to-work-here facts belong here:
 - **`Auth.verify_verified_account(user_payload) -> str`** is the standalone primitive for a route whose caller has no `gym_employees` row yet (gym create) — 401 on no email claim, 403 on an unconfirmed account, else the lowercased email.
 - **`Auth.verify_member_self(member_id, user_payload, *, gym_id=None)`** is the ONE member-facing gate: the caller's verified email must equal the `members` row's email, the auth account must be confirmed, and — when `gym_id` is passed — the member must belong to that gym. Pass `gym_id` on every gym-scoped route: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403 otherwise. **Its only callers live in `src/member_portal/` (the member-facing surface — see that section); no CRM route uses it.**
 - **Every member-scoped CRM route is STAFF-ONLY.** There is no "or the member themselves" branch anywhere in the backend — `verify_gym_employee_for_member` / `get_employee_id_for_member` gate all of them, and their role-set parameter is **required** (no default), so a call site can never silently inherit `OWNER_ADMIN`. On the check-in routes `is_member` / `ignore_warnings` are staff-selected MODES (kiosk gate vs. staff gate), not claims about who is calling. **A member reaches their own data only through the parallel `/api/v1/member/...` routes, never by a branch inside a staff route** — the two surfaces stay separate on purpose, which is what keeps a member from ever selecting a gate mode.
-- **Startup guard on GoTrue's auto-confirm.** With GoTrue's `enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup, so the DB predicate above proves nothing. `AuthSettingsGuard` (`src/shared/auth_settings_guard.py`, DI provider `auth_settings_guard`, awaited at the top of the `main.py` lifespan) reads GoTrue's own published config at `GET {supabase_url}/auth/v1/settings` and, when `mailer_autoconfirm` is true, logs a CRITICAL banner — and refuses to boot when `settings.auth_autoconfirm_policy` is `fail`. Default is `warn` (auto-confirm is normal in local dev); production sets `fail`. A failure to REACH GoTrue is never treated as a misconfiguration and never takes the app down.
+- **Startup guard on GoTrue's auto-confirm.** With GoTrue's `enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup, so the DB predicate above proves nothing. `AuthSettingsGuard` (`src/shared/auth_settings_guard.py`, DI provider `auth_settings_guard`, awaited at the top of the `main.py` lifespan) reads GoTrue's own published config at `GET {supabase_url}/auth/v1/settings` and, when `mailer_autoconfirm` is true, logs a CRITICAL banner — and refuses to boot when `settings.auth_autoconfirm_policy` is `fail`. **Default is `fail`, everywhere** — `Database/supabase/config.toml` ships `enable_confirmations = true`, so an auto-confirming stack is a misconfiguration in local dev exactly as much as in production, not a local convenience. When the guard trips, the fix is to restart the auth container, not to re-seed: GoTrue reads `enable_confirmations` at **container start**, so `supabase db reset` does NOT apply a change to it — `supabase stop && supabase start` does. A failure to REACH GoTrue is never treated as a misconfiguration and never takes the app down.
 - **There is no PostgREST client.** `SupabaseClient` and the `postgrest` dependency are gone — all DB access is the direct SQLAlchemy pool. `settings.supabase_url` (JWKS + the GoTrue settings probe) and `settings.supabase_service_role_key` (the tests' admin client) remain.
 
 **Input Validation**
@@ -803,7 +803,8 @@ There is NO separate `video_config` router or module.
 `member`, `class`, `gym`, `rank`, `plan`; not a query param) → stored in the `combatden-assets` S3
 bucket under a `category`-named key prefix → returns a CDN URL
 (`cdn.combatden.net/...?v=<content-hash>`). Used by the CRM's `ImageUploadPickerField`. Gated by
-`Auth.verify_staff_principal` (owner/admin of ≥1 gym; no `gym_id` to scope). The 5 MB cap is
+`Auth.verify_staff_principal(user_payload, allowed=STAFF)` (owner/admin/front_desk of ≥1 gym; no
+`gym_id` to scope). The 5 MB cap is
 enforced before and after the body is read.
 
 **Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
@@ -855,12 +856,16 @@ to the member-appropriate `MemberPortalProfile` — no number is re-derived).
 | `GET …/video-rec` | same | `VideosService.get_video_rec` |
 | `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
 
-**The redeem route re-checks the reward's gym before the debit, deliberately.** `redeem_reward.sql`
-only INSERTS a same-gym redemption (`JOIN locked_reward lr ON lr.gym_id = lm.gym_id`), but its
-`debited` CTE is **not** gym-scoped — a foreign `reward_id` burns the member's points and writes no
-row, and the service commits before it raises. The member route loads the reward and 404s a
-cross-gym one first. (The SQL gap is pre-existing and still open on the staff route; fixing it means
-adding the gym predicate to the `debited` CTE.)
+**Same-gym is guarded on the DEBIT, in every redeem statement.** Both `redeem_reward.sql` and
+`redeem_reward_override.sql` carry `AND (SELECT gym_id FROM locked_reward) = (SELECT gym_id FROM
+locked_member)` on their debiting CTE, alongside the `is_active` and balance guards — not only on the
+insert's `JOIN locked_reward lr ON lr.gym_id = lm.gym_id`. The guard has to live there because
+**Postgres runs every data-modifying CTE exactly once, whether or not the final query reads it**: a
+predicate that only suppresses the inserted ROW still lets the `UPDATE members` run, so a `reward_id`
+from another gym would decrement `points_balance` while writing no redemption. Guarding the debit is
+what makes a cross-gym redeem a pure no-op. On top of that, the member-portal route loads the reward
+and checks its gym before calling the service, so a foreign `reward_id` reads as a **404** rather than
+a generic failure.
 
 **Deliberately NOT in the member surface** — a member may not: check themselves in (it bypasses the
 front desk and the unsigned-waiver legal gate; a reservation is not attendance, and `member_attendance`

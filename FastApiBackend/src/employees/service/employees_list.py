@@ -1,4 +1,4 @@
-"""List + read employees for a gym."""
+"""List a gym's employees."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from src.shared.sql_loader import load_sql
 
 
 class EmployeesList(EmployeesBase):
-    """Read-only listing + single-read of a gym's employees."""
+    """Read-only listing of a gym's employees."""
 
     async def list_employees(
         self,
@@ -33,15 +33,3 @@ class EmployeesList(EmployeesBase):
             rows = result.mappings().fetchall()
 
         return [self._row_to_response(dict(row)) for row in rows]
-
-    async def get_employee(
-        self,
-        gym_id: UUID,
-        employee_id: UUID,
-    ) -> EmployeeResponse:
-        """Return one non-archived employee.
-
-        Raises:
-            EmployeeNotFoundError: If no live employee row matches.
-        """
-        return await self._get_employee(gym_id, employee_id)

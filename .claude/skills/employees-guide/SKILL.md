@@ -71,6 +71,10 @@ There is **no `user_id` FK anywhere in this system**. Both `gym_employees` and `
 `employee_type` enum: `owner | admin | front_desk | trainer` (`Database/supabase/schemas/gyms.sql`,
 mirrored as `EmployeeType` in `Database/python_data/schema/gym_employee.py`). `front_desk` is the newest
 value — added specifically to give day-to-day counter staff a scoped account without owner/admin power.
+(That reading order is the privilege hierarchy, **not** the Postgres ordinal order: because the migration
+appends `front_desk` last, the type is declared `('owner', 'admin', 'trainer', 'front_desk')`, so
+`ORDER BY employee_type` sorts owner → admin → trainer → front_desk. Never lean on it for display order —
+sort explicitly.)
 
 Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.dart`):
 **staff-admin** = owner or admin (full config + management), **staff** = staff-admin OR front_desk
@@ -125,6 +129,11 @@ else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`;
 
 - **Backend**: every route names the exact role set it admits (`OWNER_ONLY` / `OWNER_ADMIN` / `STAFF` /
   `ALL_EMPLOYEES` or a custom `frozenset[EmployeeType]`, passed to `Auth.verify_roles` — see §5).
+  **Two matrix rows have no backend counterpart and cannot have one: "Dashboard — overview/income" and
+  "Growth / analytics" are CRM-NAVIGATION gates only.** There is no owner/admin-only endpoint behind
+  either — front desk legitimately reads the same numbers from `GET /api/v1/members/counts` (`STAFF`)
+  for its own dashboard cards, and the CRM's `growth/` surface makes no backend calls at all
+  (`lib/features/growth/data/mock_growth.dart`). Don't go looking for a backend gate there.
 - **CRM**: `RolePolicy` extension on `EmployeeRole` (`CRM/lib/core/auth/role_policy.dart`) exposes one
   boolean getter per capability (`canManageStaff`, `canViewDashboard`, `canCreateMembers`, …), each keyed
   to a tier. Nav, route access, and section visibility all read these getters — **nothing hard-codes a
@@ -190,16 +199,30 @@ UPDATE + owner-row guard), `EmployeesArchive` (soft-archive + owner-row guard). 
 ### `invite_status` — derived, not stored
 
 `EmployeeResponse.invite_status` is an `InviteStatus` enum (`active | pending | none`) computed at **read
-time** from a `LEFT JOIN auth.users` in the list/get SQL (`employees_list.sql`, `employees_get.sql`):
+time**. The list/get SQL (`employees_list.sql`, `employees_get.sql`) selects a single boolean,
+`has_verified_account`, from a scalar `EXISTS` over `auth.users` — **never a JOIN**:
 
 ```sql
-LEFT JOIN auth.users u ON lower(u.email) = ge.email
+EXISTS (
+    SELECT 1
+    FROM auth.users u
+    WHERE lower(u.email) = lower(ge.email)
+      AND u.email_confirmed_at IS NOT NULL
+) AS has_verified_account
 ```
 
+The `EXISTS` is not a style preference: `auth.users` is unique on email only `WHERE is_sso_user = false`,
+so a join could match several rows and fan out — duplicating the employee in the roster (and making the
+single-row read non-deterministic in `employees_get.sql`). `EXISTS` cannot fan out. Both `.sql` files
+carry that reason as a comment; it is the same rule every identity-resolving query in
+`src/shared/sql/` follows.
+
+`EmployeesBase._map_employee` (`service/employees_base.py`) turns that flag into the enum:
+
 - **`none`** — the row has no email (an email-less trainer; instructor data, never a login principal).
-- **`pending`** — the row has an email but no matching `auth.users` row has confirmed it
-  (`u.email_confirmed_at IS NULL` or no matching row at all).
-- **`active`** — a verified Supabase account exists for that email (`u.email_confirmed_at IS NOT NULL`).
+- **`pending`** — the row has an email but `has_verified_account` is false (no matching `auth.users` row,
+  or one whose `email_confirmed_at IS NULL`).
+- **`active`** — `has_verified_account` is true: a confirmed Supabase account exists for that email.
 
 There is no stored invite/status column and no invite-token flow — `invite_status` is purely a read-time
 reflection of "does a verified auth account currently exist for this email." Sending an actual
@@ -267,8 +290,11 @@ That DB predicate only means something while GoTrue actually mails confirmations
 `enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup. `AuthSettingsGuard`
 (`src/shared/auth_settings_guard.py`, awaited in the `main.py` lifespan) reads GoTrue's published config
 at `GET {supabase_url}/auth/v1/settings` and logs a CRITICAL banner when `mailer_autoconfirm` is true —
-or refuses to boot when `settings.auth_autoconfirm_policy` is `fail` (default `warn`, because local dev
-runs auto-confirmed).
+or refuses to boot when `settings.auth_autoconfirm_policy` is `fail`, which is the **default everywhere**:
+`Database/supabase/config.toml` ships `enable_confirmations = true`, so an auto-confirming stack is a
+misconfiguration locally just as much as in production. If the guard trips, restart the auth container
+rather than re-seeding — GoTrue reads `enable_confirmations` at **container start**, so `supabase db reset`
+does not apply it; `supabase stop && supabase start` does.
 
 A route documents which roles it admits by which constant it passes — e.g. a trainer-visible schedule read
 passes `ALL_EMPLOYEES`; a money-moving membership op passes `STAFF`; gym-config writes and the employees

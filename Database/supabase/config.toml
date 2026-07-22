@@ -224,9 +224,23 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+#
+# MUST match where the CRM actually serves (CRM/Makefile: `flutter run -d
+# web-server --web-port 8081`). With enable_confirmations = true this is where
+# GoTrue sends the person after they click the confirmation link, carrying the
+# session in the URL — point it at a dead port and every local signup verifies
+# but lands nowhere, so the confirm-then-auto-login flow cannot be tested at
+# all. The hosted project sets its own site_url (app.combatden.net) in the
+# Supabase Dashboard.
+site_url = "http://localhost:8081"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# 8082 is the theme-browser target (CRM/Makefile). Plain http — the dev web
+# server does not speak https.
+additional_redirect_urls = [
+  "http://localhost:8081",
+  "http://127.0.0.1:8081",
+  "http://localhost:8082",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).

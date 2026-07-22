@@ -258,15 +258,20 @@ class Auth:
         self,
         gym_id: UUID,
         user_payload: dict,
-        allowed: frozenset[EmployeeType] = OWNER_ADMIN,
+        allowed: frozenset[EmployeeType],
     ) -> UUID:
         """Resolve the caller's ``employee_id`` for a gym.
 
         Used to stamp the operator/witness on records a staff member
         captures (e.g. a waiver signature). Same email-based
         authorization as ``verify_roles`` — the caller must hold one of
-        ``allowed`` roles (default owner/admin) on a non-archived row —
-        but returns the ``employee_id`` instead of only asserting access.
+        ``allowed`` roles on a non-archived row — but returns the
+        ``employee_id`` instead of only asserting access.
+
+        ``allowed`` is REQUIRED and has no default, for the reason spelled
+        out on ``verify_gym_employee_for_member``: a default silently gives
+        an endpoint a role set nobody chose, and the wrong role set is
+        invisible at the call site.
 
         Raises:
             HTTPException: 401 if the token has no email claim, 403 if the
@@ -280,15 +285,18 @@ class Auth:
     async def verify_staff_principal(
         self,
         user_payload: dict,
-        allowed: frozenset[EmployeeType] = OWNER_ADMIN,
+        allowed: frozenset[EmployeeType],
     ) -> None:
         """Verify the caller holds one of ``allowed`` roles at ANY gym.
 
         The gym-AGNOSTIC staff gate, for endpoints that take no ``gym_id``
         (e.g. the shared image-upload proxy). Matches the caller's
         verified email against a non-archived ``gym_employees`` row at any
-        gym whose ``employee_type`` is in ``allowed`` (default
-        owner/admin) and which is backed by a confirmed auth account.
+        gym whose ``employee_type`` is in ``allowed`` and which is backed
+        by a confirmed auth account.
+
+        ``allowed`` is REQUIRED and has no default — same reason as
+        ``get_employee_id``.
 
         Raises:
             HTTPException: 401 if the token has no email claim, 403 if the

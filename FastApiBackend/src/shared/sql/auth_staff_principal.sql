@@ -8,13 +8,13 @@
 -- duplicate the employee. EXISTS cannot fan out.
 SELECT ge.employee_id
 FROM gym_employees ge
-WHERE ge.email = :email
+WHERE lower(ge.email) = :email
   AND CAST(ge.employee_type AS TEXT) = ANY(CAST(:allowed_roles AS TEXT[]))
   AND ge.archived_at IS NULL
   AND EXISTS (
       SELECT 1
       FROM auth.users u
-      WHERE lower(u.email) = ge.email
+      WHERE lower(u.email) = lower(ge.email)
         AND u.email_confirmed_at IS NOT NULL
   )
 LIMIT 1;

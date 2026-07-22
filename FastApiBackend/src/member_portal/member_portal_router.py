@@ -608,9 +608,11 @@ async def redeem_my_reward(
     user_payload = auth.get_current_user(credentials)
     await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
 
-    # Scope the reward to the member's own gym BEFORE the debit. The redeem
-    # statement only inserts a same-gym redemption, but its debit CTE is not
-    # gym-scoped — a foreign reward_id would burn the points and write no row.
+    # Scope the reward to the member's own gym so a foreign reward_id reads as
+    # what it is — a reward this member cannot see — instead of surfacing as a
+    # generic redemption failure. The debit itself is safe either way: both
+    # redeem statements now carry the same-gym predicate on the debiting CTE,
+    # not only on the insert's join.
     try:
         reward = await rewards_service.get_reward(reward_id)
     except ValueError:

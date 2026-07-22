@@ -149,8 +149,8 @@ async def create_gym(
     ),
     responses={
         200: {"description": "Gyms retrieved (possibly empty)"},
-        400: {"description": "JWT missing email claim"},
-        401: {"description": "Not authenticated"},
+        401: {"description": "Not authenticated / no email claim"},
+        403: {"description": "Email address is not verified"},
     },
 )
 @inject

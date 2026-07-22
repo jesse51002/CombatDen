@@ -41,17 +41,13 @@ from src.checkin import SQL_DIR
 from src.checkin.service.streak_service import StreakService
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from tests.helpers import board_targets
 from tests.helpers.waiver_compliance import WaiverCompliance
 from tests.seed_constants import SEEDED_GYM_ID
 
 GYM_ID = SEEDED_GYM_ID
 
 _ENV_PATH = "/var/home/jm/Documents/CombatDen/codebase/FastApiBackend/.env"
-# How far ahead to scan the schedule board for a usable occurrence.
-_BOARD_WINDOW_DAYS = 45
-# Mirror settings.checkin_opens_hours_before_start: check-in opens this many
-# hours before a class starts, so a target further out is rejected.
-_CHECKIN_OPENS_HOURS = 2
 
 
 def _get_db_url() -> str:
@@ -67,30 +63,6 @@ def _run_async(coro):
     finally:
         loop.close()
 
-
-# One covering member (active UNLIMITED plan, eligible) per active, non-deleted
-# class. Occurrences are computed (no materialization), so NO pre-existing
-# attendance row is required -- the occurrence_date comes from the schedule
-# board (the expander).
-_COVERING_BY_CLASS_SQL = """
-SELECT DISTINCT ON (gc.class_id)
-    gc.class_id,
-    ms.member_id,
-    gc.points_worth
-FROM member_memberships_status ms
-JOIN membership_plans mp
-    ON mp.plan_id = ms.plan_id AND mp.gym_id = ms.gym_id
-JOIN gym_classes gc
-    ON gc.gym_id = ms.gym_id
-    AND gc.is_deleted = FALSE
-    AND gc.is_active = TRUE
-    AND (gc.allowed_plan_ids IS NULL
-         OR gc.allowed_plan_ids @> jsonb_build_array(ms.plan_id::text))
-WHERE ms.gym_id = $1
-  AND ms.status = 'active'
-  AND mp.class_count IS NULL
-ORDER BY gc.class_id, ms.member_id
-"""
 
 # An existing attendance row -> a member with attendance, for the streak test.
 _EXISTING_ATTENDANCE_SQL = """
@@ -130,61 +102,42 @@ _ANY_CLASS_ID_SQL = """
 SELECT class_id FROM gym_classes WHERE gym_id = $1 LIMIT 1
 """
 
-_GYM_TIMEZONE_SQL = """
-SELECT timezone FROM gyms WHERE gym_id = $1
-"""
-
-
-def _board_occurrences(api: httpx.Client) -> list[dict]:
-    """The gym's board occurrences over the scan window (empty on a non-200)."""
-    today = date.today()
-    resp = api.get(
-        "/api/v1/classes/instances",
-        params={
-            "gym_id": GYM_ID,
-            "start_date": today.isoformat(),
-            "end_date": (today + timedelta(days=_BOARD_WINDOW_DAYS)).isoformat(),
-        },
-    )
-    return resp.json()["items"] if resp.status_code == 200 else []
-
-
 def _pick_target(
-    occurrences: list[dict],
-    covering: dict[str, dict],
+    board: list[dict],
+    covering: dict[str, list[dict]],
+    attended: set[tuple[str, str, str, str]],
+    gym_timezone: str,
     *,
     checkin_open: bool,
 ) -> dict | None:
-    """First non-cancelled occurrence with a covering member on the requested
-    side of the check-in window.
+    """One freshly-checkin-able (member, occurrence) target, or None.
 
-    ``checkin_open=True`` -> a target that can be checked into now (its start is
-    within the ``_CHECKIN_OPENS_HOURS`` window or already past); ``False`` -> one
-    too far in the future to check into yet. Picking by window (not just "the
-    first occurrence") keeps the tests deterministic regardless of the hour.
+    ``checkin_open=True`` -> a target that can be checked into now (already
+    past, in session, or starting inside the open window); ``False`` -> one too
+    far in the future to check into yet. See ``tests/helpers/board_targets.py``
+    for why the pick has to scan backward and re-check coverage.
     """
-    cutoff = datetime.now(UTC) + timedelta(hours=_CHECKIN_OPENS_HOURS)
-    for occ in occurrences:
-        if occ["is_cancelled"]:
-            continue
-        cover = covering.get(occ["class_id"])
-        if cover is None:
-            continue
-        is_open = datetime.fromisoformat(occ["occurred_at"]) <= cutoff
-        if is_open != checkin_open:
-            continue
-        return {
-            "member_id": cover["member_id"],
-            "class_id": occ["class_id"],
-            "points_worth": cover["points_worth"],
-            # occurrence_date/time are always the ORIGINAL slot -- never
-            # class_date (the effective/display date), per the
-            # class-system-guide skill. A class may occur several times per
-            # day, so the time is part of the occurrence's identity.
-            "occurrence_date": occ["original_date"],
-            "occurrence_time": occ["original_time"],
-        }
-    return None
+    picked = board_targets.pick_occurrence(
+        board,
+        covering,
+        attended,
+        gym_timezone,
+        checkin_open=checkin_open,
+    )
+    if picked is None:
+        return None
+    occurrence, members = picked
+    return {
+        "member_id": members[0]["member_id"],
+        "class_id": occurrence["class_id"],
+        "points_worth": members[0]["points_worth"],
+        # occurrence_date/time are always the ORIGINAL slot -- never
+        # class_date (the effective/display date), per the
+        # class-system-guide skill. A class may occur several times per
+        # day, so the time is part of the occurrence's identity.
+        "occurrence_date": occurrence["original_date"],
+        "occurrence_time": occurrence["original_time"],
+    }
 
 
 @pytest.fixture(scope="session")
@@ -202,23 +155,18 @@ def seed_ids(api: httpx.Client) -> Iterator[dict]:
         conn = await asyncpg.connect(_get_db_url())
         try:
             gym = UUID(GYM_ID)
-            covering_rows = await conn.fetch(_COVERING_BY_CLASS_SQL, gym)
-            covering = {
-                str(r["class_id"]): {
-                    "member_id": str(r["member_id"]),
-                    "points_worth": int(r["points_worth"]),
-                }
-                for r in covering_rows
-            }
             return {
-                "covering": covering,
+                "covering": await board_targets.load_covering(conn, GYM_ID),
+                "attended": await board_targets.load_attended_keys(conn, GYM_ID),
                 "existing": await conn.fetchrow(_EXISTING_ATTENDANCE_SQL, gym),
                 "no_membership": await conn.fetchrow(_NO_MEMBERSHIP_MEMBER_SQL, gym),
                 "attendance_free_member": await conn.fetchrow(
                     _ATTENDANCE_FREE_MEMBER_SQL, gym
                 ),
                 "any_class_id": await conn.fetchval(_ANY_CLASS_ID_SQL, gym),
-                "gym_timezone": await conn.fetchval(_GYM_TIMEZONE_SQL, gym),
+                "gym_timezone": await board_targets.load_gym_timezone(
+                    conn, GYM_ID
+                ),
             }
         finally:
             await conn.close()
@@ -227,12 +175,20 @@ def seed_ids(api: httpx.Client) -> Iterator[dict]:
         ids = _run_async(_discover())
     except Exception as exc:  # noqa: BLE001 — any DB issue means skip, not fail
         pytest.skip(f"Seeded DB not reachable for discovery: {exc}")
-    occurrences = _board_occurrences(api)
+    board = board_targets.fetch_board(api, GYM_ID)
     ids["covered"] = _pick_target(
-        occurrences, ids["covering"], checkin_open=True
+        board,
+        ids["covering"],
+        ids["attended"],
+        ids["gym_timezone"],
+        checkin_open=True,
     )
     ids["too_early"] = _pick_target(
-        occurrences, ids["covering"], checkin_open=False
+        board,
+        ids["covering"],
+        ids["attended"],
+        ids["gym_timezone"],
+        checkin_open=False,
     )
 
     compliance = WaiverCompliance(api, GYM_ID)

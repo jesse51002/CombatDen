@@ -15,7 +15,7 @@ SELECT
     EXISTS (
         SELECT 1
         FROM auth.users u
-        WHERE lower(u.email) = ge.email
+        WHERE lower(u.email) = lower(ge.email)
           AND u.email_confirmed_at IS NOT NULL
     ) AS has_verified_account
 FROM gym_employees ge
