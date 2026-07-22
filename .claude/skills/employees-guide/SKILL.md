@@ -6,8 +6,10 @@ description: >-
   against the JWT), the 4-role capability matrix (owner / admin / front_desk
   / trainer), the `src/employees/` backend CRUD domain (invite_status
   derivation, owner-row protection), soft-archive semantics, the
-  `verify_roles` / role-set auth model, and the CRM's role_policy /
-  route_guard gating. Trigger on "employee", "employees", "staff", "role",
+  `verify_roles` / role-set auth model, the CRM's role_policy /
+  route_guard gating, AND the member-facing counterpart surface
+  `src/member_portal/` (the only caller of `verify_member_self`).
+  Trigger on "employee", "employees", "staff", "role", "member portal",
   "front desk", "trainer", "invite", "access", "employee_type",
   "archive employee", "who can do what", or any change to `gym_employees`,
   `src/employees/`, `src/shared/auth.py`, or the CRM's
@@ -45,7 +47,9 @@ There is **no `user_id` FK anywhere in this system**. Both `gym_employees` and `
   verified account matches **every** member row bearing their email (siblings, multiple kids under one
   parent's inbox), which is exactly how a payer sees all their linked members. `Auth.verify_member_self`
   is where that matters: it grants when the caller's email matches the member row's `email`, independent
-  of role. Nothing in the CRM uses it — every CRM route is staff-only; it is the member portal's gate.
+  of role. Nothing in the CRM uses it — every CRM route is staff-only; it gates the **member portal**
+  (`src/member_portal/`, §9), which is why that surface's entry point returns a LIST of member rows and
+  every other member route takes an explicit `member_id`.
 - **Multi-gym is native.** Because access is just "does a non-archived row at this gym match my email,"
   the same person can hold rows (even different roles) at multiple gyms; `GET /api/v1/gyms/` returns
   every gym whose non-archived employee row matches the caller's verified email, each annotated with the
@@ -243,11 +247,11 @@ over the same `_resolve_employee` query:
   in the backend** (reads and writes alike — there is no "or the member themselves" branch anywhere). The
   role-set parameter is **required, with no default**, so a call site can never silently inherit
   `OWNER_ADMIN`.
-- `verify_member_self(member_id, user_payload, *, gym_id=None)` — the ONE member-facing gate, for the
-  member portal (no CRM route uses it). The caller's verified email must equal the member row's email, a
-  CONFIRMED auth account must exist, and — when `gym_id` is given — the member must belong to that gym.
-  **Always pass `gym_id` on a gym-scoped route**: without it one email reaches a same-named member at an
-  unrelated gym. 404 unknown member, 403 otherwise.
+- `verify_member_self(member_id, user_payload, *, gym_id=None)` — the ONE member-facing gate. The
+  caller's verified email must equal the member row's email, a CONFIRMED auth account must exist, and —
+  when `gym_id` is given — the member must belong to that gym. **Always pass `gym_id` on a gym-scoped
+  route**: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403
+  otherwise. Its **only** callers are the `member_portal` routes (§9); no CRM route uses it.
 - `verify_verified_account(user_payload) -> str` — the standalone primitive for a caller who has no
   `gym_employees` row yet (gym create): 401 with no email claim, 403 on an unconfirmed account, else the
   lowercased email.
@@ -320,8 +324,59 @@ Recorded so a future read of this skill doesn't assume these exist:
   flow that would call this endpoint hasn't been wired.
 - **Kiosk mode.** No kiosk UI exists in CRM or MobileApp yet; front-desk/trainer distinctions for a kiosk
   flow are not applicable until it's built.
+- **A MobileApp client for the member portal.** The backend surface exists (§9); nothing calls it yet.
+- **Member self check-in.** Deliberately NOT built — see §9 for why.
 - **Un-archive / restore.** Re-hiring an archived person is a brand-new employee row, not a reactivation
   of the old one (§4). There is no restore endpoint.
+
+---
+
+## 9. The member-facing surface — `src/member_portal/`
+
+The staff model above has an exact counterpart for the person on the other side of the counter. It is
+a **separate domain and a separate router** (`/api/v1/member/...`), NOT a "or the member themselves"
+branch inside a staff route — that branch existed once, let a member self-check-in while overriding
+every gate (the unsigned-waiver legal gate included) and cancel their own memberships, and was deleted.
+Keeping the two surfaces physically separate is what makes it structurally impossible to reintroduce.
+
+**What admits a member.** `Auth.verify_member_self(member_id, user_payload, *, gym_id=...)` — the same
+verified-email identity rule as staff, applied to `members.email` instead of `gym_employees.email`:
+the lowercased JWT claim must equal the member row's email, a CONFIRMED `auth.users` account must exist
+for it, and the member row must belong to the PATH gym. No `employee_type` is involved; a member holds
+no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing from
+`verify_member_self`** — an owner cannot read a member's portal routes, they use the CRM routes.
+
+**Three invariants** (they are the whole point of the domain):
+
+1. **`member_id` is never derived from the JWT.** `GET /api/v1/member/members` (gated by
+   `verify_verified_account`, since no member is named yet) resolves the caller's email to their member
+   rows **across gyms** — a LIST, because `members.email` is deliberately non-unique (§1, the family
+   case). Every other route takes the chosen `member_id` + `gym_id` explicitly.
+2. **Every gym-scoped route passes `gym_id`** to the gate, so a member row at an unrelated gym is a 403
+   rather than a served page.
+3. **No client-selectable gate semantics.** `is_member`, `ignore_warnings`, `auto_approve`, `rejected`,
+   `include_inactive` appear in **no** member-facing schema or query param; the strict path is hardwired
+   server-side. This is the direct lesson of the deleted branch: a caller must never choose the gate
+   they are judged by.
+
+**What it admits** (13 routes, all thin delegation to the SAME services the CRM uses): the caller's
+member rows; their own profile (rank progress, points balance, streak, membership cards, recent +
+pending redemptions — a projection of `MembersBillingDetailService`); their streak and class history;
+their gym's **schedule board**; their own **reservations** (`POST`/`DELETE .../signup`); their gym's
+**active** reward catalog and a **pending** redemption with their own points; and their personalized
+**video** feed / rotating rec / rec click.
+
+**What it refuses, deliberately:**
+
+- **Self check-in.** A reservation is not attendance — `member_attendance` is still only written by a
+  staff check-in. Self check-in would bypass the front desk and the unsigned-waiver legal gate, and the
+  strict kiosk gate silently *skips* rather than errors, which reads as a broken button to a member.
+  Reserve a spot, then a human checks you in.
+- Cancelling or unlinking a membership or card, editing their own email (it is their identity anchor),
+  any invoice/payment mutation, points adjustment, self-approving a redemption, and anything staff-only.
+
+Deep detail (the route/gate table, the cross-gym reward guard on redeem) lives in
+`FastApiBackend/CLAUDE.md` under *Member portal domain*.
 
 ---
 
@@ -340,6 +395,11 @@ Recorded so a future read of this skill doesn't assume these exist:
   (`EmployeeNotFoundError`, `DuplicateEmployeeError`, `OwnerRowProtectedError`).
 - **Auth:** `FastApiBackend/src/shared/auth.py` — the `Auth` class, role-set constants, `verify_roles` and
   every variant.
+- **Member portal:** `FastApiBackend/src/member_portal/` — `member_portal_router.py`,
+  `schema/member_portal_schema.py`, `service/member_portal_service.py`,
+  `sql/member_portal_list_members.sql`. Tests:
+  `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units) and
+  `FastApiBackend/tests/integration/test_member_portal_integration.py` (the live gate proof).
 - **CRM:** `CRM/lib/core/auth/employee_role.dart`, `role_policy.dart`, `CRM/lib/core/navigation/
   route_guard.dart`, `CRM/lib/core/errors/exceptions.dart` (`ForbiddenException`),
   `CRM/lib/features/login/presentation/widgets/register_form.dart` (email-confirmation signup).

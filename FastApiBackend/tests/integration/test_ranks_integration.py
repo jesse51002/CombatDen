@@ -21,6 +21,8 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ class TestListRanks:
     def test_list_ranks_requires_auth(self, gym_id: str) -> None:
         """GET / without Bearer token returns 401 or 403."""
         unauthenticated = httpx.Client(
-            base_url="http://localhost:8000", timeout=30.0
+            base_url=BACKEND_BASE_URL, timeout=30.0
         )
         resp = unauthenticated.get(RANKS_BASE + "/", params={"gym_id": gym_id})
         assert resp.status_code in (401, 403), (

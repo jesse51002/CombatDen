@@ -423,8 +423,8 @@ how-to-work-here facts belong here:
 - **Trainers CAN log in now — access is role-set-gated per route, not a blanket owner/admin cut.** `src/shared/auth.py` exports role-set constants — `OWNER_ONLY`, `OWNER_ADMIN`, `STAFF` (owner/admin/front_desk), `ALL_EMPLOYEES` (all four) — and the core check `Auth.verify_roles(gym_id, user_payload, allowed)` (plus `get_employee_id`, `verify_staff_principal`, `verify_gym_employee_for_member`, `get_employee_id_for_member`, all taking an explicit role-set param — REQUIRED, no default, on the two member-scoped ones) admits the caller only when their non-archived `gym_employees` row's `employee_type` is in `allowed` **and** a CONFIRMED `auth.users` account exists for that email. Every route documents exactly which roles it admits — a route gating a trainer-visible read passes `ALL_EMPLOYEES`; gym-config writes and money-moving ops stay `OWNER_ADMIN` / `STAFF`; owner-only actions (Stripe Connect onboarding) use `verify_gym_owner` (`OWNER_ONLY`). `verify_gym_admin_or_owner` is the thin `OWNER_ADMIN` wrapper mirroring the DB's `is_gym_admin_or_owner` RLS function.
 - **Verified means VERIFIED — every identity query requires a confirmed auth account.** A matching `gym_employees` row is not enough: each identity-resolving query in `src/shared/sql/` (`auth_resolve_employee.sql`, `auth_staff_principal.sql`, `auth_verified_account.sql`, `auth_member_self.sql`, plus `src/gyms/sql/gyms_list_for_user.sql`) carries a scalar `EXISTS` over `auth.users` on `lower(u.email) = <the row's email>` **AND** `u.email_confirmed_at IS NOT NULL`. Always `EXISTS`, **never a JOIN** — `auth.users` is unique on email only `WHERE is_sso_user = false`, so a join can fan out and duplicate the row. Reading `auth.users` needs the direct pool, so **`Auth` is constructed with `db_pool`** (`auth = providers.Singleton(Auth, db_pool=db_pool)`), not a PostgREST client; it is a Singleton shared across concurrent requests, so it holds NO request-scoped state and opens a session per query. `tests/shared/test_auth_roles.py` has a drift guard that reads those `.sql` files off disk and fails if the predicate disappears.
 - **`Auth.verify_verified_account(user_payload) -> str`** is the standalone primitive for a route whose caller has no `gym_employees` row yet (gym create) — 401 on no email claim, 403 on an unconfirmed account, else the lowercased email.
-- **`Auth.verify_member_self(member_id, user_payload, *, gym_id=None)`** is the ONE member-facing gate (for the member portal; no CRM route uses it): the caller's verified email must equal the `members` row's email, the auth account must be confirmed, and — when `gym_id` is passed — the member must belong to that gym. Pass `gym_id` on every gym-scoped route: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403 otherwise.
-- **Every member-scoped CRM route is STAFF-ONLY.** There is no "or the member themselves" branch anywhere in the backend — `verify_gym_employee_for_member` / `get_employee_id_for_member` gate all of them, and their role-set parameter is **required** (no default), so a call site can never silently inherit `OWNER_ADMIN`. On the check-in routes `is_member` / `ignore_warnings` are staff-selected MODES (kiosk gate vs. staff gate), not claims about who is calling.
+- **`Auth.verify_member_self(member_id, user_payload, *, gym_id=None)`** is the ONE member-facing gate: the caller's verified email must equal the `members` row's email, the auth account must be confirmed, and — when `gym_id` is passed — the member must belong to that gym. Pass `gym_id` on every gym-scoped route: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403 otherwise. **Its only callers live in `src/member_portal/` (the member-facing surface — see that section); no CRM route uses it.**
+- **Every member-scoped CRM route is STAFF-ONLY.** There is no "or the member themselves" branch anywhere in the backend — `verify_gym_employee_for_member` / `get_employee_id_for_member` gate all of them, and their role-set parameter is **required** (no default), so a call site can never silently inherit `OWNER_ADMIN`. On the check-in routes `is_member` / `ignore_warnings` are staff-selected MODES (kiosk gate vs. staff gate), not claims about who is calling. **A member reaches their own data only through the parallel `/api/v1/member/...` routes, never by a branch inside a staff route** — the two surfaces stay separate on purpose, which is what keeps a member from ever selecting a gate mode.
 - **Startup guard on GoTrue's auto-confirm.** With GoTrue's `enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup, so the DB predicate above proves nothing. `AuthSettingsGuard` (`src/shared/auth_settings_guard.py`, DI provider `auth_settings_guard`, awaited at the top of the `main.py` lifespan) reads GoTrue's own published config at `GET {supabase_url}/auth/v1/settings` and, when `mailer_autoconfirm` is true, logs a CRITICAL banner — and refuses to boot when `settings.auth_autoconfirm_policy` is `fail`. Default is `warn` (auto-confirm is normal in local dev); production sets `fail`. A failure to REACH GoTrue is never treated as a misconfiguration and never takes the app down.
 - **There is no PostgREST client.** `SupabaseClient` and the `postgrest` dependency are gone — all DB access is the direct SQLAlchemy pool. `settings.supabase_url` (JWKS + the GoTrue settings probe) and `settings.supabase_service_role_key` (the tests' admin client) remain.
 
@@ -510,9 +510,11 @@ agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
 COMPLETED run — there is **no owner/source param**. It serves **only enriched-AND-accepted** videos:
 the SQL **INNER JOIN**s `video_rag` (the enriched-only gate) so a row shows only once it has an
 embedding, and `?rejected` selects `scan_status` `accepted` vs `rejected`. `?member_id` is a read-only
-ranking hint (the candidate set is always the path gym's feed, so it can't leak — a member-facing route
-is a future concern, this stays staff-facing). **This same read backs the member rec** (`limit=1`,
-filtered to one genre).
+ranking hint (the candidate set is always the path gym's feed, so it can't leak). This route stays
+STAFF-facing; the member reads the same feed through `GET /api/v1/member/gyms/{gid}/members/{mid}/videos`
+(`verify_member_self`, `rejected` hardwired false), which calls the very same `load_feed_page` — the
+member surface is a separate router, never a widened guard here. **This same read backs the member rec**
+(`limit=1`, filtered to one genre).
 
 **Ranking — one axis, two σ-scaled nudges** (all in `videos_load_feed_page.sql`, wrapped in a CTE so a
 window stddev is available):
@@ -806,6 +808,64 @@ enforced before and after the body is read.
 
 **Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
 `aws_region`, `assets_cdn_base_url` (AWS creds via the boto3 env credential chain, not `Settings`).
+
+## Member portal domain (`src/member_portal/`)
+
+**The member-facing surface, and the ONLY caller of `Auth.verify_member_self`.** Everything under
+`/api/v1/member` is for a gym MEMBER holding their own JWT; it grants staff nothing, and no CRM route
+moved or changed to make room for it. The mobile app is its client.
+
+**Three rules the domain exists to hold.** Break any one of them and you rebuild the holes the
+member-self branch had:
+
+1. **`member_id` is NEVER derived from the JWT.** One verified email legitimately matches SEVERAL
+   `members` rows (a parent's inbox covers the whole family — `members.email` has no uniqueness
+   constraint, by design). `GET /api/v1/member/members` is the entry point: it hands the app the
+   caller's member rows across gyms, and every other route then takes the chosen `member_id`
+   explicitly, re-checked by the gate.
+2. **Every gym-scoped route passes `gym_id` to `verify_member_self`.** Without it one email reaches a
+   same-emailed member row at an unrelated gym. The path gym is the scope; the member row is
+   re-verified against it on every call.
+3. **No client-selectable gate semantics.** `is_member`, `ignore_warnings`, `auto_approve`,
+   `rejected`, `include_inactive` appear in **no** member-facing request schema or query param — the
+   strict path is hardwired in the handler. A member must never be able to choose which gate they are
+   evaluated by (the exact hole the deleted self-branch had).
+
+**Handlers are thin — every route delegates to the SAME service the CRM uses,** so the member surface
+can't drift from the staff surface. Only two reads have no existing owner, and they live in
+`service/member_portal_service.py` (`MemberPortalService`, a single standalone service, flat at
+`service/`): `list_members_for_email` (`sql/member_portal_list_members.sql` — the entry point; it
+carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query) and
+`get_profile` (a pure field PROJECTION of `MembersBillingDetailService.get_member_billing_detail` down
+to the member-appropriate `MemberPortalProfile` — no number is re-derived).
+
+| Route (prefix `/api/v1/member`) | Gate | Delegates to |
+|---|---|---|
+| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` |
+| `GET /gyms/{gid}/members/{mid}` | `verify_member_self(mid, gym_id=gid)` | `MemberPortalService.get_profile` |
+| `GET …/streak` | same | `StreakService` |
+| `GET …/class-history` | same | `CheckinHistoryService` |
+| `GET …/classes` | same | `ClassesScheduleReaderService.list_effective_instances` |
+| `POST …/signup` | same | `SignupService.create` (+ fires `MemberVideoProfileRefreshRunner`, same router-level composition as the staff route) |
+| `DELETE …/signup` | same | `SignupService.remove` |
+| `GET …/rewards` | same | `RewardsService.list_rewards`, `include_inactive=False` hardwired |
+| `GET …/redemptions` | same | `RewardsRedemptionService.history` |
+| `POST …/rewards/{rid}/redeem` | same **+ the reward must be at the member's gym** | `RewardsRedemptionService.redeem`, `auto_approve=False` hardwired |
+| `GET …/videos` | same | `VideosService.load_feed_page`, `rejected=False` hardwired, `member_id` bound to the path member |
+| `GET …/video-rec` | same | `VideosService.get_video_rec` |
+| `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
+
+**The redeem route re-checks the reward's gym before the debit, deliberately.** `redeem_reward.sql`
+only INSERTS a same-gym redemption (`JOIN locked_reward lr ON lr.gym_id = lm.gym_id`), but its
+`debited` CTE is **not** gym-scoped — a foreign `reward_id` burns the member's points and writes no
+row, and the service commits before it raises. The member route loads the reward and 404s a
+cross-gym one first. (The SQL gap is pre-existing and still open on the staff route; fixing it means
+adding the gym predicate to the `debited` CTE.)
+
+**Deliberately NOT in the member surface** — a member may not: check themselves in (it bypasses the
+front desk and the unsigned-waiver legal gate; a reservation is not attendance, and `member_attendance`
+stays writable only by a staff check-in), cancel/unlink a membership or card, edit their own email (it
+is their identity anchor), touch any invoice/payment, adjust points, or self-approve a redemption.
 
 ## Database
 

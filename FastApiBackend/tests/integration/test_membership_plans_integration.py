@@ -11,6 +11,8 @@ as expected 400/502 failures from an unconfigured Stripe account.
 
 import pytest
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 BASE = "/api/v1/membership_plans"
 
 PLAN_IMG = "https://cdn.combatden.net/membership/presets/activity-01.jpg"
@@ -89,7 +91,7 @@ class TestListPlans:
         """GET / without a Bearer token returns 401."""
         import httpx
 
-        unauthed = httpx.Client(base_url="http://localhost:8000", timeout=30.0)
+        unauthed = httpx.Client(base_url=BACKEND_BASE_URL, timeout=30.0)
         try:
             resp = unauthed.get(BASE + "/", params={"gym_id": gym_id})
             assert resp.status_code == 401, resp.text
@@ -292,7 +294,7 @@ class TestCreatePlanValidation:
         """POST / without a Bearer token returns 401."""
         import httpx
 
-        unauthed = httpx.Client(base_url="http://localhost:8000", timeout=30.0)
+        unauthed = httpx.Client(base_url=BACKEND_BASE_URL, timeout=30.0)
         try:
             payload = {
                 "gym_id": gym_id,

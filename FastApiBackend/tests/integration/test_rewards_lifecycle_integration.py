@@ -509,3 +509,75 @@ class TestPendingQueue:
         seen_ids = {item["redemption_id"] for item in page1_body["items"]}
         seen_ids |= {item["redemption_id"] for item in page2_body["items"]}
         assert seen_ids == set(redemption_ids)
+
+
+# ---------------------------------------------------------------------------
+# Regression: a reward from ANOTHER gym must not burn the member's points
+# ---------------------------------------------------------------------------
+
+
+class TestCrossGymRedeemDoesNotBurnPoints:
+    """A foreign ``reward_id`` must cost the member nothing.
+
+    ``redeem_reward.sql`` debits and inserts in two data-modifying CTEs.
+    Postgres runs EVERY such CTE exactly once regardless of whether the
+    final query reads it, so a guard that lives only on the INSERT
+    suppresses the redemption row while the debit still lands — and the
+    service commits before raising, so the loss is permanent. The gym
+    check used to sit only on the insert's join; this pins it to the
+    debit as well.
+    """
+
+    @pytest.mark.asyncio
+    async def test_foreign_reward_leaves_balance_untouched(
+        self, api: httpx.Client, gym_id: str, created: CreatedResources
+    ) -> None:
+        member = await created.member(UUID(gym_id))
+        await set_points_balance(created.db_pool, member.member_id, 500)
+
+        # A throwaway gym, so its reward is genuinely foreign to the member.
+        async with created.db_pool.session() as session:
+            other_gym_id = (
+                await session.execute(
+                    text(
+                        "INSERT INTO gyms (gym_name) VALUES (:name) "
+                        "RETURNING gym_id"
+                    ),
+                    {"name": "ZZ CrossGym Redeem Test"},
+                )
+            ).scalar_one()
+            await session.commit()
+
+        try:
+            foreign_reward = await created.reward(
+                other_gym_id, point_cost=100, title="ZZ Foreign Reward"
+            )
+
+            resp = await _req(
+                api.post,
+                f"{REWARDS_BASE}/{foreign_reward.reward_id}/redeem",
+                json={"member_id": str(member.member_id)},
+            )
+
+            # However it is refused, it must not be refused AFTER taking
+            # the points.
+            assert resp.status_code >= 400, resp.text
+            assert (
+                await get_points_balance(created.db_pool, member.member_id)
+            ) == 500, "cross-gym redeem burned the member's points"
+            assert (
+                await _redemption_count_for_member(
+                    created.db_pool, member.member_id
+                )
+            ) == 0
+        finally:
+            async with created.db_pool.session() as session:
+                await session.execute(
+                    text("DELETE FROM gym_rewards WHERE gym_id = :g"),
+                    {"g": str(other_gym_id)},
+                )
+                await session.execute(
+                    text("DELETE FROM gyms WHERE gym_id = :g"),
+                    {"g": str(other_gym_id)},
+                )
+                await session.commit()

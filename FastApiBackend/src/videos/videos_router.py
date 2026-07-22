@@ -31,6 +31,10 @@ A real gym's live content (no prefix — each route declares its full path):
       ``video_clicked`` activity, and fires a profile refresh (staff-only,
       ``verify_gym_employee_for_member`` at ``OWNER_ADMIN``).
 
+Every route here is STAFF-facing. The member's own equivalents (feed / rec /
+click) live in ``src/member_portal/`` behind ``Auth.verify_member_self`` and
+delegate to these same services — never widen a guard in this file.
+
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
 """
@@ -90,8 +94,9 @@ PREVIEW_PER_TAG = 10
 
 
 # ── A real gym's live feed ────────────────────────────────────────────
-# NOTE: Phase 2 — when the member MobileApp repoints here, the
-# feed/preview/spec guards must widen to allow gym MEMBERS, not only employees.
+# These routes are STAFF-facing and stay that way. The member-facing reads live
+# in src/member_portal/ (verify_member_self gated) and call the SAME services —
+# the member surface is a separate router, never a widened guard here.
 
 
 @videos_router.get(

@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 import src.shared.db_schema_path  # noqa: F401  # isort: skip
 from schema.gym_employee import EmployeeType  # isort: skip
 
-from src.core.config import settings
+from src.core.config import AuthAutoconfirmPolicy, settings
 from src.main import app
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.auth import Auth
@@ -44,6 +44,15 @@ from tests.seed_constants import SEEDED_GYM_ID
 # ``with TestClient(app)`` (which runs the lifespan). The reconciler is exercised
 # directly in tests/reconciler/ by calling the services.
 settings.reconciler_enabled = False
+
+# Same reason: the lifespan also runs the GoTrue auto-confirm guard, which is
+# fail-closed by default and would abort `with TestClient(app)` on any machine
+# whose local Supabase auto-confirms. That guard checks a DEPLOYMENT's auth
+# config, which is not what a unit test is asserting — tying the suite to a
+# live GoTrue setting makes it red for a reason unrelated to the code. The
+# guard's own behaviour is covered directly in
+# tests/shared/test_auth_settings_guard.py.
+settings.auth_autoconfirm_policy = AuthAutoconfirmPolicy.WARN
 
 
 @pytest.fixture(autouse=True)

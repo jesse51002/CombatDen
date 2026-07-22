@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import httpx
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 ENDPOINT = "/api/v1/discounts/"
@@ -154,7 +156,7 @@ def test_list_discounts_content_type_json(api: httpx.Client, gym_id: str) -> Non
 def test_list_discounts_requires_auth(gym_id: str) -> None:
     """GET /api/v1/discounts/ without a Bearer token returns 401."""
     response = httpx.get(
-        f"http://localhost:8000{ENDPOINT}",
+        f"{BACKEND_BASE_URL}{ENDPOINT}",
         params={"gym_id": gym_id},
         timeout=30.0,
     )
@@ -166,7 +168,7 @@ def test_list_discounts_requires_auth(gym_id: str) -> None:
 def test_list_discounts_invalid_token_returns_401(gym_id: str) -> None:
     """GET /api/v1/discounts/ with an invalid Bearer token returns 401."""
     response = httpx.get(
-        f"http://localhost:8000{ENDPOINT}",
+        f"{BACKEND_BASE_URL}{ENDPOINT}",
         params={"gym_id": gym_id},
         headers={"Authorization": "Bearer not-a-valid-jwt"},
         timeout=30.0,

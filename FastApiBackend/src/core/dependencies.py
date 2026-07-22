@@ -43,6 +43,9 @@ from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
 )
+from src.member_portal.service.member_portal_service import (
+    MemberPortalService,
+)
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
 )
@@ -219,6 +222,8 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.rewards.rewards_router",
             "src.waivers.waivers_router",
             "src.employees.employees_router",
+            # The member-facing surface (verify_member_self gated).
+            "src.member_portal.member_portal_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
             "src.memberships.memberships_router",
@@ -243,7 +248,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         AuthSettingsGuard,
         supabase_url=settings.supabase_url,
         supabase_anon_key=settings.supabase_anon_key,
-        policy=settings.auth_autoconfirm_policy,
+        # LATE-BOUND on purpose. A plain `settings.x` is captured when this
+        # module is imported, which is before a test conftest can override it
+        # — and this policy is fail-closed, so a stale capture aborts the
+        # lifespan and errors every TestClient(app) test. Wrapping it in a
+        # provider defers the read to instantiation (inside the lifespan),
+        # matching how `settings.reconciler_enabled` is read in main.py.
+        policy=providers.Callable(
+            lambda: settings.auth_autoconfirm_policy
+        ),
         timeout_seconds=settings.auth_settings_check_timeout_seconds,
     )
 
@@ -837,6 +850,15 @@ class DependencyInjector(containers.DeclarativeContainer):
     members_payments_service = providers.Factory(
         MembersPaymentsService,
         db_pool=db_pool,
+    )
+
+    # ── Member portal (member-facing) ────────────────────────────
+    # Defined AFTER members_billing_detail_service — the portal profile is a
+    # projection of it, never a second derivation.
+    member_portal_service = providers.Factory(
+        MemberPortalService,
+        db_pool=db_pool,
+        billing_detail_service=members_billing_detail_service,
     )
 
 
