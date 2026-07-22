@@ -10,11 +10,14 @@
 --   open_invoices   - money billed and not yet paid.
 --   overdue_amount  - the price of memberships whose due date has passed.
 --
--- LIVE MEMBERSHIP means the contracted set the MRR tile, mrr_trend and
--- revenue_by_plan all use: a recurring-plan membership that has started
--- (start_date on or before gym-local today) and is not yet terminal (LEAST of
--- cancel_date / end_date, which skips NULLs). Freeze is ignored - it pauses
--- the bill, not the contract - so arpm's numerator is exactly the MRR tile.
+-- ONE RULE FOR "WHO IS CURRENTLY PAYING US", identical to revenue_hero, the
+-- MRR tile and revenue_by_plan: a recurring-plan membership that has STARTED
+-- (start_date on or before gym-local today) and whose derived status on
+-- member_memberships_status is 'active' - which drops cancelled, ended AND
+-- FROZEN rows. A frozen membership is not billed (the sync prices it as a
+-- 100%-off subscription), so it is neither revenue nor a paying member here.
+-- Nobody re-splits this rule: arpm's numerator is exactly the MRR tile, and
+-- its denominator counts only members that tile is charging.
 --
 -- THE DISCOUNT RATE COMPARES TWO STORED NUMBERS. total_price is the
 -- POST-discount price the payment sync wrote back; membership_plan_prices.price
@@ -32,21 +35,18 @@ WITH gym_day AS (
 ),
 live_recurring AS (
     SELECT
-        mm.member_id,
-        mm.total_price,
-        mm.quantity,
+        mms.member_id,
+        mms.total_price,
+        mms.quantity,
         pp.price AS list_price
-    FROM member_memberships mm
-    JOIN membership_plans p ON p.plan_id = mm.plan_id
-    JOIN membership_plan_prices pp ON pp.price_id = mm.price_id
+    FROM member_memberships_status mms
+    JOIN membership_plans p ON p.plan_id = mms.plan_id
+    JOIN membership_plan_prices pp ON pp.price_id = mms.price_id
     CROSS JOIN gym_day gd
-    WHERE mm.gym_id = CAST(:gym_id AS UUID)
+    WHERE mms.gym_id = CAST(:gym_id AS UUID)
       AND p.plan_type = 'recurring'
-      AND mm.start_date <= gd.today
-      AND (
-          LEAST(mm.cancel_date, mm.end_date) IS NULL
-          OR LEAST(mm.cancel_date, mm.end_date) > gd.today
-      )
+      AND mms.status = 'active'
+      AND mms.start_date <= gd.today
 ),
 recurring_totals AS (
     SELECT
@@ -63,9 +63,10 @@ open_invoices AS (
 ),
 overdue AS (
     -- Deliberately the identical test to revenue_hero's overdue segment, so
-    -- the two overdue numbers on the Growth page can never disagree. Unlike
-    -- the recurring tiles above it reads member_memberships_status, which
-    -- drops a frozen membership, and it spans every plan type.
+    -- the two overdue numbers on the Growth page can never disagree. Same
+    -- active-only rule as the recurring tiles above; it differs only in
+    -- spanning every plan type and in keying off next_due_date rather than
+    -- start_date.
     SELECT COALESCE(sum(mms.total_price), 0)::bigint AS cents
     FROM member_memberships_status mms
     CROSS JOIN gym_day gd

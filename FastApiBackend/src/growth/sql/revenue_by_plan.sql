@@ -1,12 +1,13 @@
 -- Revenue by Plan (breakdown, cents) - the current net monthly recurring
 -- run-rate split across the plans producing it.
 --
--- LIVE MEMBERSHIP is the contracted set, identical to the MRR tile and to
--- mrr_trend's newest point: a recurring-plan membership that has started
--- (start_date on or before gym-local today) and is not yet terminal (LEAST of
--- cancel_date / end_date, which skips NULLs). Freeze is deliberately ignored -
--- a freeze pauses the bill, not the contract - so these values always sum to
--- the MRR tile.
+-- ONE RULE FOR "WHO IS CURRENTLY PAYING US", identical to revenue_hero, the
+-- MRR tile and ARPM: a recurring-plan membership that has STARTED (start_date
+-- on or before gym-local today) and whose derived status on
+-- member_memberships_status is 'active' - which drops cancelled, ended AND
+-- FROZEN rows. A frozen membership is not billed (the sync prices it as a
+-- 100%-off subscription), so it contributes nothing here. Nobody re-splits
+-- this rule: these values always sum to the MRR tile.
 --
 -- Money comes from member_memberships.total_price, the POST-discount
 -- per-membership price the payment sync writes back, so what a plan shows here
@@ -34,17 +35,14 @@ SELECT jsonb_build_object(
                 SELECT
                     p.plan_id,
                     p.plan_name,
-                    sum(mm.total_price)::bigint AS cents
-                FROM member_memberships mm
-                JOIN membership_plans p ON p.plan_id = mm.plan_id
+                    sum(mms.total_price)::bigint AS cents
+                FROM member_memberships_status mms
+                JOIN membership_plans p ON p.plan_id = mms.plan_id
                 CROSS JOIN gym_day gd
-                WHERE mm.gym_id = CAST(:gym_id AS UUID)
+                WHERE mms.gym_id = CAST(:gym_id AS UUID)
                   AND p.plan_type = 'recurring'
-                  AND mm.start_date <= gd.today
-                  AND (
-                      LEAST(mm.cancel_date, mm.end_date) IS NULL
-                      OR LEAST(mm.cancel_date, mm.end_date) > gd.today
-                  )
+                  AND mms.status = 'active'
+                  AND mms.start_date <= gd.today
                 GROUP BY p.plan_id, p.plan_name
             ) t
         ),

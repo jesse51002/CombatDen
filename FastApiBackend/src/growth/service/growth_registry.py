@@ -177,7 +177,12 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
     ),
     GrowthMetricDef(
         key="mrr_trend",
-        name="Recurring Revenue",
+        # "Billed" is load-bearing, not decoration: this series is recurring
+        # money that ACTUALLY changed hands per month, while the MRR tile
+        # above it is the forward run-rate. The two legitimately differ, and
+        # the label is what stops that reading as a bug. The newest point is
+        # always month-to-date and therefore low by construction.
+        name="Recurring Revenue Billed",
         type=GrowthMetricType.line,
         categories=(GrowthCategory.revenue,),
         order=210,

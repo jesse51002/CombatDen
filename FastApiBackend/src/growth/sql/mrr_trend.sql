@@ -1,42 +1,91 @@
 -- Recurring Revenue (line, cents, monthly, all-time).
 --
--- One series: the net monthly recurring run-rate as it stood at the end of
--- each gym-local month, from the month of the gym's first membership through
--- the current month. A membership counts toward a month when it had started by
--- the as-of date and was not yet terminal then (LEAST of cancel_date /
--- end_date, which skips NULLs) and its plan is recurring.
+-- WHAT THIS SERIES MEANS: the recurring revenue ACTUALLY BILLED in each
+-- gym-local month, read from payment history. It is NOT a contracted run-rate
+-- "as of month end" - a point is money that moved, not money that was owed.
 --
--- The CURRENT month's as-of date is capped at today rather than the (future)
--- month end. Without the cap, a cancellation already scheduled for later this
--- month would drop out of the newest point - the line would show a churn that
--- has not happened yet, and would disagree with the MRR tile. Capping makes
--- the last point mean "as of right now", which is exactly what the tile shows.
+-- Two consequences the CRM must not hide:
+--   * THE NEWEST POINT IS PARTIAL. The current month is still in progress, so
+--     its point counts only the charges that have landed so far and is
+--     expected to sit LOW against the completed months beside it. It is not a
+--     collapse in revenue.
+--   * It does not equal the MRR tile. The tile is the current run-rate (what
+--     the gym bills per month going forward); this line is history.
 --
--- FREEZE IS IGNORED here, on purpose. Only the CURRENT freeze window is stored
--- on the member, so a past month's freeze state is simply not recoverable; a
--- frozen membership is a paused bill, not a cancelled contract, so it stays in
--- the run-rate. revenue_kpis' MRR tile, revenue_by_plan and the revenue
--- quality tiles apply the identical rule, so every recurring-revenue number on
--- the page is derived the same way.
+-- WHY CHARGES AND NOT MEMBERSHIP DATES: a FROZEN member is not billed, so
+-- their contracted price must not count as revenue. Only the CURRENT freeze
+-- window is stored (members.freeze_start_date / freeze_end_date) - a freeze
+-- that has already ended leaves no trace - so no membership-date reconstruction
+-- could honour that rule for any month but the newest. A charge is the freeze
+-- rule encoded permanently: a frozen member simply generates none.
 --
--- Money always comes from member_memberships.total_price, the POST-discount
--- per-membership price the payment sync writes back; discount math is never
--- re-derived. total_price is a CURRENT snapshot, so history is priced at
--- today's prices - the line moves with WHO was enrolled, not with repricing.
+-- ATTRIBUTION - a charge pays a whole INVOICE, which can mix recurring
+-- membership lines with one-time / custom ones, so only the recurring portion
+-- may count. Each succeeded charge is apportioned by its invoice's line items:
+--
+--     recurring_share = SUM(recurring membership line amounts)
+--                       / SUM(all recorded line amounts)
+--
+-- and the charge's own amount carries that share. The denominator is the
+-- RECORDED LINE TOTAL rather than member_invoices.total_amount on purpose:
+-- invoice-level discounts make the two differ, and a fully-recurring invoice
+-- must attribute 100% of the cash that actually moved, whatever the list
+-- lines summed to. Refunds ride the same invoice, are stored NEGATIVE, and get
+-- the same share, so a plain SUM is already net of refunds.
+--
+-- AN INVOICE WITH NO RECORDED LINES COUNTS AS FULLY RECURRING. The invoice
+-- webhook deliberately skips proration lines, so a purely-prorated invoice
+-- (a mid-cycle start, upgrade or plan change) stores real money with no lines
+-- at all. Prorations only ever arise on a subscription, so that money is
+-- recurring; dropping it would silently understate every month in which a
+-- membership changed mid-cycle. One-time and custom invoices always keep their
+-- lines and so are never caught by this branch.
+--
+-- The month grid runs from the gym's first succeeded charge through the
+-- current gym-local month with zero-filled gaps - the same grid
+-- revenue_collected draws, so the two charge-derived charts line up exactly.
 WITH gym_day AS (
-    SELECT (now() AT TIME ZONE g.timezone)::date AS today
+    SELECT
+        g.timezone AS tz,
+        (now() AT TIME ZONE g.timezone)::date AS today
     FROM gyms g
     WHERE g.gym_id = CAST(:gym_id AS UUID)
+),
+invoice_split AS (
+    SELECT
+        li.invoice_id,
+        sum(li.amount)::numeric AS recorded_cents,
+        COALESCE(sum(li.amount) FILTER (
+            WHERE li.item_type = 'membership'
+              AND p.plan_type = 'recurring'
+        ), 0)::numeric AS recurring_cents
+    FROM member_invoice_line_items li
+    LEFT JOIN member_memberships mm ON mm.item_id = li.item_id
+    LEFT JOIN membership_plans p ON p.plan_id = mm.plan_id
+    WHERE li.gym_id = CAST(:gym_id AS UUID)
+    GROUP BY li.invoice_id
+),
+charges AS (
+    SELECT
+        (c.charge_time AT TIME ZONE gd.tz)::date AS charge_date,
+        c.amount * CASE
+            -- No recorded lines: proration-only invoice, all recurring.
+            WHEN s.invoice_id IS NULL THEN 1::numeric
+            ELSE COALESCE(
+                s.recurring_cents / NULLIF(s.recorded_cents, 0), 0
+            )
+        END AS recurring_cents
+    FROM member_charges c
+    CROSS JOIN gym_day gd
+    LEFT JOIN invoice_split s ON s.invoice_id = c.invoice_id
+    WHERE c.gym_id = CAST(:gym_id AS UUID)
+      AND c.status = 'succeeded'
 ),
 bounds AS (
     SELECT
         gd.today,
         COALESCE(
-            (
-                SELECT min(mm.start_date)
-                FROM member_memberships mm
-                WHERE mm.gym_id = CAST(:gym_id AS UUID)
-            ),
+            (SELECT min(ch.charge_date) FROM charges ch),
             gd.today
         ) AS series_start
     FROM gym_day gd
@@ -44,10 +93,7 @@ bounds AS (
 months AS (
     SELECT
         gs.month_ts::date AS month_start,
-        LEAST(
-            (gs.month_ts + INTERVAL '1 month' - INTERVAL '1 day')::date,
-            b.today
-        ) AS as_of
+        (gs.month_ts + INTERVAL '1 month')::date AS next_month_start
     FROM bounds b
     CROSS JOIN generate_series(
         date_trunc('month', b.series_start::timestamp),
@@ -58,19 +104,12 @@ months AS (
 points AS (
     SELECT
         mo.month_start,
-        (
-            SELECT COALESCE(sum(mm.total_price), 0)
-            FROM member_memberships mm
-            JOIN membership_plans p ON p.plan_id = mm.plan_id
-            WHERE mm.gym_id = CAST(:gym_id AS UUID)
-              AND p.plan_type = 'recurring'
-              AND mm.start_date <= mo.as_of
-              AND (
-                  LEAST(mm.cancel_date, mm.end_date) IS NULL
-                  OR LEAST(mm.cancel_date, mm.end_date) > mo.as_of
-              )
-        )::bigint AS value
+        round(COALESCE(sum(ch.recurring_cents), 0))::bigint AS value
     FROM months mo
+    LEFT JOIN charges ch
+        ON ch.charge_date >= mo.month_start
+       AND ch.charge_date < mo.next_month_start
+    GROUP BY mo.month_start
 )
 SELECT jsonb_build_object(
     'unit', 'cents',

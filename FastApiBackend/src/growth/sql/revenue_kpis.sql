@@ -11,13 +11,15 @@
 --   failed_30d    - failed charge attempts. A count, not money: each retry is
 --                   its own row, so this is attempts, not distinct members.
 --
--- LIVE MEMBERSHIP means the contracted set: started on or before the as-of
--- date and not yet terminal (LEAST of cancel_date / end_date, which skips
--- NULLs). Freeze is deliberately ignored - a freeze pauses billing, not the
--- contract, and only the CURRENT freeze window is stored, so no as-of-date
--- rule could ever reproduce a past one. mrr_trend, revenue_by_plan and the
--- revenue-quality tiles use this identical rule, so the tile, the line's last
--- point and the per-plan breakdown always agree.
+-- ONE RULE FOR "WHO IS CURRENTLY PAYING US", shared by revenue_hero,
+-- revenue_by_plan and the revenue-quality tiles: a recurring-plan membership
+-- that has STARTED (start_date on or before gym-local today) and whose derived
+-- status on member_memberships_status is 'active'. That view drops cancelled,
+-- ended AND FROZEN rows. A FROZEN membership is not billed at all - the sync
+-- prices it as a 100%-off subscription - so counting its contracted price as
+-- revenue overstates the number. Nothing on the Revenue tab may re-split this
+-- rule: the hero, this tile, the per-plan breakdown and ARPM are all the same
+-- set of memberships.
 --
 -- Money always comes from member_memberships.total_price, the POST-discount
 -- per-membership price the payment sync writes back. Discount math is never
@@ -78,25 +80,36 @@ failed AS (
       AND (c.charge_time AT TIME ZONE b.tz)::date <= b.today
 ),
 mrr AS (
+    -- The 30-days-ago comparison re-runs the SAME rule as of the earlier
+    -- date - started by then, not terminal by then, not frozen then - by
+    -- unrolling the view's own derivation against window_start instead of
+    -- today. The freeze test reads the view's freeze_start_date /
+    -- freeze_end_date columns, which are the member's CURRENT freeze window:
+    -- a freeze that has already ENDED is not stored anywhere, so the earlier
+    -- point can only honour a freeze that is still running now. Evaluated at
+    -- today this expression is exactly status = 'active'.
     SELECT
-        COALESCE(sum(mm.total_price) FILTER (
-            WHERE mm.start_date <= b.today
-              AND (
-                  LEAST(mm.cancel_date, mm.end_date) IS NULL
-                  OR LEAST(mm.cancel_date, mm.end_date) > b.today
-              )
+        COALESCE(sum(mms.total_price) FILTER (
+            WHERE mms.status = 'active'
+              AND mms.start_date <= b.today
         ), 0)::bigint AS mrr_now,
-        COALESCE(sum(mm.total_price) FILTER (
-            WHERE mm.start_date <= b.window_start
+        COALESCE(sum(mms.total_price) FILTER (
+            WHERE mms.start_date <= b.window_start
               AND (
-                  LEAST(mm.cancel_date, mm.end_date) IS NULL
-                  OR LEAST(mm.cancel_date, mm.end_date) > b.window_start
+                  LEAST(mms.cancel_date, mms.end_date) IS NULL
+                  OR LEAST(mms.cancel_date, mms.end_date) > b.window_start
+              )
+              AND NOT (
+                  mms.freeze_start_date IS NOT NULL
+                  AND mms.freeze_end_date IS NOT NULL
+                  AND mms.freeze_start_date <= b.window_start
+                  AND b.window_start <= mms.freeze_end_date
               )
         ), 0)::bigint AS mrr_prev
-    FROM member_memberships mm
-    JOIN membership_plans p ON p.plan_id = mm.plan_id
+    FROM member_memberships_status mms
+    JOIN membership_plans p ON p.plan_id = mms.plan_id
     CROSS JOIN bounds b
-    WHERE mm.gym_id = CAST(:gym_id AS UUID)
+    WHERE mms.gym_id = CAST(:gym_id AS UUID)
       AND p.plan_type = 'recurring'
 )
 SELECT jsonb_build_object(
