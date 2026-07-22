@@ -18,6 +18,7 @@ CREATE TYPE sub_rank_type AS ENUM ('none', 'stripes', 'div');
 
 CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
     -- The gym's uploaded logo (CDN URL). NULL = no logo uploaded yet;

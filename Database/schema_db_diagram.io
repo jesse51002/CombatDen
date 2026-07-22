@@ -20,6 +20,7 @@ Table auth_users {
 
 Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
+  created_at timestamptz [not null, default: `now()`]
   gym_name varchar [not null]
   gym_description varchar
   logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']

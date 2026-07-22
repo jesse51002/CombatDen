@@ -11,6 +11,7 @@ Keep this file updated whenever database schemas change.
 GYMS: frozenset[str] = frozenset(
     {
         "gym_id",  # PK, auto-generated UUID
+        "created_at",  # auto-generated timestamp
         # Stripe Connect columns — always set by backend, never by client
         "stripe_account_id",
         "stripe_onboarding_status",

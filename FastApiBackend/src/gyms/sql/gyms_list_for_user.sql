@@ -3,6 +3,7 @@
 -- app; trainers are excluded. UNIQUE (user_id, gym_id) guarantees
 -- one row per gym, so no de-duplication is needed.
 SELECT g.gym_id,
+       g.created_at,
        g.gym_name,
        g.gym_description,
        g.timezone,

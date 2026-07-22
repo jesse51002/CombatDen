@@ -78,6 +78,8 @@ class GymResponse(BaseModel):
     """A single gym row (basic fields, no Stripe state)."""
 
     gym_id: UUID
+    # Row-creation timestamp; the reports/exports month-picker floor.
+    created_at: datetime
     gym_name: str
     gym_description: str | None
     timezone: str
