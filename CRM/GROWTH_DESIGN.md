@@ -736,9 +736,16 @@ EmptyState(
   title: 'Your metrics are still being built',
   body:  'Growth recomputes every hour. The first run usually lands within an '
          'hour of your gym going live.',
-  action: AppOutlineButton(text: 'Check again', onPressed: reload),
+  // No action, deliberately.
 )
 ```
+
+**No retry button here** — this is the one empty state that must not offer one.
+Nothing the user can press changes the outcome: the metrics are absent because
+the backend's hourly sweep has not run for this gym yet, so a "Check again" that
+re-fetches the same empty response would read as a failure the user could fix,
+and reward pressing it with no change. Contrast §5.4, where a retry is genuinely
+the right affordance because the request itself failed.
 
 ### 5.4 Error
 

@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
-import 'package:crm/features/home/data/mock_member_stats.dart';
+import 'package:crm/features/growth/presentation/widgets/revenue_hero_card.dart';
 import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_card.dart';
 import 'package:crm/features/home/presentation/widgets/overdue_payments/overdue_payments_section.dart';
-import 'package:crm/features/home/presentation/widgets/total_members_hero/total_members_hero.dart';
 import 'package:crm/features/home/presentation/widgets/upcoming_classes_card/upcoming_classes_card.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/hairline.dart';
@@ -15,13 +14,15 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `3132:3823`.
 /// Composition (top to bottom):
 ///   1. "Dashboard" page title
-///   2. Total Members hero card (semicircular arc + active/inactive)
+///   2. The money half-pie — the live `revenue_hero` growth metric, the
+///      same figure Growth's Overview tab leads with
 ///   3. Two-column row (capped at one viewport height): left = Live
 ///      Attendance over Overdue Payments, each an equal-height half that
-///      scrolls on its own; right = Upcoming Classes. Live Attendance,
-///      Overdue Payments, and Upcoming Classes are all live, bloc-backed
-///      surfaces (Live Attendance + Upcoming read the real
-///      `/classes/instances` schedule feed); only the hero remains mock.
+///      scrolls on its own; right = Upcoming Classes.
+///
+/// Every section is live and bloc-backed: the hero reads the growth
+/// metrics, Live Attendance + Upcoming read the `/classes/instances`
+/// schedule feed, and Overdue reads the members list.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -36,7 +37,7 @@ class HomeScreen extends StatelessWidget {
           spacing: DesignConstants.spacingBig,
           children: [
             Text('Dashboard', style: DesignConstants.big2),
-            TotalMembersHero(stats: kMockMemberStats),
+            const RevenueHeroCard(),
             const Hairline(),
             const _DashboardColumns(),
           ],
