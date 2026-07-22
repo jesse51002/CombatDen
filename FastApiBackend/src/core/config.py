@@ -27,8 +27,15 @@ class AuthAutoconfirmPolicy(enum.StrEnum):
     ``auth.users.email_confirmed_at IS NOT NULL``. With GoTrue's
     ``enable_confirmations`` OFF, GoTrue stamps that column ITSELF at
     signup — so the column proves nothing and anyone can sign up as
-    ``owner@somegym.com`` and be admitted. Auto-confirm is normal in local
-    dev, so the default only screams; production sets ``fail``.
+    ``owner@somegym.com`` and be admitted.
+
+    The default is ``fail``: an auth stack that auto-confirms leaves the
+    identity model wide open, and that is not a state to boot into and
+    log about. ``config.toml`` ships ``enable_confirmations = true``, so a
+    correctly-started local stack passes this too — if it trips, the stack
+    predates that setting and needs ``supabase stop && supabase start``.
+    ``warn`` exists as a deliberate, explicit escape hatch for a throwaway
+    environment holding no real data; it is never the default anywhere.
     """
 
     WARN = "warn"
@@ -48,7 +55,7 @@ class Settings(BaseSettings):
     # reads GoTrue's own published config at
     # {supabase_url}/auth/v1/settings; a failure to REACH GoTrue is never
     # treated as a misconfiguration and never takes the app down.
-    auth_autoconfirm_policy: AuthAutoconfirmPolicy = AuthAutoconfirmPolicy.WARN
+    auth_autoconfirm_policy: AuthAutoconfirmPolicy = AuthAutoconfirmPolicy.FAIL
     auth_settings_check_timeout_seconds: float = 30.0
 
     # Stripe

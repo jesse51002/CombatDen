@@ -13,11 +13,18 @@ The DB cannot detect this — but GoTrue publishes its own config at
 where ``mailer_autoconfirm`` is exactly that setting. This guard reads it
 once at startup.
 
-Local dev runs with auto-confirm on by design, so the default policy is to
-log a CRITICAL banner and carry on; production sets
-``auth_autoconfirm_policy=fail`` to refuse to boot. A failure to REACH
-GoTrue is NOT a misconfiguration — it is logged as a warning and never
-takes the app down.
+The default policy is ``fail``: it logs a CRITICAL banner and refuses to
+boot, because an auth stack that auto-confirms leaves the identity model
+open and that is not a state to start serving in. ``config.toml`` ships
+``enable_confirmations = true``, so a correctly-started local stack passes;
+tripping this means the running stack predates that setting and needs
+``supabase stop && supabase start`` (the config is read at container start,
+NOT by ``supabase db reset``). ``auth_autoconfirm_policy=warn`` is the
+explicit opt-out for a throwaway environment holding no real data.
+
+A failure to REACH GoTrue is NOT a misconfiguration — the check cannot tell
+an open auth stack from a network blip, and refusing to boot on a blip
+would make this guard an outage. It is logged as a warning and tolerated.
 """
 
 import logging
