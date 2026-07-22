@@ -222,12 +222,14 @@ async def deactivate_reward(
     "/{reward_id}/redeem",
     response_model=RedemptionResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Redeem a reward (member-initiated)",
+    summary="Request a reward redemption (staff, pending approval)",
     description=(
         "Atomically debits ``members.points_balance`` and writes "
         "a row in ``member_reward_redemptions`` with "
         "``status='pending'``.  Rejected with 400 if the member "
-        "has insufficient points or the reward is inactive."
+        "has insufficient points or the reward is inactive. Staff-only "
+        "(``STAFF`` at the member's gym) — unlike ``/redeem-for-member`` it "
+        "leaves the redemption awaiting approval instead of auto-approving."
     ),
     responses={
         201: {"description": "Redemption recorded (pending)"},
@@ -246,9 +248,9 @@ async def redeem_reward(
         Provide[DependencyInjector.rewards_redemption_service]
     ),
 ) -> RedemptionResponse:
-    """Member-initiated redemption — creates a pending redemption."""
+    """Request a redemption for a member — creates a PENDING redemption."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(
+    await auth.verify_gym_employee_for_member(
         request.member_id, user_payload, staff_roles=STAFF
     )
 
@@ -507,7 +509,9 @@ async def get_redemptions(
 ) -> RedemptionHistoryResponse:
     """Member's redemption history."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await redemption_service.history(member_id)

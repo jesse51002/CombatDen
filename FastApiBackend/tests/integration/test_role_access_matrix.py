@@ -3,8 +3,7 @@
 Signs in as each seeded role (owner / admin / front_desk / trainer) and asserts
 a REPRESENTATIVE slice of the route authorization matrix returns 200 vs 403,
 proving the role-set guards (``verify_roles`` / ``verify_gym_admin_or_owner`` /
-``verify_gym_employee_for_member`` / ``verify_can_view_member``) admit exactly
-the intended roles.
+``verify_gym_employee_for_member``) admit exactly the intended roles.
 
 Deliberately lightweight: 200s are cheap READS and 403s short-circuit inside
 the handler BEFORE any write (the request body is still schema-valid so the

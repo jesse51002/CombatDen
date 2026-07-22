@@ -43,8 +43,9 @@ There is **no `user_id` FK anywhere in this system**. Both `gym_employees` and `
   as `DuplicateEmployeeError` → 409.
 - **`members.email` has NO uniqueness constraint, by design** — families share an email. A parent's
   verified account matches **every** member row bearing their email (siblings, multiple kids under one
-  parent's inbox), which is exactly how a payer sees all their linked members. `verify_can_view_member`
-  (`Auth`) grants access when the caller's email matches the member's `email`, independent of role.
+  parent's inbox), which is exactly how a payer sees all their linked members. `Auth.verify_member_self`
+  is where that matters: it grants when the caller's email matches the member row's `email`, independent
+  of role. Nothing in the CRM uses it — every CRM route is staff-only; it is the member portal's gate.
 - **Multi-gym is native.** Because access is just "does a non-archived row at this gym match my email,"
   the same person can hold rows (even different roles) at multiple gyms; `GET /api/v1/gyms/` returns
   every gym whose non-archived employee row matches the caller's verified email, each annotated with the
@@ -236,11 +237,34 @@ over the same `_resolve_employee` query:
   at *any* gym); used by endpoints with no `gym_id` (the shared image-upload proxy).
 - `verify_gym_owner` / `verify_gym_admin_or_owner` — thin wrappers over `verify_roles` with `OWNER_ONLY` /
   `OWNER_ADMIN` (the latter mirrors the DB's `is_gym_admin_or_owner` RLS function at the API layer).
-- `verify_can_view_member(member_id, user_payload, staff_roles=OWNER_ADMIN)` — grants access when the
-  caller IS the member (email match, covering the family case) **OR** holds one of `staff_roles` at the
-  member's gym.
-- `verify_gym_employee_for_member` / `get_employee_id_for_member` — the staff-**only** (never the member
-  themselves) member-scoped variants, for ops a member must not self-serve (e.g. authorizing a payer).
+- `verify_gym_employee_for_member(member_id, user_payload, staff_roles)` /
+  `get_employee_id_for_member(member_id, user_payload, allowed)` — the member-scoped variants: resolve the
+  member's gym, then run the gym-scoped check on it. **Staff-only, and they gate EVERY member-scoped route
+  in the backend** (reads and writes alike — there is no "or the member themselves" branch anywhere). The
+  role-set parameter is **required, with no default**, so a call site can never silently inherit
+  `OWNER_ADMIN`.
+- `verify_member_self(member_id, user_payload, *, gym_id=None)` — the ONE member-facing gate, for the
+  member portal (no CRM route uses it). The caller's verified email must equal the member row's email, a
+  CONFIRMED auth account must exist, and — when `gym_id` is given — the member must belong to that gym.
+  **Always pass `gym_id` on a gym-scoped route**: without it one email reaches a same-named member at an
+  unrelated gym. 404 unknown member, 403 otherwise.
+- `verify_verified_account(user_payload) -> str` — the standalone primitive for a caller who has no
+  `gym_employees` row yet (gym create): 401 with no email claim, 403 on an unconfirmed account, else the
+  lowercased email.
+
+**Every one of those queries requires a CONFIRMED auth account**, not just a matching row: each `.sql`
+in `FastApiBackend/src/shared/sql/` carries a scalar `EXISTS` over `auth.users` on
+`lower(u.email) = <the row's email> AND u.email_confirmed_at IS NOT NULL` (never a JOIN — `auth.users` is
+unique on email only `WHERE is_sso_user = false`, so a join can fan out; same reason `employees_list.sql`
+uses `EXISTS`). Reading `auth.users` needs the direct pool, so `Auth` is constructed with `db_pool`.
+`tests/shared/test_auth_roles.py` holds a drift guard that reads those files off disk.
+
+That DB predicate only means something while GoTrue actually mails confirmations: with
+`enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup. `AuthSettingsGuard`
+(`src/shared/auth_settings_guard.py`, awaited in the `main.py` lifespan) reads GoTrue's published config
+at `GET {supabase_url}/auth/v1/settings` and logs a CRITICAL banner when `mailer_autoconfirm` is true —
+or refuses to boot when `settings.auth_autoconfirm_policy` is `fail` (default `warn`, because local dev
+runs auto-confirmed).
 
 A route documents which roles it admits by which constant it passes — e.g. a trainer-visible schedule read
 passes `ALL_EMPLOYEES`; a money-moving membership op passes `STAFF`; gym-config writes and the employees

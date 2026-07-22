@@ -4,6 +4,13 @@
 -- carries ge.employee_type. Archived employees are excluded. UNIQUE
 -- (email, gym_id) guarantees one row per gym, so no de-duplication is
 -- needed.
+--
+-- This is a ROLE-RESOLUTION query (it hands the caller their role at each
+-- gym), so it carries the same verified-account predicate as every other
+-- one: a CONFIRMED auth.users row must exist for the email. A scalar
+-- EXISTS, never a JOIN — auth.users is unique on email only
+-- WHERE is_sso_user = false, so a join could match several rows and
+-- duplicate the gym. EXISTS cannot fan out.
 SELECT g.gym_id,
        g.gym_name,
        g.gym_description,
@@ -17,4 +24,10 @@ FROM gyms g
 JOIN gym_employees ge ON ge.gym_id = g.gym_id
 WHERE lower(ge.email) = :email
   AND ge.archived_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM auth.users u
+      WHERE lower(u.email) = lower(ge.email)
+        AND u.email_confirmed_at IS NOT NULL
+  )
 ORDER BY ge.created_at ASC;

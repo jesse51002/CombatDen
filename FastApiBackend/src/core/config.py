@@ -19,6 +19,22 @@ class AppEnv(enum.StrEnum):
     PROD = "prod"
 
 
+class AuthAutoconfirmPolicy(enum.StrEnum):
+    """What to do when GoTrue is auto-confirming every signup.
+
+    Identity here is the verified email claim matched against a
+    ``gym_employees`` row, and "verified" is proven by
+    ``auth.users.email_confirmed_at IS NOT NULL``. With GoTrue's
+    ``enable_confirmations`` OFF, GoTrue stamps that column ITSELF at
+    signup — so the column proves nothing and anyone can sign up as
+    ``owner@somegym.com`` and be admitted. Auto-confirm is normal in local
+    dev, so the default only screams; production sets ``fail``.
+    """
+
+    WARN = "warn"
+    FAIL = "fail"
+
+
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
@@ -26,6 +42,14 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
+
+    # Startup guard on GoTrue's signup-confirmation setting (see
+    # AuthAutoconfirmPolicy and src/shared/auth_settings_guard.py). The check
+    # reads GoTrue's own published config at
+    # {supabase_url}/auth/v1/settings; a failure to REACH GoTrue is never
+    # treated as a misconfiguration and never takes the app down.
+    auth_autoconfirm_policy: AuthAutoconfirmPolicy = AuthAutoconfirmPolicy.WARN
+    auth_settings_check_timeout_seconds: float = 30.0
 
     # Stripe
     stripe_secret_key: str

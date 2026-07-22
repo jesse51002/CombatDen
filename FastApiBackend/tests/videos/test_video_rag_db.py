@@ -2,10 +2,11 @@
 
 Drives the real endpoints against the shared local Supabase over an ASGI
 transport. ``auth`` is overridden always-pass for the happy-path tests; the
-403 test wires the REAL ``verify_can_view_member`` behind a fake JWT payload so
-a non-viewer is rejected. The LLM client is overridden with a deterministic
-stub — its embedding is a fixed vector sized to ``settings.video_embedding_dim``
-(no provider call) that the seeded
+403 test wires the REAL ``verify_gym_employee_for_member`` behind a fake JWT
+payload so a caller who is not staff of the member's gym is rejected. The LLM
+client is overridden with a deterministic stub — its embedding is a fixed
+vector sized to ``settings.video_embedding_dim`` (no provider call) that the
+seeded
 ``video_rag`` row also carries so retrieval is clean, and its summary call
 returns a canned taste paragraph (no chat model call).
 
@@ -181,7 +182,7 @@ def _always_pass_auth() -> MagicMock:
         "email": "test@example.com",
     }
     auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
-    auth.verify_can_view_member = AsyncMock(return_value=None)
+    auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
     return auth
 
 
@@ -288,19 +289,22 @@ async def test_rec_wrong_gym_returns_404(
 async def test_rec_forbidden_for_non_viewer(
     db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """A caller who is neither the member nor gym staff gets 403 (real
-    verify_can_view_member behind a fake JWT payload). Touches only members /
-    gym_employees, so it passes regardless of the RAG migration state."""
+    """A caller who is not an owner/admin of the member's gym gets 403 (the
+    real verify_gym_employee_for_member behind a fake JWT payload). Touches
+    only members / gym_employees / auth.users, so it passes regardless of the
+    RAG migration state."""
     container = app.container
     member_id = await _insert_member(db_pool, gym_id)
-    real_auth = Auth(container.supabase())
+    real_auth = Auth(container.db_pool())
 
     auth = MagicMock(spec=Auth)
     auth.get_current_user.return_value = {
         "sub": str(uuid4()),  # neither the member nor a staff principal
         "email": "outsider@example.com",
     }
-    auth.verify_can_view_member = real_auth.verify_can_view_member
+    auth.verify_gym_employee_for_member = (
+        real_auth.verify_gym_employee_for_member
+    )
     container.auth.override(auth)
     transport = ASGITransport(app=app)
     try:

@@ -67,12 +67,14 @@ gyms_router = APIRouter(
         "Creates a gym row and the calling user's owner "
         "``gym_employees`` record, mints a Stripe Connect Express "
         "account, and returns a short-lived (~5 minute) hosted "
-        "onboarding URL."
+        "onboarding URL. The caller's email must back a CONFIRMED "
+        "Supabase auth account."
     ),
     responses={
         201: {"description": "Gym + Stripe account created, onboarding pending"},
         400: {"description": "Invalid request data"},
-        401: {"description": "Not authenticated"},
+        401: {"description": "Not authenticated / no email claim"},
+        403: {"description": "Email address is not verified"},
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
@@ -85,14 +87,10 @@ async def create_gym(
 ) -> GymCreateResponse:
     """Create a new gym and start Stripe Express onboarding."""
     user_payload = auth.get_current_user(credentials)
-    user_email: str | None = user_payload.get("email")
-
-    if not user_email:
-        logger.error("JWT payload missing email claim")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="JWT missing email claim",
-        ) from None
+    # The caller has no gym_employees row yet, so no role check can carry
+    # the verified-account predicate for them — prove it directly, or an
+    # unverified signup could mint a gym as any address it liked.
+    user_email = await auth.verify_verified_account(user_payload)
 
     try:
         return await gyms_service.create_gym(

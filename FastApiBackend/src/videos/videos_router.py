@@ -24,11 +24,12 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-rec`` — a member's
-      next rotating-category RAG recommendation (``verify_can_view_member``).
+      next rotating-category RAG recommendation (staff-only,
+      ``verify_gym_employee_for_member`` at ``OWNER_ADMIN``).
     * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click``
       — record a member opening a rec: stamps ``clicked_at``, logs a
-      ``video_clicked`` activity, and fires a profile refresh
-      (``verify_can_view_member``).
+      ``video_clicked`` activity, and fires a profile refresh (staff-only,
+      ``verify_gym_employee_for_member`` at ``OWNER_ADMIN``).
 
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
@@ -44,7 +45,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import OWNER_ADMIN, Auth, security
 from src.videos.schema.video_agent_schema import (
     AgentTurnRequest,
     AgentTurnResponse,
@@ -697,11 +698,13 @@ async def get_member_video_rec(
     ),
 ) -> MemberVideoRec:
     """Return the member's next rotating-category recommendation. Gated by
-    ``verify_can_view_member`` (staff of the member's gym OR the member
-    themselves). 404 when the member isn't in the path gym, or when no category
-    yields a video."""
+    ``verify_gym_employee_for_member`` at ``OWNER_ADMIN`` — an owner/admin of
+    the member's gym; the member cannot call it. 404 when the member isn't in
+    the path gym, or when no category yields a video."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=OWNER_ADMIN
+    )
 
     try:
         rec = await videos_service.get_video_rec(gym_id, member_id)
@@ -736,7 +739,8 @@ async def get_member_video_rec(
         "idempotent via ``clicked_at IS NULL``): logs a ``video_clicked`` "
         "member activity and fires a fire-and-forget profile refresh. A repeat "
         "click returns ``clicked=false`` without re-stamping / re-logging / "
-        "re-firing. Gated by ``verify_can_view_member``."
+        "re-firing. Gated by ``verify_gym_employee_for_member`` at "
+        "``OWNER_ADMIN`` (owner/admin of the member's gym)."
     ),
     responses={
         200: {"description": "Click recorded (or an idempotent repeat)"},
@@ -756,10 +760,13 @@ async def click_member_video_rec(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> VideoRecClickResponse:
-    """Record a member opening a rec. Gated by ``verify_can_view_member``
-    (staff of the member's gym OR the member themselves)."""
+    """Record a member opening a rec. Gated by
+    ``verify_gym_employee_for_member`` at ``OWNER_ADMIN`` — an owner/admin of
+    the member's gym; the member cannot call it."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=OWNER_ADMIN
+    )
 
     try:
         return await videos_service.record_rec_click(gym_id, member_id, rec_id)

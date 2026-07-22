@@ -4,9 +4,8 @@ Pure unit tests (no DB / Stripe / network):
 
 * **C-079** — the staff-managed billing writes (start, cancel, reprice,
   upgrade, add/remove-discounts, freeze, unfreeze, mark-paid-cash,
-  charge-card, refund) must gate on
-  ``verify_gym_employee_for_member`` (staff only), NOT
-  ``verify_can_view_member`` (which lets the member themselves through).
+  charge-card, refund) must gate on ``verify_gym_employee_for_member``
+  (staff of the member's gym only).
 * **C-070** — the freeze / unfreeze profile write must fail loudly when the
   client-supplied ``gym_id`` does not match the member's row (rowcount != 1),
   instead of silently updating 0 rows and reporting success.
@@ -38,11 +37,10 @@ from src.shared.paying_member_lock import LockBusyError
 
 
 def _make_auth() -> MagicMock:
-    """An auth double recording which member guard a handler invokes."""
+    """An auth double recording that a handler invokes the staff guard."""
     auth = MagicMock()
     auth.get_current_user = MagicMock(return_value={})
     auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
-    auth.verify_can_view_member = AsyncMock(return_value=None)
     return auth
 
 
@@ -76,7 +74,6 @@ async def test_freeze_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -93,7 +90,6 @@ async def test_unfreeze_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -113,7 +109,6 @@ async def test_mark_paid_cash_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -130,7 +125,6 @@ async def test_charge_card_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -147,7 +141,6 @@ async def test_refund_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -167,7 +160,6 @@ async def test_start_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -186,7 +178,6 @@ async def test_preview_start_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -206,7 +197,6 @@ async def test_cancel_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -227,7 +217,6 @@ async def test_add_discounts_uses_staff_only_guard() -> None:
     )
 
     auth.verify_gym_employee_for_member.assert_awaited_once()
-    auth.verify_can_view_member.assert_not_awaited()
 
 
 # ── C-070: gym_id mismatch must fail loudly (rowcount guard) ────────

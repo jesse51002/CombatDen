@@ -914,8 +914,8 @@ class TestStreakResponse:
     def test_streak_for_nonexistent_member_returns_404(
         self, api: httpx.Client
     ) -> None:
-        """auth.verify_can_view_member 404s on an unknown member before the
-        streak service runs — intentional, not a bug."""
+        """auth.verify_gym_employee_for_member 404s on an unknown member
+        before the streak service runs — intentional, not a bug."""
         resp = api.get(
             "/api/v1/streak",
             params={"member_id": str(uuid4()), "gym_id": GYM_ID},

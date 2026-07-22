@@ -3,9 +3,23 @@
 Identity is VERIFIED EMAIL, not an auth-user id. A gym is accessed by a
 person whose Supabase JWT ``email`` claim (lowercased) matches a
 ``gym_employees`` row's ``email`` at that row's ``employee_type``. Stored
-emails are lowercase, so the lowercased claim is an exact ``.eq`` match.
+emails are lowercase, so the lowercased claim is an exact match.
 An ``archived_at`` row is a soft-archived employee and grants NO access —
 every authorization query filters ``archived_at IS NULL``.
+
+**Verified means verified.** A matching row is not enough: every
+identity-resolving query also requires a CONFIRMED Supabase auth account
+for that email (``auth.users.email_confirmed_at IS NOT NULL``), so signing
+up as ``owner@somegym.com`` without ever proving control of that inbox
+grants nothing. The predicate is always a scalar ``EXISTS`` — never a JOIN,
+because ``auth.users`` is unique on email only ``WHERE is_sso_user = false``
+and a join can fan out.
+
+The DB half of that guarantee only holds while GoTrue is actually mailing
+confirmations: with ``enable_confirmations`` off, GoTrue stamps
+``email_confirmed_at`` itself at signup. ``AuthSettingsGuard`` (run from the
+app lifespan) reads GoTrue's own published config at startup and screams when
+that is the case.
 
 Trainers CAN log in now: a ``gym_employees`` row with any
 ``employee_type`` whose email matches the caller is that person's access
@@ -13,6 +27,13 @@ at that role. Which roles a given check accepts is passed explicitly as a
 role set (``OWNER_ONLY`` / ``OWNER_ADMIN`` / ``STAFF`` / ``ALL_EMPLOYEES``
 or any ``frozenset[EmployeeType]``), so a route documents exactly which
 roles it admits.
+
+Every check here is STAFF-scoped. ``verify_member_self`` is the one
+member-facing primitive — the caller must BE the member — and nothing in
+the CRM surface uses it; it exists for the member portal.
+
+``Auth`` is a DI **Singleton shared by concurrent requests**: it holds no
+request-scoped state, and every query opens its own session.
 """
 
 import logging
@@ -22,10 +43,13 @@ import jwt
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from schema.gym_employee import EmployeeType
+from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.core.config import settings
-from src.shared.database import SupabaseClient
+from src.shared import SQL_DIR
+from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +69,10 @@ ALL_EMPLOYEES = frozenset(EmployeeType)
 class Auth:
     """Handles Supabase JWT authentication and email-based gym access."""
 
-    def __init__(self, supabase: SupabaseClient) -> None:
+    def __init__(self, db_pool: DirectDatabasePool) -> None:
         jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
         self._jwks_client = jwt.PyJWKClient(jwks_url)
-        self._supabase = supabase
+        self._db_pool = db_pool
 
     def get_current_user(
         self,
@@ -87,11 +111,13 @@ class Auth:
             ) from None
 
     def _require_email(self, user_payload: dict) -> str:
-        """Return the caller's verified email claim, lowercased.
+        """Return the caller's email claim, lowercased.
 
         Identity is the ``email`` claim (stored emails are lowercase, so
         the lowercased claim matches ``gym_employees.email`` /
-        ``members.email`` exactly).
+        ``members.email`` exactly). This is the CLAIM only — that the
+        address is confirmed is proven by the ``auth.users`` predicate
+        every identity-resolving query carries.
 
         Raises:
             HTTPException: 401 if the token carries no ``email`` claim.
@@ -105,6 +131,42 @@ class Auth:
             ) from None
         return email.lower()
 
+    async def verify_verified_account(self, user_payload: dict) -> str:
+        """Return the caller's email, proven to back a CONFIRMED account.
+
+        The standalone identity primitive for routes where the caller has
+        no ``gym_employees`` row yet (creating their first gym), so no
+        role check can carry the verified-account predicate for them.
+
+        Returns:
+            The caller's email, lowercased.
+
+        Raises:
+            HTTPException: 401 if the token has no ``email`` claim, 403 if
+                no confirmed Supabase auth account exists for it.
+        """
+        email = self._require_email(user_payload)
+
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "auth_verified_account.sql")),
+                    {"email": email},
+                )
+            ).mappings().fetchone()
+
+        if not row or not row["account_verified"]:
+            logger.warning(
+                "Unverified account attempted an action: email=%s",
+                email,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email address is not verified",
+            ) from None
+
+        return email
+
     async def _resolve_employee(
         self,
         gym_id: UUID,
@@ -114,30 +176,32 @@ class Auth:
         """Resolve the caller's active ``gym_employees`` row for a gym.
 
         Matches the lowercased email claim against a non-archived row at
-        ``gym_id`` whose ``employee_type`` is in ``allowed``. The single
-        query behind both ``verify_roles`` and ``get_employee_id``.
+        ``gym_id`` whose ``employee_type`` is in ``allowed`` AND which is
+        backed by a confirmed ``auth.users`` account. The single query
+        behind both ``verify_roles`` and ``get_employee_id``.
 
         Returns:
             ``(employee_id, employee_type)`` for the matched row.
 
         Raises:
             HTTPException: 401 if the token has no email claim, 403 if no
-                matching non-archived row exists for the caller.
+                matching non-archived, verified row exists for the caller.
         """
         email = self._require_email(user_payload)
 
-        resp = await (
-            self._supabase.client.from_("gym_employees")
-            .select("employee_id, employee_type")
-            .eq("gym_id", str(gym_id))
-            .eq("email", email)
-            .in_("employee_type", [r.value for r in allowed])
-            .is_("archived_at", "null")
-            .maybe_single()
-            .execute()
-        )
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "auth_resolve_employee.sql")),
+                    {
+                        "gym_id": str(gym_id),
+                        "email": email,
+                        "allowed_roles": [r.value for r in allowed],
+                    },
+                )
+            ).mappings().fetchone()
 
-        if not resp or not resp.data:
+        if not row:
             logger.warning(
                 "Unauthorized gym access attempt: email=%s, gym_id=%s",
                 email,
@@ -149,8 +213,8 @@ class Auth:
             ) from None
 
         return (
-            UUID(resp.data["employee_id"]),
-            EmployeeType(resp.data["employee_type"]),
+            UUID(str(row["employee_id"])),
+            EmployeeType(row["employee_type"]),
         )
 
     async def verify_roles(
@@ -163,7 +227,8 @@ class Auth:
 
         The CORE authorization check every other per-gym check delegates
         to. Matches the caller's verified email against a non-archived
-        ``gym_employees`` row whose ``employee_type`` is in ``allowed``.
+        ``gym_employees`` row whose ``employee_type`` is in ``allowed``
+        and whose email backs a confirmed Supabase auth account.
 
         Args:
             gym_id: The gym being accessed.
@@ -218,7 +283,7 @@ class Auth:
         (e.g. the shared image-upload proxy). Matches the caller's
         verified email against a non-archived ``gym_employees`` row at any
         gym whose ``employee_type`` is in ``allowed`` (default
-        owner/admin).
+        owner/admin) and which is backed by a confirmed auth account.
 
         Raises:
             HTTPException: 401 if the token has no email claim, 403 if the
@@ -226,17 +291,18 @@ class Auth:
         """
         email = self._require_email(user_payload)
 
-        resp = await (
-            self._supabase.client.from_("gym_employees")
-            .select("employee_id")
-            .eq("email", email)
-            .in_("employee_type", [r.value for r in allowed])
-            .is_("archived_at", "null")
-            .limit(1)
-            .execute()
-        )
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "auth_staff_principal.sql")),
+                    {
+                        "email": email,
+                        "allowed_roles": [r.value for r in allowed],
+                    },
+                )
+            ).mappings().fetchone()
 
-        if not resp or not resp.data:
+        if not row:
             logger.warning(
                 "Unauthorized staff-only action attempt: email=%s",
                 email,
@@ -282,52 +348,69 @@ class Auth:
         """
         await self.verify_roles(gym_id, user_payload, OWNER_ADMIN)
 
-    async def verify_can_view_member(
+    async def verify_member_self(
         self,
         member_id: UUID,
         user_payload: dict,
-        staff_roles: frozenset[EmployeeType] = OWNER_ADMIN,
+        *,
+        gym_id: UUID | None = None,
     ) -> None:
-        """Verify the caller may view this member.
+        """Verify the caller IS this member.
 
-        Access is granted when the caller IS the member (their verified
-        email matches the member row's ``email`` — a parent's account
-        matches every member row bearing their email, covering the family
-        case) OR the caller holds one of ``staff_roles`` (default
-        owner/admin) at the member's gym.
+        The one member-facing primitive — the member portal's gate. It
+        grants NOTHING to staff; a staff-facing route uses
+        ``verify_gym_employee_for_member`` instead. All three conditions
+        must hold:
+
+        1. The caller's lowercased ``email`` claim equals the ``members``
+           row's ``email`` (lowercased). A parent's account therefore
+           matches every member row bearing their email — the family case.
+        2. A CONFIRMED Supabase auth account exists for that email, so an
+           unverified signup on a member's address grants nothing.
+        3. When ``gym_id`` is given, the member row's ``gym_id`` equals
+           it. Pass it on every gym-scoped route: without it one email
+           reaches a same-named member at an unrelated gym.
+
+        Args:
+            member_id: The member being accessed.
+            user_payload: The decoded JWT payload.
+            gym_id: Optional path gym the member must belong to. Omit only
+                where the route carries no gym scope at all.
 
         Raises:
-            HTTPException: 404 if the member is not found, 401 if the token
-                has no email claim, 403 if the caller is not authorized.
+            HTTPException: 404 if the member does not exist, 401 if the
+                token has no email claim, 403 if the caller is not that
+                member, is unverified, or the member is at another gym.
         """
-        member = await (
-            self._supabase.client.from_("members")
-            .select("email, gym_id")
-            .eq("member_id", str(member_id))
-            .maybe_single()
-            .execute()
-        )
+        email = self._require_email(user_payload)
 
-        if not member or not member.data:
-            logger.error(
-                "Member not found: member_id=%s",
-                member_id,
-            )
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "auth_member_self.sql")),
+                    {"member_id": str(member_id), "email": email},
+                )
+            ).mappings().fetchone()
+
+        if not row:
+            logger.error("Member not found: member_id=%s", member_id)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Member not found",
             ) from None
 
-        caller_email = self._require_email(user_payload)
-        member_email = (member.data.get("email") or "").lower()
-        if member_email == caller_email:
-            return
-
-        await self.verify_roles(
-            UUID(member.data["gym_id"]),
-            user_payload,
-            staff_roles,
-        )
+        gym_matches = gym_id is None or UUID(str(row["gym_id"])) == gym_id
+        if not (row["email_matches"] and row["account_verified"] and gym_matches):
+            logger.warning(
+                "Member-self access denied: email=%s, member_id=%s, gym_id=%s",
+                email,
+                member_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this member",
+            ) from None
 
     async def _get_member_gym_id(self, member_id: UUID) -> UUID:
         """Resolve a member's gym_id.
@@ -335,15 +418,15 @@ class Auth:
         Raises:
             HTTPException: 404 if the member is not found.
         """
-        member = await (
-            self._supabase.client.from_("members")
-            .select("gym_id")
-            .eq("member_id", str(member_id))
-            .maybe_single()
-            .execute()
-        )
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(load_sql(SQL_DIR / "auth_member_gym_id.sql")),
+                    {"member_id": str(member_id)},
+                )
+            ).mappings().fetchone()
 
-        if not member or not member.data:
+        if not row:
             logger.error(
                 "Member not found: member_id=%s",
                 member_id,
@@ -353,22 +436,25 @@ class Auth:
                 detail="Member not found",
             ) from None
 
-        return UUID(member.data["gym_id"])
+        return UUID(str(row["gym_id"]))
 
     async def verify_gym_employee_for_member(
         self,
         member_id: UUID,
         user_payload: dict,
-        staff_roles: frozenset[EmployeeType] = OWNER_ADMIN,
+        staff_roles: frozenset[EmployeeType],
     ) -> None:
         """Verify the caller holds one of ``staff_roles`` at the member's
         gym.
 
-        Staff-only: unlike ``verify_can_view_member`` this does NOT grant
-        the member themselves access. Resolves the member's gym then runs
-        ``verify_roles`` with ``staff_roles`` (default owner/admin). Gates
-        staff-managed billing writes — e.g. authorizing / de-authorizing a
-        payer — that a member must not self-serve.
+        Staff-only: it grants the member themselves NOTHING. Resolves the
+        member's gym then runs ``verify_roles`` with ``staff_roles``.
+        This is the gate on EVERY member-scoped CRM route — reads and
+        writes alike; a member-facing route uses ``verify_member_self``.
+
+        ``staff_roles`` is REQUIRED on purpose: a default silently gave two
+        video routes owner/admin gating nobody had chosen. Every call site
+        states the role set it admits.
 
         Raises:
             HTTPException: 404 if the member is not found, 401 if the token
@@ -382,15 +468,16 @@ class Auth:
         self,
         member_id: UUID,
         user_payload: dict,
-        allowed: frozenset[EmployeeType] = OWNER_ADMIN,
+        allowed: frozenset[EmployeeType],
     ) -> UUID:
         """Resolve the caller's ``employee_id`` for a member's gym.
 
         The member-scoped variant of ``get_employee_id``. Both authorizes
-        (the caller must hold one of ``allowed`` roles, default
-        owner/admin, at the member's gym) and returns the ``employee_id``
-        — used to stamp the operator/witness when staff capture a signature
-        in a member-scoped flow (the authorize-payer link flow).
+        (the caller must hold one of ``allowed`` roles at the member's
+        gym) and returns the ``employee_id`` — used to stamp the
+        operator/witness when staff capture a signature in a member-scoped
+        flow (the authorize-payer link flow). ``allowed`` is REQUIRED, for
+        the same reason as above.
 
         Raises:
             HTTPException: 404 if the member is not found, 401 if the token

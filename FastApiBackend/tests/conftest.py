@@ -98,8 +98,9 @@ def auth_mock(fake_user_id: str, fake_employee_id: str) -> MagicMock:
     (=``fake_user_id``) and an ``email`` claim — identity is the verified
     email now. The gates are async no-ops, except ``verify_roles`` which
     returns a concrete ``EmployeeType`` so handlers that use the matched
-    role keep working, and ``get_employee_id`` / ``get_employee_id_for_member``
-    which return a fixed fake employee UUID.
+    role keep working, ``get_employee_id`` / ``get_employee_id_for_member``
+    which return a fixed fake employee UUID, and
+    ``verify_verified_account`` which returns the payload's email.
     """
     auth = MagicMock(spec=Auth)
     auth.get_current_user.return_value = {
@@ -109,8 +110,11 @@ def auth_mock(fake_user_id: str, fake_employee_id: str) -> MagicMock:
     auth.verify_roles = AsyncMock(return_value=EmployeeType.owner)
     auth.verify_gym_owner = AsyncMock(return_value=None)
     auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
-    auth.verify_can_view_member = AsyncMock(return_value=None)
     auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+    auth.verify_member_self = AsyncMock(return_value=None)
+    auth.verify_verified_account = AsyncMock(
+        return_value="test@example.com"
+    )
     auth.verify_staff_principal = AsyncMock(return_value=None)
     auth.get_employee_id = AsyncMock(return_value=UUID(fake_employee_id))
     auth.get_employee_id_for_member = AsyncMock(

@@ -171,7 +171,9 @@ async def update_member(
 ) -> MemberResponse:
     """Update a member's mutable fields."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await management_service.update_member(member_id, request.data)
@@ -317,7 +319,9 @@ async def get_member_detail(
 ) -> MemberBillingDetailResponse:
     """Full membership-derived member detail."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
@@ -367,7 +371,9 @@ async def get_member_billing_detail(
 ) -> MemberBillingDetailResponse:
     """Full CRM billing detail for a member."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
@@ -472,7 +478,9 @@ async def update_member_card(
 ) -> MembersBillingProfileResponse:
     """Update a member's payment card in DB and Stripe."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await management_service.update_card(member_id, request)
@@ -536,7 +544,9 @@ async def unlink_member_payment(
 ) -> MembersBillingProfileResponse:
     """Unlink a member's payment card and cancel recurring memberships."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await management_service.unlink_payment(member_id)
@@ -903,7 +913,9 @@ async def get_authorized_payer_waiver(
 ) -> AuthorizedPayerWaiverResponse:
     """Resolve the payer-auth waiver (with body) for a member."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await waivers_service.get_payer_auth_waiver_with_body_for_member(
@@ -952,7 +964,9 @@ async def list_member_invoices(
 ) -> list[PaymentsInvoiceResponse]:
     """List Stripe invoices for a member."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await management_service.list_invoices(
@@ -1010,7 +1024,9 @@ async def get_member_upcoming_invoice(
 ) -> PreviewInvoice | None:
     """Fetch the upcoming invoice preview for a member's account."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await management_service.get_upcoming_invoice(member_id)
@@ -1067,7 +1083,9 @@ async def list_member_payments(
 ) -> list[BillingPaymentRecord]:
     """List one page of a member's payment history."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await payments_service.list_payments(

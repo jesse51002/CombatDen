@@ -72,8 +72,10 @@ checkin_router = APIRouter(
         "and resolves it against the class's schedule versions + exceptions, "
         "bumps ``last_class``, "
         "awards the class's points, and auto-ends trial / punch-card "
-        "memberships once depleted. ``is_member = true`` (kiosk / member "
-        "self-check-in) runs the strict gate — selects the best eligible "
+        "memberships once depleted. Staff-only (``STAFF`` at the member's "
+        "gym) — ``is_member`` is a staff-selected MODE, not a caller "
+        "identity. ``is_member = true`` (kiosk mode) runs the strict gate — "
+        "selects the best eligible "
         "membership with remaining capacity (trial -> one_time -> recurring) "
         "and, if none covers / the room is full, returns ``log_id = null`` "
         "with a ``skip_reason`` and writes nothing. ``is_member = false`` "
@@ -105,7 +107,7 @@ async def checkin(
 ) -> CheckinResponse:
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(
+    await auth.verify_gym_employee_for_member(
         request.member_id, user_payload, staff_roles=STAFF
     )
 
@@ -235,8 +237,8 @@ async def remove_checkin(
         "attended (NULL capacity = unlimited, never blocks). Idempotent — "
         "signing up twice for the same (member, occurrence) returns the "
         "existing ``signup_id`` with ``already_signed_up = true`` and "
-        "consumes no extra capacity. Both staff (any employee of the gym) "
-        "and the member themselves may call this."
+        "consumes no extra capacity. Staff-only — the caller must hold a "
+        "``STAFF`` role at the member's gym."
     ),
     responses={
         200: {"description": "Sign-up created (or an idempotent repeat)"},
@@ -263,7 +265,7 @@ async def signup(
 ) -> SignupResponse:
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(
+    await auth.verify_gym_employee_for_member(
         request.member_id, user_payload, staff_roles=STAFF
     )
 
@@ -327,9 +329,11 @@ async def remove_signup(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
 ) -> SignupRemoveResponse:
-    """Cancel a member's sign-up (staff or the member themselves)."""
+    """Cancel a member's sign-up (staff of the member's gym)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await signup_service.remove(
@@ -520,8 +524,8 @@ async def list_attendees(
         "reservations (occurrences not yet ended, soonest first, "
         "unpaginated) plus a newest-first PAGE of their history — attended "
         "occurrences and no-shows (a reservation whose occurrence ended "
-        "with no matching check-in). Staff for any gym member, or the "
-        "member themselves."
+        "with no matching check-in). Staff-only — the caller must hold a "
+        "``STAFF`` role at the member's gym."
     ),
     responses={
         200: {"description": "History retrieved"},
@@ -543,7 +547,9 @@ async def get_member_class_history(
 ) -> MemberClassHistoryResponse:
     """One member's reservations + attended + no-show feed."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await history_service.get_history(
@@ -581,7 +587,9 @@ async def get_streak(
 ) -> StreakResponse:
     """Weeks of consecutive class attendance."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload, staff_roles=STAFF)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         weeks = await streak_service.get_streak(member_id, gym_id)

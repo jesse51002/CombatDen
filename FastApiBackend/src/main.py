@@ -45,6 +45,11 @@ from src.waivers.waivers_router import waivers_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
+    # Identity is the verified email claim; that "verified" means anything
+    # depends on GoTrue actually mailing confirmations. Check its published
+    # config before serving a single request.
+    await app.container.auth_settings_guard().check()
+
     scheduler = None
     if settings.reconciler_enabled:
         scheduler = build_scheduler(app.container)

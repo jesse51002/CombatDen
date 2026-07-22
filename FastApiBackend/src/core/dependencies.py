@@ -128,7 +128,8 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
-from src.shared.database import DirectDatabasePool, SupabaseClient
+from src.shared.auth_settings_guard import AuthSettingsGuard
+from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.litellm_client import LiteLLMClient
 from src.shared.payer_resolver import PayerResolver
@@ -233,8 +234,18 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     db_pool = providers.Singleton(DirectDatabasePool)
-    supabase = providers.Singleton(SupabaseClient)
-    auth = providers.Singleton(Auth, supabase=supabase)
+    # Auth reads auth.users (the verified-account predicate) — only the
+    # direct pool can see that schema.
+    auth = providers.Singleton(Auth, db_pool=db_pool)
+    # Startup-only: reads GoTrue's published config and screams (or refuses
+    # to boot) when it auto-confirms every signup. Called from the lifespan.
+    auth_settings_guard = providers.Singleton(
+        AuthSettingsGuard,
+        supabase_url=settings.supabase_url,
+        supabase_anon_key=settings.supabase_anon_key,
+        policy=settings.auth_autoconfirm_policy,
+        timeout_seconds=settings.auth_settings_check_timeout_seconds,
+    )
 
     # The canonical single-shape recurrence + exception engine is pure (no
     # I/O); a single shared instance is reused everywhere.
