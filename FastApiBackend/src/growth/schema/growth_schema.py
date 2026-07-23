@@ -108,12 +108,18 @@ class TableOrientation(StrEnum):
 
 
 class MetricTableColumn(BaseModel):
-    """One column header of a metric's companion ``table``."""
+    """One column header of a metric's companion ``table``.
+
+    ``tone`` is an optional semantic color hint for the column's values
+    (``'good'`` / ``'bad'`` / ``'warn'`` / ``'neutral'`` — the same vocabulary
+    a ``hero_split`` segment's ``tone`` uses); ``None`` leaves the default.
+    """
 
     key: str
     label: str
     type: MemberListColumnType
     align: str | None = None
+    tone: str | None = None
 
 
 class MetricTableRow(BaseModel):

@@ -179,7 +179,7 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
     ),
     GrowthMetricDef(
         key="revenue_collected",
-        name="Collected by Method",
+        name="Recurring vs One-time",
         type=GrowthMetricType.bars,
         categories=(GrowthCategory.revenue,),
         order=220,

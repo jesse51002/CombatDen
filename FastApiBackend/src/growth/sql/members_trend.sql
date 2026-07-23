@@ -119,13 +119,16 @@ SELECT jsonb_build_object(
         'columns', jsonb_build_array(
             jsonb_build_object('key', 'month', 'label', 'Month', 'type', 'date'),
             jsonb_build_object(
-                'key', 'gained', 'label', 'Gained', 'type', 'number'
+                'key', 'gained', 'label', 'Gained', 'type', 'number',
+                'tone', 'good'
             ),
             jsonb_build_object(
-                'key', 'lost', 'label', 'Lost', 'type', 'number'
+                'key', 'lost', 'label', 'Lost', 'type', 'number',
+                'tone', 'bad'
             ),
             jsonb_build_object(
-                'key', 'retained', 'label', 'Retained', 'type', 'number'
+                'key', 'retained', 'label', 'Retained', 'type', 'number',
+                'tone', 'warn'
             ),
             jsonb_build_object(
                 'key', 'trial', 'label', 'Trial', 'type', 'number'
