@@ -58,11 +58,10 @@ GrowthMetric trimMetricToRange(GrowthMetric metric, GrowthRange range) {
         granularity: data.granularity,
         series: _trimSeries(data.series, months),
         byClass: _trimByClass(data.byClass, months),
-        // Carry the companion table through the trim — rebuilding without it
-        // silently drops the per-month breakdown table whenever a non-"All"
-        // range pill is active. Its rows keep full history for now (window
-        // trimming of the table is a separate, open UX decision).
-        table: data.table,
+        // Trim the companion table to the SAME window as the chart. Rebuilding
+        // without it dropped the table entirely on a non-"All" pill; carrying
+        // it untrimmed would show a 12-row table under a 3-month chart.
+        table: _trimTable(data.table, months),
       );
     case final BarsData data:
       trimmed = BarsData(
@@ -70,8 +69,7 @@ GrowthMetric trimMetricToRange(GrowthMetric metric, GrowthRange range) {
         granularity: data.granularity,
         series: _trimSeries(data.series, months),
         byClass: _trimByClass(data.byClass, months),
-        // See the LineData note above: keep the companion table on trim.
-        table: data.table,
+        table: _trimTable(data.table, months),
       );
     default:
       return metric;
@@ -86,6 +84,48 @@ GrowthMetric trimMetricToRange(GrowthMetric metric, GrowthRange range) {
     computedAt: metric.computedAt,
     data: trimmed,
   );
+}
+
+/// The companion [table] with its rows trimmed to the same [months] window
+/// as the chart, anchored on the table's `date`-typed column.
+///
+/// A table with no date column is returned untouched (nothing to window by),
+/// as is one whose date cells will not parse — the same "keep what we cannot
+/// judge" rule [_trimOne] applies to a series. The window formula matches
+/// [_trimOne] exactly (newest date minus [months]), and because the table and
+/// its chart share one month grid their newest dates agree, so the two windows
+/// line up.
+MetricTable? _trimTable(MetricTable? table, int months) {
+  if (table == null) return table;
+  final dateCol =
+      table.columns.indexWhere((c) => c.type == MemberListColumnType.date);
+  if (dateCol < 0) return table;
+
+  DateTime? newest;
+  for (final row in table.rows) {
+    final d = _rowDate(row, dateCol);
+    if (d != null && (newest == null || d.isAfter(newest))) newest = d;
+  }
+  if (newest == null) return table;
+
+  final cutoff = DateTime(newest.year, newest.month - months, newest.day);
+  final kept = [
+    for (final row in table.rows)
+      // A row whose date will not parse is KEPT, mirroring _trimOne.
+      if (!(_rowDate(row, dateCol)?.isBefore(cutoff) ?? false)) row,
+  ];
+  if (kept.length == table.rows.length) return table;
+  return MetricTable(
+    orientation: table.orientation,
+    columns: table.columns,
+    rows: kept,
+  );
+}
+
+DateTime? _rowDate(MetricTableRow row, int dateCol) {
+  if (dateCol >= row.cells.length) return null;
+  final cell = row.cells[dateCol];
+  return cell is String ? DateTime.tryParse(cell) : null;
 }
 
 List<ClassSeries>? _trimByClass(List<ClassSeries>? byClass, int months) {
