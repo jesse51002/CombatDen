@@ -332,9 +332,10 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         key="churn_trend",
         name="Churn Rate",
         type=GrowthMetricType.line,
-        # On Overview it is the churn graph the donut pair used to be; on
-        # Retention it is the detailed churn line.
-        categories=(GrowthCategory.overview, GrowthCategory.retention),
+        # Retention-only: churn % is the analyst's lens. Overview leads with
+        # Average Membership Length instead — owners read "members stay N
+        # months" more readily than a churn percentage.
+        categories=(GrowthCategory.retention,),
         order=510,
         sql_file="churn_trend.sql",
         model=LineData,
@@ -345,7 +346,9 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         key="avg_membership_length",
         name="Average Membership Length",
         type=GrowthMetricType.line,
-        categories=(GrowthCategory.retention,),
+        # Overview's retention read (replaces the churn graph — more
+        # intuitive for owners) as well as the Retention tab.
+        categories=(GrowthCategory.overview, GrowthCategory.retention),
         order=515,
         sql_file="avg_membership_length.sql",
         model=LineData,
