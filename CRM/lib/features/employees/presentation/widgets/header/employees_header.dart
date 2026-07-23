@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
 
-/// Title + summary subtitle for the Employees screen. Mirrors `MembersHeader`
-/// so the two list screens read as siblings.
+/// Title + live count subtitle for the Employees roster. Mirrors the Members
+/// header so the two list surfaces read as siblings.
 class EmployeesHeader extends StatelessWidget {
-  final EmployeesSummary summary;
+  final int total;
 
-  const EmployeesHeader({super.key, required this.summary});
+  const EmployeesHeader({super.key, required this.total});
 
   String get _subtitle =>
-      '${summary.total} team members · ${summary.coaches} coaches';
+      total == 1 ? '1 team member' : '$total team members';
 
   @override
   Widget build(BuildContext context) {

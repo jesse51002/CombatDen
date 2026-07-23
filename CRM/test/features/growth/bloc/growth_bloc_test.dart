@@ -10,7 +10,7 @@ import 'package:crm/features/growth/bloc/growth_state.dart';
 import 'package:crm/features/growth/data/models/growth_metric.dart';
 import 'package:crm/features/growth/data/models/growth_metric_data.dart';
 import 'package:crm/features/growth/data/repositories/growth_repository.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
+import 'package:crm/core/auth/employee_role.dart';
 
 class _MockGrowthRepository extends Mock implements GrowthRepository {}
 

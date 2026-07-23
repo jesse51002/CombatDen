@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     MemberWaiverStatusRow,
@@ -71,7 +71,7 @@ async def list_waivers(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await waivers_service.list_waivers(gym_id)
@@ -109,7 +109,7 @@ async def create_waiver(
         HTTPException: 400/401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await waivers_service.create_waiver(request)
@@ -161,7 +161,7 @@ async def update_waiver(
         HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await waivers_service.update_waiver(request)
@@ -214,7 +214,7 @@ async def delete_waiver(
         HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         await waivers_service.delete_waiver(waiver_id, gym_id)
@@ -269,7 +269,7 @@ async def list_member_waiver_status(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await waivers_service.list_member_status(member_id, gym_id)
@@ -314,7 +314,7 @@ async def list_waiver_versions(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await waivers_service.list_versions(waiver_id, gym_id)
@@ -359,7 +359,7 @@ async def list_waiver_signatories(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await waivers_service.list_signatories(waiver_id, gym_id)
@@ -413,7 +413,7 @@ async def sign_waiver(
     # get_employee_id both authorizes (403 if not staff of the gym) and resolves
     # the operator/witness to stamp on the signature.
     operator_employee_id = await auth.get_employee_id(
-        request.gym_id, user_payload
+        request.gym_id, user_payload, allowed=STAFF
     )
 
     try:
@@ -483,7 +483,7 @@ async def get_waiver(
         HTTPException: 401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await waivers_service.get_waiver(waiver_id, gym_id)

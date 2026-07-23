@@ -75,6 +75,7 @@ When a task builds or heavily reshapes a domain (tables + services + routes):
   - **Create-and-track wrappers** for the data factory: `await created.member(...)`, `.plan(...)`, `.discount(...)`, `.reward(...)`, `.payment_method()`, `.test_clock(...)` — prefer these over calling `tests/helpers/data_factory.py` directly so cleanup is automatic.
   - **Manual trackers** for objects a service returns: `created.track_customer/track_product/track_price/track_coupon(<stripe_id>)`, `created.track_plan_db(plan_id)`, `created.track_discount(discount_id)`, `created.track_member(member_id)`, `created.track_reward(reward_id)`, `created.track_redemption(redemption_id)` (a reward carries no Stripe object, so a redeem call's returned `redemption_id` is tracked manually).
 - Teardown order is clocks → redemption rows (FK both a member and a reward — always first) → members → plans → discounts → rewards → Stripe customers → coupons → archive prices/products. Stripe prices/products can only be **archived** (`active=false`), not deleted; coupons and customers are deleted (customer-delete cascades its subs/invoices); a test clock cascades its own clock-scoped customer/subs/invoices, so don't separately track those. Cleanup helpers live in `tests/helpers/cleanup.py`.
+- **A test must establish its own preconditions, not inherit them from seed luck.** The seed deliberately leaves state a gate will reject — e.g. every seeded member's plan attaches the liability waiver and NO member has signed it, so that starting a new membership demos the waiver gate + wizard sign step. A test asserting a happy path through such a gate must SET UP compliance and undo it, never weaken the assertion, pass an override flag, or narrow its fixture until nothing matches (that last one turns the test into a silent `skip`, which reads as green while testing nothing). `tests/helpers/waiver_compliance.py` is the model: it signs a member's outstanding waivers through the real API, records the `signature_id`s it created, and deletes exactly those on teardown — session-scoped, so it covers what the function-scoped `created` registry cannot, and it never touches the seeded `payer_auth` signatures those members already hold.
 - A test that needs special teardown ordering may keep its own `try/finally`, but the default is: register with `created` and let the fixture clean up.
 
 ## General Principles
@@ -239,7 +240,7 @@ src/
   - Good: `videos/service/video_agent/` holds the conversational-agent wrapper (`video_agent_service.py`), a self-contained sub-concern of the otherwise-flat `videos/service/`.
   - **The class system is versioned schedules + computed occurrences** (single source of truth: the `class-system-guide` skill). A class = a `gym_classes` IDENTITY row + append-only `gym_class_schedules` VERSIONS (each freezing its `timezone` at mint); occurrences are never stored — the pure `ClassesExpander` (one schedule shape; each candidate date FANS OUT over its `weekday_slots` slot list, so a class may occur several times per day) wrapped by `ClassesVersionExpander` (ownership windows by `effective_from`, first-version-owns-the-past, SLOT-level dedup at `(original_date, original_time)`) computes them for every read. An occurrence's identity is its ORIGINAL slot `(class_id, original_date, original_time)` — what `member_attendance`, `class_signups`, and `class_instance_exceptions` key (their UNIQUEs include `original_time`); every occurrence-addressed API call passes the date AND time; exceptions/reschedules never re-key anything. **`ClassesVersionsService`** (`classes_versions_service.py`) is the only writer of `gym_class_schedules`: a schedule edit mints a version effective NOW and, in the same transaction, wipes future-keyed sign-ups / early check-ins / instance exceptions whose original slot the new shape no longer produces (exact wall-clock matches survive); soft-delete wipes everything future; `remint_timezone` is the gym tz-change hook. `PUT /classes/{id}` splits `identity` (in-place) vs `schedule` (a complete shape → mint), the discounts identity/values precedent.
   - The `checkin` domain decomposes its check-in into two DI-injected seams kept flat in `checkin/service/`: `checkin_class_resolver.py` (`CheckinClassResolver`, the one-way `checkin → classes` seam — loads the class identity + its schedule versions + the day's exceptions and resolves the occurrence via the injected `ClassesVersionExpander` into a `ResolvedClass`; purely a read, nothing written; a retroactive any-date check-in validates against whichever version owned that date; it also enforces the **early-check-in window** — an occurrence starting more than `settings.checkin_opens_hours_before_start` (2h) in the future is rejected, gating both single + batch check-in) and `checkin_member_gate.py` (the per-member gate: one evaluation feeds the `is_member` split — a kiosk (`is_member=True`) strict-gate **reject**, or a staff (`is_member=False`) path that records a **clean** check-in but returns **`requires_confirmation`** (nothing written, the reasons as `warnings`) for a warned one **unless `ignore_warnings`** overrides — which records with NULL/best-available attribution + the warnings surfaced), over `checkin_queries.py` / `checkin_writer.py` / `checkin_plan_selector.py`. There is deliberately **no facade**: the single-check-in router injects the resolver + gate directly (resolve, then gate), and `batch_checkin_service.py` injects the same two (resolve once, then loop the gate over a de-duped member list). Siblings `cycle_counts_service.py` / `streak_service.py` / `checkin_attendees_service.py` (read-only per-occurrence **combined roster** — see sign-ups below) round out the domain, all flat in `service/` — the attendance row's denormalized `occurred_at` feeds the streak / cycle-count / last-class window SQL; streak additionally joins `gyms` to bucket weeks in the gym's CURRENT-local timezone (not UTC — see the class-system-guide skill), the others stay join-free. Check-in **reversal** also lives here: `checkin_reverser.py` (`CheckinReverser`) is the reusable per-member reversal core — `reverse(session, member_id, gym_id, class_id, original_date, points_worth)` deletes that member's attendance row by key, claws back the points (floored at 0), drops one `class_attended` activity, and reverses the auto-end on the charged trial / one_time pack, all in the caller's OPEN transaction (no commit). It imports **nothing** from `src.classes`. `checkin_remover.py` (`CheckinRemover`) is the thin single-member wrapper the remove endpoint injects.
-  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_can_view_member` (staff-principal-for-a-gym-member OR member-for-self, same as check-in; a staff principal is an owner/admin — trainers have no accounts). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `ValueError("Class is full")` only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
+  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_gym_employee_for_member` at `STAFF` (staff-only, same as check-in — the member cannot self-serve a reservation). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `ValueError("Class is full")` only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
     - **Deliberate exception to the one-way seam (`classes → checkin`):** `ClassesUndoService` (in `src.classes`) depends on `CheckinReverser` — the OPPOSITE of the documented one-way `checkin → classes` direction — looping it per attendee inside its shared `teardown_occurrence` (reverse attendance + delete sign-ups for one date), which is itself the single teardown that BOTH cancel entry points, the future-reschedule path, and `ClassesVersionsService`'s version-change wipe route through. So the per-member reversal has a **single** implementation. It is cycle-free precisely because `CheckinReverser` imports nothing from `src.classes` (the DI container builds `checkin_reverser` before all consumers). Don't flag this `classes → checkin` edge as a layering violation — it is intentional.
     - **The `gyms → classes` edge:** `GymsService.update_gym` calls `ClassesVersionsService.remint_timezone` on every save that carries a `timezone` (deliberately not gated on "did it change" — the gym row commits before the per-class remint, so a changed-value gate would skip a retry after a partial failure forever; the per-class deep-equal skip makes a re-save a cheap self-heal). A same-shape version mint per live class; wall-clock matching keeps every future-keyed row. Documented, deliberate.
   - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder wrapping a *single* group / file.
@@ -257,7 +258,7 @@ src/
 - All injectable dependencies must be defined as providers in `src/core/dependencies.py`
 - Route handlers using `Provide[...]` must have the `@inject` decorator
 - New domain modules must be added to `wiring_config.modules` in the container
-- Use `Annotated` type aliases for clean route signatures (`DbSession`, `SupabaseClient`, `CurrentUser`)
+- Use `Annotated` type aliases for clean route signatures (`DbSession`, `CurrentUser`)
 - Good: `DbSession = Annotated[AsyncSession, Depends(Provide[Container.db_session])]`
 - Good: `@inject` on any handler or dependency function using `Provide[...]`
 - Bad: Importing `settings` directly — use container injection instead
@@ -411,6 +412,14 @@ how-to-work-here facts belong here:
   `current_rank_id` / `current_sub_index` are `MEMBERS`-immutable (ranks
   endpoints are the only rank-change path). `image_url` and
   `sub_rank_image_overrides` are ordinary user-writable fields.
+- **Read vs. write auth.** Every ranks READ — the ladder (`GET /`),
+  `enabled`, `ready-to-promote`, `{id}/members`, `{id}/sub-rank-counts`,
+  and the `{id}` detail — passes `STAFF`, so **front desk views the
+  read-only ranks tab** (ladder + ready-to-promote board + rank detail).
+  Every WRITE — create/update/delete rank, `reorder`, the enable toggle,
+  sub-type set, `promote` / `set-member-rank`, and `seed-from-preset` —
+  stays `verify_gym_admin_or_owner` (`OWNER_ADMIN`). Preset reads
+  (`/presets*`) are any-authenticated (global catalog, no gym scope).
 - **SQL + DI edge.** Every query is its own `.sql` (`load_sql`), bound
   `CAST(:x AS T)` never `:x::t` (`update_rank` builds a dynamic SET of
   per-column casts). The `gyms → ranks_members` edge: `GymsService.update_gym`
@@ -427,7 +436,16 @@ how-to-work-here facts belong here:
 - Validate Supabase JWT tokens in FastAPI using dependency injection
 - Use dependency injection for auth checks
 - Use Supabase RLS (Row Level Security) for authorization at the database level
-- **Staff principals are owner/admin ONLY — trainers have no accounts.** A `gym_employees` row with `employee_type='trainer'` is instructor DATA (a name/photo shown on classes), never a login: the DB forbids a trainer `user_id` (`chk_trainer_has_no_account`), and every staff auth check in `src/shared/auth.py` (`verify_gym_employee`, `verify_can_view_member`'s staff branch, and the `_for_member` variants) filters to owner/admin explicitly. Never design a feature around a trainer logging in.
+- **Identity is verified email, not an auth-user id.** A gym is accessed by a person whose Supabase JWT `email` claim (lowercased) matches a `gym_employees` row's `email` at that row's `employee_type` (`chk_principal_has_email` requires an email on every login role — owner/admin/front_desk; only a `trainer` row may stay email-less instructor DATA). Stored emails are lowercase, so the lowercased claim is an exact match. An `archived_at` row is soft-archived and grants NO access.
+- **Trainers CAN log in now — access is role-set-gated per route, not a blanket owner/admin cut.** `src/shared/auth.py` exports role-set constants — `OWNER_ONLY`, `OWNER_ADMIN`, `STAFF` (owner/admin/front_desk), `ALL_EMPLOYEES` (all four) — and the core check `Auth.verify_roles(gym_id, user_payload, allowed)` (plus `get_employee_id`, `verify_staff_principal`, `verify_gym_employee_for_member`, `get_employee_id_for_member`, all taking an explicit role-set param — REQUIRED, no default, on the two member-scoped ones) admits the caller only when their non-archived `gym_employees` row's `employee_type` is in `allowed` **and** a CONFIRMED `auth.users` account exists for that email. Every route documents exactly which roles it admits — a route gating a trainer-visible read passes `ALL_EMPLOYEES`; gym-config writes and money-moving ops stay `OWNER_ADMIN` / `STAFF`; owner-only actions (Stripe Connect onboarding) use `verify_gym_owner` (`OWNER_ONLY`). `verify_gym_admin_or_owner` is the thin `OWNER_ADMIN` wrapper mirroring the DB's `is_gym_admin_or_owner` RLS function. **The full 4-role capability matrix and enforcement chain live in the `employees-guide` skill** (the source of truth; this section is the how-to-work-here summary).
+- **Go-live read gates (front desk + trainer):** a handful of reads widened for the four-role model. `GET /api/v1/tasks/ongoing` + `GET /api/v1/tasks/{task_id}` are `STAFF` (front desk must see in-task state so its single-membership reprice never races a running bulk job). `PUT /api/v1/member_memberships/price` — reprice ONE membership to its plan's CURRENT ACTIVE price (a correction, **not** a custom amount) — is `STAFF`; plan-wide `reprice-plan` stays `OWNER_ADMIN`. `GET /api/v1/employees/{gym_id}` (the LIST only) is `STAFF` so front desk can fill the schedule's instructor picker; employees create/update/archive stay `OWNER_ADMIN` (the Employees TAB is CRM-route-gated to owner/admin). `GET /api/v1/gyms/{gym_id}/showcase` is `ALL_EMPLOYEES` — every role READs its gym's theme/showcase — while the theme WRITE `PUT /gyms/{id}/theme` stays `OWNER_ADMIN`.
+- **Verified means VERIFIED — every identity query requires a confirmed auth account, pinned to the caller's OWN account.** A matching `gym_employees` row is not enough: each identity-resolving query in `src/shared/sql/` (`auth_resolve_employee.sql`, `auth_staff_principal.sql`, `auth_verified_account.sql`, `auth_member_self.sql`, plus `src/gyms/sql/gyms_list_for_user.sql` and `src/member_portal/sql/member_portal_list_members.sql`) carries a scalar `EXISTS` over `auth.users` on `lower(u.email) = <the row's email>` **AND** `u.email_confirmed_at IS NOT NULL`. That `EXISTS` is **also pinned to the caller's own account** — `AND u.id = CAST(:caller_id AS UUID)`, where `caller_id` is the JWT `sub` read via the new `Auth.require_sub(user_payload)` — so it proves the CALLER's OWN account is confirmed, not merely that SOME confirmed account holds that email. This closes an SSO edge: `auth.users` is unique on email only `WHERE is_sso_user = false`, so without the `sub` pin an unconfirmed password signup on an address that also has a confirmed SSO row could borrow that row's verification; the email equality stays as defense in depth. Always `EXISTS`, **never a JOIN** — the same email-uniqueness caveat means a join can fan out and duplicate the row. (`auth_member_gym_id.sql` is exempt — a pure member→gym lookup with no `EXISTS`, whose caller runs the pinned employee check next.) Reading `auth.users` needs the direct pool, so **`Auth` is constructed with `db_pool`** (`auth = providers.Singleton(Auth, db_pool=db_pool)`), not a PostgREST client; it is a Singleton shared across concurrent requests, so it holds NO request-scoped state and opens a session per query. `tests/shared/test_auth_roles.py` has a drift guard that reads those `.sql` files off disk and fails if the predicate disappears.
+- **`Auth.verify_verified_account(user_payload) -> str`** is the standalone primitive for a route whose caller has no `gym_employees` row yet (gym create) — 401 on no email claim, 403 on an unconfirmed account, else the lowercased email.
+- **`Auth.verify_member_self(member_id, user_payload, *, gym_id=None)`** is the ONE member-facing gate: the caller's verified email must equal the `members` row's email, the auth account must be confirmed, and — when `gym_id` is passed — the member must belong to that gym. Pass `gym_id` on every gym-scoped route: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403 otherwise. **Its only callers live in `src/member_portal/` (the member-facing surface — see that section); no CRM route uses it.**
+- **Every member-scoped CRM route is STAFF-ONLY.** There is no "or the member themselves" branch anywhere in the backend — `verify_gym_employee_for_member` / `get_employee_id_for_member` gate all of them, and their role-set parameter is **required** (no default), so a call site can never silently inherit `OWNER_ADMIN`. On the check-in routes `is_member` / `ignore_warnings` are staff-selected MODES (kiosk gate vs. staff gate), not claims about who is calling. **A member reaches their own data only through the parallel `/api/v1/member/...` routes, never by a branch inside a staff route** — the two surfaces stay separate on purpose, which is what keeps a member from ever selecting a gate mode.
+- **Gym reconciliation on member-scoped writes that carry their OWN gym.** `verify_gym_employee_for_member` takes an optional keyword `gym_id=`: when a route ALSO carries a gym in its body/path (the single check-in + sign-up pass `gym_id=request.gym_id`; remove-sign-up passes its path `gym_id`), the gate asserts the member's resolved gym equals it (403 otherwise). It is a fail-fast INPUT check, not the security boundary — a cross-gym write is already impossible because `member_attendance` / `class_signups` carry a composite FK `(member_id, gym_id) -> members(member_id, gym_id)`; the guard just turns what would be an FK-500 at write time into a clean 403 at the gate. `POST /api/v1/checkin/batch` deliberately has NO whole-batch gym pre-check: the same composite FK blocks any cross-gym row, and `BatchCheckinService._checkin_one` isolates a per-member failure into a `failed` item in the 207, so one foreign/unknown id never corrupts the batch — a whole-batch guard would instead fail every member for one bad id, breaking that per-item contract.
+- **Startup guard on GoTrue's auto-confirm.** With GoTrue's `enable_confirmations` OFF, GoTrue stamps `email_confirmed_at` itself at signup, so the DB predicate above proves nothing. `AuthSettingsGuard` (`src/shared/auth_settings_guard.py`, DI provider `auth_settings_guard`, awaited at the top of the `main.py` lifespan) reads GoTrue's own published config at `GET {supabase_url}/auth/v1/settings` and, when `mailer_autoconfirm` is true, logs a CRITICAL banner — and refuses to boot when `settings.auth_autoconfirm_policy` is `fail`. **Default is `fail`, everywhere** — `Database/supabase/config.toml` ships `enable_confirmations = true`, so an auto-confirming stack is a misconfiguration in local dev exactly as much as in production, not a local convenience. When the guard trips, the fix is to restart the auth container, not to re-seed: GoTrue reads `enable_confirmations` at **container start**, so `supabase db reset` does NOT apply a change to it — `supabase stop && supabase start` does. A failure to REACH GoTrue is never treated as a misconfiguration and never takes the app down; but a GoTrue that IS reachable yet returns no readable boolean `mailer_autoconfirm` is **fail-closed** under the `fail` policy (a reachable stack is not a network blip, and an unprovable confirmation setting is unsafe to serve behind). The guard's `_probe` classifies reachability (network + 2xx) separately from readability (a boolean flag in the body) precisely so the two cases diverge.
+- **There is no PostgREST client.** `SupabaseClient` and the `postgrest` dependency are gone — all DB access is the direct SQLAlchemy pool. `settings.supabase_url` (JWKS + the GoTrue settings probe) and `settings.supabase_service_role_key` (the tests' admin client) remain.
 
 **Input Validation**
 - Always validate with Pydantic
@@ -495,25 +513,27 @@ how-to-work-here facts belong here:
 
 The `videos` domain (`src/videos/`) also hosts the LLM-powered spec authoring and conversational
 agent plus the RAG read surface. Five routes cover the spec/agent + RAG surface
-(all `verify_gym_employee`-gated EXCEPT the member rec + rec-click routes, which are
-`verify_can_view_member`):
+(all `verify_gym_admin_or_owner`-gated EXCEPT the member rec + rec-click routes, which are
+`verify_gym_employee_for_member` at `OWNER_ADMIN`):
 
 | Route | What it does |
 |---|---|
 | `GET /api/v1/gyms/{id}/video-spec` | Return the gym's latest spec (reads `gym_video_spec_latest` view) |
 | `POST /api/v1/gyms/{id}/video-agent` | One conversational turn — also handles accept via `accepted_spec` in body |
 | `POST /api/v1/gyms/{id}/video-agent/refine-from-feed` | Fold manual curation signals from `gym_video_feed` into a new `feed_update` version |
-| `GET /api/v1/gyms/{id}/members/{member_id}/video-rec` | The member's next single rotating-category RAG rec — rotates the served genre by the member's served-rec count, records the pick, returns `{rec_id, category, video}` (`verify_can_view_member`; 404 when the member isn't in the path gym OR no category yields a video) |
-| `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_can_view_member`; 404 when the rec isn't the member's) |
+| `GET /api/v1/gyms/{id}/members/{member_id}/video-rec` | The member's next single rotating-category RAG rec — rotates the served genre by the member's served-rec count, records the pick, returns `{rec_id, category, video}` (`verify_gym_employee_for_member`, `OWNER_ADMIN`; 404 when the member isn't in the path gym OR no category yields a video) |
+| `POST /api/v1/gyms/{id}/members/{member_id}/video-rec/{rec_id}/click` | Record a member opening a rec: stamp `clicked_at`, log a `video_clicked` activity, fire a profile refresh (`verify_gym_employee_for_member`, `OWNER_ADMIN`; 404 when the rec isn't the member's) |
 
 **ONE unified feed read backs everything (`VideoFeedService.load_feed_page`).** `GET /api/v1/gyms/{id}/videos`
-(`verify_gym_employee`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
+(`verify_gym_admin_or_owner`) always MERGES the owner section (`video_run_id IS NULL`) with the gym's latest
 COMPLETED run — there is **no owner/source param**. It serves **only enriched-AND-accepted** videos:
 the SQL **INNER JOIN**s `video_rag` (the enriched-only gate) so a row shows only once it has an
 embedding, and `?rejected` selects `scan_status` `accepted` vs `rejected`. `?member_id` is a read-only
-ranking hint (the candidate set is always the path gym's feed, so it can't leak — a member-facing route
-is a future concern, this stays staff-facing). **This same read backs the member rec** (`limit=1`,
-filtered to one genre).
+ranking hint (the candidate set is always the path gym's feed, so it can't leak). This route stays
+STAFF-facing; the member reads the same feed through `GET /api/v1/member/gyms/{gid}/members/{mid}/videos`
+(`verify_member_self`, `rejected` hardwired false), which calls the very same `load_feed_page` — the
+member surface is a separate router, never a widened guard here. **This same read backs the member rec**
+(`limit=1`, filtered to one genre).
 
 **Ranking — one axis, two σ-scaled nudges** (all in `videos_load_feed_page.sql`, wrapped in a CTE so a
 window stddev is available):
@@ -533,7 +553,7 @@ window stddev is available):
   `video_feed_bump_sigma_fraction` (0.10) and `video_served_penalty_half_life_days` (7.0, ×86400 →
   `:half_life_seconds`), injected into `VideoFeedService` (no `settings` import — DI constructor args).
 
-**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_employee`,
+**Separate UNGATED owner listing** — `GET /api/v1/gyms/{id}/videos/owner` (`verify_gym_admin_or_owner`,
 `load_owner_videos` / `videos_load_owner_videos.sql`): owner-section rows only, **LEFT JOIN** `video_rag`
 (NOT the enriched gate) exposing `enriched` so the CRM can badge "processing…", `ORDER BY curated_at DESC
 NULLS LAST`. An owner-added video is visible here the INSTANT it's added — before enrichment — which the
@@ -604,7 +624,7 @@ the accept-path and first-turn state seeding (plain calls, not tools). Template 
 in `PresetsTemplateService` (presets domain); showcase reads live in `ThemeShowcaseService` (theme domain).
 
 **The "All" preview is ONE windowed query, in the service — not the router.** `GET
-/api/v1/gyms/{id}/videos/preview` (`verify_gym_employee`) returns a `GymFeedSection` list (one per genre,
+/api/v1/gyms/{id}/videos/preview` (`verify_gym_admin_or_owner`) returns a `GymFeedSection` list (one per genre,
 each capped to `per_tag`). `VideoFeedService.load_feed_preview` runs `videos_load_feed_preview.sql` — a
 `ROW_NUMBER() OVER (PARTITION BY tag ORDER BY relevance_index …) WHERE rn <= :per_tag` window over the
 SAME served candidate set as the feed page (no load-the-whole-feed-then-Python-slice); the router just
@@ -645,7 +665,7 @@ first (the feed's guarded read is `verify_and_load_embedding`).
 - **`MemberVideoProfileService`** (`member_video_profile_service.py`) — builds (refresh-only) + reads.
   `verify_member_in_gym(member_id, gym_id)` is the **READ-ONLY guard-only ownership check**: it verifies the
   member belongs to `gym_id` (raising `MemberNotInGymError`, a `ValueError` subclass, on a mismatch or missing
-  member — this stops a caller authorized to view a member, `verify_can_view_member` only checks the
+  member — this stops a caller authorized for a member, `verify_gym_employee_for_member` only checks the
   member not the path `gym_id`, from ranking a DIFFERENT gym's feed) and NEVER builds. `refresh_if_due`
   is the trigger gate — same guard, then rebuilds when the embedding is missing OR `video_profile_built_at`
   is older than `video_profile_refresh_cooldown_days` (3d), a no-op within the cooldown. `_build` reads
@@ -802,11 +822,74 @@ There is NO separate `video_config` router or module.
 `member`, `class`, `gym`, `rank`, `plan`; not a query param) → stored in the `combatden-assets` S3
 bucket under a `category`-named key prefix → returns a CDN URL
 (`cdn.combatden.net/...?v=<content-hash>`). Used by the CRM's `ImageUploadPickerField`. Gated by
-`Auth.verify_staff_principal` (owner/admin of ≥1 gym; no `gym_id` to scope). The 5 MB cap is
+`Auth.verify_staff_principal(user_payload, allowed=STAFF)` (owner/admin/front_desk of ≥1 gym; no
+`gym_id` to scope). The 5 MB cap is
 enforced before and after the body is read.
 
 **Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
 `aws_region`, `assets_cdn_base_url` (AWS creds via the boto3 env credential chain, not `Settings`).
+
+## Member portal domain (`src/member_portal/`)
+
+**The member-facing surface, and the ONLY caller of `Auth.verify_member_self`.** Everything under
+`/api/v1/member` is for a gym MEMBER holding their own JWT; it grants staff nothing, and no CRM route
+moved or changed to make room for it. The mobile app is its client.
+
+**Three rules the domain exists to hold.** Break any one of them and you rebuild the holes the
+member-self branch had:
+
+1. **`member_id` is NEVER derived from the JWT.** One verified email legitimately matches SEVERAL
+   `members` rows (a parent's inbox covers the whole family — `members.email` has no uniqueness
+   constraint, by design). `GET /api/v1/member/members` is the entry point: it hands the app the
+   caller's member rows across gyms, and every other route then takes the chosen `member_id`
+   explicitly, re-checked by the gate.
+2. **Every gym-scoped route passes `gym_id` to `verify_member_self`.** Without it one email reaches a
+   same-emailed member row at an unrelated gym. The path gym is the scope; the member row is
+   re-verified against it on every call.
+3. **No client-selectable gate semantics.** `is_member`, `ignore_warnings`, `auto_approve`,
+   `rejected`, `include_inactive` appear in **no** member-facing request schema or query param — the
+   strict path is hardwired in the handler. A member must never be able to choose which gate they are
+   evaluated by (the exact hole the deleted self-branch had).
+
+**Handlers are thin — every route delegates to the SAME service the CRM uses,** so the member surface
+can't drift from the staff surface. Only two reads have no existing owner, and they live in
+`service/member_portal_service.py` (`MemberPortalService`, a single standalone service, flat at
+`service/`): `list_members_for_email` (`sql/member_portal_list_members.sql` — the entry point; it
+carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query) and
+`get_profile` (a pure field PROJECTION of `MembersBillingDetailService.get_member_billing_detail` down
+to the member-appropriate `MemberPortalProfile` — no number is re-derived).
+
+| Route (prefix `/api/v1/member`) | Gate | Delegates to |
+|---|---|---|
+| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` |
+| `GET /gyms/{gid}/members/{mid}` | `verify_member_self(mid, gym_id=gid)` | `MemberPortalService.get_profile` |
+| `GET …/streak` | same | `StreakService` |
+| `GET …/class-history` | same | `CheckinHistoryService` |
+| `GET …/classes` | same | `ClassesScheduleReaderService.list_effective_instances` |
+| `POST …/signup` | same | `SignupService.create` (+ fires `MemberVideoProfileRefreshRunner`, same router-level composition as the staff route) |
+| `DELETE …/signup` | same | `SignupService.remove` |
+| `GET …/rewards` | same | `RewardsService.list_rewards`, `include_inactive=False` hardwired |
+| `GET …/redemptions` | same | `RewardsRedemptionService.history` |
+| `POST …/rewards/{rid}/redeem` | same **+ the reward must be at the member's gym** | `RewardsRedemptionService.redeem`, `auto_approve=False` hardwired |
+| `GET …/videos` | same | `VideosService.load_feed_page`, `rejected=False` hardwired, `member_id` bound to the path member |
+| `GET …/video-rec` | same | `VideosService.get_video_rec` |
+| `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
+
+**Same-gym is guarded on the DEBIT, in every redeem statement.** Both `redeem_reward.sql` and
+`redeem_reward_override.sql` carry `AND (SELECT gym_id FROM locked_reward) = (SELECT gym_id FROM
+locked_member)` on their debiting CTE, alongside the `is_active` and balance guards — not only on the
+insert's `JOIN locked_reward lr ON lr.gym_id = lm.gym_id`. The guard has to live there because
+**Postgres runs every data-modifying CTE exactly once, whether or not the final query reads it**: a
+predicate that only suppresses the inserted ROW still lets the `UPDATE members` run, so a `reward_id`
+from another gym would decrement `points_balance` while writing no redemption. Guarding the debit is
+what makes a cross-gym redeem a pure no-op. On top of that, the member-portal route loads the reward
+and checks its gym before calling the service, so a foreign `reward_id` reads as a **404** rather than
+a generic failure.
+
+**Deliberately NOT in the member surface** — a member may not: check themselves in (it bypasses the
+front desk and the unsigned-waiver legal gate; a reservation is not attendance, and `member_attendance`
+stays writable only by a staff check-in), cancel/unlink a membership or card, edit their own email (it
+is their identity anchor), touch any invoice/payment, adjust points, or self-approve a redemption.
 
 ## Database
 

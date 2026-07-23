@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/employees/presentation/dialogs/edit_employee_dialog.dart';
+import 'package:crm/features/employees/presentation/dialogs/remove_employee_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
+import 'package:crm/shared/widgets/employee_status_chip.dart';
 
-/// Top of the employee detail page: large headshot, name, role + status, and
-/// email, followed by a row of staff actions. Left-aligned around the photo
-/// (the member header centers a name with no photo; here the face leads).
+/// Top of the employee detail page: large headshot, name, role + status chip,
+/// and (when present) a copyable email, followed by the staff actions.
 class EmployeeProfileHeader extends StatelessWidget {
   final Employee employee;
 
@@ -25,14 +31,14 @@ class EmployeeProfileHeader extends StatelessWidget {
           spacing: DesignConstants.spacingBig,
           children: [
             InstructorAvatar(
-              photoUrl: employee.photoUrl,
+              photoUrl: employee.employeePicUrl,
               name: employee.fullName,
               diameter: 96,
             ),
             Expanded(child: _Identity(employee: employee)),
           ],
         ),
-        const _ActionButtons(),
+        _ActionButtons(employee: employee),
       ],
     );
   }
@@ -40,28 +46,65 @@ class EmployeeProfileHeader extends StatelessWidget {
 
 class _Identity extends StatelessWidget {
   final Employee employee;
+
   const _Identity({required this.employee});
 
   @override
   Widget build(BuildContext context) {
+    final email = employee.email;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
         Text(employee.fullName, style: DesignConstants.big2Bold),
-        Text(
-          employee.role.label,
-          style: DesignConstants.h2.copyWith(color: DesignConstants.text2nd),
+        Row(
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            Text(
+              employee.employeeType.label,
+              style: DesignConstants.h2.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+            EmployeeStatusChip(status: employee.inviteStatus),
+          ],
         ),
-        _EmailLine(email: employee.email),
+        if (email != null && email.isNotEmpty) _EmailLine(email: email),
       ],
     );
   }
 }
 
-class _EmailLine extends StatelessWidget {
+/// The email with a copy-to-clipboard affordance (icon swaps to a check for
+/// ~2s after a copy).
+class _EmailLine extends StatefulWidget {
   final String email;
+
   const _EmailLine({required this.email});
+
+  @override
+  State<_EmailLine> createState() => _EmailLineState();
+}
+
+class _EmailLineState extends State<_EmailLine> {
+  bool _copied = false;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.email));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,13 +113,15 @@ class _EmailLine extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         Text(
-          email,
-          style: DesignConstants.h3.copyWith(color: DesignConstants.hyperlink),
+          widget.email,
+          style: DesignConstants.h3.copyWith(
+            color: DesignConstants.hyperlink,
+          ),
         ),
         InkWell(
-          onTap: () => debugPrint('TODO: copy email "$email"'),
+          onTap: _copy,
           child: Icon(
-            Symbols.content_copy_sharp,
+            _copied ? Symbols.check_sharp : Symbols.content_copy_sharp,
             size: DesignConstants.iconSizeSmall,
             color: DesignConstants.text2nd,
             weight: DesignConstants.iconWeight,
@@ -88,7 +133,9 @@ class _EmailLine extends StatelessWidget {
 }
 
 class _ActionButtons extends StatelessWidget {
-  const _ActionButtons();
+  final Employee employee;
+
+  const _ActionButtons({required this.employee});
 
   @override
   Widget build(BuildContext context) {
@@ -96,17 +143,22 @@ class _ActionButtons extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         AppOutlineButton(
-          text: 'Message',
-          onPressed: () => debugPrint('TODO: message employee'),
-        ),
-        AppOutlineButton(
           text: 'Edit profile',
-          onPressed: () => debugPrint('TODO: edit employee'),
+          onPressed: () => EditEmployeeDialog.show(
+            context: context,
+            employee: employee,
+          ),
         ),
-        AppOutlineButton(
-          text: 'Deactivate',
-          onPressed: () => debugPrint('TODO: deactivate employee'),
-        ),
+        // The owner row is never removable here (removing the seeded owner
+        // would strand the gym) — hide the action rather than disable it.
+        if (employee.employeeType != EmployeeRole.owner)
+          AppOutlineButton(
+            text: 'Remove',
+            onPressed: () => RemoveEmployeeDialog.show(
+              context: context,
+              employee: employee,
+            ),
+          ),
       ],
     );
   }

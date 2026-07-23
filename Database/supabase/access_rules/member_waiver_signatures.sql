@@ -16,7 +16,7 @@ CREATE POLICY "Members and gym staff can view waiver signatures"
         OR EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_waiver_signatures.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 

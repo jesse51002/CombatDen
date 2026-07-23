@@ -69,10 +69,12 @@ class UrlSyncObserver extends NavigatorObserver {
     final path = Uri.parse(name).path;
     // Sync a top-level section OR a specific-member deep link
     // (`/members/detail/<id>`) OR a specific-rank deep link
-    // (`/memberships/ranks/detail/<id>`) — each carries its id in the path.
+    // (`/memberships/ranks/detail/<id>`) OR a specific-employee deep link
+    // (`/employees/detail/<id>`) — each carries its id in the path.
     if (kAddressableRoutes.contains(path) ||
         AppRoutes.memberIdFromPath(path) != null ||
-        AppRoutes.mainRankIdFromPath(path) != null) {
+        AppRoutes.mainRankIdFromPath(path) != null ||
+        AppRoutes.employeeIdFromPath(path) != null) {
       syncBrowserUrl(name);
     }
   }

@@ -14,7 +14,7 @@ CREATE POLICY "Members can view class schedules"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.gym_id = gym_class_schedules.gym_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 

@@ -11,6 +11,11 @@
 // instance vs range; occurrences are computed, never stored — attendance and
 // sign-ups key an occurrence by its ORIGINAL slot (class_id + original_date +
 // original_time, the owning version's slot before exceptions).
+// Identity for both `members` and `gym_employees` is VERIFIED EMAIL
+// (lowercase-normalized), matched against auth.jwt() ->> 'email' in RLS --
+// there is no `user_id` FK to auth.users on either table. `auth_users` below
+// is kept for reference only (Supabase's auth schema); no table has an FK to
+// it anymore.
 
 Table auth_users {
   id uuid [primary key]
@@ -33,21 +38,21 @@ Table gyms {
 
 Table gym_employees {
   employee_id uuid [primary key, default: `uuid_generate_v4()`]
-  user_id uuid [note: 'FK to auth.users, nullable until onboarding']
   gym_id uuid [not null]
-  employee_type varchar [not null, note: 'enum: owner, admin, trainer']
+  employee_type varchar [not null, note: 'enum: owner, admin, trainer, front_desk']
   first_name varchar [not null]
   last_name varchar [not null]
   phone varchar
-  email varchar
+  email varchar [note: 'identity link (lowercase-normalized); matched via auth.jwt() email, no user_id FK; NULL only allowed for trainer rows']
   employee_pic_url varchar
   employee_public_description varchar
   theme_preference varchar [not null, default: 'system', note: 'enum: system, light, dark']
+  archived_at timestamptz [note: 'nullable; soft-archive a revoked employee -- rows are never hard-deleted']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (user_id, gym_id) [unique]
     (employee_id, gym_id) [unique]
+    (gym_id, `lower(email)`) [unique, note: 'partial WHERE email IS NOT NULL']
   }
 }
 
@@ -86,13 +91,12 @@ Table gym_ranks {
 
 Table members {
   member_id uuid [primary key, default: `uuid_generate_v4()`]
-  user_id uuid [note: 'nullable, linked when member joins mobile app']
   gym_id uuid [not null]
   created_at timestamptz [not null, default: `now()`]
   last_class timestamptz
   first_name varchar [not null]
   last_name varchar [not null]
-  email varchar
+  email varchar [note: 'identity link (lowercase-normalized); matched via auth.jwt() email, no user_id FK; nullable (engagement-only members have no self-login); NOT unique -- families share an email']
   points_balance integer [not null, default: 0]
   current_rank_id uuid [note: 'nullable, FK to gym_ranks (composite with gym_id)']
   current_sub_index integer [note: 'nullable; leaf position within current_rank_id (NULL when sub_rank_count=0); written only by ranks endpoints']
@@ -121,7 +125,6 @@ Table members {
   total_monthly_recurring_price integer [not null, default: 0, note: 'CHECK >= 0']
 
   indexes {
-    (user_id, gym_id) [unique, note: 'partial WHERE user_id IS NOT NULL']
     (member_id, gym_id) [unique]
     stripe_customer_id [unique]
   }
@@ -323,10 +326,8 @@ Table member_activities {
 }
 
 // Foreign keys
-Ref: gym_employees.user_id > auth_users.id
 Ref: gym_employees.gym_id > gyms.gym_id
 
-Ref: members.user_id > auth_users.id
 Ref: members.gym_id > gyms.gym_id
 Ref: members.current_rank_id > gym_ranks.rank_id
 

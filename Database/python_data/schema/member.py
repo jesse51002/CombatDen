@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from uuid import UUID
 
+from pydantic import field_validator
+
 from . import SeedModel
 
 
@@ -12,6 +14,9 @@ class MemberCreate(SeedModel):
     service_role only and stay NULL for engagement-only members who have no
     billing. Mirrors the original CRM's single user_gym_profiles table.
 
+    There is no `user_id` FK — a member's self-access is a verified Supabase
+    auth account whose email matches this row's `email` (compared lowercase).
+
     The seed creates the identity shell via the backend `POST /members`
     (which assigns member_id and creates no Stripe customer), then sets the
     billing columns: contact via a service-role UPDATE, and the Stripe
@@ -21,7 +26,6 @@ class MemberCreate(SeedModel):
     """
 
     member_id: UUID
-    user_id: UUID | None = None
     gym_id: UUID
     last_class: datetime | None = None
     first_name: str
@@ -52,3 +56,10 @@ class MemberCreate(SeedModel):
     card_exp_month: int | None = None
     card_exp_year: int | None = None
     total_monthly_recurring_price: int = 0
+
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str | None) -> str | None:
+        """Identity now links purely by verified email (no more user_id) —
+        normalize to lowercase so seeded rows match the auth account exactly."""
+        return v.lower() if v is not None else v

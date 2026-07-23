@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/shared/widgets/navigation/nav_sections.dart';
 
 /// The mobile nav dropdown — a frosted, full-width panel that drops below the
@@ -60,7 +61,7 @@ class SectionsMobileMenu extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 spacing: DesignConstants.spacingSmall,
                 children: [
-                  for (final section in kNavSections)
+                  for (final section in visibleNavSections(selectedGym.role))
                     _MobileNavRow(
                       icon: section.icon,
                       label: section.label,

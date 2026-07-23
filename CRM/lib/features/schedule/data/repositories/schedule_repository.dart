@@ -307,6 +307,61 @@ class ScheduleRepository {
     );
   }
 
+  /// `DELETE /api/v1/classes/{class_id}/occurrences/{occurrence_date}` — the
+  /// DEDICATED staff (owner/admin/front_desk) cancel path, distinct from the
+  /// owner/admin-only [cancelInstance] `exceptions/instance` override.
+  /// Un-occurs the occurrence at [originalDate] + [originalTime] (its IDENTITY
+  /// slot): [originalDate] (`YYYY-MM-DD`) is the PATH param; [originalTime]
+  /// (`HH:MM:SS`) and [gymId] are QUERY params. Server-side it reverses the
+  /// day's attendance (points clawed back) and deletes its sign-ups. The
+  /// `OccurrenceCancelResponse` body is ignored — the board reloads from
+  /// `/instances` — so this returns void; a non-2xx surfaces as a
+  /// `ServerException` carrying the `detail`.
+  Future<void> cancelOccurrence({
+    required String classId,
+    required DateTime originalDate,
+    required String originalTime,
+    required String gymId,
+  }) async {
+    await _apiClient.delete(
+      '/api/v1/classes/$classId/occurrences/'
+      '${_dateParam.format(originalDate)}',
+      queryParameters: {
+        'occurrence_time': originalTime,
+        'gym_id': gymId,
+      },
+    );
+  }
+
+  /// `POST /api/v1/classes/{class_id}/occurrences/{occurrence_date}/reschedule`
+  /// — the DEDICATED staff (owner/admin/front_desk) move path, distinct from
+  /// the owner/admin-only [overrideInstance] `exceptions/instance` reschedule.
+  /// Moves the occurrence at [originalDate] + [originalTime] (its IDENTITY
+  /// slot) to [newDate] — DATE ONLY; the occurrence keeps its original TIME.
+  /// [originalDate] (`YYYY-MM-DD`) is the PATH param, [originalTime]
+  /// (`HH:MM:SS`) a QUERY param, and the body carries `{gym_id, new_date}`. The
+  /// backend rejects a collision with an existing non-cancelled occurrence at
+  /// the exact target instant with a 409 whose `detail` is surfaced as a
+  /// `ServerException`. The `OccurrenceRescheduleResponse` body is ignored (the
+  /// board reloads from `/instances`), so this returns void.
+  Future<void> rescheduleOccurrence({
+    required String classId,
+    required DateTime originalDate,
+    required String originalTime,
+    required String gymId,
+    required DateTime newDate,
+  }) async {
+    await _apiClient.post(
+      '/api/v1/classes/$classId/occurrences/'
+      '${_dateParam.format(originalDate)}/reschedule',
+      queryParameters: {'occurrence_time': originalTime},
+      data: {
+        'gym_id': gymId,
+        'new_date': _dateParam.format(newDate),
+      },
+    );
+  }
+
   /// `POST /api/v1/classes/{class_id}/exceptions/range` with
   /// `is_cancelled: true` — cancel every occurrence in `[startDate, endDate]`
   /// (inclusive). The response body is ignored (the board reloads instead).

@@ -103,8 +103,8 @@ def test_get_growth_requires_authentication(client, fake_gym_id):
 def test_get_growth_rejects_non_staff(
     client, auth_mock, auth_headers, fake_gym_id
 ):
-    """A caller who is not an employee of the gym -> 403."""
-    auth_mock.verify_gym_employee = AsyncMock(
+    """A caller who lacks an owner/admin role at the gym -> 403."""
+    auth_mock.verify_roles = AsyncMock(
         side_effect=HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized for this gym",

@@ -34,6 +34,8 @@ _SQL_DIR = Path(__file__).resolve().parent / "sql"
 # and a signature row, and ``member_waiver_signatures`` FKs members, so both go
 # before ``members`` — the junction before the signatures it points at. The
 # gym-config waivers themselves (gym_waivers / _versions) are left intact.
+# ``member_activities`` FKs members with no cascade, so it goes last before
+# ``members`` too.
 _GYM_TABLES = (
     "stripe_webhook_events",
     "member_charges",
@@ -45,6 +47,7 @@ _GYM_TABLES = (
     "membership_plans_unfiltered",
     "member_authorized_payers",
     "member_waiver_signatures",
+    "member_activities",
     "members",
 )
 
@@ -139,6 +142,16 @@ async def delete_member_data(
             text(load_sql(_SQL_DIR / "delete_member_memberships.sql")),
             {"id": str(member_id)},
         )
+        # member_activities FKs the member with NO cascade
+        # (fk_activity_member_gym), so any activity the member accrued blocks
+        # the delete below. Points adjustments, rank changes and check-ins all
+        # write one, so this is not an edge case — without this step the member
+        # row survives teardown, orphaned in the shared seeded gym, and the
+        # test that created it goes red on a ForeignKeyViolationError.
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_member_activities.sql")),
+            {"id": str(member_id)},
+        )
         # Authorization rows + waiver signatures FK the member (the junction also
         # FKs the signature it points at, so it goes first). Cover both roles:
         # the member as payee (member_id) and as payer (payer_member_id).
@@ -204,6 +217,44 @@ async def delete_reward(db_pool: DirectDatabasePool, reward_id: UUID) -> None:
         await session.execute(
             text(load_sql(_SQL_DIR / "delete_reward.sql")),
             {"id": str(reward_id)},
+        )
+        await session.commit()
+
+
+async def delete_employee(
+    db_pool: DirectDatabasePool, employee_id: UUID
+) -> None:
+    """Hard-delete a ``gym_employees`` row created by a test.
+
+    Production soft-archives employees (``archived_at``); test teardown wants
+    the row physically gone so created rows don't accumulate under the seeded
+    gym across runs. Deletes regardless of ``archived_at`` (so it also removes
+    a row a test already archived). A freshly-created test employee has no
+    instructor / waiver-operator references, so a plain DELETE is safe. This
+    hard DELETE is intentional and confined to the test suite.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_employee.sql")),
+            {"id": str(employee_id)},
+        )
+        await session.commit()
+
+
+async def delete_auth_user(db_pool: DirectDatabasePool, user_id: str) -> None:
+    """Delete a Supabase ``auth.users`` row created by a test.
+
+    A verified login is created for an employee via the admin API; teardown
+    removes it by id directly on the local DB (the auth schema cascades the
+    user's identities / sessions). There is no FK between ``auth.users`` and
+    ``gym_employees`` (identity is email-based, no ``user_id`` column), so the
+    order relative to ``delete_employee`` does not matter. Confined to the
+    test suite.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(load_sql(_SQL_DIR / "delete_auth_user.sql")),
+            {"id": str(user_id)},
         )
         await session.commit()
 

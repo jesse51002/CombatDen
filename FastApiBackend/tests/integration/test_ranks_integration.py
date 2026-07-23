@@ -21,6 +21,8 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ class TestListRanks:
     def test_list_ranks_requires_auth(self, gym_id: str) -> None:
         """GET / without Bearer token returns 401 or 403."""
         unauthenticated = httpx.Client(
-            base_url="http://localhost:8000", timeout=30.0
+            base_url=BACKEND_BASE_URL, timeout=30.0
         )
         resp = unauthenticated.get(RANKS_BASE + "/", params={"gym_id": gym_id})
         assert resp.status_code in (401, 403), (
@@ -209,8 +211,16 @@ class TestListPresets:
             assert preset["preset_kind"] == preset_kind
             UUID(preset["preset_id"])
             assert isinstance(preset["sub_rank_count"], int)
-            # A stripes preset implies a sub-rank type; a flat one doesn't.
-            assert preset["implied_sub_rank_type"] in (None, "stripes", "div")
+            # Every preset implies one of the three sub_rank_type values: a
+            # stripes preset implies "stripes", while flat / plain-belt presets
+            # imply "none" (the enum's own value for "sub-ranks are off", which
+            # is the per-gym DB default) rather than SQL NULL.
+            assert preset["implied_sub_rank_type"] in (
+                None,
+                "none",
+                "stripes",
+                "div",
+            )
 
     def test_list_presets_invalid_kind_returns_422(
         self, api: httpx.Client

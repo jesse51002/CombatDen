@@ -1,7 +1,7 @@
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import field_validator
 
 from . import SeedModel
 
@@ -12,6 +12,7 @@ class EmployeeType(StrEnum):
     owner = "owner"
     admin = "admin"
     trainer = "trainer"
+    front_desk = "front_desk"
 
 
 class ThemeMode(StrEnum):
@@ -24,7 +25,6 @@ class ThemeMode(StrEnum):
 
 class GymEmployeeCreate(SeedModel):
     employee_id: UUID
-    user_id: UUID | None = None
     gym_id: UUID
     employee_type: EmployeeType
     first_name: str
@@ -35,16 +35,11 @@ class GymEmployeeCreate(SeedModel):
     employee_public_description: str | None = None
     theme_preference: ThemeMode = ThemeMode.system
 
-    @model_validator(mode="after")
-    def _trainer_has_no_account(self) -> "GymEmployeeCreate":
-        """Mirrors chk_trainer_has_no_account: a trainer row is instructor
-        DATA (name/photo on classes), never a login principal."""
-        if (
-            self.employee_type == EmployeeType.trainer
-            and self.user_id is not None
-        ):
-            raise ValueError(
-                "A trainer never carries a user_id — trainers have no "
-                "accounts (they are instructor data, not principals)"
-            )
-        return self
+    @field_validator("email")
+    @classmethod
+    def _lowercase_email(cls, v: str | None) -> str | None:
+        """There is no more user_id FK — a verified Supabase auth account
+        whose email matches THIS column (compared lowercase) is this
+        person's access. Normalize to lowercase so a seeded row always
+        matches the auth account created for it."""
+        return v.lower() if v is not None else v

@@ -1,11 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/shared/widgets/navigation/nav_sections.dart';
 import 'package:crm/shared/widgets/navigation/sections_mobile_menu.dart';
 
 void main() {
+  // The menu renders visibleNavSections(selectedGym.role) — role-gated nav.
+  // An owner sees every section, so tests exercising the full row set
+  // activate an owner gym first (mirroring how the auth gate always has a
+  // role by the time this menu ever mounts).
+  setUp(() {
+    selectedGym.setActiveGym(
+      gymId: 'gym-1',
+      displayName: 'Test Gym',
+      role: EmployeeRole.owner,
+      timezone: 'America/Chicago',
+      logoUrl: null,
+    );
+  });
+
+  tearDown(() => selectedGym.reset());
+
   // Reproduces production: the menu is shown via the app Overlay, which has no
   // Material ancestor. If the menu didn't provide its own Material, the rows'
   // InkWells would throw "No Material widget found" on build — this guards that.

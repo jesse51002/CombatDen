@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.core.dependencies import DependencyInjector
 from src.growth.schema.growth_schema import GrowthResponse
 from src.growth.service.growth_service import GrowthService
-from src.shared.auth import Auth, security
+from src.shared.auth import OWNER_ADMIN, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,11 @@ async def get_growth(
 ) -> GrowthResponse:
     """Serve a gym's cached growth metrics (recomputed hourly, never on read)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    # Owner/admin only — growth is gym analytics/revenue. This mirrors the CRM
+    # role policy (canViewGrowth / canViewGymAnalytics are owner/admin), so
+    # front desk, who never sees the Growth page or the revenue hero, also
+    # can't pull the data by calling the endpoint directly.
+    await auth.verify_roles(gym_id, user_payload, OWNER_ADMIN)
 
     try:
         return await growth_service.get_growth(gym_id)

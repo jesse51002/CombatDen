@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/shared/widgets/navigation/gym_logo.dart';
 import 'package:crm/shared/widgets/navigation/nav_actions.dart';
 import 'package:crm/shared/widgets/navigation/nav_sections.dart';
@@ -51,7 +52,7 @@ class SectionsBar extends StatelessWidget {
                     ),
                     child: GymLogo(size: DesignConstants.navRailLogoSize),
                   ),
-                  for (final section in kNavSections)
+                  for (final section in visibleNavSections(selectedGym.role))
                     SidebarNavItem(
                       icon: section.icon,
                       label: section.railText,

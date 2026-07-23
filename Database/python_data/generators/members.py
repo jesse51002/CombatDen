@@ -107,6 +107,11 @@ class MemberPlan:
     # [0, sub_rank_count-1] when that rank has sub-ranks, else None.
     current_sub_index: int | None = None
     photo_url: str | None = None
+    # Set once a real Supabase auth login is created for this member (idx <
+    # AUTH_MEMBERS_PER_GYM). Its email is already this MemberPlan's `email` —
+    # that IS the access link now (no user_id FK) — so this field is only an
+    # in-memory "already has a login" / idempotency marker, never written to
+    # the member row.
     auth_user_id: uuid.UUID | None = None
     # Linked-account family: a child references its parent's handle; the
     # parent's real member_id is resolved after creation by the backend link
