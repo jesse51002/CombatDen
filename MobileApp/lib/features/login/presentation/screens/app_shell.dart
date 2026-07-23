@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/state/selected_member.dart';
+import 'package:mobile_app/features/login/presentation/widgets/app_lifecycle_refresh.dart';
 import 'package:mobile_app/features/login/presentation/widgets/gate/offline_banner.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_event.dart';
+import 'package:mobile_app/features/profile/data/repositories/member_profile_repository.dart';
 
 /// The authenticated app: a nested [Navigator] over the shared app route
-/// table, rooted at the home route. Re-keyed on the active design id so a live
-/// theme switch (a member switch, or the initial hydration) rebuilds the whole
-/// app tree from a fresh Home — needed because the app's widgets read the
-/// `DesignConstants` static getters (not `Theme.of`), so already-pushed routes
-/// wouldn't otherwise re-theme.
+/// table, rooted at the home route, with the app-wide [MemberProfileBloc]
+/// provided ABOVE it so the topbar and later features read one profile source.
+///
+/// Its whole subtree is re-keyed on the active design id AND the selected
+/// member id, so switching profiles — even to another member at the SAME gym
+/// (no theme change) — re-inflates the tree: a fresh [MemberProfileBloc] loads
+/// the new member and the navigator resets to a fresh Home, resetting every
+/// feature bloc. The re-key on design id also re-themes already-pushed routes
+/// (the app reads the `DesignConstants` static getters, not `Theme.of`).
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.onGenerateRoute});
 
@@ -17,12 +28,30 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Navigator(
-      key: ValueKey(ThemeRuntime.activeDesignId),
-      onGenerateRoute: onGenerateRoute,
-      onGenerateInitialRoutes: (navigator, initialRoute) => [
-        onGenerateRoute(RouteSettings(name: initialRoute)),
-      ],
+    // Rebuild on a same-gym member switch (no theme change), so the keyed
+    // subtree below re-inflates and resets every bloc.
+    return ListenableBuilder(
+      listenable: selectedMember,
+      builder: (context, _) {
+        return KeyedSubtree(
+          key: ValueKey(
+            '${ThemeRuntime.activeDesignId}::${selectedMember.memberId}',
+          ),
+          child: BlocProvider<MemberProfileBloc>(
+            create: (_) => MemberProfileBloc(
+              repository: MemberProfileRepository(apiClient: ApiClient()),
+            )..add(const MemberProfileLoadRequested()),
+            child: AppLifecycleRefresh(
+              child: Navigator(
+                onGenerateRoute: onGenerateRoute,
+                onGenerateInitialRoutes: (navigator, initialRoute) => [
+                  onGenerateRoute(RouteSettings(name: initialRoute)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

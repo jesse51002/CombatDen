@@ -1,37 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
-/// "Location" header + static map preview + street address.
-/// Mirrors the `MapWidget` group.
+/// "Location" header + the gym name. (The member board carries no per-class
+/// address / map, so this is the gym the class runs at.)
 class ClassLocationSection extends StatelessWidget {
-  const ClassLocationSection({super.key, required this.detail});
+  const ClassLocationSection({super.key, required this.gymName});
 
-  final MockClassDetail detail;
+  final String gymName;
 
   @override
   Widget build(BuildContext context) {
     return SubtitleSection(
       title: 'Location',
       spacing: DesignConstants.spacingMedium,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          AspectRatio(
-            aspectRatio: 1160 / 580,
-            child: Image(
-              image: ApiImage.classAsset(detail.mapAsset),
-              fit: BoxFit.cover,
-            ),
-          ),
-          Text(
-            detail.address,
-            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-          ),
-        ],
+      child: Text(
+        gymName,
+        style: DesignConstants.pBig.copyWith(color: DesignConstants.text2nd),
       ),
     );
   }
