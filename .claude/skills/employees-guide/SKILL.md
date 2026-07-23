@@ -85,6 +85,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Dashboard — operational cards (live attendance, overdue payments, upcoming classes) | ✅ | ✅ | ✅ | ❌ |
 | Dashboard — overview/income cards (Total Members hero now, gym-income module later) | ✅ | ✅ | ❌ | ❌ |
 | Growth / analytics | ✅ | ✅ | ❌ | ❌ |
+| Reports & CSV exports (Settings section; `GET /gyms/{id}/reports/report` + `/reports/full-export` zips — `canExportReports`, backend `OWNER_ADMIN`) | ✅ | ✅ | ❌ | ❌ |
 | Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
 | Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
 | Member-app theme/showcase — CHANGE the theme (`PUT /gyms/{id}/theme`) | ✅ | ✅ | ❌ | ❌ |
