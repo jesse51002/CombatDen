@@ -3,9 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_blocked_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
@@ -13,6 +13,10 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 /// check-in (or the call fails). It ALWAYS names a plain-language reason so the
 /// member isn't confused, then routes them to the desk. Mirrors the mockup
 /// blocked screen.
+///
+/// The reason line comes from `kioskBlockedCopy` — a gate rejection keys off
+/// `skip_reason`, a failed call off the backend's stable
+/// `CheckInErrorCode`, never off the `detail` prose.
 class KioskBlockedScreen extends StatelessWidget {
   const KioskBlockedScreen({super.key});
 
@@ -21,7 +25,8 @@ class KioskBlockedScreen extends StatelessWidget {
     return BlocBuilder<KioskFlowCubit, KioskFlowState>(
       buildWhen: (prev, cur) =>
           prev.blockedReason != cur.blockedReason ||
-          prev.checkInFailed != cur.checkInFailed,
+          prev.checkInFailed != cur.checkInFailed ||
+          prev.checkInErrorCode != cur.checkInErrorCode,
       builder: (context, state) {
         return KioskStage(
           center: true,
@@ -36,7 +41,11 @@ class KioskBlockedScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               _WhyBox(
-                reason: _reasonCopy(state.blockedReason, state.checkInFailed),
+                reason: kioskBlockedCopy(
+                  reason: state.blockedReason,
+                  failed: state.checkInFailed,
+                  code: state.checkInErrorCode,
+                ),
               ),
               Text(
                 'Nothing\'s wrong. The coach at the desk can sort it and '
@@ -55,23 +64,6 @@ class KioskBlockedScreen extends StatelessWidget {
         );
       },
     );
-  }
-
-  /// Friendly, plain-language reason for the rejection. A failed call and an
-  /// unknown gate value fall back to a calm generic line — every road ends at
-  /// the front desk.
-  static String _reasonCopy(CheckInWarning? reason, bool failed) {
-    if (failed) return 'We couldn\'t complete your check-in just now.';
-    return switch (reason) {
-      CheckInWarning.overCapacity => 'This class is full.',
-      CheckInWarning.noMembership =>
-        'We couldn\'t find an active membership.',
-      CheckInWarning.outOfClasses => 'You\'re out of classes on your plan.',
-      CheckInWarning.ineligiblePlan =>
-        'Your plan doesn\'t include this class.',
-      CheckInWarning.unsignedWaiver => 'There\'s a waiver to sign.',
-      CheckInWarning.unknown || null => 'Let\'s get you checked in at the desk.',
-    };
   }
 }
 

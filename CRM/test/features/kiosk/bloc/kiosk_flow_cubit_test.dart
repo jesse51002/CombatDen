@@ -5,6 +5,8 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/check_in/data/models/check_in_error_code.dart';
 import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
@@ -369,6 +371,105 @@ void main() {
         verify(() => session.endFlow()).called(1);
       },
     );
+  });
+
+  group('rejection code off a thrown check-in error', () {
+    // The backend emits a stable machine-readable `code` as a SIBLING of the
+    // prose `detail` (`checkin_exceptions.py`). The kiosk carries the CODE —
+    // never the prose, which is free to be reworded — so the blocked screen
+    // can name a real reason. Anything unusable parses to null and the screen
+    // keeps its generic line.
+    Future<KioskFlowCubit> failWith(Object error) async {
+      when(() => member.checkInMember(any())).thenThrow(error);
+      final cubit = build();
+      cubit.selectMember(member1);
+      await Future<void>.delayed(Duration.zero); // class load settles
+      await cubit.selectClass(occ1);
+      addTearDown(cubit.close);
+      return cubit;
+    }
+
+    ServerException rejection(Map<String, dynamic>? body) => ServerException(
+          'Server error 400: Bad Request',
+          statusCode: 400,
+          detail: body?['detail'] as String?,
+          data: body,
+        );
+
+    test('parses every backend code onto the state', () async {
+      // The full CheckinErrorCode table, wire value -> enum member.
+      const table = {
+        'class_not_found': CheckInErrorCode.classNotFound,
+        'class_deleted': CheckInErrorCode.classDeleted,
+        'class_inactive': CheckInErrorCode.classInactive,
+        'occurrence_not_found': CheckInErrorCode.occurrenceNotFound,
+        'occurrence_cancelled': CheckInErrorCode.occurrenceCancelled,
+        'checkin_not_open': CheckInErrorCode.checkinNotOpen,
+        'class_full': CheckInErrorCode.classFull,
+      };
+      for (final entry in table.entries) {
+        final cubit = await failWith(
+          rejection({'detail': 'some prose', 'code': entry.key}),
+        );
+        expect(cubit.state.view, KioskView.blocked);
+        expect(cubit.state.checkInFailed, isTrue);
+        expect(cubit.state.checkInErrorCode, entry.value, reason: entry.key);
+      }
+    });
+
+    test('a code this client does not know parses to unknown, not a crash',
+        () async {
+      final cubit = await failWith(
+        rejection({'detail': 'brand new rule', 'code': 'gym_closed_today'}),
+      );
+      expect(cubit.state.checkInErrorCode, CheckInErrorCode.unknown);
+    });
+
+    test('an absent / null / non-String code leaves it null', () async {
+      final absent = await failWith(rejection({'detail': 'Class is full'}));
+      expect(absent.state.checkInErrorCode, isNull);
+
+      final nulled = await failWith(
+        rejection({'detail': 'Class is full', 'code': null}),
+      );
+      expect(nulled.state.checkInErrorCode, isNull);
+
+      final nonString = await failWith(
+        rejection({'detail': 'Class is full', 'code': 400}),
+      );
+      expect(nonString.state.checkInErrorCode, isNull);
+
+      final noBody = await failWith(rejection(null));
+      expect(noBody.state.checkInErrorCode, isNull);
+    });
+
+    test('a non-ServerException failure (network) carries no code', () async {
+      final cubit = await failWith(
+        const NetworkException('Network error: connection refused'),
+      );
+      expect(cubit.state.view, KioskView.blocked);
+      expect(cubit.state.checkInFailed, isTrue);
+      expect(cubit.state.checkInErrorCode, isNull);
+    });
+
+    test('a fresh failure with no code clears the previous member\'s code',
+        () async {
+      final cubit = await failWith(
+        rejection({'detail': 'Class is full', 'code': 'class_full'}),
+      );
+      expect(cubit.state.checkInErrorCode, CheckInErrorCode.classFull);
+
+      // Same cubit, a second attempt that fails with NO code: the stale reason
+      // must not survive onto the new blocked screen. (`copyWith` keeps a
+      // nullable outcome field by default — the catch passes null explicitly
+      // for exactly this reason.)
+      when(() => member.checkInMember(any()))
+          .thenThrow(const NetworkException('Network error'));
+      cubit.selectMember(member1);
+      await Future<void>.delayed(Duration.zero);
+      await cubit.selectClass(occ1);
+      expect(cubit.state.checkInErrorCode, isNull);
+    });
   });
 
   group('class pick — checkinable-now filter (kiosk-local)', () {

@@ -4,6 +4,8 @@ import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/check_in/data/models/check_in_error_code.dart';
 import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
@@ -259,7 +261,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   /// Record the member into [occ] via the kiosk gate (`is_member: true`). A
   /// recorded or already-checked-in result (a non-null `log_id`) hands off to
   /// the glance stub; a gate rejection (`skip_reason`) or a failed call routes
-  /// to the blame-free blocked screen. Either terminal ends the flow.
+  /// to the blame-free blocked screen — a failure carrying its reason as the
+  /// backend's [CheckInErrorCode]. Either terminal ends the flow.
   Future<void> selectClass(EffectiveClassInstance occ) async {
     registerActivity();
     final member = state.selectedMember;
@@ -308,7 +311,19 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       log('Kiosk check-in failed', error: e, stackTrace: st);
       if (isClosed || seq != _classesSeq) return;
       _endFlowIfStarted();
-      emit(state.copyWith(view: KioskView.blocked, checkInFailed: true));
+      emit(state.copyWith(
+        view: KioskView.blocked,
+        checkInFailed: true,
+        // The backend's stable rejection `code` (the sibling of `detail`) is
+        // what the blocked screen switches on — NEVER the `detail` prose,
+        // which is free to be reworded. A non-[ServerException] failure (a
+        // network drop) or a body without a usable `code` passes null
+        // explicitly, clearing any prior code so the screen falls back to its
+        // generic line rather than inheriting the last member's reason.
+        checkInErrorCode: e is ServerException
+            ? CheckInErrorCode.fromErrorBody(e.data)
+            : null,
+      ));
       _syncIdleTimer();
     }
   }

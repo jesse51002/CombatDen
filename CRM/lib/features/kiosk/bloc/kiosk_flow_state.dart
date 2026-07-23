@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/check_in/data/models/check_in_error_code.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/members/data/video_feed.dart';
@@ -37,8 +38,10 @@ enum KioskView {
 /// Immutable state of the [KioskFlowCubit]. One flat state carries the current
 /// [view] plus everything each view renders (search results, the chosen
 /// member/occurrence outcome, the idle-warning countdown). Nullable outcome
-/// fields ([selectedMember], [checkInResult], [blockedReason]) reset to null
-/// only via [KioskFlowState.home]; [copyWith] never nulls them (sentinel).
+/// fields ([selectedMember], [checkInResult], [blockedReason],
+/// [checkInErrorCode]) reset to null only via [KioskFlowState.home];
+/// [copyWith] never nulls them implicitly (sentinel) — an explicit `null`
+/// argument does clear one, which is how a fresh failure drops a stale code.
 class KioskFlowState extends Equatable {
   final KioskView view;
 
@@ -61,6 +64,13 @@ class KioskFlowState extends Equatable {
   /// The check-in call itself failed (network / 5xx) — distinct from a gate
   /// rejection, which carries a [blockedReason].
   final bool checkInFailed;
+
+  /// The backend's stable machine-readable rejection code off a FAILED call
+  /// (the `code` sibling of `detail` — see [CheckInErrorCode]), which picks the
+  /// blocked screen's copy. Null when the failure carried none: a network drop,
+  /// a 5xx, or a foreign 4xx body — the screen then shows its generic line.
+  /// Only meaningful alongside [checkInFailed].
+  final CheckInErrorCode? checkInErrorCode;
 
   // ── Retention glance (Phase C2) ──
   /// The member's live points balance AFTER the just-awarded points, fetched
@@ -130,6 +140,7 @@ class KioskFlowState extends Equatable {
     this.checkInResult,
     this.blockedReason,
     this.checkInFailed = false,
+    this.checkInErrorCode,
     this.pointsBalance,
     this.rewards = const [],
     this.videos = const [],
@@ -167,6 +178,7 @@ class KioskFlowState extends Equatable {
     Object? checkInResult = _keep,
     Object? blockedReason = _keep,
     bool? checkInFailed,
+    Object? checkInErrorCode = _keep,
     Object? pointsBalance = _keep,
     List<RewardResponse>? rewards,
     List<Video>? videos,
@@ -198,6 +210,9 @@ class KioskFlowState extends Equatable {
           ? this.blockedReason
           : blockedReason as CheckInWarning?,
       checkInFailed: checkInFailed ?? this.checkInFailed,
+      checkInErrorCode: identical(checkInErrorCode, _keep)
+          ? this.checkInErrorCode
+          : checkInErrorCode as CheckInErrorCode?,
       pointsBalance: identical(pointsBalance, _keep)
           ? this.pointsBalance
           : pointsBalance as int?,
@@ -230,6 +245,7 @@ class KioskFlowState extends Equatable {
         checkInResult,
         blockedReason,
         checkInFailed,
+        checkInErrorCode,
         pointsBalance,
         rewards,
         videos,
