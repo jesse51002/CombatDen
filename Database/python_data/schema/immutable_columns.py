@@ -23,6 +23,7 @@ GYM_EMPLOYEES: frozenset[str] = frozenset(
         "employee_id",  # PK, auto-generated UUID
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
+        "archived_at",  # soft-archive lifecycle, backend-managed
         # theme_preference is intentionally NOT listed — it is the employee's own
         # client-editable CRM appearance setting (PUT /employees/me/theme).
     }
@@ -32,7 +33,6 @@ MEMBERS: frozenset[str] = frozenset(
     {
         "member_id",  # PK, auto-generated UUID
         "gym_id",  # identity FK, per-gym resource
-        "user_id",  # trigger: trg_prevent_user_id_overwrite
         "created_at",  # auto-generated timestamp
         "last_class",  # set by check-in service, never by client
         "points_balance",  # managed by rewards system, never by client
@@ -237,13 +237,6 @@ MEMBER_AUTHORIZED_PAYERS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "signature_id",  # the gating waiver signature
         "created_at",  # auto-generated timestamp
-    }
-)
-
-GYM_HISTORY: frozenset[str] = frozenset(
-    {
-        "gym_id",  # composite PK
-        "date",  # composite PK
     }
 )
 

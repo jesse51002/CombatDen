@@ -39,14 +39,22 @@ class CrmMembersListService:
 
     Args:
         db_pool: Injected database connection pool.
+        dormancy_days: How long without activity makes a short-plan
+            member dormant (``settings.member_dormancy_days``), passed
+            down to every view service so the dormant badge and the
+            dormant filter share one window.
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        dormancy_days: int,
+    ) -> None:
         self._db_pool = db_pool
-        self._all = CrmAllViewService(db_pool)
-        self._trial = CrmTrialViewService(db_pool)
-        self._frozen = CrmFrozenViewService(db_pool)
-        self._overdue = CrmOverdueViewService(db_pool)
+        self._all = CrmAllViewService(db_pool, dormancy_days)
+        self._trial = CrmTrialViewService(db_pool, dormancy_days)
+        self._frozen = CrmFrozenViewService(db_pool, dormancy_days)
+        self._overdue = CrmOverdueViewService(db_pool, dormancy_days)
 
     async def get_crm_members_list(
         self,

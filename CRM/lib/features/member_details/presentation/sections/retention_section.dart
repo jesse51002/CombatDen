@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/retention_thresholds.dart';
 import 'package:crm/features/member_details/data/models/pending_redemption.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
@@ -111,6 +113,9 @@ class _RewardsActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Adjusting points is an owner/admin-only affordance; front desk gets the
+    // rest of retention (including Redeem reward) but not points adjustment.
+    final canAdjustPoints = selectedGym.role?.canAdjustPoints ?? false;
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -130,20 +135,21 @@ class _RewardsActions extends StatelessWidget {
             pendingRewardIds: pendingRewardIds,
           ),
         ),
-        AppOutlineButton(
-          text: 'Award / adjust pts',
-          icon: Icon(
-            Symbols.star_sharp,
-            size: DesignConstants.iconSizeMedium,
-            weight: DesignConstants.iconWeight,
+        if (canAdjustPoints)
+          AppOutlineButton(
+            text: 'Award / adjust pts',
+            icon: Icon(
+              Symbols.star_sharp,
+              size: DesignConstants.iconSizeMedium,
+              weight: DesignConstants.iconWeight,
+            ),
+            onPressed: () => AdjustPointsDialog.show(
+              context: context,
+              memberId: memberId,
+              memberName: memberName,
+              currentBalance: pointsBalance,
+            ),
           ),
-          onPressed: () => AdjustPointsDialog.show(
-            context: context,
-            memberId: memberId,
-            memberName: memberName,
-            currentBalance: pointsBalance,
-          ),
-        ),
       ],
     );
   }

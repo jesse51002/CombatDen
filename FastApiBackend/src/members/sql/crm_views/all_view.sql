@@ -34,7 +34,13 @@ SELECT
             (now() AT TIME ZONE g.timezone)::date
                 - (p.last_class AT TIME ZONE g.timezone)::date
         )
-    END AS days_since_last_class
+    END AS days_since_last_class,
+    -- Member-LEVEL dormancy (only short live packs + gone quiet). It is an
+    -- aggregate over ALL of the member's memberships, so it cannot be decided
+    -- from this row alone -- a member holding a live recurring membership AND
+    -- a live trial pack produces two rows here and must never be dormant.
+    -- The one shared predicate lives in _member_dormant.sql.
+    {is_dormant} AS is_dormant
 FROM members p
 LEFT JOIN latest_memberships m
     ON p.member_id = m.member_id

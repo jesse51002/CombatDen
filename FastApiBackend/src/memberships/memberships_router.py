@@ -51,7 +51,7 @@ from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 from src.tasks.service.tasks_executor import TasksExecutor
 from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
@@ -101,7 +101,9 @@ async def cancel_membership(
 ) -> MemberMembershipsCancelResponse:
     """Cancel one or more memberships; partial success returns 207."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task(
@@ -202,7 +204,9 @@ async def freeze_membership(
 ) -> None:
     """Freeze a member's account."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await memberships_service.freeze(
@@ -260,7 +264,9 @@ async def unfreeze_membership(
 ) -> None:
     """Unfreeze a member's account."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await memberships_service.unfreeze(
@@ -328,10 +334,12 @@ async def start_membership(
     """Start the request's memberships for the payer's family."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
-        request.payer_member_id, user_payload
+        request.payer_member_id, user_payload, staff_roles=STAFF
     )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(
+            item_member_id, user_payload, staff_roles=STAFF
+        )
 
     try:
         result = await memberships_service.start(request)
@@ -426,7 +434,13 @@ async def update_membership_price(
 ) -> MemberMembershipsUpdatePriceResponse:
     """Reprice one membership to its plan's active price."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    # STAFF: this moves ONE membership back onto its plan's CURRENT active
+    # price (a correction of an outdated-price membership) — it is not a custom
+    # amount, so it is member-money work front desk performs, like a charge or
+    # a discount. Plan-wide bulk reprice (`reprice-plan`) stays OWNER_ADMIN.
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -502,7 +516,9 @@ async def upgrade_membership(
 ) -> MemberMembershipsUpgradeResponse:
     """Upgrade one membership to a different plan."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -571,7 +587,9 @@ async def preview_upgrade_membership(
 ) -> DueNowVsRecurringPreview | None:
     """Preview what upgrading a membership to a different plan would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await memberships_service.upgrade_preview(
@@ -638,7 +656,9 @@ async def cancel_one_time_membership(
 ) -> MemberMembershipsCancelOneTimeResponse:
     """Cancel a one-time/trial membership early (manual termination)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         cancel_date = await memberships_service.cancel_one_time(
@@ -702,7 +722,7 @@ async def batch_reprice_plan(
 ) -> MemberMembershipsBatchRepriceResponse:
     """Batch-reprice a plan's members to its active price."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(request.gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         task_id, count = await reprice_task_handler.create_batch(
@@ -760,10 +780,12 @@ async def preview_start_membership(
     """Preview what starting the request's memberships would charge."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
-        request.payer_member_id, user_payload
+        request.payer_member_id, user_payload, staff_roles=STAFF
     )
     for item_member_id in {item.member_id for item in request.memberships}:
-        await auth.verify_gym_employee_for_member(item_member_id, user_payload)
+        await auth.verify_gym_employee_for_member(
+            item_member_id, user_payload, staff_roles=STAFF
+        )
 
     try:
         return await memberships_service.preview_start(request)
@@ -824,7 +846,9 @@ async def preview_cancel_membership(
 ) -> list[PayerInvoiceChange]:
     """Preview what cancelling one or more memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await memberships_service.preview_cancel_many(
@@ -888,7 +912,9 @@ async def add_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -961,7 +987,9 @@ async def remove_membership_discounts(
 ) -> DueNowVsRecurringPreview | None:
     """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1036,7 +1064,9 @@ async def mark_membership_paid_cash(
 ) -> None:
     """Mark a recurring membership's open invoice as paid via cash."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
@@ -1107,7 +1137,9 @@ async def charge_member_card(
 ) -> None:
     """Charge a member's card (or mark as cash) for an ad-hoc amount."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         await memberships_service.charge_card(request)
@@ -1169,7 +1201,9 @@ async def refund_charge(
 ) -> MemberMembershipsRefundResponse:
     """Refund a prior charge for a member (card via Stripe, or cash)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await refund_service.refund_charge(request)

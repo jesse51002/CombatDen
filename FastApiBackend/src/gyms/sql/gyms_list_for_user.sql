@@ -1,7 +1,17 @@
--- All gyms the authenticated user may administer, annotated with
--- their role. Owners and admins can view/manage a gym in the admin
--- app; trainers are excluded. UNIQUE (user_id, gym_id) guarantees
--- one row per gym, so no de-duplication is needed.
+-- All gyms the authenticated user is an employee of, annotated with
+-- their role. Identity is the caller's verified email (stored lowercase);
+-- ALL roles enter the CRM, so there is no role filter here — the response
+-- carries ge.employee_type. Archived employees are excluded. The partial
+-- unique index unique_employee_email_gym on (gym_id, lower(email))
+-- WHERE email IS NOT NULL guarantees one row per email per gym, so no
+-- de-duplication is needed.
+--
+-- This is a ROLE-RESOLUTION query (it hands the caller their role at each
+-- gym), so it carries the same verified-account predicate as every other
+-- one: a CONFIRMED auth.users row must exist for the email. A scalar
+-- EXISTS, never a JOIN — auth.users is unique on email only
+-- WHERE is_sso_user = false, so a join could match several rows and
+-- duplicate the gym. EXISTS cannot fan out.
 SELECT g.gym_id,
        g.created_at,
        g.gym_name,
@@ -14,6 +24,16 @@ SELECT g.gym_id,
        ge.theme_preference
 FROM gyms g
 JOIN gym_employees ge ON ge.gym_id = g.gym_id
-WHERE ge.user_id = :user_id
-  AND ge.employee_type IN ('owner', 'admin')
+WHERE lower(ge.email) = :email
+  AND ge.archived_at IS NULL
+  AND EXISTS (
+      -- Pinned to the CALLER's own account (u.id = :caller_id, the JWT sub):
+      -- proves the caller's account is confirmed, not just that some confirmed
+      -- account holds this email. Email equality kept as defense in depth.
+      SELECT 1
+      FROM auth.users u
+      WHERE u.id = CAST(:caller_id AS UUID)
+        AND lower(u.email) = lower(ge.email)
+        AND u.email_confirmed_at IS NOT NULL
+  )
 ORDER BY ge.created_at ASC;

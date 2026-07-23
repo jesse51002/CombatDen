@@ -6,7 +6,10 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/nav_pop.dart';
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/employees/data/repositories/employees_repository.dart';
 import 'package:crm/features/schedule/bloc/schedule_bloc.dart';
 import 'package:crm/features/schedule/bloc/schedule_event.dart';
 import 'package:crm/features/schedule/bloc/schedule_state.dart';
@@ -122,6 +125,12 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   /// the listener fires the terminal flow exactly once.
   bool _completing = false;
 
+  /// The gym's staff roster, side-read once so the per-slot instructor picker
+  /// lists real employees (not only instructors already assigned on a class).
+  /// Best-effort: a failure leaves it empty and the picker falls back to the
+  /// from-classes instructors.
+  List<Employee> _employees = const [];
+
   bool get _isEdit => widget.existing != null;
 
   @override
@@ -129,6 +138,20 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     super.initState();
     final c = widget.existing;
     if (c != null) _prefill(c);
+    _loadEmployees();
+  }
+
+  Future<void> _loadEmployees() async {
+    final gymId = selectedGym.gymId;
+    if (gymId == null || gymId.isEmpty) return;
+    try {
+      final employees =
+          await EmployeesRepository(apiClient: ApiClient()).listEmployees(gymId);
+      if (!mounted) return;
+      setState(() => _employees = employees);
+    } catch (_) {
+      // Best-effort: the picker degrades to the from-classes instructors.
+    }
   }
 
   void _prefill(GymClassResponse c) {
@@ -567,7 +590,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
               final classes = state is ScheduleLoaded
                   ? state.classes
                   : const <GymClassResponse>[];
-              return _form(InstructorOption.fromClasses(classes));
+              return _form(InstructorOption.merged(_employees, classes));
           }
         },
       ),

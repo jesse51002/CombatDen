@@ -1,6 +1,6 @@
 """API routes for the reports domain.
 
-Two read-only, gym-employee-gated (owner/admin) downloads:
+Two read-only, owner/admin-gated downloads:
 
 - ``GET /{gym_id}/reports/report?month=YYYY-MM`` — the period operational
   report (month omitted => all-time).
@@ -83,7 +83,7 @@ async def download_report(
 ) -> Response:
     """Build + return the period report zip."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     report_month: ReportMonth | None = None
     if month is not None:
@@ -143,7 +143,7 @@ async def download_full_export(
 ) -> Response:
     """Build + return the full-export zip."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         filename, zip_bytes = await export_service.build_export(gym_id)

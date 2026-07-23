@@ -15,11 +15,11 @@ import 'package:crm/shared/widgets/error_message.dart';
 
 /// Registration form card. Driven by [LoginBloc] from context.
 ///
-/// On [LoginRegistrationSuccess] the form is replaced by a
-/// confirm-email prompt with a link back to sign-in.
-/// If the backend immediately authenticates on sign-up, the
-/// [AuthGate] handles the [LoginAuthenticated] transition
-/// before this prompt is ever shown.
+/// On [LoginAwaitingEmailConfirmation] (Supabase email confirmation is on)
+/// the form is replaced by a "check your email" prompt with a resend link
+/// and a way back to sign-in. If sign-up returns a session immediately
+/// (confirmations off / auto-confirmed) the [AuthGate] handles the
+/// [LoginAuthenticated] transition before this prompt is ever shown.
 class RegisterForm extends StatefulWidget {
   const RegisterForm({super.key});
 
@@ -55,9 +55,10 @@ class _RegisterFormState extends State<RegisterForm> {
   Widget build(BuildContext context) {
     return BlocBuilder<LoginBloc, LoginState>(
       builder: (context, state) {
-        if (state is LoginRegistrationSuccess) {
-          return _ConfirmEmailCard(
-            email: _emailController.text.trim(),
+        if (state is LoginAwaitingEmailConfirmation) {
+          return _VerifyEmailCard(
+            email: state.email,
+            resent: state.resent,
           );
         }
 
@@ -143,12 +144,14 @@ class _RegisterFormState extends State<RegisterForm> {
   }
 }
 
-/// Shown when [LoginRegistrationSuccess] is emitted — prompts
-/// the user to check their inbox and offers a link to sign in.
-class _ConfirmEmailCard extends StatelessWidget {
+/// Shown on [LoginAwaitingEmailConfirmation] — prompts the user to open the
+/// confirmation link, offers a resend, and a way back to sign-in. Reuses the
+/// shared auth chrome ([AuthHeader], card container, [AppPrimaryButton]).
+class _VerifyEmailCard extends StatelessWidget {
   final String email;
+  final bool resent;
 
-  const _ConfirmEmailCard({required this.email});
+  const _VerifyEmailCard({required this.email, required this.resent});
 
   @override
   Widget build(BuildContext context) {
@@ -167,57 +170,124 @@ class _ConfirmEmailCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingBig,
             children: [
-              Icon(
-                Symbols.mark_email_read_sharp,
-                size: DesignConstants.iconSizeBig * 1.5,
-                color: DesignConstants.primaryColor,
-                weight: DesignConstants.iconWeight,
+              const AuthHeader(
+                title: 'Check your email',
+                subtitle: 'Confirm your email to finish setup',
               ),
               Column(
                 mainAxisSize: MainAxisSize.min,
-                spacing: DesignConstants.spacingMedium,
+                spacing: DesignConstants.spacingLarge,
                 children: [
-                  Text(
-                    'Check your email',
-                    style: DesignConstants.h1,
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    'We sent a confirmation link to',
-                    style: DesignConstants.p.copyWith(
-                      color: DesignConstants.text2nd,
+                  _VerifyBody(email: email),
+                  if (resent) const _ResentAck(),
+                  AppPrimaryButton(
+                    text: 'Back to sign in',
+                    fullWidth: true,
+                    onPressed: () => Navigator.of(context).pushReplacement(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LoginScreen(),
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    email,
-                    style: DesignConstants.h3.copyWith(
-                      color: DesignConstants.primaryColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    'Confirm your email, then sign in below.',
-                    style: DesignConstants.p.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
-              AppPrimaryButton(
-                text: 'Go to sign in',
-                fullWidth: true,
-                onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const LoginScreen(),
-                  ),
-                ),
-              ),
+              _ResendLink(email: email),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The instruction line, with the destination email emphasized inline.
+class _VerifyBody extends StatelessWidget {
+  final String email;
+
+  const _VerifyBody({required this.email});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+        children: [
+          const TextSpan(text: 'We sent a confirmation link to '),
+          TextSpan(
+            text: email,
+            style: DesignConstants.pSemibold.copyWith(
+              color: DesignConstants.text,
+            ),
+          ),
+          const TextSpan(
+            text: '. Click it to finish setting up your account, '
+                'then sign in.',
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+}
+
+/// Inline acknowledgement shown after a successful resend.
+class _ResentAck extends StatelessWidget {
+  const _ResentAck();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Icon(
+          Symbols.check_circle_sharp,
+          size: DesignConstants.iconSizeSmall,
+          color: DesignConstants.primaryColor,
+          weight: DesignConstants.iconWeight,
+        ),
+        Text(
+          'Confirmation link sent',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.primaryColor,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Didn't get the email? Resend link" — dispatches
+/// [LoginResendConfirmationRequested].
+class _ResendLink extends StatelessWidget {
+  final String email;
+
+  const _ResendLink({required this.email});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Text(
+          "Didn't get the email?",
+          style: DesignConstants.p.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        ),
+        GestureDetector(
+          onTap: () => context.read<LoginBloc>().add(
+                LoginResendConfirmationRequested(email),
+              ),
+          child: Text(
+            'Resend link',
+            style: DesignConstants.pSemibold.copyWith(
+              color: DesignConstants.primaryColor,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

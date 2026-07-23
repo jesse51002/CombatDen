@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/settings/bloc/settings_bloc.dart';
 import 'package:crm/features/settings/bloc/settings_event.dart';
 import 'package:crm/features/settings/bloc/settings_state.dart';
@@ -20,17 +22,20 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// Settings — the gym admin's per-account preferences.
 ///
 /// Sections sit directly on the page, separated by hairlines (the De-Card
-/// rule):
-///   1. Gym profile — the gym's name + uploaded logo (identity first)
-///   2. Appearance — the System / Light / Dark theme control
-///   3. Gym timezone — the gym's IANA zone (drives class times, the schedule
-///      board, and check-in windows)
-///   4. Sign-up QR codes — the printable front-desk codes (moved here from the
-///      nav rail)
-///   5. Gym presets — the owner1-only template import (hidden for everyone
-///      else, so it and its leading separator are omitted rather than left
-///      dangling)
-///   6. Reports & exports — download the gym's records as zipped CSVs
+/// rule). Each section is **role-gated** (see [RolePolicy]); a role that can't
+/// use a section never sees it, and the hairlines interleave only the visible
+/// ones:
+///   1. Gym profile — the gym's name + uploaded logo (staff admin only)
+///   2. Appearance — the System / Light / Dark theme control (any staff)
+///   3. Gym timezone — the gym's IANA zone (staff admin only)
+///   4. Sign-up QR codes — the printable front-desk codes (kiosk or gym
+///      settings, so front desk sees them)
+///   5. Gym presets — the owner1-only template import (self-gated)
+///   6. Reports & exports — download the gym's records as zipped CSVs (staff
+///      admin only; front desk reaches this screen but never sees this section)
+///
+/// Front desk lands on appearance + QR only; trainer never reaches this
+/// screen (the route guard blocks `/settings` for it).
 ///
 /// Backed by a small [SettingsBloc] (the theme, timezone, and Gym profile
 /// saves talk to the backend); the selected theme itself lives in
@@ -41,6 +46,29 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final role = selectedGym.role;
+    final canGymSettings = role?.canManageGymSettings ?? false;
+    final canAppearance = role?.canUseAppearanceSettings ?? false;
+    final canKiosk = role?.canOperateKiosk ?? false;
+    final canExportReports = role?.canExportReports ?? false;
+
+    // Only the sections this role may use, joined by hairlines with no
+    // leading / trailing / doubled separator.
+    final sections = <Widget>[
+      if (canGymSettings) const GymProfileSection(),
+      if (canAppearance) const AppearanceSection(),
+      if (canGymSettings) const GymTimezoneSection(),
+      if (canKiosk || canGymSettings) const QrCodesSection(),
+      if (GymPresetsSection.isVisible()) const GymPresetsSection(),
+      if (canExportReports) const ReportsExportsSection(),
+    ];
+    final children = <Widget>[
+      for (var i = 0; i < sections.length; i++) ...[
+        if (i > 0) const Hairline(),
+        sections[i],
+      ],
+    ];
+
     return RepositoryProvider<SettingsRepository>(
       create: (_) => SettingsRepository(apiClient: ApiClient()),
       child: BlocProvider<SettingsBloc>(
@@ -63,24 +91,7 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: DesignConstants.spacingBig,
-                children: [
-                  const GymProfileSection(),
-                  const Hairline(),
-                  const AppearanceSection(),
-                  const Hairline(),
-                  const GymTimezoneSection(),
-                  const Hairline(),
-                  const QrCodesSection(),
-                  // Presets is owner1-only; include it AND its leading
-                  // separator only when visible, so lower roles don't get a
-                  // stray hairline (or a double one above Reports & exports).
-                  if (GymPresetsSection.isAvailableForCurrentUser) ...const [
-                    Hairline(),
-                    GymPresetsSection(),
-                  ],
-                  const Hairline(),
-                  const ReportsExportsSection(),
-                ],
+                children: children,
               ),
             ),
           ),

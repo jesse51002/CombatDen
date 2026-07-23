@@ -275,6 +275,11 @@ class DesignConstants {
   static const double navRailLogoSize = 64.0;
   static const double quickListWidth = 240.0;
   static const double tableRowHeight = 35.0;
+  // Cap on a growth metric table's scroll viewport — about eight rows tall —
+  // so a long companion breakdown or member list scrolls internally instead
+  // of dictating the tab's height. The section title and the table's own
+  // header sit above this cap; only the rows scroll within it.
+  static const double growthTableMaxHeight = tableRowHeight * 8;
 
   // Landing-style top nav (LandingPage/hifi/chrome.jsx GWNav).
   static const double navHeight = 68.0;
@@ -350,6 +355,15 @@ class DesignConstants {
 
   // Height of the vertical status accent bar beside a status label.
   static const double statusAccentBarHeight = 22.0;
+
+  // Chart geometry. The stroke of a painted data line — distinct from
+  // `dividerThickness` (a hairline), `progressBarThickness` (a progress rail)
+  // and `buttonBorder` (a control border). The cap on a bar's thickness is
+  // likewise its own token: it coincides with `iconSizeLarge`, but icon sizes
+  // are reserved for `Icon()` (the same rule that keeps `legendDotSize` and
+  // `spinnerSizeSmall` separate from `iconSize*`).
+  static const double chartStroke = 2.0;
+  static const double chartBarMaxWidth = 24.0;
 
   // Line widths — the standard hairline, the heavier table-row separator, the
   // thin progress / step bar, and the short inline vertical rule's length.

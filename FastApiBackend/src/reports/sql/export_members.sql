@@ -4,7 +4,6 @@
 -- state, never part of the gym's data export.
 SELECT
     m.member_id,
-    m.user_id,
     m.gym_id,
     m.created_at,
     m.last_class,

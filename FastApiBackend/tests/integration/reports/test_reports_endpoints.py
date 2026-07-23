@@ -23,9 +23,12 @@ from collections.abc import Callable
 from decimal import Decimal
 
 import httpx
+import pytest
 from sqlalchemy import text
 
 from src.shared.database import DirectDatabasePool
+from tests.integration.conftest import authed_client, sign_in_as
+from tests.seed_constants import SEEDED_FRONT_DESK_EMAIL, SEEDED_OWNER_PASSWORD
 
 _REPORT_FILES = {
     "summary.csv",
@@ -64,6 +67,22 @@ _EXPORT_FILES = {
     "activities.csv",
     "employees.csv",
 }
+
+
+@pytest.fixture(scope="module")
+def front_desk_api() -> httpx.Client:
+    """A client signed in as the seeded front_desk employee.
+
+    Both report routes are owner/admin-only (``verify_gym_admin_or_owner``),
+    so front desk must be 403'd on its OWN gym — a stronger auth proof than the
+    foreign-gym case (which any non-employee also fails). The front_desk account
+    (``frontdesk1@test.com``) is seeded, so this creates + cleans up nothing.
+    """
+    client = authed_client(
+        sign_in_as(SEEDED_FRONT_DESK_EMAIL, SEEDED_OWNER_PASSWORD)
+    )
+    yield client
+    client.close()
 
 
 async def _req(fn: Callable, *args, **kwargs) -> httpx.Response:
@@ -131,6 +150,15 @@ class TestDownloadReport:
         response = api.get(f"/api/v1/gyms/{uuid.uuid4()}/reports/report")
         assert response.status_code == 403, response.text
 
+    def test_front_desk_is_403(
+        self, front_desk_api: httpx.Client, gym_id: str
+    ) -> None:
+        # Owner/admin only: front desk is denied even on its own gym.
+        response = front_desk_api.get(
+            f"/api/v1/gyms/{gym_id}/reports/report"
+        )
+        assert response.status_code == 403, response.text
+
 
 class TestDownloadFullExport:
     """GET /api/v1/gyms/{gym_id}/reports/full-export."""
@@ -178,6 +206,15 @@ class TestDownloadFullExport:
 
     def test_foreign_gym_is_403(self, api: httpx.Client) -> None:
         response = api.get(f"/api/v1/gyms/{uuid.uuid4()}/reports/full-export")
+        assert response.status_code == 403, response.text
+
+    def test_front_desk_is_403(
+        self, front_desk_api: httpx.Client, gym_id: str
+    ) -> None:
+        # Owner/admin only: front desk is denied even on its own gym.
+        response = front_desk_api.get(
+            f"/api/v1/gyms/{gym_id}/reports/full-export"
+        )
         assert response.status_code == 403, response.text
 
 

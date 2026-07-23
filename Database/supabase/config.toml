@@ -88,7 +88,6 @@ schema_paths = [
     # member_waiver_signatures (the gating signature), so loads after both.
     "./schemas/member_authorized_payers.sql",
     "./schemas/member_activities.sql",
-    "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
     "./schemas/template_gym.sql",
     "./schemas/template_gym_query.sql",
@@ -224,9 +223,23 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+#
+# MUST match where the CRM actually serves (CRM/Makefile: `flutter run -d
+# web-server --web-port 8081`). With enable_confirmations = true this is where
+# GoTrue sends the person after they click the confirmation link, carrying the
+# session in the URL — point it at a dead port and every local signup verifies
+# but lands nowhere, so the confirm-then-auto-login flow cannot be tested at
+# all. The hosted project sets its own site_url (app.combatden.net) in the
+# Supabase Dashboard.
+site_url = "http://localhost:8081"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# 8082 is the theme-browser target (CRM/Makefile). Plain http — the dev web
+# server does not speak https.
+additional_redirect_urls = [
+  "http://localhost:8081",
+  "http://127.0.0.1:8081",
+  "http://localhost:8082",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -252,7 +265,13 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised from the stock 2/hour: with enable_confirmations = true every signup
+# costs one, so 2 throttles after a single retry and blocks local signup
+# testing. Local mail is caught by Inbucket (:54324) and never leaves the
+# machine, so a high ceiling costs nothing here. The HOSTED project's limits
+# are set in the Supabase Dashboard and are governed by its SMTP sender, not
+# by this file.
+email_sent = 100
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -279,7 +298,15 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# MUST STAY TRUE. Identity is the VERIFIED email claim: access is a live join
+# between the JWT `email` and gym_employees.email / members.email, so an
+# auto-confirming stack would let anyone sign up as an existing owner's
+# address and inherit that gym. The seed is unaffected (it creates users via
+# the admin API with email_confirm=True); local confirmation mail lands in
+# Inbucket. The HOSTED project is configured separately in the Supabase
+# Dashboard (Auth > Providers > Email) and needs a working SMTP sender there
+# — this file only governs the local stack.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.

@@ -42,7 +42,16 @@ class AppRoutes {
   // is not deep-linkable.
   static const String membershipsWaiverEditor =
       '/memberships/waivers/editor';
+  // The Growth screen's six tabs are each addressable. The base
+  // [growth] path is the Overview tab; the ordered list backing the
+  // deep-link ↔ tab-index mapping is `kGrowthTabRoutes` in
+  // `growth_screen.dart`.
   static const String growth = '/growth';
+  static const String growthMembers = '/growth/members';
+  static const String growthRevenue = '/growth/revenue';
+  static const String growthAttendance = '/growth/attendance';
+  static const String growthTrial = '/growth/trial';
+  static const String growthRetention = '/growth/retention';
   static const String employees = '/employees';
   static const String employeeDetail = '/employees/detail';
   // Settings hosts the appearance (theme) control, the gym timezone
@@ -82,6 +91,22 @@ class AppRoutes {
   /// with [membershipsRankDetailPath] (mirrors [memberIdFromPath]).
   static String? mainRankIdFromPath(String path) {
     const prefix = '$membershipsRankDetail/';
+    if (!path.startsWith(prefix)) return null;
+    final id = path.substring(prefix.length);
+    return id.isEmpty ? null : id;
+  }
+
+  /// Deep-link path for a specific employee's detail page —
+  /// `/employees/detail/<employeeId>`. Round-trips with
+  /// [employeeIdFromPath] (mirrors [memberDetailPath]).
+  static String employeeDetailPath(String employeeId) =>
+      '$employeeDetail/$employeeId';
+
+  /// The employee id from an `/employees/detail/<id>` path, or null when
+  /// [path] is not a specific-employee deep link (the bare [employeeDetail]
+  /// route, or any other route). Round-trips with [employeeDetailPath].
+  static String? employeeIdFromPath(String path) {
+    const prefix = '$employeeDetail/';
     if (!path.startsWith(prefix)) return null;
     final id = path.substring(prefix.length);
     return id.isEmpty ? null : id;

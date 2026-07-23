@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_bloc.dart';
 import 'package:crm/features/memberships/bloc/plans/plans_event.dart';
@@ -90,6 +92,9 @@ class _PlansTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Read-only for front desk: no row-tap into the editor, no per-row Edit
+    // button, no Add row. The plan table itself stays fully viewable.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return MembershipsTabScaffold(
       table: Column(
         children: [
@@ -110,8 +115,10 @@ class _PlansTable extends StatelessWidget {
               for (final plan in state.plans)
                 AppDataTableRow(
                   // The whole row opens the edit page; the Edit button stays
-                  // as an affordance.
-                  onTap: () => _openDetails(context, plan: plan),
+                  // as an affordance. Both are owner/admin only.
+                  onTap: canConfigure
+                      ? () => _openDetails(context, plan: plan)
+                      : null,
                   cells: [
                     Text(plan.planName, style: DesignConstants.p),
                     Text(planPriceLabel(plan), style: DesignConstants.p),
@@ -123,19 +130,24 @@ class _PlansTable extends StatelessWidget {
                     ),
                     Text(planClassAmountLabel(plan), style: DesignConstants.p),
                     Text('${plan.enrolledCount}', style: DesignConstants.p),
-                    MembershipEditButton(
-                      onTap: () => _openDetails(context, plan: plan),
-                    ),
+                    if (canConfigure)
+                      MembershipEditButton(
+                        onTap: () => _openDetails(context, plan: plan),
+                      )
+                    else
+                      const SizedBox.shrink(),
                   ],
                 ),
             ],
           ),
         ],
       ),
-      addRow: AddRowButton(
-        label: 'Add New Membership',
-        onTap: () => _openDetails(context),
-      ),
+      addRow: canConfigure
+          ? AddRowButton(
+              label: 'Add New Membership',
+              onTap: () => _openDetails(context),
+            )
+          : null,
     );
   }
 }

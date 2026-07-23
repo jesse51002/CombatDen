@@ -1,3 +1,4 @@
+import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
 
 /// Fallback label for an assigned instructor whose resolved name is missing
@@ -6,14 +7,13 @@ const String _kUnnamedInstructor = 'Instructor';
 
 /// One selectable instructor for the class form's per-slot picker.
 ///
-/// There is no GET-employees endpoint, so the form has no live staff roster to
-/// pull from. Instead the picker is sourced from the **real** instructor
-/// (id, name) pairs already resolved on the gym's existing classes — every
-/// slot's `instructor_id` carries the joined `instructor_name` on
-/// [GymClassResponse.weekdaySlots]. This keeps the ids real (no mock UUIDs the
-/// backend would reject) at the cost of only listing instructors already
-/// assigned somewhere; a brand-new gym with no classes yet shows an empty
-/// picker (instructors are optional, so the class still saves).
+/// The picker is primarily sourced from the gym's real staff roster (a
+/// side-read of `GET /api/v1/employees/{gym_id}` — each employee's id is a valid
+/// `instructor_id`). It's then merged with the instructor (id, name) pairs
+/// already resolved on the gym's existing classes, so an instructor assigned on
+/// a class stays pickable even if they're no longer on the roster (a data
+/// mismatch never drops an in-use instructor from an edited class). Instructors
+/// are optional, so an empty picker still saves.
 class InstructorOption {
   final String id;
   final String name;
@@ -26,6 +26,29 @@ class InstructorOption {
   /// fallback.
   static List<InstructorOption> fromClasses(List<GymClassResponse> classes) {
     final byId = <String, String>{};
+    _addClasses(byId, classes);
+    return _sorted(byId);
+  }
+
+  /// The staff roster merged with any instructor already assigned on a class.
+  /// [employees] leads (real names win); a class-assigned instructor not on the
+  /// roster is still appended so an edited class never loses its current pick.
+  static List<InstructorOption> merged(
+    List<Employee> employees,
+    List<GymClassResponse> classes,
+  ) {
+    final byId = <String, String>{};
+    for (final e in employees) {
+      _add(byId, e.employeeId, e.fullName);
+    }
+    _addClasses(byId, classes);
+    return _sorted(byId);
+  }
+
+  static void _addClasses(
+    Map<String, String> byId,
+    List<GymClassResponse> classes,
+  ) {
     for (final c in classes) {
       for (final slots in c.weekdaySlots.values) {
         for (final slot in slots) {
@@ -33,11 +56,13 @@ class InstructorOption {
         }
       }
     }
-    final options = byId.entries
+  }
+
+  static List<InstructorOption> _sorted(Map<String, String> byId) {
+    return byId.entries
         .map((e) => InstructorOption(id: e.key, name: e.value))
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    return options;
   }
 
   static void _add(Map<String, String> byId, String? id, String? name) {

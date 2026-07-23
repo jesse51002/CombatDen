@@ -93,16 +93,17 @@ class GymsService:
     async def create_gym(
         self,
         request: GymCreateRequest,
-        user_id: UUID,
         user_email: str,
     ) -> GymCreateResponse:
         """Create a gym and begin Stripe Express onboarding.
 
-        A user may own multiple gyms, so this does not pre-check for
-        an existing gym. Delegates to ``GymsCreateService`` for the
-        DB-first insert + default-waiver seed + Stripe account +
-        AccountLink flow (waiver is seeded before Stripe so a failure
-        tears down cleanly with no orphaned Stripe account).
+        Identity is the caller's verified email — the owner
+        ``gym_employees`` row is keyed on it. A user may own multiple
+        gyms, so this does not pre-check for an existing gym. Delegates
+        to ``GymsCreateService`` for the DB-first insert + default-waiver
+        seed + Stripe account + AccountLink flow (waiver is seeded before
+        Stripe so a failure tears down cleanly with no orphaned Stripe
+        account).
 
         Raises:
             ValueError: If ``user_email`` is empty.
@@ -112,7 +113,6 @@ class GymsService:
 
         return await self._create_service.create_gym(
             request=request,
-            user_id=user_id,
             user_email=user_email,
         )
 
@@ -144,19 +144,26 @@ class GymsService:
 
     async def list_gyms_for_user(
         self,
-        user_id: UUID,
+        user_email: str,
+        caller_id: str,
     ) -> list[GymWithRoleResponse]:
-        """Return every gym the caller may administer (owner/admin).
+        """Return every gym the caller is an employee of.
 
-        Each gym is annotated with the caller's ``employee_type`` for
-        it. Returns an empty list when the user administers no gyms.
+        Identity is the caller's verified email (matched lowercase). Each
+        gym is annotated with the caller's ``employee_type`` for it — all
+        roles enter the CRM. Returns an empty list when the caller is an
+        employee of no gyms.
+
+        ``caller_id`` is the JWT ``sub`` — the confirmed-account ``EXISTS``
+        pins on it so the query proves the CALLER's own account is confirmed,
+        not merely that some confirmed account holds this email.
         """
         async with self._db_pool.session() as session:
             rows = (
                 (
                     await session.execute(
                         text(load_sql(SQL_DIR / "gyms_list_for_user.sql")),
-                        {"user_id": str(user_id)},
+                        {"email": user_email.lower(), "caller_id": caller_id},
                     )
                 )
                 .mappings()
@@ -267,19 +274,19 @@ class GymsService:
     async def update_employee_theme(
         self,
         gym_id: UUID,
-        user_id: UUID,
+        user_email: str,
         theme_preference: ThemeMode,
     ) -> EmployeeThemeResponse:
         """Save the caller's CRM theme preference for one gym.
 
-        The caller's employment at ``gym_id`` is verified at the
-        router layer; the WHERE clause scopes the write to the
-        caller's own ``gym_employees`` row.
+        The caller's employment at ``gym_id`` is verified at the router
+        layer; the WHERE clause scopes the write to the caller's own
+        ``gym_employees`` row, matched by verified email (lowercase).
         """
         sql = load_sql(SQL_DIR / "update_employee_theme.sql")
         params = {
             "theme_preference": theme_preference.value,
-            "user_id": str(user_id),
+            "email": user_email.lower(),
             "gym_id": str(gym_id),
         }
         row = await self._db_pool.execute_with_retry(sql, params)

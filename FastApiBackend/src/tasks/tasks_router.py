@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 from src.tasks.service.tasks_service import TasksService
 from src.tasks.tasks_schema import TaskResponse
 
@@ -54,7 +54,11 @@ async def list_ongoing_tasks(
 ) -> list[TaskResponse]:
     """List the gym's unfinished tasks (the CRM's memberships-screen poll)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    # STAFF (incl. front desk): a read the member-detail + memberships screens
+    # fire to BADGE in-task memberships and hide the reprice affordance on one
+    # that's mid-migration. Front desk can reprice a single membership, so it
+    # must see the in-task state too — otherwise it races a running bulk job.
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await tasks_service.list_ongoing_tasks(gym_id)
@@ -94,7 +98,8 @@ async def get_task(
 ) -> TaskResponse:
     """Get one task + items (gym-scoped)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    # STAFF read — same in-task polling surface as /ongoing.
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         task = await tasks_service.get_task(task_id, gym_id)

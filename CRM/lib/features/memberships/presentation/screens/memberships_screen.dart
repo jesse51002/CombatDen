@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/url_sync.dart';
@@ -179,6 +180,11 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
 
   @override
   Widget build(BuildContext context) {
+    // Front desk gets a READ-ONLY catalog: the write affordances (the
+    // top-right "Add New …" primary button, and the ranks-tab "Seed from
+    // preset") render only for owner/admin. The tabs, tables, and rank detail
+    // stay fully viewable.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingBig,
@@ -205,7 +211,7 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
                   // Ranks tab pairs "Seed from preset" beside the primary
                   // "Add New Rank" so a gym can build its ladder from a
                   // template or by hand from the same place.
-                  if (_tabIndex == 3) ...[
+                  if (_tabIndex == 3 && canConfigure) ...[
                     AppOutlineButton(
                       text: 'Seed from preset',
                       borderRadius: DesignConstants.radiusBig,
@@ -219,10 +225,11 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
                     ),
                     const SizedBox(width: DesignConstants.spacingMedium),
                   ],
-                  AppPrimaryButton(
-                    text: _addLabels[_tabIndex],
-                    onPressed: _openAddDialog,
-                  ),
+                  if (canConfigure)
+                    AppPrimaryButton(
+                      text: _addLabels[_tabIndex],
+                      onPressed: _openAddDialog,
+                    ),
                 ],
               ),
             ],

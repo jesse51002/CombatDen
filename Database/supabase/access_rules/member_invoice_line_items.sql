@@ -8,7 +8,7 @@ CREATE POLICY "Users and gym staff can view invoice line items"
     USING (
         EXISTS (
             SELECT 1 FROM member_invoices inv
-            JOIN members m ON m.user_id = auth.uid()
+            JOIN members m ON lower(m.email) = lower(auth.jwt() ->> 'email')
             WHERE inv.invoice_id = member_invoice_line_items.invoice_id
             AND (
                 m.member_id = inv.paid_by_member_id

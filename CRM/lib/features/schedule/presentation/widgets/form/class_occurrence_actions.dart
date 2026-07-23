@@ -17,6 +17,12 @@ final DateFormat _dateLabel = DateFormat('EEEE, MMM d, yyyy');
 ///   only when check-in is open ([canCheckIn]): the class has started / passed,
 ///   or starts within the early window. Hidden for an occurrence too far in the
 ///   future to check into yet (the backend rejects those anyway).
+///
+/// Both action buttons additionally require [canManage] (`canCheckInMembers`:
+/// owner/admin/front desk). A **trainer** ([canManage] false) sees the same
+/// block fully read-only: the roster is visible, but the action buttons are
+/// absent and the note reads in the passive voice.
+///
 /// "Cancel this class" now lives beside "Edit" in
 /// `ClassOccurrenceReadOnlyDetails`, not here. A cancelled occurrence shows a
 /// note instead of the actions. For a past / materialized occurrence the
@@ -30,14 +36,20 @@ class ClassOccurrenceActions extends StatelessWidget {
   final bool isCancelled;
 
   /// Whether members can still be signed up for this occurrence (it hasn't
-  /// already passed) — gates the "Reserve members" action.
+  /// already passed) — gates the "Reserve members" action (with [canManage]).
   final bool canSignUp;
   final VoidCallback onSignUpMembers;
 
   /// Whether check-in is open for this occurrence (it has started / passed, or
-  /// starts within the early window) — gates the "Update attendees" action.
+  /// starts within the early window) — gates the "Update attendees" action
+  /// (with [canManage]).
   final bool canCheckIn;
   final VoidCallback onUpdateAttendees;
+
+  /// Whether the caller may act on attendance (reserve / update attendees) —
+  /// `canCheckInMembers` (owner/admin/front desk). When false the block is
+  /// read-only: buttons + their caption are hidden and the note is passive.
+  final bool canManage;
 
   /// The Reserved/Attended roster for a past / materialized occurrence; null
   /// for a future occurrence (nothing recorded yet).
@@ -51,6 +63,7 @@ class ClassOccurrenceActions extends StatelessWidget {
     required this.onSignUpMembers,
     required this.canCheckIn,
     required this.onUpdateAttendees,
+    required this.canManage,
     this.roster,
   });
 
@@ -58,12 +71,14 @@ class ClassOccurrenceActions extends StatelessWidget {
     final date = _dateLabel.format(occurrenceDate);
     if (isCancelled) return 'This class is cancelled on $date.';
     if (!canCheckIn) {
-      return canSignUp
+      return (canSignUp && canManage)
           ? 'Check-in opens closer to the class — you can still reserve '
               'members.'
           : 'Check-in opens closer to the class.';
     }
-    return 'Manage who attended on $date.';
+    return canManage
+        ? 'Manage who attended on $date.'
+        : 'See who attended on $date.';
   }
 
   @override
@@ -78,7 +93,7 @@ class ClassOccurrenceActions extends StatelessWidget {
             _note,
             style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
           ),
-          if (!isCancelled)
+          if (canManage && !isCancelled)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: DesignConstants.spacingSmall,

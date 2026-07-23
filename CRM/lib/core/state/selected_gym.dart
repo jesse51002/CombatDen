@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/gym_detail.dart';
 

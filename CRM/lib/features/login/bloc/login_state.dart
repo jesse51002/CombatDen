@@ -48,7 +48,18 @@ class LoginError extends LoginState {
   List<Object?> get props => [message, isLoginError];
 }
 
-/// Registration success state (before navigation)
-class LoginRegistrationSuccess extends LoginState {
-  const LoginRegistrationSuccess();
+/// Sign-up succeeded but the account still needs email confirmation before a
+/// session exists (Supabase `enable_confirmations` is on). Carries the [email]
+/// the confirmation link was sent to, shown on the "check your email" screen.
+/// [resent] flips true after a successful resend so the UI can acknowledge it.
+/// The user leaves this state when the emailed link lands and the external
+/// session listener flips the app to [LoginAuthenticated].
+class LoginAwaitingEmailConfirmation extends LoginState {
+  final String email;
+  final bool resent;
+
+  const LoginAwaitingEmailConfirmation(this.email, {this.resent = false});
+
+  @override
+  List<Object?> get props => [email, resent];
 }

@@ -38,9 +38,15 @@ from src.classes.service.classes_versions_service import (
 )
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
+from src.employees.service.employees_service import EmployeesService
+from src.growth.service.growth_compute_service import GrowthComputeService
+from src.growth.service.growth_service import GrowthService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
+)
+from src.member_portal.service.member_portal_service import (
+    MemberPortalService,
 )
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
@@ -131,7 +137,8 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
-from src.shared.database import DirectDatabasePool, SupabaseClient
+from src.shared.auth_settings_guard import AuthSettingsGuard
+from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.litellm_client import LiteLLMClient
 from src.shared.payer_resolver import PayerResolver
@@ -215,12 +222,16 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.main",
             "src.checkin.checkin_router",
             "src.classes.classes_router",
+            "src.growth.growth_router",
             "src.gyms.gyms_router",
             "src.members.members_router",
             "src.ranks.ranks_router",
             "src.reports.reports_router",
             "src.rewards.rewards_router",
             "src.waivers.waivers_router",
+            "src.employees.employees_router",
+            # The member-facing surface (verify_member_self gated).
+            "src.member_portal.member_portal_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
             "src.memberships.memberships_router",
@@ -236,8 +247,26 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     db_pool = providers.Singleton(DirectDatabasePool)
-    supabase = providers.Singleton(SupabaseClient)
-    auth = providers.Singleton(Auth, supabase=supabase)
+    # Auth reads auth.users (the verified-account predicate) — only the
+    # direct pool can see that schema.
+    auth = providers.Singleton(Auth, db_pool=db_pool)
+    # Startup-only: reads GoTrue's published config and screams (or refuses
+    # to boot) when it auto-confirms every signup. Called from the lifespan.
+    auth_settings_guard = providers.Singleton(
+        AuthSettingsGuard,
+        supabase_url=settings.supabase_url,
+        supabase_anon_key=settings.supabase_anon_key,
+        # LATE-BOUND on purpose. A plain `settings.x` is captured when this
+        # module is imported, which is before a test conftest can override it
+        # — and this policy is fail-closed, so a stale capture aborts the
+        # lifespan and errors every TestClient(app) test. Wrapping it in a
+        # provider defers the read to instantiation (inside the lifespan),
+        # matching how `settings.reconciler_enabled` is read in main.py.
+        policy=providers.Callable(
+            lambda: settings.auth_autoconfirm_policy
+        ),
+        timeout_seconds=settings.auth_settings_check_timeout_seconds,
+    )
 
     # The canonical single-shape recurrence + exception engine is pure (no
     # I/O); a single shared instance is reused everywhere.
@@ -428,6 +457,11 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Waivers: plain gym config (versioned documents + read-only e-sign
     # tracking), no Stripe.
     waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
+
+    # Employees: plain gym config (live staff-roster CRUD), no Stripe.
+    # Identity is the lowercase email column matched to a verified auth account
+    # (no user_id); archiving is a soft-delete, no auth-system interaction.
+    employees_service = providers.Factory(EmployeesService, db_pool=db_pool)
 
     # Videos: the slug-keyed template catalog + a real gym's live
     # feed/spec/showcase from the gym_video_* tables, plus the owner's feed
@@ -819,10 +853,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     crm_members_list_service = providers.Factory(
         CrmMembersListService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
     crm_total_counts_service = providers.Factory(
         CrmTotalCountsService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
 
     # ── Members billing/management ───────────────────────────────
@@ -835,6 +871,15 @@ class DependencyInjector(containers.DeclarativeContainer):
     members_payments_service = providers.Factory(
         MembersPaymentsService,
         db_pool=db_pool,
+    )
+
+    # ── Member portal (member-facing) ────────────────────────────
+    # Defined AFTER members_billing_detail_service — the portal profile is a
+    # projection of it, never a second derivation.
+    member_portal_service = providers.Factory(
+        MemberPortalService,
+        db_pool=db_pool,
+        billing_detail_service=members_billing_detail_service,
     )
 
 
@@ -925,6 +970,20 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
+    # ── Growth metrics ───────────────────────────────────────────
+    # Read path: pure cache read, no compute. Write path: the scheduled
+    # sweep, guarded across app instances by the generic resource lock.
+    growth_service = providers.Factory(GrowthService, db_pool=db_pool)
+    growth_compute_service = providers.Factory(
+        GrowthComputeService,
+        db_pool=db_pool,
+        resource_lock=resource_lock,
+        dormancy_days=settings.member_dormancy_days,
+        at_risk_days=settings.growth_at_risk_days,
+        lock_key=settings.growth_compute_lock_key,
+        lock_ttl_seconds=settings.growth_compute_lock_ttl_seconds,
+    )
+
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,

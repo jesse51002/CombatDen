@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 
 void main() {
   tearDown(() => selectedGym.reset());

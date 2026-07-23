@@ -7,8 +7,10 @@ uses ``SELECT *``), so the header and the SELECT can never drift.
 
 Excluded everywhere (see the SQL): ``members.video_profile_*`` (the RAG
 embedding + summary), ``stripe_event_payload`` on invoices/charges, and the
-tables that are pure internal infrastructure (``stripe_webhook_events``,
-``resource_locks``, ``tasks``, the ``gym_video_*`` pool).
+tables that are pure internal infrastructure or a machine-derived cache
+(``stripe_webhook_events``, ``resource_locks``, ``tasks``, the ``gym_video_*``
+pool, and ``gym_growth_metrics`` — the Growth page's hourly-recomputed metric
+cache, fully derivable from the source tables that ARE exported).
 """
 
 import logging

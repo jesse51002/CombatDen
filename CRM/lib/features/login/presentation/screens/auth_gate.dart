@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/route_guard.dart';
 import 'package:crm/core/navigation/url_sync.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
@@ -213,13 +215,19 @@ class _MembersWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     // Deep-link support: boot at the route in the URL fragment
     // (e.g. `/#/schedule`) so any admin page is directly reachable
-    // on a fresh load; default to the dashboard. The custom
-    // onGenerateInitialRoutes builds a single route (no synthetic
-    // back stack from path splitting).
+    // on a fresh load — but only when the active role may open it.
+    // With no fragment (or a forbidden one) start on the role's
+    // landing route instead. `redirectRouteFor` returns the landing
+    // route for a forbidden path and null for an allowed one, so this
+    // both picks the default landing screen and rejects a forbidden
+    // deep link in one step. The custom onGenerateInitialRoutes builds
+    // a single route (no synthetic back stack from path splitting).
+    final role = selectedGym.role;
     final fragment = Uri.base.fragment;
-    final initial = (fragment.isNotEmpty && fragment != '/')
+    final requested = (fragment.isNotEmpty && fragment != '/')
         ? fragment
-        : AppRoutes.home;
+        : (role?.landingRoute ?? AppRoutes.home);
+    final initial = redirectRouteFor(requested, role) ?? requested;
     return Navigator(
       initialRoute: initial,
       onGenerateRoute: onGenerateRoute,

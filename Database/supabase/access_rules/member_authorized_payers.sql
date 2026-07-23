@@ -14,7 +14,7 @@ CREATE POLICY "Gym staff and involved members can view authorized payers"
         is_gym_admin_or_owner(member_authorized_payers.gym_id)
         OR EXISTS (
             SELECT 1 FROM members
-            WHERE members.user_id = auth.uid()
+            WHERE lower(members.email) = lower(auth.jwt() ->> 'email')
             AND members.member_id IN (
                 member_authorized_payers.member_id,
                 member_authorized_payers.payer_member_id

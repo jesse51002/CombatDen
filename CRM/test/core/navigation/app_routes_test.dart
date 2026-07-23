@@ -42,4 +42,50 @@ void main() {
       expect(AppRoutes.memberIdFromPath('/'), isNull);
     });
   });
+
+  group('AppRoutes employee-detail deep link', () {
+    test('employeeDetailPath builds /employees/detail/<id>', () {
+      expect(
+        AppRoutes.employeeDetailPath('emp-123'),
+        '/employees/detail/emp-123',
+      );
+    });
+
+    test('employeeIdFromPath extracts the id', () {
+      expect(
+        AppRoutes.employeeIdFromPath('/employees/detail/emp-123'),
+        'emp-123',
+      );
+    });
+
+    test('employeeIdFromPath round-trips employeeDetailPath', () {
+      const id = 'e1f2g3h4-0000-uuid-8888';
+      expect(
+        AppRoutes.employeeIdFromPath(AppRoutes.employeeDetailPath(id)),
+        id,
+      );
+    });
+
+    test('the bare detail route carries no id', () {
+      expect(
+        AppRoutes.employeeIdFromPath(AppRoutes.employeeDetail),
+        isNull,
+      );
+      expect(
+        AppRoutes.employeeIdFromPath('/employees/detail/'),
+        isNull,
+      );
+    });
+
+    test('a non-detail route carries no id', () {
+      expect(AppRoutes.employeeIdFromPath(AppRoutes.employees), isNull);
+      expect(AppRoutes.employeeIdFromPath('/schedule'), isNull);
+      expect(AppRoutes.employeeIdFromPath('/'), isNull);
+      // Not swallowed by the member-detail round-trip helpers either.
+      expect(
+        AppRoutes.employeeIdFromPath(AppRoutes.memberDetailPath('m1')),
+        isNull,
+      );
+    });
+  });
 }

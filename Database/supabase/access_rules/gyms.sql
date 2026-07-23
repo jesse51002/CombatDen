@@ -42,7 +42,7 @@ CREATE POLICY "Owners and admins can insert employees"
         is_gym_admin_or_owner(gym_employees.gym_id)
         OR (
             gym_employees.employee_type = 'owner'
-            AND gym_employees.user_id = auth.uid()
+            AND lower(gym_employees.email) = lower(auth.jwt() ->> 'email')
             AND NOT gym_has_owner(gym_employees.gym_id)
         )
     );
@@ -54,5 +54,5 @@ CREATE POLICY "Owners and admins can update employees"
     USING (is_gym_admin_or_owner(gym_employees.gym_id))
     WITH CHECK (is_gym_admin_or_owner(gym_employees.gym_id));
 
--- Identity columns stay immutable
-REVOKE UPDATE (employee_id, gym_id, created_at) ON TABLE gym_employees FROM authenticated;
+-- Identity columns stay immutable; archived_at lifecycle is backend-only
+REVOKE UPDATE (employee_id, gym_id, created_at, archived_at) ON TABLE gym_employees FROM authenticated;

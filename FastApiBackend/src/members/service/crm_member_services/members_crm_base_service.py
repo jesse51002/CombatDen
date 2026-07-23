@@ -14,6 +14,9 @@ from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
     MembersListFilters,
 )
+from src.members.service.members_status_mapping import (
+    load_member_dormant_sql,
+)
 from src.shared.database import DirectDatabasePool
 
 TERMINAL_STATUSES: frozenset[CrmMemberStatus] = frozenset(
@@ -26,6 +29,9 @@ LIVE_DB_STATUSES: tuple[MembershipDbStatus, ...] = (
 # The gym's local current date — every status predicate that depends on
 # "today" (overdue / not-overdue) reads it off the joined `gyms g`.
 GYM_TODAY_SQL = "(now() AT TIME ZONE g.timezone)::date"
+# Every view aliases members as `p`, so the shared dormancy predicate is
+# correlated to the same two id expressions everywhere.
+DORMANT_SQL = load_member_dormant_sql("p.member_id", "p.gym_id")
 
 
 class CrmBaseViewService:
@@ -35,10 +41,17 @@ class CrmBaseViewService:
 
     Args:
         db_pool: Injected database connection pool.
+        dormancy_days: How long without activity makes a short-plan
+            member dormant (``settings.member_dormancy_days``).
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        dormancy_days: int,
+    ) -> None:
         self._db_pool = db_pool
+        self._dormancy_days = dormancy_days
 
     # -- Filter builder --
 
@@ -136,6 +149,8 @@ class CrmBaseViewService:
         - trial: an active trial that is not past due
         - overdue: a non-cancelled membership past its due date
         - frozen: a frozen membership
+        - dormant: only short live packs + gone quiet, on a row that is
+          live and not past due — a member-level check
         - cancelled / ended: the member's only memberships are terminal
           (no live one) — a member-level check
         - no_membership: the member has no membership row
@@ -176,6 +191,19 @@ class CrmBaseViewService:
                 f"AND m.next_due_date < {GYM_TODAY_SQL})"
             )
             params["st_cancelled"] = MembershipDbStatus.cancelled.value
+
+        if CrmMemberStatus.dormant in statuses:
+            # Matches exactly when the dormant badge renders: the member
+            # is dormant AND this row is the kind of row that shows it.
+            # Overdue and frozen outrank dormant (see DORMANT_YIELDS_TO
+            # in members_status_mapping), and a terminal row never
+            # carries it — so the row must be active and not past due.
+            conditions.append(
+                f"({DORMANT_SQL} AND m.status = :st_active_dormant "
+                f"AND {not_overdue})"
+            )
+            params["st_active_dormant"] = MembershipDbStatus.active.value
+            params["dormancy_days"] = self._dormancy_days
 
         if CrmMemberStatus.no_membership in statuses:
             conditions.append("(m.status IS NULL)")

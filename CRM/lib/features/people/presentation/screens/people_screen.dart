@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/url_sync.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/employees/bloc/employees_bloc.dart';
+import 'package:crm/features/employees/bloc/employees_event.dart';
+import 'package:crm/features/employees/data/repositories/employees_repository.dart';
 import 'package:crm/features/employees/presentation/widgets/employees_list_body.dart';
 import 'package:crm/features/members/presentation/widgets/members_list_body.dart';
 import 'package:crm/features/members_list/bloc/members_list_bloc.dart';
@@ -14,6 +18,7 @@ import 'package:crm/features/members_list/bloc/members_list_state.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/error_message.dart';
@@ -42,6 +47,10 @@ class PeopleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Only staff admins (owner / admin) see the Employees tab, so the
+    // employees repo + bloc are only provided (and only fire their fetch) for
+    // them — front desk never triggers a GET /employees they can't access.
+    final canManageStaff = selectedGym.role?.canManageStaff ?? false;
     // ApiClient is built inside each lazy `create:` (not in build())
     // so it isn't re-allocated on every parent rebuild.
     return MultiRepositoryProvider(
@@ -55,13 +64,32 @@ class PeopleScreen extends StatelessWidget {
         RepositoryProvider<RanksRepository>(
           create: (_) => RanksRepository(apiClient: ApiClient()),
         ),
+        if (canManageStaff)
+          RepositoryProvider<EmployeesRepository>(
+            create: (_) => EmployeesRepository(apiClient: ApiClient()),
+          ),
+        if (canManageStaff)
+          RepositoryProvider<ScheduleRepository>(
+            create: (_) => ScheduleRepository(apiClient: ApiClient()),
+          ),
       ],
-      child: BlocProvider<MembersListBloc>(
-        create: (ctx) => MembersListBloc(
-          repository: ctx.read<MembersListRepository>(),
-          membershipsRepository: ctx.read<MembershipsRepository>(),
-          ranksRepository: ctx.read<RanksRepository>(),
-        )..add(MembersListInitRequested(selectedGym.gymId ?? '')),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<MembersListBloc>(
+            create: (ctx) => MembersListBloc(
+              repository: ctx.read<MembersListRepository>(),
+              membershipsRepository: ctx.read<MembershipsRepository>(),
+              ranksRepository: ctx.read<RanksRepository>(),
+            )..add(MembersListInitRequested(selectedGym.gymId ?? '')),
+          ),
+          if (canManageStaff)
+            BlocProvider<EmployeesBloc>(
+              create: (ctx) => EmployeesBloc(
+                employeesRepository: ctx.read<EmployeesRepository>(),
+                scheduleRepository: ctx.read<ScheduleRepository>(),
+              )..add(EmployeesInitRequested(selectedGym.gymId ?? '')),
+            ),
+        ],
         child: AppShell(
           // Pinned to /members so the single "People" rail item stays lit on
           // both tabs (the URL still flips /members <-> /employees).
@@ -86,6 +114,10 @@ class _PeopleBodyState extends State<_PeopleBody> {
   static const _tabs = ['Members', 'Employees'];
   static const _tabRoutes = [AppRoutes.members, AppRoutes.employees];
 
+  // Only staff admins (owner / admin) see the Employees tab. Role is stable
+  // for the session, so read it once.
+  final bool _canManageStaff = selectedGym.role?.canManageStaff ?? false;
+
   late int _tabIndex = widget.initialTab.index;
 
   // Tab switching is a local setState (the IndexedStack keeps each tab's
@@ -97,6 +129,13 @@ class _PeopleBodyState extends State<_PeopleBody> {
 
   @override
   Widget build(BuildContext context) {
+    // Front desk / trainer never see the Employees tab: render the Members
+    // list alone, no switcher, and ignore an `initialTab: employees`. The
+    // route guard already blocks `/employees`; this is the in-screen
+    // belt-and-braces (and the Members tab brings its own top padding).
+    if (!_canManageStaff) {
+      return const _MembersTab();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

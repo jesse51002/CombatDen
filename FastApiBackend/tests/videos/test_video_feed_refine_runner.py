@@ -189,7 +189,7 @@ async def test_drain_cancels_in_flight_and_clears() -> None:
 def _auth() -> MagicMock:
     auth = MagicMock()
     auth.get_current_user = MagicMock(return_value={})
-    auth.verify_gym_employee = AsyncMock(return_value=None)
+    auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
     return auth
 
 

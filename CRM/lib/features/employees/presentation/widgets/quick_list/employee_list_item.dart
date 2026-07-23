@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
 /// One employee row in the detail page's right-rail quick-list: avatar, name,
@@ -34,7 +34,7 @@ class EmployeeListItem extends StatelessWidget {
           spacing: DesignConstants.spacingMedium,
           children: [
             InstructorAvatar(
-              photoUrl: employee.photoUrl,
+              photoUrl: employee.employeePicUrl,
               name: employee.fullName,
               diameter: 32,
             ),
@@ -50,7 +50,7 @@ class EmployeeListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    employee.role.label,
+                    employee.employeeType.label,
                     style: DesignConstants.p.copyWith(
                       color: DesignConstants.text2nd,
                     ),

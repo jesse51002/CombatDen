@@ -20,12 +20,23 @@ class MemberStatusCell extends StatelessWidget {
     this.text,
   });
 
+  /// Colour encodes SEVERITY, the label encodes the exact state — which is
+  /// why several statuses deliberately share a colour (cancelled, ended and
+  /// overdue are all red). Green healthy, blue trial, amber needs-attention,
+  /// red problem-or-over, grey no-relationship.
+  ///
+  /// [MembershipStatus.dormant] joins frozen on amber: both mean "not
+  /// currently training, worth a look", and neither is a failure. It is
+  /// deliberately not muted grey — a dormant member is the one staff most
+  /// need to notice, and the muted tokens fall below AA at text sizes.
   Color _fg() {
     return switch (status) {
       MembershipStatus.active => DesignConstants.goodGreen,
       MembershipStatus.trial => DesignConstants.primaryColor,
       MembershipStatus.overdue => DesignConstants.badRed,
-      MembershipStatus.frozen => DesignConstants.okYellow,
+      MembershipStatus.frozen ||
+      MembershipStatus.dormant =>
+        DesignConstants.okYellow,
       MembershipStatus.cancelled ||
       MembershipStatus.ended =>
         DesignConstants.badRed,

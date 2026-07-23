@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
@@ -60,6 +62,9 @@ class _DiscountsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Read-only for front desk: no row-tap into the editor, no per-row Edit
+    // button, no Add row. The discount table itself stays fully viewable.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return MembershipsTabScaffold(
       table: AppDataTable(
         shrinkWrap: true,
@@ -72,7 +77,9 @@ class _DiscountsTable extends StatelessWidget {
         rows: [
           for (final discount in state.discounts)
             AppDataTableRow(
-              onTap: () => _openDialog(context, discount: discount),
+              onTap: canConfigure
+                  ? () => _openDialog(context, discount: discount)
+                  : null,
               cells: [
                 Text(discount.discountName, style: DesignConstants.p),
                 Align(
@@ -86,17 +93,22 @@ class _DiscountsTable extends StatelessWidget {
                   discountLengthLabel(discount),
                   style: DesignConstants.p,
                 ),
-                MembershipEditButton(
-                  onTap: () => _openDialog(context, discount: discount),
-                ),
+                if (canConfigure)
+                  MembershipEditButton(
+                    onTap: () => _openDialog(context, discount: discount),
+                  )
+                else
+                  const SizedBox.shrink(),
               ],
             ),
         ],
       ),
-      addRow: AddRowButton(
-        label: 'Add New Discount',
-        onTap: () => _openDialog(context),
-      ),
+      addRow: canConfigure
+          ? AddRowButton(
+              label: 'Add New Discount',
+              onTap: () => _openDialog(context),
+            )
+          : null,
     );
   }
 }
