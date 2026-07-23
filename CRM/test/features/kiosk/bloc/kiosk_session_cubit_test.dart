@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
+import 'package:crm/features/kiosk/data/kiosk_server_clock.dart';
 import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockKioskSessionStore extends Mock implements KioskSessionStore {}
+
+class _MockKioskServerClock extends Mock implements KioskServerClock {}
 
 /// The kiosk cubit is the Phase B security state machine. The runway is
 /// absolute (never extended by member interaction), the exit order is
@@ -16,7 +19,7 @@ class _MockKioskSessionStore extends Mock implements KioskSessionStore {}
 /// injected clock makes the deadline deterministic; `fakeAsync` drives the
 /// 11h45 / 12h timers in virtual time.
 ///
-/// Two hardening properties are exercised here:
+/// Three hardening properties are exercised here:
 /// - **SEC-1 (no admin-flash):** the cubit starts synchronously in
 ///   [KioskStatus.restoring] (which the gate renders as a loader, never the
 ///   admin workspace) and resolves it only once the persisted flag has been
@@ -24,6 +27,12 @@ class _MockKioskSessionStore extends Mock implements KioskSessionStore {}
 /// - **SEC-2 (durable before entering):** `enterKiosk` awaits the flag persist
 ///   BEFORE flipping to [active], so a reload in the microtask gap can't strand
 ///   a live session without its flag; a failed save does not enter at all.
+/// - **SEC-3 (server-anchored runway):** entry pins the deadline off SERVER
+///   time and restore judges expiry against SERVER time, so a rolled-back
+///   device clock can't extend the surface past T+12h; when the server clock
+///   is unavailable, restore fails closed near the deadline. The mocked
+///   [KioskServerClock] returns [t0] by default (matching the device clock,
+///   so the older cases behave identically) and is overridden per SEC-3 test.
 void main() {
   final t0 = DateTime.utc(2026, 1, 1, 12);
   const runway = Duration(hours: 12);
@@ -31,6 +40,7 @@ void main() {
   final deadline = t0.add(runway);
 
   late _MockKioskSessionStore store;
+  late _MockKioskServerClock serverClock;
   late int signOutCalls;
   late bool sessionPresent;
 
@@ -40,15 +50,20 @@ void main() {
 
   setUp(() {
     store = _MockKioskSessionStore();
+    serverClock = _MockKioskServerClock();
     signOutCalls = 0;
     sessionPresent = true; // a live admin session exists while in kiosk
     when(() => store.read()).thenAnswer((_) async => (false, null));
     when(() => store.save(any())).thenAnswer((_) async {});
     when(() => store.clear()).thenAnswer((_) async {});
+    // Default: the server clock agrees with the device clock (t0), so the
+    // SEC-1/SEC-2 cases below are unaffected by the new server anchor.
+    when(() => serverClock.serverNow()).thenAnswer((_) async => t0);
   });
 
   KioskSessionCubit build({DateTime Function()? now}) => KioskSessionCubit(
         store: store,
+        serverClock: serverClock,
         dispatchSignOut: () => signOutCalls++,
         sessionGone: () => !sessionPresent,
         now: now ?? () => t0,
@@ -249,6 +264,86 @@ void main() {
         expect(signOutCalls, 1);
         cubit.close();
       });
+    });
+  });
+
+  group('SEC-3: server-anchored runway', () {
+    test('enterKiosk pins the deadline off SERVER now, not the device clock',
+        () async {
+      // Device clock reads t0; the server is one hour ahead. The runway must be
+      // measured from the SERVER instant, so a device clock (rolled either way)
+      // can't shift the absolute deadline.
+      final serverAhead = t0.add(const Duration(hours: 1));
+      when(() => serverClock.serverNow())
+          .thenAnswer((_) async => serverAhead);
+      final cubit = build(now: () => t0);
+      await pumpEventQueue(); // restore settles → inactive
+      await cubit.enterKiosk();
+      final expected = serverAhead.add(runway); // NOT t0 + runway
+      expect(cubit.state.deadline, expected);
+      verify(() => store.save(expected)).called(1);
+      await cubit.close();
+    });
+
+    test('enterKiosk falls back to the device clock when the server is down',
+        () async {
+      when(() => serverClock.serverNow()).thenAnswer((_) async => null);
+      final cubit = build(now: () => t0);
+      await pumpEventQueue();
+      await cubit.enterKiosk();
+      expect(cubit.state.deadline, deadline); // t0 + runway
+      await cubit.close();
+    });
+
+    test(
+        'restore ends the session when the SERVER clock is past the deadline '
+        'even though a rolled-back device clock reads "before"', () async {
+      // Persisted deadline t0+12h. Device clock rolled back to t0 (reads well
+      // before the deadline). Server says t0+13h — an hour past expiry. The
+      // server wins: end + sign out, never active.
+      when(() => store.read()).thenAnswer((_) async => (true, deadline));
+      when(() => serverClock.serverNow())
+          .thenAnswer((_) async => deadline.add(const Duration(hours: 1)));
+      final cubit = build(now: () => t0);
+      await pumpEventQueue();
+      expect(cubit.state.status, KioskStatus.ended);
+      expect(cubit.state.isKioskVisible, isFalse);
+      expect(signOutCalls, 1);
+      await cubit.close();
+    });
+
+    test(
+        'restore fails CLOSED when the server is unavailable AND the device '
+        'clock is near the deadline (would otherwise restore locked)',
+        () async {
+      // Deadline 10 min out → past the lockout mark (deadline − 15 min), so the
+      // device clock alone would restore [locked]. With the server unreachable
+      // that close to expiry we refuse to trust the device clock: end + sign
+      // out instead.
+      final near = t0.add(const Duration(minutes: 10));
+      when(() => store.read()).thenAnswer((_) async => (true, near));
+      when(() => serverClock.serverNow()).thenAnswer((_) async => null);
+      final cubit = build(now: () => t0);
+      await pumpEventQueue();
+      expect(cubit.state.status, KioskStatus.ended);
+      expect(signOutCalls, 1);
+      await cubit.close();
+    });
+
+    test(
+        'restore trusts a comfortably-early device clock when the server is '
+        'unavailable (offline kiosk still resumes)', () async {
+      // Deadline 6h out → nowhere near the lockout mark. An offline reload must
+      // still resume the kiosk rather than fail closed on every network blip.
+      final future = t0.add(const Duration(hours: 6));
+      when(() => store.read()).thenAnswer((_) async => (true, future));
+      when(() => serverClock.serverNow()).thenAnswer((_) async => null);
+      final cubit = build(now: () => t0);
+      await pumpEventQueue();
+      expect(cubit.state.status, KioskStatus.active);
+      expect(cubit.state.deadline, future);
+      expect(signOutCalls, 0);
+      await cubit.close();
     });
   });
 }

@@ -99,6 +99,13 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Expose the HTTP Date header so the browser (CRM kiosk) can read the
+        # server's clock off any response. A CORS-guarded browser only sees
+        # Date on a cross-origin response when it is named here (a literal "*"
+        # would not, since allow_credentials=True forbids the wildcard). The
+        # kiosk anchors its absolute 12h runway to this server time so a
+        # rolled-back device clock can't extend the member surface past T+12h.
+        expose_headers=["Date"],
     )
 
     application.add_exception_handler(

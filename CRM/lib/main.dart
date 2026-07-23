@@ -17,6 +17,7 @@ import 'package:crm/features/employees/presentation/screens/employee_detail_scre
 import 'package:crm/features/growth/presentation/screens/growth_screen.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/data/kiosk_server_clock.dart';
 import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
@@ -182,6 +183,9 @@ class _AuthGateHost extends StatelessWidget {
             lazy: false,
             create: (_) => KioskSessionCubit(
               store: KioskSessionStore(),
+              // Anchors the 12h runway to server time (HTTP Date), so a
+              // rolled-back device clock can't extend the member surface.
+              serverClock: KioskServerClock(),
               dispatchSignOut: () =>
                   loginBloc.add(const LoginSignOutRequested()),
               sessionGone: () =>

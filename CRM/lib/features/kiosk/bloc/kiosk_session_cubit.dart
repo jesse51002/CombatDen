@@ -4,6 +4,7 @@ import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
+import 'package:crm/features/kiosk/data/kiosk_server_clock.dart';
 import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 
 /// The security state machine behind CRM Kiosk Mode. Provided **above the auth
@@ -18,6 +19,17 @@ import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 /// Entry pins an absolute [KioskSessionState.deadline] = `now + runway`
 /// (default 12h). Member interaction never extends it — a stolen or forgotten
 /// iPad always loses access within the runway. Two timers ride it:
+///
+/// ### Server-anchored (SEC-3)
+/// `now` here is the SERVER clock, not the device clock. Both the entry pin
+/// and the reload expiry check read the server time via [KioskServerClock]
+/// (the HTTP `Date` header), so a supervised iPad whose clock is rolled *back*
+/// can't read "still before the deadline" and extend the member surface past
+/// its true T+12h. The exposure only ever existed across a reload — a live
+/// session's timers are duration-based (monotonic). When the server clock is
+/// unreachable, entry falls back to the device clock (staff is physically
+/// present), and restore **fails closed** near the deadline (below) rather
+/// than trusting a possibly-rolled-back device clock.
 ///
 /// - **lockout** at `deadline − graceWindow` (T+11h45): block *new* flow
 ///   starts. If nothing is mid-flow → sign out now (idle, 15 min early). If a
@@ -46,12 +58,14 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
     required KioskSessionStore store,
     required void Function() dispatchSignOut,
     required bool Function() sessionGone,
+    KioskServerClock? serverClock,
     DateTime Function() now = DateTime.now,
     Duration runway = const Duration(hours: 12),
     Duration graceWindow = const Duration(minutes: 15),
   })  : _store = store,
         _dispatchSignOut = dispatchSignOut,
         _sessionGone = sessionGone,
+        _serverClock = serverClock ?? KioskServerClock(),
         _now = now,
         _runway = runway,
         _graceWindow = graceWindow,
@@ -61,6 +75,12 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
 
   final KioskSessionStore _store;
 
+  /// Reads the SERVER clock (HTTP `Date`) so the runway can't be extended by a
+  /// rolled-back device clock. Returns null when unavailable; the entry/restore
+  /// paths fall back to [_now] (the device clock) — restore fails closed near
+  /// the deadline in that case.
+  final KioskServerClock _serverClock;
+
   /// Starts a sign-out (dispatches `LoginSignOutRequested`). Kept as a plain
   /// callback so the cubit never imports the login feature.
   final void Function() _dispatchSignOut;
@@ -69,6 +89,9 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
   /// persistence clear so a failed sign-out never wipes the flag.
   final bool Function() _sessionGone;
 
+  /// The DEVICE clock — the fallback used only when [_serverClock] is
+  /// unreachable (and, at restore, gated by the near-deadline fail-closed
+  /// rule). The server clock is the source of truth for the runway.
   final DateTime Function() _now;
   final Duration _runway;
   final Duration _graceWindow;
@@ -87,6 +110,12 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
   /// Enter kiosk: persist the flag + absolute deadline **first**, then start the
   /// runway timers and flip to [KioskStatus.active].
   ///
+  /// The deadline is anchored to the SERVER clock (SEC-3) so a rolled-back
+  /// device clock can never mint a longer-than-runway session. The server read
+  /// falls back to the device clock only when the backend is unreachable at
+  /// entry — staff is physically present, so an untampered device clock is an
+  /// acceptable baseline.
+  ///
   /// The save is *awaited before* the state flips (the caller awaits this): a
   /// reload in the microtask gap must never catch a live [active] session whose
   /// flag has not been written yet — that would restore straight into the admin
@@ -94,7 +123,9 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
   /// does **not** enter: the state is left untouched (the admin keeps the
   /// workspace) rather than entering a kiosk the next boot can't restore.
   Future<void> enterKiosk() async {
-    final deadline = _now().add(_runway);
+    final base = await _serverClock.serverNow() ?? _now();
+    if (isClosed) return;
+    final deadline = base.add(_runway);
     try {
       await _store.save(deadline);
     } catch (e, s) {
@@ -104,7 +135,7 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
     }
     if (isClosed) return;
     _flowCount = 0;
-    _scheduleTimers(deadline);
+    _scheduleTimers(deadline, base);
     emit(KioskSessionState(status: KioskStatus.active, deadline: deadline));
   }
 
@@ -143,9 +174,13 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
 
   // ── Timers ──
 
-  void _scheduleTimers(DateTime deadline) {
+  /// Schedule the lockout + hard-revoke timers off [now] — the same reference
+  /// instant the deadline was judged against (server time when available). The
+  /// timers themselves are duration-based (monotonic), so passing the
+  /// server-derived remaining time keeps a rolled-back device clock from
+  /// stretching them after a restore.
+  void _scheduleTimers(DateTime deadline, DateTime now) {
     _cancelTimers();
-    final now = _now();
     final untilLockout = deadline.subtract(_graceWindow).difference(now);
     final untilRevoke = deadline.difference(now);
     // A non-positive offset means that moment already passed (e.g. restoring
@@ -205,20 +240,41 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
       emit(const KioskSessionState.inactive());
       return;
     }
-    final now = _now();
-    if (!now.isBefore(deadline)) {
+    // Judge expiry against the SERVER clock (SEC-3): a rolled-back device clock
+    // reads "before the deadline" forever, so it can't be trusted to bound the
+    // runway across a reload. Only reached once a kiosk flag is persisted, so a
+    // normal admin boot never pays for this network read.
+    final serverNow = await _serverClock.serverNow();
+    if (isClosed) return;
+    final deviceNow = _now();
+    final effectiveNow = serverNow ?? deviceNow;
+
+    // Fail CLOSED when the server clock is unavailable AND the device clock
+    // already places us at/past the lockout mark: a possibly-rolled-back device
+    // clock is not trustworthy that close to expiry, so end rather than risk
+    // extending the surface. A comfortably-early offline reload still trusts the
+    // device clock below — otherwise an offline kiosk could never resume.
+    final deviceNearDeadline =
+        !deviceNow.isBefore(deadline.subtract(_graceWindow));
+    if (serverNow == null && deviceNearDeadline) {
+      emit(KioskSessionState(status: KioskStatus.ended, deadline: deadline));
+      _dispatchSignOut();
+      return;
+    }
+
+    if (!effectiveNow.isBefore(deadline)) {
       // The runway blew while the tab was closed. Fail closed: don't enter
       // kiosk — drive a sign-out and show the ended (locked) screen.
       emit(KioskSessionState(status: KioskStatus.ended, deadline: deadline));
       _dispatchSignOut();
       return;
     }
-    _scheduleTimers(deadline);
+    _scheduleTimers(deadline, effectiveNow);
     // Reopened inside the grace window (past lockout, before the deadline):
     // restore straight to [locked]. The idle-sign-out is a property of the
     // lockout *transition* on a live session, not of restore — the hard-revoke
     // timer (still scheduled above) bounds it at the deadline.
-    final locked = !now.isBefore(deadline.subtract(_graceWindow));
+    final locked = !effectiveNow.isBefore(deadline.subtract(_graceWindow));
     emit(KioskSessionState(
       status: locked ? KioskStatus.locked : KioskStatus.active,
       deadline: deadline,
