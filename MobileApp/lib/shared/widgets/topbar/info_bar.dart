@@ -11,11 +11,16 @@ class InfoBar extends StatelessWidget {
     required this.rankBadgeAsset,
     required this.streakDays,
     required this.pointsLabel,
+    this.onQrTap,
   });
 
   final String rankBadgeAsset;
   final int streakDays;
   final String pointsLabel;
+
+  /// Optional tap handler for the QR-code tile. When null the tile is a
+  /// static icon (its behavior on every topbar that doesn't opt in).
+  final VoidCallback? onQrTap;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +60,7 @@ class InfoBar extends StatelessWidget {
             ),
           ),
         ),
-        const Expanded(child: _QrCodeItem()),
+        Expanded(child: _QrCodeItem(onTap: onQrTap)),
       ],
     );
   }
@@ -139,11 +144,13 @@ class _IconValueItem extends StatelessWidget {
 }
 
 class _QrCodeItem extends StatelessWidget {
-  const _QrCodeItem();
+  const _QrCodeItem({this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final icon = SizedBox(
       height: 30,
       child: Center(
         child: Image(
@@ -155,6 +162,13 @@ class _QrCodeItem extends StatelessWidget {
           fit: BoxFit.contain,
         ),
       ),
+    );
+    // Null handler → the exact prior behavior: a plain, non-interactive icon.
+    if (onTap == null) return icon;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: icon,
     );
   }
 }

@@ -28,6 +28,7 @@ class AppTopbar extends StatelessWidget {
     required this.rankBadgeAsset,
     this.onTitleTap,
     this.onTitleDoubleTap,
+    this.onQrTap,
   });
 
   final AppTopbarMode mode;
@@ -39,6 +40,11 @@ class AppTopbar extends StatelessWidget {
   final String rankBadgeAsset;
   final VoidCallback? onTitleTap;
   final VoidCallback? onTitleDoubleTap;
+
+  /// Optional QR-tile tap handler, threaded to the [InfoBar]. Only the home
+  /// topbar wires it (to open the check-in scanner); every other topbar leaves
+  /// it null, so its QR tile stays a static icon.
+  final VoidCallback? onQrTap;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +81,7 @@ class AppTopbar extends StatelessWidget {
             rankBadgeAsset: rankBadgeAsset,
             streakDays: streakDays,
             pointsLabel: pointsLabel,
+            onQrTap: onQrTap,
           ),
         ],
       ),

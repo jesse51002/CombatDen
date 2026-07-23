@@ -35,6 +35,8 @@ class HomeTopbar extends StatelessWidget {
           rankBadgeAsset: _kDefaultRankBadgeAsset,
           onTitleDoubleTap: () =>
               Navigator.of(context).pushNamed(AppRoutes.memberSelect),
+          onQrTap: () =>
+              Navigator.of(context).pushNamed(AppRoutes.checkinScanner),
         );
       },
     );

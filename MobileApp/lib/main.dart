@@ -16,6 +16,9 @@ import 'package:mobile_app/features/login/data/repositories/auth_repository.dart
 import 'package:mobile_app/features/login/presentation/screens/auth_gate.dart';
 import 'package:mobile_app/features/member_select/presentation/screens/switch_profile_screen.dart';
 import 'package:mobile_app/features/profile/presentation/screens/profile_screen.dart';
+import 'package:mobile_app/features/qr_checkin/presentation/screens/checkin_confirm_screen.dart';
+import 'package:mobile_app/features/qr_checkin/presentation/screens/checkin_pick_class_screen.dart';
+import 'package:mobile_app/features/qr_checkin/presentation/screens/checkin_scanner_screen.dart';
 import 'package:mobile_app/features/rewards/presentation/screens/my_rewards_screen.dart';
 import 'package:mobile_app/features/rewards/presentation/screens/points_store_screen.dart';
 import 'package:mobile_app/features/rewards/presentation/screens/summary_screen.dart';
@@ -43,6 +46,9 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.profile: (_) => const ProfileScreen(),
   AppRoutes.styleSelect: (_) => const StyleSelectScreen(),
   AppRoutes.memberSelect: (_) => const SwitchProfileScreen(),
+  AppRoutes.checkinScanner: (_) => const CheckinScannerScreen(),
+  AppRoutes.checkinPickClass: (_) => const CheckinPickClassScreen(),
+  AppRoutes.checkinConfirm: (_) => const CheckinConfirmScreen(),
   AppRoutes.myRewards: (_) => const MyRewardsScreen(),
   AppRoutes.pointsStore: (_) => const PointsStoreScreen(),
   AppRoutes.summary: (_) => const SummaryScreen(),

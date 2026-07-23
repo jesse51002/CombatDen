@@ -23,6 +23,11 @@ class AppRoutes {
   // Switch profile — re-open the "Who's training?" member picker in-app.
   static const String memberSelect = '/member-select';
 
+  // QR check-in flow: topbar tile → scanner → pick today's class → confirm.
+  static const String checkinScanner = '/checkin/scanner';
+  static const String checkinPickClass = '/checkin/pick';
+  static const String checkinConfirm = '/checkin/confirm';
+
   // Rewards tab
   static const String myRewards = '/rewards';
   static const String pointsStore = '/rewards/store';
