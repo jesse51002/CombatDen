@@ -3,10 +3,11 @@
 
 There is no materializer and no past/live day-dedup in the versioned model:
 the board is pure version expansion (``ClassesVersionExpander``,
-``include_cancelled=True``) enriched with instructor names and attendance /
-sign-up counts, all keyed by the occurrence's FULL identity ``(class_id,
-original_date, original_time)`` — with several slots per day legal, a
-date-only key would conflate two same-day occurrences. These tests cover:
+``include_cancelled=True``) enriched with the class description, the resolved
+instructor (name + public bio + photo), and attendance / sign-up counts, all
+keyed by the occurrence's FULL identity ``(class_id, original_date,
+original_time)`` — with several slots per day legal, a date-only key would
+conflate two same-day occurrences. These tests cover:
 
 * a multi-version class renders its pre-mint days from the OLD version and
   its post-mint days from the NEW version, in the same window;
@@ -27,7 +28,13 @@ date-only key would conflate two same-day occurrences. These tests cover:
 * a class with TWO slots on one date renders TWO independent board rows,
   each with its own ``original_time`` and independently-keyed counts;
 * an instance exception bound to ONE slot (e.g. cancelling the 06:00
-  occurrence) leaves a same-day SIBLING slot (18:00) completely untouched.
+  occurrence) leaves a same-day SIBLING slot (18:00) completely untouched;
+* a board row carries the class description and the resolved instructor's
+  name + public bio + photo when a slot has an assigned instructor;
+* those instructor fields (and a null class description) are None when the
+  slot has no instructor / the class has no description;
+* a per-occurrence instructor OVERRIDE (instance exception ``new_instructor_id``)
+  surfaces the OVERRIDE instructor's bio + photo, not the default slot's.
 
 The DB reads (``_read_all``) are stubbed by sql-file name; the real
 ``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``) does the
@@ -64,6 +71,7 @@ def _class_row(
     class_id: UUID,
     gym_id: UUID,
     class_name: str = "Test Class",
+    class_description: str | None = None,
     max_capacity: int | None = None,
     is_deleted: bool = False,
 ) -> dict:
@@ -72,7 +80,7 @@ def _class_row(
         "class_id": class_id,
         "gym_id": gym_id,
         "class_name": class_name,
-        "class_description": None,
+        "class_description": class_description,
         "max_capacity": max_capacity,
         "allowed_plan_ids": None,
         "image_url": "https://example.test/class.jpg",
@@ -80,6 +88,24 @@ def _class_row(
         "is_active": True,
         "is_deleted": is_deleted,
         "created_at": datetime.now(UTC),
+    }
+
+
+def _instructor_row(
+    *,
+    employee_id: UUID,
+    first_name: str = "Ins",
+    last_name: str = "Tructor",
+    bio: str | None = None,
+    image_url: str | None = None,
+) -> dict:
+    """A ``classes_gym_instructors.sql``-shaped gym-employees row."""
+    return {
+        "employee_id": employee_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "employee_public_description": bio,
+        "employee_pic_url": image_url,
     }
 
 
@@ -113,14 +139,19 @@ def _version_row(
 
 def _daily_version_row(
     *, class_id: UUID, gym_id: UUID, effective_from: datetime,
-    class_time: time, **kwargs: object,
+    class_time: time, instructor_id: UUID | None = None,
+    **kwargs: object,
 ) -> dict:
     """A single-slot-per-day daily version row."""
     return _version_row(
         class_id=class_id,
         gym_id=gym_id,
         effective_from=effective_from,
-        weekday_slots={ALL_DAYS_KEY: [{"time": class_time, "instructor_id": None}]},
+        weekday_slots={
+            ALL_DAYS_KEY: [
+                {"time": class_time, "instructor_id": instructor_id}
+            ]
+        },
         recurring_unit=RecurringUnit.daily,
         **kwargs,
     )
@@ -134,6 +165,7 @@ def _instance_row(
     original_time: time = time(9, 0),
     is_cancelled: bool = False,
     new_date: date | None = None,
+    new_instructor_id: UUID | None = None,
 ) -> dict:
     return {
         "exception_id": uuid4(),
@@ -145,7 +177,7 @@ def _instance_row(
         "new_class_time": None,
         "new_duration_minutes": None,
         "new_max_capacity": None,
-        "new_instructor_id": None,
+        "new_instructor_id": new_instructor_id,
         "new_date": new_date,
         "created_at": datetime(2025, 1, 1, tzinfo=UTC),
     }
@@ -180,13 +212,14 @@ def _service(
     ranges: list[dict] | None = None,
     attendance: list[dict] | None = None,
     signups: list[dict] | None = None,
+    instructors: list[dict] | None = None,
 ) -> ClassesScheduleReaderService:
     sql_map: dict[str, list[dict]] = {
         "classes_board_classes.sql": classes,
         "classes_schedules_for_gym.sql": versions,
         "classes_instance_exceptions_for_window.sql": instances or [],
         "classes_range_exceptions_for_window.sql": ranges or [],
-        "classes_gym_instructors.sql": [],
+        "classes_gym_instructors.sql": instructors or [],
         "classes_attendance_counts.sql": attendance or [],
         "classes_signup_counts.sql": signups or [],
     }
@@ -632,6 +665,165 @@ async def test_instance_exception_on_one_slot_leaves_sibling_untouched(
     assert rows[time(6, 0)].has_instance_exception is True
     assert rows[time(18, 0)].is_cancelled is False
     assert rows[time(18, 0)].has_instance_exception is False
+
+
+# -- class description + instructor bio / photo enrichment -----------------
+
+
+async def test_class_description_and_instructor_bio_photo_populate(
+    monkeypatch,
+) -> None:
+    """A board row carries the class's description and the resolved
+    instructor's name + public bio + photo when the slot has an assigned
+    instructor present in the gym's employee directory."""
+    class_id, gym_id, instructor_id = uuid4(), uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+    day = date(2026, 6, 1)
+
+    version = _daily_version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+        instructor_id=instructor_id,
+    )
+    service = _service(
+        classes=[
+            _class_row(
+                class_id=class_id,
+                gym_id=gym_id,
+                class_description="Gi & no-gi fundamentals.",
+            )
+        ],
+        versions=[version],
+        instructors=[
+            _instructor_row(
+                employee_id=instructor_id,
+                first_name="Ana",
+                last_name="Diaz",
+                bio="Black belt, 10 years teaching.",
+                image_url="https://example.test/ana.jpg",
+            )
+        ],
+    )
+
+    resp = await service.list_effective_instances(gym_id, day, day)
+
+    row = next(r for r in resp.items if r.original_date == day)
+    assert row.class_description == "Gi & no-gi fundamentals."
+    assert row.resolved_instructor_id == instructor_id
+    assert row.resolved_instructor_name == "Ana Diaz"
+    assert row.resolved_instructor_bio == "Black belt, 10 years teaching."
+    assert row.resolved_instructor_image_url == "https://example.test/ana.jpg"
+
+
+async def test_instructor_fields_and_description_none_when_absent(
+    monkeypatch,
+) -> None:
+    """With an unassigned slot (and a class carrying no description), the
+    class_description and all three resolved-instructor fields are None — the
+    additive board fields degrade cleanly."""
+    class_id, gym_id = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+    day = date(2026, 6, 1)
+
+    version = _daily_version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),  # instructor_id defaults to None (unassigned)
+    )
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instructors=[],  # no employees at the gym
+    )
+
+    resp = await service.list_effective_instances(gym_id, day, day)
+
+    row = next(r for r in resp.items if r.original_date == day)
+    assert row.class_description is None
+    assert row.resolved_instructor_id is None
+    assert row.resolved_instructor_name is None
+    assert row.resolved_instructor_bio is None
+    assert row.resolved_instructor_image_url is None
+
+
+async def test_instance_override_instructor_uses_override_bio_photo(
+    monkeypatch,
+) -> None:
+    """A per-occurrence instructor OVERRIDE (an instance exception's
+    ``new_instructor_id``) surfaces the OVERRIDE instructor's bio + photo on
+    that occurrence, while an unaffected sibling day keeps the DEFAULT slot
+    instructor's — the bio/photo follow the resolved instructor, exactly as
+    the name does."""
+    class_id, gym_id = uuid4(), uuid4()
+    default_instructor, override_instructor = uuid4(), uuid4()
+    now = datetime(2020, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+    day1, day2 = date(2026, 6, 1), date(2026, 6, 2)
+
+    version = _daily_version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+        instructor_id=default_instructor,
+    )
+    # day2's occurrence is reassigned to the override instructor.
+    instances = [
+        _instance_row(
+            class_id=class_id,
+            gym_id=gym_id,
+            original_date=day2,
+            original_time=time(9, 0),
+            new_instructor_id=override_instructor,
+        )
+    ]
+    service = _service(
+        classes=[_class_row(class_id=class_id, gym_id=gym_id)],
+        versions=[version],
+        instances=instances,
+        instructors=[
+            _instructor_row(
+                employee_id=default_instructor,
+                first_name="Def",
+                last_name="Ault",
+                bio="default bio",
+                image_url="https://example.test/default.jpg",
+            ),
+            _instructor_row(
+                employee_id=override_instructor,
+                first_name="Ovr",
+                last_name="Ride",
+                bio="override bio",
+                image_url="https://example.test/override.jpg",
+            ),
+        ],
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day2)
+
+    by_date = {row.original_date: row for row in resp.items}
+    # Unaffected sibling day -> the DEFAULT slot instructor.
+    assert by_date[day1].resolved_instructor_id == default_instructor
+    assert by_date[day1].resolved_instructor_name == "Def Ault"
+    assert by_date[day1].resolved_instructor_bio == "default bio"
+    assert (
+        by_date[day1].resolved_instructor_image_url
+        == "https://example.test/default.jpg"
+    )
+    # Overridden day -> the OVERRIDE instructor's bio + photo, not the default.
+    assert by_date[day2].resolved_instructor_id == override_instructor
+    assert by_date[day2].resolved_instructor_name == "Ovr Ride"
+    assert by_date[day2].resolved_instructor_bio == "override bio"
+    assert (
+        by_date[day2].resolved_instructor_image_url
+        == "https://example.test/override.jpg"
+    )
+    assert by_date[day2].has_instance_exception is True
 
 
 # ── window guard (bounded span) ───────────────────────────────────────

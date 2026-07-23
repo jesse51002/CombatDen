@@ -215,7 +215,9 @@ all supported — the exception layer is how the past gets corrected.
 `ClassesScheduleReaderService` (`GET /api/v1/classes/instances`): load every
 class (deleted included) + ALL versions + the window's exceptions
 (concurrently, via `asyncio.gather`), expand via `ClassesVersionExpander`
-with `include_cancelled=True`, enrich with instructor names, per-SLOT
+with `include_cancelled=True`, enrich with the class description + the
+resolved instructor (name + public bio + photo, all following the resolved
+`instructor_id` so a per-occurrence override's bio/photo win), per-SLOT
 capacity overrides / instance-exception flags, and the attendance / sign-up
 counts (everything keyed `(class_id, original_date, original_time)` — plain
 GROUP BYs, no joins; two same-day slots enrich independently). No
