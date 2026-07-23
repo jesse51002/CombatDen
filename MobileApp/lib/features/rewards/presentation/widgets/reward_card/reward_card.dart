@@ -10,7 +10,10 @@ const double _kCardTitleHeight = 42;
 /// Shared reward card used by both the Points Store and My Rewards grids.
 /// 3:2 image with a brand-orange price tag pinned to the top-right; below
 /// the image a fixed-height title slot, the points cost, and a CTA whose
-/// label is provided by the caller (e.g. "Redeem" vs "Use").
+/// label is provided by the caller (e.g. "Redeem" on the store vs a redemption
+/// status on My Rewards). A null [onPressed] renders the CTA disabled — the
+/// store uses it to gate an unaffordable reward, My Rewards to show a
+/// non-interactive status.
 class RewardCard extends StatelessWidget {
   const RewardCard({
     super.key,
@@ -27,7 +30,7 @@ class RewardCard extends StatelessWidget {
   final String priceLabel;
   final int pointsCost;
   final String buttonText;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
