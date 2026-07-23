@@ -4,13 +4,32 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_search_results.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 
-/// The "Name search" half of the kiosk home — a live, debounced search over
-/// the gym roster feeding a plain name list (no avatars/photos: a shared iPad
-/// shouldn't show member faces). Selecting a name starts the check-in flow.
+/// The "Name search" half of the kiosk home, as the two slots the home's band
+/// layout places (mockup `.home-panel`): the section head, and the live search
+/// field + result list that floats in the flexible middle (`.search-wrap`).
+/// There is no footer — the QR half's adoption block no longer costs this half
+/// its alignment, because both bodies share one flexible band.
+KioskHomeHalf kioskNameSearchHalf() => const KioskHomeHalf(
+      head: KioskSectionHead(
+        title: 'Name search',
+        subtitle: 'Search for your name for a quick check in',
+      ),
+      body: KioskNameSearch(),
+    );
+
+/// The name-search body: a live, debounced search over the gym roster feeding
+/// a plain name list (no avatars/photos: a shared iPad shouldn't show member
+/// faces). Selecting a name starts the check-in flow.
+///
+/// At rest the field is the whole body, so it sits on the band's exact centre
+/// — the same centre the QR tile sits on. The results block below it carries
+/// its OWN top gap instead of a column spacing, so an empty result list adds
+/// no height and cannot nudge the field off that shared centre.
 class KioskNameSearch extends StatefulWidget {
   const KioskNameSearch({super.key});
 
@@ -38,18 +57,12 @@ class _KioskNameSearchState extends State<KioskNameSearch> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        spacing: DesignConstants.spacingBig,
         children: [
-          const KioskSectionHead(
-            title: 'Name search',
-            subtitle: 'Search for your name for a quick check in',
-          ),
           AppSearchBox(
             controller: _controller,
             hintText: 'Start typing your name',
             textStyle: DesignConstants.h2,
-            onChanged: (value) =>
-                context.read<KioskFlowCubit>().search(value),
+            onChanged: (value) => context.read<KioskFlowCubit>().search(value),
           ),
           const KioskSearchResults(),
         ],

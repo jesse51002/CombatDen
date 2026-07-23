@@ -335,6 +335,19 @@ class DesignConstants {
   static const double qrThumbnailSize = 120.0;
   // The kiosk "Get the app" modal's real scannable download QR (module box).
   static const double kioskAppQrSize = 168.0;
+
+  // ── Kiosk QR contrast — deliberately NOT theme-aware ──
+  // A QR code's colours are a FUNCTIONAL requirement, not a themable surface:
+  // scanners expect dark modules on a light quiet zone, and many fail (or are
+  // slow) on an inverted code. Resolving these through `text` / `surface`
+  // rendered the kiosk QR light-on-dark for a gym running the dark theme,
+  // silently breaking the app-adoption funnel (and, at Phase G, the live
+  // check-in code). So both kiosk QR tiles pin to the light palette's ink +
+  // white in EVERY theme. Do NOT "fix" these back onto `text` / `surface` —
+  // the inversion is the bug, the theme-independence is the fix. The one
+  // renderer is `KioskQrFrame`.
+  static const Color kioskQrModule = _lText;
+  static const Color kioskQrQuietZone = _lSurface;
   // A default-image chip in the ImageUploadPickerField pool tray. The chip
   // width follows the field's aspectRatio, so belts render square (64x64)
   // and photos landscape at this height.
@@ -443,12 +456,69 @@ class DesignConstants {
         letterSpacing: 1.9,
       );
 
+  /// A literal value rendered as a kiosk chip — the sign-in email on the "Get
+  /// the app" card's step 2 (mockup `.step-email`). Geist Mono at body size so
+  /// an address reads unambiguously (l/1, O/0), untracked — unlike
+  /// [kioskEyebrow], which is a tracked uppercase micro-label.
+  static TextStyle get kioskMonoValue => monoFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: text,
+        letterSpacing: 0,
+      );
+
   /// Inner content measure for the glance's two panels — the width the reward
   /// tile grid and the week-day strip are capped at (and centered within)
   /// inside a panel, so neither spreads edge-to-edge on the wide kiosk. One
   /// token unifies the mockup's `.reward-grid` (max 292) and `.week-strip`
   /// (max 360) caps into a single kiosk content width.
   static const double kioskGlanceMeasure = 320.0;
+
+  /// One video card on the "Watch videos" showcase slide (mockup `.vc-grid`,
+  /// two 198px columns in a 410px grid). Wider than half of
+  /// [kioskGlanceMeasure] on purpose: a video card carries a 16:9 thumbnail
+  /// AND a title line, so squeezing it to the reward-tile measure crushes
+  /// both.
+  static const double kioskVideoCardWidth = 192.0;
+
+  // ── Kiosk button scale ──
+  // The kiosk is read (and pressed) from standing distance on a supervised
+  // iPad, so its buttons run a full step larger than the admin defaults
+  // (13px label / 16x8 padding) — the same reason the kiosk display type
+  // above exists. Mockup `.btn-primary` / `.btn-outline`. These are applied
+  // ONLY through `KioskPrimaryButton` / `KioskOutlineButton`
+  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`) so the whole
+  // kiosk button set scales together and no call site restates a size; the
+  // admin app keeps the `AppPrimaryButton` / `AppOutlineButton` defaults.
+
+  /// Kiosk PRIMARY button label — 19px semibold (mockup `.btn-primary`).
+  static TextStyle get kioskButtonPrimaryLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 19,
+        color: text,
+        letterSpacing: -0.19,
+      );
+
+  /// Kiosk OUTLINE button label — 17px semibold (mockup `.btn-outline`).
+  static TextStyle get kioskButtonOutlineLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 17,
+        color: text,
+        letterSpacing: -0.17,
+      );
+
+  /// Kiosk PRIMARY button box — 18/34 (mockup `.btn-primary` padding).
+  static const EdgeInsets kioskButtonPrimaryPadding = EdgeInsets.symmetric(
+    horizontal: 34,
+    vertical: 18,
+  );
+
+  /// Kiosk OUTLINE button box — 15/30 (mockup `.btn-outline` padding). One
+  /// step tighter than the primary, exactly as the mockup pairs them.
+  static const EdgeInsets kioskButtonOutlinePadding = EdgeInsets.symmetric(
+    horizontal: 30,
+    vertical: 15,
+  );
 
   /// H2 text style (semibold, 16)
   static TextStyle get h2 => baseFont.copyWith(

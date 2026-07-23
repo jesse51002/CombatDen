@@ -10,6 +10,12 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// The name-search results — plain, centered name rows (deliberately NO
 /// avatars/photos). Also renders the searching / no-match / failed states.
 /// Tapping a name hands off to the class pick via [KioskFlowCubit.selectMember].
+///
+/// Every populated state carries its OWN top gap and the resting state is a
+/// true zero-height box, so an empty result list adds nothing to the search
+/// half — that is what keeps the field on the QR's optical centre at rest
+/// (see [KioskNameSearch]). Never re-introduce the gap as a parent column
+/// spacing: that would reserve it even when this renders nothing.
 class KioskSearchResults extends StatelessWidget {
   const KioskSearchResults({super.key});
 
@@ -51,12 +57,15 @@ class _Results extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < rows.length; i++)
-          _NameRow(row: rows[i], first: i == 0),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(top: DesignConstants.spacingLarge),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < rows.length; i++)
+            _NameRow(row: rows[i], first: i == 0),
+        ],
+      ),
     );
   }
 }

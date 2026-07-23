@@ -14,7 +14,10 @@ import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
+import 'package:crm/features/member_details/data/models/rank.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/members/data/gym_content_repository.dart';
+import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
@@ -22,6 +25,11 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/models/rank_enabled_response.dart';
+import 'package:crm/features/memberships/data/models/rank_ladder.dart';
+import 'package:crm/features/memberships/data/models/rank_sub_type.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
@@ -35,6 +43,11 @@ class _MockScheduleRepository extends Mock implements ScheduleRepository {}
 class _MockMemberRepository extends Mock implements MemberRepository {}
 
 class _MockRewardsRepository extends Mock implements RewardsRepository {}
+
+class _MockGymContentRepository extends Mock
+    implements GymContentRepository {}
+
+class _MockRanksRepository extends Mock implements RanksRepository {}
 
 class _MockMemberDetail extends Mock implements MemberDetailResponse {}
 
@@ -115,10 +128,34 @@ void main() {
     createdAt: t0,
   );
 
+  final video1 = Video(
+    url: 'https://youtube.com/watch?v=abc',
+    title: 'Clinch control fundamentals',
+    thumbnailUrl: 'https://img/1.jpg',
+    channelName: 'Combat Culture',
+    channelUrl: 'https://youtube.com/@cc',
+    channelAvatarUrl: '',
+    viewCount: 12000,
+    relevanceIndex: 0,
+    tags: const [],
+    bigGroups: const [],
+  );
+
+  final blueRank = MainRank(
+    rankId: 'rank-blue',
+    gymId: gymId,
+    mainRankNumOrder: 2,
+    name: 'Blue',
+    classesToNextMajor: 25,
+    createdAt: t0,
+  );
+
   late _MockMembersListRepository members;
   late _MockScheduleRepository schedule;
   late _MockMemberRepository member;
   late _MockRewardsRepository rewards;
+  late _MockGymContentRepository content;
+  late _MockRanksRepository ranks;
   late _MockMemberDetail detail;
   late _MockKioskSessionCubit session;
 
@@ -143,6 +180,8 @@ void main() {
     schedule = _MockScheduleRepository();
     member = _MockMemberRepository();
     rewards = _MockRewardsRepository();
+    content = _MockGymContentRepository();
+    ranks = _MockRanksRepository();
     detail = _MockMemberDetail();
     session = _MockKioskSessionCubit();
     when(() => session.state).thenReturn(activeState);
@@ -155,11 +194,37 @@ void main() {
         videosWatched: 0,
       ),
     );
+    when(() => detail.rank).thenReturn(
+      const Rank(
+        rankId: 'rank-blue',
+        name: 'Blue',
+        classesToNextMajor: 25,
+        classesTillNextStep: 25,
+      ),
+    );
     when(() => member.getMemberDetail(any()))
         .thenAnswer((_) async => detail);
     when(() => rewards.listRewards(any(),
             includeInactive: any(named: 'includeInactive')))
         .thenAnswer((_) async => [rewardPricey, rewardCheap]);
+    when(() => content.fetchVideos(any(),
+            videoType: any(named: 'videoType'),
+            rejected: any(named: 'rejected'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset')))
+        .thenAnswer((_) async => VideoPage(videos: [video1], total: 1));
+    when(() => ranks.getRankEnabled(any())).thenAnswer(
+      (_) async => const RankEnabledResponse(
+        gymId: gymId,
+        isRankEnabled: true,
+      ),
+    );
+    when(() => ranks.listRanks(any())).thenAnswer(
+      (_) async => RankLadder(
+        ranks: [blueRank],
+        subRankType: RankSubType.none,
+      ),
+    );
   });
 
   KioskFlowCubit build() => KioskFlowCubit(
@@ -167,6 +232,8 @@ void main() {
         scheduleRepository: schedule,
         memberRepository: member,
         rewardsRepository: rewards,
+        gymContentRepository: content,
+        ranksRepository: ranks,
         session: session,
         gymId: gymId,
         now: () => t0,
@@ -238,10 +305,14 @@ void main() {
       setUp: () => when(() => session.state).thenReturn(lockedState),
       build: build,
       act: (cubit) => cubit.selectMember(member1),
-      expect: () => [
-        isA<KioskFlowState>().having((s) => s.view, 'view', KioskView.closing),
-      ],
-      verify: (_) => verifyNever(() => session.beginFlow()),
+      // Asserted on the settled state, not the emitted list: the three
+      // gym-wide catalogues warmed at construction land asynchronously and
+      // each publishes its own emit, so the stream carries entries this test
+      // has no opinion about.
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.closing);
+        verifyNever(() => session.beginFlow());
+      },
     );
   });
 
@@ -544,6 +615,117 @@ void main() {
       expect(cubit.state.view, KioskView.home);
       verifyNever(() => session.beginFlow());
       cubit.close();
+    });
+  });
+
+  group('gym-wide showcase catalogues (fetched once at kiosk ENTRY)', () {
+    test('warms rewards, this gym\'s own video feed, and the rank ladder — '
+        'each exactly once, before any member arrives', () {
+      fakeAsync((async) {
+        final cubit = build();
+        async.flushMicrotasks();
+
+        // All three land on the IDLE HOME, so the "Get the app" modal opened
+        // from the home QR panel already has them and fires no fetch.
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.rewards, [rewardCheap, rewardPricey]);
+        expect(cubit.state.videos, [video1]);
+        expect(cubit.state.rankLadder, [blueRank]);
+
+        // The gym's OWN feed, gym-id scoped — never the default content gym's
+        // showcase that `selectedGym.detail` carries.
+        verify(() => content.fetchVideos(gymId,
+            videoType: any(named: 'videoType'),
+            rejected: any(named: 'rejected'),
+            limit: kKioskShowcaseVideoCount,
+            offset: any(named: 'offset'))).called(1);
+        verify(() => ranks.getRankEnabled(gymId)).called(1);
+        verify(() => ranks.listRanks(gymId)).called(1);
+        cubit.close();
+      });
+    });
+
+    test('the catalogues survive a return home — no re-fetch per member', () {
+      fakeAsync((async) {
+        final cubit = build();
+        async.flushMicrotasks();
+
+        cubit.goHome();
+        async.flushMicrotasks();
+
+        expect(cubit.state.rewards, [rewardCheap, rewardPricey]);
+        expect(cubit.state.videos, [video1]);
+        expect(cubit.state.rankLadder, [blueRank]);
+        // Still one call each — goHome re-seeds from the entry-time cache.
+        verify(() => content.fetchVideos(any(),
+            videoType: any(named: 'videoType'),
+            rejected: any(named: 'rejected'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'))).called(1);
+        verify(() => ranks.listRanks(any())).called(1);
+        cubit.close();
+      });
+    });
+
+    test('a gym with ranks switched OFF gets no ladder (and never reads it)',
+        () {
+      fakeAsync((async) {
+        when(() => ranks.getRankEnabled(any())).thenAnswer(
+          (_) async => const RankEnabledResponse(
+            gymId: gymId,
+            isRankEnabled: false,
+          ),
+        );
+        final cubit = build();
+        async.flushMicrotasks();
+
+        expect(cubit.state.rankLadder, isEmpty);
+        verifyNever(() => ranks.listRanks(any()));
+        cubit.close();
+      });
+    });
+
+    test('a failed catalogue fetch is non-fatal — it just leaves that list '
+        'empty', () {
+      fakeAsync((async) {
+        when(() => content.fetchVideos(any(),
+                videoType: any(named: 'videoType'),
+                rejected: any(named: 'rejected'),
+                limit: any(named: 'limit'),
+                offset: any(named: 'offset')))
+            .thenThrow(Exception('feed down'));
+        when(() => ranks.getRankEnabled(any())).thenThrow(Exception('down'));
+        final cubit = build();
+        async.flushMicrotasks();
+
+        // No error view, no thrown state — the slides are simply omitted.
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.videos, isEmpty);
+        expect(cubit.state.rankLadder, isEmpty);
+        cubit.close();
+      });
+    });
+
+    test('the glance also records the member\'s rank, for the "You\'re here" '
+        'rung', () {
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.currentRankId, 'rank-blue');
+
+        // …and it is per-member, so it never follows the next person home.
+        cubit.goHome();
+        expect(cubit.state.currentRankId, isNull);
+        cubit.close();
+      });
     });
   });
 }

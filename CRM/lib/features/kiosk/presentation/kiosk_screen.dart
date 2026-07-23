@@ -13,11 +13,15 @@ import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dar
 import 'package:crm/features/kiosk/presentation/screens/kiosk_glance_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_checking_in.dart';
+import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_slide.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_header.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_idle_warning.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/members/data/gym_content_repository.dart';
+import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
@@ -46,6 +50,8 @@ class KioskScreen extends StatelessWidget {
         scheduleRepository: ScheduleRepository(apiClient: ApiClient()),
         memberRepository: MemberRepository(apiClient: ApiClient()),
         rewardsRepository: RewardsRepository(apiClient: ApiClient()),
+        gymContentRepository: GymContentRepository(ApiClient()),
+        ranksRepository: RanksRepository(apiClient: ApiClient()),
         session: context.read<KioskSessionCubit>(),
         gymId: selectedGym.gymId!,
       ),
@@ -138,6 +144,13 @@ class _IdleOverlay extends StatelessWidget {
 /// The "Get the CombatDen App" modal (UX-5), rendered over the current view
 /// (like the idle warning) whenever the cubit's [KioskFlowState.appModalOpen]
 /// is set — opened by a glance tap or the home QR panel's "Get it" affordance.
+///
+/// Everything it shows comes from state the cubit ALREADY holds: the three
+/// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's own
+/// video feed, its rank ladder), the classes the flow loaded, and the
+/// checked-in member's address + rank. **No fetch is fired to open the modal**
+/// — that is what keeps it instant. A catalogue that came back empty simply
+/// drops its slide.
 class _AppModalOverlay extends StatelessWidget {
   const _AppModalOverlay();
 
@@ -146,12 +159,30 @@ class _AppModalOverlay extends StatelessWidget {
     return BlocBuilder<KioskFlowCubit, KioskFlowState>(
       buildWhen: (prev, cur) =>
           prev.appModalOpen != cur.appModalOpen ||
-          prev.appModalCountdown != cur.appModalCountdown,
+          prev.appModalCountdown != cur.appModalCountdown ||
+          prev.rewards != cur.rewards ||
+          prev.classes != cur.classes ||
+          prev.videos != cur.videos ||
+          prev.rankLadder != cur.rankLadder ||
+          prev.currentRankId != cur.currentRankId ||
+          prev.selectedMember != cur.selectedMember,
       builder: (context, state) {
         if (!state.appModalOpen) return const SizedBox.shrink();
+        // Only the `all` view row carries an email, and that is the view the
+        // kiosk name search uses; any other shape means we don't know it.
+        final member = state.selectedMember;
         return KioskGetAppModal(
           gymId: selectedGym.gymId ?? '',
+          gymName: selectedGym.gymName,
           secondsLeft: state.appModalCountdown,
+          memberEmail: member is AllViewRow ? member.email : null,
+          rewards: state.rewards,
+          classes: state.classes,
+          videos: state.videos,
+          rankLadder: kioskRankSteps(
+            state.rankLadder,
+            currentRankId: state.currentRankId,
+          ),
         );
       },
     );

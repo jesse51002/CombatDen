@@ -221,6 +221,12 @@ space + hairlines + titles. Nested cards are always wrong.
   swap in a solid fill for a destructive/confirm action (that drops the gradient + shadow).
 - **Outline** (`AppOutlineButton`): 2px ink border, ink label, transparent fill, for secondary
   actions (Print, Edit, Promote, View all).
+- **Kiosk scale** (`KioskPrimaryButton` / `KioskOutlineButton`): the same two buttons one step
+  larger — 19px label / 18x34 padding and 17px / 15x30 (`kioskButtonPrimaryLabel`,
+  `kioskButtonOutlineLabel` and their padding tokens) — because the member kiosk is read and
+  pressed from standing distance, the same reason the kiosk display type exists. These two
+  wrappers are the only place those tokens are applied, so the whole kiosk button set scales
+  together; the admin surfaces keep the base defaults.
 
 ### Hairline
 - A 1px rule in the `line` tint (ink @ 9%). Horizontal separates stacked sections;

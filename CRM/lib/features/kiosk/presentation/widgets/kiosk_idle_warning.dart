@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
-import 'package:crm/shared/widgets/app_primary_button.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 
 /// The flow-idle warning — a veil over the in-progress flow with a visible
 /// countdown. Any interaction anywhere dismisses it and resets the 5-minute
@@ -59,7 +59,7 @@ class KioskIdleWarning extends StatelessWidget {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    AppPrimaryButton(
+                    KioskPrimaryButton(
                       text: 'I\'m still here',
                       onPressed: () =>
                           context.read<KioskFlowCubit>().registerActivity(),

@@ -8,11 +8,15 @@ import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/members/data/gym_content_repository.dart';
+import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
+import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
@@ -48,6 +52,10 @@ const Duration kKioskGlanceAutoReturn = Duration(seconds: 8);
 /// a gym with more rewards surfaces the nearest few, the rest live in the app.
 const int kKioskGlanceRewardCount = 4;
 
+/// How many of this gym's own videos the "Watch videos" showcase slide shows
+/// (mockup `.vc-grid` is a two-card row). Only this many are fetched.
+const int kKioskShowcaseVideoCount = 2;
+
 /// How long the "Get the CombatDen App" modal (UX-5) stays open before it
 /// auto-closes back to home, so the next member gets a clean home. A member can
 /// also leave early with Done. It is the modal's OWN clock — a plain countdown
@@ -72,6 +80,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     required ScheduleRepository scheduleRepository,
     required MemberRepository memberRepository,
     required RewardsRepository rewardsRepository,
+    required GymContentRepository gymContentRepository,
+    required RanksRepository ranksRepository,
     required KioskSessionCubit session,
     required String gymId,
     DateTime Function() now = DateTime.now,
@@ -79,20 +89,30 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         _scheduleRepo = scheduleRepository,
         _memberRepo = memberRepository,
         _rewardsRepo = rewardsRepository,
+        _contentRepo = gymContentRepository,
+        _ranksRepo = ranksRepository,
         _session = session,
         _gymId = gymId,
         _now = now,
         super(const KioskFlowState.home()) {
-    // Warm the gym-wide reward catalog once at kiosk entry so the first glance
-    // renders its tiles instantly (it is reused for every member). Failures are
-    // swallowed here — the glance re-attempts and degrades to points-only.
-    unawaited(_ensureRewards());
+    // Warm the three GYM-WIDE catalogues once, here at kiosk entry, and cache
+    // them for the whole session: they are identical for every member, and the
+    // member-facing screens that render them (the glance, the "Get the app"
+    // showcase) must open instantly — the modal in particular fires no fetch
+    // of its own. Each is independent and each failure is non-fatal: the
+    // glance degrades to points-only, and a showcase slide with no data is
+    // simply omitted rather than showing an error on a member-facing screen.
+    unawaited(_warmRewards());
+    unawaited(_warmVideos());
+    unawaited(_warmRankLadder());
   }
 
   final MembersListRepository _membersRepo;
   final ScheduleRepository _scheduleRepo;
   final MemberRepository _memberRepo;
   final RewardsRepository _rewardsRepo;
+  final GymContentRepository _contentRepo;
+  final RanksRepository _ranksRepo;
   final KioskSessionCubit _session;
   final String _gymId;
   final DateTime Function() _now;
@@ -116,6 +136,15 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   /// fetches (the eager warm + a fast first check-in).
   List<RewardResponse>? _rewardsCache;
   Future<List<RewardResponse>>? _rewardsInFlight;
+
+  /// This gym's own curated video feed head + its main-rank ladder — the other
+  /// two gym-wide catalogues, likewise fetched once at entry. Unlike the
+  /// rewards catalog nothing re-attempts these mid-session: they feed showcase
+  /// slides only, and an absent slide is the designed degradation. They are
+  /// held here (not only on the state) so [goHome] can re-seed a fresh home
+  /// without re-fetching.
+  List<Video> _videosCache = const [];
+  List<MainRank> _rankLadderCache = const [];
 
   /// Whether this flow has told the session it started (so end is balanced —
   /// exactly one [KioskSessionCubit.endFlow] per [KioskSessionCubit.beginFlow]).
@@ -296,9 +325,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     final seq = ++_glanceSeq;
     final rewards = await _ensureRewards();
     int? balance;
+    String? rankId;
     try {
       final detail = await _memberRepo.getMemberDetail(member.memberId);
       balance = detail.retention.pointsBalance;
+      // Also the "You're here" rung on the rank showcase slide — the same
+      // fetch already pays for it, so no extra call.
+      rankId = detail.rank?.rankId;
     } catch (e, st) {
       log('Kiosk points balance load failed', error: e, stackTrace: st);
     }
@@ -306,6 +339,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     emit(state.copyWith(
       rewards: rewards,
       pointsBalance: balance,
+      currentRankId: rankId,
       glanceLoading: false,
     ));
   }
@@ -334,6 +368,67 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       _rewardsInFlight = null;
     }
   }
+
+  // ── Gym-wide showcase catalogues (warmed once at kiosk entry) ──
+
+  /// Publish the warmed reward catalog onto the state, so the "Get the app"
+  /// modal can show this gym's real rewards from the IDLE HOME too — not only
+  /// after a check-in has populated the glance.
+  Future<void> _warmRewards() async {
+    final rewards = await _ensureRewards();
+    if (isClosed || rewards.isEmpty) return;
+    emit(state.copyWith(rewards: rewards));
+  }
+
+  /// The head of THIS gym's own curated feed (`GET /gyms/{id}/videos`) — the
+  /// only per-gym feed the CRM can read. Deliberately not `selectedGym.detail`:
+  /// that showcase belongs to a DEFAULT content gym, so rendering it here would
+  /// put another gym's videos on a member-facing screen.
+  Future<void> _warmVideos() async {
+    try {
+      final page = await _contentRepo.fetchVideos(
+        _gymId,
+        limit: kKioskShowcaseVideoCount,
+      );
+      if (isClosed) return;
+      _videosCache = page.videos;
+      if (page.videos.isEmpty) return;
+      emit(state.copyWith(videos: page.videos));
+    } catch (e, st) {
+      // Non-fatal: the slide is omitted, never an error on a member screen.
+      log('Kiosk video feed load failed', error: e, stackTrace: st);
+    }
+  }
+
+  /// The gym's main-rank ladder — but only when the gym actually runs ranks.
+  /// The enabled flag is a separate gym setting from the ladder rows, so a gym
+  /// that configured belts and then switched ranks off must NOT see them; both
+  /// reads happen here, once, and either falling short leaves the ladder empty
+  /// (the slide and its dot are then omitted).
+  Future<void> _warmRankLadder() async {
+    try {
+      final enabled = await _ranksRepo.getRankEnabled(_gymId);
+      if (isClosed || !enabled.isRankEnabled) return;
+      final ladder = await _ranksRepo.listRanks(_gymId);
+      if (isClosed) return;
+      _rankLadderCache = ladder.ranks;
+      if (ladder.ranks.isEmpty) return;
+      emit(state.copyWith(rankLadder: ladder.ranks));
+    } catch (e, st) {
+      // Non-fatal: the slide is omitted, never an error on a member screen.
+      log('Kiosk rank ladder load failed', error: e, stackTrace: st);
+    }
+  }
+
+  /// A fresh idle home that KEEPS the gym-wide catalogues (rewards, videos,
+  /// rank ladder) — they are identical for every member and were paid for once
+  /// at entry — while dropping every per-member field the plain
+  /// [KioskFlowState.home] constant clears.
+  KioskFlowState get _freshHome => const KioskFlowState.home().copyWith(
+        rewards: _rewardsCache ?? const [],
+        videos: _videosCache,
+        rankLadder: _rankLadderCache,
+      );
 
   /// Start the glance's 8-second auto-return. One per-second countdown drives
   /// the visible timer and, at zero, returns home (mirrors the idle countdown).
@@ -409,7 +504,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     _classesSeq++;
     _glanceSeq++; // drop any in-flight glance fetch
     _endFlowIfStarted();
-    emit(const KioskFlowState.home());
+    emit(_freshHome);
     _syncIdleTimer();
   }
 

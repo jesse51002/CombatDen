@@ -4,8 +4,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// Shown when a member tries to start a check-in after the session has passed
 /// its lockout mark (no new flows). A calm close, never an error — the runway
@@ -34,7 +34,7 @@ class KioskClosingScreen extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          AppOutlineButton(
+          KioskOutlineButton(
             text: 'Okay',
             onPressed: () => context.read<KioskFlowCubit>().goHome(),
           ),

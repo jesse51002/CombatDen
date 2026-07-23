@@ -6,8 +6,8 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
-import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// The blame-free front-desk handoff shown when the kiosk gate rejects a
 /// check-in (or the call fails). It ALWAYS names a plain-language reason so the
@@ -46,7 +46,7 @@ class KioskBlockedScreen extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              AppPrimaryButton(
+              KioskPrimaryButton(
                 text: 'Okay, got it',
                 onPressed: () => context.read<KioskFlowCubit>().goHome(),
               ),

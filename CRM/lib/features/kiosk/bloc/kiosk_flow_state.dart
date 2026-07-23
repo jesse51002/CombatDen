@@ -2,7 +2,9 @@ import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
+import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
+import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
@@ -68,9 +70,29 @@ class KioskFlowState extends Equatable {
   final int? pointsBalance;
 
   /// The gym-wide reward catalog (active, cheapest-first, capped) shown as the
-  /// glance's tiles. Cached once on the cubit and reused for every member;
-  /// empty when the gym has no rewards (or the catalog fetch failed).
+  /// glance's tiles and the "Earn rewards" showcase slide. Fetched ONCE at
+  /// kiosk entry and reused for every member (it survives [goHome]); empty
+  /// when the gym has no rewards, or when the catalog fetch failed.
   final List<RewardResponse> rewards;
+
+  // ── Gym-wide showcase catalogues (fetched once at kiosk entry) ──
+  /// The head of this gym's OWN curated video feed — the "Watch videos"
+  /// showcase slide. Fetched once at kiosk entry and reused (it survives
+  /// [goHome]); empty when the gym's feed is empty or the fetch failed, and
+  /// the slide is then omitted rather than showing anything invented.
+  final List<Video> videos;
+
+  /// The gym's ordered main-rank ladder — the "Track rank" showcase slide.
+  /// Fetched once at kiosk entry and reused (it survives [goHome]). EMPTY
+  /// when the gym has ranks switched off, has configured none, or the fetch
+  /// failed; the slide (and its dot) is then omitted.
+  final List<MainRank> rankLadder;
+
+  /// The checked-in member's current main-rank id, from the glance's member
+  /// fetch — it tags the "You're here" rung on the rank slide. Null from the
+  /// idle home (no member is known there), which simply leaves the ladder
+  /// untagged rather than guessing a rung.
+  final String? currentRankId;
 
   /// The per-glance data fetch (rewards + balance) is in flight.
   final bool glanceLoading;
@@ -110,6 +132,9 @@ class KioskFlowState extends Equatable {
     this.checkInFailed = false,
     this.pointsBalance,
     this.rewards = const [],
+    this.videos = const [],
+    this.rankLadder = const [],
+    this.currentRankId,
     this.glanceLoading = false,
     this.glanceCountdown = 0,
     this.idleWarningActive = false,
@@ -120,6 +145,11 @@ class KioskFlowState extends Equatable {
 
   /// The idle rest state — every field cleared. Returning here abandons any
   /// in-progress draft (privacy: no half-entered name left on screen).
+  ///
+  /// It clears the gym-wide catalogues too, because it is a plain "everything
+  /// off" constant. [KioskFlowCubit.goHome] re-seeds them from its entry-time
+  /// caches, so the showcase never re-fetches on the way home — see
+  /// `KioskFlowCubit._freshHome`.
   const KioskFlowState.home() : this(view: KioskView.home);
 
   static const Object _keep = Object();
@@ -139,6 +169,9 @@ class KioskFlowState extends Equatable {
     bool? checkInFailed,
     Object? pointsBalance = _keep,
     List<RewardResponse>? rewards,
+    List<Video>? videos,
+    List<MainRank>? rankLadder,
+    Object? currentRankId = _keep,
     bool? glanceLoading,
     int? glanceCountdown,
     bool? idleWarningActive,
@@ -169,6 +202,11 @@ class KioskFlowState extends Equatable {
           ? this.pointsBalance
           : pointsBalance as int?,
       rewards: rewards ?? this.rewards,
+      videos: videos ?? this.videos,
+      rankLadder: rankLadder ?? this.rankLadder,
+      currentRankId: identical(currentRankId, _keep)
+          ? this.currentRankId
+          : currentRankId as String?,
       glanceLoading: glanceLoading ?? this.glanceLoading,
       glanceCountdown: glanceCountdown ?? this.glanceCountdown,
       idleWarningActive: idleWarningActive ?? this.idleWarningActive,
@@ -194,6 +232,9 @@ class KioskFlowState extends Equatable {
         checkInFailed,
         pointsBalance,
         rewards,
+        videos,
+        rankLadder,
+        currentRankId,
         glanceLoading,
         glanceCountdown,
         idleWarningActive,

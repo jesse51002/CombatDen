@@ -3,8 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The glance's system footer (mockup `.glance-foot`): a hairline, the
@@ -33,7 +33,7 @@ class KioskGlanceFoot extends StatelessWidget {
           ),
         ),
         Center(
-          child: AppOutlineButton(
+          child: KioskOutlineButton(
             text: 'Done',
             onPressed: () => context.read<KioskFlowCubit>().goHome(),
           ),
