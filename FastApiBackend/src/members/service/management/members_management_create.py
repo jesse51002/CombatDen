@@ -162,7 +162,6 @@ class MembersManagementCreate(MembersManagementBase):
         """Insert the member identity + contact row (no Stripe columns yet)."""
         params = {
             "gym_id": str(request.gym_id),
-            "user_id": str(request.user_id) if request.user_id else None,
             "first_name": request.first_name,
             "last_name": request.last_name,
             "email": request.email,

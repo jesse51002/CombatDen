@@ -1,4 +1,4 @@
-CREATE TYPE employee_type AS ENUM ('owner', 'admin', 'trainer');
+CREATE TYPE employee_type AS ENUM ('owner', 'admin', 'trainer', 'front_desk');
 
 -- Per-employee CRM admin-app appearance preference. 'system' follows the OS.
 CREATE TYPE theme_mode AS ENUM ('system', 'light', 'dark');
@@ -50,35 +50,41 @@ CREATE TABLE gyms (
 
 CREATE TABLE gym_employees (
     employee_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    -- Login principal link. ONLY owner/admin rows may carry one: a
-    -- 'trainer' row is instructor DATA (a name/photo shown on classes),
-    -- never an account — enforced by chk_trainer_has_no_account below,
-    -- which is what makes is_gym_employee() (and every backend staff
-    -- check) owner/admin-only by construction.
-    user_id UUID CONSTRAINT fk_employee_user REFERENCES auth.users(id),
     gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms(gym_id),
     employee_type employee_type NOT NULL,
     first_name VARCHAR NOT NULL CHECK (first_name <> ''),
     last_name VARCHAR NOT NULL CHECK (last_name <> ''),
     phone VARCHAR,
+    -- Identity link. Lowercase-normalized. A verified auth account with this
+    -- email = this person's access to the gym (matched via auth.jwt() ->>
+    -- 'email' in the security-definer helpers below, not a user_id FK). Only
+    -- a 'trainer' row may leave this NULL (see chk_principal_has_email) — a
+    -- trainer row is instructor DATA (a name/photo shown on classes), never
+    -- a login principal.
     email VARCHAR,
     employee_pic_url VARCHAR,
     employee_public_description VARCHAR,
     -- CRM admin-app theme this employee chose (client-editable; see immutable_columns).
     theme_preference theme_mode NOT NULL DEFAULT 'system',
+    -- Soft-archive: a revoked employee. Rows are never hard-deleted (the
+    -- instructor + waiver-operator FKs reference them). Excluded from every
+    -- auth check (is_gym_employee / is_gym_admin_or_owner) and the employees
+    -- list.
+    archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (employee_id),
-    UNIQUE (user_id, gym_id),
     UNIQUE (employee_id, gym_id),
-    -- Trainers have no accounts at all (see user_id comment above).
-    CONSTRAINT chk_trainer_has_no_account
-        CHECK (employee_type <> 'trainer' OR user_id IS NULL)
+    -- Only a login-carrying role (owner/admin/front_desk) must carry an
+    -- email — a trainer row may legitimately be email-less instructor data.
+    CONSTRAINT chk_principal_has_email
+        CHECK (employee_type = 'trainer' OR email IS NOT NULL)
 );
 
 -- ============================================================
 -- Security-definer helpers (bypass RLS to avoid recursion)
 -- ============================================================
 
+-- Any login-carrying, non-archived employee (matched by verified email).
 CREATE FUNCTION is_gym_employee(p_gym_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql SECURITY DEFINER SET search_path = ''
@@ -87,7 +93,8 @@ AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.gym_employees
         WHERE gym_employees.gym_id = p_gym_id
-        AND gym_employees.user_id = auth.uid()
+        AND lower(gym_employees.email) = lower(auth.jwt() ->> 'email')
+        AND gym_employees.archived_at IS NULL
     );
 $$;
 
@@ -99,7 +106,8 @@ AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.gym_employees
         WHERE gym_employees.gym_id = p_gym_id
-        AND gym_employees.user_id = auth.uid()
+        AND lower(gym_employees.email) = lower(auth.jwt() ->> 'email')
+        AND gym_employees.archived_at IS NULL
         AND gym_employees.employee_type IN ('owner', 'admin')
     );
 $$;
@@ -116,7 +124,8 @@ AS $$
     );
 $$;
 
--- Partial unique index: a user can only have one employee record per gym
-CREATE UNIQUE INDEX unique_employee_user_gym
-    ON gym_employees (user_id, gym_id)
-    WHERE user_id IS NOT NULL;
+-- Partial unique index: one employee row per email per gym (case-insensitive;
+-- the email identity key).
+CREATE UNIQUE INDEX unique_employee_email_gym
+    ON gym_employees (gym_id, lower(email))
+    WHERE email IS NOT NULL;

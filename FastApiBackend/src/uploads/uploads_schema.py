@@ -19,6 +19,7 @@ class UploadCategory(StrEnum):
     gym = "gym"
     rank = "rank"
     plan = "plan"
+    employee = "employee"
 
 
 class ImageUploadResponse(BaseModel):

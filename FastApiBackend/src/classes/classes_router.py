@@ -8,6 +8,7 @@ from uuid import UUID
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
+from schema.gym_employee import EmployeeType
 
 from src.classes.schema.classes_crud_schema import (
     ClassInstanceExceptionListResponse,
@@ -40,7 +41,7 @@ from src.classes.service.classes_undo_service import (
     RescheduleConflictError,
 )
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import ALL_EMPLOYEES, OWNER_ADMIN, STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +52,11 @@ classes_router = APIRouter(
 
 
 # ---------------------------------------------------------------------------
-# Occurrence un-occur (cancel) + reschedule — Phase 6. Admin/owner gated on the
-# caller-supplied gym_id (the same direct ``verify_gym_admin_or_owner`` wiring
-# the batch check-in uses); the service validates the class belongs to that gym
-# (404 otherwise). Billing-adjacent: cancel deletes attendance + may clear an
-# auto-end end_date, never claws back points.
+# Occurrence un-occur (cancel) + reschedule — Phase 6. STAFF gated (owner /
+# admin / front_desk) on the caller-supplied gym_id (the same direct
+# ``verify_roles`` wiring the batch check-in uses); the service validates the
+# class belongs to that gym (404 otherwise). Billing-adjacent: cancel deletes
+# attendance + may clear an auto-end end_date, never claws back points.
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +88,8 @@ def _raise_for_undo_value_error(msg: str) -> NoReturn:
         "the auto-end on trial / one_time packs that drop back below "
         "capacity, deletes the occurrence's sign-ups (a cancelled occurrence "
         "can't be attended), and writes the cancelled instance exception. A "
-        "same-day sibling occurrence is untouched. Admin/owner only."
+        "same-day sibling occurrence is untouched. Staff only "
+        "(owner/admin/front_desk)."
     ),
     responses={
         200: {"description": "Occurrence cancelled"},
@@ -109,9 +111,9 @@ async def cancel_occurrence(
         Provide[DependencyInjector.classes_undo_service]
     ),
 ) -> OccurrenceCancelResponse:
-    """Un-occur a single class occurrence (admin/owner)."""
+    """Un-occur a single class occurrence (staff: owner/admin/front_desk)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await undo_service.cancel_occurrence(
@@ -146,7 +148,8 @@ async def cancel_occurrence(
         "keeps them, re-dated onto the new day — all in one transaction. "
         "Rejected with 409 only when the exact target instant (new_date + start "
         "time) is already taken by a non-cancelled occurrence (landing on a busy "
-        "day at a different time is allowed). Admin/owner only."
+        "day at a different time is allowed). Staff only "
+        "(owner/admin/front_desk)."
     ),
     responses={
         200: {"description": "Occurrence rescheduled"},
@@ -169,9 +172,9 @@ async def reschedule_occurrence(
         Provide[DependencyInjector.classes_undo_service]
     ),
 ) -> OccurrenceRescheduleResponse:
-    """Reschedule a single occurrence to a later date (admin/owner)."""
+    """Reschedule a single occurrence to a later date (staff: owner/admin/front_desk)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+    await auth.verify_roles(request.gym_id, user_payload, STAFF)
 
     try:
         return await undo_service.reschedule_occurrence(
@@ -205,9 +208,9 @@ async def reschedule_occurrence(
 # ---------------------------------------------------------------------------
 # Class CRUD + exceptions + the schedule board.
 #
-# Auth: reads are gym-employee gated via ``verify_gym_employee``; writes
-# (create / update / soft-delete / exception upsert + range) are gated to
-# admin-or-owner via ``verify_gym_admin_or_owner`` — the same read/write split
+# Auth: reads are gated to any gym employee (ALL_EMPLOYEES) via
+# ``verify_roles``; writes (create / update / soft-delete / exception upsert
+# + range) are gated to admin-or-owner (OWNER_ADMIN) — the same read/write split
 # the sibling gym-config CRUD domains (rewards / discounts / plans) use, and
 # the API-layer mirror of the DB's ``is_gym_admin_or_owner`` RLS function.
 # Trainers may read gym config but may not mutate it.
@@ -239,7 +242,7 @@ async def list_classes(
 ) -> GymClassListResponse:
     """List non-deleted classes for a gym."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
 
     try:
         return await crud_service.list_classes(
@@ -324,12 +327,18 @@ async def list_effective_instances(
 ) -> EffectiveClassInstanceListResponse:
     """The schedule board for a gym across a date window."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
 
     try:
         return await reader_service.list_effective_instances(
             gym_id, start_date, end_date
         )
+    except ValueError as exc:
+        # An inverted or over-wide date window — a bad request, not a 5xx.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
     except Exception:
         logger.error(
             "Failed to build schedule board: gym_id=%s", gym_id, exc_info=True
@@ -379,7 +388,7 @@ async def upsert_instance_exception(
     """Upsert a single-date instance exception."""
     user_payload = auth.get_current_user(credentials)
     existing = await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -435,7 +444,9 @@ async def list_instance_exceptions(
 ) -> ClassInstanceExceptionListResponse:
     """List instance exceptions for a class within a window."""
     user_payload = auth.get_current_user(credentials)
-    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
     try:
         return await exceptions_service.list_instance_exceptions(
@@ -486,7 +497,7 @@ async def create_range_exception(
     """Create a range exception."""
     user_payload = auth.get_current_user(credentials)
     existing = await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -542,7 +553,9 @@ async def list_range_exceptions(
 ) -> ClassRangeExceptionListResponse:
     """List all range exceptions for a class."""
     user_payload = auth.get_current_user(credentials)
-    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
     try:
         return await exceptions_service.list_range_exceptions(class_id)
@@ -597,7 +610,7 @@ async def update_range_exception(
     """Move a range exception's dates (admin/owner)."""
     user_payload = auth.get_current_user(credentials)
     existing = await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -651,7 +664,7 @@ async def delete_range_exception(
     """Remove a range exception (admin/owner)."""
     user_payload = auth.get_current_user(credentials)
     await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -695,7 +708,9 @@ async def get_class(
 ) -> GymClassResponse:
     """Get a single class (gym-employee scoped)."""
     user_payload = auth.get_current_user(credentials)
-    return await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    return await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
 
 @classes_router.put(
@@ -732,7 +747,7 @@ async def update_class(
     """Update a class."""
     user_payload = auth.get_current_user(credentials)
     await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -784,7 +799,7 @@ async def soft_delete_class(
     """Soft-delete a class."""
     user_payload = auth.get_current_user(credentials)
     await _resolve_class_for_auth(
-        crud_service, auth, class_id, user_payload, require_admin_or_owner=True
+        crud_service, auth, class_id, user_payload, roles=OWNER_ADMIN
     )
 
     try:
@@ -804,13 +819,17 @@ async def _resolve_class_for_auth(
     auth: Auth,
     class_id: UUID,
     user_payload: dict,
-    *,
-    require_admin_or_owner: bool = False,
+    roles: frozenset[EmployeeType],
 ) -> GymClassResponse:
     """Load a class (404 if absent) and gate the caller on its gym.
 
-    Reads gate at gym-employee level; writes pass
-    ``require_admin_or_owner=True`` to gate at admin-or-owner instead.
+    ``roles`` is REQUIRED — no default. Every caller states its role set:
+    reads pass ``ALL_EMPLOYEES``, writes pass ``OWNER_ADMIN``. This mirrors
+    the ``Auth`` API's no-default rule (``verify_gym_employee_for_member`` et
+    al.): a silent default is exactly how a future write route added through
+    this helper could gate a class mutation at ``ALL_EMPLOYEES`` — letting a
+    trainer or front-desk staffer edit or delete a class — without anyone
+    choosing that.
     """
     try:
         existing = await crud_service.get_class(class_id)
@@ -819,8 +838,5 @@ async def _resolve_class_for_auth(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Class not found",
         ) from None
-    if require_admin_or_owner:
-        await auth.verify_gym_admin_or_owner(existing.gym_id, user_payload)
-    else:
-        await auth.verify_gym_employee(existing.gym_id, user_payload)
+    await auth.verify_roles(existing.gym_id, user_payload, roles)
     return existing

@@ -9,9 +9,10 @@ import 'package:crm/features/login/presentation/widgets/register_form.dart';
 /// link. Shares the same [LoginBloc] from the tree (wired in
 /// `main.dart`'s `_AuthGateHost`).
 ///
-/// On [LoginRegistrationSuccess] the [RegisterForm] swaps its
-/// own body to the confirm-email prompt; on [LoginAuthenticated]
-/// the [AuthGate] automatically tears this route out.
+/// On [LoginAwaitingEmailConfirmation] the [RegisterForm] swaps
+/// its own body to the "check your email" prompt; on
+/// [LoginAuthenticated] the [AuthGate] automatically tears this
+/// route out.
 class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
 

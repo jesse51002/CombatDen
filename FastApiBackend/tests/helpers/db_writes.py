@@ -82,3 +82,30 @@ async def set_points_balance(
             {"balance": points_balance, "id": str(member_id)},
         )
         await session.commit()
+
+
+async def set_auth_email_confirmed(
+    db_pool: DirectDatabasePool,
+    user_id: str,
+    *,
+    confirmed: bool,
+) -> None:
+    """Flip a TEST auth user's ``auth.users.email_confirmed_at`` on/off.
+
+    The verified-email identity model rests entirely on that column (every
+    identity-resolving query in ``src/shared/auth.py`` requires it to be
+    non-NULL), so proving an unverified account is rejected means writing it
+    directly — GoTrue exposes no "un-confirm" API. Test setup only: production
+    never writes ``auth.users``, and only a user the test itself created (and
+    deletes on teardown) may be passed here.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(
+                "UPDATE auth.users SET email_confirmed_at = "
+                "CASE WHEN :confirmed THEN now() ELSE NULL END "
+                "WHERE id = CAST(:id AS UUID)"
+            ),
+            {"confirmed": confirmed, "id": str(user_id)},
+        )
+        await session.commit()

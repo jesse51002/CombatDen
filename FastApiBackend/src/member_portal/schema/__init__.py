@@ -1,0 +1,1 @@
+"""Member portal schema package."""

@@ -16,10 +16,14 @@ locked_reward AS (
     FOR UPDATE
 ),
 debited AS (
-    -- The is_active guard MUST live here, not only on the insert: Postgres
-    -- runs every data-modifying CTE exactly once regardless of whether the
-    -- final query reads it, so an unguarded debit on an inactive reward
-    -- would burn points while inserting no redemption row.
+    -- EVERY guard MUST live here, not only on the insert: Postgres runs each
+    -- data-modifying CTE exactly once regardless of whether the final query
+    -- reads it, so an unguarded debit burns points while inserting no
+    -- redemption row. That applies to is_active AND to the same-gym check --
+    -- the insert's `JOIN locked_reward lr ON lr.gym_id = lm.gym_id` only
+    -- suppresses the ROW; without the matching guard below, a reward_id from
+    -- another gym still decremented the balance, the service committed, and
+    -- the caller got a 400 with the member permanently short the points.
     UPDATE members
     SET points_balance = points_balance - (
         SELECT point_cost FROM locked_reward
@@ -27,6 +31,8 @@ debited AS (
     WHERE member_id = :member_id
       AND points_balance >= (SELECT point_cost FROM locked_reward)
       AND (SELECT is_active FROM locked_reward)
+      AND (SELECT gym_id FROM locked_reward)
+          = (SELECT gym_id FROM locked_member)
     RETURNING points_balance
 ),
 inserted AS (

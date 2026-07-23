@@ -26,7 +26,7 @@ from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
 from src.rewards.service.rewards_service import RewardsService
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ async def list_rewards(
 ) -> RewardListResponse:
     """List rewards for a gym."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await rewards_service.list_rewards(gym_id, include_inactive=include_inactive)
@@ -222,12 +222,14 @@ async def deactivate_reward(
     "/{reward_id}/redeem",
     response_model=RedemptionResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Redeem a reward (member-initiated)",
+    summary="Request a reward redemption (staff, pending approval)",
     description=(
         "Atomically debits ``members.points_balance`` and writes "
         "a row in ``member_reward_redemptions`` with "
         "``status='pending'``.  Rejected with 400 if the member "
-        "has insufficient points or the reward is inactive."
+        "has insufficient points or the reward is inactive. Staff-only "
+        "(``STAFF`` at the member's gym) — unlike ``/redeem-for-member`` it "
+        "leaves the redemption awaiting approval instead of auto-approving."
     ),
     responses={
         201: {"description": "Redemption recorded (pending)"},
@@ -246,9 +248,11 @@ async def redeem_reward(
         Provide[DependencyInjector.rewards_redemption_service]
     ),
 ) -> RedemptionResponse:
-    """Member-initiated redemption — creates a pending redemption."""
+    """Request a redemption for a member — creates a PENDING redemption."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await redemption_service.redeem(
@@ -304,7 +308,9 @@ async def redeem_reward_for_member(
 ) -> RedemptionResponse:
     """Staff-initiated redemption — always approved, optionally override points."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee_for_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await redemption_service.redeem_for_member(
@@ -352,7 +358,7 @@ async def list_pending_redemptions(
 ) -> PendingRedemptionListResponse:
     """List a page of pending redemptions for a gym."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await redemption_service.list_pending(
@@ -405,7 +411,7 @@ async def approve_redemption(
     # The redemption row already carries its gym: authorize against that
     # directly — verify_gym_employee_for_member would pay a second members
     # round-trip just to re-derive the same gym_id.
-    await auth.verify_gym_employee(UUID(str(info["gym_id"])), user_payload)
+    await auth.verify_roles(UUID(str(info["gym_id"])), user_payload, STAFF)
 
     try:
         return await redemption_service.approve(redemption_id)
@@ -461,7 +467,7 @@ async def reject_redemption(
     # The redemption row already carries its gym: authorize against that
     # directly — verify_gym_employee_for_member would pay a second members
     # round-trip just to re-derive the same gym_id.
-    await auth.verify_gym_employee(UUID(str(info["gym_id"])), user_payload)
+    await auth.verify_roles(UUID(str(info["gym_id"])), user_payload, STAFF)
 
     try:
         return await redemption_service.reject(redemption_id)
@@ -503,7 +509,9 @@ async def get_redemptions(
 ) -> RedemptionHistoryResponse:
     """Member's redemption history."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await redemption_service.history(member_id)
@@ -548,5 +556,5 @@ async def get_reward_by_id(
             detail="Reward not found",
         ) from None
 
-    await auth.verify_gym_employee(reward.gym_id, user_payload)
+    await auth.verify_roles(reward.gym_id, user_payload, STAFF)
     return reward

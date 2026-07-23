@@ -1,6 +1,5 @@
 INSERT INTO members (
     gym_id,
-    user_id,
     first_name,
     last_name,
     email,
@@ -14,7 +13,6 @@ INSERT INTO members (
 )
 VALUES (
     :gym_id,
-    :user_id,
     :first_name,
     :last_name,
     :email,
@@ -29,7 +27,6 @@ VALUES (
 RETURNING
     member_id,
     gym_id,
-    user_id,
     first_name,
     last_name,
     email,

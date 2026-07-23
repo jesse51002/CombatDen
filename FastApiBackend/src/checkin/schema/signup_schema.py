@@ -17,9 +17,9 @@ class SignupRequest(BaseModel):
     signed-up member who never checks in is a no-show, never auto-counted as
     attended.
 
-    Both staff (any employee of the gym) and the member themselves may create
-    a sign-up — the same ``verify_can_view_member`` auth check the check-in
-    endpoints use. Idempotent: signing up twice for the same (member,
+    Staff-only, like every check-in endpoint: the caller must hold a
+    ``STAFF`` role at the member's gym (``verify_gym_employee_for_member``).
+    Idempotent: signing up twice for the same (member,
     occurrence) is a no-op (``already_signed_up=true``), consuming no extra
     capacity.
     """

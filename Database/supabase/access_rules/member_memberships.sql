@@ -15,7 +15,7 @@ CREATE POLICY "Members can view own memberships"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_memberships_unfiltered.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 

@@ -5,7 +5,7 @@
 
 ``is_member`` selects how the gate behaves:
 
-* ``is_member=True`` (kiosk / member self-check-in) — the strict gate: resolve
+* ``is_member=True`` (kiosk mode) — the strict gate: resolve
   the member's active memberships, gate by plan eligibility + remaining
   punch-card capacity + the room's ``max_capacity``, and check in against the
   best covering plan (trial -> one_time -> recurring, then lowest class_count,
@@ -108,7 +108,7 @@ class CheckinMemberGate:
         Args:
             resolved_class: The resolved class (from the class resolver).
             member_id: The member checking in.
-            is_member: ``True`` for a kiosk / member self-check-in (strict gate
+            is_member: ``True`` for kiosk mode (strict gate
                 — reject when uncovered / full); ``False`` (default) for a staff
                 check-in.
             ignore_warnings: Staff override. When ``False`` (default) a staff

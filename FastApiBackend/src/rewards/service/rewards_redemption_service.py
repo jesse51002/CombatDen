@@ -72,7 +72,8 @@ class RewardsRedemptionService:
 
         if not row:
             raise ValueError(
-                "Redemption rejected: insufficient points or reward inactive"
+                "Redemption rejected: insufficient points, reward inactive, "
+                "or reward belongs to another gym"
             )
 
         return RedemptionResponse(**row)
@@ -122,7 +123,9 @@ class RewardsRedemptionService:
 
         Drops the points sufficiency guard so the redemption is always written
         (balance drains to zero; shortfall is comped). Still requires the
-        reward to be active.
+        reward to be active AND to belong to the member's own gym — without
+        that second guard the unguarded drain burned points for a reward the
+        member could never receive.
         """
         sql = load_sql(SQL_DIR / "redeem_reward_override.sql")
         params = {
@@ -149,7 +152,10 @@ class RewardsRedemptionService:
             row = None
 
         if not row:
-            raise ValueError("Redemption rejected: reward is inactive")
+            raise ValueError(
+                "Redemption rejected: reward is inactive or belongs to "
+                "another gym"
+            )
 
         return RedemptionResponse(**row)
 

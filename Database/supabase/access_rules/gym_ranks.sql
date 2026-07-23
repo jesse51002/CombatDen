@@ -12,7 +12,7 @@ CREATE POLICY "Members can view their gym's ranks"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.gym_id = gym_ranks.gym_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 

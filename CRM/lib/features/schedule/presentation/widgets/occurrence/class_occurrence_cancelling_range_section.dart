@@ -26,6 +26,11 @@ final DateFormat _rangeDateLabel = DateFormat('MMM d, yyyy');
 class ClassOccurrenceCancellingRangeSection extends StatefulWidget {
   final String classId;
   final String cancellingRangeId;
+
+  /// Whether the Edit range / Remove range cancellation actions show
+  /// (`canEditSchedule`: owner/admin). When false the "Cancelled by a range"
+  /// info still renders, but read-only (front desk + trainer).
+  final bool canEdit;
   final ValueChanged<ClassRangeException> onEdit;
   final ValueChanged<ClassRangeException> onRemove;
 
@@ -33,6 +38,7 @@ class ClassOccurrenceCancellingRangeSection extends StatefulWidget {
     super.key,
     required this.classId,
     required this.cancellingRangeId,
+    required this.canEdit,
     required this.onEdit,
     required this.onRemove,
   });
@@ -103,26 +109,28 @@ class _ClassOccurrenceCancellingRangeSectionState
                   ),
                 ],
               ),
-              const Hairline(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: DesignConstants.spacingLarge,
-                  children: [
-                    AppOutlineButton(
-                      text: 'Remove range cancellation',
-                      onPressed: () => widget.onRemove(range),
-                      borderColor: DesignConstants.badRed,
-                      textColor: DesignConstants.badRed,
-                    ),
-                    AppOutlineButton(
-                      text: 'Edit range',
-                      onPressed: () => widget.onEdit(range),
-                    ),
-                  ],
+              if (widget.canEdit) ...[
+                const Hairline(),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: DesignConstants.spacingLarge,
+                    children: [
+                      AppOutlineButton(
+                        text: 'Remove range cancellation',
+                        onPressed: () => widget.onRemove(range),
+                        borderColor: DesignConstants.badRed,
+                        textColor: DesignConstants.badRed,
+                      ),
+                      AppOutlineButton(
+                        text: 'Edit range',
+                        onPressed: () => widget.onEdit(range),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         );

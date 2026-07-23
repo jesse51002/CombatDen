@@ -3,9 +3,13 @@
 The backend `POST /api/v1/members/` provisions a Stripe customer for every
 member (the gym must have a Stripe Connect account). It accepts the full
 identity + contact profile: gym_id / first_name / last_name /
-(email, user_id, current_rank_id) plus the contact columns (phone, address,
-emergency_contact_*, photo_url) and an optional `payment_method_id`. So per
-member we:
+(email, current_rank_id) plus the contact columns (phone, address,
+emergency_contact_*, photo_url) and an optional `payment_method_id`. There is
+no `user_id` FK — a member's self-access is a verified Supabase auth account
+whose email matches this row's `email` (compared lowercase), so a member who
+gets a real login (the first `AUTH_MEMBERS_PER_GYM`) simply needs an auth
+user created with that SAME email; nothing is stamped onto the member row for
+it. So per member we:
 
   1. POST the member (identity + contact, plus `pm_card_visa` for non-children)
      → the backend creates the Stripe customer and, for non-children, attaches
@@ -100,6 +104,8 @@ def _create_one(
     per-family billing lock is taken here).
     """
     # Give the first few members a real auth login (idempotent by email).
+    # There is no user_id to backfill — the auth user's email already matches
+    # this member's email, which IS the access link.
     if idx < AUTH_MEMBERS_PER_GYM and member.auth_user_id is None:
         user = auth.create_user(client, member.email)
         member.auth_user_id = uuid.UUID(user["id"])
@@ -108,17 +114,15 @@ def _create_one(
     if existing is not None:
         member.member_id = uuid.UUID(existing["member_id"])
 
-        # points_balance is rewards-managed (immutable to the API), the user_id
-        # backfill is identity, and current_sub_index is written only by the
-        # audited ranks endpoints (the create/update API refuses it) — all go
-        # direct via service-role. diff_update no-ops any field already matching
-        # (so a NULL-vs-NULL sub-index on a 'none' gym writes nothing).
+        # points_balance is rewards-managed (immutable to the API), and
+        # current_sub_index is written only by the audited ranks endpoints
+        # (the create/update API refuses it) — both go direct via
+        # service-role. diff_update no-ops any field already matching (so a
+        # NULL-vs-NULL sub-index on a 'none' gym writes nothing).
         direct: dict = {
             "points_balance": member.points_balance,
             "current_sub_index": member.current_sub_index,
         }
-        if member.auth_user_id is not None and existing.get("user_id") is None:
-            direct["user_id"] = str(member.auth_user_id)
         diff_update(client, "members", "member_id", str(member.member_id), direct, existing)
 
         # Identity + contact drift goes through the API.
@@ -137,8 +141,6 @@ def _create_one(
     }
     if member.current_rank_id is not None:
         payload["current_rank_id"] = str(member.current_rank_id)
-    if member.auth_user_id is not None:
-        payload["user_id"] = str(member.auth_user_id)
     # Every member is provisioned a Stripe customer at creation. A member also
     # gets a default card when they will be billed directly: a root/solo (not a
     # linked child) OR a SELF-PAYING linked child (own card, own subscription).

@@ -11,11 +11,11 @@ CREATE POLICY "Users and gym staff can view charges"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_charges.paid_by_member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
         OR EXISTS (
             SELECT 1 FROM member_invoices inv
-            JOIN members m ON m.user_id = auth.uid()
+            JOIN members m ON lower(m.email) = lower(auth.jwt() ->> 'email')
             WHERE inv.invoice_id = member_charges.invoice_id
             AND inv.paid_for ? m.member_id::text
         )

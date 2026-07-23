@@ -129,7 +129,7 @@ class MemberVideoProfileService:
     def _guard(row: dict | None, gym_id: UUID) -> None:
         """Reject a missing member or a member of a DIFFERENT gym.
 
-        Stops a caller authorized to view a member (``verify_can_view_member``
+        Stops a caller authorized for a member (``verify_gym_employee_for_member``
         only checks the member, not the path ``gym_id``) from ranking another
         gym's feed against this member by passing a mismatched ``gym_id``.
         """

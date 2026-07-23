@@ -8,7 +8,7 @@ CREATE POLICY "Users and gym staff can view activities"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_activities.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
         OR is_gym_admin_or_owner(member_activities.gym_id)
     );

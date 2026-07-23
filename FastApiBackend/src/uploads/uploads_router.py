@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 from src.uploads.service.uploads_s3_service import UploadsS3Service
 from src.uploads.uploads_schema import ImageUploadResponse, UploadCategory
 
@@ -32,8 +32,8 @@ MAX_IMAGE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
         "(``reward``, ``member``, ``class``, ``gym``, ``rank``, or "
         "``plan``). Proxies the bytes to the private S3 "
         "bucket and returns the CloudFront CDN URL with a content-hash "
-        "cache-buster. Requires a staff principal (owner/admin of at "
-        "least one gym)."
+        "cache-buster. Requires a staff principal (owner/admin/front_desk "
+        "of at least one gym)."
     ),
     responses={
         201: {"description": "Image uploaded; CDN URL returned"},
@@ -55,7 +55,7 @@ async def upload_image(
 ) -> ImageUploadResponse:
     """Upload an image; returns its CDN URL."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_staff_principal(user_payload)
+    await auth.verify_staff_principal(user_payload, allowed=STAFF)
 
     content_type = file.content_type or ""
     if not content_type.startswith("image/"):

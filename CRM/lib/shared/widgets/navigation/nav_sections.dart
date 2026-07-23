@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 
 /// A nav item that opens a flow instead of navigating to a route. Both these
@@ -111,3 +113,29 @@ const List<NavSection> kNavSections = [
     route: AppRoutes.settings,
   ),
 ];
+
+/// [kNavSections] filtered to what [role] may see, driving both the desktop
+/// rail and the mobile dropdown so a role never renders a nav item it can't
+/// open. The two routeless flow-opening entries each gate on their OWN
+/// capability — "Add New Member" on [RolePolicy.canCreateMembers], "Kiosk Mode"
+/// on [RolePolicy.canOperateKiosk] (kept distinct so restricting one never
+/// hides the other); every routed entry shows iff the role may access its
+/// route. A null [role] (pre-activation) hides everything — nav renders only
+/// inside the activated workspace, where the role is always known.
+List<NavSection> visibleNavSections(EmployeeRole? role) {
+  bool isVisible(NavSection section) {
+    final route = section.route;
+    if (route != null) return role != null && role.canAccessRoute(route);
+    // Routeless flow-opening item: gate on its action's own capability.
+    switch (section.action) {
+      case NavSectionAction.addMember:
+        return role?.canCreateMembers ?? false;
+      case NavSectionAction.enterKiosk:
+        return role?.canOperateKiosk ?? false;
+      case null:
+        return false;
+    }
+  }
+
+  return kNavSections.where(isVisible).toList();
+}
