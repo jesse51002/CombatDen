@@ -88,7 +88,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
 | Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
 | Member-app theme/showcase — CHANGE the theme (`PUT /gyms/{id}/theme`) | ✅ | ✅ | ❌ | ❌ |
-| Gym showcase/theme — READ (`GET /gyms/{id}/showcase`) | ✅ | ✅ | ✅ | ✅ |
+| Gym showcase/theme — READ (`GET /gyms/{id}/showcase`; **also any MEMBER of the gym** — now returns `theme_design_id`) | ✅ | ✅ | ✅ | ✅ |
 | Employees tab — manage staff: create / update / archive | ✅ | ✅ | ❌ | ❌ |
 | Read the employee roster (`GET /employees/{gym_id}` list — the schedule's instructor picker) | ✅ | ✅ | ✅ | ❌ |
 | Gym settings | ✅ | ✅ | ❌ | ❌ |
@@ -131,9 +131,10 @@ instructor picker (the Employees TAB itself stays owner/admin). The read/write s
 (staff, read) vs `canConfigureCatalog` (owner/admin, write); the Dashboard's overview/income cards sit
 behind `canViewGymAnalytics` (owner/admin) while `canViewDashboard` itself is staff.
 
-**Trainer** is READ-ONLY: the full schedule and every roster, the gym showcase/theme read
-(`GET /gyms/{id}/showcase` is `ALL_EMPLOYEES` — every role may READ its gym's theme), plus their own
-theme preference — nothing else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
+**Trainer** is READ-ONLY: the full schedule and every roster (`ALL_EMPLOYEES`), the gym showcase/theme
+read (`GET /gyms/{id}/showcase`, gated by `verify_gym_member_or_employee` — every employee role **AND
+any member of the gym** may READ its theme; the response now also carries `theme_design_id` so a
+member's app can re-theme), plus their own theme preference — nothing else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
 `/home`, the dashboard).
 
 ### Where this is enforced
@@ -162,9 +163,10 @@ like any other employee type; the DB constraint flipped from "trainer must have 
 
 Access for a trainer is still role-set-gated per route exactly like every other role — **not** a blanket
 owner/admin cut with everyone else lumped together. `src/shared/auth.py` exports `ALL_EMPLOYEES` (all
-four types) for the trainer-visible reads (full schedule, rosters, and the gym showcase/theme read
-`GET /gyms/{id}/showcase`); everything else stays `OWNER_ADMIN` or
-`STAFF`, which a trainer's `employee_type` never matches.
+four types) for the trainer-visible reads (full schedule and rosters). The gym showcase/theme read
+(`GET /gyms/{id}/showcase`) is a step wider still — gated by `verify_gym_member_or_employee` (every
+employee role **OR** any member of the gym; see §2, §6), not `ALL_EMPLOYEES`. Everything else stays
+`OWNER_ADMIN` or `STAFF`, which a trainer's `employee_type` never matches.
 
 ---
 
@@ -286,6 +288,15 @@ over the same `_resolve_employee` query:
   at *any* gym); used by endpoints with no `gym_id` (the shared image-upload proxy).
 - `verify_gym_owner` / `verify_gym_admin_or_owner` — thin wrappers over `verify_roles` with `OWNER_ONLY` /
   `OWNER_ADMIN` (the latter mirrors the DB's `is_gym_admin_or_owner` RLS function at the API layer).
+- `verify_gym_member_or_employee(gym_id, user_payload)` — the gym-LEVEL **branding** gate (the
+  theme/showcase read). Grants when the caller's verified email matches EITHER a non-archived
+  `gym_employees` row at the gym (any `employee_type`) OR any `members` row at the gym (no
+  membership-status filter). Takes NO `member_id` and confers no member-scoped access — it only answers
+  "does this verified caller belong to this gym in some capacity". It deliberately sits OUTSIDE the
+  member-scoped-surface separation (§9): a member reaches it directly with only a `gym_id`, because the
+  showcase is gym branding, not member data. Its own `src/shared/sql/auth_gym_member_or_employee.sql`
+  carries the same confirmed-account `EXISTS` (drift-guarded). **Only caller:**
+  `GET /api/v1/gyms/{id}/showcase`.
 - `verify_gym_employee_for_member(member_id, user_payload, staff_roles)` /
   `get_employee_id_for_member(member_id, user_payload, allowed)` — the member-scoped variants: resolve the
   member's gym, then run the gym-scoped check on it. **Staff-only, and they gate EVERY member-scoped route
@@ -413,6 +424,14 @@ pending redemptions — a projection of `MembersBillingDetailService`); their st
 their gym's **schedule board**; their own **reservations** (`POST`/`DELETE .../signup`); their gym's
 **active** reward catalog and a **pending** redemption with their own points; and their personalized
 **video** feed / rotating rec / rec click.
+
+**Plus one gym-LEVEL read that is NOT a `member_portal` route.** A member also reads their gym's
+branding via `GET /api/v1/gyms/{id}/showcase` (the **theme** domain, not `/api/v1/member/...`), so the
+app can re-theme itself to the gym — the response carries `theme_design_id`. That route is gated by
+`verify_gym_member_or_employee` (any employee role OR any member of the gym; §2, §6), NOT
+`verify_member_self`: it takes only a `gym_id` and returns gym branding, not member data, so it
+deliberately lives outside this domain's member-scoped separation. It is the mobile app's one call that
+isn't under the member router.
 
 **What it refuses, deliberately:**
 

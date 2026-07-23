@@ -354,7 +354,7 @@ Scoped / significant dependencies:
 - `dio` — HTTP client behind `ApiClient` for the FastApiBackend (CRM data). Distinct from the `theme_flutter` transitive `dio` — this is the direct CRM dep; route every CRM call through `ApiClient`, not a raw `Dio`.
 - `supabase_flutter` — auth (JWT for `ApiClient`, session refresh) and real-time DB for the CRM stack. Gated in `main.dart`; absent from the theme-browser target.
 - `flutter_stripe` / `flutter_stripe_web` / `stripe_js` — Stripe payment collection (member-detail billing dialogs).
-- `get_it` — service locator for DI across CRM features.
+- **DI is manual constructor injection — CRM code does not use a service locator.** Repositories and blocs are constructed inline at their `RepositoryProvider` / `BlocProvider` `create:` sites. `get_it` is declared in `pubspec.yaml` and pulled transitively by `theme_flutter`, but nothing in `lib/` references it — do not introduce a service locator.
 - `json_annotation` / `json_serializable` / `build_runner` — code-gen for API response models (`*.g.dart`).
 - `flutter_dotenv` — loads `.env.dev` / `.env.prod` at startup for Supabase / Stripe / `API_BASE_URL` (see *Configuration*).
 - `intl` — date/currency formatting. `uuid` — local UUIDs for optimistic creates. `stream_transform` — bloc stream operators (debounce/switchMap).

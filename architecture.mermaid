@@ -1,6 +1,6 @@
 flowchart TB
   %% ---------- CLIENTS ----------
-  MobileApp["📱 <b>MobileApp</b> — Flutter member app<br/>videos feed · gym detail · home / booking<br/>rewards / stats · style-select · core / AppConfig"]
+  MobileApp["📱 <b>MobileApp</b> — Flutter member app (live client)<br/>Supabase auth · AuthGate → MemberGate → AppShell<br/>ApiClient (dio + JWT interceptor · 401 refresh · 403≠sign-out) → member portal<br/>SelectedMember identity (family picker) · theme hydration (theme_design_id)<br/>home / booking · rewards · profile (rank + progress graph) · videos feed/rec<br/>qr check-in (scanner · kiosk Phase G seam) · celebration (watermark)"]
   CRM["🖥️ <b>CRM</b> — gym admin web (full CRM)<br/>login · Supabase auth<br/>api_client (dio + auth interceptor) · BLoC repositories → FastApiBackend<br/>members list · member detail (billing) · gym setup (Stripe Connect)<br/>members video tab (FastApiBackend videos domain)<br/>live theme preview + showcase (ThemeService — read-only)<br/>theme-browser target · schedule board · shared widgets / deploy"]
   LandingPage["🌐 <b>LandingPage</b> — React-via-CDN site<br/>hero carousel · feed demo · loyalty loop<br/>pricing table · hifi/ copy + ds · S3 deploy"]
 
@@ -61,7 +61,9 @@ flowchart TB
   LLMProvider["🤖 Anthropic / LLM<br/>agent: Pydantic AI (AnthropicModel)<br/>regular calls: litellm (LiteLLMClient)<br/>default claude-sonnet-4-6"]
 
   %% ---------- CROSS-SYSTEM (root siblings only) ----------
-  MobileApp -->|"GET /apps/{id}/styles"| TS_api
+  MobileApp -->|"authd /api/v1/member portal (profile · board · reservations · rewards · videos · showcase theme_design_id)"| FastApiBackend
+  MobileApp -->|"Supabase Auth (login)"| Database
+  MobileApp -->|"branding: GET /apps/{id}/styles (theme_flutter)"| TS_api
   CRM -->|"GET /apps/{id}/styles (theme catalog) + live preview"| TS_api
   CRM -->|"authd API (billing + video content) · public showcase-defaults + gym theme PUT"| FastApiBackend
   CRM -->|"Supabase Auth (login)"| Database
