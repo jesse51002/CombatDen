@@ -1,69 +1,120 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_exit_lock.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_blocked_screen.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_class_pick_screen.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_glance_stub_screen.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_header.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_idle_warning.dart';
+import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+import 'package:crm/shared/widgets/centered_processing_view.dart';
 
 /// The full-viewport member surface mounted (in place of the admin workspace)
 /// while kiosk is active — no `AppShell`, no nav rail, no admin routes.
 ///
-/// TODO(Phase C): replaced by the real kiosk home + check-in + glance + signup
-/// surfaces. This is a **deliberately temporary security-shell placeholder** —
-/// it only proves the auth-gate swap and the exit-lock sign-out. Do not build
-/// the member UI here; that lands in Phase C behind the `impeccable` pass.
+/// It hosts the check-in lane: a persistent header, the swapping sub-screen
+/// ([KioskFlowCubit] drives which), and the flow-idle warning overlay. The
+/// whole surface listens for pointer activity to reset the 5-minute idle guard.
+///
+/// The Phase C2 retention glance and the Phase D signup flow are stubbed (a
+/// minimal success screen; a front-desk placeholder dialog).
 class KioskScreen extends StatelessWidget {
   const KioskScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Repositories follow the CRM convention: instantiated with a fresh
+    // `ApiClient()` at the point the cubit is built (they are not provided in
+    // the widget tree). The gym id is guaranteed non-null here — the auth gate
+    // only mounts the kiosk once a gym is active.
+    return BlocProvider<KioskFlowCubit>(
+      create: (context) => KioskFlowCubit(
+        membersRepository: MembersListRepository(apiClient: ApiClient()),
+        scheduleRepository: ScheduleRepository(apiClient: ApiClient()),
+        memberRepository: MemberRepository(apiClient: ApiClient()),
+        session: context.read<KioskSessionCubit>(),
+        gymId: selectedGym.gymId!,
+      ),
+      child: const _KioskScreenBody(),
+    );
+  }
+}
+
+class _KioskScreenBody extends StatelessWidget {
+  const _KioskScreenBody();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: DesignConstants.backgroundColor,
-      body: Stack(
-        children: [
-          const _KioskPlaceholderBody(),
-          Positioned(
-            top: DesignConstants.paddingSmall,
-            right: DesignConstants.paddingSmall,
-            child: const KioskExitLock(),
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) =>
+            context.read<KioskFlowCubit>().registerActivity(),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const KioskHeader(),
+              Expanded(
+                child: Stack(
+                  children: const [
+                    _ViewSwitcher(),
+                    _IdleOverlay(),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _KioskPlaceholderBody extends StatelessWidget {
-  const _KioskPlaceholderBody();
+class _ViewSwitcher extends StatelessWidget {
+  const _ViewSwitcher();
 
   @override
   Widget build(BuildContext context) {
-    final gymName = selectedGym.gymName ?? 'Your gym';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Icon(
-            Symbols.point_of_sale_sharp,
-            size: DesignConstants.iconSizeBig,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.primaryColor,
-          ),
-          Text(
-            'Kiosk Mode',
-            style: DesignConstants.h1,
-            textAlign: TextAlign.center,
-          ),
-          Text(
-            gymName,
-            style: DesignConstants.pBig.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+    return BlocBuilder<KioskFlowCubit, KioskFlowState>(
+      buildWhen: (prev, cur) => prev.view != cur.view,
+      builder: (context, state) {
+        return switch (state.view) {
+          KioskView.home => const KioskHomeScreen(),
+          KioskView.classPick => const KioskClassPickScreen(),
+          KioskView.checkingIn => const CenteredProcessingView(),
+          KioskView.checkedIn => const KioskGlanceStubScreen(),
+          KioskView.blocked => const KioskBlockedScreen(),
+          KioskView.closing => const KioskClosingScreen(),
+        };
+      },
+    );
+  }
+}
+
+class _IdleOverlay extends StatelessWidget {
+  const _IdleOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<KioskFlowCubit, KioskFlowState>(
+      buildWhen: (prev, cur) =>
+          prev.idleWarningActive != cur.idleWarningActive ||
+          prev.idleCountdown != cur.idleCountdown,
+      builder: (context, state) {
+        if (!state.idleWarningActive) return const SizedBox.shrink();
+        return KioskIdleWarning(seconds: state.idleCountdown);
+      },
     );
   }
 }
