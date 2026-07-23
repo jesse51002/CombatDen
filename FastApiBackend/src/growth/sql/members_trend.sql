@@ -146,7 +146,11 @@ SELECT jsonb_build_object(
                             m.trial
                         )
                     )
-                    ORDER BY m.month_start
+                    -- Newest month first: a data table reads top-down, so the
+                    -- most recent row is the one an owner wants at the top.
+                    -- The chart's series stays ascending (time flows left to
+                    -- right); only this table array is reversed.
+                    ORDER BY m.month_start DESC
                 )
                 FROM metrics m
             ),
