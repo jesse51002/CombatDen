@@ -66,6 +66,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     rows = [
         {
             "gym_id": gym_a,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -75,6 +76,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
         },
         {
             "gym_id": gym_b,
+            "created_at": datetime.now(UTC),
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
             "timezone": "America/New_York",
@@ -187,6 +189,7 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -218,6 +221,7 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -250,6 +254,7 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
