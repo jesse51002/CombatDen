@@ -37,48 +37,58 @@ class KioskGlanceScreen extends StatelessWidget {
       builder: (context, state) {
         final result = state.checkInResult;
         final alreadyCheckedIn = result?.alreadyCheckedIn ?? false;
-        return KioskStage(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            spacing: DesignConstants.spacingMedium,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: DesignConstants.spacingBig,
-                children: [
-                  KioskGlanceGreeting(
-                    firstName: kioskFirstName(state.selectedMember?.name),
-                    alreadyCheckedIn: alreadyCheckedIn,
-                  ),
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: DesignConstants.spacingLarge,
-                      children: [
-                        Expanded(
-                          child: KioskStreakPanel(
-                            weeks: result?.classStreakWeeks ?? 0,
-                            daysCompleted:
-                                result?.currentWeekDays ?? _kEmptyWeek,
-                          ),
-                        ),
-                        Expanded(
-                          child: KioskRewardsPanel(
-                            pointsBalance: state.pointsBalance,
-                            pointsAwarded: result?.pointsAwarded ?? 0,
-                            rewards: state.rewards,
-                            loading: state.glanceLoading,
-                            alreadyCheckedIn: alreadyCheckedIn,
-                          ),
-                        ),
-                      ],
+        // A tap ANYWHERE on the glance opens the "Get the app" modal (the
+        // founder's UX-5 ruling — the glance tap now funnels to the app instead
+        // of ejecting home). The Done button + reward tiles are interactive
+        // children that win their own taps in the gesture arena, so this only
+        // fires on the glance's inert areas. Opaque so the whole glance surface
+        // is tappable.
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.read<KioskFlowCubit>().openAppModal(),
+          child: KioskStage(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: DesignConstants.spacingBig,
+                  children: [
+                    KioskGlanceGreeting(
+                      firstName: kioskFirstName(state.selectedMember?.name),
+                      alreadyCheckedIn: alreadyCheckedIn,
                     ),
-                  ),
-                ],
-              ),
-              KioskGlanceFoot(secondsLeft: state.glanceCountdown),
-            ],
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: DesignConstants.spacingLarge,
+                        children: [
+                          Expanded(
+                            child: KioskStreakPanel(
+                              weeks: result?.classStreakWeeks ?? 0,
+                              daysCompleted:
+                                  result?.currentWeekDays ?? _kEmptyWeek,
+                            ),
+                          ),
+                          Expanded(
+                            child: KioskRewardsPanel(
+                              pointsBalance: state.pointsBalance,
+                              pointsAwarded: result?.pointsAwarded ?? 0,
+                              rewards: state.rewards,
+                              loading: state.glanceLoading,
+                              alreadyCheckedIn: alreadyCheckedIn,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                KioskGlanceFoot(secondsLeft: state.glanceCountdown),
+              ],
+            ),
           ),
         );
       },

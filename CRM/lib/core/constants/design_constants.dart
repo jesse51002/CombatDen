@@ -328,6 +328,8 @@ class DesignConstants {
   static const double rewardThumbnailHeight = 80.0;
   static const double rewardAvatarSize = 72.0;
   static const double qrThumbnailSize = 120.0;
+  // The kiosk "Get the app" modal's real scannable download QR (module box).
+  static const double kioskAppQrSize = 168.0;
   // A default-image chip in the ImageUploadPickerField pool tray. The chip
   // width follows the field's aspectRatio, so belts render square (64x64)
   // and photos landscape at this height.

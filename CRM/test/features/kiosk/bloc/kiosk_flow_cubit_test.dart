@@ -477,4 +477,73 @@ void main() {
       });
     });
   });
+
+  group('get-the-app modal (UX-5)', () {
+    test('opening the modal PAUSES the glance auto-return; its own 60s clock '
+        'returns home', () {
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks(); // class load settles
+        cubit.selectClass(occ1);
+        async.flushMicrotasks(); // check-in records + glance starts
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+
+        cubit.openAppModal();
+        expect(cubit.state.appModalOpen, isTrue);
+        expect(cubit.state.appModalCountdown, kKioskAppModalTimeout.inSeconds);
+        expect(cubit.state.view, KioskView.checkedIn); // glance still behind it
+
+        // The glance's 8s auto-return is paused — elapsing past it stays put.
+        async.elapse(const Duration(seconds: 8));
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.appModalOpen, isTrue);
+
+        // The modal's OWN 60s clock reaches zero and returns to a fresh home.
+        async.elapse(const Duration(seconds: 52)); // total 60s
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.appModalOpen, isFalse);
+        expect(cubit.state.selectedMember, isNull);
+        cubit.close();
+      });
+    });
+
+    test('Done closes the modal, returns home, and cancels the 60s timer', () {
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+        cubit.openAppModal();
+        expect(cubit.state.appModalOpen, isTrue);
+
+        cubit.closeAppModal(); // Done
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.appModalOpen, isFalse);
+
+        // The modal timer was cancelled — no late goHome, no pending-timer crash.
+        async.elapse(const Duration(seconds: 120));
+        expect(cubit.state.view, KioskView.home);
+        cubit.close();
+      });
+    });
+
+    test('opening the modal from home is informational — it begins NO member '
+        'flow', () {
+      final cubit = build();
+      cubit.openAppModal();
+      expect(cubit.state.appModalOpen, isTrue);
+      expect(cubit.state.view, KioskView.home);
+      verifyNever(() => session.beginFlow());
+      cubit.close();
+    });
+  });
 }

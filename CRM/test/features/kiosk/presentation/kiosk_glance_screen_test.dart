@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
@@ -72,7 +73,10 @@ void main() {
     glanceCountdown: 8,
   );
 
-  Future<void> pumpGlance(WidgetTester tester, KioskFlowState state) async {
+  Future<_MockKioskFlowCubit> pumpGlance(
+    WidgetTester tester,
+    KioskFlowState state,
+  ) async {
     final cubit = _MockKioskFlowCubit();
     whenListen(
       cubit,
@@ -93,6 +97,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle(); // let the drain bar's 1s tween finish
+    return cubit;
   }
 
   testWidgets('renders the glance with no layout error at iPad-landscape size',
@@ -191,5 +196,19 @@ void main() {
 
     expect(find.byIcon(Symbols.check_circle_sharp), findsNothing);
     expect(find.byIcon(Symbols.circle_sharp), findsNWidgets(7));
+  });
+
+  testWidgets('a tap on the glance opens the get-the-app modal (not goHome)',
+      (tester) async {
+    // The founder's UX-5 ruling: the glance tap now funnels to the app modal
+    // instead of ejecting home. Tapping an inert glance element (the streak
+    // caption) routes to the glance's opaque gesture, not the Done button.
+    final cubit = await pumpGlance(tester, glanceState);
+
+    await tester.tap(find.text('week streak'));
+    await tester.pump();
+
+    verify(() => cubit.openAppModal()).called(1);
+    verifyNever(() => cubit.goHome());
   });
 }

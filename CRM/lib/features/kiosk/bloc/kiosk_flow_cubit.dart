@@ -48,6 +48,13 @@ const Duration kKioskGlanceAutoReturn = Duration(seconds: 8);
 /// a gym with more rewards surfaces the nearest few, the rest live in the app.
 const int kKioskGlanceRewardCount = 4;
 
+/// How long the "Get the CombatDen App" modal (UX-5) stays open before it
+/// auto-closes back to home, so the next member gets a clean home. A member can
+/// also leave early with Done. It is the modal's OWN clock — a plain countdown
+/// that member interaction does NOT reset (unlike the 5-minute idle guard); the
+/// modal is a self-dismissing overlay, not an in-progress draft.
+const Duration kKioskAppModalTimeout = Duration(seconds: 60);
+
 /// Drives the kiosk check-in lane's internal navigation: the current
 /// [KioskView], the in-progress member/occurrence draft, live name search, the
 /// `is_member: true` check-in, and the 5-minute flow-idle guard.
@@ -98,6 +105,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   Timer? _idleTimer;
   Timer? _countdownTimer;
   Timer? _glanceTimer;
+  Timer? _appModalTimer;
   int _searchSeq = 0;
   int _classesSeq = 0;
   int _glanceSeq = 0;
@@ -344,6 +352,51 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     });
   }
 
+  // ── "Get the app" modal (UX-5) ──
+
+  /// Open the member-facing "Get the CombatDen App" modal — opened by a tap on
+  /// the retention glance (the founder's UX-5 ruling: the glance tap now offers
+  /// the app instead of ejecting home) or the home QR panel's "Get it"
+  /// affordance. Opening it PAUSES the glance's 8-second auto-return and any
+  /// flow-idle guard, and starts the modal's OWN 60-second auto-close. It is a
+  /// pure informational overlay — it does NOT begin a member flow (no
+  /// [KioskSessionCubit.beginFlow]) — so it never touches the grace-window
+  /// bookkeeping. Idempotent while already open.
+  void openAppModal() {
+    if (state.appModalOpen) return;
+    // Pause the glance auto-return + suppress the idle guard: the modal's own
+    // 60s clock is the sole timer while it is up.
+    _glanceTimer?.cancel();
+    _idleTimer?.cancel();
+    _countdownTimer?.cancel();
+    emit(state.copyWith(
+      appModalOpen: true,
+      appModalCountdown: kKioskAppModalTimeout.inSeconds,
+      idleWarningActive: false,
+      idleCountdown: 0,
+    ));
+    _startAppModalTimer();
+  }
+
+  /// The modal's 60-second auto-close. One per-second countdown drives the
+  /// visible timer and, at zero, returns home (mirrors the glance/idle timers).
+  void _startAppModalTimer() {
+    _appModalTimer?.cancel();
+    _appModalTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (isClosed) return;
+      final next = state.appModalCountdown - 1;
+      if (next <= 0) {
+        _appModalTimer?.cancel();
+        goHome();
+      } else {
+        emit(state.copyWith(appModalCountdown: next));
+      }
+    });
+  }
+
+  /// Close the modal (Done) and return to a fresh home for the next member.
+  void closeAppModal() => goHome();
+
   // ── Return to home (Done / cancel / idle timeout) ──
 
   /// Abandon any in-progress draft and return to the idle home screen. Ends
@@ -351,6 +404,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   void goHome() {
     _searchDebounce?.cancel();
     _glanceTimer?.cancel();
+    _appModalTimer?.cancel();
     _searchSeq++;
     _classesSeq++;
     _glanceSeq++; // drop any in-flight glance fetch
@@ -382,6 +436,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     // The retention glance is governed by its own 8s auto-return, never the
     // 5-minute flow-idle guard (the flow has already ended by then).
     if (state.view == KioskView.checkedIn) return;
+    // The "Get the app" modal runs its own 60s clock — suppress the idle guard
+    // beneath it (it can sit over an engaged home draft).
+    if (state.appModalOpen) return;
     if (_engaged && !state.idleWarningActive) {
       _idleTimer = Timer(kKioskIdleTimeout, _onIdle);
     }
@@ -425,6 +482,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
     _glanceTimer?.cancel();
+    _appModalTimer?.cancel();
     // Balance a mid-flow teardown: without this the session's flowCount stays
     // incremented (endFlow is a pure in-memory decrement — safe post-close).
     _endFlowIfStarted();

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
+import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// The "Scan with app" half of the kiosk home — a static QR-code visual
 /// placeholder (the live check-in nonce is Phase G, so this renders but does
-/// nothing) plus the App Store adoption line. Mirrors the mockup QR column.
+/// nothing) plus the App Store adoption line and a quiet "Get it" affordance
+/// that opens the "Get the CombatDen App" modal (UX-5). Mirrors the mockup QR
+/// column.
 class KioskQrPanel extends StatelessWidget {
   const KioskQrPanel({super.key});
 
@@ -16,13 +21,28 @@ class KioskQrPanel extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingBig,
-      children: const [
-        KioskSectionHead(
+      children: [
+        const KioskSectionHead(
           title: 'Scan with app',
           subtitle: 'Scan QR code with app for instant check in',
         ),
-        _QrPlaceholder(),
-        KioskAppLine(text: 'Get the CombatDen app in the App Store.'),
+        const _QrPlaceholder(),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            const KioskAppLine(
+              text: 'Get the CombatDen app in the App Store.',
+            ),
+            AppOutlineButton(
+              text: 'Don\'t have the app? Get it',
+              borderColor: DesignConstants.line,
+              textColor: DesignConstants.text2nd,
+              onPressed: () =>
+                  context.read<KioskFlowCubit>().openAppModal(),
+            ),
+          ],
+        ),
       ],
     );
   }

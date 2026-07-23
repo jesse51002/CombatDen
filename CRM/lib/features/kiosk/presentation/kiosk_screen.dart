@@ -13,6 +13,7 @@ import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dar
 import 'package:crm/features/kiosk/presentation/screens/kiosk_glance_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_checking_in.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_header.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_idle_warning.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -72,6 +73,7 @@ class _KioskScreenBody extends StatelessWidget {
                   children: const [
                     _ViewSwitcher(),
                     _IdleOverlay(),
+                    _AppModalOverlay(),
                   ],
                 ),
               ),
@@ -82,17 +84,16 @@ class _KioskScreenBody extends StatelessWidget {
     );
   }
 
-  /// A pointer-down anywhere on the kiosk surface. On the retention glance
-  /// (the flow has already ended) a tap DISMISSES to home so the next member
-  /// gets a clean start; everywhere else it merely resets the 5-minute
-  /// flow-idle guard ("I'm still here").
+  /// A pointer-down anywhere on the kiosk surface: resets the 5-minute flow-idle
+  /// guard ("I'm still here"). Harmless on the idle home and the retention
+  /// glance (neither runs the guard). While the "Get the app" modal is open it
+  /// is a no-op — the modal owns its own 60-second clock. The glance's
+  /// tap-to-open-the-modal is handled by the glance screen's own gesture (so
+  /// its Done button still wins its own taps), not here.
   void _onSurfaceTap(BuildContext context) {
     final cubit = context.read<KioskFlowCubit>();
-    if (cubit.state.view == KioskView.checkedIn) {
-      cubit.goHome();
-    } else {
-      cubit.registerActivity();
-    }
+    if (cubit.state.appModalOpen) return;
+    cubit.registerActivity();
   }
 }
 
@@ -129,6 +130,29 @@ class _IdleOverlay extends StatelessWidget {
       builder: (context, state) {
         if (!state.idleWarningActive) return const SizedBox.shrink();
         return KioskIdleWarning(seconds: state.idleCountdown);
+      },
+    );
+  }
+}
+
+/// The "Get the CombatDen App" modal (UX-5), rendered over the current view
+/// (like the idle warning) whenever the cubit's [KioskFlowState.appModalOpen]
+/// is set — opened by a glance tap or the home QR panel's "Get it" affordance.
+class _AppModalOverlay extends StatelessWidget {
+  const _AppModalOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<KioskFlowCubit, KioskFlowState>(
+      buildWhen: (prev, cur) =>
+          prev.appModalOpen != cur.appModalOpen ||
+          prev.appModalCountdown != cur.appModalCountdown,
+      builder: (context, state) {
+        if (!state.appModalOpen) return const SizedBox.shrink();
+        return KioskGetAppModal(
+          gymId: selectedGym.gymId ?? '',
+          secondsLeft: state.appModalCountdown,
+        );
       },
     );
   }

@@ -83,6 +83,18 @@ class KioskFlowState extends Equatable {
   final bool idleWarningActive;
   final int idleCountdown;
 
+  // ── "Get the app" modal (UX-5) ──
+  /// Whether the member-facing "Get the CombatDen App" modal is open — an
+  /// overlay funnel opened from a glance tap or the home QR panel. While open
+  /// it pauses the glance's 8-second auto-return and runs its OWN 60-second
+  /// timer ([appModalCountdown]); on Done or expiry the cubit returns home.
+  /// Reset to false only via [KioskFlowState.home].
+  final bool appModalOpen;
+
+  /// Seconds left on the app modal's 60-second auto-close. Drives its "Back to
+  /// start in Ns" label + drain bar. 0 when the modal is closed.
+  final int appModalCountdown;
+
   const KioskFlowState({
     required this.view,
     this.searchQuery = '',
@@ -102,6 +114,8 @@ class KioskFlowState extends Equatable {
     this.glanceCountdown = 0,
     this.idleWarningActive = false,
     this.idleCountdown = 0,
+    this.appModalOpen = false,
+    this.appModalCountdown = 0,
   });
 
   /// The idle rest state — every field cleared. Returning here abandons any
@@ -129,6 +143,8 @@ class KioskFlowState extends Equatable {
     int? glanceCountdown,
     bool? idleWarningActive,
     int? idleCountdown,
+    bool? appModalOpen,
+    int? appModalCountdown,
   }) {
     return KioskFlowState(
       view: view ?? this.view,
@@ -157,6 +173,8 @@ class KioskFlowState extends Equatable {
       glanceCountdown: glanceCountdown ?? this.glanceCountdown,
       idleWarningActive: idleWarningActive ?? this.idleWarningActive,
       idleCountdown: idleCountdown ?? this.idleCountdown,
+      appModalOpen: appModalOpen ?? this.appModalOpen,
+      appModalCountdown: appModalCountdown ?? this.appModalCountdown,
     );
   }
 
@@ -180,5 +198,7 @@ class KioskFlowState extends Equatable {
         glanceCountdown,
         idleWarningActive,
         idleCountdown,
+        appModalOpen,
+        appModalCountdown,
       ];
 }
