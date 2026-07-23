@@ -91,6 +91,41 @@ class MemberPortalProfile(BaseModel):
     pending_redemptions: list[PendingRedemptionCard] = []
 
 
+class RankProgressPoint(BaseModel):
+    """One point in the member's rank-progress series (the profile graph).
+
+    Attributes:
+        date: The gym-local day the activity happened (bucketed in the gym's
+            own timezone, like the streak and last-class reads).
+        classes_into_rank: Classes accrued toward the next rank at this point —
+            reset to 0 at each promotion (a ``rank_changed`` marker) and capped
+            at ``classes_needed``.
+        classes_needed: Classes required to reach the next rank — the member's
+            CURRENT per-step threshold from the gym's live rank ladder (the same
+            derivation the profile's rank block uses: an even split of
+            ``classes_to_next_major`` across the effective sub-positions, else
+            the full major threshold). Constant across the series; historical
+            threshold changes are approximated by today's value.
+    """
+
+    date: date
+    classes_into_rank: int
+    classes_needed: int
+
+
+class MemberRankProgressResponse(BaseModel):
+    """The member's rank-progress series — one point per activity event.
+
+    Walked chronologically from the member's ``member_activities``: each
+    ``rank_changed`` resets the counter to 0, each ``class_attended`` after it
+    increments the counter by one (capped at ``classes_needed``). ``points`` is
+    an empty list (a valid 200) when the member holds no rank or the gym has
+    ranks disabled.
+    """
+
+    points: list[RankProgressPoint]
+
+
 class MemberPortalSignupRequest(BaseModel):
     """Body for the member's own class reservation.
 

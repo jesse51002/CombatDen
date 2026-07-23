@@ -58,6 +58,7 @@ from src.member_portal.schema.member_portal_schema import (
     MemberPortalIdentityListResponse,
     MemberPortalProfile,
     MemberPortalSignupRequest,
+    MemberRankProgressResponse,
 )
 from src.member_portal.service.member_portal_service import MemberPortalService
 from src.rewards.schema.rewards_schema import (
@@ -197,6 +198,56 @@ async def get_my_profile(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve your profile",
+        ) from None
+
+
+@member_portal_router.get(
+    "/gyms/{gym_id}/members/{member_id}/rank-progress",
+    response_model=MemberRankProgressResponse,
+    summary="The member's rank-progress series (the profile graph's data)",
+    description=(
+        "A time series of the member's progress toward their next rank: one "
+        "point per activity event, walked chronologically from the member's "
+        "``member_activities``. Each ``rank_changed`` resets the counter to 0 "
+        "(a promotion) and each ``class_attended`` after it adds one, capped "
+        "at ``classes_needed`` — the member's current per-step threshold from "
+        "the gym's live rank ladder (the same derivation the profile's rank "
+        "block uses). Empty (a valid 200) when the member holds no rank or the "
+        "gym has ranks disabled. Gated by ``verify_member_self`` on the path "
+        "gym."
+    ),
+    responses={
+        200: {"description": "The member's rank-progress series (possibly empty)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not this member, or the member is at another gym"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def get_my_rank_progress(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    portal_service: MemberPortalService = Depends(
+        Provide[DependencyInjector.member_portal_service]
+    ),
+) -> MemberRankProgressResponse:
+    """The member's rank-progress time series."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
+
+    try:
+        return await portal_service.get_rank_progress(member_id, gym_id)
+    except Exception:
+        logger.error(
+            "Member-portal rank-progress query failed: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve your rank progress",
         ) from None
 
 

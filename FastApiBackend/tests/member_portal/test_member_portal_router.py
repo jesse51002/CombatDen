@@ -38,6 +38,8 @@ from src.member_portal.schema.member_portal_schema import (
     MemberPortalIdentity,
     MemberPortalIdentityListResponse,
     MemberPortalProfile,
+    MemberRankProgressResponse,
+    RankProgressPoint,
 )
 from src.members.schema.members_billing_schema import (
     BillingPersonalInfo,
@@ -282,6 +284,55 @@ def test_get_profile_maps_missing_member_to_404(
     resp = client.get(_base(fake_gym_id, fake_member_id), headers=auth_headers)
 
     assert resp.status_code == 404
+
+
+def test_rank_progress_gates_and_returns_series(
+    client, auth_headers, auth_mock, portal_service_mock, fake_gym_id, fake_member_id
+):
+    portal_service_mock.get_rank_progress = AsyncMock(
+        return_value=MemberRankProgressResponse(
+            points=[
+                RankProgressPoint(
+                    date=date(2026, 7, 1), classes_into_rank=1, classes_needed=2
+                ),
+                RankProgressPoint(
+                    date=date(2026, 7, 8), classes_into_rank=0, classes_needed=2
+                ),
+            ]
+        )
+    )
+
+    resp = client.get(
+        f"{_base(fake_gym_id, fake_member_id)}/rank-progress", headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [p["classes_into_rank"] for p in body["points"]] == [1, 0]
+    assert body["points"][0]["classes_needed"] == 2
+    portal_service_mock.get_rank_progress.assert_awaited_once_with(
+        UUID(fake_member_id), UUID(fake_gym_id)
+    )
+    auth_mock.verify_member_self.assert_awaited_once_with(
+        UUID(fake_member_id),
+        auth_mock.get_current_user.return_value,
+        gym_id=UUID(fake_gym_id),
+    )
+
+
+def test_rank_progress_allows_an_empty_series(
+    client, auth_headers, portal_service_mock, fake_gym_id, fake_member_id
+):
+    portal_service_mock.get_rank_progress = AsyncMock(
+        return_value=MemberRankProgressResponse(points=[])
+    )
+
+    resp = client.get(
+        f"{_base(fake_gym_id, fake_member_id)}/rank-progress", headers=auth_headers
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["points"] == []
 
 
 def test_get_streak_gates_and_returns_weeks(
