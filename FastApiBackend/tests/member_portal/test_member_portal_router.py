@@ -25,6 +25,8 @@ from schema.video import VideoGenre
 import src.shared.db_schema_path  # noqa: F401  — resolves ``from schema.*``
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
+    MemberClassHistoryRow,
+    MemberClassHistoryStatus,
 )
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
@@ -356,9 +358,31 @@ def test_get_streak_gates_and_returns_weeks(
 def test_class_history_gates_and_paginates(
     client, auth_headers, auth_mock, history_service_mock, fake_gym_id, fake_member_id
 ):
+    reserved = MemberClassHistoryRow(
+        class_id=uuid4(),
+        class_name="Fundamentals",
+        image_url="https://cdn.example/f.png",
+        original_date=date(2026, 8, 1),
+        original_time=time(18, 0),
+        duration_minutes=60,
+        points_worth=55,
+        occurred_at=None,
+        status=MemberClassHistoryStatus.reserved,
+    )
+    attended = MemberClassHistoryRow(
+        class_id=uuid4(),
+        class_name="Sparring",
+        image_url="https://cdn.example/s.png",
+        original_date=date(2026, 7, 1),
+        original_time=time(19, 0),
+        duration_minutes=90,
+        points_worth=75,
+        occurred_at=datetime(2026, 7, 1, 19, 0, tzinfo=UTC),
+        status=MemberClassHistoryStatus.attended,
+    )
     history_service_mock.get_history = AsyncMock(
         return_value=MemberClassHistoryResponse(
-            upcoming=[], history=[], has_more=False
+            upcoming=[reserved], history=[attended], has_more=False
         )
     )
 
@@ -372,6 +396,11 @@ def test_class_history_gates_and_paginates(
         UUID(fake_member_id), UUID(fake_gym_id), limit=5, offset=10
     )
     auth_mock.verify_member_self.assert_awaited()
+    # points_worth rides through the response contract on both lists — the
+    # potential award on a reservation, the earned points on an attended row.
+    body = resp.json()
+    assert body["upcoming"][0]["points_worth"] == 55
+    assert body["history"][0]["points_worth"] == 75
 
 
 def test_class_history_rejects_an_out_of_range_limit(

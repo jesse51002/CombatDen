@@ -93,6 +93,7 @@ class CheckinHistoryService:
             original_date=row["original_date"],
             original_time=row["original_time"],
             duration_minutes=row["duration_minutes"],
+            points_worth=row["points_worth"],
             occurred_at=row["occurred_at"],
             status=status,
         )

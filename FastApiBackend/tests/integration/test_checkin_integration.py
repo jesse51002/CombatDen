@@ -978,3 +978,81 @@ class TestStreakWeekBoundaryIsGymLocal:
             assert streak == 1
         finally:
             _delete_raw_attendance(member_id, class_id, target_sunday)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/checkin/history — the attended row carries the class's points
+# ---------------------------------------------------------------------------
+
+
+def _class_with_current_schedule() -> dict | None:
+    """A class that has a CURRENT schedule version + its ``points_worth``.
+
+    The history query joins ``gym_class_schedules_current``, so a class with
+    no live version would be dropped; discovering through that same join
+    guarantees the inserted attendance row surfaces.
+    """
+
+    async def _run() -> dict | None:
+        conn = await asyncpg.connect(_get_db_url())
+        try:
+            row = await conn.fetchrow(
+                "SELECT c.class_id, c.points_worth FROM gym_classes c "
+                "JOIN gym_class_schedules_current s ON s.class_id = c.class_id "
+                "WHERE c.gym_id = $1 LIMIT 1",
+                UUID(GYM_ID),
+            )
+            return dict(row) if row is not None else None
+        finally:
+            await conn.close()
+
+    return _run_async(_run())
+
+
+class TestClassHistoryPointsWorth:
+    """The member-page history card reads ``points_worth`` off the class row,
+    so the post-class celebration can show "+N points earned". Regression
+    lock: ``checkin_member_history.sql`` must SELECT ``gym_classes.points_worth``
+    and ``CheckinHistoryService`` must map it onto the row."""
+
+    def test_attended_history_row_carries_class_points_worth(
+        self, api: httpx.Client, seed_ids: dict
+    ) -> None:
+        member_row = seed_ids["attendance_free_member"]
+        klass = _class_with_current_schedule()
+        if member_row is None or klass is None:
+            pytest.skip(
+                "Seed missing an attendance-free member / scheduled class"
+            )
+        member_id = str(member_row["member_id"])
+        class_id = str(klass["class_id"])
+        expected_points = int(klass["points_worth"])
+
+        original_date = date.today() - timedelta(days=30)
+        original_time = time(12, 0)
+        occurred_at = datetime.combine(original_date, original_time, tzinfo=UTC)
+
+        _insert_raw_attendance(
+            member_id, class_id, original_date, original_time, occurred_at
+        )
+        try:
+            resp = api.get(
+                "/api/v1/checkin/history",
+                params={"member_id": member_id, "gym_id": GYM_ID},
+            )
+            assert resp.status_code == 200, resp.text
+            history = resp.json()["history"]
+            mine = [
+                r
+                for r in history
+                if r["class_id"] == class_id
+                and r["original_date"] == original_date.isoformat()
+                and r["status"] == "attended"
+            ]
+            assert len(mine) == 1, (
+                "the inserted attended occurrence must appear exactly once "
+                f"in history; got {mine}"
+            )
+            assert mine[0]["points_worth"] == expected_points
+        finally:
+            _delete_raw_attendance(member_id, class_id, original_date)
