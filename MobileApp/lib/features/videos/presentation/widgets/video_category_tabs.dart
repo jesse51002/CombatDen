@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 
-/// The pill row across the top of the videos screen (All / Education /
-/// Entertainment). Selecting a pill re-filters the feed in place via
-/// [onTabSelected].
+/// The pill row across the top of the videos screen (All + one per genre in the
+/// feed). Selecting a pill reloads the feed for that genre via [onTabSelected].
+///
+/// Scrolls horizontally: the genre set is open-ended (up to nine values), so a
+/// fixed centered row would overflow. The pill styling is unchanged.
 class VideoCategoryTabs extends StatelessWidget {
   const VideoCategoryTabs({
     super.key,
@@ -19,21 +21,24 @@ class VideoCategoryTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: DesignConstants.screenHorizontalPadding,
-        vertical: DesignConstants.spacingLarge,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          for (var i = 0; i < tabs.length; i++)
-            _CategoryPill(
-              label: tabs[i],
-              isActive: i == selectedIndex,
-              onTap: () => onTabSelected?.call(i),
-            ),
-        ],
+      padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingLarge),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(
+          horizontal: DesignConstants.screenHorizontalPadding,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: DesignConstants.spacingLarge,
+          children: [
+            for (var i = 0; i < tabs.length; i++)
+              _CategoryPill(
+                label: tabs[i],
+                isActive: i == selectedIndex,
+                onTap: () => onTabSelected?.call(i),
+              ),
+          ],
+        ),
       ),
     );
   }

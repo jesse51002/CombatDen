@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/video.dart';
+import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
@@ -9,9 +9,9 @@ import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 /// full-width "Play" CTA underneath. Used for the very top hero on
 /// `VideosScreen`.
 class FeaturedVideoCard extends StatelessWidget {
-  const FeaturedVideoCard({super.key, required this.video, this.onTap});
+  const FeaturedVideoCard({super.key, required this.card, this.onTap});
 
-  final Video video;
+  final GymVideoCard card;
   final VoidCallback? onTap;
 
   @override
@@ -27,10 +27,10 @@ class FeaturedVideoCard extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           VideoReccCard(
-            title: video.title,
-            metaLabel: video.metaLabel,
-            thumbnail: CachedNetworkImageProvider(video.thumbnailUrl),
-            creatorPfp: CachedNetworkImageProvider(video.channelAvatarUrl),
+            title: card.title,
+            metaLabel: card.metaLabel,
+            thumbnail: CachedNetworkImageProvider(card.thumbnailUrl),
+            creatorPfp: CachedNetworkImageProvider(card.channelAvatarUrl),
             roundThumbnail: false,
             onTap: onTap,
           ),
