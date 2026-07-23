@@ -51,6 +51,13 @@ class MetricUnit(StrEnum):
     percent = "percent"
 
 
+class Granularity(StrEnum):
+    """The time bucket a ``line`` / ``bars`` series steps by."""
+
+    month = "month"
+    week = "week"
+
+
 class KpiTile(BaseModel):
     """One headline number inside a ``kpi_group``."""
 
@@ -107,6 +114,18 @@ class TableOrientation(StrEnum):
     beside = "beside"
 
 
+class ColumnAlign(StrEnum):
+    """Horizontal text-alignment of a tabular column's cells.
+
+    The complete CSS ``text-align`` set (forward-compatible); the growth SQL
+    currently emits only ``right``.
+    """
+
+    left = "left"
+    right = "right"
+    center = "center"
+
+
 class MetricTableColumn(BaseModel):
     """One column header of a metric's companion ``table``.
 
@@ -118,7 +137,7 @@ class MetricTableColumn(BaseModel):
     key: str
     label: str
     type: MemberListColumnType
-    align: str | None = None
+    align: ColumnAlign | None = None
     tone: str | None = None
 
 
@@ -172,7 +191,7 @@ class LineData(BaseModel):
     """
 
     unit: MetricUnit
-    granularity: str
+    granularity: Granularity
     series: list[MetricSeries]
     by_class: list[ClassSeries] | None = None
     table: MetricTable | None = None
@@ -188,7 +207,7 @@ class BarsData(BaseModel):
     """
 
     unit: MetricUnit
-    granularity: str
+    granularity: Granularity
     series: list[MetricSeries]
     by_class: list[ClassSeries] | None = None
     table: MetricTable | None = None
@@ -257,7 +276,7 @@ class MemberListColumn(BaseModel):
     key: str
     label: str
     type: MemberListColumnType
-    align: str | None = None
+    align: ColumnAlign | None = None
 
 
 class MemberListRow(BaseModel):
