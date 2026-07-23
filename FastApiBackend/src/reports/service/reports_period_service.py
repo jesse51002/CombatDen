@@ -118,7 +118,8 @@ class ReportsPeriodService:
         """
         gym = await self._load_gym(gym_id)
         tz = ZoneInfo(gym["timezone"])
-        window = self._compute_window(tz, report_month)
+        now_local = datetime.now(UTC).astimezone(tz)
+        window = self._compute_window(tz, report_month, now_local)
 
         ts_params = self._ts_params(gym_id, window)
         date_params = self._date_params(gym_id, window)
@@ -200,6 +201,7 @@ class ReportsPeriodService:
         self,
         tz: ZoneInfo,
         report_month: ReportMonth | None,
+        now_local: datetime,
     ) -> _ReportWindow:
         """Resolve the gym-local month window into UTC + local-date binds.
 
@@ -207,8 +209,11 @@ class ReportsPeriodService:
         00:00)`` converted to UTC instants for timestamptz columns; DATE
         columns compare against the gym-local period dates. All-time skips the
         window entirely (the SQL's all-time flag short-circuits the predicate).
+
+        ``now_local`` is the current gym-local moment, injected (not read from
+        the wall clock here) so the window is a pure function of its inputs; it
+        decides the "(month to date)" label and caps ``as_of_date`` at today.
         """
-        now_local = datetime.now(UTC).astimezone(tz)
         if report_month is None:
             return _ReportWindow(
                 all_time=True,
@@ -228,8 +233,11 @@ class ReportsPeriodService:
         end_utc = datetime(
             end_local.year, end_local.month, end_local.day, tzinfo=tz
         ).astimezone(UTC)
-        # Last gym-local date of the month (the as-of date for the active count).
-        as_of_date = end_local - timedelta(days=1)
+        # As-of date for the active-membership count: the last gym-local day of
+        # the month, but never past today -- so the CURRENT (in-progress) month
+        # is a true "month to date" snapshot, not a projection to a future
+        # month-end. Past months are unaffected (today is already beyond them).
+        as_of_date = min(end_local - timedelta(days=1), now_local.date())
         period_slug = f"{year:04d}-{month:02d}"
         is_current = now_local.year == year and now_local.month == month
         label = (
@@ -293,7 +301,8 @@ class ReportsPeriodService:
         gym_id: UUID,
         window: _ReportWindow,
     ) -> int:
-        """Count memberships active (incl. frozen) as of the period-end date."""
+        """Count memberships active (incl. frozen) as of ``window.as_of_date``
+        (the month-end, capped at today for the in-progress month)."""
         sql = load_sql(SQL_DIR / "report_active_memberships_at.sql")
         params = {"gym_id": str(gym_id), "as_of_date": window.as_of_date}
         async with self._db_pool.session() as session:

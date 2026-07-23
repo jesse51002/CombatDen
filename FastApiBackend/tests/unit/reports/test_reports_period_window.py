@@ -16,6 +16,10 @@ from src.reports.schema.reports_schema import ReportMonth
 from src.reports.service.reports_period_service import ReportsPeriodService
 
 _CHICAGO = ZoneInfo("America/Chicago")
+# A fixed "current moment" well after 2026, so the boundary tests below run a
+# deterministic window calc: every 2026 month is in the past, so as_of_date
+# lands on the month-end. The as-of capping itself is exercised in TestAsOfDate.
+_NOW = datetime(2027, 1, 15, 12, 0, tzinfo=_CHICAGO)
 
 
 def _service() -> ReportsPeriodService:
@@ -26,7 +30,7 @@ class TestComputeWindow:
     """Gym-local month -> UTC / local-date binds."""
 
     def test_all_time_skips_the_window(self) -> None:
-        window = _service()._compute_window(_CHICAGO, None)
+        window = _service()._compute_window(_CHICAGO, None, _NOW)
         assert window.all_time is True
         assert window.start_utc is None
         assert window.end_utc is None
@@ -37,7 +41,7 @@ class TestComputeWindow:
 
     def test_plain_month_boundaries(self) -> None:
         # June 2026 is fully inside CDT (UTC-5).
-        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 6))
+        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 6), _NOW)
         assert window.all_time is False
         assert window.start_utc == datetime(2026, 6, 1, 5, 0, tzinfo=UTC)
         assert window.end_utc == datetime(2026, 7, 1, 5, 0, tzinfo=UTC)
@@ -49,7 +53,7 @@ class TestComputeWindow:
 
     def test_march_dst_start_crosses_the_spring_forward(self) -> None:
         # DST begins Sun Mar 8 2026: the 1st is CST (UTC-6), Apr 1 is CDT (UTC-5).
-        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 3))
+        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 3), _NOW)
         assert window.start_utc == datetime(2026, 3, 1, 6, 0, tzinfo=UTC)
         assert window.end_utc == datetime(2026, 4, 1, 5, 0, tzinfo=UTC)
         assert window.as_of_date.isoformat() == "2026-03-31"
@@ -57,10 +61,47 @@ class TestComputeWindow:
     def test_november_dst_end_crosses_the_fall_back(self) -> None:
         # DST ends Sun Nov 1 2026 at 2am: midnight Nov 1 is still CDT (UTC-5),
         # Dec 1 is CST (UTC-6).
-        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 11))
+        window = _service()._compute_window(_CHICAGO, ReportMonth(2026, 11), _NOW)
         assert window.start_utc == datetime(2026, 11, 1, 5, 0, tzinfo=UTC)
         assert window.end_utc == datetime(2026, 12, 1, 6, 0, tzinfo=UTC)
         assert window.as_of_date.isoformat() == "2026-11-30"
+
+
+class TestAsOfDate:
+    """``as_of_date`` (the active-membership count's as-of day) caps at today.
+
+    A completed month counts as of its last day; the in-progress (current)
+    month and any not-yet-started month count as of today, so the current
+    month is a true "month to date" snapshot rather than a projection to a
+    future month-end.
+    """
+
+    _JULY_23 = datetime(2026, 7, 23, 12, 0, tzinfo=_CHICAGO)
+
+    def test_past_month_uses_month_end(self) -> None:
+        window = _service()._compute_window(
+            _CHICAGO, ReportMonth(2026, 5), self._JULY_23
+        )
+        assert window.as_of_date.isoformat() == "2026-05-31"
+        assert window.label == "2026-05"
+
+    def test_current_month_caps_at_today(self) -> None:
+        window = _service()._compute_window(
+            _CHICAGO, ReportMonth(2026, 7), self._JULY_23
+        )
+        assert window.as_of_date.isoformat() == "2026-07-23"
+        assert window.label == "2026-07 (month to date)"
+
+    def test_future_month_caps_at_today(self) -> None:
+        window = _service()._compute_window(
+            _CHICAGO, ReportMonth(2026, 9), self._JULY_23
+        )
+        assert window.as_of_date.isoformat() == "2026-07-23"
+
+    def test_all_time_uses_today(self) -> None:
+        window = _service()._compute_window(_CHICAGO, None, self._JULY_23)
+        assert window.all_time is True
+        assert window.as_of_date.isoformat() == "2026-07-23"
 
 
 class TestToDollars:
