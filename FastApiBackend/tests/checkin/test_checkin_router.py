@@ -26,9 +26,12 @@ from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
 )
+from src.checkin.service.streak_service import StreakResult
 from src.main import app
 
 _STUB_STREAK_WEEKS = 3
+# Mon + Wed + Fri attended this week (Monday-first, index 0 = Mon .. 6 = Sun).
+_STUB_WEEK_DAYS = [True, False, True, False, True, False, False]
 
 
 def _override_checkin(response: CheckinResponse) -> None:
@@ -41,7 +44,12 @@ def _override_checkin(response: CheckinResponse) -> None:
     gate = MagicMock()
     gate.checkin_member = AsyncMock(return_value=response)
     streak = MagicMock()
-    streak.get_streak = AsyncMock(return_value=_STUB_STREAK_WEEKS)
+    streak.get_streak_details = AsyncMock(
+        return_value=StreakResult(
+            weeks=_STUB_STREAK_WEEKS,
+            current_week_days=list(_STUB_WEEK_DAYS),
+        )
+    )
     app.container.checkin_class_resolver.override(resolver)
     app.container.checkin_member_gate.override(gate)
     app.container.streak_service.override(streak)
@@ -106,8 +114,9 @@ def test_checkin_records_when_a_plan_covers_the_class(
     body = resp.json()
     assert body["log_id"] == log_id
     assert body["already_checked_in"] is False
-    # A recorded check-in folds in the member's streak.
+    # A recorded check-in folds in the member's streak + current-week strip.
     assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
+    assert body["current_week_days"] == _STUB_WEEK_DAYS
     assert body["chosen_plan_id"] == str(plan_id)
     assert body["chosen_item_id"] == str(item_id)
     assert body["points_awarded"] == 50

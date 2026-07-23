@@ -120,12 +120,14 @@ async def checkin(
             request.is_member,
             request.ignore_warnings,
         )
-        # Fold in the member's streak (after this check-in) so the caller needn't
-        # make a second GET /streak call.
+        # Fold in the member's streak + current-week strip (after this
+        # check-in) so the caller needn't make a second GET /streak call.
         if result.log_id is not None:
-            result.class_streak_weeks = await streak_service.get_streak(
+            streak = await streak_service.get_streak_details(
                 request.member_id, request.gym_id
             )
+            result.class_streak_weeks = streak.weeks
+            result.current_week_days = streak.current_week_days
         return result
     except ValueError as exc:
         msg = str(exc)
@@ -580,7 +582,7 @@ async def get_streak(
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        weeks = await streak_service.get_streak(member_id, gym_id)
+        streak = await streak_service.get_streak_details(member_id, gym_id)
     except Exception:
         logger.error(
             "Streak query failed: member_id=%s",
@@ -592,4 +594,8 @@ async def get_streak(
             detail="Failed to retrieve streak",
         ) from None
 
-    return StreakResponse(member_id=member_id, class_streak_weeks=weeks)
+    return StreakResponse(
+        member_id=member_id,
+        class_streak_weeks=streak.weeks,
+        current_week_days=streak.current_week_days,
+    )

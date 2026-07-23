@@ -248,6 +248,13 @@ class CheckinResponse(BaseModel):
             this check-in — the same value ``GET /api/v1/streak`` returns, folded
             into the check-in response so the caller needn't make a second call.
             0 when the check-in was not recorded (a rejection / needs-confirmation).
+        current_week_days: The member's current gym-local week attendance strip
+            AFTER this check-in — a length-7 list, index 0 = Monday .. 6 = Sunday
+            (Monday-first), each ``True`` when the member attended a class on that
+            weekday of the CURRENT gym-local week. The same value the strip on
+            ``GET /api/v1/streak`` carries, folded in alongside
+            ``class_streak_weeks``. All ``False`` when the check-in was not
+            recorded (a rejection / needs-confirmation).
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -262,6 +269,7 @@ class CheckinResponse(BaseModel):
     warnings: list[CheckinWarning] = []
     requires_confirmation: bool = False
     class_streak_weeks: int = 0
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)
     memberships: list[CheckinMembershipBreakdown] = []
 
 
@@ -333,7 +341,19 @@ class AttendeeListResponse(BaseModel):
 
 
 class StreakResponse(BaseModel):
-    """Response for GET /api/v1/streak."""
+    """Response for GET /api/v1/streak.
+
+    Attributes:
+        member_id: The member the streak belongs to.
+        class_streak_weeks: Consecutive gym-local weeks with at least one
+            class attendance.
+        current_week_days: The current gym-local week attendance strip — a
+            length-7 list, index 0 = Monday .. 6 = Sunday (Monday-first), each
+            ``True`` when the member attended a class on that weekday of the
+            CURRENT gym-local week. All ``False`` when they have not attended
+            this week.
+    """
 
     member_id: UUID
     class_streak_weeks: int
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)
