@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/theme_controller.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 
 /// One item from `GET /api/v1/gyms/` — a gym the signed-in user
 /// owns or admins, annotated with the caller's [role] for it.

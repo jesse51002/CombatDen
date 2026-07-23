@@ -238,9 +238,12 @@ class TestValidation:
         assert r.status_code == 422, r.text
         detail = r.json()["detail"]
         missing_fields = {err["loc"][-1] for err in detail if err["type"] == "missing"}
-        assert "gym_id" in missing_fields
         assert "freeze_months" in missing_fields
         assert "idempotency_key" in missing_fields
+        # gym_id is deliberately NOT part of this contract — the gym is derived
+        # server-side from the member's own row, so asking the client for it
+        # would be dead weight (see MemberMembershipsFreezeRequest).
+        assert "gym_id" not in missing_fields
 
     def test_freeze_months_must_be_positive(self, api):
         """POST /freeze with freeze_months=0 returns 422 (gt constraint)."""

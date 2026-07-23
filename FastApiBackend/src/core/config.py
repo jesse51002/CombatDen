@@ -19,6 +19,29 @@ class AppEnv(enum.StrEnum):
     PROD = "prod"
 
 
+class AuthAutoconfirmPolicy(enum.StrEnum):
+    """What to do when GoTrue is auto-confirming every signup.
+
+    Identity here is the verified email claim matched against a
+    ``gym_employees`` row, and "verified" is proven by
+    ``auth.users.email_confirmed_at IS NOT NULL``. With GoTrue's
+    ``enable_confirmations`` OFF, GoTrue stamps that column ITSELF at
+    signup — so the column proves nothing and anyone can sign up as
+    ``owner@somegym.com`` and be admitted.
+
+    The default is ``fail``: an auth stack that auto-confirms leaves the
+    identity model wide open, and that is not a state to boot into and
+    log about. ``config.toml`` ships ``enable_confirmations = true``, so a
+    correctly-started local stack passes this too — if it trips, the stack
+    predates that setting and needs ``supabase stop && supabase start``.
+    ``warn`` exists as a deliberate, explicit escape hatch for a throwaway
+    environment holding no real data; it is never the default anywhere.
+    """
+
+    WARN = "warn"
+    FAIL = "fail"
+
+
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
@@ -26,6 +49,14 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
+
+    # Startup guard on GoTrue's signup-confirmation setting (see
+    # AuthAutoconfirmPolicy and src/shared/auth_settings_guard.py). The check
+    # reads GoTrue's own published config at
+    # {supabase_url}/auth/v1/settings; a failure to REACH GoTrue is never
+    # treated as a misconfiguration and never takes the app down.
+    auth_autoconfirm_policy: AuthAutoconfirmPolicy = AuthAutoconfirmPolicy.FAIL
+    auth_settings_check_timeout_seconds: float = 30.0
 
     # Stripe
     stripe_secret_key: str
@@ -194,6 +225,15 @@ class Settings(BaseSettings):
     # usual ~30m) so staff can check a member into several back-to-back classes
     # at once. Past / in-session occurrences are always check-in-able.
     checkin_opens_hours_before_start: int = 2
+
+    # Max span a single schedule-board request may cover (start_date ..
+    # end_date), in CALENDAR months. The board expands every class's
+    # occurrences over the window in memory, so an unbounded range is a
+    # cheap CPU/memory DoS from one authenticated call. Two months comfortably
+    # covers the CRM's week view and a member browsing ahead; anything wider
+    # is rejected 400. Applied in ClassesScheduleReaderService, so it guards
+    # both the staff /classes/instances route and the member schedule route.
+    schedule_board_max_span_months: int = 2
 
     # Every class HAS an image (gym_classes.image_url is NOT NULL — the
     # card/board/check-in UI leans on it): class create/update and the preset

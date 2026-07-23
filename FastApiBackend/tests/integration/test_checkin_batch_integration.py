@@ -27,7 +27,8 @@ It is intentionally NOT asserted here.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, time, timedelta
+from collections.abc import Iterator
+from datetime import date, time
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -35,36 +36,13 @@ import httpx
 import pytest
 from dotenv import dotenv_values
 
+from tests.helpers import board_targets
+from tests.helpers.waiver_compliance import WaiverCompliance
 from tests.seed_constants import SEEDED_GYM_ID
 
 GYM_ID = SEEDED_GYM_ID
 
 _ENV_PATH = "/var/home/jm/Documents/CombatDen/codebase/FastApiBackend/.env"
-# How far ahead to scan the schedule board for a usable occurrence.
-_BOARD_WINDOW_DAYS = 45
-# Mirror settings.checkin_opens_hours_before_start: only an occurrence starting
-# within this window (or already past) can be checked into.
-_CHECKIN_OPENS_HOURS = 2
-
-# Covering members (active UNLIMITED eligible plan) for each active, non-deleted
-# class. Grouped in Python to find a class with >= 2 distinct covering members,
-# so one batch can yield a fresh check-in AND an already-checked-in member.
-_COVERING_MEMBERS_SQL = """
-SELECT gc.class_id, ms.member_id, gc.points_worth
-FROM member_memberships_status ms
-JOIN membership_plans mp
-    ON mp.plan_id = ms.plan_id AND mp.gym_id = ms.gym_id
-JOIN gym_classes gc
-    ON gc.gym_id = ms.gym_id
-    AND gc.is_deleted = FALSE
-    AND gc.is_active = TRUE
-    AND (gc.allowed_plan_ids IS NULL
-         OR gc.allowed_plan_ids @> jsonb_build_array(ms.plan_id::text))
-WHERE ms.gym_id = $1
-  AND ms.status = 'active'
-  AND mp.class_count IS NULL
-ORDER BY gc.class_id, ms.member_id
-"""
 
 # A member at the gym with NO active membership -> the no-membership skip case.
 _NO_MEMBERSHIP_MEMBER_SQL = """
@@ -96,68 +74,61 @@ def _run_async(coro):
 
 
 def _multi_covered_target(
-    api: httpx.Client, by_class: dict[str, list[dict]]
+    api: httpx.Client,
+    covering: dict[str, list[dict]],
+    attended: set[tuple[str, str, str, str]],
+    gym_timezone: str,
 ) -> dict | None:
-    """Intersect the board with classes that have >= 2 covering members.
+    """A checkable board occurrence whose class has >= 2 covering members that
+    are BOTH freshly checkin-able (neither already on its roster).
 
-    Returns the first non-cancelled board occurrence whose class has two or more
-    covering members, as
-    ``{class_id, occurrence_date, occurrence_time, points_worth, members: [id, id]}``.
+    Returns
+    ``{class_id, occurrence_date, occurrence_time, points_worth, members: [id, id]}``
+    or None. See ``tests/helpers/board_targets.py`` for the selection rules.
     """
-    today = date.today()
-    resp = api.get(
-        "/api/v1/classes/instances",
-        params={
-            "gym_id": GYM_ID,
-            "start_date": today.isoformat(),
-            "end_date": (
-                today + timedelta(days=_BOARD_WINDOW_DAYS)
-            ).isoformat(),
-        },
+    picked = board_targets.pick_occurrence(
+        board_targets.fetch_board(api, GYM_ID),
+        covering,
+        attended,
+        gym_timezone,
+        checkin_open=True,
+        min_members=2,
     )
-    if resp.status_code != 200:
+    if picked is None:
         return None
-    cutoff = datetime.now(UTC) + timedelta(hours=_CHECKIN_OPENS_HOURS)
-    for occ in resp.json()["items"]:
-        if occ["is_cancelled"]:
-            continue
-        # Skip occurrences too far out to check into yet (the 2h early window).
-        if datetime.fromisoformat(occ["occurred_at"]) > cutoff:
-            continue
-        members = by_class.get(occ["class_id"])
-        if members is None or len(members) < 2:
-            continue
-        return {
-            "class_id": occ["class_id"],
-            # Always the ORIGINAL slot -- never class_date. A class may occur
-            # several times per day, so the time is part of the identity.
-            "occurrence_date": occ["original_date"],
-            "occurrence_time": occ["original_time"],
-            "points_worth": members[0]["points_worth"],
-            "members": [members[0]["member_id"], members[1]["member_id"]],
-        }
-    return None
+    occurrence, members = picked
+    return {
+        "class_id": occurrence["class_id"],
+        # Always the ORIGINAL slot -- never class_date. A class may occur
+        # several times per day, so the time is part of the identity.
+        "occurrence_date": occurrence["original_date"],
+        "occurrence_time": occurrence["original_time"],
+        "points_worth": members[0]["points_worth"],
+        "members": [members[0]["member_id"], members[1]["member_id"]],
+    }
 
 
 @pytest.fixture(scope="session")
-def batch_ids(api: httpx.Client) -> dict:
-    """Discover a multi-cover class + occurrence + a no-membership member."""
+def batch_ids(api: httpx.Client) -> Iterator[dict]:
+    """Discover a multi-cover class + occurrence + a no-membership member.
+
+    Both picked covering members are then made WAIVER-COMPLIANT (see
+    ``tests/helpers/waiver_compliance.py``): the seed deliberately leaves every
+    member unsigned, and the check-in gate warns + records nothing for an
+    unsigned member, so the recording tests must establish that precondition
+    themselves. The signatures created here are deleted at session end.
+    """
 
     async def _discover() -> dict:
         conn = await asyncpg.connect(_get_db_url())
         try:
             gym = UUID(GYM_ID)
-            rows = await conn.fetch(_COVERING_MEMBERS_SQL, gym)
-            by_class: dict[str, list[dict]] = {}
-            for r in rows:
-                by_class.setdefault(str(r["class_id"]), []).append(
-                    {
-                        "member_id": str(r["member_id"]),
-                        "points_worth": int(r["points_worth"]),
-                    }
-                )
             return {
-                "by_class": by_class,
+                "covering": await board_targets.load_covering(conn, GYM_ID),
+                "attended": await board_targets.load_attended_keys(conn, GYM_ID),
+                "gym_timezone": await board_targets.load_gym_timezone(
+                    conn, GYM_ID
+                ),
                 "no_membership": await conn.fetchrow(
                     _NO_MEMBERSHIP_MEMBER_SQL, gym
                 ),
@@ -167,10 +138,23 @@ def batch_ids(api: httpx.Client) -> dict:
 
     try:
         ids = _run_async(_discover())
-    except Exception as exc:  # noqa: BLE001 — any DB issue means skip, not fail
+    except (OSError, asyncpg.PostgresConnectionError) as exc:
+        # ONLY an unreachable/dropped DB skips — a query bug (bad column,
+        # type error) is a real regression that must fail loudly, not vanish
+        # into a green skip for the whole session-scoped fixture.
         pytest.skip(f"Seeded DB not reachable for discovery: {exc}")
-    ids["target"] = _multi_covered_target(api, ids["by_class"])
-    return ids
+    ids["target"] = _multi_covered_target(
+        api, ids["covering"], ids["attended"], ids["gym_timezone"]
+    )
+
+    compliance = WaiverCompliance(api, GYM_ID)
+    if ids["target"] is not None:
+        for member_id in ids["target"]["members"]:
+            compliance.ensure_signed(member_id)
+    try:
+        yield ids
+    finally:
+        compliance.cleanup()
 
 
 def _member_points(member_id: str) -> int:

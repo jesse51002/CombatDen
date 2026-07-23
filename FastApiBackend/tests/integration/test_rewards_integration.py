@@ -18,6 +18,8 @@ Run with:
 import httpx
 import pytest
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -169,7 +171,7 @@ class TestListRewards:
 
     def test_list_rewards_requires_auth(self, gym_id: str) -> None:
         """GET /api/v1/rewards/ without a token returns 401 or 403."""
-        unauthenticated = httpx.Client(base_url="http://localhost:8000", timeout=30.0)
+        unauthenticated = httpx.Client(base_url=BACKEND_BASE_URL, timeout=30.0)
         try:
             response = unauthenticated.get(REWARDS_BASE, params={"gym_id": gym_id})
             assert response.status_code in (401, 403), (
@@ -293,7 +295,7 @@ class TestGetReward:
 
     def test_get_reward_requires_auth(self, a_reward_id: str) -> None:
         """GET /api/v1/rewards/{id} without a token returns 401 or 403."""
-        unauthenticated = httpx.Client(base_url="http://localhost:8000", timeout=30.0)
+        unauthenticated = httpx.Client(base_url=BACKEND_BASE_URL, timeout=30.0)
         try:
             response = unauthenticated.get(f"{REWARDS_BASE}{a_reward_id}")
             assert response.status_code in (401, 403), (

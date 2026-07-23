@@ -68,12 +68,18 @@ class ClassAttendeeRoster extends StatefulWidget {
   /// (several slots per day are legal).
   final String occurrenceTime;
 
+  /// Whether the per-row remove (×) — cancel reservation / reverse check-in —
+  /// is offered (`canCheckInMembers`: owner/admin/front desk). When false the
+  /// roster stays fully visible but read-only (trainer view).
+  final bool canManage;
+
   const ClassAttendeeRoster({
     super.key,
     required this.gymId,
     required this.classId,
     required this.occurrenceDate,
     required this.occurrenceTime,
+    required this.canManage,
   });
 
   @override
@@ -203,6 +209,7 @@ class _ClassAttendeeRosterState extends State<ClassAttendeeRoster> {
           attended: attended,
           hasAttended: hasAttended,
           tab: tab,
+          canManage: widget.canManage,
           onTabChanged: (tab) => setState(() => _tab = tab),
           onCancelReservation: _cancelReservation,
           onRemoveCheckIn: _removeCheckIn,
@@ -244,6 +251,9 @@ class _TabbedRoster extends StatefulWidget {
   /// [tab] is always [_RosterTab.reserved] and no switcher renders.
   final bool hasAttended;
   final _RosterTab tab;
+
+  /// Whether each row shows its remove (×) action (see [ClassAttendeeRoster]).
+  final bool canManage;
   final ValueChanged<_RosterTab> onTabChanged;
   final ValueChanged<Attendee> onCancelReservation;
   final ValueChanged<Attendee> onRemoveCheckIn;
@@ -253,6 +263,7 @@ class _TabbedRoster extends StatefulWidget {
     required this.attended,
     required this.hasAttended,
     required this.tab,
+    required this.canManage,
     required this.onTabChanged,
     required this.onCancelReservation,
     required this.onRemoveCheckIn,
@@ -343,11 +354,13 @@ class _TabbedRosterState extends State<_TabbedRoster> {
                   child: MemberRowTile(
                     name: attendee.fullName,
                     subtitle: showAttendedMark ? const _AttendedMark() : null,
-                    trailing: _RemoveButton(
-                      name: attendee.fullName,
-                      tab: widget.tab,
-                      onPressed: () => onRemove(attendee),
-                    ),
+                    trailing: widget.canManage
+                        ? _RemoveButton(
+                            name: attendee.fullName,
+                            tab: widget.tab,
+                            onPressed: () => onRemove(attendee),
+                          )
+                        : null,
                   ),
                 );
               },

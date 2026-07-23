@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
+import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/employees/data/models/employees_format.dart';
 import 'package:crm/shared/widgets/info_row.dart';
 
-/// The contact + employment record as label: value rows: email, phone, when
-/// they joined, tenure, and employment type.
+/// The contact + tenure record as label: value rows — email (or "No login" for
+/// an email-less instructor), phone when present, and when they joined (derived
+/// from `created_at`).
 class EmployeeInfoSection extends StatelessWidget {
   final Employee employee;
 
@@ -13,23 +15,27 @@ class EmployeeInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final email = employee.email;
+    final phone = employee.phone;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        InfoRow(
-          label: 'Email',
-          value: employee.email,
-          linkType: InfoRowLinkType.email,
-        ),
-        InfoRow(
-          label: 'Phone',
-          value: employee.phone,
-          linkType: InfoRowLinkType.phone,
-        ),
-        InfoRow(label: 'Joined', value: employee.joinedLabel),
-        InfoRow(label: 'Tenure', value: employee.tenureLabel),
-        InfoRow(label: 'Employment', value: employee.employmentLabel),
+        if (email != null && email.isNotEmpty)
+          InfoRow(
+            label: 'Email',
+            value: email,
+            linkType: InfoRowLinkType.email,
+          )
+        else
+          const InfoRow(label: 'Email', value: 'No login on file'),
+        if (phone != null && phone.isNotEmpty)
+          InfoRow(
+            label: 'Phone',
+            value: phone,
+            linkType: InfoRowLinkType.phone,
+          ),
+        InfoRow(label: 'Joined', value: joinedLabel(employee.createdAt)),
       ],
     );
   }

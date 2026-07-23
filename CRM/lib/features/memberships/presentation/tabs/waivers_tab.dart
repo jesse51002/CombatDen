@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_state.dart';
@@ -67,6 +69,9 @@ class _WaiversTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Read-only for front desk: no row-tap into the editor, no per-row Edit
+    // button, no Add row. The waiver table itself stays fully viewable.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return MembershipsTabScaffold(
       table: AppDataTable(
         shrinkWrap: true,
@@ -78,7 +83,9 @@ class _WaiversTable extends StatelessWidget {
         rows: [
           for (final waiver in state.waivers)
             AppDataTableRow(
-              onTap: () => _openEditor(context, waiver: waiver),
+              onTap: canConfigure
+                  ? () => _openEditor(context, waiver: waiver)
+                  : null,
               cells: [
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -98,17 +105,22 @@ class _WaiversTable extends StatelessWidget {
                   '${waiver.totalSignedCount} signed',
                   style: DesignConstants.p,
                 ),
-                MembershipEditButton(
-                  onTap: () => _openEditor(context, waiver: waiver),
-                ),
+                if (canConfigure)
+                  MembershipEditButton(
+                    onTap: () => _openEditor(context, waiver: waiver),
+                  )
+                else
+                  const SizedBox.shrink(),
               ],
             ),
         ],
       ),
-      addRow: AddRowButton(
-        label: 'Add New Waiver',
-        onTap: () => _openEditor(context),
-      ),
+      addRow: canConfigure
+          ? AddRowButton(
+              label: 'Add New Waiver',
+              onTap: () => _openEditor(context),
+            )
+          : null,
     );
   }
 }

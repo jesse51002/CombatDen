@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_bloc.dart';
 import 'package:crm/features/memberships/bloc/ready_to_promote/ready_to_promote_event.dart';
 import 'package:crm/features/memberships/data/models/main_rank.dart';
@@ -44,6 +46,9 @@ class ReadyToPromoteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Promote is a WRITE action — owner/admin only. Front desk sees the
+    // board and each member's progress, but no Promote button.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return PromotableMemberRow(
       imageUrl: row.imageUrl,
       avatarUrl: row.avatarUrl,
@@ -54,7 +59,7 @@ class ReadyToPromoteRow extends StatelessWidget {
       currentSubIndex: row.currentSubIndex,
       classesSince: row.classesSince,
       stepDenominator: row.stepDenominator,
-      onPromote: () => _openDialog(context),
+      onPromote: canConfigure ? () => _openDialog(context) : null,
       onViewMember: () => Navigator.pushNamed(
         context,
         AppRoutes.memberDetailPath(row.memberId),

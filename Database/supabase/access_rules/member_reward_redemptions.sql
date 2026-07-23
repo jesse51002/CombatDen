@@ -8,7 +8,7 @@ CREATE POLICY "Users and gym staff can view reward redemptions"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_reward_redemptions.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
         OR is_gym_admin_or_owner(member_reward_redemptions.gym_id)
     );
@@ -23,7 +23,7 @@ CREATE POLICY "Members and gym staff can insert redemptions"
         OR EXISTS (
             SELECT 1 FROM members
             WHERE members.member_id = member_reward_redemptions.member_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
             AND members.gym_id = member_reward_redemptions.gym_id
         )
     );

@@ -16,6 +16,8 @@ import uuid
 import httpx
 import pytest
 
+from tests.integration.conftest import BACKEND_BASE_URL
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _KNOWN_STATUSES = {"not_started", "pending", "complete", "disabled"}
@@ -90,7 +92,7 @@ class TestListMyGyms:
 
     def test_unauthenticated_returns_401_or_403(self) -> None:
         """GET /api/v1/gyms/ without auth returns 401 or 403."""
-        client = httpx.Client(base_url="http://localhost:8000", timeout=10.0)
+        client = httpx.Client(base_url=BACKEND_BASE_URL, timeout=10.0)
         response = client.get("/api/v1/gyms/")
         client.close()
         assert response.status_code in (401, 403), (
@@ -197,7 +199,7 @@ class TestGetOnboardingStatus:
 
     def test_unauthenticated_returns_401_or_403(self, gym_id: str) -> None:
         """Unauthenticated request returns 401 or 403."""
-        client = httpx.Client(base_url="http://localhost:8000", timeout=10.0)
+        client = httpx.Client(base_url=BACKEND_BASE_URL, timeout=10.0)
         response = client.get(f"/api/v1/gyms/{gym_id}/onboarding")
         client.close()
         assert response.status_code in (401, 403), (

@@ -4,7 +4,6 @@ WHERE member_id = :member_id
 RETURNING
     member_id,
     gym_id,
-    user_id,
     first_name,
     last_name,
     email,

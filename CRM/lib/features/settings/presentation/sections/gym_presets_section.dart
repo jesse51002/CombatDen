@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/presets/bloc/presets_bloc.dart';
 import 'package:crm/features/presets/bloc/presets_event.dart';
 import 'package:crm/features/presets/bloc/presets_state.dart';
@@ -20,18 +20,25 @@ const String kPresetAdminEmail = 'owner1@test.com';
 /// rewards template to the current real gym.
 ///
 /// GATED: only rendered when the current user's email is [kPresetAdminEmail]
-/// AND their role at the active gym is [EmployeeRole.owner]. The backend
-/// also enforces the allowlist — the gate is a UI convenience only.
+/// AND their role at the active gym may manage gym settings (owner / admin,
+/// via [RolePolicy.canManageGymSettings]). The backend also enforces the
+/// allowlist — the gate is a UI convenience only. Exposed as [isVisible] so
+/// the Settings screen can omit the section (and its leading hairline)
+/// entirely rather than render an invisible placeholder.
 class GymPresetsSection extends StatelessWidget {
   const GymPresetsSection({super.key});
 
+  /// Whether the preset import tool is available to the current user.
+  static bool isVisible() {
+    final email = Supabase.instance.client.auth.currentUser?.email;
+    final role = selectedGym.role;
+    return email == kPresetAdminEmail &&
+        (role?.canManageGymSettings ?? false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final email =
-        Supabase.instance.client.auth.currentUser?.email;
-    final role = selectedGym.role;
-
-    if (email != kPresetAdminEmail || role != EmployeeRole.owner) {
+    if (!isVisible()) {
       return const SizedBox.shrink();
     }
 

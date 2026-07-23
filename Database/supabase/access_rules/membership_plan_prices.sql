@@ -14,7 +14,7 @@ CREATE POLICY "Members can view plan prices"
         EXISTS (
             SELECT 1 FROM members
             WHERE members.gym_id = membership_plan_prices_unfiltered.gym_id
-            AND members.user_id = auth.uid()
+            AND lower(members.email) = lower(auth.jwt() ->> 'email')
         )
     );
 

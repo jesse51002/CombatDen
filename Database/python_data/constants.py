@@ -46,7 +46,14 @@ DISCOUNTS_PER_MEMBERSHIP_MAX = 3
 CUSTOM_DISCOUNT_PROBABILITY = 0.15
 OVERDUE_MEMBERS_PER_GYM = 2
 REWARDS_PER_GYM = 4
-EXTRA_EMPLOYEES_PER_GYM = 2
+# Deterministic staff (beyond the owner) so every employee_type/account-state
+# combo exists as a real, addressable seeded row for backend role-matrix
+# tests: admin + front_desk + trainer, each with a verified auth login
+# (adminN@test.com / frontdeskN@test.com / trainerN@test.com), plus one
+# account-less "pending" trainer (legacy instructor data, no login). See
+# generators/employees.generate_accounted / generate_pending_trainer and
+# bootstrap/gyms.create_all.
+EXTRA_EMPLOYEES_PER_GYM = 4
 CLASSES_PER_GYM = 7
 ACTIVITIES_PER_MEMBER = 5
 HISTORY_DAYS = 30

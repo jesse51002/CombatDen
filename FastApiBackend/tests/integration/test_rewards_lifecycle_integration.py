@@ -456,19 +456,26 @@ class TestPendingQueue:
     async def test_pending_queue_pagination(
         self, api: httpx.Client, created: CreatedResources, gym_id: str
     ) -> None:
-        """limit/offset page correctly over a known set of pending rows."""
+        """limit/offset page correctly over the gym's pending queue.
+
+        Anchored on the queue's CURRENT size rather than requiring an empty
+        one: the seed itself generates pending redemptions, so a
+        ``total != 0`` skip meant this test never executed at all — it read
+        green while asserting nothing.
+
+        Paging the WHOLE queue (not just the rows this test adds) is also a
+        stronger check than the original: it proves every page is the right
+        size, that the pages carry no duplicate and skip no row, and that
+        the three new rows are all reachable. ``list_pending_redemptions.sql``
+        orders by ``requested_at ASC``, so the new rows land last.
+        """
         baseline = await _req(
             api.get,
             f"{REWARDS_BASE}/redemptions/pending",
             params={"gym_id": gym_id, "limit": 1},
         )
         assert baseline.status_code == 200, baseline.text
-        if baseline.json()["total"] != 0:
-            pytest.skip(
-                "Gym already has pending redemptions outstanding (another "
-                "run's leftovers) — skipping the exact-count pagination "
-                "assertion to avoid a false failure on a shared DB"
-            )
+        baseline_total = baseline.json()["total"]
 
         reward = await created.reward(UUID(gym_id), point_cost=10)
         redemption_ids: list[str] = []
@@ -485,27 +492,131 @@ class TestPendingQueue:
             created.track_redemption(UUID(redemption_id))
             redemption_ids.append(redemption_id)
 
-        page1 = await _req(
-            api.get,
-            f"{REWARDS_BASE}/redemptions/pending",
-            params={"gym_id": gym_id, "limit": 2},
-        )
-        assert page1.status_code == 200, page1.text
-        page1_body = page1.json()
-        assert len(page1_body["items"]) == 2
-        assert page1_body["total"] == 3
+        expected_total = baseline_total + 3
+        page_size = 2
+        seen: list[str] = []
+        for offset in range(0, expected_total, page_size):
+            page = await _req(
+                api.get,
+                f"{REWARDS_BASE}/redemptions/pending",
+                params={
+                    "gym_id": gym_id,
+                    "limit": page_size,
+                    "offset": offset,
+                },
+            )
+            assert page.status_code == 200, page.text
+            body = page.json()
+            # COUNT(*) OVER () is the total BEFORE the limit, so every page
+            # reports the same figure.
+            assert body["total"] == expected_total, (
+                f"page at offset {offset} reported total {body['total']}, "
+                f"expected {expected_total}"
+            )
+            assert len(body["items"]) == min(
+                page_size, expected_total - offset
+            )
+            seen.extend(item["redemption_id"] for item in body["items"])
 
-        page2 = await _req(
-            api.get,
-            f"{REWARDS_BASE}/redemptions/pending",
-            params={"gym_id": gym_id, "limit": 2, "offset": 2},
+        # No row repeated across pages and none skipped.
+        assert len(seen) == len(set(seen)), "a row appeared on two pages"
+        assert len(seen) == expected_total
+        assert set(redemption_ids) <= set(seen), (
+            "the newly created pending redemptions were not all reachable "
+            "by paging"
         )
-        assert page2.status_code == 200, page2.text
-        page2_body = page2.json()
-        assert len(page2_body["items"]) == 1
-        assert page2_body["total"] == 3
 
-        # The two pages together cover exactly the 3 rows we created.
-        seen_ids = {item["redemption_id"] for item in page1_body["items"]}
-        seen_ids |= {item["redemption_id"] for item in page2_body["items"]}
-        assert seen_ids == set(redemption_ids)
+
+# ---------------------------------------------------------------------------
+# Regression: a reward from ANOTHER gym must not burn the member's points
+# ---------------------------------------------------------------------------
+
+
+class TestCrossGymRedeemDoesNotBurnPoints:
+    """A foreign ``reward_id`` must cost the member nothing.
+
+    Both redeem statements debit and insert in two data-modifying CTEs.
+    Postgres runs EVERY such CTE exactly once regardless of whether the
+    final query reads it, so a guard that lives only on the INSERT
+    suppresses the redemption row while the debit still lands — and the
+    service commits before raising, so the loss is permanent. The gym
+    check used to sit only on the insert's join; this pins it to the
+    debit as well.
+
+    Every staff entry point is covered because they run DIFFERENT SQL:
+    ``/redeem`` and ``redeem-for-member`` (override=false) run
+    ``redeem_reward.sql``, whose debit is at least guarded on sufficient
+    balance; ``override=true`` runs ``redeem_reward_override.sql``, whose
+    debit is ``LEAST(balance, cost)`` with NO sufficiency guard — so the
+    unfixed version burned points off every member, not only ones who
+    could afford the reward. Fixing one file and not the other left the
+    worse path live.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("path_suffix", "body_extra"),
+        [
+            ("redeem", {}),
+            ("redeem-for-member", {"override": False}),
+            ("redeem-for-member", {"override": True}),
+        ],
+        ids=["redeem", "for-member-guarded", "for-member-override"],
+    )
+    async def test_foreign_reward_leaves_balance_untouched(
+        self,
+        api: httpx.Client,
+        gym_id: str,
+        created: CreatedResources,
+        path_suffix: str,
+        body_extra: dict,
+    ) -> None:
+        member = await created.member(UUID(gym_id))
+        await set_points_balance(created.db_pool, member.member_id, 500)
+
+        # A throwaway gym, so its reward is genuinely foreign to the member.
+        async with created.db_pool.session() as session:
+            other_gym_id = (
+                await session.execute(
+                    text(
+                        "INSERT INTO gyms (gym_name) VALUES (:name) "
+                        "RETURNING gym_id"
+                    ),
+                    {"name": "ZZ CrossGym Redeem Test"},
+                )
+            ).scalar_one()
+            await session.commit()
+
+        try:
+            foreign_reward = await created.reward(
+                other_gym_id, point_cost=100, title="ZZ Foreign Reward"
+            )
+
+            resp = await _req(
+                api.post,
+                f"{REWARDS_BASE}/{foreign_reward.reward_id}/{path_suffix}",
+                json={"member_id": str(member.member_id), **body_extra},
+            )
+
+            # However it is refused, it must not be refused AFTER taking
+            # the points.
+            assert resp.status_code >= 400, resp.text
+            assert (
+                await get_points_balance(created.db_pool, member.member_id)
+            ) == 500, "cross-gym redeem burned the member's points"
+            assert (
+                await _redemption_count_for_member(
+                    created.db_pool, member.member_id
+                )
+            ) == 0
+        finally:
+            async with created.db_pool.session() as session:
+                await session.execute(
+                    text("DELETE FROM gym_rewards WHERE gym_id = :g"),
+                    {"g": str(other_gym_id)},
+                )
+                await session.execute(
+                    text("DELETE FROM gyms WHERE gym_id = :g"),
+                    {"g": str(other_gym_id)},
+                )
+                await session.commit()

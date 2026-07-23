@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/config/environment.dart';
 import 'package:crm/core/config/supabase_config.dart';
 import 'package:crm/core/constants/env_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/navigation/route_guard.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/employees/presentation/screens/employee_detail_screen.dart';
 import 'package:crm/features/growth/presentation/screens/growth_screen.dart';
@@ -179,6 +182,21 @@ final Map<String, WidgetBuilder> _routeBuilders = {
 };
 
 Route<dynamic> _onGenerateRoute(RouteSettings settings) {
+  // Role-based access guard, first thing: if the active role may not open the
+  // requested route, resolve the role's landing route instead. Keeping the
+  // redirected RouteSettings.name as the landing route makes UrlSyncObserver
+  // rewrite the address bar, so a hand-typed forbidden URL (e.g. `/growth` as
+  // front desk) visibly lands on the allowed section. A null role
+  // (pre-activation) passes through untouched.
+  final redirect = redirectRouteFor(settings.name, selectedGym.role);
+  if (redirect != null) {
+    final builder =
+        _routeBuilders[redirect] ?? _routeBuilders[AppRoutes.home]!;
+    return MaterialPageRoute<dynamic>(
+      builder: builder,
+      settings: RouteSettings(name: redirect),
+    );
+  }
   final path = Uri.parse(settings.name ?? AppRoutes.home).path;
   // A specific member's detail page is deep-linkable by id:
   // `/members/detail/<memberId>`. Parse the id off the path and hand it
@@ -220,6 +238,19 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: RouteSettings(name: settings.name, arguments: rankId),
     );
   }
+  // A specific employee's detail page is deep-linkable by id:
+  // `/employees/detail/<employeeId>`. Parse the id off the path and hand
+  // it to EmployeeDetailScreen as the route argument (mirrors member
+  // detail); the bare `/employees/detail` (no id) still resolves via the
+  // route table. Keep the path-with-id as the route name so the URL +
+  // UrlSyncObserver stay correct.
+  final employeeId = AppRoutes.employeeIdFromPath(path);
+  if (employeeId != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => const EmployeeDetailScreen(),
+      settings: RouteSettings(name: settings.name, arguments: employeeId),
+    );
+  }
   // The rank create / edit form carries the rank (or null for create)
   // as a route argument; not deep-linkable.
   if (path == AppRoutes.membershipsRankEditor) {
@@ -247,10 +278,27 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: settings,
     );
   }
-  final builder =
-      _routeBuilders[path] ?? _routeBuilders[AppRoutes.home]!;
+  // Known path: render its builder as-is (URL unchanged).
+  //
+  // Unknown path — a stale/typo URL, or an app path with no route builder
+  // (e.g. `/schedule/class/new`) — falls back to the ACTIVE ROLE's landing
+  // route, NOT blindly Home. Home is the Dashboard, which a trainer or
+  // front-desk role is denied, so landing there would strand them off-role
+  // (canAccessRoute returns true for unrecognized paths, so the redirect
+  // guard above doesn't catch this). Rewrite the address bar to the fallback
+  // (mirrors the redirect branch above) so the URL matches the page shown.
+  // landingRoute is always one of home/members/schedule (all in
+  // _routeBuilders), so the inner `?? AppRoutes.home` is belt-and-braces.
+  final knownBuilder = _routeBuilders[path];
+  if (knownBuilder != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: knownBuilder,
+      settings: settings,
+    );
+  }
+  final fallback = selectedGym.role?.landingRoute ?? AppRoutes.home;
   return MaterialPageRoute<dynamic>(
-    builder: builder,
-    settings: settings,
+    builder: _routeBuilders[fallback] ?? _routeBuilders[AppRoutes.home]!,
+    settings: RouteSettings(name: fallback),
   );
 }

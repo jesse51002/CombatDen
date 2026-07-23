@@ -57,16 +57,15 @@ class GymsCreateService:
     async def create_gym(
         self,
         request: GymCreateRequest,
-        user_id: UUID,
         user_email: str,
     ) -> GymCreateResponse:
         """Create a gym and begin Stripe Express onboarding.
 
         Args:
             request: Gym + owner display names.
-            user_id: The authenticated user's Supabase ``sub`` UUID.
-            user_email: The authenticated user's email; pre-fills
-                the Stripe hosted onboarding flow.
+            user_email: The authenticated user's verified email — the
+                owner ``gym_employees`` row's identity (stored lowercase)
+                and the pre-fill for the Stripe hosted onboarding flow.
 
         Returns:
             The gym id, new Stripe account id, ``pending`` status,
@@ -77,7 +76,7 @@ class GymsCreateService:
             StripeOrphanError: If the post-Stripe UPDATE fails
                 after retries — an operator must reconcile.
         """
-        gym_id = await self._insert_pending_rows(request, user_id, user_email)
+        gym_id = await self._insert_pending_rows(request, user_email)
 
         # Seed the default authorized-payer waiver BEFORE creating the Stripe
         # account. If this fails, _cleanup_pending tears down the pending rows
@@ -129,10 +128,14 @@ class GymsCreateService:
     async def _insert_pending_rows(
         self,
         request: GymCreateRequest,
-        user_id: UUID,
         user_email: str,
     ) -> UUID:
-        """Insert the pending gym and owner rows in one transaction."""
+        """Insert the pending gym and owner rows in one transaction.
+
+        The owner ``gym_employees`` row is keyed on the caller's verified
+        email (stored lowercase — it is identity now), so it is
+        lowercased before binding.
+        """
         gym_sql = load_sql(SQL_DIR / "gyms_insert_pending.sql")
         owner_sql = load_sql(SQL_DIR / "insert_owner_employee.sql")
 
@@ -152,11 +155,10 @@ class GymsCreateService:
                 text(owner_sql),
                 {
                     "gym_id": str(gym_id),
-                    "user_id": str(user_id),
                     "first_name": request.owner_first_name,
                     "last_name": request.owner_last_name,
                     "phone": request.owner_phone,
-                    "email": user_email,
+                    "email": user_email.lower(),
                 },
             )
             await session.commit()

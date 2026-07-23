@@ -1,6 +1,5 @@
 INSERT INTO gym_employees (
     gym_id,
-    user_id,
     employee_type,
     first_name,
     last_name,
@@ -9,7 +8,6 @@ INSERT INTO gym_employees (
 )
 VALUES (
     :gym_id,
-    :user_id,
     'owner',
     :first_name,
     :last_name,
@@ -19,7 +17,6 @@ VALUES (
 RETURNING
     employee_id,
     gym_id,
-    user_id,
     employee_type,
     first_name,
     last_name,

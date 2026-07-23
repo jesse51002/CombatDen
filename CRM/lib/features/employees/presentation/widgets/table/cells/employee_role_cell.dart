@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/employees/data/mock_employees.dart';
 
 /// "Role" column cell — the employee's role label, kept lighter than the
 /// name so the eye lands on the person first, then their role.

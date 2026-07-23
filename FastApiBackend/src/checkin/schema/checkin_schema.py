@@ -16,9 +16,8 @@ class CheckinWarning(StrEnum):
     The gate evaluates these once per (member, occurrence). ``is_member``
     decides what they mean:
 
-    * ``is_member=True`` (kiosk / member self-check-in) — a blocking condition
-      *rejects* the check-in (returned as the response ``skip_reason``, nothing
-      written).
+    * ``is_member=True`` (kiosk mode) — a blocking condition *rejects* the
+      check-in (returned as the response ``skip_reason``, nothing written).
     * ``is_member=False`` (staff / admin) — the same conditions come back as
       ``warnings`` that hold the check-in for confirmation
       (``requires_confirmation``, nothing written) unless ``ignore_warnings``
@@ -95,9 +94,12 @@ class CheckinRequest(BaseModel):
     time is required. Occurrences are computed, never stored — there is no
     materialization step.
 
-    ``is_member`` selects the gate:
+    The endpoint is STAFF-ONLY (``STAFF`` at the member's gym). ``is_member``
+    is therefore a staff-selected MODE — which gate to run — not a claim about
+    who the caller is:
 
-    * ``True`` — the member self-checks-in (kiosk). The strict gate applies: if
+    * ``True`` — kiosk mode (a terminal staff put in front of members). The
+      strict gate applies: if
       no eligible covering membership has remaining capacity, the member is out
       of classes, the room is full, or the plan is ineligible, the check-in is
       rejected (``log_id = null`` + a ``skip_reason``, nothing written).
@@ -109,8 +111,9 @@ class CheckinRequest(BaseModel):
       recorded (attributed to the best available membership, NULL plan/item when
       none) with the warnings surfaced.
 
-    ``ignore_warnings`` only applies to a staff check-in (``is_member = false``);
-    a kiosk check-in is never overridable.
+    ``ignore_warnings`` only applies to the staff gate (``is_member = false``);
+    kiosk mode is never overridable. Both flags are staff-chosen on a
+    staff-only route.
     """
 
     member_id: UUID

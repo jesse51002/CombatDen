@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
@@ -45,6 +47,19 @@ class RankLadderSection extends StatelessWidget {
             'above to build your first belts.',
       );
     }
+    // Only owner/admin may reorder. Front desk gets a plain, non-reorderable
+    // ladder — the cards stay tappable (rank detail is viewable), only the
+    // drag handles and the reorder action are gone.
+    final canReorder = selectedGym.role?.canConfigureCatalog ?? false;
+    if (!canReorder) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < state.ranks.length; i++)
+            _card(i, reorderable: false),
+        ],
+      );
+    }
     return ReorderableListView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -53,20 +68,28 @@ class RankLadderSection extends StatelessWidget {
           _onReorder(context, oldIndex, newIndex),
       children: [
         for (var i = 0; i < state.ranks.length; i++)
-          Padding(
-            key: ValueKey(state.ranks[i].rankId),
-            padding: const EdgeInsets.only(
-              bottom: DesignConstants.spacingLarge,
-            ),
-            child: MainRankCard(
-              rank: state.ranks[i],
-              gymId: state.gymId,
-              subRankType: state.subRankType,
-              index: i,
-              isTop: i == state.ranks.length - 1,
-            ),
-          ),
+          _card(i, reorderable: true),
       ],
+    );
+  }
+
+  /// One ladder card (with its trailing gap), keyed by rank id so the
+  /// [ReorderableListView] can track it across a drag. [reorderable] hides
+  /// the drag handle for the read-only ladder.
+  Widget _card(int i, {required bool reorderable}) {
+    return Padding(
+      key: ValueKey(state.ranks[i].rankId),
+      padding: const EdgeInsets.only(
+        bottom: DesignConstants.spacingLarge,
+      ),
+      child: MainRankCard(
+        rank: state.ranks[i],
+        gymId: state.gymId,
+        subRankType: state.subRankType,
+        index: i,
+        isTop: i == state.ranks.length - 1,
+        reorderable: reorderable,
+      ),
     );
   }
 }

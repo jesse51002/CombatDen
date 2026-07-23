@@ -13,11 +13,11 @@ CREATE POLICY "Read summaries for visible videos"
             WHERE video.video_id = video_rag.video_id
             AND (
                 video.gym_id IS NULL
-                OR is_gym_employee(video.gym_id)
+                OR is_gym_admin_or_owner(video.gym_id)
                 OR EXISTS (
                     SELECT 1 FROM members
                     WHERE members.gym_id = video.gym_id
-                    AND members.user_id = auth.uid()
+                    AND lower(members.email) = lower(auth.jwt() ->> 'email')
                 )
             )
         )

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -188,25 +190,28 @@ class _RankedBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final atTop = _atTop;
+    // Promoting / changing a rank is an owner/admin-only affordance; front
+    // desk still sees the belt + progress view, just not the manage action.
+    final canPromoteRank = selectedGym.role?.canPromoteRank ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
         _BeltRow(rank: rank),
         _RankProgress(rank: rank, atTop: atTop),
-        if (data.enabled)
-          AppOutlineButton(
-            fullWidth: true,
-            borderRadius: DesignConstants.radiusSmall,
-            text: atTop ? 'Change rank' : 'Promote',
-            onPressed: () => _manage(context),
-          )
-        else
+        if (!data.enabled)
           Text(
             'Rank system is disabled.',
             style: DesignConstants.pSmall.copyWith(
               color: DesignConstants.text2nd,
             ),
+          )
+        else if (canPromoteRank)
+          AppOutlineButton(
+            fullWidth: true,
+            borderRadius: DesignConstants.radiusSmall,
+            text: atTop ? 'Change rank' : 'Promote',
+            onPressed: () => _manage(context),
           ),
       ],
     );
@@ -234,6 +239,9 @@ class _UnrankedBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Assigning a rank is an owner/admin-only affordance (same tier as
+    // promote); front desk sees the "no rank" note without the assign action.
+    final canPromoteRank = selectedGym.role?.canPromoteRank ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
@@ -242,12 +250,13 @@ class _UnrankedBody extends StatelessWidget {
           'No rank assigned.',
           style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
         ),
-        AppOutlineButton(
-          fullWidth: true,
-          text: 'Assign rank',
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: () => _assign(context),
-        ),
+        if (canPromoteRank)
+          AppOutlineButton(
+            fullWidth: true,
+            text: 'Assign rank',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => _assign(context),
+          ),
       ],
     );
   }
