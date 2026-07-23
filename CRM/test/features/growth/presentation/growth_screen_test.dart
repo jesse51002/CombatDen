@@ -290,9 +290,9 @@ void main() {
 
       await tester.tap(find.text('Revenue'));
       await tester.pump();
-      expect(tabIndex(tester), 2);
+      expect(tabIndex(tester), 1);
 
-      await tester.tap(find.text('Retention'));
+      await tester.tap(find.text('Attendance'));
       await tester.pump();
       expect(tabIndex(tester), 5);
     });
@@ -302,13 +302,13 @@ void main() {
     test('every tab route is addressable, in tab order', () {
       expect(kGrowthTabRoutes, [
         AppRoutes.growth,
-        AppRoutes.growthMembers,
         AppRoutes.growthRevenue,
-        AppRoutes.growthAttendance,
-        AppRoutes.growthTrial,
+        AppRoutes.growthMembers,
         AppRoutes.growthRetention,
+        AppRoutes.growthTrial,
+        AppRoutes.growthAttendance,
       ]);
-      expect(kGrowthTabRoutes.indexOf(AppRoutes.growthAttendance), 3);
+      expect(kGrowthTabRoutes.indexOf(AppRoutes.growthAttendance), 5);
     });
 
     testWidgets('an initial tab index opens that tab', (tester) async {
@@ -419,7 +419,7 @@ void main() {
             byClass: boxingOnly(),
           ),
         ]),
-        initialTab: 3,
+        initialTab: 5,
       );
 
       String? renderedClassId() => tester
@@ -450,7 +450,7 @@ void main() {
         _loaded([
           _lineMetric(category: GrowthCategory.attendance, name: 'Check-ins'),
         ]),
-        initialTab: 3,
+        initialTab: 5,
       );
       expect(find.text('All classes'), findsNothing);
     });

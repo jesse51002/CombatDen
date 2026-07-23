@@ -77,12 +77,17 @@ class GrowthPageBody extends StatelessWidget {
             ),
           );
         }
+        // Order MUST match `_tabs` / `_categories` / `kGrowthTabRoutes` in
+        // growth_screen.dart — the IndexedStack is indexed by tab position:
+        // Overview · Revenue · Members · Retention · Trial · Attendance.
         return IndexedStack(
           index: tabIndex,
           children: [
             OverviewTab(state: state, range: range, compact: compact),
-            MembersTab(state: state, range: range, compact: compact),
             RevenueTab(state: state, range: range, compact: compact),
+            MembersTab(state: state, range: range, compact: compact),
+            RetentionTab(state: state, range: range, compact: compact),
+            TrialTab(state: state, range: range, compact: compact),
             AttendanceTab(
               state: state,
               range: range,
@@ -90,8 +95,6 @@ class GrowthPageBody extends StatelessWidget {
               className: className,
               compact: compact,
             ),
-            TrialTab(state: state, range: range, compact: compact),
-            RetentionTab(state: state, range: range, compact: compact),
           ],
         );
     }

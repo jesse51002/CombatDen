@@ -29,12 +29,19 @@ class LineView extends StatelessWidget {
   /// The selected class chip, when the metric carries `by_class`.
   final String? classId;
 
+  /// Whether to append the metric's companion table beneath the chart when
+  /// it carries one. The Growth tabs leave this on; the Home dashboard's
+  /// revenue-trend card turns it off — a dashboard card shows the line only,
+  /// never a per-month table.
+  final bool showCompanionTable;
+
   const LineView({
     super.key,
     required this.data,
     required this.metricKey,
     required this.name,
     this.classId,
+    this.showCompanionTable = true,
   });
 
   @override
@@ -123,6 +130,11 @@ class LineView extends StatelessWidget {
       ],
     );
 
-    return ChartWithCompanionTable(chart: chart, table: data.table);
+    if (!showCompanionTable) return chart;
+    return ChartWithCompanionTable(
+      chart: chart,
+      table: data.table,
+      granularity: data.granularity,
+    );
   }
 }

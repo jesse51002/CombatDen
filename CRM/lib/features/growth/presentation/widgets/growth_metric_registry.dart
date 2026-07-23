@@ -25,7 +25,7 @@ const Map<String, String> kMetricWindowLabels = {
   'revenue_by_plan': 'Current',
   'rank_distribution': 'Current',
   'class_fill_rate': 'Current',
-  'trial_outcomes': 'Current',
+  'trial_outcomes': 'Last 90 days',
   'active_trials': 'Current',
   'at_risk_members': 'Current',
   // Monthly histories.
@@ -45,7 +45,6 @@ const Map<String, String> kMetricWindowLabels = {
   'attendance_by_class': 'Weekly, all-time',
   'video_engagement': 'Weekly, all-time',
   // Rolling windows.
-  'churn_donuts': 'Last 30 days',
   'trial_engagement': 'Last 30 days',
   'attendance_heatmap': 'Last 90 days',
 };

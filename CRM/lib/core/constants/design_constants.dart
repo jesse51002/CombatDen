@@ -275,6 +275,11 @@ class DesignConstants {
   static const double navRailLogoSize = 64.0;
   static const double quickListWidth = 240.0;
   static const double tableRowHeight = 35.0;
+  // Cap on a growth metric table's scroll viewport — about eight rows tall —
+  // so a long companion breakdown or member list scrolls internally instead
+  // of dictating the tab's height. The section title and the table's own
+  // header sit above this cap; only the rows scroll within it.
+  static const double growthTableMaxHeight = tableRowHeight * 8;
 
   // Landing-style top nav (LandingPage/hifi/chrome.jsx GWNav).
   static const double navHeight = 68.0;

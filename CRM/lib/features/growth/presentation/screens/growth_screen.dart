@@ -23,11 +23,11 @@ import 'package:crm/shared/widgets/view_switcher.dart';
 /// source, so they cannot drift.
 const List<String> kGrowthTabRoutes = [
   AppRoutes.growth,
-  AppRoutes.growthMembers,
   AppRoutes.growthRevenue,
-  AppRoutes.growthAttendance,
-  AppRoutes.growthTrial,
+  AppRoutes.growthMembers,
   AppRoutes.growthRetention,
+  AppRoutes.growthTrial,
+  AppRoutes.growthAttendance,
 ];
 
 /// Growth (analytics) screen — six tabs over ONE cached backend read.
@@ -37,7 +37,7 @@ const List<String> kGrowthTabRoutes = [
 /// class are all client-side reshapes of the page already in memory —
 /// none of them refetches.
 class GrowthScreen extends StatelessWidget {
-  /// Tab to open on (0 Overview … 5 Retention).
+  /// Tab to open on (0 Overview … 5 Attendance).
   final int initialTab;
 
   const GrowthScreen({super.key, this.initialTab = 0});
@@ -75,24 +75,24 @@ class GrowthView extends StatefulWidget {
 class _GrowthViewState extends State<GrowthView> {
   static const _tabs = [
     'Overview',
-    'Members',
     'Revenue',
-    'Attendance',
-    'Trial',
+    'Members',
     'Retention',
+    'Trial',
+    'Attendance',
   ];
 
   static const _categories = [
     GrowthCategory.overview,
-    GrowthCategory.members,
     GrowthCategory.revenue,
-    GrowthCategory.attendance,
-    GrowthCategory.trial,
+    GrowthCategory.members,
     GrowthCategory.retention,
+    GrowthCategory.trial,
+    GrowthCategory.attendance,
   ];
 
   /// The Attendance tab's index — the one tab carrying class chips.
-  static const _attendanceTab = 3;
+  static const _attendanceTab = 5;
 
   late int _tabIndex;
   GrowthRange _range = GrowthRange.all;

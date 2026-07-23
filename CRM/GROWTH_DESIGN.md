@@ -41,9 +41,15 @@ read serves all six tabs, so switching never refetches.
 ### 1.2 Tab bar
 
 `ViewSwitcher` (shared, unchanged) with
-`['Overview', 'Members', 'Revenue', 'Attendance', 'Trial', 'Retention']`.
-Default index 0. Tab switch = local `setState` + `syncBrowserUrl(_tabRoutes[i])`,
-exactly as `_MembershipsBodyState._onTabSelected` does.
+`['Overview', 'Revenue', 'Members', 'Retention', 'Trial', 'Attendance']`.
+Default index 0 (Overview). Money first (Revenue, Members), then the retention
+arc (Retention, Trial), with operational Attendance last. Tab switch = local
+`setState` + `syncBrowserUrl(kGrowthTabRoutes[i])`, exactly as
+`_MembershipsBodyState._onTabSelected` does. The tab labels, `_categories`,
+`kGrowthTabRoutes`, and the `GrowthPageBody` `IndexedStack` children all list in
+this one order so they cannot drift; `main.dart` deep-links resolve by
+`kGrowthTabRoutes.indexOf(path)`, so the route CONSTANTS are unchanged — only
+their order in the list moved.
 
 - Desktop label style: the `ViewSwitcher` default (`pBig`, 16).
 - Below `navMobileBreakpoint` (768): pass `textStyle: DesignConstants.h3` (13).
@@ -624,30 +630,32 @@ wide (`h3`, `text`), three value columns of 96px, row height `tableRowHeight` (3
 
 `AppDataTable(shrinkWrap: true, stickyHeader: false)` with one
 `AppDataTableColumn` per wire column and `AppDataTableRow.onTap` pushing
-`AppRoutes.memberDetailPath(memberId)`.
+`AppRoutes.memberDetailPath(memberId)`. Every column is a **fill** column, so
+they render **equal width**, sharing the row equally — no per-type `minWidth`.
 
-| wire `type` | cell | align | width |
-|---|---|---|---|
-| `text` | `Text(v, style: h3)` | left | `minWidth: 160, fill: true` |
-| `number` | `Text(NumberFormat.decimalPattern().format(v), style: h3)` | right | `minWidth: 96` |
-| `cents` | `Text(formatMinorUnits(v, decimalDigits: 0), style: h3)` | right | `minWidth: 112` |
-| `date` | `Tooltip(message: absolute, child: Text(relative, style: h3, color: text2nd))` | left | `minWidth: 128` |
+| wire `type` | cell | align |
+|---|---|---|
+| `text` | `Text(v, style: h3)` | left |
+| `number` | `Text(NumberFormat.decimalPattern().format(v), style: h3)` | right |
+| `cents` | `Text(formatMinorUnits(v, decimalDigits: 0), style: h3)` | right |
+| `date` | `Text(absoluteDate(v), style: h3, color: text2nd)` | left |
 
-Relative date rendering: `Today` · `Yesterday` · `N days ago` (past) ·
-`in N days` (future). Absolute tooltip = `DateFormat.yMMMd()`.
+A numeric cell right-aligns inside its equal-width column via a
+`SizedBox(width: infinity)` in `member_list_cells._cellText` — no per-column
+align flag. **Dates render ABSOLUTE, never relative** (no "N days ago"): a
+day-level member date (`started` / `last seen`) reads `DateFormat.yMMMd()`
+(`Sep 5, 2026`); a companion table's monthly date reads `DateFormat.yMMM()`
+(`Sep 2025`), keyed by the owning chart's `granularity` (see `absoluteDate` in
+`member_list_cells.dart`). A null cell is an em-dash (`—`).
 
 Row affordance: rows are already `InkWell` when `onTap` is set. The section
 subtitle carries the instruction — `Select a member to open their profile` — rather
 than adding a chevron column, which would spend a column on chrome.
 
-**Rows.** 0 → `EmptyState.inline(minHeight: tableRowHeight * 4)`. > 10 → render 10;
-these lists are bounded by definition (at-risk, active trials), so no pagination.
-
-**Requires a shared-widget change:** `AppDataTableColumn` gains
-`final AppDataTableAlign align` (`left` default, `right`) and both
-`_buildRow` / `_buildFlexRowChildren` use it for the cell `Align`. This is a
-correct extension every table benefits from — not a Growth-local hack, and not a
-new design token.
+**Rows.** 0 → `EmptyState.inline(minHeight: tableRowHeight * 4)`. Otherwise the
+list shows **every** row (no hard cap): the table is wrapped in
+`BoundedMetricTable` (§4.10), so a long at-risk / active-trials list scrolls
+inside a fixed height rather than being truncated to a top-N.
 
 ### 4.9 Companion table — a `line` / `bars` add-on
 
@@ -657,34 +665,69 @@ A `line` / `bars` payload may carry an optional `table` (`MetricTable`):
 alone, unchanged. Members-over-time and Revenue-over-time are the two metrics
 that carry one today (a per-month breakdown beneath the line).
 
-- **Widgets.** `ChartWithCompanionTable(chart, table)` wraps the built chart;
-  `MetricCompanionTable` renders the table itself. Both live in
-  `metric_renderers/companion_table_view.dart`. The table reuses `AppDataTable`
-  (`shrinkWrap: true, stickyHeader: false`) and the **`member_list` cell
-  formatter** (§4.8), so a chart's data table reads as a sibling of the page's
-  other tables — de-carded, matching the page.
+- **Widgets.** `ChartWithCompanionTable(chart, table, granularity)` wraps the
+  built chart; `MetricCompanionTable(table, granularity)` renders the table
+  itself. Both live in `metric_renderers/companion_table_view.dart`. The table
+  reuses `AppDataTable` (`shrinkWrap: true, stickyHeader: false`) and the
+  **`member_list` cell formatter** (§4.8), so a chart's data table reads as a
+  sibling of the page's other tables — de-carded, matching the page. Columns are
+  **equal width** (all fill) and the whole table is wrapped in
+  `BoundedMetricTable` (§4.10) so a 12-month breakdown scrolls inside a fixed
+  height instead of dominating the tab. `granularity` is the owning chart's, so
+  the Month column mirrors the month axis.
 - **Cells format by column `type`,** exactly as `member_list` does: `date` →
-  relative day + absolute tooltip; `cents` → `money.dart`; `number` →
-  right-aligned grouped int; `text` → left. A **null cell renders as an
-  em-dash** (`—`), never `null`, never `0` — an absent value and a zero are
-  different facts.
+  **absolute** date (a monthly table's Month column reads `Sep 2025` via
+  `DateFormat.yMMM`, mirroring the chart's month axis — never relative "N days
+  ago"); `cents` → `money.dart`; `number` → right-aligned grouped int; `text` →
+  left. A **null cell renders as an em-dash** (`—`), never `null`, never `0` — an
+  absent value and a zero are different facts.
+- **Value cells are tinted by their column's `tone`** (`columnToneColor`):
+  `good → goodGreen`, `bad → badRed`, `warn → okYellow`, and `neutral` / null /
+  unknown → the default cell text color. This restores the old mockup's
+  Gained-green / Lost-red / Retained-yellow read. Only value cells are tinted;
+  the Month (`date`) column stays default, and an absent (null) cell keeps its
+  muted em-dash regardless of tone.
 - **Orientation.** `stacked` → `Column[chart, table]`, `spacing: spacingLarge`
   (the chart's own internal rhythm, so the table reads as one more block of the
   same body, not a tighter-bound appendage). `stacked` is the only orientation
   the backend emits today; `beside` and the resilient `unknown` fall back to
   the same stack — a side-by-side `Row` is a localized change in
   `ChartWithCompanionTable` if `beside` ever ships.
-- **No row tap, no row cap.** Companion-table rows are aggregate per-bucket data
-  (a per-month Gained / Lost / Retained / Trial breakdown), not members — so a
-  row carries no member deep-link, and the table shows **every** row: it is
-  bounded by the chart's own buckets, not a top-N list. (Contrast `member_list`,
-  which caps at 10 because those lists are genuinely unbounded.)
+- **No row tap; every row shown, inside a bounded scroll.** Companion-table
+  rows are aggregate per-bucket data (a per-month Gained / Lost / Retained /
+  Trial breakdown), not members — so a row carries no member deep-link, and the
+  table shows **every** row (bounded by the chart's own buckets, not a top-N).
+  The `BoundedMetricTable` wrapper (§4.10) caps the *height* and scrolls the
+  rows internally, so "every row" never means "dictates the tab's height".
 - **Contract.** Mirrors `MetricTable` / `MetricTableColumn` / `MetricTableRow` /
   `TableOrientation` in `FastApiBackend/src/growth/schema/growth_schema.py`.
-  `MetricTableColumn.type` reuses `MemberListColumnType`; a row's `cells` are
-  positional against `columns`, each a `String`, a `double`, or null (the same
-  normalisation `MemberListRow` uses). `TableOrientation` parses resiliently to
-  `unknown`. `LineData` / `BarsData` gained a nullable `table` field.
+  `MetricTableColumn.type` reuses `MemberListColumnType` and carries an optional
+  `tone` (`good` / `bad` / `warn` / `neutral` / null — the same vocabulary a
+  `hero_split` segment's tone uses); a row's `cells` are positional against
+  `columns`, each a `String`, a `double`, or null (the same normalisation
+  `MemberListRow` uses). `TableOrientation` parses resiliently to `unknown`.
+  `LineData` / `BarsData` gained a nullable `table` field.
+
+### 4.10 `BoundedMetricTable` — the fixed-height scroll wrapper
+
+Every growth table — the `member_list` renderer AND every companion table — is
+wrapped in `BoundedMetricTable`
+(`metric_renderers/bounded_metric_table.dart`) so the table never dictates the
+tab's height. A 12-row companion breakdown or a long at-risk list would
+otherwise dominate its tab; the wrapper caps the height and scrolls the rows
+inside it.
+
+- **Cap:** `DesignConstants.growthTableMaxHeight` (`tableRowHeight * 8`, §10) is
+  the max viewport height — a handful of rows. It is a `maxHeight`
+  (`ConstrainedBox`), not a fixed height, so a short table still renders at its
+  natural height; only a long one caps and scrolls.
+- **Convention:** matches the member-detail history cards — an explicit
+  `ScrollController`, an always-visible thumb (`thumbVisibility: true`), and a
+  `spacingLarge` right gutter so the thumb clears the last column. The section
+  title above stays put; only the rows scroll.
+- The wrapped `AppDataTable` keeps `stickyHeader: false`: its header row scrolls
+  with the rows, exactly as the history cards' tables do — the section's own
+  metric-name title is the pinned heading.
 
 ---
 
@@ -810,34 +853,44 @@ of the page is unaffected. One bad envelope must never blank the page.
 Order within a tab is the envelope's `order`; the lists below are that order with
 spans applied. `|` marks two half-span metrics sharing one row.
 
+The tab order is Overview · Revenue · Members · Retention · Trial · Attendance
+(§1.2).
+
 **Overview** — `revenue_hero` (hero) · `members_kpis` · `members_trend` ·
-`churn_donuts`.
+`avg_membership_length`.
 The hero is first and is the page's only hero figure; everything below it is
-supporting. Three hairlines.
+supporting. Three hairlines. Overview leads with Average Membership Length as its
+retention read — an owner reads "members stay N months" more readily than a churn
+percentage.
+
+**Revenue** — `revenue_kpis` · `mrr_trend` · `revenue_collected` (stacked ×3:
+Card S1 / Cash S2 / Other residual) · `revenue_by_plan` · `revenue_quality_kpis`.
+MRR-first: the headline stat then its own history directly beneath it. `mrr_trend`
+is also drawn on the Home dashboard by `RevenueTrendCard` (owner/admin only, under
+the money hero) — the line only, `showCompanionTable: false`, never its per-month
+table.
 
 **Members** — `members_kpis` · `members_trend` · `members_gained_lost` ·
 `members_by_plan` · `membership_status_mix` | `member_tenure`.
 
-**Revenue** — `revenue_kpis` · `mrr_trend` · `revenue_collected` (stacked ×3:
-Card S1 / Cash S2 / Other residual) · `revenue_by_plan` · `revenue_quality_kpis`.
-MRR-first: the headline stat then its own history directly beneath it.
-
-**Attendance** — class chips active. `attendance_kpis` · `checkins_trend` ·
-`attendance_heatmap` · `attendance_by_class` | `class_fill_rate` ·
-`signups_vs_checkins` (grouped: Check-ins S1, Sign-ups S2 — the achieved value gets
-the accent, so no-shows read as the gap).
+**Retention** — `retention_kpis` · `churn_trend` · `avg_membership_length` ·
+`cohort_retention` | `rank_distribution` · `at_risk_members` · `engagement_kpis` ·
+`promotions_trend` | `redemptions_trend` · `video_engagement` (line ×2: Clicked S1,
+Served S2).
+Cause up top (churn, cohorts, at-risk), the engagement loop that drives it below —
+one scroll, cause then effect. This is the longest tab; that is acceptable for the
+one tab an owner reads end to end. Churn is a `line` here now (`churn_trend`), not a
+donut — the dropped `churn_donuts` metric left the `donut_pair` renderer in place
+for a future donut metric.
 
 **Trial** — `trial_kpis` · `trials_started_vs_converted` (grouped: Converted S1,
 Started S2) · `trial_conversion_trend` · `trial_outcomes` | `trial_engagement` ·
 `active_trials`.
 
-**Retention** — `retention_kpis` · `churn_donuts` · `churn_trend` ·
-`cohort_retention` | `rank_distribution` · `at_risk_members` · `engagement_kpis` ·
-`promotions_trend` | `redemptions_trend` · `video_engagement` (line ×2: Clicked S1,
-Served S2).
-Cause up top (churn, cohorts, at-risk), the engagement loop that drives it below —
-one scroll, cause then effect. This tab is the longest at ~9 sections; that is
-acceptable for the one tab an owner reads end to end.
+**Attendance** — class chips active. `attendance_kpis` · `checkins_trend` ·
+`attendance_heatmap` · `attendance_by_class` | `class_fill_rate` ·
+`signups_vs_checkins` (grouped: Check-ins S1, Sign-ups S2 — the achieved value gets
+the accent, so no-shows read as the gap).
 
 ---
 
@@ -948,15 +1001,35 @@ changed.
     carries a negative tick (`niceCeiling` floors at 1; `yTicksFor` is
     `[max, max/2, 0]`). A regression guard asserts the line painter receives
     non-empty points on a non-negative scale.
-11. **Churn moved off `donut_pair`.** The backend dropped the `churn_donuts`
-    metric; churn is now a `line` on Overview + Retention, rendered generically
-    by category — no CRM tab change. The `donut_pair` renderer stays (unused,
-    ready for a future donut metric). Two stale references remain and are noted,
-    not silently inherited: the `churn_donuts` window-label entry in
-    `growth_metric_registry.dart` (harmless — an unused key that no-ops to `''`)
-    and the `churn_donuts` mentions in §6's Overview / Retention composition
-    above. Both are candidates for a follow-up cleanup once the backend's new
-    churn-line key is confirmed.
+11. **Churn is a `line`, not a `donut_pair`.** The backend dropped the
+    `churn_donuts` metric; churn is now `churn_trend` (a `line`) on Retention,
+    and Overview leads with `avg_membership_length` (also a line) as its
+    retention read — both rendered generically by category. The `donut_pair`
+    renderer stays in place, unused, ready for a future donut metric. The stale
+    `churn_donuts` window-label entry (`growth_metric_registry.dart`) and the §6
+    Overview / Retention `churn_donuts` mentions have been removed.
+
+### Table + tab polish (live-metrics pass, cont.)
+
+12. **Every growth table is height-bounded with an internal scroll**
+    (`BoundedMetricTable`, §4.10) — companion tables and member lists both. A
+    long table scrolls inside `growthTableMaxHeight` (§10) instead of dictating
+    the tab's height; the `member_list` ten-row hard cap is gone (all rows show,
+    inside the scroll).
+13. **Table `date` cells render absolute, never relative** (§4.8): a monthly
+    companion table's Month column reads `Sep 2025` (mirroring the chart's month
+    axis); member dates read `Sep 5, 2026`. The old relative "N days ago"
+    rendering is gone.
+14. **Growth table columns are equal width** (all fill columns, §4.8) instead of
+    content-sized.
+15. **Companion value cells are tinted by their column `tone`** (§4.9) —
+    Gained-green / Lost-red / Retained-yellow — mirroring the new
+    `MetricTableColumn.tone` contract field.
+16. **Tabs reordered** to Overview · Revenue · Members · Retention · Trial ·
+    Attendance (§1.2); the route constants are unchanged, only their list order.
+17. **Home dashboard gains a revenue-over-time card** (`RevenueTrendCard`) under
+    the money hero, owner/admin only — the `mrr_trend` line only, never its
+    companion table (§6 Revenue note).
 
 ### Pre-existing issues surfaced (not silently inherited)
 
@@ -983,12 +1056,13 @@ changed.
 
 ## 10. Proposed new tokens
 
-Two geometry constants. No new colors are required.
+Three geometry constants. No new colors are required.
 
 | token | value | why an existing token will not do |
 |---|---|---|
 | `chartStroke` | `2.0` | The chart line weight. `dividerThickness` (1) is a hairline, `progressBarThickness` (4) is a progress rail, `buttonBorder` (2) is a button border. Today `_MembersTrendLinePainter` hardcodes `3` with a comment saying no token exists. |
 | `chartBarMaxWidth` | `24.0` | The cap on bar thickness. Coincides with `iconSizeLarge`, but icon sizes are reserved for `Icon()` — the same rule that already keeps `spinnerSizeSmall` and `legendDotSize` separate from `iconSize*`. |
+| `growthTableMaxHeight` | `tableRowHeight * 8` | The scroll-viewport cap for a growth table (`BoundedMetricTable`, §4.10) — about eight rows. Derived from `tableRowHeight` so it tracks the row height; not `historyCardHeight` (560), which is a member-detail card's own fixed height, nor a chart height. |
 
 **Optional, only if the ΔE-15 normal-vision floor must be cleared everywhere**
 (§2.3): a `chartSeries2` pair replacing `darkPrimary` as S2 — light around

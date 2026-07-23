@@ -66,6 +66,7 @@ MetricTableColumn _$MetricTableColumnFromJson(Map<String, dynamic> json) =>
       label: json['label'] as String,
       type: MemberListColumnType.fromJson(json['type'] as String),
       align: json['align'] as String?,
+      tone: json['tone'] as String?,
     );
 
 MetricTableRow _$MetricTableRowFromJson(Map<String, dynamic> json) =>

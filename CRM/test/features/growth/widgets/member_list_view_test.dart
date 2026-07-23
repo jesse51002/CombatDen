@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'package:crm/features/growth/data/models/growth_metric_data.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/growth_metric_view.dart';
@@ -57,7 +58,12 @@ void main() {
     expect(find.text('Ana Reyes'), findsOneWidget);
     expect(find.text('1,284'), findsOneWidget);
     expect(find.text(r'$45'), findsOneWidget);
-    expect(find.text('3 days ago'), findsOneWidget);
+    // A date cell reads as a real date, never relative ("N days ago").
+    expect(
+      find.text(DateFormat.yMMMd().format(threeDaysAgo)),
+      findsOneWidget,
+    );
+    expect(find.textContaining('days ago'), findsNothing);
   });
 
   testWidgets('a null cell renders an em-dash, never "null" or 0',
@@ -103,7 +109,10 @@ void main() {
     expect(find.text('Only a name'), findsOneWidget);
   });
 
-  testWidgets('caps at ten rows', (tester) async {
+  testWidgets('shows every row — no hard cap', (tester) async {
+    // With the table bounded to a fixed height and scrolling internally,
+    // the list renders ALL its rows (the old ten-row cap is gone); the
+    // scroll viewport builds every child even those below the fold.
     await tester.pumpWidget(
       host(
         GrowthMetricView(
@@ -123,20 +132,42 @@ void main() {
         ),
       ),
     );
+    expect(tester.takeException(), isNull);
     expect(find.text('Member 9'), findsOneWidget);
-    expect(find.text('Member 10'), findsNothing);
+    expect(find.text('Member 10'), findsOneWidget);
+    expect(find.text('Member 13'), findsOneWidget);
   });
 
-  group('relativeDay', () {
-    final now = DateTime(2026, 7, 20);
-    test('names today and yesterday', () {
-      expect(relativeDay(DateTime(2026, 7, 20, 9), now: now), 'Today');
-      expect(relativeDay(DateTime(2026, 7, 19), now: now), 'Yesterday');
-    });
-
-    test('counts days either side', () {
-      expect(relativeDay(DateTime(2026, 7, 14), now: now), '6 days ago');
-      expect(relativeDay(DateTime(2026, 7, 25), now: now), 'in 5 days');
-    });
+  testWidgets('an absolute-date column reads as a real date', (tester) async {
+    final started = DateTime(2025, 9, 5);
+    await tester.pumpWidget(
+      host(
+        GrowthMetricView(
+          metric: memberListMetric(
+            columns: const [
+              MemberListColumn(
+                key: 'name',
+                label: 'Member',
+                type: MemberListColumnType.text,
+              ),
+              MemberListColumn(
+                key: 'started',
+                label: 'Started',
+                type: MemberListColumnType.date,
+              ),
+            ],
+            rows: [
+              MemberListRow(
+                memberId: 'm-1',
+                cells: ['Ana Reyes', started.toIso8601String()],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text(DateFormat.yMMMd().format(started)), findsOneWidget);
+    expect(find.textContaining('days ago'), findsNothing);
   });
 }

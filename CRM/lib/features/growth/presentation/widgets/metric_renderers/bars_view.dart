@@ -148,7 +148,11 @@ class BarsView extends StatelessWidget {
       ],
     );
 
-    return ChartWithCompanionTable(chart: chart, table: data.table);
+    return ChartWithCompanionTable(
+      chart: chart,
+      table: data.table,
+      granularity: data.granularity,
+    );
   }
 
   /// The good half keeps the positive tone, the bad half the negative one.

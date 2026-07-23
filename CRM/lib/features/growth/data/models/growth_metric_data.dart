@@ -231,11 +231,19 @@ class MetricTableColumn {
   final MemberListColumnType type;
   final String? align;
 
+  /// An optional semantic color hint for this column's value cells —
+  /// `'good'` / `'bad'` / `'warn'` / `'neutral'` (the same vocabulary a
+  /// `hero_split` segment's tone uses); null leaves the default text color.
+  /// Mirrors `MetricTableColumn.tone` in the growth schema. Restores the
+  /// old mockup's Gained-green / Lost-red / Retained-yellow tinting.
+  final String? tone;
+
   const MetricTableColumn({
     required this.key,
     required this.label,
     required this.type,
     this.align,
+    this.tone,
   });
 
   factory MetricTableColumn.fromJson(Map<String, dynamic> json) =>

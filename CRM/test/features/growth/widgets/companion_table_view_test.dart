@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/growth/data/models/growth_metric.dart';
 import 'package:crm/features/growth/data/models/growth_metric_data.dart';
@@ -39,6 +40,41 @@ MetricTable _table({
         MetricTableRow(cells: ['2026-06-01', 6.0, 250000.0]),
         // A null cents cell: an absent amount, not zero.
         MetricTableRow(cells: ['2026-07-01', 85.0, null]),
+      ],
+    );
+
+/// A companion table whose value columns each carry a tone, so a single
+/// fixture exercises good/bad/warn cell tinting (the Month column is
+/// untoned and must stay default).
+MetricTable _tonedTable() => const MetricTable(
+      orientation: TableOrientation.stacked,
+      columns: [
+        MetricTableColumn(
+          key: 'month',
+          label: 'Month',
+          type: MemberListColumnType.date,
+        ),
+        MetricTableColumn(
+          key: 'gained',
+          label: 'Gained',
+          type: MemberListColumnType.number,
+          tone: 'good',
+        ),
+        MetricTableColumn(
+          key: 'lost',
+          label: 'Lost',
+          type: MemberListColumnType.number,
+          tone: 'bad',
+        ),
+        MetricTableColumn(
+          key: 'retained',
+          label: 'Retained',
+          type: MemberListColumnType.number,
+          tone: 'warn',
+        ),
+      ],
+      rows: [
+        MetricTableRow(cells: ['2026-06-01', 12.0, 3.0, 88.0]),
       ],
     );
 
@@ -105,6 +141,32 @@ void main() {
       // The column headers come through.
       expect(find.text('Gained'), findsOneWidget);
       expect(find.text('Collected'), findsOneWidget);
+    });
+
+    testWidgets('a monthly Month column reads the month, not "days ago"',
+        (tester) async {
+      // The chart's granularity is `month`, so the date column mirrors the
+      // month axis (`DateFormat.yMMM` → "Jun 2026"), never relative time.
+      await pump(tester, _lineWithTable(table: _table()));
+      expect(find.text('Jun 2026'), findsOneWidget);
+      expect(find.text('Jul 2026'), findsOneWidget);
+      expect(find.textContaining('days ago'), findsNothing);
+    });
+
+    testWidgets('tints value cells by their column tone', (tester) async {
+      await pump(tester, _lineWithTable(table: _tonedTable()));
+
+      Color? cellColor(String text) =>
+          tester.widget<Text>(find.text(text)).style?.color;
+
+      // good → green, bad → red, warn → yellow; the untoned Month column
+      // keeps the default (muted) date color, never a status hue.
+      expect(cellColor('12'), DesignConstants.goodGreen);
+      expect(cellColor('3'), DesignConstants.badRed);
+      expect(cellColor('88'), DesignConstants.okYellow);
+      expect(cellColor('Jun 2026'), isNot(DesignConstants.goodGreen));
+      expect(cellColor('Jun 2026'), isNot(DesignConstants.badRed));
+      expect(cellColor('Jun 2026'), isNot(DesignConstants.okYellow));
     });
 
     testWidgets('no table means no companion table', (tester) async {

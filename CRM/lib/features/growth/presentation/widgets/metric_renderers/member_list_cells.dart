@@ -9,18 +9,18 @@ import 'package:crm/features/growth/data/models/growth_metric_data.dart';
 /// the string "null" — an absent number and a zero are different facts.
 const String kEmptyCell = '—';
 
-/// Column widths by type: names get the fill column, numbers get just
-/// enough to read.
-double minWidthFor(MemberListColumnType type) => switch (type) {
-      MemberListColumnType.text || MemberListColumnType.unknown => 160,
-      MemberListColumnType.number => 96,
-      MemberListColumnType.cents => 112,
-      MemberListColumnType.date => 128,
-    };
-
 /// Numbers and money read right-aligned so their digits line up.
 bool isNumericColumn(MemberListColumnType type) =>
     type == MemberListColumnType.number || type == MemberListColumnType.cents;
+
+/// The absolute date a growth table cell shows — never relative ("N days
+/// ago"). A month-granularity table (the companion tables) reads `Sep 2025`
+/// (`DateFormat.yMMM`, the same month form the chart's read-out uses); a
+/// day-level date (a member's "started" / "last seen") reads `Sep 5, 2026`.
+String absoluteDate(DateTime date, String? granularity) =>
+    granularity == 'month'
+        ? DateFormat.yMMM().format(date)
+        : DateFormat.yMMMd().format(date);
 
 /// Renders one positional cell against its column's declared type.
 ///
@@ -28,7 +28,18 @@ bool isNumericColumn(MemberListColumnType type) =>
 /// em-dash; a value whose runtime type does not match its column falls back
 /// to its plain string form rather than throwing — one odd cell must not
 /// take the page down.
-Widget buildMemberListCell(Object? value, MemberListColumnType type) {
+///
+/// [granularity] shapes how a `date` cell reads (see [absoluteDate]);
+/// [toneColor], when supplied, tints a value cell's text (the companion
+/// table's good/bad/warn column tones). A `date` cell is never toned — it is
+/// a label column, not a value — and an absent (null) cell keeps its muted
+/// em-dash regardless of tone.
+Widget buildMemberListCell(
+  Object? value,
+  MemberListColumnType type, {
+  String? granularity,
+  Color? toneColor,
+}) {
   if (value == null) return _cellText(kEmptyCell, muted: true, align: type);
   switch (type) {
     case MemberListColumnType.number:
@@ -37,6 +48,7 @@ Widget buildMemberListCell(Object? value, MemberListColumnType type) {
             ? NumberFormat.decimalPattern().format(value)
             : '$value',
         align: type,
+        color: toneColor,
       );
     case MemberListColumnType.cents:
       return _cellText(
@@ -44,17 +56,19 @@ Widget buildMemberListCell(Object? value, MemberListColumnType type) {
             ? formatMinorUnits(value.round(), decimalDigits: 0)
             : '$value',
         align: type,
+        color: toneColor,
       );
     case MemberListColumnType.date:
       final parsed = value is String ? DateTime.tryParse(value) : null;
       if (parsed == null) return _cellText('$value', align: type);
-      return Tooltip(
-        message: DateFormat.yMMMd().format(parsed.toLocal()),
-        child: _cellText(relativeDay(parsed.toLocal()), muted: true, align: type),
+      return _cellText(
+        absoluteDate(parsed.toLocal(), granularity),
+        muted: true,
+        align: type,
       );
     case MemberListColumnType.text:
     case MemberListColumnType.unknown:
-      return _cellText('$value', align: type);
+      return _cellText('$value', align: type, color: toneColor);
   }
 }
 
@@ -62,15 +76,17 @@ Widget _cellText(
   String text, {
   bool muted = false,
   required MemberListColumnType align,
+  Color? color,
 }) {
+  final resolved = color ?? (muted ? DesignConstants.text2nd : null);
   final child = Text(
     text,
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
     textAlign: isNumericColumn(align) ? TextAlign.right : TextAlign.left,
-    style: muted
-        ? DesignConstants.h3.copyWith(color: DesignConstants.text2nd)
-        : DesignConstants.h3,
+    style: resolved == null
+        ? DesignConstants.h3
+        : DesignConstants.h3.copyWith(color: resolved),
   );
   // The shared table left-aligns every cell; a numeric cell claims the full
   // column width and right-aligns its own text inside it.
@@ -78,17 +94,3 @@ Widget _cellText(
       ? SizedBox(width: double.infinity, child: child)
       : child;
 }
-
-/// `Today` / `Yesterday` / `N days ago` / `in N days`.
-String relativeDay(DateTime date, {DateTime? now}) {
-  final today = _dayOf(now ?? DateTime.now());
-  final days = _dayOf(date).difference(today).inDays;
-  if (days == 0) return 'Today';
-  if (days == -1) return 'Yesterday';
-  if (days == 1) return 'Tomorrow';
-  if (days < 0) return '${-days} days ago';
-  return 'in $days days';
-}
-
-DateTime _dayOf(DateTime value) =>
-    DateTime(value.year, value.month, value.day);
