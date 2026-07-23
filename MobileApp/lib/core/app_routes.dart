@@ -20,6 +20,9 @@ class AppRoutes {
   // Style picker (double-tap the home logo)
   static const String styleSelect = '/style-select';
 
+  // Switch profile — re-open the "Who's training?" member picker in-app.
+  static const String memberSelect = '/member-select';
+
   // Rewards tab
   static const String myRewards = '/rewards';
   static const String pointsStore = '/rewards/store';
