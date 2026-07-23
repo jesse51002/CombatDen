@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// A centered section heading for the kiosk home halves: a bold sub-title over
-/// a muted explanatory line (mockup `.sub-title` + `.sub-text`).
+/// A centered section heading for the kiosk home halves: a kiosk-scale
+/// sub-title over a muted explanatory line (mockup `.sub-title` + `.sub-text`).
 class KioskSectionHead extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -22,7 +22,7 @@ class KioskSectionHead extends StatelessWidget {
       children: [
         Text(
           title,
-          style: DesignConstants.h1,
+          style: DesignConstants.kioskTitle,
           textAlign: TextAlign.center,
         ),
         Text(

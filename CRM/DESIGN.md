@@ -184,6 +184,10 @@ tracking; body stays neutral.
 - **Label** (`h3`, 600, 13px): table headers, chips, metadata.
 - **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
+**Kiosk-scale display** (`kioskDisplay`, 700, 40px; `kioskTitle`, 600, 21px): the member
+self-serve kiosk (a supervised iPad) is read from ~2m, so its home title and panel sub-titles
+run one step larger than the admin ramp. Kiosk-only — the admin surfaces never use these.
+
 ### Named Rules
 **The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Geist, never from
 switching typefaces. Keep ≥1.25 scale steps; flat scales read as a spreadsheet.

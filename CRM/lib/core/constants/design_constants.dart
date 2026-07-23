@@ -381,6 +381,30 @@ class DesignConstants {
   static TextStyle get big2Bold => big2.copyWith(fontWeight: FontWeight.w700);
   static TextStyle get big2Light => big2.copyWith(fontWeight: FontWeight.w300);
 
+  // ── Kiosk display type ──
+  // The kiosk iPad is read from ~2m, so its titles run larger/tracked-tighter
+  // than the admin ramp (which tops out at big2/32). Like the other text
+  // getters these carry `color: text`; callers apply a muted color where the
+  // mockup uses ink-3 (e.g. a panel's sub-text via `.copyWith(color: text3rd)`).
+
+  /// Kiosk "Check in" home title — 40px bold, kiosk-scale display type (read
+  /// from a distance). Mockup `.home-title h1`.
+  static TextStyle get kioskDisplay => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 40,
+        color: text,
+        letterSpacing: -1.2,
+      );
+
+  /// Kiosk panel sub-title ("Scan with app" / "Name search") — 21px semibold,
+  /// kiosk-scale display type (read from a distance). Mockup `.sub-title`.
+  static TextStyle get kioskTitle => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 21,
+        color: text,
+        letterSpacing: -0.2,
+      );
+
   /// H2 text style (semibold, 16)
   static TextStyle get h2 => baseFont.copyWith(
         fontWeight: FontWeight.w600,

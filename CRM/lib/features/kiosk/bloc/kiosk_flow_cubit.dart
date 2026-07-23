@@ -32,7 +32,7 @@ const Duration kKioskSearchDebounce = Duration(milliseconds: 300);
 const Duration kKioskIdleTimeout = Duration(minutes: 5);
 
 /// The visible countdown on the idle warning before it abandons the draft and
-/// returns to home. (Jesse to confirm 30 vs 60 — this one line is the switch.)
+/// returns to home. Confirmed 30s — this one line is the switch.
 const Duration kKioskIdleCountdown = Duration(seconds: 30);
 
 /// Drives the kiosk check-in lane's internal navigation: the current
