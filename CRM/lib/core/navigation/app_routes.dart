@@ -42,7 +42,16 @@ class AppRoutes {
   // is not deep-linkable.
   static const String membershipsWaiverEditor =
       '/memberships/waivers/editor';
+  // The Growth screen's six tabs are each addressable. The base
+  // [growth] path is the Overview tab; the ordered list backing the
+  // deep-link ↔ tab-index mapping is `kGrowthTabRoutes` in
+  // `growth_screen.dart`.
   static const String growth = '/growth';
+  static const String growthMembers = '/growth/members';
+  static const String growthRevenue = '/growth/revenue';
+  static const String growthAttendance = '/growth/attendance';
+  static const String growthTrial = '/growth/trial';
+  static const String growthRetention = '/growth/retention';
   static const String employees = '/employees';
   static const String employeeDetail = '/employees/detail';
   // Settings hosts the appearance (theme) control, the gym timezone
