@@ -6,7 +6,7 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_week_strip.
 
 /// The glance's left half — a static replica of the member app's resting streak
 /// state (mockup `.streak`): the big sapphire week numeral over "week streak",
-/// a keep-it-alive note, and the Sunday→Saturday week strip. Vertically centred
+/// a keep-it-alive note, and the Monday→Sunday week strip. Vertically centred
 /// in its panel like the app's resting composition.
 class KioskStreakPanel extends StatelessWidget {
   final int weeks;

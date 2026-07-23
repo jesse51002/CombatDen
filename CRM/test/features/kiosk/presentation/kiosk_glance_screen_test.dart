@@ -40,6 +40,17 @@ void main() {
     classStreakWeeks: 7,
   );
 
+  // Mon + Wed attended this week (Monday-first: index 0 = Mon, 2 = Wed).
+  const monWed = CheckInResponse(
+    logId: 'log-1',
+    memberId: 'mem-1',
+    classId: 'class-1',
+    alreadyCheckedIn: false,
+    pointsAwarded: 15,
+    classStreakWeeks: 2,
+    currentWeekDays: [true, false, true, false, false, false, false],
+  );
+
   RewardResponse reward(String id, int cost) => RewardResponse(
         rewardId: id,
         gymId: 'gym-1',
@@ -119,5 +130,41 @@ void main() {
     expect(find.text('YOUR POINTS'), findsOneWidget);
     expect(find.byType(ProgressArc), findsNothing);
     expect(find.text('Redeem rewards in the CombatDen app'), findsNothing);
+  });
+
+  testWidgets('week strip marks current_week_days positionally, Monday-first',
+      (tester) async {
+    await pumpGlance(tester, glanceState.copyWith(checkInResult: monWed));
+
+    // The strip's badges are the ONLY circle/check-circle icons on the glance.
+    // Widget-tree traversal walks the Row's children left-to-right, so the
+    // icon order is Mon..Sun — proving the render is Monday-first, no reorder.
+    final strip = tester
+        .widgetList<Icon>(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Icon &&
+                (w.icon == Symbols.check_circle_sharp ||
+                    w.icon == Symbols.circle_sharp),
+          ),
+        )
+        .toList();
+    final completed = [
+      for (final icon in strip) icon.icon == Symbols.check_circle_sharp,
+    ];
+
+    // Mon (0) + Wed (2) done; the other five open.
+    expect(completed, [true, false, true, false, false, false, false]);
+    expect(find.byIcon(Symbols.check_circle_sharp), findsNWidgets(2));
+    expect(find.byIcon(Symbols.circle_sharp), findsNWidgets(5));
+  });
+
+  testWidgets('week strip falls back to all-open when no per-day data',
+      (tester) async {
+    // Default check-in response: currentWeekDays is a length-7 all-false list.
+    await pumpGlance(tester, glanceState);
+
+    expect(find.byIcon(Symbols.check_circle_sharp), findsNothing);
+    expect(find.byIcon(Symbols.circle_sharp), findsNWidgets(7));
   });
 }

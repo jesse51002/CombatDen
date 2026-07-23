@@ -19,10 +19,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 /// check-in response; balance + reward catalog fetched by the cubit) rides on
 /// [KioskFlowState]; it degrades gracefully when a fetch fails.
 ///
-/// DATA NOTE — week strip: the backend exposes no per-day completion source
-/// (`GET /streak` and the check-in response return only an integer week count).
-/// So the strip marks only TODAY (the just-checked-in day) done; a real
-/// per-day strip needs a new backend field or a history query.
+/// The week strip reads `current_week_days` (Monday-first, index 0 = Monday)
+/// off the check-in response — one badge per weekday attended this week.
 class KioskGlanceScreen extends StatelessWidget {
   const KioskGlanceScreen({super.key});
 
@@ -59,7 +57,8 @@ class KioskGlanceScreen extends StatelessWidget {
                         Expanded(
                           child: KioskStreakPanel(
                             weeks: result?.classStreakWeeks ?? 0,
-                            daysCompleted: _todayOnly(),
+                            daysCompleted:
+                                result?.currentWeekDays ?? _kEmptyWeek,
                           ),
                         ),
                         Expanded(
@@ -82,12 +81,16 @@ class KioskGlanceScreen extends StatelessWidget {
       },
     );
   }
-
-  /// Sun..Sat completion with only TODAY marked done — the one day we KNOW was
-  /// attended (the check-in that produced this glance). See the class doc's data
-  /// note: no per-day source exists to fill the rest honestly.
-  static List<bool> _todayOnly() {
-    final todayIndex = DateTime.now().weekday % 7; // Mon=1..Sun=7 -> Sun=0
-    return List<bool>.generate(7, (i) => i == todayIndex);
-  }
 }
+
+/// A length-7 all-false week — the fall-back passed to the strip before any
+/// check-in result is present (index 0 = Monday … 6 = Sunday).
+const List<bool> _kEmptyWeek = [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+];

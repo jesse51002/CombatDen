@@ -3,18 +3,32 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// Sunday-first day labels for the week strip (mockup `.week-strip`).
-const List<String> _kWeekLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+/// Monday-first day labels for the week strip (mockup `.week-strip`):
+/// Mon Tue Wed Thu Fri Sat Sun.
+const List<String> _kWeekLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+/// A week with no attendance — the fall-back when the passed list is not the
+/// expected length of seven, so a degraded response never indexes out of range.
+const List<bool> _kAllOpen = [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+];
 
 /// A static, un-animated re-skin of the member app's streak week strip
 /// (`StreakWeekStrip` in `lib/showcase/`), rebuilt against `DesignConstants`
-/// for the kiosk glance: seven equal day badges, Sunday→Saturday. A completed
+/// for the kiosk glance: seven equal day badges, Monday→Sunday. A completed
 /// day fills with the brand accent-soft wash + a sapphire check; an open day
 /// sits on the muted ground with an open ring.
 ///
-/// [daysCompleted] must hold exactly seven booleans (Sun..Sat). On the kiosk
-/// today's checked-in day is the only one marked done — the backend exposes no
-/// per-day completion source (see the glance screen's data note).
+/// [daysCompleted] holds seven booleans, index 0 = Monday … 6 = Sunday — the
+/// check-in response's `current_week_days` (already Monday-first). Rendered
+/// **positionally with no reordering**. If it isn't exactly seven long the
+/// strip falls back to all-open (never indexes out of range).
 class KioskStreakWeekStrip extends StatelessWidget {
   final List<bool> daysCompleted;
 
@@ -22,6 +36,9 @@ class KioskStreakWeekStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final days = daysCompleted.length == _kWeekLabels.length
+        ? daysCompleted
+        : _kAllOpen;
     return ConstrainedBox(
       constraints: const BoxConstraints(
         maxWidth: DesignConstants.kioskGlanceMeasure,
@@ -33,7 +50,7 @@ class KioskStreakWeekStrip extends StatelessWidget {
             Expanded(
               child: _DayBadge(
                 label: _kWeekLabels[i],
-                completed: i < daysCompleted.length && daysCompleted[i],
+                completed: days[i],
               ),
             ),
         ],
