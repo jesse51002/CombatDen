@@ -333,6 +333,12 @@ async def list_effective_instances(
         return await reader_service.list_effective_instances(
             gym_id, start_date, end_date
         )
+    except ValueError as exc:
+        # An inverted or over-wide date window — a bad request, not a 5xx.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
     except Exception:
         logger.error(
             "Failed to build schedule board: gym_id=%s", gym_id, exc_info=True

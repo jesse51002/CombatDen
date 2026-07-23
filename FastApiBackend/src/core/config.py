@@ -226,6 +226,15 @@ class Settings(BaseSettings):
     # at once. Past / in-session occurrences are always check-in-able.
     checkin_opens_hours_before_start: int = 2
 
+    # Max span a single schedule-board request may cover (start_date ..
+    # end_date), in CALENDAR months. The board expands every class's
+    # occurrences over the window in memory, so an unbounded range is a
+    # cheap CPU/memory DoS from one authenticated call. Two months comfortably
+    # covers the CRM's week view and a member browsing ahead; anything wider
+    # is rejected 400. Applied in ClassesScheduleReaderService, so it guards
+    # both the staff /classes/instances route and the member schedule route.
+    schedule_board_max_span_months: int = 2
+
     # Every class HAS an image (gym_classes.image_url is NOT NULL — the
     # card/board/check-in UI leans on it): class create/update and the preset
     # import fill this platform default (a generic people-in-a-gym photo,

@@ -25,6 +25,8 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
+from dateutil.relativedelta import relativedelta
+
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes import SQL_DIR
 from src.classes.schema.classes_crud_schema import (
@@ -40,6 +42,7 @@ from src.classes.service.classes_expander_mapping import (
 from src.classes.service.classes_version_expander import (
     ClassesVersionExpander,
 )
+from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
@@ -75,7 +78,14 @@ class ClassesScheduleReaderService:
         moved into this window renders here (and only here), while its
         counts (keyed by the out-of-window original date) still load via the
         same widened bounds.
+
+        Raises:
+            ValueError: if ``end_date`` is before ``start_date``, or the window
+                spans more than ``settings.schedule_board_max_span_months``
+                calendar months. Both routes map this to a 400 — an unbounded
+                window would expand millions of occurrences in memory.
         """
+        self._validate_window(start_date, end_date)
         gym_params = {"gym_id": str(gym_id)}
         window_params = {
             "gym_id": str(gym_id),
@@ -138,6 +148,24 @@ class ClassesScheduleReaderService:
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
+
+    @staticmethod
+    def _validate_window(start_date: date, end_date: date) -> None:
+        """Reject an inverted or over-wide board window (both -> a 400).
+
+        The board expands every class's occurrences over the window in
+        memory, so the span is bounded at
+        ``settings.schedule_board_max_span_months`` calendar months; a wider
+        request is a cheap way to spike CPU/memory from one call.
+        """
+        if end_date < start_date:
+            raise ValueError("end_date must be on or after start_date")
+        months = settings.schedule_board_max_span_months
+        if end_date > start_date + relativedelta(months=months):
+            raise ValueError(
+                f"Date range too wide — the schedule window may span at most "
+                f"{months} months"
+            )
 
     # -- per-class expansion + enrichment --------------------------------
 

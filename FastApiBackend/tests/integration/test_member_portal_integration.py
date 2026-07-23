@@ -198,6 +198,18 @@ async def test_member_portal_serves_own_data_and_refuses_everyone_elses(
         assert resp.status_code == 200, resp.text
         assert "items" in resp.json()
 
+        # 2b. The schedule window is span-bounded: a >2-month range is a 400
+        # (an unbounded window would expand millions of occurrences in memory).
+        wide = client.get(
+            f"{_portal(gym_id, str(me.member_id))}/classes",
+            params={
+                "start_date": today.isoformat(),
+                "end_date": (today + timedelta(days=200)).isoformat(),
+            },
+        )
+        assert wide.status_code == 400, wide.text
+        assert "too wide" in wide.json()["detail"].lower()
+
         # 3. The family case: the sibling row bearing the same email reads too.
         assert client.get(
             _portal(gym_id, str(sibling.member_id))

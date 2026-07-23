@@ -255,12 +255,14 @@ def test_front_desk_cannot_promote_member(
 
 
 def test_trainer_can_read_class_instances(trainer_api, gym_id: str):
+    # The schedule window is span-bounded (<= 2 months), so keep the range
+    # inside it — this test is about the ROLE gate, not the span guard.
     resp = trainer_api.get(
         "/api/v1/classes/instances",
         params={
             "gym_id": gym_id,
             "start_date": "2026-01-01",
-            "end_date": "2026-12-31",
+            "end_date": "2026-02-15",
         },
     )
     assert resp.status_code == 200, resp.text

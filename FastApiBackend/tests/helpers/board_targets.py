@@ -48,10 +48,14 @@ import asyncpg
 import httpx
 
 # How far back / ahead to scan the board. The lookback only has to clear the
-# longest realistic gap between classes at a seeded gym; 21 days is far more
-# than that while keeping the board response small.
-BOARD_LOOKBACK_DAYS = 21
-BOARD_WINDOW_DAYS = 45
+# longest realistic gap between classes at a seeded gym (14 days is far more
+# than that); the forward window only has to reach a >2h-future occurrence.
+# Their SUM must stay under the board's max span (settings
+# .schedule_board_max_span_months = 2 months ~= 59 days minimum), since
+# fetch_board hits the real /classes/instances route, which now enforces it:
+# 14 + 42 = 56 < 59, with margin.
+BOARD_LOOKBACK_DAYS = 14
+BOARD_WINDOW_DAYS = 42
 # Mirrors settings.checkin_opens_hours_before_start.
 CHECKIN_OPENS_HOURS = 2
 
