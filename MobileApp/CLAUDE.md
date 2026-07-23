@@ -38,29 +38,36 @@ correction, wiring an already-designed component) can be done directly; anything
 with visual ambiguity or non-trivial size goes through `impeccable`. See the
 codebase-root `CLAUDE.md` for the full rule.
 
-## A batch of superseded files is kept DORMANT — don't flag them as dead code
+## A few superseded files are kept DORMANT for the capture harness — don't flag them as dead code
 
-Going live stopped *using* the old visual-prototype scaffolding but, by explicit
-ruling, did **not** delete it: those files stay on disk, dormant, pending one
-consolidated removal approval. So the *Always delete dead code* law below is
-**temporarily suspended for this specific batch only** — do not flag these as
-violations and do not delete them without explicit approval. The dormant batch:
+Going live retired the old visual-prototype scaffolding. Most of it was removed;
+what REMAINS dormant on disk is kept alive **only because the dev-only
+landing-page capture harness (`tools/capture/`) still imports it** — the harness
+needs its own update before these can go (see the capture warning under
+*Project Structure*). So the *Always delete dead code* law below is **suspended
+for this specific capture-coupled set only** — do not flag these as violations
+or delete them until the capture harness is reworked or retired. The dormant,
+capture-coupled set:
 
-- The old prototype mock data (`features/*/data/mock_*.dart` — `mock_gym`,
-  `mock_profile`, `mock_stats`, `mock_my_rewards`, `mock_points_store`).
-- The **VideoService-era read path**: `core/video_service_config.dart` +
-  `core/selected_gym.dart`, `features/gym/data/gym_api_client.dart` /
+- The **VideoService-era read path**: `core/selected_gym.dart` +
+  `core/video_service_config.dart`, `features/gym/data/gym_api_client.dart` /
   `gym_detail.dart` / `gym_repository.dart`, and
   `features/videos/data/video_api_client.dart` / `video.dart` /
   `video_feed_repository.dart` / `video_helpers.dart` / `video_selectors.dart`.
-  These read the old VideoService directly by gym id; the app now reads all of
-  this through the member portal.
-- `features/style_select/` — the old "browse gyms by theme" picker (replaced by
-  the identity picker in `features/member_select/`).
-- The post-class **wins** screen (`features/stats/.../wins_*`) — dropped from the
-  celebration flow but kept in the tree.
+  The app reads everything through the member portal now; the capture harness
+  still renders via this old path.
+- `features/home/data/mock_gym.dart` + `features/stats/data/mock_stats.dart` —
+  the two prototype mocks the harness still renders (topbar chrome, the
+  `StreakBody` / `WinsBody` demo stats).
+- `features/stats/presentation/widgets/wins/` (`wins_body` + `wins_tile` +
+  `wins_tile_row`) — the post-class wins widgets, dropped from the celebration
+  flow but still rendered by the harness. The wins **screen** + route are gone.
+- `features/style_select/data/gyms_pager.dart` — the old VideoService gym-browser
+  pager the harness pages to pick a gym/theme. The style-select **screen** +
+  route are gone.
 
-Once approved, these get removed in one pass and this note goes away with them.
+Once the capture harness is reworked or retired, this set goes with it and this
+note is deleted.
 
 ## State-management model
 

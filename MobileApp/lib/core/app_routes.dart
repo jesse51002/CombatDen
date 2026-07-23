@@ -17,9 +17,6 @@ class AppRoutes {
   // Profile
   static const String profile = '/profile';
 
-  // Style picker (double-tap the home logo)
-  static const String styleSelect = '/style-select';
-
   // Switch profile — re-open the "Who's training?" member picker in-app.
   static const String memberSelect = '/member-select';
 
@@ -35,7 +32,6 @@ class AppRoutes {
 
   // Post-class celebration flow
   static const String postClassStreak = '/post-class/streak';
-  static const String postClassWins = '/post-class/wins';
   static const String postClassPoints = '/post-class/points';
   static const String postClassRewards = '/post-class/rewards';
   static const String postClassRank = '/post-class/rank';
