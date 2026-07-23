@@ -76,7 +76,16 @@ class _CheckinScannerScreenState extends State<CheckinScannerScreen> {
             alignment: Alignment.topLeft,
             child: Padding(
               padding: EdgeInsets.all(DesignConstants.spacingSmall),
-              child: const AppCloseButton(),
+              // A scrim keeps the close affordance legible over a bright frame.
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: DesignConstants.backgroundColor.withValues(
+                    alpha: 0.55,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const AppCloseButton(),
+              ),
             ),
           ),
         ],

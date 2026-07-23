@@ -26,7 +26,7 @@ class ScannerPermissionView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingLarge,
+          spacing: DesignConstants.spacingBig,
           children: [
             Icon(
               Symbols.no_photography_sharp,
@@ -34,17 +34,29 @@ class ScannerPermissionView extends StatelessWidget {
               color: DesignConstants.text2nd,
               size: DesignConstants.iconSize2xl,
             ),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: DesignConstants.h1,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: DesignConstants.h1,
+                ),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: DesignConstants.p.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+            AppPrimaryButton(
+              text: 'Try again',
+              onPressed: onRetry,
+              fullWidth: true,
             ),
-            AppPrimaryButton(text: 'Try again', onPressed: onRetry),
           ],
         ),
       ),

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/login/presentation/widgets/auth_header.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/error_message.dart';
+
+// The mail-hero circle diameter — a per-asset glyph frame, not a fungible
+// design token (CLAUDE.md _k carve-out).
+const double _kHeroDiameter = 72;
 
 /// "Check your email" view shown after a sign-up that needs email
 /// confirmation. Renders the destination [email], a resend link, and an
@@ -37,10 +40,7 @@ class VerifyEmailView extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingBig,
       children: [
-        const AuthHeader(
-          title: 'Check your email',
-          subtitle: 'Confirm your email to finish setting up',
-        ),
+        const _VerifyHeader(),
         Column(
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingLarge,
@@ -64,6 +64,56 @@ class VerifyEmailView extends StatelessWidget {
               color: DesignConstants.text2nd,
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The verify step's header: a mail glyph in a soft primary circle over the
+/// title + subtitle. Leads with the mail mark (not the brand wordmark) so the
+/// step instantly reads as "we sent you something, check your inbox".
+class _VerifyHeader extends StatelessWidget {
+  const _VerifyHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingLarge,
+      children: [
+        Container(
+          width: _kHeroDiameter,
+          height: _kHeroDiameter,
+          decoration: BoxDecoration(
+            color: DesignConstants.primaryCard,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Symbols.mark_email_unread_sharp,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.primaryColor,
+            size: DesignConstants.iconSize2xl,
+          ),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              'Check your email',
+              style: DesignConstants.h1,
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              'Confirm your email to finish setting up',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ],
     );

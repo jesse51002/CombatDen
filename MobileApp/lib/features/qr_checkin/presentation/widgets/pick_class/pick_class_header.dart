@@ -9,29 +9,26 @@ class PickClassHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: DesignConstants.spacingSmall,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: AppCloseButton(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        const Align(
+          alignment: Alignment.centerLeft,
+          child: AppCloseButton(),
+        ),
+        // Left-aligned with the class cards below (which inset by
+        // screenHorizontalPadding).
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: DesignConstants.screenHorizontalPadding,
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: DesignConstants.spacingMedium,
-            ),
-            child: Text(
-              "Which class are you checking into?",
-              style: DesignConstants.h1,
-            ),
+          child: Text(
+            "Which class are you checking into?",
+            style: DesignConstants.h1,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

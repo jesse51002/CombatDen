@@ -18,21 +18,25 @@ class PickClassErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: DesignConstants.screenHorizontalPadding,
-        vertical: DesignConstants.spacingBig,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          ErrorMessage(message: message),
-          Center(
-            child: AppPrimaryButton(text: 'Try again', onPressed: onRetry),
-          ),
-        ],
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: DesignConstants.screenHorizontalPadding,
+          vertical: DesignConstants.spacingBig,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingLarge,
+          children: [
+            ErrorMessage(message: message),
+            AppPrimaryButton(
+              text: 'Try again',
+              onPressed: onRetry,
+              fullWidth: true,
+            ),
+          ],
+        ),
       ),
     );
   }

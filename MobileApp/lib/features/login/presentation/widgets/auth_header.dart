@@ -22,7 +22,12 @@ class AuthHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingBig,
       children: [
-        Text('CombatDen', style: DesignConstants.big2),
+        Text(
+          'CombatDen',
+          style: DesignConstants.big2.copyWith(
+            color: DesignConstants.primaryColor,
+          ),
+        ),
         Column(
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingSmall,

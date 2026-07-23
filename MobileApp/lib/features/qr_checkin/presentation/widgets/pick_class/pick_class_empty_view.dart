@@ -15,7 +15,7 @@ class PickClassEmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingMedium,
+          spacing: DesignConstants.spacingBig,
           children: [
             Icon(
               Symbols.event_busy_sharp,
@@ -23,11 +23,23 @@ class PickClassEmptyView extends StatelessWidget {
               color: DesignConstants.text2nd,
               size: DesignConstants.iconSize2xl,
             ),
-            Text('No classes today', style: DesignConstants.h1),
-            Text(
-              "There's nothing on the schedule to check into right now.",
-              textAlign: TextAlign.center,
-              style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                Text(
+                  'No classes today',
+                  textAlign: TextAlign.center,
+                  style: DesignConstants.h1,
+                ),
+                Text(
+                  "There's nothing on the schedule to check into right now.",
+                  textAlign: TextAlign.center,
+                  style: DesignConstants.p.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

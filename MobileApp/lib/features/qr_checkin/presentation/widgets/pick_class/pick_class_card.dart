@@ -61,7 +61,7 @@ class _ClassInfo extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text(occurrence.className, style: DesignConstants.h3),
+        Text(occurrence.className, style: DesignConstants.h2),
         Text(
           '$range (${occurrence.resolvedDurationMinutes} min)',
           style: DesignConstants.p,

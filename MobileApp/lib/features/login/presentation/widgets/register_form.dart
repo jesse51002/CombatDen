@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/utils/validators.dart';
@@ -7,6 +8,7 @@ import 'package:mobile_app/features/login/bloc/login_bloc.dart';
 import 'package:mobile_app/features/login/bloc/login_event.dart';
 import 'package:mobile_app/features/login/bloc/login_state.dart';
 import 'package:mobile_app/features/login/presentation/widgets/auth_header.dart';
+import 'package:mobile_app/features/login/presentation/widgets/info_note.dart';
 import 'package:mobile_app/features/login/presentation/widgets/verify_email_view.dart';
 import 'package:mobile_app/shared/widgets/app_text_field.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
@@ -126,7 +128,11 @@ class _RegisterFormState extends State<RegisterForm> {
                 spacing: DesignConstants.spacingLarge,
                 children: [
                   if (errorMessage != null) ErrorMessage(message: errorMessage),
-                  const _OnFileHint(),
+                  const InfoNote(
+                    icon: Symbols.mail_sharp,
+                    message: 'Use the email your gym has on file. '
+                        "That's how we match you to your membership.",
+                  ),
                   AppTextField(
                     controller: _emailController,
                     label: 'Email',
@@ -166,23 +172,6 @@ class _RegisterFormState extends State<RegisterForm> {
           ),
         );
       },
-    );
-  }
-}
-
-/// The "use the email your gym has on file" hint — the load-bearing copy that
-/// tells a member to sign up with the address the gym already has, so the
-/// backend matches them to their membership rows.
-class _OnFileHint extends StatelessWidget {
-  const _OnFileHint();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'Use the email your gym has on file. '
-      "That's how we match you to your membership.",
-      style: DesignConstants.pSmall.copyWith(color: DesignConstants.text2nd),
-      textAlign: TextAlign.center,
     );
   }
 }

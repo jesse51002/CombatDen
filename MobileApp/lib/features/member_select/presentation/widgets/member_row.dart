@@ -5,10 +5,12 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/member_select/data/models/member_identity.dart';
 
-const double _kLogoDiameter = 48.0;
+const double _kAvatarDiameter = 48.0;
 
-/// One tappable row in the "Who's training?" picker: the gym logo in a circle,
-/// the member's name, the gym name, and a trailing chevron.
+/// One tappable row in the "Who's training?" picker: the member's avatar in a
+/// circle (their photo, or their initials), their name, the gym name, and a
+/// trailing chevron. The avatar is the member — not the gym — so two profiles
+/// on the same shared email (a family) stay distinguishable at a glance.
 class MemberRow extends StatelessWidget {
   const MemberRow({
     super.key,
@@ -34,7 +36,7 @@ class MemberRow extends StatelessWidget {
           child: Row(
             spacing: DesignConstants.spacingLarge,
             children: [
-              _LogoCircle(url: member.gymLogoUrl),
+              _MemberAvatar(member: member),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,22 +73,23 @@ class MemberRow extends StatelessWidget {
   }
 }
 
-/// The gym logo in a circle, falling back to a storefront glyph when the gym
-/// has no logo or the image can't load.
-class _LogoCircle extends StatelessWidget {
-  const _LogoCircle({required this.url});
+/// The member's avatar in a circle: their photo when present, otherwise their
+/// initials on a soft primary tint (a person glyph if there's no name either).
+class _MemberAvatar extends StatelessWidget {
+  const _MemberAvatar({required this.member});
 
-  final String? url;
+  final MemberIdentity member;
 
   @override
   Widget build(BuildContext context) {
+    final photo = member.photoUrl;
     final fallback = _fallback();
-    if (url == null || url!.isEmpty) return fallback;
+    if (photo == null || photo.isEmpty) return fallback;
     return ClipOval(
       child: CachedNetworkImage(
-        imageUrl: url!,
-        width: _kLogoDiameter,
-        height: _kLogoDiameter,
+        imageUrl: photo,
+        width: _kAvatarDiameter,
+        height: _kAvatarDiameter,
         fit: BoxFit.cover,
         placeholder: (_, _) => fallback,
         errorWidget: (_, _, _) => fallback,
@@ -95,20 +98,37 @@ class _LogoCircle extends StatelessWidget {
   }
 
   Widget _fallback() {
+    final initials = _initials();
     return Container(
-      width: _kLogoDiameter,
-      height: _kLogoDiameter,
+      width: _kAvatarDiameter,
+      height: _kAvatarDiameter,
       decoration: BoxDecoration(
         color: DesignConstants.primaryCard,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Icon(
-        Symbols.storefront_sharp,
-        weight: DesignConstants.iconWeight,
-        color: DesignConstants.primaryColor,
-        size: DesignConstants.iconSizeMd,
-      ),
+      child: initials.isEmpty
+          ? Icon(
+              Symbols.person_sharp,
+              weight: DesignConstants.iconWeight,
+              color: DesignConstants.primaryColor,
+              size: DesignConstants.iconSizeMd,
+            )
+          : Text(
+              initials,
+              style: DesignConstants.h2.copyWith(
+                color: DesignConstants.primaryColor,
+              ),
+            ),
     );
+  }
+
+  /// Up to two initials from the member's name (first + last, else first).
+  String _initials() {
+    final first = member.firstName.trim();
+    final last = member.lastName.trim();
+    final a = first.isNotEmpty ? first[0] : '';
+    final b = last.isNotEmpty ? last[0] : '';
+    return '$a$b'.toUpperCase();
   }
 }
