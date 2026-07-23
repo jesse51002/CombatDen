@@ -359,7 +359,7 @@ Scoped / significant dependencies:
 - `flutter_dotenv` — loads `.env.dev` / `.env.prod` at startup for Supabase / Stripe / `API_BASE_URL` (see *Configuration*).
 - `intl` — date/currency formatting. `uuid` — local UUIDs for optimistic creates. `stream_transform` — bloc stream operators (debounce/switchMap).
 - `timezone` — **the Settings gym-timezone picker only** (`features/settings/.../timezone_picker_dialog.dart` + its section): the full IANA database with current UTC offsets. Initialized **lazily on first use** (memoized `ensureTimezonesInitialized`), never at app startup.
-- `web` — Flutter web interop (required by `stripe_js`).
+- `web` — Flutter web interop (required by `stripe_js`). Also used directly in `lib/core/utils/file_download.dart` (Blob → object URL → `<a download>` click) to trigger the browser download of a report/export zip fetched via `ApiClient.getBytes`.
 - `google_fonts` — Geist (the landing typeface) via `GoogleFonts.geist()` / `GoogleFonts.geistMono()` (referenced by `DesignConstants.baseFont` / `monoFont`).
 - `material_symbols_icons` — `Symbols.*_sharp` icons.
 - `flutter_markdown_plus` — renders a read-only markdown prompt panel in one feature screen. Styling from `DesignConstants`. Used only there.

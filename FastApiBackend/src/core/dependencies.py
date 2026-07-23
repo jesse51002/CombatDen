@@ -128,6 +128,10 @@ from src.reconciler.service.reconciler.reconciler_stale_task_sweep import (
 from src.reconciler.service.reconciler.reconciler_subscription_orphan_sweep import (
     SubscriptionOrphanSweep,
 )
+from src.reports.service.reports_full_export_service import (
+    ReportsFullExportService,
+)
+from src.reports.service.reports_period_service import ReportsPeriodService
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -222,6 +226,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.gyms.gyms_router",
             "src.members.members_router",
             "src.ranks.ranks_router",
+            "src.reports.reports_router",
             "src.rewards.rewards_router",
             "src.waivers.waivers_router",
             "src.employees.employees_router",
@@ -417,6 +422,17 @@ class DependencyInjector(containers.DeclarativeContainer):
         default_image_url=settings.default_reward_image_url,
     )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
+
+    # Reports & CSV exports: two read-only zip builders (period report + full
+    # raw export). No Stripe, no writes — just gym-scoped reads.
+    reports_period_service = providers.Factory(
+        ReportsPeriodService,
+        db_pool=db_pool,
+    )
+    reports_full_export_service = providers.Factory(
+        ReportsFullExportService,
+        db_pool=db_pool,
+    )
 
     # Ranks: a thin facade over four concern services. RanksPresets
     # composes RanksMembers for the shared lowest-rank backfill (seeding a

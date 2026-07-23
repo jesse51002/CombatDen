@@ -15,9 +15,9 @@ const Map<String, bool Function(EmployeeRole)> _staffAdminCapabilities = {
   'canAdjustPoints': _canAdjustPoints,
   'canPromoteRank': _canPromoteRank,
   'canEditSchedule': _canEditSchedule,
-  'canSetCustomMembershipPrice': _canSetCustomMembershipPrice,
   'canBulkReprice': _canBulkReprice,
   'canRemovePayerLink': _canRemovePayerLink,
+  'canExportReports': _canExportReports,
 };
 
 bool _canManageStaff(EmployeeRole r) => r.canManageStaff;
@@ -29,10 +29,9 @@ bool _canViewGrowth(EmployeeRole r) => r.canViewGrowth;
 bool _canAdjustPoints(EmployeeRole r) => r.canAdjustPoints;
 bool _canPromoteRank(EmployeeRole r) => r.canPromoteRank;
 bool _canEditSchedule(EmployeeRole r) => r.canEditSchedule;
-bool _canSetCustomMembershipPrice(EmployeeRole r) =>
-    r.canSetCustomMembershipPrice;
 bool _canBulkReprice(EmployeeRole r) => r.canBulkReprice;
 bool _canRemovePayerLink(EmployeeRole r) => r.canRemovePayerLink;
+bool _canExportReports(EmployeeRole r) => r.canExportReports;
 
 /// Staff capabilities: true for owner/admin/front_desk.
 const Map<String, bool Function(EmployeeRole)> _staffCapabilities = {
@@ -41,6 +40,11 @@ const Map<String, bool Function(EmployeeRole)> _staffCapabilities = {
   'canEditMemberProfile': _canEditMemberProfile,
   'canManageMemberBilling': _canManageMemberBilling,
   'canMutateMemberships': _canMutateMemberships,
+  // Single-membership reprice to the plan's ACTIVE price is a member-money
+  // correction front desk performs, so it is staff-wide (owner/admin/front
+  // desk) — NOT staff-admin. Plan-wide reprice (canBulkReprice) stays
+  // staff-admin.
+  'canSetCustomMembershipPrice': _canSetCustomMembershipPrice,
   'canRedeemRewards': _canRedeemRewards,
   'canApproveRedemptions': _canApproveRedemptions,
   'canCheckInMembers': _canCheckInMembers,
@@ -60,6 +64,8 @@ bool _canCreateMembers(EmployeeRole r) => r.canCreateMembers;
 bool _canEditMemberProfile(EmployeeRole r) => r.canEditMemberProfile;
 bool _canManageMemberBilling(EmployeeRole r) => r.canManageMemberBilling;
 bool _canMutateMemberships(EmployeeRole r) => r.canMutateMemberships;
+bool _canSetCustomMembershipPrice(EmployeeRole r) =>
+    r.canSetCustomMembershipPrice;
 bool _canRedeemRewards(EmployeeRole r) => r.canRedeemRewards;
 bool _canApproveRedemptions(EmployeeRole r) => r.canApproveRedemptions;
 bool _canCheckInMembers(EmployeeRole r) => r.canCheckInMembers;

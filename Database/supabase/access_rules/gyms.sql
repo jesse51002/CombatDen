@@ -18,7 +18,7 @@ CREATE POLICY "Gym staff can update own gym"
     WITH CHECK (is_gym_admin_or_owner(gyms.gym_id));
 
 -- Identity columns stay immutable; Stripe Connect columns are written by service_role only
-REVOKE UPDATE (gym_id, stripe_account_id, stripe_onboarding_status) ON TABLE gyms FROM authenticated;
+REVOKE UPDATE (gym_id, created_at, stripe_account_id, stripe_onboarding_status) ON TABLE gyms FROM authenticated;
 
 -- ========================
 -- gym_employees

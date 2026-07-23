@@ -30,7 +30,10 @@ What each test proves:
   regression on ``revenue_kpis``.
 * ``test_revenue_buckets_by_gym_local_month`` — the monthly series buckets a
   charge by the gym's LOCAL month (``AT TIME ZONE``), not UTC. Covers
-  ``mrr_trend``.
+  ``revenue_trend``.
+* ``test_revenue_trend_counts_one_time_charges`` — ``revenue_trend`` counts a
+  succeeded charge whose invoice lines are all ONE-TIME, the money the old
+  recurring-only trend would have dropped (the semantics-widening lock).
 * ``test_all_revenue_metrics_execute_and_validate`` — all six revenue ``.sql``
   files run against the real DB and return a payload that validates against
   their registry model (a read-only smoke that a SQL/shape break can't pass).
@@ -67,7 +70,7 @@ AT_RISK_DAYS = 14
 REVENUE_KEYS = (
     "revenue_hero",
     "revenue_kpis",
-    "mrr_trend",
+    "revenue_trend",
     "revenue_collected",
     "revenue_by_plan",
     "revenue_quality_kpis",
@@ -291,6 +294,71 @@ async def _insert_membership(
     return UUID(str(row["item_id"]))
 
 
+async def _insert_one_time_plan(
+    session, list_price: int
+) -> tuple[UUID, UUID]:
+    """A visible ONE-TIME plan + active price. A charge attributed to its line
+    items is exactly what the old recurring-only trend excluded; the widened
+    ``revenue_trend`` counts it. Returns (plan_id, price_id)."""
+    plan = (
+        await session.execute(
+            text(
+                "INSERT INTO membership_plans_unfiltered "
+                "(gym_id, plan_name, image_url, plan_type, duration_amount, "
+                " duration_unit, is_public, stripe_product_id) "
+                "VALUES (:g, 'Growth Test One-time', :img, 'one_time', 1, "
+                " 'month', true, :prod) RETURNING plan_id"
+            ),
+            {
+                "g": str(GYM),
+                "img": "https://cdn.combatden.net/membership/presets/activity-01.jpg",
+                "prod": f"prod_test_{uuid4().hex}",
+            },
+        )
+    ).mappings().one()
+    plan_id = UUID(str(plan["plan_id"]))
+    price = (
+        await session.execute(
+            text(
+                "INSERT INTO membership_plan_prices_unfiltered "
+                "(plan_id, gym_id, stripe_price_id, price, is_active) "
+                "VALUES (:p, :g, :sp, :price, true) RETURNING price_id"
+            ),
+            {
+                "p": str(plan_id),
+                "g": str(GYM),
+                "sp": f"price_test_{uuid4().hex}",
+                "price": list_price,
+            },
+        )
+    ).mappings().one()
+    return plan_id, UUID(str(price["price_id"]))
+
+
+async def _insert_membership_line_item(
+    session, invoice_id: UUID, item_id: UUID, amount: int
+) -> None:
+    """A membership line item on ``invoice_id`` pointing at membership
+    ``item_id`` (``amount`` cents). Its membership's plan_type is what the OLD
+    apportionment read to classify the charge; ``revenue_trend`` ignores the
+    lines entirely and counts the whole charge."""
+    await session.execute(
+        text(
+            "INSERT INTO member_invoice_line_items "
+            "(line_item_id, invoice_id, gym_id, item_type, name, amount, "
+            " item_id) "
+            "VALUES (:lid, :inv, :g, 'membership', 'One-time pack', :amt, :it)"
+        ),
+        {
+            "lid": f"il_test_{uuid4().hex}",
+            "inv": str(invoice_id),
+            "g": str(GYM),
+            "amt": amount,
+            "it": str(item_id),
+        },
+    )
+
+
 async def _delete_metric_row(db_pool, key: str) -> None:
     """Delete exactly the (seeded gym, key) growth-cache row a test wrote."""
     async with db_pool.session() as session:
@@ -391,9 +459,9 @@ async def test_revenue_buckets_by_gym_local_month(db_pool, created) -> None:
 
     Reads the gym's timezone and builds a charge instant one hour before the
     local month start — the PREVIOUS local month, but (for a UTC-behind tz like
-    the seeded gym's America/Chicago) still the CURRENT UTC month. The charge
-    rides an empty invoice, so ``mrr_trend`` attributes it fully to recurring
-    and drops it into exactly one month bucket:
+    the seeded gym's America/Chicago) still the CURRENT UTC month.
+    ``revenue_trend`` counts the whole succeeded charge amount (no
+    apportionment) and drops it into exactly one month bucket:
 
     * the GYM-LOCAL month bucket rises by the charge amount, and
     * the UTC month bucket does NOT move.
@@ -427,8 +495,8 @@ async def test_revenue_buckets_by_gym_local_month(db_pool, created) -> None:
         "month — choose a boundary instant that crosses the month line"
     )
 
-    trend_def = REGISTRY_BY_KEY["mrr_trend"]
-    before = _series_points(await _run_metric(db_pool, trend_def), "mrr")
+    trend_def = REGISTRY_BY_KEY["revenue_trend"]
+    before = _series_points(await _run_metric(db_pool, trend_def), "revenue")
 
     amount = 4237
     async with db_pool.session() as session:
@@ -440,10 +508,54 @@ async def test_revenue_buckets_by_gym_local_month(db_pool, created) -> None:
         await session.commit()
     created.track_member(member_id)
 
-    after = _series_points(await _run_metric(db_pool, trend_def), "mrr")
+    after = _series_points(await _run_metric(db_pool, trend_def), "revenue")
 
     assert after.get(local_bucket, 0) - before.get(local_bucket, 0) == amount
     assert after.get(utc_bucket, 0) - before.get(utc_bucket, 0) == 0
+
+
+async def test_revenue_trend_counts_one_time_charges(db_pool, created) -> None:
+    """``revenue_trend`` counts a succeeded charge whose invoice lines are all
+    ONE-TIME — the money the OLD recurring-only trend would have dropped.
+
+    Seeds a one-time plan + membership, an invoice bearing a single one-time
+    membership line item, and a succeeded payment for it dated now. The old
+    ``mrr_trend`` apportioned each charge by its lines and kept only the
+    recurring share, so a fully one-time charge contributed ZERO; the widened
+    ``revenue_trend`` counts the whole charge with no apportionment, so the
+    series total rises by exactly the amount.
+    """
+    trend_def = REGISTRY_BY_KEY["revenue_trend"]
+    before = sum(
+        _series_points(await _run_metric(db_pool, trend_def), "revenue").values()
+    )
+
+    amount = 7900
+    start = date.today() - timedelta(days=2)
+    now = datetime.now(UTC)
+    async with db_pool.session() as session:
+        member_id = await _insert_member(session)
+        plan_id, price_id = await _insert_one_time_plan(
+            session, list_price=amount
+        )
+        item_id = await _insert_membership(
+            session, member_id, plan_id, price_id, total_price=amount,
+            start_date=start,
+        )
+        invoice_id = await _insert_invoice(session, member_id, amount)
+        await _insert_membership_line_item(
+            session, invoice_id, item_id, amount
+        )
+        await _insert_payment(session, invoice_id, member_id, amount, now)
+        await session.commit()
+    created.track_member(member_id)
+    created.track_plan_db(plan_id)
+
+    after = sum(
+        _series_points(await _run_metric(db_pool, trend_def), "revenue").values()
+    )
+
+    assert after - before == amount
 
 
 async def test_all_revenue_metrics_execute_and_validate(db_pool) -> None:

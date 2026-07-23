@@ -31,7 +31,7 @@ const Map<String, String> kMetricWindowLabels = {
   // Monthly histories.
   'members_trend': 'Monthly, all-time',
   'members_gained_lost': 'Monthly, all-time',
-  'mrr_trend': 'Monthly, all-time',
+  'revenue_trend': 'Monthly, all-time',
   'revenue_collected': 'Monthly, all-time',
   'churn_trend': 'Monthly, all-time',
   'trials_started_vs_converted': 'Monthly, all-time',
