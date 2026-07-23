@@ -233,9 +233,13 @@ class Settings(BaseSettings):
     growth_compute_lock_key: str = "growth_compute"
     # The sweep's own lease. Deliberately NOT lock_ttl_seconds (60s): that is
     # sized for a single billing op, while a sweep walks every metric for every
-    # gym. A lease that expires mid-sweep lets a second container start a
-    # duplicate one, so this is sized to outlive a full run.
-    growth_compute_lock_ttl_seconds: int = 1800
+    # gym. It must outlive a full run so a mid-sweep expiry can't let a second
+    # container start a duplicate — but no longer, because a hard-killed
+    # backend (kill -9 skips the release) orphans the lease for exactly this
+    # long before it self-heals. A measured full pass is ~0.1s/gym (seconds
+    # for a large fleet), so 10 min is generous headroom on a slow DB while
+    # keeping the post-crash orphan window short.
+    growth_compute_lock_ttl_seconds: int = 600
 
     # Check-in early window: how many hours BEFORE a class's start time check-in
     # opens. A check-in (single or batch "update attendees") for an occurrence
