@@ -200,6 +200,14 @@ class _AuthenticatedGateState
         if (selectedGym.gymId != null) {
           return BlocBuilder<KioskSessionCubit, KioskSessionState>(
             builder: (context, kiosk) {
+              // Until the persisted kiosk flag has been read, show a neutral
+              // loader — NEVER _MembersWorkspace. This closes the boot/reload
+              // window where the old `inactive` initial state mounted the admin
+              // workspace (whose nested navigator boots at the URL fragment and
+              // fires its backend fetch) before `_restore` could swap in the
+              // kiosk. A member on a kiosk iPad can no longer point the address
+              // bar at an admin route and have it render on a reload.
+              if (kiosk.isRestoring) return const LoadingScreen();
               if (kiosk.isEnded) return const KioskLockedScreen();
               if (kiosk.isKioskVisible) return const KioskScreen();
               return _MembersWorkspace(

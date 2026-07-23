@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -30,6 +31,16 @@ import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 /// *first* and persistence is cleared **only** once the session is confirmed
 /// gone ([handleSignedOut] gated on [_sessionGone]) — a failed sign-out leaves
 /// the kiosk up rather than dropping to admin.
+///
+/// ## Boot: no admin-flash
+/// The cubit starts synchronously in [KioskStatus.restoring] (before the async
+/// [_restore] reads localStorage), which the gate renders as a neutral loader —
+/// never the admin workspace. So on a reload/refresh the persisted flag is read
+/// *before* anything decides whether to mount the admin workspace; a member on
+/// a kiosk iPad can't point the address bar at an admin route and have it render
+/// during the restore window. `_restore` resolves [restoring] to [inactive]
+/// when nothing is persisted, so a genuine non-kiosk admin still reaches the
+/// workspace once the read completes.
 class KioskSessionCubit extends Cubit<KioskSessionState> {
   KioskSessionCubit({
     required KioskSessionStore store,
@@ -44,7 +55,7 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
         _now = now,
         _runway = runway,
         _graceWindow = graceWindow,
-        super(const KioskSessionState.inactive()) {
+        super(const KioskSessionState.restoring()) {
     unawaited(_restore());
   }
 
@@ -73,14 +84,28 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
 
   // ── Entry / exit ──
 
-  /// Enter kiosk: pin the absolute deadline, start the runway timers, flip to
-  /// [KioskStatus.active], and persist the flag + deadline.
-  void enterKiosk() {
+  /// Enter kiosk: persist the flag + absolute deadline **first**, then start the
+  /// runway timers and flip to [KioskStatus.active].
+  ///
+  /// The save is *awaited before* the state flips (the caller awaits this): a
+  /// reload in the microtask gap must never catch a live [active] session whose
+  /// flag has not been written yet — that would restore straight into the admin
+  /// workspace (fail-OPEN). Persist-then-enter closes that window. A failed save
+  /// does **not** enter: the state is left untouched (the admin keeps the
+  /// workspace) rather than entering a kiosk the next boot can't restore.
+  Future<void> enterKiosk() async {
     final deadline = _now().add(_runway);
+    try {
+      await _store.save(deadline);
+    } catch (e, s) {
+      log('Kiosk enter aborted: flag persist failed',
+          error: e, stackTrace: s);
+      return; // fail-closed: never enter without a durable flag
+    }
+    if (isClosed) return;
     _flowCount = 0;
     _scheduleTimers(deadline);
     emit(KioskSessionState(status: KioskStatus.active, deadline: deadline));
-    unawaited(_store.save(deadline));
   }
 
   /// Leave kiosk: sign out **first**. Persistence is *not* touched here — it is
@@ -174,7 +199,12 @@ class KioskSessionCubit extends Cubit<KioskSessionState> {
   Future<void> _restore() async {
     final (active, deadline) = await _store.read();
     if (isClosed) return;
-    if (!active || deadline == null) return; // nothing persisted
+    if (!active || deadline == null) {
+      // Nothing persisted — a genuine non-kiosk admin. Resolve the initial
+      // [restoring] loader to [inactive] so the gate mounts the workspace.
+      emit(const KioskSessionState.inactive());
+      return;
+    }
     final now = _now();
     if (!now.isBefore(deadline)) {
       // The runway blew while the tab was closed. Fail closed: don't enter

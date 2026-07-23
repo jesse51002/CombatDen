@@ -172,6 +172,14 @@ class _AuthGateHost extends StatelessWidget {
         builder: (context) {
           final loginBloc = context.read<LoginBloc>();
           return BlocProvider<KioskSessionCubit>(
+            // Non-lazy: construct the cubit as soon as this host builds — before
+            // the authenticated branch first builds its BlocBuilder — so it is
+            // already in [KioskStatus.restoring] (and `_restore` already reading
+            // localStorage, in parallel with the gym fetch) when the gate first
+            // reads it. This guarantees there is no lazy-construct race where an
+            // earlier read could observe a pre-restore state and mount the admin
+            // workspace.
+            lazy: false,
             create: (_) => KioskSessionCubit(
               store: KioskSessionStore(),
               dispatchSignOut: () =>

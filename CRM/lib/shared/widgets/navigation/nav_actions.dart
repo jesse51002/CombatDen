@@ -65,7 +65,10 @@ Future<void> _confirmEnterKiosk(BuildContext context) async {
     confirmLabel: 'Enter Kiosk',
   );
   if (!confirmed) return;
-  cubit.enterKiosk();
+  // enterKiosk persists the kiosk flag before flipping to active; await it so
+  // the durable-before-entering guarantee (SEC-2) holds. It swallows a persist
+  // failure internally (staying out of kiosk), so no try/catch is needed here.
+  await cubit.enterKiosk();
 }
 
 /// Opens the add-member flow from the primary nav CTA. When it closes without
