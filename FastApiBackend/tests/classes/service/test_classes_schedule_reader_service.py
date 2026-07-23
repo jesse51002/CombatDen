@@ -10,8 +10,8 @@ date-only key would conflate two same-day occurrences. These tests cover:
 
 * a multi-version class renders its pre-mint days from the OLD version and
   its post-mint days from the NEW version, in the same window;
-* a soft-deleted class renders only occurrences that have already ENDED
-  (no in-session/future rows);
+* a soft-deleted OR PAUSED class renders only occurrences that have already
+  ENDED (no in-session/future rows);
 * attendance / sign-up counts are keyed by the occurrence's IDENTITY
   ``(class_id, original_date, original_time)`` — a rescheduled occurrence's
   counts follow its ORIGINAL slot, not its displayed ``class_date``;
@@ -65,6 +65,7 @@ def _class_row(
     gym_id: UUID,
     class_name: str = "Test Class",
     max_capacity: int | None = None,
+    is_active: bool = True,
     is_deleted: bool = False,
 ) -> dict:
     """A ``classes_board_classes.sql``-shaped identity row."""
@@ -77,7 +78,7 @@ def _class_row(
         "allowed_plan_ids": None,
         "image_url": "https://example.test/class.jpg",
         "points_worth": 10,
-        "is_active": True,
+        "is_active": is_active,
         "is_deleted": is_deleted,
         "created_at": datetime.now(UTC),
     }
@@ -273,6 +274,43 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     service = _service(
         classes=[
             _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
+        ],
+        versions=[version],
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day5)
+
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day2, day3}
+    assert day4 not in rendered
+    assert day5 not in rendered
+
+
+async def test_paused_class_renders_past_only(monkeypatch) -> None:
+    """Same treatment as a soft-deleted class: a PAUSED class
+    (``gym_classes.is_active = false``) also renders only occurrences that
+    have already ENDED — in-session/future occurrences do not. A paused
+    class is un-checkin-able (``CheckinClassResolver``) and un-sign-up-able
+    (``SignupService``), so the board must never offer one of its live/future
+    occurrences; it stays visible (and un-pausable) only on the
+    class-management endpoints (``GET /api/v1/classes``,
+    ``GET /api/v1/classes/{class_id}``). See the ``class-system-guide``
+    skill."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    # 09:00-10:00 daily; "now" is day3 10:00 -> day3 has JUST ended.
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    version = _daily_version_row(
+        class_id=class_id,
+        gym_id=gym_id,
+        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+        class_time=time(9, 0),
+    )
+    service = _service(
+        classes=[
+            _class_row(class_id=class_id, gym_id=gym_id, is_active=False)
         ],
         versions=[version],
     )

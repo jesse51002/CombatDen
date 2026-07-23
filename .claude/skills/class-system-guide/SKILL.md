@@ -226,10 +226,36 @@ bounds stretched to its exceptions' original/target dates; the result is
 filtered back to the view window by EFFECTIVE date — a moved-in occurrence
 renders here (counts still load, keyed by its out-of-window original date),
 a moved-out one renders only in its target window. The one time-dependent
-rule: a soft-deleted class emits only occurrences whose END (`occurred_at`
-+ duration) is at/before now. Board rows carry `original_date` +
-`original_time` (addressing) alongside `class_date` / `resolved_class_time`
+rule: a soft-deleted OR PAUSED class emits only occurrences whose END
+(`occurred_at` + duration) is at/before now. Board rows carry `original_date`
++ `original_time` (addressing) alongside `class_date` / `resolved_class_time`
 (display).
+
+**Paused = same past-only treatment as deleted, on this endpoint.**
+`gym_classes.is_active=false` (PAUSED — the CRM's class-active toggle,
+distinct from soft-delete) is suppressed to past-only exactly like a
+soft-DELETED class: `ClassesScheduleReaderService` filters a paused class's
+occurrences down to already-ENDED ones, so `GET /api/v1/classes/instances`
+(the ONE feed behind the CRM schedule board, the CRM dashboard, the kiosk
+check-in grid, and the member portal) never offers a live/future occurrence
+of a paused class. Its already-run past keeps rendering (a paused class's
+real attendance history must stay visible on the dashboard). This is why:
+**check-in and sign-up both REJECT a paused occurrence** —
+`CheckinClassResolver.resolve` raises
+`CheckinClassInactiveError("Class is not active")`
+(`checkin_class_resolver.py`) and `SignupService.create` does the
+same (`signup_service.py`) — a `ValueError` subclass from
+`src/checkin/checkin_exceptions.py` that the API surfaces as
+`400 {"detail": "Class is not active", "code": "class_inactive"}` — so no
+occurrence view may ever hand out an occurrence either of those would
+refuse. Filtering server-side, once, fixes
+every client at once with zero client-side pause-awareness needed. A paused
+class stays visible (and un-pausable) only through the **class-management
+endpoints** — `GET /api/v1/classes` and `GET /api/v1/classes/{class_id}` —
+which are a DIFFERENT read (`ClassesCrudService`, not the reader/expander)
+and need no change: that is where an owner sees and un-pauses one. This
+asymmetry with the identity/management endpoints (board hides, management
+shows) is deliberate — do not "fix" it into matching the other's filter.
 
 ## 4. Cancel / reschedule — any date, keys never change
 

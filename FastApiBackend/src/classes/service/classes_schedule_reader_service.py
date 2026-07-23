@@ -13,10 +13,14 @@ flags, and the attendance / sign-up counts (all keyed by the occurrence's
 full identity, ``(class_id, original_date, original_time)`` — two same-day
 slots enrich independently).
 
-The one time-dependent rule: a soft-DELETED class emits only occurrences that
-have already ENDED (``occurred_at`` + duration at/before now) — its past is a
-permanent record, but a dead class produces no in-session or future
-occurrences.
+The one time-dependent rule: a soft-DELETED OR PAUSED class emits only
+occurrences that have already ENDED (``occurred_at`` + duration at/before
+now) — its past is a permanent record, but a dead or paused class produces no
+in-session or future occurrences. A paused class (``gym_classes.is_active =
+false``) is un-checkin-able (``CheckinClassResolver``) and un-sign-up-able
+(``SignupService``), so the board never offers a live/future occurrence of
+one; it stays visible (unpaused) only through the class-management endpoints
+(``GET /api/v1/classes``, ``GET /api/v1/classes/{class_id}``).
 """
 
 import asyncio
@@ -188,9 +192,12 @@ class ClassesScheduleReaderService:
         original/target dates (so a cross-window reschedule's identity date
         is enumerated), then filters back to the view window by EFFECTIVE
         date — a moved-out occurrence renders in its target window only. A
-        soft-deleted class keeps only occurrences that already ENDED (its
-        past is a record; a dead class has no live/future slots — the delete
-        path wiped their sign-ups and check-ins).
+        soft-deleted OR paused class keeps only occurrences that already
+        ENDED (its past is a record; a dead class has no live/future slots —
+        the delete path wiped their sign-ups and check-ins; a paused class is
+        un-checkin-able and un-sign-up-able, so the board must not offer a
+        live/future occurrence of one — it stays editable/unpausable only on
+        the class-management endpoints).
         """
         expand_start, expand_end = self._widened_bounds(
             start_date, end_date, instance_rows
@@ -208,7 +215,7 @@ class ClassesScheduleReaderService:
             for occ in occurrences
             if start_date <= occ.effective_date <= end_date
         ]
-        if class_row["is_deleted"]:
+        if class_row["is_deleted"] or not class_row["is_active"]:
             occurrences = [
                 occ for occ in occurrences if self._has_ended(occ, now)
             ]
@@ -302,7 +309,7 @@ class ClassesScheduleReaderService:
     @staticmethod
     def _has_ended(occ: EffectiveOccurrence, now: datetime) -> bool:
         """Whether the occurrence is over — its start + duration is at/before
-        now (the deleted-class past-only filter)."""
+        now (the deleted-or-paused-class past-only filter)."""
         end = occ.occurred_at + timedelta(minutes=occ.duration_minutes)
         return end <= now
 
