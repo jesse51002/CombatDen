@@ -21,13 +21,27 @@ SELECT
     COUNT(DISTINCT m.member_id) FILTER (
         WHERE m.status = 'frozen'
     ) AS frozen,
-    COUNT(DISTINCT m.member_id) FILTER (
-        -- Match the Overdue tab (overdue_view.sql) and the row badge
-        -- (is_membership_overdue): a cancelled membership keeps its stale
-        -- past next_due_date forever, so without this guard the subtitle
-        -- count drifts permanently above what the Overdue tab lists.
-        WHERE m.status != 'cancelled'
-        AND m.next_due_date < (now() AT TIME ZONE g.timezone)::date
+    (
+        -- Counted as its own deduped subquery, NOT as a FILTER over the
+        -- outer FROM, so this tally lists exactly what the Overdue tab
+        -- (overdue_view.sql) shows. Two things have to match, and both
+        -- live here rather than in the outer query so the other tallies
+        -- (active / trial / frozen) keep their undeduped semantics:
+        --   1. the DISTINCT ON -- newest membership per (member, plan),
+        --      identical to the tab's latest_memberships CTE. Without it
+        --      a member holding an old past-due row AND a newer current
+        --      row on the same plan is counted here but absent there.
+        --   2. the shared overdue predicate.
+        SELECT count(DISTINCT lm.member_id)
+        FROM (
+            SELECT DISTINCT ON (member_id, gym_id, plan_id) *
+            FROM member_memberships_status
+            WHERE gym_id = :gym_id
+            ORDER BY member_id, gym_id, plan_id,
+                     start_date DESC, created_at DESC
+        ) lm
+        JOIN gyms lg ON lg.gym_id = lm.gym_id
+        WHERE ({is_overdue})
     ) AS overdue,
     (
         SELECT count(*)

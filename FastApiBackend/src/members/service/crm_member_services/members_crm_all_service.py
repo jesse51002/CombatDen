@@ -21,9 +21,9 @@ from src.members.service.crm_member_services.members_crm_base_service import (
 )
 from src.members.service.members_status_mapping import (
     is_member_dormant,
-    is_membership_overdue,
 )
 from src.shared.formatters import format_price
+from src.shared.membership_status import is_membership_overdue
 from src.shared.sql_loader import load_sql
 
 PRIORITY_LOWEST = 99

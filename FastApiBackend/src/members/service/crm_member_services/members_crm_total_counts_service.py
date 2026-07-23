@@ -12,6 +12,7 @@ from src.members.service.members_status_mapping import (
     load_member_dormant_sql,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import load_membership_overdue_sql
 from src.shared.sql_loader import load_sql
 
 # The dormant tally counts members straight off the members table, so it
@@ -19,6 +20,14 @@ from src.shared.sql_loader import load_sql
 DORMANT_COUNT_SQL = load_member_dormant_sql(
     "dormant_m.member_id",
     "dormant_m.gym_id",
+)
+
+# The overdue tally runs over its own deduped subquery so it lists exactly
+# what the Overdue tab shows, so it correlates the shared predicate to that
+# subquery's aliases (lm / lg), not to the outer FROM.
+OVERDUE_COUNT_SQL = load_membership_overdue_sql(
+    "lm",
+    "(now() AT TIME ZONE lg.timezone)::date",
 )
 
 
@@ -54,7 +63,10 @@ class CrmTotalCountsService:
         """
         sql = load_sql(
             SQL_DIR / "crm_views" / "total_counts.sql",
-            {"is_dormant": DORMANT_COUNT_SQL},
+            {
+                "is_dormant": DORMANT_COUNT_SQL,
+                "is_overdue": OVERDUE_COUNT_SQL,
+            },
         )
         params = {
             "gym_id": str(gym_id),

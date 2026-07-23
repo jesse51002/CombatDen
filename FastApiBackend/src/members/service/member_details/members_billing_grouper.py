@@ -12,13 +12,11 @@ from src.members.schema.members_billing_schema import (
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
 )
-from src.members.service.members_status_mapping import (
-    is_membership_overdue,
-)
 from src.memberships.memberships_schema import (
     MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
+from src.shared.membership_status import is_membership_overdue
 
 
 class MembershipOverviewContext(BaseModel):

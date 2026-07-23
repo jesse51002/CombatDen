@@ -53,18 +53,26 @@ def test_active_status_matches_the_active_badge() -> None:
     )
     assert "m.status = :st_active" in where
     assert "mp.plan_type != :pt_trial" in where  # excludes trials
-    assert "m.next_due_date >= " in where  # excludes overdue
+    # Excludes overdue as the NEGATION of the ONE shared predicate, so
+    # "is overdue" and "is not overdue" can never drift apart.
+    assert "NOT (" in where
+    assert "m.next_due_date < " in where
     assert params["st_active"] == "active"
     assert params["pt_trial"] == "trial"
 
 
-def test_overdue_status_excludes_cancelled() -> None:
-    where, params = _build(
+def test_overdue_status_is_active_only() -> None:
+    where, _ = _build(
         MembersListFilters(membership_status=[CrmMemberStatus.overdue]),
     )
-    assert "m.status != :st_cancelled" in where
+    # The shared predicate: ONLY an active membership can be overdue. A
+    # frozen one bills $0 and a cancelled / ended one is finished, so
+    # none of them is money the gym can still collect.
+    assert "m.status = 'active'" in where
+    assert "m.next_due_date IS NOT NULL" in where
     assert "m.next_due_date < " in where
-    assert params["st_cancelled"] == "cancelled"
+    # The old hand-written "not cancelled" form is gone for good.
+    assert "m.status != :st_cancelled" not in where
 
 
 def test_multiple_statuses_or_within_dimension() -> None:
@@ -77,7 +85,7 @@ def test_multiple_statuses_or_within_dimension() -> None:
     # inside one AND-ed status group.
     assert " OR " in where
     assert "mp.plan_type != :pt_trial" in where  # the active predicate
-    assert "m.status != :st_cancelled" in where  # the overdue predicate
+    assert "m.status = 'active'" in where  # the overdue predicate
 
 
 def test_plan_ids_filter_is_anded_in_and_scoped_to_live() -> None:

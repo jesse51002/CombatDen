@@ -33,7 +33,7 @@ from src.members.service.member_details.members_billing_grouper import (
     MembersBillingGrouper,
     MembershipOverviewContext,
 )
-from src.members.service.members_status_mapping import is_membership_overdue
+from src.shared.membership_status import is_membership_overdue
 
 TODAY = date(2026, 6, 4)
 PAST = date(2026, 5, 1)
@@ -74,10 +74,16 @@ def test_is_membership_overdue_truth_table():
     assert is_membership_overdue("active", PAST, TODAY) is True
     assert is_membership_overdue("active", FUTURE, TODAY) is False
     assert is_membership_overdue("active", None, TODAY) is False
-    # Cancelled is never overdue, even when past due.
-    assert is_membership_overdue("cancelled", PAST, TODAY) is False
     # Strictly past — the due date itself is not yet overdue.
     assert is_membership_overdue("active", TODAY, TODAY) is False
+    # ONLY an active membership can be overdue. A frozen one is a
+    # deliberate pause billing $0 (a synthetic 100%-off through the
+    # sync), and a cancelled / ended one is finished — none of the three
+    # is money the gym can still collect, so a stale next_due_date on
+    # them must never read as overdue.
+    assert is_membership_overdue("frozen", PAST, TODAY) is False
+    assert is_membership_overdue("cancelled", PAST, TODAY) is False
+    assert is_membership_overdue("ended", PAST, TODAY) is False
 
 
 def test_card_marks_past_due_membership_overdue():
@@ -145,6 +151,7 @@ def _usage(*, item_id, plan_id, **overrides) -> MembershipUsage:
         "start_date": date(2026, 1, 1),
         "plan_type": PlanType.recurring,
         "status": "active",
+        "reference_date": TODAY,
         "class_count": 12,
         "classes_used": 3,
         "classes_remaining": 9,

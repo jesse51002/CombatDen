@@ -37,10 +37,10 @@ from src.members.service.member_details.members_billing_grouper import (
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
 )
-from src.members.service.members_status_mapping import (
+from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import (
     is_membership_overdue,
 )
-from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 _DETAILS_SQL = SQL_DIR / "member_details"

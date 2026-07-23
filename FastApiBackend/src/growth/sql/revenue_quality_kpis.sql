@@ -62,18 +62,18 @@ open_invoices AS (
       AND i.status = 'open'
 ),
 overdue AS (
-    -- Deliberately the identical test to revenue_hero's overdue segment, so
-    -- the two overdue numbers on the Growth page can never disagree. Same
-    -- active-only rule as the recurring tiles above; it differs only in
-    -- spanning every plan type and in keying off next_due_date rather than
-    -- start_date.
+    -- The shared overdue predicate (src/shared/sql/membership_overdue.sql,
+    -- injected as the is_overdue template variable) — literally the same
+    -- text as revenue_hero's
+    -- overdue segment and the members-list Overdue tab, so the two overdue
+    -- numbers on the Growth page can never disagree. It spans every plan type
+    -- and keys off next_due_date rather than start_date, unlike the recurring
+    -- tiles above.
     SELECT COALESCE(sum(mms.total_price), 0)::bigint AS cents
     FROM member_memberships_status mms
     CROSS JOIN gym_day gd
     WHERE mms.gym_id = CAST(:gym_id AS UUID)
-      AND mms.status = 'active'
-      AND mms.next_due_date IS NOT NULL
-      AND mms.next_due_date < gd.today
+      AND ({is_overdue})
 )
 SELECT jsonb_build_object(
     'tiles', jsonb_build_array(

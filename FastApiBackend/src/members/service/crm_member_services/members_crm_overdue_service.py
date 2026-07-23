@@ -12,9 +12,11 @@ from src.members.schema.members_crm_members_list_schema import (
     OverdueViewRow,
 )
 from src.members.service.crm_member_services.members_crm_base_service import (
+    GYM_TODAY_SQL,
     CrmBaseViewService,
 )
 from src.shared.formatters import format_price
+from src.shared.membership_status import load_membership_overdue_sql
 from src.shared.sql_loader import load_sql
 
 
@@ -48,7 +50,12 @@ class CrmOverdueViewService(CrmBaseViewService):
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
             SQL_DIR / "crm_views" / "overdue_view.sql",
-            {"where_clause": where},
+            {
+                "where_clause": where,
+                "is_overdue": load_membership_overdue_sql(
+                    "m", GYM_TODAY_SQL
+                ),
+            },
         )
         params["limit"] = count
         params["offset"] = start_index

@@ -8,9 +8,12 @@
 --                 membership terminal, or only trial / one_time packs left and
 --                 no activity inside the window). A lost member is never also
 --                 reported as active.
---   2. overdue  - an active membership whose due date has already passed. Same
---                 test as revenue_hero's overdue segment, so the money tile
---                 and this bucket can never disagree about who is late.
+--   2. overdue  - an active membership whose due date has already passed. The
+--                 shared predicate (src/shared/sql/membership_overdue.sql,
+--                 injected as the is_overdue template variable), so this
+--                 bucket, the money tiles, the members-list Overdue tab and
+--                 the check-in gate are ONE text and cannot disagree about
+--                 who is late.
 --   3. frozen   - a frozen membership (member_memberships_status derives the
 --                 freeze from the SUBJECT member's freeze window).
 --   4. trial    - an active membership on a trial plan.
@@ -30,11 +33,7 @@ member_flags AS (
         bool_or(
             mms.status = 'active' AND p.plan_type = 'trial'
         ) AS has_trial,
-        bool_or(
-            mms.status = 'active'
-            AND mms.next_due_date IS NOT NULL
-            AND mms.next_due_date < gd.today
-        ) AS has_overdue
+        bool_or({is_overdue}) AS has_overdue
     FROM member_memberships_status mms
     JOIN membership_plans p ON p.plan_id = mms.plan_id
     CROSS JOIN gym_day gd

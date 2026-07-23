@@ -18,6 +18,7 @@ from src.members.service.members_status_mapping import (
     load_member_dormant_sql,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import load_membership_overdue_sql
 
 TERMINAL_STATUSES: frozenset[CrmMemberStatus] = frozenset(
     {CrmMemberStatus.cancelled, CrmMemberStatus.ended},
@@ -160,10 +161,11 @@ class CrmBaseViewService:
             conditions: List of WHERE conditions to append to.
             params: Dict of query params to append to.
         """
-        not_overdue = (
-            "(m.next_due_date IS NULL "
-            f"OR m.next_due_date >= {GYM_TODAY_SQL})"
-        )
+        # Both the overdue filter and its negation are derived from the
+        # ONE shared predicate, so "is overdue" and "is not overdue" can
+        # never drift apart the way two hand-written texts would.
+        overdue_sql = load_membership_overdue_sql("m", GYM_TODAY_SQL)
+        not_overdue = f"NOT ({overdue_sql})"
 
         if CrmMemberStatus.active in statuses:
             conditions.append(
@@ -186,11 +188,7 @@ class CrmBaseViewService:
             params["st_frozen"] = MembershipDbStatus.frozen.value
 
         if CrmMemberStatus.overdue in statuses:
-            conditions.append(
-                "(m.status != :st_cancelled "
-                f"AND m.next_due_date < {GYM_TODAY_SQL})"
-            )
-            params["st_cancelled"] = MembershipDbStatus.cancelled.value
+            conditions.append(f"({overdue_sql})")
 
         if CrmMemberStatus.dormant in statuses:
             # Matches exactly when the dormant badge renders: the member
