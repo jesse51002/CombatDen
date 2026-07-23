@@ -211,6 +211,79 @@ from that member's own memberships only.
 - Whether to constrain a linked discount to the **same plan** ("same membership
   type") to keep the tier math unambiguous.
 
+## 7. Disputes / chargebacks — no handler (not built)
+
+**Current state — a dispute is invisible.** `StripeWebhooksService._dispatch`
+routes exactly seven events (`invoice.paid`, `invoice_payment.paid`,
+`invoice.payment_failed`, `refund.created`, `refund.updated`, `account.updated`,
+`customer.subscription.deleted`). **No `charge.dispute.*` event is handled
+anywhere** — so when a member disputes a charge, the money leaves the gym's
+Stripe balance (plus Stripe's dispute fee) and the CRM ledger never learns:
+`member_charges` keeps the original `succeeded payment` row at full value, the
+member's billing detail overstates what the gym actually collected, and the
+reports/full-export CSVs inherit the same overstatement. The reconciler cannot
+self-heal it either — `InvoiceFetchSweep` re-applies paid/failed/refund records
+through the same webhook `record()` seams, and there is no dispute seam for it
+to call.
+
+### What it takes
+- **Handlers for the dispute lifecycle** — at minimum `charge.dispute.created`
+  (funds withdrawn + a dispute fee) and `charge.dispute.closed` (won → funds
+  returned; lost → the withdrawal stands). `charge.dispute.funds_reinstated` /
+  `funds_withdrawn` are the precise money-movement events if per-event accuracy
+  is wanted over the created/closed pair.
+- **Ledger shape mirrors the refund handler.** `refund_handler.py` is the model
+  to copy: record the debit as a **negative `member_charges` row linked to the
+  original charge**, idempotent on the Stripe object id. A dispute is the same
+  shape (a negative against a prior payment) plus a `won` case that reverses the
+  negative, so the existing `refunds_charge_id` linkage and idempotency pattern
+  carry over rather than needing a new table.
+- **A staff surface.** A disputed member has to be visible — a dispute is
+  usually also a retention/eviction decision, not just an accounting one.
+
+### Open questions
+- Whether a dispute is a distinct `member_charges.kind` / `status` or reuses the
+  refund-shaped negative row with a new status value.
+- Whether the dispute FEE is modelled at all (it is gym-borne, has no member
+  attribution, and today nothing in the schema holds a non-member-attributed
+  cost).
+- Whether a lost dispute should drive any membership lifecycle action
+  (auto-cancel the membership, flag the member) or stay purely financial.
+
+## 8. Sales tax / VAT on invoices (not built)
+
+**Current state — invoices are built tax-free.** There is no tax rate, tax code,
+`automatic_tax`, or `tax_behavior` anywhere in the payment path; the only
+occurrence of the word is a "pre-tax line amount" comment in
+`payments_stripe_mappers.py`. Every price and invoice line is treated as the
+final amount.
+
+**Why it is deferred, not a defect.** Whether membership dues are taxable is
+jurisdiction-dependent (many US states do not tax fitness/instruction services;
+several tax health-club memberships or "amusement services" explicitly), so this
+is only real once a gym in a taxing jurisdiction onboards.
+
+### What it takes
+- **Most likely no engine work: enable Stripe Tax on the connected account.**
+  Every write is a **direct charge** (`connect_opts` passes
+  `stripe_account=<gym's account>`), so tax registration, nexus, and collection
+  belong to the **gym's own** Stripe account, not the platform's. The code change
+  would be passing `automatic_tax={'enabled': True}` on subscription/invoice
+  creation, plus a customer address/tax-location requirement at member create.
+- **Price `tax_behavior`** (`inclusive` vs `exclusive`) must be decided per
+  price, and it interacts with the plan-price versioning model — an existing
+  price's behavior cannot be edited in place, so it becomes another reason to
+  mint a new price version.
+
+### Open questions
+- Whether the platform mandates/configures this or leaves it entirely to each
+  gym's Stripe account (the direct-charge model makes the latter the default).
+- Whether displayed CRM prices are tax-inclusive or tax-exclusive, and how the
+  member-facing surfaces present a tax line they have never shown before.
+- How the discount engine's coupon math interacts with an added tax line
+  (Stripe applies tax after discounts, but the CRM's own preview/report totals
+  would need to agree).
+
 
 --------------------------
 
@@ -222,7 +295,7 @@ from that member's own memberships only.
 > outbox) or only bites at a scale the MVP isn't at (the Stripe-in-txn read).
 > They live here, not in a known-bugs doc, because each is a *build*, not a patch.
 
-## 7. Durable writeback outbox (not built)
+## 9. Durable writeback outbox (not built)
 
 **The motivating bug (C-012).** Every DB writeback in the sync engine runs
 *after* its Stripe mutation, so it is inherently best-effort. Most steps have a
@@ -246,7 +319,7 @@ this work (today they're the untested backstop the outbox would make reliable).
 retry/giveup policy and how a permanently-failing step is surfaced to staff;
 whether the drain runs in an existing sweep or its own worker.
 
-## 8. Move Stripe reads out of the webhook / reconciler DB transaction (future scaling)
+## 10. Move Stripe reads out of the webhook / reconciler DB transaction (future scaling)
 
 **Current state (C-053).** `InvoicePaymentPaidHandler.resolve_charge()` does a
 live `payment_intents.retrieve` *inside* the open DB transaction on both the
