@@ -13,4 +13,5 @@ MembersListTotalCounts _$MembersListTotalCountsFromJson(
   trial: (json['trial'] as num).toInt(),
   frozen: (json['frozen'] as num).toInt(),
   overdue: (json['overdue'] as num).toInt(),
+  dormant: (json['dormant'] as num?)?.toInt() ?? 0,
 );

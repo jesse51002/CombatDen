@@ -21,7 +21,14 @@ class CrmMemberStatus(StrEnum):
     """Computed membership status for CRM display.
 
     Extends DB statuses with derived values like trial,
-    overdue, and no_membership.
+    overdue, dormant, and no_membership.
+
+    ``dormant`` is a member-level status: they hold only short
+    (trial / one_time) live packs and have gone quiet for longer than
+    the gym's dormancy window. Without it those members display as
+    ``active`` / ``trial``, which reads as "in progress" for someone who
+    bought a pack and vanished. Its derivation and badge precedence live
+    in ``src/members/service/members_status_mapping.py``.
     """
 
     active = "active"
@@ -30,6 +37,7 @@ class CrmMemberStatus(StrEnum):
     cancelled = "cancelled"
     ended = "ended"
     overdue = "overdue"
+    dormant = "dormant"
     no_membership = "no_membership"
 
 
@@ -167,12 +175,21 @@ class MembersListTotalCounts(BaseModel):
     """Aggregate member counts across the full dataset.
 
     Always reflects totals regardless of active view or filters.
+
+    These are independent tallies, not a partition: a member can be
+    counted under more than one heading (an overdue member is also
+    counted as active, and a dormant one is also counted as trial when
+    their pack is a trial). ``dormant`` follows that existing shape, and
+    counts the dormancy RULE — a dormant member whose membership is
+    frozen or past due is counted here even though a higher-precedence
+    badge claims their row in the list.
     """
 
     active: int
     trial: int
     frozen: int
     overdue: int
+    dormant: int
 
 
 class CrmMembersListResponse(BaseModel):

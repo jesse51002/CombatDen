@@ -204,10 +204,6 @@ flowchart TB
   Financials -.->|"~5%"| f_fail["failed attempt first"]
   Financials -.->|"~3%"| f_refund["refunded later"]
 
-  %% ── gym_history ×30 (simple) ──
-  History["📈 gym_history ×30"]
-  History -->|"daily"| h_day["active vs inactive rollup · 30 days"]
-
   %% ── Waivers ×2 — payer-auth agreement + liability waiver per gym ──
   Waivers["📜 Waivers ×2"]
   Waivers -->|"v1"| w_dflt["payer-auth agreement (waiver_type=payer_auth)<br/>1 catalog + 1 version · seed-copied from platform default · editable · undeletable"]
@@ -217,6 +213,6 @@ flowchart TB
   classDef hub  fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
-  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Signups,Rewards,Activities,Financials,History,Waivers hub;
+  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Signups,Rewards,Activities,Financials,Waivers hub;
   class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_admin,st_frontdesk,st_trainer,st_pending,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_applied,r_belts,r_flat,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,sg_att,sg_noshow,sg_future,rw_active,rw_inactive,rd_none,rd_some,rd_approved,rd_pending,ac_attended,ac_rank,f_ok,f_card,f_bank,f_fail,f_refund,h_day,w_dflt,w_liab leaf;
+  class st_owner,st_admin,st_frontdesk,st_trainer,st_pending,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_applied,r_belts,r_flat,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,sg_att,sg_noshow,sg_future,rw_active,rw_inactive,rd_none,rd_some,rd_approved,rd_pending,ac_attended,ac_rank,f_ok,f_card,f_bank,f_fail,f_refund,w_dflt,w_liab leaf;

@@ -12,6 +12,8 @@ from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.discounts.discounts_router import discounts_router
 from src.employees.employees_router import employees_router
+from src.growth.growth_router import growth_router
+from src.growth.growth_scheduler import build_growth_scheduler
 from src.gyms.gyms_router import gyms_router
 from src.member_portal.member_portal_router import member_portal_router
 from src.members.members_router import members_router
@@ -56,11 +58,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         scheduler = build_scheduler(app.container)
     if scheduler is not None:
         scheduler.start()
+    # Separate scheduler: the growth compute runs on its own interval (and
+    # immediately at launch), independent of the reconciler's cron.
+    growth_scheduler = None
+    if settings.growth_enabled:
+        growth_scheduler = build_growth_scheduler(app.container)
+    if growth_scheduler is not None:
+        growth_scheduler.start()
     try:
         yield
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        if growth_scheduler is not None:
+            growth_scheduler.shutdown(wait=False)
         # Drain in-flight fetches before pool disposal.
         await MembershipsInvoiceFetchRunner.drain()
         await MemberVideoProfileRefreshRunner.drain()
@@ -107,6 +118,7 @@ def create_app() -> FastAPI:
 
     application.include_router(checkin_router)
     application.include_router(classes_router)
+    application.include_router(growth_router)
     application.include_router(gyms_router)
     application.include_router(members_router)
     application.include_router(ranks_router)

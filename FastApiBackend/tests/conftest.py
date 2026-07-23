@@ -45,6 +45,11 @@ from tests.seed_constants import SEEDED_GYM_ID
 # directly in tests/reconciler/ by calling the services.
 settings.reconciler_enabled = False
 
+# Same for the growth-compute scheduler, which additionally fires IMMEDIATELY
+# at startup (next_run_time=now) — it would race every TestClient boot against
+# the mocked db_pool. tests/growth/ drives GrowthComputeService directly.
+settings.growth_enabled = False
+
 # Same reason: the lifespan also runs the GoTrue auto-confirm guard, which is
 # fail-closed by default and would abort `with TestClient(app)` on any machine
 # whose local Supabase auto-confirms. That guard checks a DEPLOYMENT's auth
