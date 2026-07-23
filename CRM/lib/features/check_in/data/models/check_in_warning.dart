@@ -9,6 +9,11 @@ import 'package:json_annotation/json_annotation.dart';
 /// records — these arrive as non-blocking `warnings` on a recorded check-in,
 /// never as a rejection. [unknown] is the resilient fallback so a new backend
 /// value never crashes the UI.
+///
+/// [overdue] is the one condition that warns staff but never blocks a kiosk
+/// check-in — a past-due date is often a false alarm (a payment retry in
+/// flight, cash not yet recorded), so the backend surfaces it and lets the
+/// front desk decide.
 @JsonEnum(valueField: 'value')
 enum CheckInWarning {
   noMembership('no_membership', 'No active membership'),
@@ -16,6 +21,7 @@ enum CheckInWarning {
   ineligiblePlan('ineligible_plan', 'Not eligible for this class'),
   overCapacity('over_capacity', 'Class is full'),
   unsignedWaiver('unsigned_waiver', 'Required waiver not signed'),
+  overdue('overdue', 'Payment overdue'),
   unknown('unknown', 'Heads up');
 
   const CheckInWarning(this.value, this.displayLabel);
