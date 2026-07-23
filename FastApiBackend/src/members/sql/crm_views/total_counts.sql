@@ -22,7 +22,12 @@ SELECT
         WHERE m.status = 'frozen'
     ) AS frozen,
     COUNT(DISTINCT m.member_id) FILTER (
-        WHERE m.next_due_date < (now() AT TIME ZONE g.timezone)::date
+        -- Match the Overdue tab (overdue_view.sql) and the row badge
+        -- (is_membership_overdue): a cancelled membership keeps its stale
+        -- past next_due_date forever, so without this guard the subtitle
+        -- count drifts permanently above what the Overdue tab lists.
+        WHERE m.status != 'cancelled'
+        AND m.next_due_date < (now() AT TIME ZONE g.timezone)::date
     ) AS overdue,
     (
         SELECT count(*)

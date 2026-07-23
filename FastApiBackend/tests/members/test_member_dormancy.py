@@ -358,6 +358,84 @@ async def test_total_counts_tallies_dormant_members(db_pool) -> None:
     assert counts.active == 1
 
 
+async def test_total_counts_overdue_excludes_cancelled(db_pool) -> None:
+    """``total_counts.sql``'s overdue tally excludes cancelled memberships.
+
+    A cancelled membership keeps its stale past ``next_due_date`` forever, so
+    without the ``status != 'cancelled'`` guard the overdue subtitle would
+    drift permanently above what the Overdue tab and the row badge (both
+    cancelled-excluding, via ``is_membership_overdue`` / ``overdue_view``)
+    show. One active past-due member and one cancelled past-due member share
+    the gym; only the active one counts as overdue.
+    """
+    gym_id = str(uuid4())
+    active_due, cancelled_due = uuid4(), uuid4()
+    start_old = date.today() - timedelta(days=60)
+    past_due = date.today() - timedelta(days=10)
+    plan_recurring = str(uuid4())
+
+    sql = f"""
+        WITH members AS (
+            SELECT * FROM (VALUES
+                (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
+                 CAST(NULL AS TIMESTAMPTZ)),
+                (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
+                 CAST(NULL AS TIMESTAMPTZ))
+            ) AS v(member_id, gym_id, last_class)
+        ),
+        gyms AS (
+            SELECT
+                CAST(:gym_id AS UUID) AS gym_id,
+                CAST(:tz AS TEXT) AS timezone
+        ),
+        membership_plans AS (
+            SELECT * FROM (VALUES
+                (CAST(:plan_recurring AS UUID), CAST(:gym_id AS UUID),
+                 'recurring')
+            ) AS v(plan_id, gym_id, plan_type)
+        ),
+        member_memberships_status AS (
+            SELECT * FROM (VALUES
+                (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
+                 CAST(:plan_recurring AS UUID), 'active',
+                 CAST(:start_old AS DATE), CAST(:past_due AS DATE)),
+                (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
+                 CAST(:plan_recurring AS UUID), 'cancelled',
+                 CAST(:start_old AS DATE), CAST(:past_due AS DATE))
+            ) AS v(member_id, gym_id, plan_id, status, start_date,
+                   next_due_date)
+        )
+        {load_sql(SQL_DIR / "crm_views" / "total_counts.sql",
+                  {"is_dormant": DORMANT_COUNT_SQL})}
+    """
+    params = {
+        "gym_id": gym_id,
+        "tz": TZ,
+        "m_a": str(active_due),
+        "m_b": str(cancelled_due),
+        "plan_recurring": plan_recurring,
+        "start_old": start_old,
+        "past_due": past_due,
+        "dormancy_days": DORMANCY_DAYS,
+    }
+
+    async with db_pool.session() as session:
+        result = await session.execute(text(sql), params)
+        row = result.mappings().one()
+
+    counts = MembersListTotalCounts(
+        active=row["active"],
+        trial=row["trial"],
+        frozen=row["frozen"],
+        overdue=row["overdue"],
+        dormant=row["dormant"],
+    )
+    # Only the active past-due membership is overdue; the cancelled one,
+    # despite its stale past next_due_date, is excluded.
+    assert counts.overdue == 1
+    assert counts.active == 1
+
+
 # -- Badge precedence (hermetic) --
 
 _ALL_SERVICE = CrmAllViewService(None, DORMANCY_DAYS)  # type: ignore[arg-type]
