@@ -193,6 +193,90 @@ class ClassSeries {
       _$ClassSeriesFromJson(json);
 }
 
+// ── companion table (line / bars) ──
+
+/// Where a metric's companion [MetricTable] sits relative to its chart.
+///
+/// Mirrors `TableOrientation` in the growth schema. Resilient: an unknown
+/// value falls back to [unknown], which the renderer treats as [stacked].
+@JsonEnum(valueField: 'value')
+enum TableOrientation {
+  stacked('stacked'),
+  beside('beside'),
+  unknown('unknown');
+
+  const TableOrientation(this.value);
+
+  /// The snake_case value used in JSON serialization.
+  final String value;
+
+  static TableOrientation fromJson(String value) =>
+      TableOrientation.values.firstWhere(
+        (v) => v.value == value,
+        orElse: () => TableOrientation.unknown,
+      );
+
+  String toJson() => value;
+}
+
+/// One column header of a metric's companion [MetricTable].
+///
+/// Reuses [MemberListColumnType] — a cell renders by its column's declared
+/// type exactly as a `member_list` cell does.
+@JsonSerializable(fieldRename: FieldRename.snake, createToJson: false)
+class MetricTableColumn {
+  final String key;
+  final String label;
+  @JsonKey(fromJson: MemberListColumnType.fromJson)
+  final MemberListColumnType type;
+  final String? align;
+
+  const MetricTableColumn({
+    required this.key,
+    required this.label,
+    required this.type,
+    this.align,
+  });
+
+  factory MetricTableColumn.fromJson(Map<String, dynamic> json) =>
+      _$MetricTableColumnFromJson(json);
+}
+
+/// One companion-table row; [cells] is positional against
+/// [MetricTable.columns], each a `String`, a `double`, or null — the same
+/// normalisation [MemberListRow] uses.
+@JsonSerializable(fieldRename: FieldRename.snake, createToJson: false)
+class MetricTableRow {
+  @JsonKey(fromJson: _cellsFromJson)
+  final List<Object?> cells;
+
+  const MetricTableRow({required this.cells});
+
+  factory MetricTableRow.fromJson(Map<String, dynamic> json) =>
+      _$MetricTableRowFromJson(json);
+}
+
+/// A data table rendered alongside a `line` / `bars` chart — under it
+/// ([TableOrientation.stacked]) or beside it ([TableOrientation.beside]).
+///
+/// Mirrors `MetricTable` in the growth schema.
+@JsonSerializable(fieldRename: FieldRename.snake, createToJson: false)
+class MetricTable {
+  @JsonKey(fromJson: TableOrientation.fromJson)
+  final TableOrientation orientation;
+  final List<MetricTableColumn> columns;
+  final List<MetricTableRow> rows;
+
+  const MetricTable({
+    required this.orientation,
+    required this.columns,
+    required this.rows,
+  });
+
+  factory MetricTable.fromJson(Map<String, dynamic> json) =>
+      _$MetricTableFromJson(json);
+}
+
 /// Payload for `line` — one or more time series drawn as lines.
 @JsonSerializable(fieldRename: FieldRename.snake, createToJson: false)
 class LineData extends GrowthMetricData {
@@ -202,11 +286,16 @@ class LineData extends GrowthMetricData {
   final List<MetricSeries> series;
   final List<ClassSeries>? byClass;
 
+  /// An optional companion data table rendered alongside the chart (e.g. a
+  /// per-month breakdown under the line). Null when the metric has no table.
+  final MetricTable? table;
+
   const LineData({
     required this.unit,
     required this.granularity,
     required this.series,
     this.byClass,
+    this.table,
   });
 
   factory LineData.fromJson(Map<String, dynamic> json) =>
@@ -225,11 +314,15 @@ class BarsData extends GrowthMetricData {
   final List<MetricSeries> series;
   final List<ClassSeries>? byClass;
 
+  /// The same optional companion data table [LineData] carries.
+  final MetricTable? table;
+
   const BarsData({
     required this.unit,
     required this.granularity,
     required this.series,
     this.byClass,
+    this.table,
   });
 
   factory BarsData.fromJson(Map<String, dynamic> json) =>

@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/growth/data/models/growth_metric_data.dart';
+import 'package:crm/features/growth/presentation/widgets/metric_renderers/companion_table_view.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_frame.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_hover_layer.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_legend.dart';
@@ -83,7 +84,7 @@ class BarsView extends StatelessWidget {
       if (trimmed) 'Showing the last $kMaxBarBuckets periods',
     ];
 
-    return Column(
+    final chart = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingLarge,
       children: [
@@ -94,7 +95,7 @@ class BarsView extends StatelessWidget {
                 ChartLegendEntry(
                   color: s.color,
                   label: '${s.label} '
-                      '${formatMetricValue(s.lastValue ?? 0, data.unit)}',
+                      '${formatMetricValue(s.total, data.unit)}',
                 ),
             ],
           ),
@@ -146,6 +147,8 @@ class BarsView extends StatelessWidget {
         for (final note in notes) ChartNote(text: note),
       ],
     );
+
+    return ChartWithCompanionTable(chart: chart, table: data.table);
   }
 
   /// The good half keeps the positive tone, the bad half the negative one.

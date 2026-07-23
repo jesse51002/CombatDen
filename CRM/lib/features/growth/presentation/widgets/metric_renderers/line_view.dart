@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/growth/data/models/growth_metric_data.dart';
+import 'package:crm/features/growth/presentation/widgets/metric_renderers/companion_table_view.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_frame.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_hover_layer.dart';
 import 'package:crm/features/growth/presentation/widgets/metric_renderers/chrome/chart_legend.dart';
@@ -66,7 +67,7 @@ class LineView extends StatelessWidget {
     // drops a crowded pair). 3: only the accent series.
     final endLabeled = series.length == 2 ? {0, 1} : {0};
 
-    return Column(
+    final chart = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingLarge,
       children: [
@@ -77,7 +78,7 @@ class LineView extends StatelessWidget {
                 ChartLegendEntry(
                   color: s.color,
                   label: '${s.label} '
-                      '${formatMetricValue(s.lastValue ?? 0, data.unit)}',
+                      '${formatMetricValue(s.total, data.unit)}',
                 ),
             ],
           ),
@@ -121,5 +122,7 @@ class LineView extends StatelessWidget {
         if (singlePoint) const ChartNote(text: 'Only one period so far'),
       ],
     );
+
+    return ChartWithCompanionTable(chart: chart, table: data.table);
   }
 }

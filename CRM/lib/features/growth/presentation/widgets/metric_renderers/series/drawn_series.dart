@@ -36,6 +36,21 @@ class DrawnSeries {
     return -1;
   }
 
+  /// The sum of this series across every drawn bucket (nulls skipped).
+  ///
+  /// This is the range-consistent figure the legend shows: a series is drawn
+  /// over exactly the points the chart shows (the range pill trims them
+  /// before the bundle is built), so summing them is the real total across
+  /// the visible window — never the lone newest bucket, which sits misleading
+  /// beside a full chart when the latest period is still filling in.
+  double get total {
+    var sum = 0.0;
+    for (final v in values) {
+      if (v != null) sum += v;
+    }
+    return sum;
+  }
+
   // Value equality (not identity) so a painter holding a list of these can
   // answer `shouldRepaint` correctly.
   @override

@@ -60,6 +60,27 @@ ClassSeries _$ClassSeriesFromJson(Map<String, dynamic> json) => ClassSeries(
       .toList(),
 );
 
+MetricTableColumn _$MetricTableColumnFromJson(Map<String, dynamic> json) =>
+    MetricTableColumn(
+      key: json['key'] as String,
+      label: json['label'] as String,
+      type: MemberListColumnType.fromJson(json['type'] as String),
+      align: json['align'] as String?,
+    );
+
+MetricTableRow _$MetricTableRowFromJson(Map<String, dynamic> json) =>
+    MetricTableRow(cells: _cellsFromJson(json['cells'] as List));
+
+MetricTable _$MetricTableFromJson(Map<String, dynamic> json) => MetricTable(
+  orientation: TableOrientation.fromJson(json['orientation'] as String),
+  columns: (json['columns'] as List<dynamic>)
+      .map((e) => MetricTableColumn.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  rows: (json['rows'] as List<dynamic>)
+      .map((e) => MetricTableRow.fromJson(e as Map<String, dynamic>))
+      .toList(),
+);
+
 LineData _$LineDataFromJson(Map<String, dynamic> json) => LineData(
   unit: MetricUnit.fromJson(json['unit'] as String),
   granularity: json['granularity'] as String,
@@ -69,6 +90,9 @@ LineData _$LineDataFromJson(Map<String, dynamic> json) => LineData(
   byClass: (json['by_class'] as List<dynamic>?)
       ?.map((e) => ClassSeries.fromJson(e as Map<String, dynamic>))
       .toList(),
+  table: json['table'] == null
+      ? null
+      : MetricTable.fromJson(json['table'] as Map<String, dynamic>),
 );
 
 BarsData _$BarsDataFromJson(Map<String, dynamic> json) => BarsData(
@@ -80,6 +104,9 @@ BarsData _$BarsDataFromJson(Map<String, dynamic> json) => BarsData(
   byClass: (json['by_class'] as List<dynamic>?)
       ?.map((e) => ClassSeries.fromJson(e as Map<String, dynamic>))
       .toList(),
+  table: json['table'] == null
+      ? null
+      : MetricTable.fromJson(json['table'] as Map<String, dynamic>),
 );
 
 BreakdownItem _$BreakdownItemFromJson(Map<String, dynamic> json) =>

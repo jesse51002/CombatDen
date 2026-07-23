@@ -649,6 +649,43 @@ these lists are bounded by definition (at-risk, active trials), so no pagination
 correct extension every table benefits from — not a Growth-local hack, and not a
 new design token.
 
+### 4.9 Companion table — a `line` / `bars` add-on
+
+A `line` / `bars` payload may carry an optional `table` (`MetricTable`):
+`{ orientation, columns[], rows[] }`. When present the renderer shows the chart
+**and** the table together; when absent (the common case) the chart renders
+alone, unchanged. Members-over-time and Revenue-over-time are the two metrics
+that carry one today (a per-month breakdown beneath the line).
+
+- **Widgets.** `ChartWithCompanionTable(chart, table)` wraps the built chart;
+  `MetricCompanionTable` renders the table itself. Both live in
+  `metric_renderers/companion_table_view.dart`. The table reuses `AppDataTable`
+  (`shrinkWrap: true, stickyHeader: false`) and the **`member_list` cell
+  formatter** (§4.8), so a chart's data table reads as a sibling of the page's
+  other tables — de-carded, matching the page.
+- **Cells format by column `type`,** exactly as `member_list` does: `date` →
+  relative day + absolute tooltip; `cents` → `money.dart`; `number` →
+  right-aligned grouped int; `text` → left. A **null cell renders as an
+  em-dash** (`—`), never `null`, never `0` — an absent value and a zero are
+  different facts.
+- **Orientation.** `stacked` → `Column[chart, table]`, `spacing: spacingLarge`
+  (the chart's own internal rhythm, so the table reads as one more block of the
+  same body, not a tighter-bound appendage). `stacked` is the only orientation
+  the backend emits today; `beside` and the resilient `unknown` fall back to
+  the same stack — a side-by-side `Row` is a localized change in
+  `ChartWithCompanionTable` if `beside` ever ships.
+- **No row tap, no row cap.** Companion-table rows are aggregate per-bucket data
+  (a per-month Gained / Lost / Retained / Trial breakdown), not members — so a
+  row carries no member deep-link, and the table shows **every** row: it is
+  bounded by the chart's own buckets, not a top-N list. (Contrast `member_list`,
+  which caps at 10 because those lists are genuinely unbounded.)
+- **Contract.** Mirrors `MetricTable` / `MetricTableColumn` / `MetricTableRow` /
+  `TableOrientation` in `FastApiBackend/src/growth/schema/growth_schema.py`.
+  `MetricTableColumn.type` reuses `MemberListColumnType`; a row's `cells` are
+  positional against `columns`, each a `String`, a `double`, or null (the same
+  normalisation `MemberListRow` uses). `TableOrientation` parses resiliently to
+  `unknown`. `LineData` / `BarsData` gained a nullable `table` field.
+
 ---
 
 ## 5. Shared states
@@ -890,6 +927,36 @@ No fluid typography anywhere — hierarchy is fixed-step, per the product regist
 
 Nothing in the six-tab IA, the metric-to-tab assignment, or the renderer set was
 changed.
+
+### Chart fixes (live-metrics pass)
+
+9. **The chart legend value is the series' total over the shown window, not its
+   newest bucket.** Each `line` / `bars` legend entry reads `{label} {value}`
+   where `value` is the **sum of that series over the currently-shown
+   (range-trimmed) points** — the range pill trims a series before the bundle is
+   built, so the legend total always matches exactly what the chart draws. The
+   old value was the latest bucket, which sat misleading beside a full chart the
+   moment the newest period was still filling in (e.g. `Check-ins 0` for the
+   current, incomplete week next to a full-year chart). Implemented as
+   `DrawnSeries.total`, read in `line_view` / `bars_view`.
+10. **A `line`'s y-axis is `0..niceCeiling(max)` — never negative.** Verified
+    against live data: `members_trend` (a single count series, 2 → 107) draws a
+    correct `200 / 100 / 0` axis with the line filled in. Negatives belong
+    **only** to the `bars` diverging mode (§4.4): `members_gained_lost` correctly
+    carries `+max / 0 / −max`, which is where the `−100` tick on the Members tab
+    comes from — the diverging bars, not the line. A count / cents line never
+    carries a negative tick (`niceCeiling` floors at 1; `yTicksFor` is
+    `[max, max/2, 0]`). A regression guard asserts the line painter receives
+    non-empty points on a non-negative scale.
+11. **Churn moved off `donut_pair`.** The backend dropped the `churn_donuts`
+    metric; churn is now a `line` on Overview + Retention, rendered generically
+    by category — no CRM tab change. The `donut_pair` renderer stays (unused,
+    ready for a future donut metric). Two stale references remain and are noted,
+    not silently inherited: the `churn_donuts` window-label entry in
+    `growth_metric_registry.dart` (harmless — an unused key that no-ops to `''`)
+    and the `churn_donuts` mentions in §6's Overview / Retention composition
+    above. Both are candidates for a follow-up cleanup once the backend's new
+    churn-line key is confirmed.
 
 ### Pre-existing issues surfaced (not silently inherited)
 
