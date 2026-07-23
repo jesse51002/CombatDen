@@ -23,6 +23,15 @@ from schema.member_reward_redemption import RewardRedemptionStatus
 from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — resolves ``from schema.*``
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassFullError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinErrorCode,
+    CheckinOccurrenceCancelledError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
 )
@@ -400,10 +409,51 @@ def test_create_signup_uses_the_path_member_not_the_body(
     auth_mock.verify_member_self.assert_awaited()
 
 
-def test_create_signup_maps_full_class_to_400(
-    client, auth_headers, signup_service_mock, fake_gym_id, fake_member_id
+@pytest.mark.parametrize(
+    ("exc_type", "expected", "expected_code"),
+    [
+        (CheckinClassNotFoundError, 404, CheckinErrorCode.class_not_found),
+        (CheckinClassDeletedError, 400, CheckinErrorCode.class_deleted),
+        (CheckinClassInactiveError, 400, CheckinErrorCode.class_inactive),
+        (
+            CheckinOccurrenceNotFoundError,
+            400,
+            CheckinErrorCode.occurrence_not_found,
+        ),
+        (
+            CheckinOccurrenceCancelledError,
+            400,
+            CheckinErrorCode.occurrence_cancelled,
+        ),
+        (CheckinClassFullError, 400, CheckinErrorCode.class_full),
+    ],
+)
+def test_create_signup_maps_error_type_to_status_and_code(
+    client,
+    auth_headers,
+    signup_service_mock,
+    fake_gym_id,
+    fake_member_id,
+    exc_type,
+    expected,
+    expected_code,
 ):
-    signup_service_mock.create = AsyncMock(side_effect=ValueError("Class is full"))
+    """The member-facing route dispatches on the exception TYPE, exactly like
+    the staff ``POST /api/v1/signup`` — same ``SignupService``, same statuses,
+    same sibling ``code``.
+
+    It used to pick the status by looking for "not found" in the message, so
+    it agreed with the staff route only by coincidence: rewording one message
+    would have moved the member-facing status while the staff one stayed put.
+    Each message here is deliberately hostile to that old dispatch (the 404
+    type's lacks "not found"; the 400 types' contain it).
+    """
+    message = (
+        "no such class at this gym"
+        if expected == 404
+        else "the thing was not found, and yet this is a 400"
+    )
+    signup_service_mock.create = AsyncMock(side_effect=exc_type(message))
 
     resp = client.post(
         f"{_base(fake_gym_id, fake_member_id)}/signup",
@@ -411,14 +461,19 @@ def test_create_signup_maps_full_class_to_400(
         headers=auth_headers,
     )
 
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == "Class is full"
+    assert resp.status_code == expected, resp.text
+    body = resp.json()
+    assert isinstance(body["detail"], str)
+    assert body["detail"] == message
+    assert body["code"] == expected_code.value
 
 
-def test_create_signup_maps_missing_class_to_404(
+def test_create_signup_foreign_value_error_still_400(
     client, auth_headers, signup_service_mock, fake_gym_id, fake_member_id
 ):
-    signup_service_mock.create = AsyncMock(side_effect=ValueError("Class not found"))
+    """An unmapped ValueError stays the generic bad-input 400 (and carries no
+    ``code``) — the same fallback the staff route keeps."""
+    signup_service_mock.create = AsyncMock(side_effect=ValueError("something odd"))
 
     resp = client.post(
         f"{_base(fake_gym_id, fake_member_id)}/signup",
@@ -426,7 +481,8 @@ def test_create_signup_maps_missing_class_to_404(
         headers=auth_headers,
     )
 
-    assert resp.status_code == 404
+    assert resp.status_code == 400, resp.text
+    assert "code" not in resp.json()
 
 
 def test_remove_signup_gates_and_delegates(

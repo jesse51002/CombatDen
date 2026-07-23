@@ -239,8 +239,9 @@ src/
 - **A large domain MAY group a distinct sub-concern cluster into a subfolder** when that materially aids clarity — flat stays the *default*, but a domain that has grown big enough to hold a self-contained multi-file sub-concern can put it in its own `service/<sub-concern>/` folder. Reach for this only for a genuine multi-file cluster, **never for a single file**.
   - Good: `videos/service/video_agent/` holds the conversational-agent wrapper (`video_agent_service.py`), a self-contained sub-concern of the otherwise-flat `videos/service/`.
   - **The class system is versioned schedules + computed occurrences** (single source of truth: the `class-system-guide` skill). A class = a `gym_classes` IDENTITY row + append-only `gym_class_schedules` VERSIONS (each freezing its `timezone` at mint); occurrences are never stored — the pure `ClassesExpander` (one schedule shape; each candidate date FANS OUT over its `weekday_slots` slot list, so a class may occur several times per day) wrapped by `ClassesVersionExpander` (ownership windows by `effective_from`, first-version-owns-the-past, SLOT-level dedup at `(original_date, original_time)`) computes them for every read. An occurrence's identity is its ORIGINAL slot `(class_id, original_date, original_time)` — what `member_attendance`, `class_signups`, and `class_instance_exceptions` key (their UNIQUEs include `original_time`); every occurrence-addressed API call passes the date AND time; exceptions/reschedules never re-key anything. **`ClassesVersionsService`** (`classes_versions_service.py`) is the only writer of `gym_class_schedules`: a schedule edit mints a version effective NOW and, in the same transaction, wipes future-keyed sign-ups / early check-ins / instance exceptions whose original slot the new shape no longer produces (exact wall-clock matches survive); soft-delete wipes everything future; `remint_timezone` is the gym tz-change hook. `PUT /classes/{id}` splits `identity` (in-place) vs `schedule` (a complete shape → mint), the discounts identity/values precedent.
+  - **The schedule board suppresses a PAUSED class exactly like a soft-deleted one — no exposed-flag asymmetry.** `GET /api/v1/classes/instances` (`ClassesScheduleReaderService`) feeds four surfaces — the CRM schedule board, the CRM dashboard, the kiosk check-in grid, and the member portal — so a class that check-in (`CheckinClassResolver`) and sign-up (`SignupService`) both REJECT (`gym_classes.is_active=false` → `CheckinClassInactiveError("Class is not active")`, a `ValueError` subclass carrying `code = class_inactive`) must never be offered as a live/future occurrence on any of them. The board filters a paused class to past-only, same as `is_deleted` (its already-run attendance still renders). A paused class stays visible — and is un-paused — only through the class-management endpoints, `GET /api/v1/classes` and `GET /api/v1/classes/{class_id}` (`ClassesCrudService`), which need no change. See the `class-system-guide` skill for the full contract.
   - The `checkin` domain decomposes its check-in into two DI-injected seams kept flat in `checkin/service/`: `checkin_class_resolver.py` (`CheckinClassResolver`, the one-way `checkin → classes` seam — loads the class identity + its schedule versions + the day's exceptions and resolves the occurrence via the injected `ClassesVersionExpander` into a `ResolvedClass`; purely a read, nothing written; a retroactive any-date check-in validates against whichever version owned that date; it also enforces the **early-check-in window** — an occurrence starting more than `settings.checkin_opens_hours_before_start` (2h) in the future is rejected, gating both single + batch check-in) and `checkin_member_gate.py` (the per-member gate: one evaluation feeds the `is_member` split — a kiosk (`is_member=True`) strict-gate **reject**, or a staff (`is_member=False`) path that records a **clean** check-in but returns **`requires_confirmation`** (nothing written, the reasons as `warnings`) for a warned one **unless `ignore_warnings`** overrides — which records with NULL/best-available attribution + the warnings surfaced), over `checkin_queries.py` / `checkin_writer.py` / `checkin_plan_selector.py`. There is deliberately **no facade**: the single-check-in router injects the resolver + gate directly (resolve, then gate), and `batch_checkin_service.py` injects the same two (resolve once, then loop the gate over a de-duped member list). Siblings `cycle_counts_service.py` / `streak_service.py` / `checkin_attendees_service.py` (read-only per-occurrence **combined roster** — see sign-ups below) round out the domain, all flat in `service/` — the attendance row's denormalized `occurred_at` feeds the streak / cycle-count / last-class window SQL; streak additionally joins `gyms` to bucket weeks in the gym's CURRENT-local timezone (not UTC — see the class-system-guide skill), the others stay join-free. Check-in **reversal** also lives here: `checkin_reverser.py` (`CheckinReverser`) is the reusable per-member reversal core — `reverse(session, member_id, gym_id, class_id, original_date, points_worth)` deletes that member's attendance row by key, claws back the points (floored at 0), drops one `class_attended` activity, and reverses the auto-end on the charged trial / one_time pack, all in the caller's OPEN transaction (no commit). It imports **nothing** from `src.classes`. `checkin_remover.py` (`CheckinRemover`) is the thin single-member wrapper the remove endpoint injects.
-  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_gym_employee_for_member` at `STAFF` (staff-only, same as check-in — the member cannot self-serve a reservation). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `ValueError("Class is full")` only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
+  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_gym_employee_for_member` at `STAFF` (staff-only, same as check-in — the member cannot self-serve a reservation). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `CheckinClassFullError("Class is full")` (`code = class_full`) only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
     - **Deliberate exception to the one-way seam (`classes → checkin`):** `ClassesUndoService` (in `src.classes`) depends on `CheckinReverser` — the OPPOSITE of the documented one-way `checkin → classes` direction — looping it per attendee inside its shared `teardown_occurrence` (reverse attendance + delete sign-ups for one date), which is itself the single teardown that BOTH cancel entry points, the future-reschedule path, and `ClassesVersionsService`'s version-change wipe route through. So the per-member reversal has a **single** implementation. It is cycle-free precisely because `CheckinReverser` imports nothing from `src.classes` (the DI container builds `checkin_reverser` before all consumers). Don't flag this `classes → checkin` edge as a layering violation — it is intentional.
     - **The `gyms → classes` edge:** `GymsService.update_gym` calls `ClassesVersionsService.remint_timezone` on every save that carries a `timezone` (deliberately not gated on "did it change" — the gym row commits before the per-class remint, so a changed-value gate would skip a retry after a partial failure forever; the per-class deep-equal skip makes a re-save a cheap self-heal). A same-shape version mint per live class; wall-clock matching keeps every future-keyed row. Documented, deliberate.
   - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder wrapping a *single* group / file.
@@ -286,11 +287,108 @@ src/
 - **Discounts are a deliberate variant of this rule, not a violation.** A discount is a two-table identity/version model (`gym_discounts` identity + immutable `gym_discount_values` versions), so `DiscountUpdateRequest` splits the mutable data **by destination** into two sub-models — `identity` (rename in place) and `values` (mint a new version) — instead of one flat `data`. The model shape itself encodes which table each field writes (no runtime field-partition set), while the service **still** runs the same `validate_mutable_columns(GYM_DISCOUNTS, …)` guard over the combined change keys. `discount_id`/`gym_id` stay top-level for the auth `gym_id` check. See `src/discounts/schema/discounts_schema.py` + `service/discounts/discounts_update.py` and the `discounts-guide` skill.
 
 **Error Handling**
-- Create custom exception hierarchy
-- Register exception handlers globally
-- Use specific exception types
-- Include meaningful error messages
-- Customize validation error responses
+- Create a custom exception hierarchy per domain, in
+  `src/<domain>/<domain>_exceptions.py` (the domain-prefix naming rule). Class
+  names carry the domain prefix too: `CheckinClassNotFoundError`,
+  `EmployeeNotFoundError`.
+- **A router must map an exception to its HTTP status BY TYPE — never by
+  matching words in the message.** Substring dispatch
+  (`if "not found" in str(exc).lower(): 404`) makes the message *prose* part of
+  the public API: rewording it silently moves the status code, and no test can
+  catch that structurally. This bit us live — the kiosk got an opaque 400 for
+  "Class is not active" because that string happens not to contain "not found".
+  Catch the specific types first, then the domain base, then the generic
+  fallback.
+- **The error body is `detail` (a plain STRING) + a SIBLING `code`.** The
+  status alone is not enough for a client to branch on, and matching on prose
+  client-side would just move the fragility across the wire. So a typed domain
+  rejection serializes as:
+
+  ```json
+  {"detail": "Class is not active", "code": "class_inactive"}
+  ```
+
+  - **`detail` MUST stay a plain string on every endpoint** — never an object,
+    never a nested `{"message": …, "code": …}`. The CRM's
+    `lib/core/network/api_client.dart` `_extractDetail` returns `data['detail']`
+    only when it is a `String`, and `member_detail_bloc.dart` renders
+    `(e.detail ?? e.message)`, so nesting would silently degrade every real
+    error message to "Server error 400: Bad Request". This is *why* the sibling
+    shape was chosen. If a change makes preserving the string impossible, stop
+    and raise it — don't reshape the body.
+  - **`code` is the stable machine-readable discriminator** clients switch on;
+    `detail` is prose for humans and may be reworded freely.
+  - **Codes are part of the public contract. Renaming one is a BREAKING
+    change** for every client switching on it — add a new code instead of
+    repurposing an existing one.
+  - `code` is a `StrEnum` in the domain's exceptions module
+    (`CheckinErrorCode`), and each concrete exception declares **both**
+    `status_code` and `code` as class attributes — the type is the single
+    source of truth for the whole contract.
+- **One global handler formats the body; routers only re-raise.** Register the
+  domain base with `app.add_exception_handler` in `src/main.py` (the
+  `_handle_lock_busy_error` template) — Starlette resolves a handler by walking
+  the raised type's MRO, so registering the base covers every subclass — and
+  have it read `exc.status_code` / `exc.code` off the instance. Then **the
+  hazard**: every router handler wraps its call in `try/except Exception → 500`,
+  which would swallow the domain error before it ever reached a global handler.
+  The fix is a typed arm that **re-raises**:
+
+  ```python
+  except CheckinError:
+      raise          # a `raise` inside an `except` clause propagates out of
+                     # the WHOLE try — the sibling `except Exception` below
+                     # cannot re-catch it
+  except ValueError as exc:   # foreign bad input → 400, no code
+      ...
+  except Exception:           # → 500, logged with exc_info=True
+      ...
+  ```
+
+  Prove it with a test, don't assume it: the parametrized type → status/code
+  tests flip to 500 the moment a re-raise stops working.
+- **Declare the shape in OpenAPI.** Every `responses` entry a typed rejection
+  can produce carries `{"model": <Domain>ErrorResponse, …}` (`detail: str` +
+  `code: <Domain>ErrorCode | None`), so the contract is self-documenting and
+  client codegen sees the enum. `code` is nullable because the generic
+  `except ValueError` → 400 arm emits none — clients fall back to `detail` when
+  it is absent. Model: `src/checkin/schema/checkin_error_schema.py`.
+- **Domain exception bases subclass `ValueError`.** Every router already has an
+  `except ValueError` → 400 arm, so subclassing keeps every existing handler
+  (including other domains' and any per-item `except` isolation) working
+  unchanged — a typed hierarchy is additive, never a breaking sweep — and an
+  unmapped domain error still lands as a 400 (bad input) rather than a 500.
+  Models: `src/checkin/checkin_exceptions.py`,
+  `src/employees/employees_exceptions.py`.
+- **Keep the generic `except Exception` → 500 arm** (with
+  `logger.error(..., exc_info=True)`) below the typed arms, and a generic
+  `except ValueError` between them.
+- **The type → (status, code) table belongs in a test, not in a comment.** A
+  parametrized test over that table, using deliberately message-hostile strings
+  (a 404 type whose message lacks "not found", a 400 type whose message
+  contains it), is what actually locks the contract — assert the status, that
+  `detail` is a `str`, and the exact `code`. Add reflection tests so a new
+  exception can't silently inherit a default: every concrete subclass in the
+  module must appear in the table, and must declare `status_code` + `code` in
+  its **own** `vars()` (the base keeps safe fallbacks so a forgotten subclass
+  can't 500 a live request — the test is what fails loudly instead). Model:
+  `tests/checkin/test_checkin_error_mapping.py`.
+- Include meaningful error messages; customize validation error responses.
+- **Status codes are a contract — don't "improve" one during a refactor.**
+  `checkin`'s "not an occurrence of this class" is a **400, not a 404**, because
+  occurrences are computed rather than stored (a bad slot is a bad address, not
+  a missing resource) and both endpoints' OpenAPI `responses` have documented
+  `400 Not a valid occurrence on that date` since they shipped. If a status
+  looks wrong, report it — changing it is a separate call.
+- **Beware `except ValueError` as a catch-all: pydantic `ValidationError`
+  subclasses `ValueError`.** A blanket arm can turn an internal validation
+  failure into a wrong 4xx with a raw validation dump as `detail` instead of a
+  500. Narrow such arms to the typed catches. **A blanket arm on a handler
+  whose service raises no `ValueError` at all is always the bug** — it can only
+  ever fire on an internal failure. `GET /checkin/attendees` (a pure read) and
+  `DELETE /checkin` (whose remover raises only `CheckinClassNotFoundError`)
+  both carried one mapping *any* `ValueError` to 404; both now catch only the
+  typed error, so a serialization failure is a logged 500.
 
 **Logging and Exception Strategy**
 - **API/Router layer**: Use `logger.error()` with `exc_info=True` to log full stack traces

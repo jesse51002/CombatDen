@@ -2,6 +2,26 @@
 
 Single + batch check-in, sign-ups (reservations), the per-occurrence combined
 roster, and the attendance streak.
+
+**Error status AND the machine-readable ``code`` are decided BY EXCEPTION
+TYPE, never by the message text.** The domain raises the typed errors in
+``checkin_exceptions``, each of which carries its own ``status_code`` +
+``code``; ``CheckinClassNotFoundError`` is the only one that 404s, every
+other ``CheckinError`` is a 400 (including "not an occurrence of this class",
+which these endpoints have documented as a 400 since they shipped —
+occurrences are computed, so a bad slot is a bad address, not a missing
+resource). Rewording a message can no longer move a status code.
+
+Every handler below re-raises a ``CheckinError`` untouched so the ONE global
+formatter (``_handle_checkin_error`` in ``src/main.py``) writes the body:
+``{"detail": "<prose>", "code": "<stable_code>"}`` — ``code`` a SIBLING key,
+``detail`` always a plain string. A ``raise`` inside an ``except`` clause
+propagates out of the whole ``try``, so the sibling ``except Exception ->
+500`` arm below it never re-catches the re-raised error.
+
+Because every one of them subclasses ``ValueError``, the trailing generic
+``except ValueError`` still catches an unmapped FOREIGN domain error as a 400
+(bad input) instead of letting it fall to a 500 — that arm emits no ``code``.
 """
 
 import logging
@@ -15,10 +35,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
+from src.checkin.checkin_exceptions import CheckinError
 from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinRequest,
     BatchCheckinResponse,
 )
+from src.checkin.schema.checkin_error_schema import CheckinErrorResponse
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
 )
@@ -90,10 +112,20 @@ checkin_router = APIRouter(
     ),
     responses={
         200: {"description": "Check-in result returned (recorded or skipped)"},
-        400: {"description": "Not a valid occurrence on that date"},
+        400: {
+            "model": CheckinErrorResponse,
+            "description": (
+                "Not a valid occurrence on that date / class deleted or "
+                "inactive / check-in not open yet. ``code`` is the stable "
+                "discriminator; ``detail`` is prose"
+            ),
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this member"},
-        404: {"description": "Class not found"},
+        404: {
+            "model": CheckinErrorResponse,
+            "description": "Class not found (``code`` = class_not_found)",
+        },
     },
 )
 @inject
@@ -134,16 +166,17 @@ async def checkin(
             result.class_streak_weeks = streak.weeks
             result.current_week_days = streak.current_week_days
         return result
+    except CheckinError:
+        # Re-raised untouched: the global handler reads the status + the
+        # stable ``code`` off the type. This arm exists ONLY so the
+        # `except Exception` below can't swallow it — a `raise` inside an
+        # `except` clause propagates out of the whole `try`.
+        raise
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # An unmapped/foreign ValueError is bad input, not a 5xx (no code).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -179,7 +212,10 @@ async def checkin(
         200: {"description": "Removal result (removed true / false)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Class not found"},
+        404: {
+            "model": CheckinErrorResponse,
+            "description": "Class not found (``code`` = class_not_found)",
+        },
     },
 )
 @inject
@@ -201,11 +237,14 @@ async def remove_checkin(
         return await remover.remove(
             class_id, gym_id, occurrence_date, occurrence_time, member_id
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from None
+    except CheckinError:
+        # Re-raised for the global formatter (404 / class_not_found is the
+        # only rejection the remover raises). No blanket `except ValueError`
+        # here on purpose: this handler used to 404 on ANY ValueError, and
+        # pydantic's ValidationError IS a ValueError — a malformed
+        # CheckinRemoveResponse would have surfaced as a 404 carrying a raw
+        # validation dump instead of a logged 500.
+        raise
     except Exception:
         logger.error(
             "Remove check-in failed: member_id=%s, class_id=%s, occurrence_date=%s",
@@ -246,14 +285,19 @@ async def remove_checkin(
     responses={
         200: {"description": "Sign-up created (or an idempotent repeat)"},
         400: {
+            "model": CheckinErrorResponse,
             "description": (
                 "Class is full / deleted / inactive, or the date isn't a "
-                "real, non-cancelled occurrence of the class"
-            )
+                "real, non-cancelled occurrence of the class. ``code`` is "
+                "the stable discriminator; ``detail`` is prose"
+            ),
         },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this member"},
-        404: {"description": "Class or gym not found"},
+        404: {
+            "model": CheckinErrorResponse,
+            "description": "Class not found (``code`` = class_not_found)",
+        },
     },
 )
 @inject
@@ -287,16 +331,16 @@ async def signup(
         # from the videos domain.
         profile_refresh_runner.start(request.member_id, request.gym_id)
         return result
+    except CheckinError:
+        # Re-raised for the global formatter (status + code off the type):
+        # class not found -> 404, every other sign-up rejection (deleted /
+        # inactive class, not an occurrence, cancelled day, class full) -> 400.
+        raise
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # An unmapped/foreign ValueError is bad input, not a 5xx.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -384,10 +428,20 @@ async def remove_signup(
                 "already_checked_in / skipped / needs_confirmation / failed)"
             ),
         },
-        400: {"description": "Not a valid occurrence on that date"},
+        400: {
+            "model": CheckinErrorResponse,
+            "description": (
+                "Not a valid occurrence on that date / class deleted or "
+                "inactive / check-in not open yet. ``code`` is the stable "
+                "discriminator; ``detail`` is prose"
+            ),
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Class not found"},
+        404: {
+            "model": CheckinErrorResponse,
+            "description": "Class not found (``code`` = class_not_found)",
+        },
         500: {"description": "Batch check-in failed for every member"},
     },
 )
@@ -420,16 +474,17 @@ async def checkin_batch(
             request.is_member,
             request.ignore_warnings,
         )
+    except CheckinError:
+        # The batch resolves the occurrence ONCE before any per-member work, so
+        # these are whole-request failures. Re-raised for the global formatter:
+        # class not found -> 404; deleted / inactive class, not an occurrence
+        # of this class, check-in not open yet -> 400.
+        raise
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # An unmapped/foreign ValueError is bad input, not a 5xx.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -483,7 +538,7 @@ async def checkin_batch(
         200: {"description": "Roster returned (possibly empty)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Gym not found"},
+        500: {"description": "Failed to read the roster"},
     },
 )
 @inject
@@ -506,11 +561,12 @@ async def list_attendees(
         return await attendees_service.list_attendees(
             gym_id, class_id, occurrence_date, occurrence_time
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from None
+    # No `except ValueError` arm: this is a pure read that raises no domain
+    # error at all (an unknown gym / class / slot is an EMPTY roster, not a
+    # rejection), so the blanket ValueError -> 404 that used to sit here could
+    # only ever fire on an INTERNAL failure — and pydantic's ValidationError
+    # subclasses ValueError, so a malformed roster row surfaced as a 404
+    # carrying a raw validation dump. It is a 500 now, logged with the trace.
     except Exception:
         logger.error(
             "Attendee list failed: gym_id=%s, class_id=%s, occurrence_date=%s",

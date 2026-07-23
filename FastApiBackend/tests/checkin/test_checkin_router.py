@@ -5,12 +5,21 @@ these router tests override the resolver + member-gate providers with doubles
 and assert the router's wiring (auth -> resolve -> gate -> serialization). The
 gating *logic* is unit-tested directly in
 ``checkin/test_checkin_plan_selector.py``.
+
+The error-status contract — which typed ``CheckinError`` maps to which HTTP
+status — lives in ``checkin/test_checkin_error_mapping.py``; the few status
+cases here are smoke coverage of the same table.
 """
 
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassFullError,
+    CheckinClassNotFoundError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinItemResult,
     BatchCheckinItemStatus,
@@ -422,8 +431,10 @@ def test_batch_checkin_total_failure_returns_500(
 def test_batch_checkin_class_not_found_returns_404(
     client, auth_headers, fake_gym_id
 ):
-    """A ValueError mentioning 'not found' maps to 404 before any member work."""
-    _override_batch(side_effect=ValueError("Class not found"))
+    """A CheckinClassNotFoundError maps to 404 before any member work — by
+    TYPE, not by the message's wording (test_checkin_error_mapping.py owns
+    the full type -> status table)."""
+    _override_batch(side_effect=CheckinClassNotFoundError("Class not found"))
     try:
         resp = client.post(
             _BATCH_URL,
@@ -439,9 +450,11 @@ def test_batch_checkin_class_not_found_returns_404(
 def test_batch_checkin_invalid_occurrence_returns_400(
     client, auth_headers, fake_gym_id
 ):
-    """A non-'not found' ValueError (not a real occurrence) maps to 400."""
+    """A CheckinOccurrenceNotFoundError (not a real occurrence of this class)
+    maps to 400 — occurrences are computed, so a bad slot is a bad address,
+    not a missing resource."""
     _override_batch(
-        side_effect=ValueError(
+        side_effect=CheckinOccurrenceNotFoundError(
             "No class occurrence on 2026-06-01 for this class"
         )
     )
@@ -533,9 +546,9 @@ def test_signup_idempotent_repeat_returns_existing_id(
 
 
 def test_signup_full_class_returns_400(client, auth_headers, fake_gym_id):
-    """A ValueError('Class is full') from the service maps to 400."""
+    """A CheckinClassFullError from the service maps to 400."""
     service = MagicMock()
-    service.create = AsyncMock(side_effect=ValueError("Class is full"))
+    service.create = AsyncMock(side_effect=CheckinClassFullError("Class is full"))
     app.container.signup_service.override(service)
     try:
         resp = client.post(
@@ -551,9 +564,11 @@ def test_signup_full_class_returns_400(client, auth_headers, fake_gym_id):
 
 
 def test_signup_unknown_class_returns_404(client, auth_headers, fake_gym_id):
-    """A ValueError('Class not found') from the service maps to 404."""
+    """A CheckinClassNotFoundError from the service maps to 404."""
     service = MagicMock()
-    service.create = AsyncMock(side_effect=ValueError("Class not found"))
+    service.create = AsyncMock(
+        side_effect=CheckinClassNotFoundError("Class not found")
+    )
     app.container.signup_service.override(service)
     try:
         resp = client.post(

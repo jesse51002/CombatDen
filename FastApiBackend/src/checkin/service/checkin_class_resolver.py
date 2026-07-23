@@ -13,6 +13,13 @@ import json
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinNotOpenYetError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.checkin_schema import ResolvedClass
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
@@ -49,28 +56,35 @@ class CheckinClassResolver:
         """Resolve a single class occurrence.
 
         Raises:
-            ValueError: If the class does not exist / is deleted / is
-                inactive, no real non-cancelled occurrence lands on the exact
-                ``(occurrence_date, occurrence_time)`` slot (its ORIGINAL
-                slot), or the occurrence starts further than
+            CheckinClassNotFoundError: The class does not exist for this gym
+                (router -> 404).
+            CheckinClassDeletedError: The class is soft-deleted.
+            CheckinClassInactiveError: The class is paused.
+            CheckinOccurrenceNotFoundError: No real non-cancelled occurrence
+                lands on the exact ``(occurrence_date, occurrence_time)`` slot
+                (its ORIGINAL slot).
+            CheckinNotOpenYetError: The occurrence starts further than
                 ``settings.checkin_opens_hours_before_start`` in the future
                 (check-in isn't open yet).
+
+            All of them subclass ``ValueError``; every one but
+            ``CheckinClassNotFoundError`` maps to 400.
         """
         class_row = await self._queries.get_class_for_checkin(
             class_id, gym_id, occurrence_date, occurrence_time
         )
         if class_row is None:
-            raise ValueError("Class not found")
+            raise CheckinClassNotFoundError("Class not found")
         if class_row["is_deleted"]:
-            raise ValueError("Class has been deleted")
+            raise CheckinClassDeletedError("Class has been deleted")
         if not class_row["is_active"]:
-            raise ValueError("Class is not active")
+            raise CheckinClassInactiveError("Class is not active")
 
         occurrence = await self._occurrence_resolution.resolve_original(
             class_id, occurrence_date, occurrence_time
         )
         if occurrence is None:
-            raise ValueError(
+            raise CheckinOccurrenceNotFoundError(
                 f"No class occurrence on {occurrence_date} at "
                 f"{occurrence_time} for this class"
             )
@@ -83,7 +97,7 @@ class CheckinClassResolver:
             hours=settings.checkin_opens_hours_before_start
         )
         if occurrence.occurred_at > opens_at:
-            raise ValueError(
+            raise CheckinNotOpenYetError(
                 "Check-in is not open yet — it opens "
                 f"{settings.checkin_opens_hours_before_start} hours before the "
                 "class starts"

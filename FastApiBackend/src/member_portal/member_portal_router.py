@@ -36,6 +36,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
+from src.checkin.checkin_exceptions import CheckinError
+from src.checkin.schema.checkin_error_schema import CheckinErrorResponse
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
 )
@@ -378,10 +380,22 @@ async def list_my_gym_classes(
     ),
     responses={
         200: {"description": "Reservation created (or an idempotent repeat)"},
-        400: {"description": "Class full / deleted / inactive, or not an occurrence"},
+        400: {
+            "model": CheckinErrorResponse,
+            "description": (
+                "Class full / deleted / inactive, or not an occurrence. "
+                "``code`` is the stable discriminator; ``detail`` is prose"
+            ),
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not this member, or the member is at another gym"},
-        404: {"description": "Member or class not found"},
+        404: {
+            "model": CheckinErrorResponse,
+            "description": (
+                "Member not found (no ``code``), or class not found "
+                "(``code`` = class_not_found)"
+            ),
+        },
     },
 )
 @inject
@@ -415,16 +429,21 @@ async def create_my_signup(
         # decoupled from the videos domain. Never fails the booking.
         profile_refresh_runner.start(member_id, gym_id)
         return result
+    except CheckinError:
+        # Typed dispatch, exactly like the staff sign-up route: re-raised for
+        # the global formatter, which reads the status AND the stable ``code``
+        # off the exception type (class not found -> 404, every other sign-up
+        # rejection -> 400). This route used to pick the status by looking for
+        # "not found" in the message, so it agreed with the staff route only
+        # by coincidence — a reworded message would have silently moved this
+        # member-facing status while the staff one stayed put.
+        raise
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # A foreign/unmapped ValueError is bad input, not a 5xx — same
+        # fallback the staff route keeps. No ``code`` on this one.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

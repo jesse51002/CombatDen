@@ -5,9 +5,13 @@ Covers the effective-capacity resolution ``resolve`` folds into
 overriding the class's ``max_capacity`` (NULL = unlimited) — the same
 resolution ``SignupService`` runs for the sign-up path
 (``test_signup_service.py``), mirrored here since it's the check-in capacity
-gate's actual input; the ``ValueError`` mapping around a ``None`` resolution
-(class not found / deleted / inactive / no real occurrence); and the
-early-check-in window gate.
+gate's actual input; the TYPED rejection each failed condition raises
+(class not found / deleted / inactive / no real occurrence — see
+``src/checkin/checkin_exceptions.py``); and the early-check-in window gate.
+
+Each condition has its OWN exception type, and it is the type — not the
+message — the router maps to an HTTP status
+(``test_checkin_error_mapping.py`` owns that contract).
 
 Occurrence resolution itself (the shared ``CheckinOccurrenceResolution`` —
 window-widening for a rescheduled occurrence, cancelled-day handling,
@@ -27,6 +31,13 @@ from uuid import UUID, uuid4
 import pytest
 from schema.gym_class import RecurringUnit
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinNotOpenYetError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.service.checkin_class_resolver import CheckinClassResolver
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
@@ -239,7 +250,7 @@ async def test_class_not_found_raises() -> None:
     class_id, gym_id = uuid4(), uuid4()
     resolver = _resolver(None)
 
-    with pytest.raises(ValueError, match="Class not found"):
+    with pytest.raises(CheckinClassNotFoundError, match="Class not found"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -249,7 +260,7 @@ async def test_deleted_class_raises() -> None:
         _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
     )
 
-    with pytest.raises(ValueError, match="deleted"):
+    with pytest.raises(CheckinClassDeletedError, match="deleted"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -259,7 +270,7 @@ async def test_inactive_class_raises() -> None:
         _class_row(class_id=class_id, gym_id=gym_id, is_active=False)
     )
 
-    with pytest.raises(ValueError, match="not active"):
+    with pytest.raises(CheckinClassInactiveError, match="not active"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -270,7 +281,7 @@ async def test_no_versions_raises_no_occurrence() -> None:
         _class_row(class_id=class_id, gym_id=gym_id), versions=[]
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -287,7 +298,7 @@ async def test_non_recurrence_date_raises_no_occurrence() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -300,7 +311,7 @@ async def test_wrong_slot_time_raises_no_occurrence() -> None:
         versions=[_version_row(class_id=class_id, gym_id=gym_id)],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(
             class_id, gym_id, _OCCURRENCE_DATE, time(18, 30)
         )
@@ -320,7 +331,7 @@ async def test_cancelled_occurrence_raises_no_occurrence() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -418,5 +429,5 @@ async def test_checkin_too_far_in_future_is_rejected() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="not open yet"):
+    with pytest.raises(CheckinNotOpenYetError, match="not open yet"):
         await resolver.resolve(class_id, gym_id, far_future, _OCCURRENCE_TIME)

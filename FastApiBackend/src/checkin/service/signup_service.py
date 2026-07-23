@@ -31,6 +31,14 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.checkin import SQL_DIR
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassFullError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinOccurrenceCancelledError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
@@ -83,14 +91,20 @@ class SignupService:
         ORIGINAL slot.
 
         Raises:
-            ValueError: "Class not found" if the class doesn't exist for the
-                gym; "Class has been deleted" / "Class is not active" if the
-                class is soft-deleted / inactive; "Not a class occurrence on
-                that date" / "This class is cancelled that day" if the slot
-                isn't a real, non-cancelled occurrence of this class; "Class
-                is full" if the occurrence is at its effective
-                ``max_capacity`` and this member isn't already counted
-                (signed up or attended).
+            CheckinClassNotFoundError: The class doesn't exist for the gym
+                (router -> 404).
+            CheckinClassDeletedError: The class is soft-deleted.
+            CheckinClassInactiveError: The class is paused.
+            CheckinOccurrenceNotFoundError: The slot isn't an occurrence of
+                this class.
+            CheckinOccurrenceCancelledError: It is an occurrence, but that day
+                is cancelled.
+            CheckinClassFullError: The occurrence is at its effective
+                ``max_capacity`` and this member isn't already counted (signed
+                up or attended).
+
+            All of them subclass ``ValueError``; every one but
+            ``CheckinClassNotFoundError`` maps to 400.
         """
         class_row, occurrence = await self._validate_occurrence(
             class_id, gym_id, occurrence_date, occurrence_time
@@ -162,25 +176,25 @@ class SignupService:
         occurrence (for ``original_time``).
 
         Raises:
-            ValueError: See ``create``'s docstring for the message set.
+            CheckinError subclasses: See ``create``'s docstring for the set.
         """
         class_row = await self._queries.get_class_for_checkin(
             class_id, gym_id, occurrence_date, occurrence_time
         )
         if class_row is None:
-            raise ValueError(_CLASS_NOT_FOUND_MSG)
+            raise CheckinClassNotFoundError(_CLASS_NOT_FOUND_MSG)
         if class_row["is_deleted"]:
-            raise ValueError(_CLASS_DELETED_MSG)
+            raise CheckinClassDeletedError(_CLASS_DELETED_MSG)
         if not class_row["is_active"]:
-            raise ValueError(_CLASS_INACTIVE_MSG)
+            raise CheckinClassInactiveError(_CLASS_INACTIVE_MSG)
 
         occurrence = await self._occurrence_resolution.resolve_original(
             class_id, occurrence_date, occurrence_time, include_cancelled=True
         )
         if occurrence is None:
-            raise ValueError(_NOT_AN_OCCURRENCE_MSG)
+            raise CheckinOccurrenceNotFoundError(_NOT_AN_OCCURRENCE_MSG)
         if occurrence.is_cancelled:
-            raise ValueError(_CLASS_CANCELLED_MSG)
+            raise CheckinOccurrenceCancelledError(_CLASS_CANCELLED_MSG)
         return class_row, occurrence
 
     # -- write -------------------------------------------------------------
@@ -256,7 +270,7 @@ class SignupService:
         headcount is never pulled into this one's.
 
         Raises:
-            ValueError: "Class is full".
+            CheckinClassFullError: "Class is full" (router -> 400).
         """
         members = await self._queries.get_signup_or_attended_members(
             class_id, gym_id, occurrence_date, occurrence_time
@@ -264,4 +278,4 @@ class SignupService:
         if member_id in members:
             return
         if len(members) >= effective_capacity:
-            raise ValueError(_CLASS_FULL_MSG)
+            raise CheckinClassFullError(_CLASS_FULL_MSG)

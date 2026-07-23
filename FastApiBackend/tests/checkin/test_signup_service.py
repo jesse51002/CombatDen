@@ -16,6 +16,10 @@ shared resolution algorithm itself lives in
 occurrence-validation coverage that doesn't need the live ``class_signups``
 table — see ``test_signup_integration.py`` for the live-DB behavior (which
 needs the migration to be applied first).
+
+Every rejection has its OWN typed exception (``src/checkin/checkin_exceptions.py``)
+and it is the TYPE the router maps to an HTTP status — never the message. The
+type -> status contract is owned by ``test_checkin_error_mapping.py``.
 """
 
 from datetime import date, datetime, time, timedelta
@@ -25,6 +29,14 @@ from uuid import UUID, uuid4
 import pytest
 from schema.gym_class import RecurringUnit
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassFullError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinOccurrenceCancelledError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
 )
@@ -206,7 +218,7 @@ async def test_cancelled_day_is_rejected() -> None:
         instances=[_instance_exception_row(is_cancelled=True)],
     )
 
-    with pytest.raises(ValueError, match="cancelled"):
+    with pytest.raises(CheckinOccurrenceCancelledError, match="cancelled"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -228,7 +240,7 @@ async def test_non_recurrence_date_is_rejected() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="Not a class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="Not a class occurrence"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -245,7 +257,7 @@ async def test_wrong_slot_time_is_rejected() -> None:
         versions=[_version_row(class_row["class_id"], class_row["gym_id"])],
     )
 
-    with pytest.raises(ValueError, match="Not a class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="Not a class occurrence"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, time(18, 30)
         )
@@ -258,7 +270,7 @@ async def test_no_versions_is_rejected() -> None:
     class_row = _class_row()
     service, session = _service(class_row, versions=[])
 
-    with pytest.raises(ValueError, match="Not a class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="Not a class occurrence"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -269,7 +281,7 @@ async def test_no_versions_is_rejected() -> None:
 async def test_deleted_class_is_rejected() -> None:
     service, session = _service(_class_row(is_deleted=True))
 
-    with pytest.raises(ValueError, match="deleted"):
+    with pytest.raises(CheckinClassDeletedError, match="deleted"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -280,7 +292,7 @@ async def test_deleted_class_is_rejected() -> None:
 async def test_inactive_class_is_rejected() -> None:
     service, session = _service(_class_row(is_active=False))
 
-    with pytest.raises(ValueError, match="not active"):
+    with pytest.raises(CheckinClassInactiveError, match="not active"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -292,7 +304,7 @@ async def test_unknown_class_raises_not_found() -> None:
     service, session = _service(None)
     service._queries.get_signup_or_attended_members = AsyncMock()
 
-    with pytest.raises(ValueError, match="Class not found"):
+    with pytest.raises(CheckinClassNotFoundError, match="Class not found"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -384,7 +396,7 @@ async def test_two_same_day_slots_cancelled_morning_rejected() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="cancelled"):
+    with pytest.raises(CheckinOccurrenceCancelledError, match="cancelled"):
         await service.create(uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, morning)
 
     session.execute.assert_not_called()
@@ -444,7 +456,7 @@ async def test_full_room_rejects_a_new_member() -> None:
         return_value={uuid4(), uuid4()}
     )
 
-    with pytest.raises(ValueError, match="Class is full"):
+    with pytest.raises(CheckinClassFullError, match="Class is full"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
@@ -485,7 +497,7 @@ async def test_exception_max_capacity_overrides_class_default() -> None:
         return_value={uuid4()}  # already 1/1 under the override
     )
 
-    with pytest.raises(ValueError, match="Class is full"):
+    with pytest.raises(CheckinClassFullError, match="Class is full"):
         await service.create(
             uuid4(), uuid4(), uuid4(), _OCCURRENCE_DATE, _OCCURRENCE_TIME
         )
