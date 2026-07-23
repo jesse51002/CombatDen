@@ -11,7 +11,12 @@ columns would also trip it.
 
 from src.reports import SQL_DIR
 
-# Columns/tables that must NEVER be selected by an export query.
+# Columns/tables that must NEVER be selected by an export query. This set is
+# the machine-checked mirror of the exclusion list documented in
+# ``reports_full_export_service`` — the RAG embedding/summary columns, the raw
+# Stripe event blobs, and the internal-infrastructure / machine-cache tables
+# (webhook events, resource locks, the tasks domain, the gym_video_* pool, and
+# the Growth metric cache). Keep the two in sync.
 _FORBIDDEN_SUBSTRINGS = (
     "video_profile_summary",
     "video_profile_embedding",
@@ -20,6 +25,9 @@ _FORBIDDEN_SUBSTRINGS = (
     "stripe_event_payload",
     "stripe_webhook_events",
     "resource_locks",
+    "tasks",
+    "task_items",
+    "gym_growth_metrics",
     "gym_video_",
     "select *",
 )
