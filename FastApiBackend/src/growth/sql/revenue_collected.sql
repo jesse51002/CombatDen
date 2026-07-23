@@ -43,8 +43,10 @@
 -- lines and so are never caught by this branch - the one-time series only ever
 -- counts real one_time/trial line items.
 --
--- The Recurring series is the IDENTICAL figure mrr_trend's line plots, over the
--- same month grid, so the two charge-derived charts line up exactly.
+-- revenue_trend's line plots ALL revenue (this recurring share PLUS the
+-- one-time share PLUS any non-membership cash) over the SAME month grid, so the
+-- two charge-derived charts share an x-axis exactly; this Recurring series is
+-- the recurring slice of that total, never the whole line.
 WITH gym_day AS (
     SELECT
         g.timezone AS tz,

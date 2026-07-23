@@ -164,17 +164,19 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         model=KpiGroupData,
     ),
     GrowthMetricDef(
-        key="mrr_trend",
-        # "Billed" is load-bearing, not decoration: this series is recurring
-        # money that ACTUALLY changed hands per month, while the MRR tile
-        # above it is the forward run-rate. The two legitimately differ, and
-        # the label is what stops that reading as a bug. The newest point is
-        # always month-to-date and therefore low by construction.
-        name="Recurring Revenue Billed",
+        key="revenue_trend",
+        # "Billed" is load-bearing, not decoration: this series is money that
+        # ACTUALLY changed hands per month, while the forward-run-rate
+        # Recurring Revenue KPI tile is what the gym bills per month going
+        # forward. The two legitimately differ, and the label is what stops
+        # that reading as a bug. It is now ALL revenue (recurring + one-time +
+        # trial + cash), not just recurring. The newest point is always
+        # month-to-date and therefore low by construction.
+        name="Revenue Billed",
         type=GrowthMetricType.line,
-        categories=(GrowthCategory.revenue,),
+        categories=(GrowthCategory.overview, GrowthCategory.revenue),
         order=210,
-        sql_file="mrr_trend.sql",
+        sql_file="revenue_trend.sql",
         model=LineData,
     ),
     GrowthMetricDef(
