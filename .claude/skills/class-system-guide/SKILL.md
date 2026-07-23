@@ -301,12 +301,28 @@ rejects an occurrence starting >2h out. Retroactive any-date check-ins work
 ignore_warnings)`:
 - **`is_member=True`** (kiosk / member self) — strict: a blocking condition
   (`no_membership | out_of_classes | ineligible_plan | over_capacity |
-  unsigned_waiver`) **rejects** (`skip_reason`, nothing written).
+  unsigned_waiver`) **rejects** (`skip_reason`, nothing written). What blocks
+  is `GateEvaluation.blocked`, **not** membership of `CheckinWarning` —
+  `overdue` is a warning that deliberately does NOT block (see below).
 - **`is_member=False`** (staff, CRM default) — a clean check-in records, but
   a warned one is **NOT recorded**: `requires_confirmation=true` +
   `warnings`; resend with **`ignore_warnings=true`** to record
   (best-available / NULL attribution). Batch has a `needs_confirmation` item
-  status.
+  status. EVERY reason warns staff, including `overdue`.
+- **The overdue warning** (`overdue`): the attributed membership is past due
+  — evaluated with the ONE shared rule in
+  `src/shared/membership_status.py` (`is_membership_overdue`, active-only),
+  the same text the members-list Overdue tab, its tally, its filter and the
+  growth revenue tiles use. It compares `renew_date` to the occurrence's
+  gym-local `reference_date` (carried on `MembershipUsage`), so a retroactive
+  check-in is judged as of the class it records — the same anchoring
+  `covers_reference` uses. **Never a kiosk blocker**: billing is not a legal
+  gate the way the waiver is, and a past-due date is often a false alarm (a
+  Stripe retry in flight, cash not yet recorded), so staff see it and decide.
+  It sorts LAST in `_REASON_PRIORITY` — a coverage problem is more actionable.
+  Sign-ups are NOT gated by it, matching the waiver precedent. **Every**
+  `CheckinWarning` member must appear in `_REASON_PRIORITY`; that tuple is
+  ordered by `.index`, which raises on a missing member.
 - **The waiver gate** (`unsigned_waiver`,
   `checkin/sql/checkin_unsigned_waivers.sql`): a waiver required by any of
   the member's CURRENT (active/frozen) memberships' plans that they haven't
