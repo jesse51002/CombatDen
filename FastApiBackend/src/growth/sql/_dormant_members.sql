@@ -116,6 +116,19 @@ member_dormancy AS (
                 )
             )
         ) AS dormant,
+        -- Case (b) ONLY: the member still HAS a live membership (not all
+        -- terminal) but it is only trial/one_time packs and they have gone
+        -- quiet. This is the "dormant" the members list LABELS dormant -- an
+        -- all-terminal member is "cancelled"/"ended" there, not dormant.
+        -- The broader `dormant` above (which also fires on all-terminal) is
+        -- the churn/lost unit; a bucket that LABELS members "dormant" must use
+        -- THIS flag so the word means the same thing on both surfaces.
+        (
+            COALESCE(a.membership_count, 0) > 0
+            AND a.terminal_count < a.membership_count
+            AND a.live_recurring_count = 0
+            AND a.last_activity < a.today - CAST(:dormancy_days AS INTEGER)
+        ) AS dormant_unused_pack,
         CASE
             WHEN a.terminal_count = a.membership_count
                 THEN a.last_terminal_date

@@ -44,7 +44,13 @@ member_flags AS (
 classified AS (
     SELECT
         CASE
-            WHEN d.dormant THEN 'dormant'
+            -- The status mix LABELS this bucket "Dormant", so it uses the
+            -- members-list meaning (only-live-short-packs + gone quiet), NOT
+            -- the broader case-(a)+(b) churn flag. An all-terminal member is
+            -- churned (counted by the lost/churn metrics) but reads as
+            -- cancelled, not dormant -- so they land in no live-status bucket
+            -- here, exactly as the members list shows them.
+            WHEN d.dormant_unused_pack THEN 'dormant'
             WHEN f.has_overdue THEN 'overdue'
             WHEN f.has_frozen THEN 'frozen'
             WHEN f.has_trial THEN 'trial'
