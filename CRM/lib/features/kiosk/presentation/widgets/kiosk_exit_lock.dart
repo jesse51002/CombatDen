@@ -45,8 +45,7 @@ class KioskExitLock extends StatelessWidget {
     final confirmed = await ConfirmationModal.show(
       context: context,
       title: 'Exit Kiosk Mode?',
-      message: 'This signs the iPad out. You’ll need to sign back in to '
-          'manage your gym.',
+      message: 'This signs the iPad out. Staff will need to sign back in.',
       confirmLabel: 'Exit & sign out',
       confirmColor: DesignConstants.badRed,
     );

@@ -119,8 +119,8 @@ void main() {
     expect(find.byIcon(Symbols.check_sharp), findsNWidgets(2));
   });
 
-  testWidgets('shows a points-only panel (no grid, no redeem line) when the '
-      'gym has no rewards', (tester) async {
+  testWidgets('a no-rewards gym still gets an app nudge — booking, not '
+      'redeeming — over the points-only panel', (tester) async {
     await pumpGlance(
       tester,
       glanceState.copyWith(rewards: const <RewardResponse>[]),
@@ -129,7 +129,32 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('YOUR POINTS'), findsOneWidget);
     expect(find.byType(ProgressArc), findsNothing);
+    // The redeem line is gone but the funnel is not — it points at booking.
     expect(find.text('Redeem rewards in the CombatDen app'), findsNothing);
+    expect(find.text('Get the CombatDen app to book classes'), findsOneWidget);
+  });
+
+  testWidgets('a repeat check-in softens the greeting and drops the +pts chip',
+      (tester) async {
+    // Contract-wise a repeat awards no points; the fixture keeps points to
+    // prove the chip is suppressed by alreadyCheckedIn, not merely by a zero.
+    const repeat = CheckInResponse(
+      logId: 'log-1',
+      memberId: 'mem-1',
+      classId: 'class-1',
+      alreadyCheckedIn: true,
+      pointsAwarded: 15,
+      classStreakWeeks: 7,
+    );
+    await pumpGlance(tester, glanceState.copyWith(checkInResult: repeat));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text("You're already checked in for today, Marcus."),
+      findsOneWidget,
+    );
+    expect(find.text('Nice one, Marcus.'), findsNothing);
+    expect(find.text('+15 pts'), findsNothing);
   });
 
   testWidgets('week strip marks current_week_days positionally, Monday-first',

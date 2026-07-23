@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
-import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
@@ -85,9 +84,10 @@ class _NameRow extends StatelessWidget {
           vertical: DesignConstants.spacingLarge,
         ),
         child: Text(
-          // First name + last initial only — a shared iPad shouldn't show a
-          // full member name a bystander can read (see [kioskDisplayName]).
-          kioskDisplayName(row.name),
+          // The member's FULL name — two members who share a first name + last
+          // initial must stay distinguishable at the moment they tap to check
+          // in (a first-initial abbreviation collides silently).
+          row.name,
           style: DesignConstants.h2,
           textAlign: TextAlign.center,
         ),

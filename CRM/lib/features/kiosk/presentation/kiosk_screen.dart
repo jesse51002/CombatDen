@@ -12,13 +12,13 @@ import 'package:crm/features/kiosk/presentation/screens/kiosk_class_pick_screen.
 import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_glance_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_checking_in.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_header.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_idle_warning.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
-import 'package:crm/shared/widgets/centered_processing_view.dart';
 
 /// The full-viewport member surface mounted (in place of the admin workspace)
 /// while kiosk is active — no `AppShell`, no nav rail, no admin routes.
@@ -107,7 +107,7 @@ class _ViewSwitcher extends StatelessWidget {
         return switch (state.view) {
           KioskView.home => const KioskHomeScreen(),
           KioskView.classPick => const KioskClassPickScreen(),
-          KioskView.checkingIn => const CenteredProcessingView(),
+          KioskView.checkingIn => const KioskCheckingIn(),
           KioskView.checkedIn => const KioskGlanceScreen(),
           KioskView.blocked => const KioskBlockedScreen(),
           KioskView.closing => const KioskClosingScreen(),

@@ -10,15 +10,21 @@ import 'package:crm/shared/widgets/fill_grid.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The glance's right half — the member's points balance + the just-earned
-/// delta over the image-first reward tiles, with a calm "redeem in the app"
-/// footer (mockup `.rewards`). Degrades gracefully: a null [pointsBalance]
-/// (billing fetch failed) drops the balance line and shows cost-only tiles;
-/// an empty [rewards] gym shows a points-only panel (no grid, no footer).
+/// delta over the image-first reward tiles, always closing on a calm app nudge
+/// (mockup `.rewards`). The nudge never disappears: with rewards it points at
+/// redemption, without them (or a failed catalog fetch) it points at booking,
+/// so a no-rewards gym's glance isn't a lone "YOUR POINTS" eyebrow over empty
+/// space. Degrades gracefully otherwise: a null [pointsBalance] (billing fetch
+/// failed) drops the balance line and shows cost-only tiles; an empty [rewards]
+/// gym shows a points-only panel (no grid). On a repeat check-in
+/// ([alreadyCheckedIn]) the "+N pts" celebration chip is suppressed (it earned
+/// none).
 class KioskRewardsPanel extends StatelessWidget {
   final int? pointsBalance;
   final int pointsAwarded;
   final List<RewardResponse> rewards;
   final bool loading;
+  final bool alreadyCheckedIn;
 
   const KioskRewardsPanel({
     super.key,
@@ -26,20 +32,27 @@ class KioskRewardsPanel extends StatelessWidget {
     required this.pointsAwarded,
     required this.rewards,
     required this.loading,
+    this.alreadyCheckedIn = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasRewards = !loading && rewards.isNotEmpty;
     return KioskGlancePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          _RewardsHead(balance: pointsBalance, awarded: pointsAwarded),
+          _RewardsHead(
+            balance: pointsBalance,
+            awarded: pointsAwarded,
+            alreadyCheckedIn: alreadyCheckedIn,
+          ),
           Expanded(child: _GridArea(rewards: rewards, balance: pointsBalance,
               loading: loading)),
-          if (hasRewards) const _RedeemFooter(),
+          // The app funnel always closes the panel — only hidden while the
+          // catalog is still loading (the grid shows a spinner and we don't yet
+          // know which nudge fits).
+          if (!loading) _AppFooter(hasRewards: rewards.isNotEmpty),
         ],
       ),
     );
@@ -49,8 +62,13 @@ class KioskRewardsPanel extends StatelessWidget {
 class _RewardsHead extends StatelessWidget {
   final int? balance;
   final int awarded;
+  final bool alreadyCheckedIn;
 
-  const _RewardsHead({required this.balance, required this.awarded});
+  const _RewardsHead({
+    required this.balance,
+    required this.awarded,
+    required this.alreadyCheckedIn,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +82,8 @@ class _RewardsHead extends StatelessWidget {
           spacing: DesignConstants.spacingMedium,
           children: [
             if (balance != null) _Balance(balance: balance!),
-            if (awarded > 0) _EarnedChip(awarded: awarded),
+            // No "+N pts" celebration on a repeat check-in — it awards none.
+            if (awarded > 0 && !alreadyCheckedIn) _EarnedChip(awarded: awarded),
           ],
         ),
       ],
@@ -156,8 +175,12 @@ class _GridArea extends StatelessWidget {
   }
 }
 
-class _RedeemFooter extends StatelessWidget {
-  const _RedeemFooter();
+/// The always-present app funnel under the grid: redemption when the gym has
+/// rewards, booking otherwise — so the nudge never vanishes.
+class _AppFooter extends StatelessWidget {
+  final bool hasRewards;
+
+  const _AppFooter({required this.hasRewards});
 
   @override
   Widget build(BuildContext context) {
@@ -167,8 +190,12 @@ class _RedeemFooter extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         const Hairline(),
-        const Center(
-          child: KioskAppLine(text: 'Redeem rewards in the CombatDen app'),
+        Center(
+          child: KioskAppLine(
+            text: hasRewards
+                ? 'Redeem rewards in the CombatDen app'
+                : 'Get the CombatDen app to book classes',
+          ),
         ),
       ],
     );

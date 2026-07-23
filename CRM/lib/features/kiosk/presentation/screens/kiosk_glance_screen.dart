@@ -36,6 +36,7 @@ class KioskGlanceScreen extends StatelessWidget {
           prev.glanceCountdown != cur.glanceCountdown,
       builder: (context, state) {
         final result = state.checkInResult;
+        final alreadyCheckedIn = result?.alreadyCheckedIn ?? false;
         return KioskStage(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -48,6 +49,7 @@ class KioskGlanceScreen extends StatelessWidget {
                 children: [
                   KioskGlanceGreeting(
                     firstName: kioskFirstName(state.selectedMember?.name),
+                    alreadyCheckedIn: alreadyCheckedIn,
                   ),
                   IntrinsicHeight(
                     child: Row(
@@ -67,6 +69,7 @@ class KioskGlanceScreen extends StatelessWidget {
                             pointsAwarded: result?.pointsAwarded ?? 0,
                             rewards: state.rewards,
                             loading: state.glanceLoading,
+                            alreadyCheckedIn: alreadyCheckedIn,
                           ),
                         ),
                       ],

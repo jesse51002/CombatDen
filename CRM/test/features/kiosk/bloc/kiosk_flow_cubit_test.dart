@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc_test/bloc_test.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +179,29 @@ void main() {
         data: rows,
       );
 
+  // A minimal occurrence at [occurredAt] for the checkinable-now filter test.
+  EffectiveClassInstance occAt(
+    String id,
+    DateTime occurredAt, {
+    int duration = 60,
+    bool cancelled = false,
+  }) =>
+      EffectiveClassInstance(
+        classId: id,
+        gymId: gymId,
+        className: id,
+        classDate: DateTime(2026, 1, 1),
+        originalDate: DateTime(2026, 1, 1),
+        originalTime: '00:00:00',
+        occurredAt: occurredAt,
+        resolvedClassTime: '00:00:00',
+        resolvedDurationMinutes: duration,
+        pointsWorth: 10,
+        isCancelled: cancelled,
+        hasInstanceException: false,
+        hasRangeException: false,
+      );
+
   group('name search', () {
     test('debounces, then populates results from the roster', () {
       fakeAsync((async) {
@@ -273,6 +298,62 @@ void main() {
         verify(() => session.endFlow()).called(1);
       },
     );
+  });
+
+  group('class pick — checkinable-now filter (kiosk-local)', () {
+    // Fixed now = t0 = 18:00. The filter keeps in-session + early-window
+    // occurrences and drops already-ended, out-of-window, and cancelled ones.
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'drops ended / out-of-window / cancelled classes and orders the rest '
+      'current-then-soonest',
+      setUp: () {
+        final ended = occAt('ended', t0.subtract(const Duration(hours: 2)));
+        final soon = occAt('soon', t0.add(const Duration(hours: 1)));
+        final later = occAt('later', t0.add(const Duration(hours: 3)));
+        final cancelled = occAt('cancelled', t0, cancelled: true);
+        when(() => schedule.listEffectiveInstances(any(), any(), any()))
+            .thenAnswer((_) async => [later, ended, soon, occ1, cancelled]);
+      },
+      build: build,
+      act: (cubit) async {
+        cubit.selectMember(member1);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      },
+      verify: (cubit) {
+        // occ1 (18:00, in session) then soon (19:00, within the 2h window);
+        // ended (17:00 end), later (21:00 start), and cancelled all dropped.
+        expect(
+          cubit.state.classes.map((c) => c.classId).toList(),
+          ['class-1', 'soon'],
+        );
+      },
+    );
+  });
+
+  group('stale check-in response guard (SEC-5)', () {
+    test('a response landing after the member left does not leak the glance '
+        'over the next person', () async {
+      final gate = Completer<CheckInResponse>();
+      when(() => member.checkInMember(any())).thenAnswer((_) => gate.future);
+      final cubit = build();
+
+      cubit.selectMember(member1);
+      await Future<void>.delayed(Duration.zero); // class load settles
+      final pending = cubit.selectClass(occ1); // check-in awaits the gate
+      expect(cubit.state.view, KioskView.checkingIn);
+
+      cubit.goHome(); // the member walks away before the response arrives
+      expect(cubit.state.view, KioskView.home);
+
+      gate.complete(recorded); // the stale response finally lands
+      await pending;
+
+      expect(cubit.state.view, KioskView.home); // NOT the prior glance
+      expect(cubit.state.checkInResult, isNull);
+      // Ended exactly once (by goHome), never double-ended by the stale branch.
+      verify(() => session.endFlow()).called(1);
+      await cubit.close();
+    });
   });
 
   group('5-minute flow-idle guard', () {

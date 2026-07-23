@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_exit_lock.dart';
+import 'package:crm/shared/widgets/navigation/gym_logo.dart';
 
 /// The persistent kiosk header: gym identity on the left, the discreet
 /// staff-exit lock on the right, a hairline beneath — the mockup's
@@ -45,7 +45,9 @@ class _Identity extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        const _LogoMark(),
+        // The gym's uploaded logo when it has one, else the CombatDen mark —
+        // the same real-gym-identity treatment the admin nav chrome uses.
+        const GymLogo(size: DesignConstants.navMenuButtonSize),
         Flexible(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,30 +71,6 @@ class _Identity extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _LogoMark extends StatelessWidget {
-  const _LogoMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: DesignConstants.navMenuButtonSize,
-      height: DesignConstants.navMenuButtonSize,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: DesignConstants.primaryGradient,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-        boxShadow: DesignConstants.buttonShadow,
-      ),
-      child: Icon(
-        Symbols.adjust_sharp,
-        size: DesignConstants.iconSizeLarge,
-        weight: DesignConstants.iconWeight,
-        color: DesignConstants.onAccent,
-      ),
     );
   }
 }

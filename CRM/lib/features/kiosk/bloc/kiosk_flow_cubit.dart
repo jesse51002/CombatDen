@@ -194,9 +194,19 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
           await _scheduleRepo.listEffectiveInstances(_gymId, today, today);
       if (isClosed || seq != _classesSeq) return;
       final now = _now();
+      // Genuinely checkinable RIGHT NOW: in-session or starting within the 2h
+      // early window (occurrenceCheckInOpen), AND not already ended — so this
+      // morning's finished classes are dropped instead of being offered at
+      // 6pm (the backend would silently accept a past occurrence). Kiosk-local:
+      // the tighter end-bound lives here, not in the shared predicate the staff
+      // check-in dialog reuses. Ordered current/soonest first — ascending start
+      // instant puts an in-session class before an upcoming one.
       final open = all
           .where((i) =>
-              !i.isCancelled && occurrenceCheckInOpen(i.occurredAt, now))
+              !i.isCancelled &&
+              occurrenceCheckInOpen(i.occurredAt, now) &&
+              occurrenceEnd(i.occurredAt, i.resolvedDurationMinutes)
+                  .isAfter(now))
           .toList()
         ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
       emit(state.copyWith(classesLoading: false, classes: open));
@@ -217,6 +227,11 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     registerActivity();
     final member = state.selectedMember;
     if (member == null || state.view == KioskView.checkingIn) return;
+    // Guard the async check-in with the class-flow seq (bumped by goHome /
+    // selectMember): a response arriving after the member walked away must not
+    // emit the prior member's glance/blocked over the next person. Mirrors the
+    // stale-drop the search / class-load / glance fetches already do.
+    final seq = _classesSeq;
     emit(state.copyWith(view: KioskView.checkingIn));
     _syncIdleTimer();
     try {
@@ -230,7 +245,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
           isMember: true,
         ),
       );
-      if (isClosed) return;
+      if (isClosed || seq != _classesSeq) return;
       _endFlowIfStarted();
       if (resp.logId == null) {
         emit(state.copyWith(
@@ -254,7 +269,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       }
     } catch (e, st) {
       log('Kiosk check-in failed', error: e, stackTrace: st);
-      if (isClosed) return;
+      if (isClosed || seq != _classesSeq) return;
       _endFlowIfStarted();
       emit(state.copyWith(view: KioskView.blocked, checkInFailed: true));
       _syncIdleTimer();
@@ -410,6 +425,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
     _glanceTimer?.cancel();
+    // Balance a mid-flow teardown: without this the session's flowCount stays
+    // incremented (endFlow is a pure in-memory decrement — safe post-close).
+    _endFlowIfStarted();
     return super.close();
   }
 }
