@@ -148,6 +148,11 @@ class _Track extends StatelessWidget {
           FractionallySizedBox(
             alignment: Alignment.centerLeft,
             widthFactor: fraction,
+            // heightFactor is load-bearing: without it the fill's child gets
+            // the Stack's loose height (min 0) and, having no intrinsic
+            // height, collapses to zero — the track shows but the coloured
+            // fill is invisible. Pin it to the full track height.
+            heightFactor: 1,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: fill,
