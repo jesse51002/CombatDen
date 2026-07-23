@@ -151,22 +151,6 @@ class GymThemeResponse(BaseModel):
     theme_design_id: str
 
 
-class GymEmployeeResponse(BaseModel):
-    """A single gym_employees row."""
-
-    employee_id: UUID
-    gym_id: UUID
-    user_id: UUID | None
-    employee_type: str
-    first_name: str
-    last_name: str
-    phone: str | None
-    email: str | None
-    employee_pic_url: str | None
-    employee_public_description: str | None
-    created_at: datetime
-
-
 class GymCreateResponse(BaseModel):
     """Response for POST /api/v1/gyms/ (Stripe onboarding path).
 

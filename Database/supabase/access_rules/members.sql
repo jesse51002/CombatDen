@@ -7,7 +7,7 @@ CREATE POLICY "Users and gym staff can view members"
     ON members
     FOR SELECT
     USING (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     );
 
@@ -17,11 +17,11 @@ CREATE POLICY "Users and gym staff can update members"
     ON members
     FOR UPDATE
     USING (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     )
     WITH CHECK (
-        auth.uid() = user_id
+        lower(members.email) = lower(auth.jwt() ->> 'email')
         OR is_gym_admin_or_owner(members.gym_id)
     );
 
@@ -33,7 +33,7 @@ CREATE POLICY "Gym staff can insert members"
     WITH CHECK (is_gym_admin_or_owner(members.gym_id));
 
 -- Identity columns stay immutable (PK / FK / created_at).
-REVOKE UPDATE (member_id, user_id, gym_id, created_at) ON TABLE members FROM authenticated;
+REVOKE UPDATE (member_id, gym_id, created_at) ON TABLE members FROM authenticated;
 
 -- Column-level Stripe gating. The merged contact / freeze / Stripe billing
 -- columns are written by service_role only — never by the client.
@@ -68,7 +68,8 @@ REVOKE INSERT, UPDATE (
     video_profile_built_at
 ) ON TABLE members FROM authenticated;
 
--- Filtered billing view: read-only for clients (writes go to the members
--- table via service_role). security_invoker propagates members' RLS.
-GRANT SELECT ON member_billing_profile TO authenticated;
+-- Filtered billing view (writes go to the members table via service_role).
+-- No client grant: `authenticated` holds no privileges on any table or view
+-- (see zz_client_privileges.sql). security_invoker propagates members' RLS
+-- to whichever role does read it.
 REVOKE INSERT, UPDATE, DELETE ON member_billing_profile FROM authenticated;

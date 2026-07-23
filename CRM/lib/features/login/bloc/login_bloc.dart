@@ -32,16 +32,38 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<LoginSignUpRequested>(_onSignUpRequested);
     on<LoginSignOutRequested>(_onSignOutRequested);
     on<LoginStatusChecked>(_onStatusChecked);
+    on<LoginResendConfirmationRequested>(_onResendConfirmationRequested);
+    on<LoginExternalSessionDetected>(_onExternalSessionDetected);
 
-    // Listen to Supabase auth state changes so
-    // that session expiry or external sign-outs
-    // automatically redirect to login.
+    // Listen to Supabase auth state changes. A session turning null
+    // (expiry / external sign-out) redirects to login; a session
+    // ARRIVING from outside the login form — a persisted session on
+    // boot, the email-confirmation link landing on web (Supabase
+    // detects it in the URL and fires `signedIn`), or a token refresh
+    // (`userUpdated`) — flips the app to authenticated. This catches the
+    // confirmation-link landing and closes the pre-existing race where
+    // `LoginStatusChecked` ran before the URL session landed and
+    // stranded the app on the login screen.
+    //
+    // `passwordRecovery` is deliberately NOT in that set: this CRM has no
+    // forgot-password / reset-password UI, so a recovery event could only
+    // arrive out-of-band (a Supabase dashboard reset) and treating it as a
+    // login would authenticate the user WITHOUT letting them set a new
+    // password. A real password-reset flow — which needs a dedicated
+    // set-password screen — is intentionally not handled yet (future work).
     _authSubscription =
         _authRepository.authStateChanges.listen(
       (authState) {
-        if (authState.event ==
-            AuthChangeEvent.signedOut) {
+        final event = authState.event;
+        if (event == AuthChangeEvent.signedOut) {
           add(const LoginSignOutRequested());
+        } else if (event == AuthChangeEvent.signedIn ||
+            event == AuthChangeEvent.initialSession ||
+            event == AuthChangeEvent.userUpdated) {
+          final session = authState.session;
+          if (session != null) {
+            add(LoginExternalSessionDetected(session.user));
+          }
         }
       },
     );
@@ -88,12 +110,21 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     emit(const LoginLoading());
 
     try {
-      final user = await _authRepository.signUp(
+      final response = await _authRepository.signUp(
         email: event.email,
         password: event.password,
       );
-      // Automatically log in user after successful registration
-      emit(LoginAuthenticated(user));
+      if (response.session != null) {
+        // Confirmations off / auto-confirmed: a session came back, so the
+        // user is already authenticated. (The external listener also sees
+        // this `signedIn`, but the emit here is deduped.)
+        emit(LoginAuthenticated(response.user!));
+      } else {
+        // Confirmations on: no session yet. Hold on the "check your email"
+        // screen until the emailed link lands and the external-session
+        // listener flips the app to authenticated.
+        emit(LoginAwaitingEmailConfirmation(event.email));
+      }
     } on AuthException catch (e, stackTrace) {
       log('Sign up failed', error: e, stackTrace: stackTrace);
 
@@ -109,6 +140,39 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         isLoginError: false,
       ));
     }
+  }
+
+  /// Handle a confirmation-email resend from the "check your email" screen.
+  /// Keeps the user on [LoginAwaitingEmailConfirmation]; on success flips
+  /// `resent` so the UI can acknowledge it.
+  Future<void> _onResendConfirmationRequested(
+    LoginResendConfirmationRequested event,
+    Emitter<LoginState> emit,
+  ) async {
+    try {
+      await _authRepository.resendConfirmation(event.email);
+      emit(LoginAwaitingEmailConfirmation(event.email, resent: true));
+    } catch (e, stackTrace) {
+      log('Resend confirmation failed', error: e, stackTrace: stackTrace);
+      // Stay on the confirmation screen; the user can try again.
+      emit(LoginAwaitingEmailConfirmation(event.email));
+    }
+  }
+
+  /// Handle a session that arrived from outside the login form (persisted
+  /// session on boot, the email-confirmation link landing on web, or a
+  /// token refresh). Mark the app authenticated, guarding against a
+  /// redundant emit for the same user.
+  Future<void> _onExternalSessionDetected(
+    LoginExternalSessionDetected event,
+    Emitter<LoginState> emit,
+  ) async {
+    final current = state;
+    if (current is LoginAuthenticated &&
+        current.user.id == event.user.id) {
+      return;
+    }
+    emit(LoginAuthenticated(event.user));
   }
 
   /// Handle sign out request

@@ -2,8 +2,8 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/members/bloc/set_app_theme_bloc.dart';
 import 'package:crm/features/members/bloc/set_app_theme_event.dart';
 import 'package:crm/features/members/bloc/set_app_theme_state.dart';

@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from postgrest import AsyncPostgrestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -95,15 +94,3 @@ class DirectDatabasePool:
         )
         raise last_exc  # type: ignore[misc]
 
-
-class SupabaseClient:
-    """Manages the Supabase PostgREST client."""
-
-    def __init__(self) -> None:
-        self.client = AsyncPostgrestClient(
-            base_url=f"{settings.supabase_url}/rest/v1",
-            headers={
-                "apikey": settings.supabase_service_role_key,
-                "Authorization": (f"Bearer {settings.supabase_service_role_key}"),
-            },
-        )

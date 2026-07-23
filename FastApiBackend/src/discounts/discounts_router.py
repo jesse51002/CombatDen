@@ -15,7 +15,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountUpdateRequest,
 )
 from src.discounts.service.discounts_service import DiscountsService
-from src.shared.auth import Auth, security
+from src.shared.auth import STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def list_discounts(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await discounts_service.list_discounts(gym_id)

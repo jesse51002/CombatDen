@@ -30,8 +30,15 @@ class AuthRepository {
     }
   }
 
-  /// Sign up with email and password
-  Future<User> signUp({
+  /// Sign up with email and password.
+  ///
+  /// Returns the full [AuthResponse] so the caller can branch on
+  /// `response.session`: when Supabase email confirmation is enabled the
+  /// session is **null** (the user must click the emailed link before a
+  /// session exists); when confirmation is off (or the address is
+  /// auto-confirmed) the session is populated and the user is immediately
+  /// authenticated. `response.user` is always populated on success.
+  Future<AuthResponse> signUp({
     required String email,
     required String password,
   }) async {
@@ -45,11 +52,27 @@ class AuthRepository {
         throw AuthException('Sign up failed');
       }
 
-      return response.user!;
+      return response;
     } on AuthException {
       rethrow;
     } catch (e) {
       throw AuthException('An unexpected error occurred');
+    }
+  }
+
+  /// Re-send the sign-up confirmation email to [email]. Used from the
+  /// "check your email" screen when the first link didn't arrive. Supabase
+  /// silently ignores a resend for an already-confirmed address.
+  Future<void> resendConfirmation(String email) async {
+    try {
+      await _supabase.auth.resend(
+        type: OtpType.signup,
+        email: email.trim(),
+      );
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException('Could not resend the confirmation email');
     }
   }
 

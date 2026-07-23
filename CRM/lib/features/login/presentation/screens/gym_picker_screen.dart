@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/gym_setup/data/models/employee_role.dart';
 import 'package:crm/features/gym_setup/data/models/gym_with_role.dart';
 
 /// Shown after sign-in when the user administers more than one gym.
@@ -144,24 +144,11 @@ class _RoleChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),
       child: Text(
-        _label(role),
+        role.label,
         style: DesignConstants.pSmall.copyWith(
           color: DesignConstants.text2nd,
         ),
       ),
     );
-  }
-
-  static String _label(EmployeeRole role) {
-    switch (role) {
-      case EmployeeRole.owner:
-        return 'Owner';
-      case EmployeeRole.admin:
-        return 'Admin';
-      case EmployeeRole.trainer:
-        return 'Trainer';
-      case EmployeeRole.unknown:
-        return 'Staff';
-    }
   }
 }

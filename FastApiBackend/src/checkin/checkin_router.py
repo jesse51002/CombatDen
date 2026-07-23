@@ -49,7 +49,7 @@ from src.checkin.service.checkin_remover import CheckinRemover
 from src.checkin.service.signup_service import SignupService
 from src.checkin.service.streak_service import StreakService
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import ALL_EMPLOYEES, STAFF, Auth, security
 from src.videos.service.member_video_profile_refresh_runner import (
     MemberVideoProfileRefreshRunner,
 )
@@ -72,8 +72,10 @@ checkin_router = APIRouter(
         "and resolves it against the class's schedule versions + exceptions, "
         "bumps ``last_class``, "
         "awards the class's points, and auto-ends trial / punch-card "
-        "memberships once depleted. ``is_member = true`` (kiosk / member "
-        "self-check-in) runs the strict gate — selects the best eligible "
+        "memberships once depleted. Staff-only (``STAFF`` at the member's "
+        "gym) — ``is_member`` is a staff-selected MODE, not a caller "
+        "identity. ``is_member = true`` (kiosk mode) runs the strict gate — "
+        "selects the best eligible "
         "membership with remaining capacity (trial -> one_time -> recurring) "
         "and, if none covers / the room is full, returns ``log_id = null`` "
         "with a ``skip_reason`` and writes nothing. ``is_member = false`` "
@@ -105,7 +107,10 @@ async def checkin(
 ) -> CheckinResponse:
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF,
+        gym_id=request.gym_id,
+    )
 
     try:
         resolved_class = await resolver.resolve(
@@ -165,8 +170,8 @@ async def checkin(
         "below capacity — reverses the auto-end (clears the pack's "
         "``end_date``). The occurrence itself is kept (the class still "
         "happened). A member who was not checked in returns "
-        "``removed = false`` with a 200. Admin / owner "
-        "only."
+        "``removed = false`` with a 200. Staff only "
+        "(owner/admin/front_desk)."
     ),
     responses={
         200: {"description": "Removal result (removed true / false)"},
@@ -188,7 +193,7 @@ async def remove_checkin(
 ) -> CheckinRemoveResponse:
     """Reverse one member's check-in (staff)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await remover.remove(
@@ -233,8 +238,8 @@ async def remove_checkin(
         "attended (NULL capacity = unlimited, never blocks). Idempotent — "
         "signing up twice for the same (member, occurrence) returns the "
         "existing ``signup_id`` with ``already_signed_up = true`` and "
-        "consumes no extra capacity. Both staff (any employee of the gym) "
-        "and the member themselves may call this."
+        "consumes no extra capacity. Staff-only — the caller must hold a "
+        "``STAFF`` role at the member's gym."
     ),
     responses={
         200: {"description": "Sign-up created (or an idempotent repeat)"},
@@ -261,7 +266,10 @@ async def signup(
 ) -> SignupResponse:
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF,
+        gym_id=request.gym_id,
+    )
 
     try:
         result = await signup_service.create(
@@ -323,9 +331,11 @@ async def remove_signup(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     signup_service: SignupService = Depends(Provide[DependencyInjector.signup_service]),
 ) -> SignupRemoveResponse:
-    """Cancel a member's sign-up (staff or the member themselves)."""
+    """Cancel a member's sign-up (staff of the member's gym)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF, gym_id=gym_id
+    )
 
     try:
         return await signup_service.remove(
@@ -362,7 +372,7 @@ async def remove_signup(
         "batch) records a clean member and holds a warned one as "
         "``needs_confirmation`` (not recorded) unless ``ignore_warnings = true`` "
         "overrides; ``true`` runs the strict kiosk gate per member, skipping the "
-        "uncovered / over-capacity. Admin/owner only."
+        "uncovered / over-capacity. Staff only (owner/admin/front_desk)."
     ),
     responses={
         207: {
@@ -390,7 +400,13 @@ async def checkin_batch(
 ) -> JSONResponse:
     """Batch staff check-in — 207 on any processed mix, 500 on total failure."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
+    await auth.verify_roles(request.gym_id, user_payload, STAFF)
+    # A member from another gym cannot be stamped in: member_attendance's
+    # composite FK (member_id, gym_id) -> members(member_id, gym_id) rejects
+    # the write, and the batch isolates that per member (a failed item in the
+    # 207), so a foreign/unknown id never corrupts the batch or leaks a
+    # cross-gym row. No whole-batch gym pre-check — it would break the 207
+    # per-item contract by failing every member for one bad id.
 
     try:
         response, all_failed = await batch_service.batch_checkin(
@@ -482,7 +498,7 @@ async def list_attendees(
 ) -> AttendeeListResponse:
     """Everyone signed up or attended for one occurrence (may be empty)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
 
     try:
         return await attendees_service.list_attendees(
@@ -516,8 +532,8 @@ async def list_attendees(
         "reservations (occurrences not yet ended, soonest first, "
         "unpaginated) plus a newest-first PAGE of their history — attended "
         "occurrences and no-shows (a reservation whose occurrence ended "
-        "with no matching check-in). Staff for any gym member, or the "
-        "member themselves."
+        "with no matching check-in). Staff-only — the caller must hold a "
+        "``STAFF`` role at the member's gym."
     ),
     responses={
         200: {"description": "History retrieved"},
@@ -539,7 +555,9 @@ async def get_member_class_history(
 ) -> MemberClassHistoryResponse:
     """One member's reservations + attended + no-show feed."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         return await history_service.get_history(
@@ -577,7 +595,9 @@ async def get_streak(
 ) -> StreakResponse:
     """Weeks of consecutive class attendance."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
 
     try:
         weeks = await streak_service.get_streak(member_id, gym_id)

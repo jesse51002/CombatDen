@@ -87,5 +87,21 @@ class AppRoutes {
     return id.isEmpty ? null : id;
   }
 
+  /// Deep-link path for a specific employee's detail page —
+  /// `/employees/detail/<employeeId>`. Round-trips with
+  /// [employeeIdFromPath] (mirrors [memberDetailPath]).
+  static String employeeDetailPath(String employeeId) =>
+      '$employeeDetail/$employeeId';
+
+  /// The employee id from an `/employees/detail/<id>` path, or null when
+  /// [path] is not a specific-employee deep link (the bare [employeeDetail]
+  /// route, or any other route). Round-trips with [employeeDetailPath].
+  static String? employeeIdFromPath(String path) {
+    const prefix = '$employeeDetail/';
+    if (!path.startsWith(prefix)) return null;
+    final id = path.substring(prefix.length);
+    return id.isEmpty ? null : id;
+  }
+
   AppRoutes._();
 }

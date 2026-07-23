@@ -10,7 +10,7 @@ CREATE POLICY "Users and gym staff can view applied membership discounts"
         EXISTS (
             SELECT 1 FROM members m
             WHERE m.member_id = member_membership_applied_discounts_unfiltered.member_id
-            AND m.user_id = auth.uid()
+            AND lower(m.email) = lower(auth.jwt() ->> 'email')
         )
         OR is_gym_admin_or_owner(member_membership_applied_discounts_unfiltered.gym_id)
     );

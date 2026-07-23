@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/nav_pop.dart';
@@ -224,6 +225,9 @@ class _LoadedState extends State<_Loaded> {
     final state = widget.state;
     final members = state.members;
     final hasMembers = members.isNotEmpty;
+    // Write affordances (Edit / Delete the rank, Promote a member) are
+    // owner/admin only; the screen stays fully viewable for front desk.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     // Leading blocks: hero, counts summary, progression, then either the
     // roster title (when populated) or the empty state — followed by the
     // flat, backend-proximity-sorted member rows and an optional trailing
@@ -247,6 +251,7 @@ class _LoadedState extends State<_Loaded> {
                 return _Hero(
                   rank: state.rank,
                   isTop: _isTop,
+                  canConfigure: canConfigure,
                   onEdit: _edit,
                   onDelete: _delete,
                 );
@@ -289,7 +294,8 @@ class _LoadedState extends State<_Loaded> {
                   currentSubIndex: member.currentSubIndex,
                   classesSince: member.classesSince,
                   stepDenominator: member.stepDenominator,
-                  onPromote: () => _promote(member),
+                  onPromote:
+                      canConfigure ? () => _promote(member) : null,
                   onViewMember: () => Navigator.pushNamed(
                     context,
                     AppRoutes.memberDetailPath(member.memberId),
@@ -317,12 +323,17 @@ class _LoadedState extends State<_Loaded> {
 class _Hero extends StatelessWidget {
   final MainRank rank;
   final bool isTop;
+
+  /// Owner/admin: shows the Edit + Delete actions. Front desk: the belt hero
+  /// and back affordance stay, but the write actions are hidden.
+  final bool canConfigure;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _Hero({
     required this.rank,
     required this.isTop,
+    required this.canConfigure,
     required this.onEdit,
     required this.onDelete,
   });
@@ -359,24 +370,25 @@ class _Hero extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: DesignConstants.spacingMedium,
-              children: [
-                AppOutlineButton(
-                  text: 'Edit',
-                  borderRadius: DesignConstants.radiusSmall,
-                  onPressed: onEdit,
-                ),
-                AppOutlineButton(
-                  text: 'Delete',
-                  borderRadius: DesignConstants.radiusSmall,
-                  borderColor: DesignConstants.badRed,
-                  textColor: DesignConstants.badRed,
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
+            if (canConfigure)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: DesignConstants.spacingMedium,
+                children: [
+                  AppOutlineButton(
+                    text: 'Edit',
+                    borderRadius: DesignConstants.radiusSmall,
+                    onPressed: onEdit,
+                  ),
+                  AppOutlineButton(
+                    text: 'Delete',
+                    borderRadius: DesignConstants.radiusSmall,
+                    borderColor: DesignConstants.badRed,
+                    textColor: DesignConstants.badRed,
+                    onPressed: onDelete,
+                  ),
+                ],
+              ),
           ],
         ),
         Row(

@@ -1,7 +1,8 @@
 """API routes for the theme domain.
 
     * ``GET /api/v1/gyms/{gym_id}/showcase`` — a gym's branded class/reward
-      cards (gym-employee gated).
+      cards (any employee of the gym; every role may READ the theme, only
+      owner/admin may CHANGE it via ``PUT /gyms/{id}/theme``).
     * ``GET /api/v1/theme/showcase-defaults`` — category-keyed static demo
       class/reward cards for the standalone theme browser (PUBLIC).
 """
@@ -16,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import ALL_EMPLOYEES, Auth, security
 from src.theme.schema.theme_schema import GymShowcase, ShowcaseDefaults
 from src.theme.service.theme_showcase_defaults_service import (
     ThemeShowcaseDefaultsService,
@@ -35,7 +36,7 @@ theme_router = APIRouter(tags=["theme"])
     description=(
         "The gym's branded class cards and points-store reward cards. "
         "``classes`` / ``rewards`` are possibly-empty lists. "
-        "Gym-employee gated."
+        "Readable by any employee of the gym (all four roles)."
     ),
     responses={
         200: {"description": "The gym's showcase"},
@@ -54,7 +55,11 @@ async def get_gym_showcase(
 ) -> GymShowcase:
     """Return the gym's showcase: its class cards and reward cards."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    # ALL_EMPLOYEES: every role may READ its gym's current theme/showcase (the
+    # auth gate fetches it for everyone at sign-in). Only owner/admin may
+    # CHANGE the theme — that write is `PUT /gyms/{id}/theme`, still gated
+    # OWNER_ADMIN in gyms_router.
+    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
 
     try:
         classes, rewards = await asyncio.gather(

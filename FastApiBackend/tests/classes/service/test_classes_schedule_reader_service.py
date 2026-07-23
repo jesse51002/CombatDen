@@ -39,6 +39,8 @@ from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
+import pytest
+from dateutil.relativedelta import relativedelta
 from schema.gym_class import RecurringUnit
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
@@ -630,3 +632,39 @@ async def test_instance_exception_on_one_slot_leaves_sibling_untouched(
     assert rows[time(6, 0)].has_instance_exception is True
     assert rows[time(18, 0)].is_cancelled is False
     assert rows[time(18, 0)].has_instance_exception is False
+
+
+# ── window guard (bounded span) ───────────────────────────────────────
+
+
+def test_validate_window_accepts_a_window_up_to_the_max_span() -> None:
+    """A window exactly at the configured max span (default 2 months) is
+    allowed — the boundary is inclusive."""
+    start = date(2026, 3, 1)
+    end = start + relativedelta(months=2)  # exactly the cap
+    # Does not raise.
+    ClassesScheduleReaderService._validate_window(start, end)
+
+
+def test_validate_window_rejects_a_window_wider_than_the_max_span() -> None:
+    """One day past the max span is a 400-mapped ValueError, not a silent
+    million-occurrence expansion."""
+    start = date(2026, 3, 1)
+    too_wide = start + relativedelta(months=2) + relativedelta(days=1)
+    with pytest.raises(ValueError, match="too wide"):
+        ClassesScheduleReaderService._validate_window(start, too_wide)
+
+
+def test_validate_window_rejects_an_inverted_window() -> None:
+    """end_date before start_date is a ValueError, not an empty result."""
+    with pytest.raises(ValueError, match="on or after"):
+        ClassesScheduleReaderService._validate_window(
+            date(2026, 3, 10), date(2026, 3, 1)
+        )
+
+
+def test_validate_window_allows_a_single_day() -> None:
+    """start == end (a one-day board) is valid."""
+    ClassesScheduleReaderService._validate_window(
+        date(2026, 3, 1), date(2026, 3, 1)
+    )

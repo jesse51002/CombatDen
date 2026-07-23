@@ -9,7 +9,7 @@ CREATE POLICY "Users and gym staff can view invoices"
     USING (
         EXISTS (
             SELECT 1 FROM members
-            WHERE members.user_id = auth.uid()
+            WHERE lower(members.email) = lower(auth.jwt() ->> 'email')
             AND (
                 members.member_id = member_invoices.paid_by_member_id
                 OR member_invoices.paid_for ? members.member_id::text

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_bloc.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_event.dart';
 import 'package:crm/features/memberships/bloc/ranks/ranks_state.dart';
@@ -28,6 +30,8 @@ class RankSubTypeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Front desk sees the current sub-rank style but can't change it.
+    final canConfigure = selectedGym.role?.canConfigureCatalog ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: DesignConstants.card,
@@ -57,7 +61,7 @@ class RankSubTypeSection extends StatelessWidget {
             ),
             _Segmented(
               current: state.subRankType,
-              enabled: !state.isMutating,
+              enabled: !state.isMutating && canConfigure,
               onSelected: (t) => _select(context, t),
             ),
           ],

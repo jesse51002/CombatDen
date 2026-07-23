@@ -24,11 +24,16 @@ A real gym's live content (no prefix — each route declares its full path):
     * ``POST /api/v1/gyms/{gym_id}/video-agent/refine-from-feed`` — feed→spec
       learning.
     * ``GET /api/v1/gyms/{gym_id}/members/{member_id}/video-rec`` — a member's
-      next rotating-category RAG recommendation (``verify_can_view_member``).
+      next rotating-category RAG recommendation (staff-only,
+      ``verify_gym_employee_for_member`` at ``OWNER_ADMIN``).
     * ``POST /api/v1/gyms/{gym_id}/members/{member_id}/video-rec/{rec_id}/click``
       — record a member opening a rec: stamps ``clicked_at``, logs a
-      ``video_clicked`` activity, and fires a profile refresh
-      (``verify_can_view_member``).
+      ``video_clicked`` activity, and fires a profile refresh (staff-only,
+      ``verify_gym_employee_for_member`` at ``OWNER_ADMIN``).
+
+Every route here is STAFF-facing. The member's own equivalents (feed / rec /
+click) live in ``src/member_portal/`` behind ``Auth.verify_member_self`` and
+delegate to these same services — never widen a guard in this file.
 
 Template catalog has moved to ``presets_router`` (``/api/v1/presets/templates``).
 The showcase endpoint has moved to ``theme_router`` (``/api/v1/gyms/{id}/showcase``).
@@ -44,7 +49,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import Auth, security
+from src.shared.auth import OWNER_ADMIN, Auth, security
 from src.videos.schema.video_agent_schema import (
     AgentTurnRequest,
     AgentTurnResponse,
@@ -89,8 +94,9 @@ PREVIEW_PER_TAG = 10
 
 
 # ── A real gym's live feed ────────────────────────────────────────────
-# NOTE: Phase 2 — when the member MobileApp repoints here, the
-# feed/preview/spec guards must widen to allow gym MEMBERS, not only employees.
+# These routes are STAFF-facing and stay that way. The member-facing reads live
+# in src/member_portal/ (verify_member_self gated) and call the SAME services —
+# the member surface is a separate router, never a widened guard here.
 
 
 @videos_router.get(
@@ -135,7 +141,7 @@ async def get_gym_videos(
     can't leak; a member-facing route is a future concern, this stays
     gym-employee gated). The ungated owner-management view is ``/videos/owner``."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     if video_type is not None and big_group is not None:
         raise HTTPException(
@@ -201,7 +207,7 @@ async def get_gym_owner_videos(
     """Return one page of the gym's owner-added videos (ungated — shows a video
     before it's enriched), newest add first. Gym-employee gated."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         page, total = await videos_service.load_owner_videos(
@@ -252,7 +258,7 @@ async def lookup_gym_video(
 ) -> GymVideoCard:
     """Return a YouTube link's details for the add confirmation — no write."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         card = await videos_service.lookup_feed_video(body.url)
@@ -315,7 +321,7 @@ async def add_gym_video(
     """Add one YouTube video to the gym's feed (with real metadata fetched from
     the YouTube Data API) and return its card."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         card = await videos_service.add_feed_video(gym_id, body.url)
@@ -382,7 +388,7 @@ async def remove_gym_video(
     deletes it from the owner section (+ owned pool if it's a manual custom);
     else it rejects the latest-run row (with the optional reason)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         curated = await videos_service.remove_feed_video(
@@ -448,7 +454,7 @@ async def keep_gym_video(
 ) -> None:
     """Un-reject a video (back to the served feed); idempotent → 204."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         curated = await videos_service.keep_feed_video(
@@ -503,7 +509,7 @@ async def get_gym_videos_preview(
     query (``rejected=true`` → the rejected list) that returns up to ``per_tag``
     videos per genre in feed order, one ``GymFeedSection`` per genre."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         sections = await videos_service.load_feed_preview(
@@ -547,7 +553,7 @@ async def get_gym_videos_spec(
 ) -> GymVideoSpecView:
     """Return the gym's live video spec, 404 when no spec row exists."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         spec = await videos_service.load_gym_spec(gym_id)
@@ -586,7 +592,7 @@ async def get_video_spec(
 ) -> VideoSpecView:
     """The gym's latest spec version. 404 when no spec has been authored yet."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     spec = await videos_service.load_latest_spec(gym_id)
     if spec is None:
@@ -615,7 +621,7 @@ async def video_agent_turn(
     """Run one turn: the agent replies with text (its next question) or a finished
     draft to review, plus the serialized history to send back next turn."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         return await service.agent_turn(gym_id, body)
@@ -644,7 +650,7 @@ async def refine_video_spec_from_feed(
     """Fold unconsumed manual curation signals into a new ``feed_update`` spec
     version. 404 when there is no existing spec or no new signals to learn from."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_gym_employee(gym_id, user_payload)
+    await auth.verify_gym_admin_or_owner(gym_id, user_payload)
 
     try:
         result = await videos_service.refine_from_feed(gym_id)
@@ -697,11 +703,13 @@ async def get_member_video_rec(
     ),
 ) -> MemberVideoRec:
     """Return the member's next rotating-category recommendation. Gated by
-    ``verify_can_view_member`` (staff of the member's gym OR the member
-    themselves). 404 when the member isn't in the path gym, or when no category
-    yields a video."""
+    ``verify_gym_employee_for_member`` at ``OWNER_ADMIN`` — an owner/admin of
+    the member's gym; the member cannot call it. 404 when the member isn't in
+    the path gym, or when no category yields a video."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=OWNER_ADMIN
+    )
 
     try:
         rec = await videos_service.get_video_rec(gym_id, member_id)
@@ -736,7 +744,8 @@ async def get_member_video_rec(
         "idempotent via ``clicked_at IS NULL``): logs a ``video_clicked`` "
         "member activity and fires a fire-and-forget profile refresh. A repeat "
         "click returns ``clicked=false`` without re-stamping / re-logging / "
-        "re-firing. Gated by ``verify_can_view_member``."
+        "re-firing. Gated by ``verify_gym_employee_for_member`` at "
+        "``OWNER_ADMIN`` (owner/admin of the member's gym)."
     ),
     responses={
         200: {"description": "Click recorded (or an idempotent repeat)"},
@@ -756,10 +765,13 @@ async def click_member_video_rec(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> VideoRecClickResponse:
-    """Record a member opening a rec. Gated by ``verify_can_view_member``
-    (staff of the member's gym OR the member themselves)."""
+    """Record a member opening a rec. Gated by
+    ``verify_gym_employee_for_member`` at ``OWNER_ADMIN`` — an owner/admin of
+    the member's gym; the member cannot call it."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=OWNER_ADMIN
+    )
 
     try:
         return await videos_service.record_rec_click(gym_id, member_id, rec_id)

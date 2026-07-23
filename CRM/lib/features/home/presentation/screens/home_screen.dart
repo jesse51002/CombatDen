@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/home/data/mock_member_stats.dart';
 import 'package:crm/features/home/presentation/widgets/live_attendance_card/live_attendance_card.dart';
 import 'package:crm/features/home/presentation/widgets/overdue_payments/overdue_payments_section.dart';
@@ -27,6 +29,12 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The Total Members hero is an OVERVIEW/analytics card — owner/admin only.
+    // Front desk still reaches the Dashboard for its operational cards (Live
+    // Attendance, Overdue Payments, Upcoming Classes), which stay unconditional
+    // below. The hero's trailing hairline goes with it so front desk doesn't
+    // get a stray divider under the title.
+    final showHero = selectedGym.role?.canViewGymAnalytics ?? false;
     return AppShell(
       activeRoute: AppRoutes.home,
       child: SingleChildScrollView(
@@ -36,8 +44,10 @@ class HomeScreen extends StatelessWidget {
           spacing: DesignConstants.spacingBig,
           children: [
             Text('Dashboard', style: DesignConstants.big2),
-            TotalMembersHero(stats: kMockMemberStats),
-            const Hairline(),
+            if (showHero) ...[
+              TotalMembersHero(stats: kMockMemberStats),
+              const Hairline(),
+            ],
             const _DashboardColumns(),
           ],
         ),

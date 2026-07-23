@@ -42,6 +42,8 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
     on<ScheduleRangeCancelled>(_onRangeCancelled);
     on<ScheduleRangeExceptionUpdated>(_onRangeExceptionUpdated);
     on<ScheduleRangeExceptionDeleted>(_onRangeExceptionDeleted);
+    on<ScheduleOccurrenceCancelled>(_onOccurrenceCancelled);
+    on<ScheduleOccurrenceRescheduled>(_onOccurrenceRescheduled);
     on<ScheduleBatchCheckInRequested>(_onBatchCheckIn);
     on<ScheduleBatchCheckInCleared>(_onBatchCheckInCleared);
     on<ScheduleSignUpRequested>(_onSignUp);
@@ -156,6 +158,43 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         () => _repository.deleteRangeException(
           event.classId,
           event.exceptionId,
+        ),
+      );
+
+  /// Cancel a single occurrence via the DEDICATED staff endpoint (the path
+  /// front desk is allowed to call), then reload the board. Rides the same
+  /// `_mutateAndReload` lifecycle as the owner/admin `exceptions/instance`
+  /// cancel, so the occurrence screen's existing processing → success/error
+  /// terminal flow drives it unchanged.
+  Future<void> _onOccurrenceCancelled(
+    ScheduleOccurrenceCancelled event,
+    Emitter<ScheduleState> emit,
+  ) =>
+      _mutateAndReload(
+        emit,
+        () => _repository.cancelOccurrence(
+          classId: event.classId,
+          originalDate: event.originalDate,
+          originalTime: event.originalTime,
+          gymId: _gymId,
+        ),
+      );
+
+  /// Move a single occurrence to another day via the DEDICATED staff endpoint
+  /// (the path front desk is allowed to call), then reload the board. A 409
+  /// target-instant collision surfaces on `actionError` via `_mutateAndReload`.
+  Future<void> _onOccurrenceRescheduled(
+    ScheduleOccurrenceRescheduled event,
+    Emitter<ScheduleState> emit,
+  ) =>
+      _mutateAndReload(
+        emit,
+        () => _repository.rescheduleOccurrence(
+          classId: event.classId,
+          originalDate: event.originalDate,
+          originalTime: event.originalTime,
+          gymId: _gymId,
+          newDate: event.newDate,
         ),
       );
 

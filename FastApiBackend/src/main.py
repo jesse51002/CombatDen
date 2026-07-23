@@ -11,7 +11,9 @@ from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.discounts.discounts_router import discounts_router
+from src.employees.employees_router import employees_router
 from src.gyms.gyms_router import gyms_router
+from src.member_portal.member_portal_router import member_portal_router
 from src.members.members_router import members_router
 from src.memberships.memberships_router import (
     member_memberships_router,
@@ -44,6 +46,11 @@ from src.waivers.waivers_router import waivers_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
+    # Identity is the verified email claim; that "verified" means anything
+    # depends on GoTrue actually mailing confirmations. Check its published
+    # config before serving a single request.
+    await app.container.auth_settings_guard().check()
+
     scheduler = None
     if settings.reconciler_enabled:
         scheduler = build_scheduler(app.container)
@@ -105,6 +112,11 @@ def create_app() -> FastAPI:
     application.include_router(ranks_router)
     application.include_router(rewards_router)
     application.include_router(waivers_router)
+    application.include_router(employees_router)
+
+    # The member-facing portal — every route gated by verify_member_self.
+    # Staff routes above are unchanged and remain staff-only.
+    application.include_router(member_portal_router)
 
     application.include_router(discounts_router)
     application.include_router(member_memberships_router)
