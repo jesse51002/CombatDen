@@ -14,7 +14,6 @@ import 'package:crm/features/settings/presentation/sections/appearance_section.d
 import 'package:crm/features/settings/presentation/sections/gym_presets_section.dart';
 import 'package:crm/features/settings/presentation/sections/gym_profile_section.dart';
 import 'package:crm/features/settings/presentation/sections/gym_timezone_section.dart';
-import 'package:crm/features/settings/presentation/sections/qr_codes_section.dart';
 import 'package:crm/features/settings/presentation/sections/reports_exports_section.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/hairline.dart';
@@ -28,13 +27,11 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///   1. Gym profile — the gym's name + uploaded logo (staff admin only)
 ///   2. Appearance — the System / Light / Dark theme control (any staff)
 ///   3. Gym timezone — the gym's IANA zone (staff admin only)
-///   4. Sign-up QR codes — the printable front-desk codes (kiosk or gym
-///      settings, so front desk sees them)
-///   5. Gym presets — the owner1-only template import (self-gated)
-///   6. Reports & exports — download the gym's records as zipped CSVs (staff
+///   4. Reports & exports — download the gym's records as zipped CSVs (staff
 ///      admin only; front desk reaches this screen but never sees this section)
+///   5. Gym presets — the owner1-only template import (self-gated)
 ///
-/// Front desk lands on appearance + QR only; trainer never reaches this
+/// Front desk lands on appearance only; trainer never reaches this
 /// screen (the route guard blocks `/settings` for it).
 ///
 /// Backed by a small [SettingsBloc] (the theme, timezone, and Gym profile
@@ -49,7 +46,6 @@ class SettingsScreen extends StatelessWidget {
     final role = selectedGym.role;
     final canGymSettings = role?.canManageGymSettings ?? false;
     final canAppearance = role?.canUseAppearanceSettings ?? false;
-    final canKiosk = role?.canOperateKiosk ?? false;
     final canExportReports = role?.canExportReports ?? false;
 
     // Only the sections this role may use, joined by hairlines with no
@@ -58,9 +54,8 @@ class SettingsScreen extends StatelessWidget {
       if (canGymSettings) const GymProfileSection(),
       if (canAppearance) const AppearanceSection(),
       if (canGymSettings) const GymTimezoneSection(),
-      if (canKiosk || canGymSettings) const QrCodesSection(),
-      if (GymPresetsSection.isVisible()) const GymPresetsSection(),
       if (canExportReports) const ReportsExportsSection(),
+      if (GymPresetsSection.isVisible()) const GymPresetsSection(),
     ];
     final children = <Widget>[
       for (var i = 0; i < sections.length; i++) ...[
