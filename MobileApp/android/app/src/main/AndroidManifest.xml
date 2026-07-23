@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Reach the FastApiBackend + Supabase over the network. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Scan the gym's check-in QR code (mobile_scanner). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="mobile_app"
         android:name="${applicationName}"

@@ -1,4 +1,4 @@
-.PHONY: help run run-phone run-ios run-release tunnel tunnel-phone analyze format test clean get reset devices doctor capture capture-booking capture-app capture-shots stitch
+.PHONY: help run run-dev run-phone run-ios run-release tunnel tunnel-phone analyze format test clean get reset devices doctor capture capture-booking capture-app capture-shots stitch
 
 # Physical device serial (from `adb devices` / `flutter devices`).
 DEVICE := 52121FDAS0018S
@@ -10,6 +10,7 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  make run          Run on emulator (auto adb-reverse :8000/:8002 to backend)"
+	@echo "  make run-dev      Run on emulator with dev auto-login credentials (Phase B)"
 	@echo "  make run-phone    Run on physical device (USB adb-reverse tunnel to backend)"
 	@echo "  make run-ios      Run on iOS simulator"
 	@echo "  make run-release  Run on emulator in release mode (tunneled)"
@@ -30,6 +31,13 @@ help:
 # services must be up (`make api` in ../CustomizationService and ../VideoService).
 run: tunnel
 	flutter run -d $(EMULATOR)
+
+# Same as `run`, plus the dev auto-login credentials. The defines are consumed
+# by the Phase B auth bootstrap (harmless no-op until then).
+run-dev: tunnel
+	flutter run -d $(EMULATOR) \
+		--dart-define=DEV_AUTOLOGIN_EMAIL=member1@test.com \
+		--dart-define=DEV_AUTOLOGIN_PASSWORD=abcd1234
 
 # Same tunnels over USB to a physical device (Wi-Fi-independent — sidesteps
 # router AP/client isolation), then run pointed at localhost. Re-run after
