@@ -163,6 +163,7 @@ class _AuthenticatedGateState
       timezone: gym.timezone,
       logoUrl: gym.logoUrl,
       savedThemeDesignId: gym.themeDesignId,
+      createdAt: gym.createdAt,
     );
     // Seed the content gym (drives the read-only member-app content surfaces);
     // in the admin context this also fetches the real gym's showcase.

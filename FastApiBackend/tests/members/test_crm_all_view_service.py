@@ -20,7 +20,8 @@ from src.members.service.crm_member_services.members_crm_all_service import (
     CrmAllViewService,
 )
 
-_SERVICE = CrmAllViewService(None)  # type: ignore[arg-type]  # pool unused
+# Pool unused here; the dormancy window only matters to the SQL path.
+_SERVICE = CrmAllViewService(None, 30)  # type: ignore[arg-type]
 
 
 def test_days_since_last_class_reads_the_sql_column_directly() -> None:

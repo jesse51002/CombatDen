@@ -14,6 +14,7 @@ const _statusOptions = <MembershipStatus>[
   MembershipStatus.trial,
   MembershipStatus.frozen,
   MembershipStatus.overdue,
+  MembershipStatus.dormant,
   MembershipStatus.cancelled,
   MembershipStatus.ended,
   MembershipStatus.noMembership,

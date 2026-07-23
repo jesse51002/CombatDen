@@ -224,7 +224,8 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   // named-route builder here (one would crash with no ancestor bloc).
   AppRoutes.settings: (_) => const SettingsScreen(),
   AppRoutes.videoAgent: (_) => const VideoAgentScreen(),
-  AppRoutes.growth: (_) => const GrowthScreen(),
+  // Growth is resolved by `_onGenerateRoute`'s tab mapping (all six of
+  // its tab routes, base path included), not from this map.
   AppRoutes.employees: (_) =>
       const PeopleScreen(initialTab: PeopleTab.employees),
   AppRoutes.employeeDetail: (_) => const EmployeeDetailScreen(),
@@ -272,6 +273,15 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
   if (membershipsTab != null) {
     return MaterialPageRoute<dynamic>(
       builder: (_) => MembershipsScreen(initialTab: membershipsTab),
+      settings: settings,
+    );
+  }
+  // The Growth screen's six tabs are each addressable by URL, mapped to
+  // the tab the screen opens on (the base /growth path is Overview).
+  final growthTab = kGrowthTabRoutes.indexOf(path);
+  if (growthTab >= 0) {
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => GrowthScreen(initialTab: growthTab),
       settings: settings,
     );
   }

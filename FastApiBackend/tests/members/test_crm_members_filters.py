@@ -23,7 +23,7 @@ from src.members.service.crm_member_services.members_crm_base_service import (
 )
 
 # build_where_clause never touches the pool, so a None pool is fine here.
-_SERVICE = CrmBaseViewService(None)  # type: ignore[arg-type]
+_SERVICE = CrmBaseViewService(None, 30)  # type: ignore[arg-type]
 _GYM = uuid4()
 
 
