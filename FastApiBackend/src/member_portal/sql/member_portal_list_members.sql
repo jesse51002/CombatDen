@@ -28,9 +28,13 @@ FROM members m
 JOIN gyms g ON g.gym_id = m.gym_id
 WHERE COALESCE(lower(m.email), '') = :email
   AND EXISTS (
+      -- Pinned to the CALLER's own account (u.id = :caller_id, the JWT sub):
+      -- the caller's OWN account must be confirmed, not just some account on
+      -- this email. Email equality kept as defense in depth.
       SELECT 1
       FROM auth.users u
-      WHERE lower(u.email) = :email
+      WHERE u.id = CAST(:caller_id AS UUID)
+        AND lower(u.email) = :email
         AND u.email_confirmed_at IS NOT NULL
   )
 ORDER BY g.gym_name ASC, m.first_name ASC, m.last_name ASC, m.member_id ASC;

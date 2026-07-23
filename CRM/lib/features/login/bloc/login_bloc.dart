@@ -39,11 +39,18 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     // (expiry / external sign-out) redirects to login; a session
     // ARRIVING from outside the login form — a persisted session on
     // boot, the email-confirmation link landing on web (Supabase
-    // detects it in the URL and fires `signedIn`), a token refresh, or
-    // password recovery — flips the app to authenticated. The latter
-    // catches the confirmation-link landing and closes the pre-existing
-    // race where `LoginStatusChecked` ran before the URL session landed
-    // and stranded the app on the login screen.
+    // detects it in the URL and fires `signedIn`), or a token refresh
+    // (`userUpdated`) — flips the app to authenticated. This catches the
+    // confirmation-link landing and closes the pre-existing race where
+    // `LoginStatusChecked` ran before the URL session landed and
+    // stranded the app on the login screen.
+    //
+    // `passwordRecovery` is deliberately NOT in that set: this CRM has no
+    // forgot-password / reset-password UI, so a recovery event could only
+    // arrive out-of-band (a Supabase dashboard reset) and treating it as a
+    // login would authenticate the user WITHOUT letting them set a new
+    // password. A real password-reset flow — which needs a dedicated
+    // set-password screen — is intentionally not handled yet (future work).
     _authSubscription =
         _authRepository.authStateChanges.listen(
       (authState) {
@@ -52,8 +59,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
           add(const LoginSignOutRequested());
         } else if (event == AuthChangeEvent.signedIn ||
             event == AuthChangeEvent.initialSession ||
-            event == AuthChangeEvent.userUpdated ||
-            event == AuthChangeEvent.passwordRecovery) {
+            event == AuthChangeEvent.userUpdated) {
           final session = authState.session;
           if (session != null) {
             add(LoginExternalSessionDetected(session.user));
@@ -154,9 +160,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   }
 
   /// Handle a session that arrived from outside the login form (persisted
-  /// session on boot, the email-confirmation link landing on web, a token
-  /// refresh, or password recovery). Mark the app authenticated, guarding
-  /// against a redundant emit for the same user.
+  /// session on boot, the email-confirmation link landing on web, or a
+  /// token refresh). Mark the app authenticated, guarding against a
+  /// redundant emit for the same user.
   Future<void> _onExternalSessionDetected(
     LoginExternalSessionDetected event,
     Emitter<LoginState> emit,

@@ -31,7 +31,6 @@ extension RolePolicy on EmployeeRole {
   bool get canAdjustPoints => _isStaffAdmin;
   bool get canPromoteRank => _isStaffAdmin;
   bool get canEditSchedule => _isStaffAdmin;
-  bool get canSetCustomMembershipPrice => _isStaffAdmin;
   bool get canBulkReprice => _isStaffAdmin;
   bool get canRemovePayerLink => _isStaffAdmin;
   // The Dashboard's overview / financial cards (the Total Members hero now, a
@@ -45,6 +44,12 @@ extension RolePolicy on EmployeeRole {
   bool get canEditMemberProfile => _isStaff;
   bool get canManageMemberBilling => _isStaff;
   bool get canMutateMemberships => _isStaff;
+  /// Reprice a SINGLE membership to its plan's current ACTIVE price — a
+  /// correction of an outdated-price membership, NOT setting a custom amount
+  /// (despite the legacy name). This is a member-money operation front desk
+  /// performs, so it is staff-wide. Plan-wide reprice stays owner/admin
+  /// ([canBulkReprice]).
+  bool get canSetCustomMembershipPrice => _isStaff;
   bool get canRedeemRewards => _isStaff;
   bool get canApproveRedemptions => _isStaff;
   bool get canCheckInMembers => _isStaff;

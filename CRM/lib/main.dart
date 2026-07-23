@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/config/environment.dart';
 import 'package:crm/core/config/supabase_config.dart';
 import 'package:crm/core/constants/env_constants.dart';
@@ -277,10 +278,27 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: settings,
     );
   }
-  final builder =
-      _routeBuilders[path] ?? _routeBuilders[AppRoutes.home]!;
+  // Known path: render its builder as-is (URL unchanged).
+  //
+  // Unknown path — a stale/typo URL, or an app path with no route builder
+  // (e.g. `/schedule/class/new`) — falls back to the ACTIVE ROLE's landing
+  // route, NOT blindly Home. Home is the Dashboard, which a trainer or
+  // front-desk role is denied, so landing there would strand them off-role
+  // (canAccessRoute returns true for unrecognized paths, so the redirect
+  // guard above doesn't catch this). Rewrite the address bar to the fallback
+  // (mirrors the redirect branch above) so the URL matches the page shown.
+  // landingRoute is always one of home/members/schedule (all in
+  // _routeBuilders), so the inner `?? AppRoutes.home` is belt-and-braces.
+  final knownBuilder = _routeBuilders[path];
+  if (knownBuilder != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: knownBuilder,
+      settings: settings,
+    );
+  }
+  final fallback = selectedGym.role?.landingRoute ?? AppRoutes.home;
   return MaterialPageRoute<dynamic>(
-    builder: builder,
-    settings: settings,
+    builder: _routeBuilders[fallback] ?? _routeBuilders[AppRoutes.home]!,
+    settings: RouteSettings(name: fallback),
   );
 }

@@ -137,8 +137,8 @@ void main() {
   group('LoginBloc external session', () {
     blocTest<LoginBloc, LoginState>(
       'a session arriving from outside the login form (the '
-      'confirmation-link landing, a persisted session, a token refresh, or '
-      'password recovery) flips the app to authenticated',
+      'confirmation-link landing, a persisted session, or a token '
+      'refresh) flips the app to authenticated',
       build: build,
       act: (_) {
         final user = _user('user-3');

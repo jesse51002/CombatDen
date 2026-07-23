@@ -120,6 +120,39 @@ def test_front_desk_can_read_member_invoices(front_desk_api, seeded_member_id):
     assert resp.status_code == 200, resp.text
 
 
+def test_front_desk_can_reach_reprice_single(front_desk_api, seeded_member_id):
+    """Single-membership reprice is STAFF now (front desk performs it, like a
+    charge or a discount). A REAL member id resolves the gym so the role check
+    passes; a bogus item_id then falls through to 404 ("Membership not found").
+    The point is that the ROLE gate does NOT 403 front desk — never a 403."""
+    resp = front_desk_api.put(
+        "/api/v1/member_memberships/price",
+        json={
+            "item_id": str(uuid4()),
+            "member_id": seeded_member_id,
+            "idempotency_key": str(uuid4()),
+        },
+    )
+    assert resp.status_code != 403, resp.text
+    assert resp.status_code == 404, resp.text
+
+
+def test_front_desk_can_list_ongoing_tasks(front_desk_api, gym_id: str):
+    """The ongoing-tasks poll is STAFF: front desk must see in-task state
+    (it can reprice a single membership, so it races a running bulk job)."""
+    resp = front_desk_api.get(
+        "/api/v1/tasks/ongoing", params={"gym_id": gym_id}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_front_desk_can_list_employees(front_desk_api, gym_id: str):
+    """The employees LIST is STAFF (fills the schedule's instructor picker);
+    create/update/archive stay owner/admin."""
+    resp = front_desk_api.get(f"/api/v1/employees/{gym_id}")
+    assert resp.status_code == 200, resp.text
+
+
 # ── front_desk (STAFF) — forbidden (OWNER_ADMIN-only) ─────────────
 
 
@@ -138,20 +171,6 @@ def test_front_desk_cannot_create_plan(front_desk_api, gym_id: str):
             # validation — before the handler's role check runs — so the test
             # would pass/fail for a reason unrelated to authorization.
             "image_url": "https://cdn.combatden.net/test/plan.jpg",
-        },
-    )
-    assert resp.status_code == 403, resp.text
-
-
-def test_front_desk_cannot_reprice_membership(front_desk_api, seeded_member_id):
-    """Reprice is owner/admin only. A REAL member id is used so the member's
-    gym resolves and the role check (not a 404) is what returns 403."""
-    resp = front_desk_api.put(
-        "/api/v1/member_memberships/price",
-        json={
-            "item_id": str(uuid4()),
-            "member_id": seeded_member_id,
-            "idempotency_key": str(uuid4()),
         },
     )
     assert resp.status_code == 403, resp.text
@@ -263,6 +282,14 @@ def test_trainer_can_read_checkin_attendees(trainer_api, gym_id: str):
     assert resp.status_code == 200, resp.text
 
 
+def test_trainer_can_read_gym_showcase(trainer_api, gym_id: str):
+    """The showcase read is ALL_EMPLOYEES — every role (trainer included) may
+    read its gym's branded class/reward cards; only owner/admin CHANGE the
+    theme (a separate PUT, still owner/admin)."""
+    resp = trainer_api.get(f"/api/v1/gyms/{gym_id}/showcase")
+    assert resp.status_code == 200, resp.text
+
+
 # ── trainer — forbidden (STAFF-only) ──────────────────────────────
 
 
@@ -283,6 +310,21 @@ def test_trainer_cannot_create_member(trainer_api, gym_id: str):
             "first_name": "Nope",
             "last_name": "Trainer",
             "email": f"itest-{uuid4().hex[:12]}@example.com",
+        },
+    )
+    assert resp.status_code == 403, resp.text
+
+
+def test_trainer_cannot_reprice_membership(trainer_api, seeded_member_id):
+    """Single-membership reprice is STAFF; a trainer is NOT staff. A REAL member
+    id resolves the gym (the trainer IS an employee there) so the ROLE check —
+    not a 404 — is what returns 403."""
+    resp = trainer_api.put(
+        "/api/v1/member_memberships/price",
+        json={
+            "item_id": str(uuid4()),
+            "member_id": seeded_member_id,
+            "idempotency_key": str(uuid4()),
         },
     )
     assert resp.status_code == 403, resp.text

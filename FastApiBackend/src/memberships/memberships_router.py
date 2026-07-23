@@ -51,7 +51,7 @@ from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
-from src.shared.auth import OWNER_ADMIN, STAFF, Auth, security
+from src.shared.auth import STAFF, Auth, security
 from src.tasks.service.tasks_executor import TasksExecutor
 from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
@@ -434,8 +434,12 @@ async def update_membership_price(
 ) -> MemberMembershipsUpdatePriceResponse:
     """Reprice one membership to its plan's active price."""
     user_payload = auth.get_current_user(credentials)
+    # STAFF: this moves ONE membership back onto its plan's CURRENT active
+    # price (a correction of an outdated-price membership) — it is not a custom
+    # amount, so it is member-money work front desk performs, like a charge or
+    # a discount. Plan-wide bulk reprice (`reprice-plan`) stays OWNER_ADMIN.
     await auth.verify_gym_employee_for_member(
-        request.member_id, user_payload, staff_roles=OWNER_ADMIN
+        request.member_id, user_payload, staff_roles=STAFF
     )
 
     try:

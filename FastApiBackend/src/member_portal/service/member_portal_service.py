@@ -51,6 +51,7 @@ class MemberPortalService:
     async def list_members_for_email(
         self,
         email: str,
+        caller_id: str,
     ) -> MemberPortalIdentityListResponse:
         """Return every member row bearing ``email``, across gyms.
 
@@ -62,6 +63,10 @@ class MemberPortalService:
 
         Args:
             email: The caller's lowercased, already-verified email claim.
+            caller_id: The JWT ``sub`` — the confirmed-account ``EXISTS`` pins
+                on it, so the query proves the CALLER's own account is
+                confirmed, not merely that some confirmed account holds this
+                email.
 
         Returns:
             The caller's member rows, each annotated with its gym.
@@ -69,7 +74,11 @@ class MemberPortalService:
         sql = load_sql(SQL_DIR / "member_portal_list_members.sql")
         async with self._db_pool.session() as session:
             rows = (
-                (await session.execute(text(sql), {"email": email}))
+                (
+                    await session.execute(
+                        text(sql), {"email": email, "caller_id": caller_id}
+                    )
+                )
                 .mappings()
                 .fetchall()
             )

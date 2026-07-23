@@ -173,7 +173,10 @@ def seed_ids(api: httpx.Client) -> Iterator[dict]:
 
     try:
         ids = _run_async(_discover())
-    except Exception as exc:  # noqa: BLE001 — any DB issue means skip, not fail
+    except (OSError, asyncpg.PostgresConnectionError) as exc:
+        # ONLY an unreachable/dropped DB skips — a query bug (bad column,
+        # type error) is a real regression that must fail loudly, not vanish
+        # into a green skip for the whole session-scoped fixture.
         pytest.skip(f"Seeded DB not reachable for discovery: {exc}")
     board = board_targets.fetch_board(api, GYM_ID)
     ids["covered"] = _pick_target(

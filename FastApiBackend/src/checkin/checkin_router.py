@@ -108,7 +108,8 @@ async def checkin(
     """Record attendance — resolve the occurrence, then run the member gate."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
-        request.member_id, user_payload, staff_roles=STAFF
+        request.member_id, user_payload, staff_roles=STAFF,
+        gym_id=request.gym_id,
     )
 
     try:
@@ -266,7 +267,8 @@ async def signup(
     """Reserve a member a spot on a class occurrence."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
-        request.member_id, user_payload, staff_roles=STAFF
+        request.member_id, user_payload, staff_roles=STAFF,
+        gym_id=request.gym_id,
     )
 
     try:
@@ -332,7 +334,7 @@ async def remove_signup(
     """Cancel a member's sign-up (staff of the member's gym)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
-        member_id, user_payload, staff_roles=STAFF
+        member_id, user_payload, staff_roles=STAFF, gym_id=gym_id
     )
 
     try:
@@ -399,6 +401,12 @@ async def checkin_batch(
     """Batch staff check-in — 207 on any processed mix, 500 on total failure."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_roles(request.gym_id, user_payload, STAFF)
+    # A member from another gym cannot be stamped in: member_attendance's
+    # composite FK (member_id, gym_id) -> members(member_id, gym_id) rejects
+    # the write, and the batch isolates that per member (a failed item in the
+    # 207), so a foreign/unknown id never corrupts the batch or leaks a
+    # cross-gym row. No whole-batch gym pre-check — it would break the 207
+    # per-item contract by failing every member for one bad id.
 
     try:
         response, all_failed = await batch_service.batch_checkin(

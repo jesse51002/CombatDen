@@ -133,9 +133,10 @@ async def list_my_members(
     """Resolve the caller's verified email to their member rows."""
     user_payload = auth.get_current_user(credentials)
     email = await auth.verify_verified_account(user_payload)
+    caller_id = auth.require_sub(user_payload)
 
     try:
-        return await portal_service.list_members_for_email(email)
+        return await portal_service.list_members_for_email(email, caller_id)
     except Exception:
         logger.error("Failed to list member rows for the caller", exc_info=True)
         raise HTTPException(

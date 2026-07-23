@@ -15,9 +15,13 @@
 SELECT m.gym_id,
        (COALESCE(lower(m.email), '') = :email) AS email_matches,
        EXISTS (
+           -- Pinned to the CALLER's own account (u.id = :caller_id, the JWT
+           -- sub): the caller's OWN account must be confirmed, not just some
+           -- account on this email. Email equality kept as defense in depth.
            SELECT 1
            FROM auth.users u
-           WHERE lower(u.email) = :email
+           WHERE u.id = CAST(:caller_id AS UUID)
+             AND lower(u.email) = :email
              AND u.email_confirmed_at IS NOT NULL
        ) AS account_verified
 FROM members m

@@ -26,9 +26,13 @@ JOIN gym_employees ge ON ge.gym_id = g.gym_id
 WHERE lower(ge.email) = :email
   AND ge.archived_at IS NULL
   AND EXISTS (
+      -- Pinned to the CALLER's own account (u.id = :caller_id, the JWT sub):
+      -- proves the caller's account is confirmed, not just that some confirmed
+      -- account holds this email. Email equality kept as defense in depth.
       SELECT 1
       FROM auth.users u
-      WHERE lower(u.email) = lower(ge.email)
+      WHERE u.id = CAST(:caller_id AS UUID)
+        AND lower(u.email) = lower(ge.email)
         AND u.email_confirmed_at IS NOT NULL
   )
 ORDER BY ge.created_at ASC;

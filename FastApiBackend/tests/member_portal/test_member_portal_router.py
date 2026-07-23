@@ -211,7 +211,8 @@ def _video_card() -> GymVideoCard:
 
 
 def test_list_my_members_uses_verified_account_gate(
-    client, auth_headers, auth_mock, portal_service_mock, fake_gym_id
+    client, auth_headers, auth_mock, portal_service_mock, fake_gym_id,
+    fake_user_id,
 ):
     portal_service_mock.list_members_for_email = AsyncMock(
         return_value=MemberPortalIdentityListResponse(
@@ -232,9 +233,10 @@ def test_list_my_members_uses_verified_account_gate(
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["members"]) == 1
     auth_mock.verify_verified_account.assert_awaited()
-    # The email comes from the gate, never from the client.
+    # The email + caller_id (the JWT sub) both come from the gate, never from
+    # the client — the identity query pins the caller's own confirmed account.
     portal_service_mock.list_members_for_email.assert_awaited_once_with(
-        "test@example.com"
+        "test@example.com", fake_user_id
     )
 
 

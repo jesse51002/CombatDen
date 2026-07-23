@@ -95,9 +95,17 @@ class EmployeesUpdate(EmployeesBase):
     ) -> None:
         """Guard edits to the owner row.
 
-        The owner row may be edited ONLY by the owner themselves, and the
-        owner's ``employee_type`` is immutable. A non-owner target is
-        unrestricted here.
+        The owner row may be edited ONLY by the owner themselves, its
+        ``employee_type`` is immutable, and — for now — so is its ``email``.
+        A non-owner target is unrestricted here.
+
+        Owner email is frozen deliberately, for simplicity: email is the sole
+        identity link now (no ``user_id`` FK), so an owner who mistypes their
+        own email would instantly 403 out of their own gym with NO recovery
+        path (an admin cannot edit the owner row, and the owner row cannot be
+        archived). Freezing it removes that self-lockout foot-gun. This is a
+        stopgap — the real fix is a proper owner-email-change flow with
+        re-confirmation; tracked in TODO.md.
         """
         if target.employee_type is not EmployeeType.owner:
             return
@@ -105,6 +113,14 @@ class EmployeesUpdate(EmployeesBase):
             raise OwnerRowProtectedError(
                 "The owner row can only be edited by the owner, and the "
                 "owner's role cannot be changed."
+            )
+        # An owner may still edit their own name/photo/bio/phone — just not the
+        # identity-anchor email. A no-op (same email) is allowed.
+        if data.email is not None and data.email != target.email:
+            raise OwnerRowProtectedError(
+                "The owner's email is fixed for now — changing it would risk "
+                "locking the owner out of their own gym. Contact support to "
+                "change an owner email."
             )
 
     @staticmethod

@@ -1,7 +1,9 @@
 """API routes for the employees domain.
 
-Live CRUD for a gym's staff roster (``gym_employees``). Staff management is
-owner/admin only, so every endpoint guards ``verify_roles(..., OWNER_ADMIN)``.
+Live CRUD for a gym's staff roster (``gym_employees``). Staff MANAGEMENT
+(create/update/archive) is owner/admin only (``verify_roles(..., OWNER_ADMIN)``);
+the LIST read is ``STAFF`` so front desk can fill the schedule's instructor
+picker (the Employees TAB itself is route-gated to owner/admin in the CRM).
 Identity is the lowercase ``email`` column — a verified Supabase auth account
 whose email matches a row is that person's login; creating an employee is a
 plain INSERT with no auth-system interaction, and archiving is a soft-delete
@@ -30,7 +32,7 @@ from src.employees.schema.employees_schema import (
     EmployeeUpdateRequest,
 )
 from src.employees.service.employees_service import EmployeesService
-from src.shared.auth import OWNER_ADMIN, Auth, security
+from src.shared.auth import OWNER_ADMIN, STAFF, Auth, security
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,8 @@ employees_router = APIRouter(
     summary="List a gym's employees",
     description=(
         "Lists all non-archived employees of the gym (every type), each with "
-        "its derived invite status. Owner/admin only."
+        "its derived invite status. Any staff role (owner/admin/front_desk) — "
+        "front desk reads it to fill the schedule's instructor picker."
     ),
     responses={
         200: {"description": "Employees listed successfully"},
@@ -70,7 +73,12 @@ async def list_employees(
         HTTPException: 401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_roles(gym_id, user_payload, OWNER_ADMIN)
+    # STAFF read: the LIST is the roster the schedule surfaces read to fill the
+    # instructor picker (front desk cancels/reschedules occurrences, which
+    # needs instructor names). The Employees TAB is still owner/admin — it is
+    # route-gated in the CRM (`canManageStaff`), not by this endpoint. Every
+    # WRITE (create/update/archive) below stays OWNER_ADMIN.
+    await auth.verify_roles(gym_id, user_payload, STAFF)
 
     try:
         return await employees_service.list_employees(gym_id)

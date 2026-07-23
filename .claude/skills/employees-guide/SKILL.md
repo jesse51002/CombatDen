@@ -87,13 +87,17 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Growth / analytics | ✅ | ✅ | ❌ | ❌ |
 | Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
 | Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
-| Member-app management (theme, showcase) | ✅ | ✅ | ❌ | ❌ |
-| Employees tab (manage staff) | ✅ | ✅ | ❌ | ❌ |
+| Member-app theme/showcase — CHANGE the theme (`PUT /gyms/{id}/theme`) | ✅ | ✅ | ❌ | ❌ |
+| Gym showcase/theme — READ (`GET /gyms/{id}/showcase`) | ✅ | ✅ | ✅ | ✅ |
+| Employees tab — manage staff: create / update / archive | ✅ | ✅ | ❌ | ❌ |
+| Read the employee roster (`GET /employees/{gym_id}` list — the schedule's instructor picker) | ✅ | ✅ | ✅ | ❌ |
 | Gym settings | ✅ | ✅ | ❌ | ❌ |
 | Point adjustments | ✅ | ✅ | ❌ | ❌ |
 | Rank promotion | ✅ | ✅ | ❌ | ❌ |
-| Bulk reprice (plan-wide) | ✅ | ✅ | ❌ | ❌ |
-| Custom single-membership price / set price | ✅ | ✅ | ❌ | ❌ |
+| Bulk reprice (plan-wide, `reprice-plan`) | ✅ | ✅ | ❌ | ❌ |
+| Single-membership reprice to the plan's ACTIVE price (`PUT /price`) | ✅ | ✅ | ✅ | ❌ |
+| Read ongoing / one tracked task (`/tasks/ongoing`, `/tasks/{id}` — in-task badge + poll) | ✅ | ✅ | ✅ | ❌ |
+| Plan set-price (mint a new plan price version — a config write) | ✅ | ✅ | ❌ | ❌ |
 | Payer-link **remove** | ✅ | ✅ | ❌ | ❌ |
 | View members | ✅ | ✅ | ✅ | ❌ |
 | Create members (API; CRM "Add Member" UI still deferred — see §6) | ✅ | ✅ | ✅ | ❌ |
@@ -117,12 +121,19 @@ and the **operational** Dashboard cards, but stays **narrow on config-writes/ana
 of thumb: anything that touches "run the front counter for a member who's standing there" — or just
 *looking at* how the gym is set up — is front-desk-accessible; anything that **reshapes** gym config
 (create/edit/delete/promote/reorder/toggle), or that is staffing, reporting, or gym-income/overview
-analytics, is owner/admin-only. The read/write split is enforced by two capabilities: `canViewCatalog`
+analytics, is owner/admin-only. **Single-membership reprice to the plan's ACTIVE price (`PUT /price`)
+is front-desk-allowed** — it corrects an outdated-price membership onto the current active price (not a
+custom amount), so it is member-money work like a charge or a discount; the **plan-wide** bulk reprice
+(`reprice-plan`) and a plan's **set-price** (minting a new price version) stay owner/admin. Front desk
+also **reads** ongoing tracked tasks (`/tasks/ongoing`, `/tasks/{id}`) so its single reprice never races
+a running bulk job, and the employee **roster** (`GET /employees/{gym_id}` list) to fill the schedule's
+instructor picker (the Employees TAB itself stays owner/admin). The read/write split is enforced by two capabilities: `canViewCatalog`
 (staff, read) vs `canConfigureCatalog` (owner/admin, write); the Dashboard's overview/income cards sit
 behind `canViewGymAnalytics` (owner/admin) while `canViewDashboard` itself is staff.
 
-**Trainer** is READ-ONLY: the full schedule and every roster, plus their own theme preference — nothing
-else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
+**Trainer** is READ-ONLY: the full schedule and every roster, the gym showcase/theme read
+(`GET /gyms/{id}/showcase` is `ALL_EMPLOYEES` — every role may READ its gym's theme), plus their own
+theme preference — nothing else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
 `/home`, the dashboard).
 
 ### Where this is enforced
@@ -151,7 +162,8 @@ like any other employee type; the DB constraint flipped from "trainer must have 
 
 Access for a trainer is still role-set-gated per route exactly like every other role — **not** a blanket
 owner/admin cut with everyone else lumped together. `src/shared/auth.py` exports `ALL_EMPLOYEES` (all
-four types) for the trainer-visible reads (full schedule, rosters); everything else stays `OWNER_ADMIN` or
+four types) for the trainer-visible reads (full schedule, rosters, and the gym showcase/theme read
+`GET /gyms/{id}/showcase`); everything else stays `OWNER_ADMIN` or
 `STAFF`, which a trainer's `employee_type` never matches.
 
 ---
@@ -179,17 +191,21 @@ four types) for the trainer-visible reads (full schedule, rosters); everything e
 
 ## 5. Backend domain — `src/employees/`
 
-4 endpoints, `EmployeesService` facade, all owner/admin-only:
+4 endpoints, `EmployeesService` facade. The LIST read is `STAFF`; create / update / archive are
+owner/admin-only:
 
-| Route | What it does |
-|---|---|
-| `GET /api/v1/employees/{gym_id}` | List all non-archived employees (every type), each with derived `invite_status` |
-| `POST /api/v1/employees/{gym_id}` | Create a staff member — plain INSERT, no auth-system interaction. `employee_type` may not be `owner` |
-| `PUT /api/v1/employees/{gym_id}/{employee_id}` | Partial update of mutable fields (name/phone/email/pic/description/`employee_type`) |
-| `DELETE /api/v1/employees/{gym_id}/{employee_id}` | Soft-archive (see §4) |
+| Route | Gate | What it does |
+|---|---|---|
+| `GET /api/v1/employees/{gym_id}` | `STAFF` | List all non-archived employees (every type), each with derived `invite_status` — front desk reads the roster to fill the schedule's instructor picker |
+| `POST /api/v1/employees/{gym_id}` | `OWNER_ADMIN` | Create a staff member — plain INSERT, no auth-system interaction. `employee_type` may not be `owner` |
+| `PUT /api/v1/employees/{gym_id}/{employee_id}` | `OWNER_ADMIN` | Partial update of mutable fields (name/phone/email/pic/description/`employee_type`) |
+| `DELETE /api/v1/employees/{gym_id}/{employee_id}` | `OWNER_ADMIN` | Soft-archive (see §4) |
 
-All four guard `auth.verify_roles(gym_id, user_payload, OWNER_ADMIN)` — front desk and trainer cannot
-manage staff at all (matches the capability matrix in §2).
+The three WRITES (create / update / archive) guard `auth.verify_roles(gym_id, user_payload,
+OWNER_ADMIN)` — front desk and trainer cannot manage staff at all (matches the capability matrix in
+§2). The LIST read guards `STAFF`, so front desk can read the roster to fill the schedule's instructor
+picker; the Employees **TAB** stays owner/admin, route-gated in the CRM (`canManageStaff`), not by this
+endpoint.
 
 **Facade + concerns** (flat in `service/`, `EmployeesBase` holds the shared DB pool + the single-row
 fetch/mapper): `EmployeesList` (list/read), `EmployeesCreate` (insert), `EmployeesUpdate` (dynamic partial
@@ -237,6 +253,12 @@ notification/invite email is deferred (see §6).
   `EmployeesUpdate._enforce_owner_rules`: if the update target is the owner row, the caller's own
   `employee_id` must equal the target's AND the request must not attempt an `employee_type` change,
   or it raises `OwnerRowProtectedError` (→ 403).
+- **The owner's email is immutable for now.** `_enforce_owner_rules` also rejects an owner changing
+  their OWN email (a no-op same-email update is allowed). Email is the sole identity link (no `user_id`
+  FK), so a mistyped owner email would 403 the owner out of their own gym with **no** API recovery — an
+  admin cannot edit the owner row, and the owner row cannot be archived. Freezing it removes that
+  self-lockout foot-gun. This is a deliberate simplicity **stopgap**; a proper owner-email-change flow
+  with re-confirmation is future work (tracked in `TODO.md`).
 - **The owner row can never be archived** (§4).
 
 ---

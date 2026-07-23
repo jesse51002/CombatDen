@@ -264,11 +264,20 @@ class TestCreatePlanValidation:
         resp = api.post(BASE + "/", json=payload)
         assert resp.status_code == 422, resp.text
 
-    def test_valid_recurring_plan_blocked_by_stripe(self, api, gym_id):
-        """A fully valid recurring plan payload reaches Stripe and fails with 400
-        (gym has no Stripe account configured) rather than a 5xx.
-        This confirms the validation layer passes and the error is expected
-        for a seed environment without Stripe.
+    def test_valid_recurring_plan_passes_validation_and_reaches_stripe(
+        self, api, gym_id
+    ):
+        """A fully valid recurring plan payload passes the validation layer and
+        reaches the Stripe create path.
+
+        The seeded gym has a COMPLETE Stripe Connect account, so the expected
+        outcome is a real create (201) — NOT a 400. The test therefore CLEANS
+        UP what it makes: on a 201 it deletes the plan, which deactivates the
+        Stripe product and soft-deletes the row (``plans_delete``), so no plan
+        or Stripe object leaks onto the shared test account each run. A 400 is
+        tolerated only for a gym without Stripe configured; a Stripe upstream
+        failure is 500, NEVER a 502 (the proxy auto-retry family is banned on
+        mutating billing ops — see FastApiBackend/CLAUDE.md).
         """
         payload = {
             "gym_id": gym_id,
@@ -281,14 +290,24 @@ class TestCreatePlanValidation:
             "price": 5000,
         }
         resp = api.post(BASE + "/", json=payload)
-        # 400 = Stripe not configured (expected in local seed env)
-        # 502 = Stripe configured but returned an error (also acceptable)
-        # 201 = plan was actually created (would be OK too)
-        assert resp.status_code in (201, 400, 502), (
-            f"Unexpected status {resp.status_code}: {resp.text}"
-        )
-        if resp.status_code == 400:
-            assert "stripe" in resp.json().get("detail", "").lower(), resp.text
+        created_plan_id = None
+        try:
+            assert resp.status_code in (201, 400, 500), (
+                f"Unexpected status {resp.status_code}: {resp.text}"
+            )
+            if resp.status_code == 201:
+                created_plan_id = resp.json()["plan_id"]
+            elif resp.status_code == 400:
+                assert "stripe" in resp.json().get("detail", "").lower(), (
+                    resp.text
+                )
+        finally:
+            if created_plan_id is not None:
+                # Deactivates the Stripe product + soft-deletes the plan.
+                api.delete(
+                    BASE + "/",
+                    params={"plan_id": created_plan_id, "gym_id": gym_id},
+                )
 
     def test_create_requires_auth(self, gym_id):
         """POST / without a Bearer token returns 401."""

@@ -166,9 +166,10 @@ async def list_my_gyms(
     # 403 when the address backs no verified account. The SQL carries the
     # same predicate, so an unverified caller can never see a gym either way.
     user_email = await auth.verify_verified_account(user_payload)
+    caller_id = auth.require_sub(user_payload)
 
     try:
-        return await gyms_service.list_gyms_for_user(user_email)
+        return await gyms_service.list_gyms_for_user(user_email, caller_id)
     except Exception:
         logger.error(
             "Failed to list gyms for email=%s",

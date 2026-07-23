@@ -124,6 +124,10 @@ def auth_mock(fake_user_id: str, fake_employee_id: str) -> MagicMock:
     auth.verify_verified_account = AsyncMock(
         return_value="test@example.com"
     )
+    # require_sub is SYNC (reads the JWT sub claim) — return the same
+    # fake_user_id the payload carries, so a router threading caller_id into a
+    # service call passes a stable, assertable value.
+    auth.require_sub = MagicMock(return_value=fake_user_id)
     auth.verify_staff_principal = AsyncMock(return_value=None)
     auth.get_employee_id = AsyncMock(return_value=UUID(fake_employee_id))
     auth.get_employee_id_for_member = AsyncMock(

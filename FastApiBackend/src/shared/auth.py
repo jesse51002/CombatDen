@@ -136,6 +136,30 @@ class Auth:
             ) from None
         return email.lower()
 
+    def require_sub(self, user_payload: dict) -> str:
+        """Return the caller's ``sub`` claim — their ``auth.users`` id.
+
+        Every identity-resolving query pins its confirmed-account ``EXISTS``
+        to ``u.id = :caller_id`` so it proves the CALLER's OWN account is
+        confirmed, not merely that SOME confirmed account holds that email.
+        (`auth.users` is unique on email only ``WHERE is_sso_user = false``, so
+        under SSO an unconfirmed password signup on an existing address could
+        otherwise borrow a different confirmed row's verification.) The ``sub``
+        claim is the caller's account id and is always present in a valid
+        Supabase JWT; a missing one is a malformed token.
+
+        Raises:
+            HTTPException: 401 if the token carries no ``sub`` claim.
+        """
+        sub = user_payload.get("sub")
+        if not sub:
+            logger.error("JWT payload missing sub claim")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing sub claim",
+            ) from None
+        return sub
+
     async def verify_verified_account(self, user_payload: dict) -> str:
         """Return the caller's email, proven to back a CONFIRMED account.
 
@@ -151,12 +175,13 @@ class Auth:
                 no confirmed Supabase auth account exists for it.
         """
         email = self.require_email(user_payload)
+        caller_id = self.require_sub(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
                 await session.execute(
                     text(load_sql(SQL_DIR / "auth_verified_account.sql")),
-                    {"email": email},
+                    {"email": email, "caller_id": caller_id},
                 )
             ).mappings().fetchone()
 
@@ -193,6 +218,7 @@ class Auth:
                 matching non-archived, verified row exists for the caller.
         """
         email = self.require_email(user_payload)
+        caller_id = self.require_sub(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
@@ -202,6 +228,7 @@ class Auth:
                         "gym_id": str(gym_id),
                         "email": email,
                         "allowed_roles": [r.value for r in allowed],
+                        "caller_id": caller_id,
                     },
                 )
             ).mappings().fetchone()
@@ -303,6 +330,7 @@ class Auth:
                 caller holds no allowed role at any gym.
         """
         email = self.require_email(user_payload)
+        caller_id = self.require_sub(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
@@ -311,6 +339,7 @@ class Auth:
                     {
                         "email": email,
                         "allowed_roles": [r.value for r in allowed],
+                        "caller_id": caller_id,
                     },
                 )
             ).mappings().fetchone()
@@ -396,12 +425,17 @@ class Auth:
                 member, is unverified, or the member is at another gym.
         """
         email = self.require_email(user_payload)
+        caller_id = self.require_sub(user_payload)
 
         async with self._db_pool.session() as session:
             row = (
                 await session.execute(
                     text(load_sql(SQL_DIR / "auth_member_self.sql")),
-                    {"member_id": str(member_id), "email": email},
+                    {
+                        "member_id": str(member_id),
+                        "email": email,
+                        "caller_id": caller_id,
+                    },
                 )
             ).mappings().fetchone()
 
@@ -456,6 +490,8 @@ class Auth:
         member_id: UUID,
         user_payload: dict,
         staff_roles: frozenset[EmployeeType],
+        *,
+        gym_id: UUID | None = None,
     ) -> None:
         """Verify the caller holds one of ``staff_roles`` at the member's
         gym.
@@ -469,13 +505,33 @@ class Auth:
         video routes owner/admin gating nobody had chosen. Every call site
         states the role set it admits.
 
+        ``gym_id`` reconciles a route that ALSO takes a gym in its body/path
+        (check-in, sign-up) with the member: without it, the gate authorizes
+        the caller at the MEMBER's gym while the handler stamps rows using
+        the REQUEST's gym — so staff at gym A could write a row into gym B by
+        pairing gym A's id with a gym-A member, or vice versa. When passed, the
+        member's resolved gym must equal it (403 otherwise). Omit it only where
+        the route carries no separate gym scope.
+
         Raises:
             HTTPException: 404 if the member is not found, 401 if the token
                 has no email claim, 403 if the caller holds no allowed role
-                at the member's gym.
+                at the member's gym, or the member is not in ``gym_id``.
         """
-        gym_id = await self._get_member_gym_id(member_id)
-        await self.verify_roles(gym_id, user_payload, staff_roles)
+        member_gym_id = await self._get_member_gym_id(member_id)
+        if gym_id is not None and member_gym_id != gym_id:
+            logger.warning(
+                "Member/gym mismatch: member_id=%s is at gym=%s, request "
+                "gym=%s",
+                member_id,
+                member_gym_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Member does not belong to this gym",
+            ) from None
+        await self.verify_roles(member_gym_id, user_payload, staff_roles)
 
     async def get_employee_id_for_member(
         self,

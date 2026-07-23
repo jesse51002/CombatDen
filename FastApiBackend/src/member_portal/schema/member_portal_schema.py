@@ -1,12 +1,18 @@
 """Pydantic schemas for the member-facing portal surface.
 
-Deliberately a THIN, member-appropriate contract rather than the CRM's
-``MemberBillingDetailResponse``: the mobile app is a second consumer, and the
-CRM detail carries staff-facing concepts (authorization rosters, who-pays-for-
-whom, ``on_outdated_price``, the aggregate recurring price) that a member has
-no use for. The per-block sub-models are REUSED from
+A projection of the CRM's ``MemberBillingDetailResponse`` down to the member's
+OWN data. It is thinner than the CRM detail in that it drops the top-level
+STAFF-only blocks — the authorized-payer roster and the who-this-member-pays-
+for grouping the front desk uses to manage a family's billing. It is NOT a
+field-stripped variant of the per-block models: those sub-models
+(``BillingMembershipInfo``, ``BillingRank``, ``BillingRetention``,
+``BillingRewardCard``, ``PendingRedemptionCard``) are REUSED verbatim from
 ``members_billing_schema`` so the two surfaces can never disagree about what a
-rank, a membership card, or a retention block looks like.
+membership card or a rank looks like. Consequently each membership card here
+carries the same per-membership fields the CRM shows — including
+``paid_by_member_id``, ``current_active_price``, ``on_outdated_price``, and the
+applied discounts — scoped strictly to the caller's own rows (a member seeing
+their own payer and price is fine; what they never get is another member's).
 
 None of these models carries an ``is_member`` / ``ignore_warnings`` style
 field: gate semantics are never client-selectable on a member-facing route.

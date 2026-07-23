@@ -145,6 +145,7 @@ class GymsService:
     async def list_gyms_for_user(
         self,
         user_email: str,
+        caller_id: str,
     ) -> list[GymWithRoleResponse]:
         """Return every gym the caller is an employee of.
 
@@ -152,13 +153,17 @@ class GymsService:
         gym is annotated with the caller's ``employee_type`` for it — all
         roles enter the CRM. Returns an empty list when the caller is an
         employee of no gyms.
+
+        ``caller_id`` is the JWT ``sub`` — the confirmed-account ``EXISTS``
+        pins on it so the query proves the CALLER's own account is confirmed,
+        not merely that some confirmed account holds this email.
         """
         async with self._db_pool.session() as session:
             rows = (
                 (
                     await session.execute(
                         text(load_sql(SQL_DIR / "gyms_list_for_user.sql")),
-                        {"email": user_email.lower()},
+                        {"email": user_email.lower(), "caller_id": caller_id},
                     )
                 )
                 .mappings()
