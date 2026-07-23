@@ -444,7 +444,9 @@ async def list_instance_exceptions(
 ) -> ClassInstanceExceptionListResponse:
     """List instance exceptions for a class within a window."""
     user_payload = auth.get_current_user(credentials)
-    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
     try:
         return await exceptions_service.list_instance_exceptions(
@@ -551,7 +553,9 @@ async def list_range_exceptions(
 ) -> ClassRangeExceptionListResponse:
     """List all range exceptions for a class."""
     user_payload = auth.get_current_user(credentials)
-    await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
     try:
         return await exceptions_service.list_range_exceptions(class_id)
@@ -704,7 +708,9 @@ async def get_class(
 ) -> GymClassResponse:
     """Get a single class (gym-employee scoped)."""
     user_payload = auth.get_current_user(credentials)
-    return await _resolve_class_for_auth(crud_service, auth, class_id, user_payload)
+    return await _resolve_class_for_auth(
+        crud_service, auth, class_id, user_payload, roles=ALL_EMPLOYEES
+    )
 
 
 @classes_router.put(
@@ -813,12 +819,17 @@ async def _resolve_class_for_auth(
     auth: Auth,
     class_id: UUID,
     user_payload: dict,
-    roles: frozenset[EmployeeType] = ALL_EMPLOYEES,
+    roles: frozenset[EmployeeType],
 ) -> GymClassResponse:
     """Load a class (404 if absent) and gate the caller on its gym.
 
-    Reads pass ``roles=ALL_EMPLOYEES`` (the default); writes pass
-    ``roles=OWNER_ADMIN`` to gate at admin-or-owner instead.
+    ``roles`` is REQUIRED — no default. Every caller states its role set:
+    reads pass ``ALL_EMPLOYEES``, writes pass ``OWNER_ADMIN``. This mirrors
+    the ``Auth`` API's no-default rule (``verify_gym_employee_for_member`` et
+    al.): a silent default is exactly how a future write route added through
+    this helper could gate a class mutation at ``ALL_EMPLOYEES`` — letting a
+    trainer or front-desk staffer edit or delete a class — without anyone
+    choosing that.
     """
     try:
         existing = await crud_service.get_class(class_id)

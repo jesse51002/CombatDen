@@ -22,12 +22,22 @@ tripping this means the running stack predates that setting and needs
 NOT by ``supabase db reset``). ``auth_autoconfirm_policy=warn`` is the
 explicit opt-out for a throwaway environment holding no real data.
 
-A failure to REACH GoTrue is NOT a misconfiguration — the check cannot tell
-an open auth stack from a network blip, and refusing to boot on a blip
-would make this guard an outage. It is logged as a warning and tolerated.
+Reachability and readability are kept separate:
+
+* A failure to REACH GoTrue is NOT a misconfiguration — the check cannot
+  tell an open auth stack from a network blip, and refusing to boot on a
+  blip would make this guard an outage. It is logged as a warning and
+  tolerated, always.
+* A GoTrue we DID reach whose settings carry no readable
+  ``mailer_autoconfirm`` is a different case: it is not a blip, and we
+  cannot prove confirmations are on, so under the ``fail`` policy it is
+  fail-closed exactly like a confirmed auto-confirm. (Lumping this in with
+  "unreachable" was a fail-open: a reachable-but-unparseable settings
+  response booted the app even under ``fail``.)
 """
 
 import logging
+from enum import StrEnum
 
 import httpx
 
@@ -38,13 +48,29 @@ logger = logging.getLogger(__name__)
 SETTINGS_PATH = "/auth/v1/settings"
 AUTOCONFIRM_KEY = "mailer_autoconfirm"
 
-_BANNER = (
+_OPEN_BANNER = (
     "!!! GoTrue is AUTO-CONFIRMING every signup "
     "(%s=true at %s). email_confirmed_at is stamped by GoTrue itself, so "
     "the verified-email identity model is OPEN: anyone can sign up as an "
     "existing employee's address and be admitted to that gym. Turn "
     "enable_confirmations ON for any environment holding real data."
 )
+
+_UNREADABLE_BANNER = (
+    "!!! Reached GoTrue at %s but its settings carried no readable %s flag, "
+    "so it cannot be proven that signups require email confirmation. "
+    "Treating as UNSAFE — a reachable GoTrue is not a network blip. Verify "
+    "enable_confirmations and GoTrue's /settings response."
+)
+
+
+class _ProbeOutcome(StrEnum):
+    """The result of reading GoTrue's published settings once."""
+
+    confirmations_on = "confirmations_on"  # mailer_autoconfirm=false — safe
+    auto_confirming = "auto_confirming"  # mailer_autoconfirm=true — OPEN
+    unreachable = "unreachable"  # could not reach GoTrue — a tolerable blip
+    unreadable = "unreadable"  # reached, no readable flag — unsafe
 
 
 class AuthSettingsGuard:
@@ -63,24 +89,17 @@ class AuthSettingsGuard:
         self._timeout_seconds = timeout_seconds
 
     async def check(self) -> None:
-        """Warn (or refuse to boot) when GoTrue auto-confirms signups.
+        """Warn (or refuse to boot) unless GoTrue is proven to confirm signups.
 
         Raises:
-            RuntimeError: only when auto-confirm is CONFIRMED on and the
-                policy is ``fail``. Never raised for an unreachable or
-                unparseable GoTrue — that is logged and tolerated.
+            RuntimeError: under the ``fail`` policy, when GoTrue is reachable
+                and EITHER auto-confirms OR gives no readable
+                ``mailer_autoconfirm`` (both are unsafe to serve blindly). An
+                UNREACHABLE GoTrue is logged and tolerated — never raised.
         """
-        autoconfirm = await self._read_autoconfirm()
+        outcome = await self._probe()
 
-        if autoconfirm is None:
-            logger.warning(
-                "Could not read GoTrue settings at %s — signup-confirmation "
-                "state UNKNOWN; verify enable_confirmations manually.",
-                self._settings_url,
-            )
-            return
-
-        if not autoconfirm:
+        if outcome is _ProbeOutcome.confirmations_on:
             logger.info(
                 "GoTrue signup confirmations are ON (%s=false) — "
                 "email_confirmed_at is a real proof of inbox control.",
@@ -88,20 +107,44 @@ class AuthSettingsGuard:
             )
             return
 
-        logger.critical(_BANNER, AUTOCONFIRM_KEY, self._settings_url)
-        if self._policy is AuthAutoconfirmPolicy.FAIL:
-            raise RuntimeError(
-                "Refusing to start: GoTrue auto-confirms signups "
-                f"({AUTOCONFIRM_KEY}=true) and "
-                "auth_autoconfirm_policy=fail."
+        if outcome is _ProbeOutcome.unreachable:
+            # A network blip / GoTrue not ready. The probe cannot tell an open
+            # auth stack from a blip, and refusing to boot on a blip would make
+            # this guard an outage — so an unreachable probe is tolerated.
+            logger.warning(
+                "Could not reach GoTrue settings at %s — signup-confirmation "
+                "state UNKNOWN; verify enable_confirmations manually.",
+                self._settings_url,
+            )
+            return
+
+        # Reached GoTrue and could NOT prove confirmations are on — it either
+        # auto-confirms or gave no readable flag. Neither is a blip; under the
+        # fail policy, refuse to boot.
+        if outcome is _ProbeOutcome.auto_confirming:
+            logger.critical(_OPEN_BANNER, AUTOCONFIRM_KEY, self._settings_url)
+            reason = f"GoTrue auto-confirms signups ({AUTOCONFIRM_KEY}=true)"
+        else:  # unreadable
+            logger.critical(
+                _UNREADABLE_BANNER, self._settings_url, AUTOCONFIRM_KEY
+            )
+            reason = (
+                f"GoTrue gave no readable {AUTOCONFIRM_KEY}, so signup "
+                "confirmations cannot be verified"
             )
 
-    async def _read_autoconfirm(self) -> bool | None:
-        """Return GoTrue's ``mailer_autoconfirm``, or None if unknowable.
+        if self._policy is AuthAutoconfirmPolicy.FAIL:
+            raise RuntimeError(
+                f"Refusing to start: {reason} and auth_autoconfirm_policy=fail."
+            )
 
-        None covers every "we could not find out" case — network error,
-        non-2xx, non-JSON body, missing key — so the caller can separate a
-        real misconfiguration from a failure to reach GoTrue.
+    async def _probe(self) -> _ProbeOutcome:
+        """Read GoTrue's ``mailer_autoconfirm`` once, classifying the outcome.
+
+        Reachability (the network GET + a 2xx) is kept separate from
+        readability (a JSON body carrying a boolean ``mailer_autoconfirm``):
+        an unreachable GoTrue is a tolerable blip, but a reachable one whose
+        settings we cannot read is unsafe, not merely unknown.
         """
         try:
             async with httpx.AsyncClient(
@@ -112,14 +155,26 @@ class AuthSettingsGuard:
                     headers={"apikey": self._anon_key},
                 )
                 response.raise_for_status()
-                payload = response.json()
         except Exception:
             logger.warning(
-                "GoTrue settings probe failed: %s",
+                "GoTrue settings probe could not reach %s",
                 self._settings_url,
                 exc_info=True,
             )
-            return None
+            return _ProbeOutcome.unreachable
 
-        value = payload.get(AUTOCONFIRM_KEY)
-        return value if isinstance(value, bool) else None
+        # Reached GoTrue (2xx). From here a bad body / missing-or-non-bool flag
+        # is UNREADABLE, not unreachable — we did reach it.
+        try:
+            payload = response.json()
+            value = payload.get(AUTOCONFIRM_KEY)
+        except Exception:
+            value = None
+
+        if not isinstance(value, bool):
+            return _ProbeOutcome.unreadable
+        return (
+            _ProbeOutcome.auto_confirming
+            if value
+            else _ProbeOutcome.confirmations_on
+        )
