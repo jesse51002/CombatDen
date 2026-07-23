@@ -10,6 +10,8 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
@@ -18,6 +20,8 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/rewards/data/models/reward_response.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
@@ -27,6 +31,10 @@ class _MockMembersListRepository extends Mock
 class _MockScheduleRepository extends Mock implements ScheduleRepository {}
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
+
+class _MockRewardsRepository extends Mock implements RewardsRepository {}
+
+class _MockMemberDetail extends Mock implements MemberDetailResponse {}
 
 class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 
@@ -85,9 +93,31 @@ void main() {
     skipReason: CheckInWarning.overCapacity,
   );
 
+  // Deliberately pricey-first so the cubit's cheapest-first sort is observable.
+  final rewardPricey = RewardResponse(
+    rewardId: 'r-pricey',
+    gymId: gymId,
+    title: '1-on-1 PT session',
+    pointCost: 2500,
+    priceLabel: '50% off',
+    isActive: true,
+    createdAt: t0,
+  );
+  final rewardCheap = RewardResponse(
+    rewardId: 'r-cheap',
+    gymId: gymId,
+    title: 'Bring a friend',
+    pointCost: 1000,
+    priceLabel: 'Free',
+    isActive: true,
+    createdAt: t0,
+  );
+
   late _MockMembersListRepository members;
   late _MockScheduleRepository schedule;
   late _MockMemberRepository member;
+  late _MockRewardsRepository rewards;
+  late _MockMemberDetail detail;
   late _MockKioskSessionCubit session;
 
   setUpAll(() {
@@ -110,16 +140,31 @@ void main() {
     members = _MockMembersListRepository();
     schedule = _MockScheduleRepository();
     member = _MockMemberRepository();
+    rewards = _MockRewardsRepository();
+    detail = _MockMemberDetail();
     session = _MockKioskSessionCubit();
     when(() => session.state).thenReturn(activeState);
     when(() => schedule.listEffectiveInstances(any(), any(), any()))
         .thenAnswer((_) async => <EffectiveClassInstance>[occ1]);
+    when(() => detail.retention).thenReturn(
+      const Retention(
+        classStreakWeeks: 3,
+        pointsBalance: 2150,
+        videosWatched: 0,
+      ),
+    );
+    when(() => member.getMemberDetail(any()))
+        .thenAnswer((_) async => detail);
+    when(() => rewards.listRewards(any(),
+            includeInactive: any(named: 'includeInactive')))
+        .thenAnswer((_) async => [rewardPricey, rewardCheap]);
   });
 
   KioskFlowCubit build() => KioskFlowCubit(
         membersRepository: members,
         scheduleRepository: schedule,
         memberRepository: member,
+        rewardsRepository: rewards,
         session: session,
         gymId: gymId,
         now: () => t0,
@@ -177,7 +222,7 @@ void main() {
 
   group('recording the check-in', () {
     blocTest<KioskFlowCubit, KioskFlowState>(
-      'a recorded check-in advances to the glance stub and ends the flow',
+      'a recorded check-in advances to the glance and ends the flow',
       setUp: () => when(() => member.checkInMember(any()))
           .thenAnswer((_) async => recorded),
       build: build,
@@ -268,6 +313,85 @@ void main() {
         // The clock is reset: elapsing just under the timeout does not re-warn.
         async.elapse(kKioskIdleTimeout - const Duration(seconds: 1));
         expect(cubit.state.idleWarningActive, isFalse);
+        cubit.close();
+      });
+    });
+  });
+
+  group('retention glance (Phase C2)', () {
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'a recorded check-in loads the points balance + cheapest-first reward '
+      'catalog onto the glance',
+      setUp: () => when(() => member.checkInMember(any()))
+          .thenAnswer((_) async => recorded),
+      build: build,
+      act: (cubit) async {
+        cubit.selectMember(member1);
+        await cubit.selectClass(occ1);
+        // Let the (unawaited) balance + catalog fetches settle.
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      },
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.glanceLoading, isFalse);
+        expect(cubit.state.pointsBalance, 2150);
+        // Sorted cheapest-first (fixtures were pricey-first).
+        expect(
+          cubit.state.rewards.map((r) => r.rewardId).toList(),
+          ['r-cheap', 'r-pricey'],
+        );
+      },
+    );
+
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'degrades gracefully when the billing fetch fails — the glance still '
+      'shows (streak + earned from the response), balance null',
+      setUp: () {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        when(() => member.getMemberDetail(any()))
+            .thenThrow(Exception('billing down'));
+      },
+      build: build,
+      act: (cubit) async {
+        cubit.selectMember(member1);
+        await cubit.selectClass(occ1);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      },
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.checkInResult?.classStreakWeeks, 3);
+        expect(cubit.state.checkInResult?.pointsAwarded, 15);
+        expect(cubit.state.glanceLoading, isFalse);
+        expect(cubit.state.pointsBalance, isNull);
+        // The catalog still loaded — only the balance fetch failed.
+        expect(cubit.state.rewards, isNotEmpty);
+      },
+    );
+
+    test('auto-returns home after the 8-second countdown (its own clock, '
+        'not the 5-minute idle)', () {
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks(); // class load settles
+        cubit.selectClass(occ1);
+        async.flushMicrotasks(); // check-in records + glance starts
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+
+        // Halfway the glance is still up (the 5-minute idle never fired).
+        async.elapse(const Duration(seconds: 4));
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.idleWarningActive, isFalse);
+
+        async.elapse(const Duration(seconds: 4)); // reaches 8s -> home
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.selectedMember, isNull);
+        expect(cubit.state.glanceCountdown, 0);
         cubit.close();
       });
     });

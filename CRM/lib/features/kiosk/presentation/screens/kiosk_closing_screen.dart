@@ -24,7 +24,7 @@ class KioskClosingScreen extends StatelessWidget {
           const _Icon(),
           Text(
             'This kiosk is closing',
-            style: DesignConstants.big2Bold,
+            style: DesignConstants.kioskDisplay,
             textAlign: TextAlign.center,
           ),
           Text(

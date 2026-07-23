@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_class_grid.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -22,7 +23,7 @@ class KioskClassPickScreen extends StatelessWidget {
           prev.classes != cur.classes ||
           prev.classesFailed != cur.classesFailed,
       builder: (context, state) {
-        final name = _firstName(state.selectedMember?.name);
+        final name = kioskFirstName(state.selectedMember?.name);
         return KioskStage(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -35,11 +36,6 @@ class KioskClassPickScreen extends StatelessWidget {
         );
       },
     );
-  }
-
-  static String _firstName(String? full) {
-    if (full == null || full.trim().isEmpty) return 'there';
-    return full.trim().split(' ').first;
   }
 }
 
@@ -54,7 +50,7 @@ class _Head extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text('Hi $name, pick your class', style: DesignConstants.big2Bold),
+        Text('Hi $name, pick your class', style: DesignConstants.kioskDisplay),
         Text(
           'Open for check-in right now · tap a class to check in',
           style: DesignConstants.pBig.copyWith(

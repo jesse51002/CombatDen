@@ -9,6 +9,8 @@ import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/rewards/data/models/reward_response.dart';
+import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 
 class _MockMembersListRepository extends Mock
@@ -17,6 +19,8 @@ class _MockMembersListRepository extends Mock
 class _MockScheduleRepository extends Mock implements ScheduleRepository {}
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
+
+class _MockRewardsRepository extends Mock implements RewardsRepository {}
 
 class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 
@@ -36,10 +40,15 @@ void main() {
         deadline: DateTime.utc(2026, 1, 1, 30),
       ),
     );
+    final rewards = _MockRewardsRepository();
+    when(() => rewards.listRewards(any(),
+            includeInactive: any(named: 'includeInactive')))
+        .thenAnswer((_) async => const <RewardResponse>[]);
     cubit = KioskFlowCubit(
       membersRepository: _MockMembersListRepository(),
       scheduleRepository: _MockScheduleRepository(),
       memberRepository: _MockMemberRepository(),
+      rewardsRepository: rewards,
       session: session,
       gymId: 'gym-1',
     );

@@ -405,6 +405,35 @@ class DesignConstants {
         letterSpacing: -0.2,
       );
 
+  /// The post-check-in glance's hero streak numeral — 112px bold, sized for the
+  /// 2-metre glance (bigger than the whole admin ramp, which tops out at
+  /// big2/32). Mockup `.streak-num`. Carries `color: text` like the other kiosk
+  /// display tokens; the glance recolors it to the brand via
+  /// `.copyWith(color: primaryColor)` (the numeral is always sapphire).
+  static TextStyle get kioskStreakNum => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 112,
+        color: text,
+        letterSpacing: -5.6,
+      );
+
+  /// The glance's tracked mono eyebrow ("YOUR POINTS") — a Geist-Mono
+  /// micro-label above the points balance. Always muted (`text3rd`) and
+  /// letter-tracked. Mockup `.eyebrow`.
+  static TextStyle get kioskEyebrow => monoFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        color: text3rd,
+        letterSpacing: 1.9,
+      );
+
+  /// Inner content measure for the glance's two panels — the width the reward
+  /// tile grid and the week-day strip are capped at (and centered within)
+  /// inside a panel, so neither spreads edge-to-edge on the wide kiosk. One
+  /// token unifies the mockup's `.reward-grid` (max 292) and `.week-strip`
+  /// (max 360) caps into a single kiosk content width.
+  static const double kioskGlanceMeasure = 320.0;
+
   /// H2 text style (semibold, 16)
   static TextStyle get h2 => baseFont.copyWith(
         fontWeight: FontWeight.w600,

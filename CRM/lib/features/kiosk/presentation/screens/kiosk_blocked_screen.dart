@@ -32,7 +32,7 @@ class KioskBlockedScreen extends StatelessWidget {
               const _BlockedIcon(),
               Text(
                 'Let\'s sort this at the front desk',
-                style: DesignConstants.big2Bold,
+                style: DesignConstants.kioskDisplay,
                 textAlign: TextAlign.center,
               ),
               _WhyBox(
