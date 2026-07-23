@@ -8,7 +8,10 @@ not a Pydantic response model, so there is no response schema here.
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
+
+from dateutil.relativedelta import relativedelta
 
 # A report month is exactly ``YYYY-MM`` (zero-padded). Anything else is a 400.
 _MONTH_PATTERN = re.compile(r"^(\d{4})-(\d{2})$")
@@ -46,7 +49,8 @@ class ReportMonth:
 
         Raises:
             ValueError: If the string is not a well-formed ``YYYY-MM`` with a
-                month in ``01``..``12``.
+                month in ``01``..``12``, or names a year whose month window
+                falls outside the supported calendar range.
         """
         match = _MONTH_PATTERN.match(raw.strip())
         if match is None:
@@ -55,4 +59,15 @@ class ReportMonth:
         month = int(match.group(2))
         if not 1 <= month <= 12:
             raise ValueError("month must be between 01 and 12")
+        # Reject a year whose month window can't be constructed (e.g. 0000 or
+        # 9999-12): the period service builds ``date(year, month, 1)`` and adds
+        # a month for the window's exclusive end, both of which raise on an
+        # out-of-range year. Validating that construction here keeps malformed
+        # input a 400 at the boundary instead of a 500 deep in the service.
+        try:
+            date(year, month, 1) + relativedelta(months=1)
+        except (ValueError, OverflowError) as exc:
+            raise ValueError(
+                "month is outside the supported calendar range"
+            ) from exc
         return cls(year=year, month=month)

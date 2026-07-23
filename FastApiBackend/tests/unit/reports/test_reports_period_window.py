@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from src.reports.schema.reports_schema import ReportMonth
 from src.reports.service.reports_period_service import ReportsPeriodService
 
@@ -77,3 +79,34 @@ class TestToDollars:
     def test_result_is_always_two_decimals(self) -> None:
         assert str(ReportsPeriodService._to_dollars(100)) == "1.00"
         assert str(ReportsPeriodService._to_dollars(150)) == "1.50"
+
+
+class TestReportMonthParse:
+    """``?month=`` validation happens at parse time, so bad input is a 400."""
+
+    def test_valid_month(self) -> None:
+        assert ReportMonth.parse("2026-06") == ReportMonth(2026, 6)
+
+    def test_strips_surrounding_whitespace(self) -> None:
+        assert ReportMonth.parse("  2026-06  ") == ReportMonth(2026, 6)
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["2026", "2026-6", "26-06", "2026-13", "2026-00", "not-a-month", ""],
+    )
+    def test_malformed_rejected(self, raw: str) -> None:
+        with pytest.raises(ValueError):
+            ReportMonth.parse(raw)
+
+    @pytest.mark.parametrize("raw", ["0000-05", "9999-12"])
+    def test_out_of_range_year_rejected_not_500(self, raw: str) -> None:
+        # Both match the YYYY-MM shape with a 1..12 month but can't form a
+        # calendar window (date(0, ...) is out of range; date(9999, 12, 1) + a
+        # month overflows to year 10000). parse must reject them here (-> 400),
+        # never let them reach the period service (-> 500).
+        with pytest.raises(ValueError):
+            ReportMonth.parse(raw)
+
+    def test_year_9999_non_december_is_valid(self) -> None:
+        # Only the window's exclusive end can overflow; 9999-11 stays in range.
+        assert ReportMonth.parse("9999-11") == ReportMonth(9999, 11)
