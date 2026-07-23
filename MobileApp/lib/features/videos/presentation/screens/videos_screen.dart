@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/network/api_client.dart';
-import 'package:mobile_app/core/selected_gym.dart';
-import 'package:mobile_app/features/home/data/mock_gym.dart';
+import 'package:mobile_app/core/state/selected_member.dart';
+import 'package:mobile_app/core/utils/number_format.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
 import 'package:mobile_app/features/videos/bloc/videos_bloc.dart';
 import 'package:mobile_app/features/videos/bloc/videos_event.dart';
 import 'package:mobile_app/features/videos/bloc/videos_state.dart';
@@ -194,19 +197,34 @@ class _FeedError extends StatelessWidget {
   }
 }
 
+// Bundled fallback assets for the topbar's theme-driven logo / rank belt.
+const String _kDefaultLogoAsset = 'gym_logo_global_mma.png';
+const String _kDefaultRankBadgeAsset = 'icon_rank_belt.png';
+
+/// The videos tab's name-only topbar: gym name from the selected member, and
+/// streak / points read LIVE from the shared [MemberProfileBloc] — the same
+/// per-member chrome the home and rewards topbars render, never mock.
 class _Topbar extends StatelessWidget {
   const _Topbar();
 
   @override
   Widget build(BuildContext context) {
-    return AppTopbar(
-      mode: AppTopbarMode.nameOnly,
-      showBackButton: false,
-      gymName: selectedGym.displayName,
-      logoAsset: mockGymGlobalMma.logoAsset,
-      streakDays: mockGymGlobalMma.streakDays,
-      pointsLabel: mockGymGlobalMma.pointsLabel,
-      rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
+    return BlocBuilder<MemberProfileBloc, MemberProfileState>(
+      builder: (context, state) {
+        final retention = state.profile?.retention;
+        return AppTopbar(
+          mode: AppTopbarMode.nameOnly,
+          showBackButton: false,
+          gymName: selectedMember.gymName ?? '',
+          logoAsset: _kDefaultLogoAsset,
+          streakDays: retention?.classStreakWeeks ?? 0,
+          pointsLabel:
+              retention != null ? formatCount(retention.pointsBalance) : '—',
+          rankBadgeAsset: _kDefaultRankBadgeAsset,
+          onTitleDoubleTap: () =>
+              Navigator.of(context).pushNamed(AppRoutes.memberSelect),
+        );
+      },
     );
   }
 }
