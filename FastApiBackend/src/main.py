@@ -29,6 +29,7 @@ from src.plans.plans_router import (
 from src.presets.presets_router import presets_router
 from src.ranks.ranks_router import ranks_router
 from src.reconciler.reconciler_scheduler import build_scheduler
+from src.reports.reports_router import reports_router
 from src.rewards.rewards_router import rewards_router
 from src.shared.paying_member_lock import LockBusyError
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
@@ -110,6 +111,9 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # The reports/exports downloads carry the filename in Content-Disposition;
+        # the browser can only read it cross-origin when it's explicitly exposed.
+        expose_headers=["Content-Disposition"],
     )
 
     application.add_exception_handler(
@@ -122,6 +126,7 @@ def create_app() -> FastAPI:
     application.include_router(gyms_router)
     application.include_router(members_router)
     application.include_router(ranks_router)
+    application.include_router(reports_router)
     application.include_router(rewards_router)
     application.include_router(waivers_router)
     application.include_router(employees_router)

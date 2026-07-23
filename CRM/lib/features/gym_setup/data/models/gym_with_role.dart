@@ -29,6 +29,12 @@ class GymWithRole {
   /// gym's saved branding.
   final String? themeDesignId;
 
+  /// When the gym was created (`gyms.created_at`); null on an older backend
+  /// that doesn't yet return the field. The Settings → Reports & exports
+  /// month picker floors its year list at this year (falling back to a fixed
+  /// year when null).
+  final DateTime? createdAt;
+
   const GymWithRole({
     required this.gymId,
     required this.gymName,
@@ -38,9 +44,11 @@ class GymWithRole {
     this.gymDescription,
     this.themeDesignId,
     this.logoUrl,
+    this.createdAt,
   });
 
   factory GymWithRole.fromJson(Map<String, dynamic> json) {
+    final createdAtRaw = json['created_at'] as String?;
     return GymWithRole(
       gymId: json['gym_id'] as String,
       gymName: json['gym_name'] as String,
@@ -51,6 +59,7 @@ class GymWithRole {
       themePreference:
           themeModeFromApi(json['theme_preference'] as String?),
       themeDesignId: json['theme_design_id'] as String?,
+      createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
     );
   }
 }
