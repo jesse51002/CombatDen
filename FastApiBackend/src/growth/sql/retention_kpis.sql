@@ -11,10 +11,11 @@
 --   retention_90d - of the members who were active 90 days ago, the share who
 --                   have still not crossed into dormancy (percent). Also
 --                   point-in-time, so no delta.
---   active_streaks- members on a LIVE weekly streak: at least one check-in in
---                   each of two CONSECUTIVE ISO weeks, where the later of the
---                   two is the current or the previous week (an older pair is
---                   a streak that already ended). Point-in-time, no delta.
+--   avg_length    - current average membership length: over members who hold
+--                   a LIVE membership right now, the average whole-months
+--                   since their FIRST membership started. The point-in-time
+--                   snapshot of the Average Membership Length line; a higher
+--                   number means members are staying longer. No delta.
 --
 -- The 30-day and 90-day spans are the metric's own definition (they are what
 -- the tiles MEAN), not tunable behaviour, so they are literals; the dormancy
@@ -92,30 +93,33 @@ at_risk AS (
              <= b.today - CAST(:at_risk_days AS INTEGER)
       )
 ),
-streak_weeks AS (
-    SELECT DISTINCT
-        a.member_id,
-        date_trunc('week', (a.occurred_at AT TIME ZONE b.tz))::date AS wk
-    FROM member_attendance a
-    CROSS JOIN bounds b
-    WHERE a.gym_id = CAST(:gym_id AS UUID)
-      AND (a.occurred_at AT TIME ZONE b.tz)::date >= b.week2
-),
-streak_flags AS (
-    SELECT
-        sw.member_id,
-        bool_or(sw.wk = b.week0) AS in_week0,
-        bool_or(sw.wk = b.week1) AS in_week1,
-        bool_or(sw.wk = b.week2) AS in_week2
-    FROM streak_weeks sw
-    CROSS JOIN bounds b
-    GROUP BY sw.member_id
-),
-streaks AS (
-    SELECT count(*)::bigint AS live_streaks
-    FROM streak_flags f
-    WHERE (f.in_week0 AND f.in_week1)
-       OR (f.in_week1 AND f.in_week2)
+avg_length AS (
+    -- Over members holding a live membership as of today, the average
+    -- whole-months since their FIRST membership start. age()-based whole
+    -- months, mirroring member_tenure.sql / avg_membership_length.sql.
+    SELECT round(avg(pm.months)::numeric, 1) AS avg_months
+    FROM (
+        SELECT
+            mm.member_id,
+            extract(year FROM age(b.today, min(mm.start_date)))::int * 12
+            + extract(month FROM age(b.today, min(mm.start_date)))::int
+                AS months
+        FROM member_memberships mm
+        CROSS JOIN bounds b
+        WHERE mm.gym_id = CAST(:gym_id AS UUID)
+          AND EXISTS (
+              SELECT 1
+              FROM member_memberships live
+              WHERE live.member_id = mm.member_id
+                AND live.gym_id = mm.gym_id
+                AND live.start_date <= b.today
+                AND (
+                    LEAST(live.cancel_date, live.end_date) IS NULL
+                    OR LEAST(live.cancel_date, live.end_date) > b.today
+                )
+          )
+        GROUP BY mm.member_id, b.today
+    ) pm
 )
 SELECT jsonb_build_object(
     'tiles', jsonb_build_array(
@@ -149,9 +153,9 @@ SELECT jsonb_build_object(
             'unit', 'percent'
         ),
         jsonb_build_object(
-            'key', 'active_streaks',
-            'label', 'Active Streaks',
-            'value', s.live_streaks,
+            'key', 'avg_membership_length',
+            'label', 'Avg Membership Length',
+            'value', COALESCE(al.avg_months, 0),
             'unit', 'count'
         )
     )
@@ -159,4 +163,4 @@ SELECT jsonb_build_object(
 FROM churn c
 CROSS JOIN retention r
 CROSS JOIN at_risk ar
-CROSS JOIN streaks s
+CROSS JOIN avg_length al
