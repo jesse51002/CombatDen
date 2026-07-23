@@ -81,17 +81,23 @@ class GrowthTabBody extends StatelessWidget {
           metricSpan(metric) == MetricSpan.half &&
           metricSpan(next) == MetricSpan.half;
       if (pairs) {
+        // Top-aligned columns with a whitespace gap — deliberately NOT
+        // IntrinsicHeight + a full-height vertical divider. Chart renderers
+        // (bars/line via chart_frame, heatmap, the hero) use a LayoutBuilder
+        // to size themselves, and IntrinsicHeight measuring a LayoutBuilder
+        // throws "LayoutBuilder does not support returning intrinsic
+        // dimensions". Because IndexedStack lays out every tab, a single
+        // paired chart row (e.g. Retention's rank_distribution +
+        // promotions_trend) would break the whole page, not just its tab.
+        // The gap matches the page's de-carded, whitespace-separated rhythm.
         rows.add(
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingBig,
-              children: [
-                Expanded(child: _section(metric)),
-                const Hairline(vertical: true),
-                Expanded(child: _section(next)),
-              ],
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingBig,
+            children: [
+              Expanded(child: _section(metric)),
+              Expanded(child: _section(next)),
+            ],
           ),
         );
         i++;

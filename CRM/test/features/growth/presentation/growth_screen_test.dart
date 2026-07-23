@@ -98,6 +98,31 @@ GrowthMetric _lineMetric({
       ),
     );
 
+/// A half-span `bars` chart. Its key (`promotions_trend` /
+/// `redemptions_trend`) is one the span registry marks half, so two in a
+/// row pair into one Row — and `bars` renders through a `LayoutBuilder`,
+/// the combination that used to crash under `IntrinsicHeight`.
+GrowthMetric _barsMetric({
+  required String key,
+  required String name,
+  GrowthCategory category = GrowthCategory.overview,
+  int order = 10,
+}) =>
+    _metric(
+      key: key,
+      name: name,
+      category: category,
+      type: GrowthMetricType.bars,
+      order: order,
+      data: BarsData(
+        unit: MetricUnit.count,
+        granularity: 'month',
+        series: [
+          MetricSeries(key: 'n', label: 'Count', points: _monthlyPoints()),
+        ],
+      ),
+    );
+
 GrowthState _loaded(List<GrowthMetric> metrics) => GrowthState(
       status: GrowthStatus.loaded,
       metrics: metrics,
@@ -198,8 +223,9 @@ void main() {
     testWidgets('two consecutive half-span metrics share one row',
         (tester) async {
       // `breakdown` is the one half-span type; a pair renders side by side
-      // separated by a vertical hairline, not stacked with a horizontal
-      // rule between them.
+      // in one Row separated by whitespace — no vertical divider (which would
+      // force an IntrinsicHeight that a chart child can't be measured under),
+      // and no horizontal rule (that only goes BETWEEN rows).
       await pump(
         tester,
         _loaded([
@@ -214,14 +240,48 @@ void main() {
       );
       expect(find.text('Status mix'), findsOneWidget);
       expect(find.text('Member tenure'), findsOneWidget);
-      final rules = tester.widgetList<Hairline>(
+      // Both sit under one Row (the pair), so that Row is an ancestor of both.
+      final sharedRow = find.ancestor(
+        of: find.text('Status mix'),
+        matching: find.byType(Row),
+      );
+      expect(
+        find.descendant(of: sharedRow, matching: find.text('Member tenure')),
+        findsWidgets,
+      );
+      // A single paired row: no inter-row rule, and no vertical divider.
+      expect(
         find.descendant(
           of: find.byType(OverviewTab),
           matching: find.byType(Hairline),
         ),
+        findsNothing,
       );
-      expect(rules.where((h) => h.vertical), hasLength(1));
-      expect(rules.where((h) => !h.vertical), isEmpty);
+    });
+
+    testWidgets('a paired row of chart metrics renders without crashing',
+        (tester) async {
+      // The regression this guards: two half-span CHART metrics
+      // (bars → chart_frame → LayoutBuilder) pair into one row. The old
+      // IntrinsicHeight wrapper measured that LayoutBuilder and threw
+      // "LayoutBuilder does not support returning intrinsic dimensions" —
+      // and because IndexedStack lays out every tab, it broke the whole
+      // page, not just this one. A breakdown pair never tripped it
+      // (breakdown has no LayoutBuilder), which is why it went uncaught.
+      await pump(
+        tester,
+        _loaded([
+          _barsMetric(key: 'promotions_trend', name: 'Promotions'),
+          _barsMetric(
+            key: 'redemptions_trend',
+            name: 'Redemptions',
+            order: 20,
+          ),
+        ]),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Promotions'), findsOneWidget);
+      expect(find.text('Redemptions'), findsOneWidget);
     });
 
     testWidgets('tapping a tab switches the body', (tester) async {
