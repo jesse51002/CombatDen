@@ -21,10 +21,22 @@ import 'package:mobile_app/features/profile/data/repositories/member_profile_rep
 /// the new member and the navigator resets to a fresh Home, resetting every
 /// feature bloc. The re-key on design id also re-themes already-pushed routes
 /// (the app reads the `DesignConstants` static getters, not `Theme.of`).
-class AppShell extends StatelessWidget {
+///
+/// The shell navigator carries a stable [GlobalKey] (owned by the state, so it
+/// survives ambient rebuilds) so the app-open celebration check in
+/// [AppLifecycleRefresh] — which sits ABOVE the navigator — can push the
+/// post-class flow onto it.
+class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.onGenerateRoute});
 
   final Route<dynamic> Function(RouteSettings) onGenerateRoute;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -42,10 +54,12 @@ class AppShell extends StatelessWidget {
               repository: MemberProfileRepository(apiClient: ApiClient()),
             )..add(const MemberProfileLoadRequested()),
             child: AppLifecycleRefresh(
+              navigatorKey: _navigatorKey,
               child: Navigator(
-                onGenerateRoute: onGenerateRoute,
+                key: _navigatorKey,
+                onGenerateRoute: widget.onGenerateRoute,
                 onGenerateInitialRoutes: (navigator, initialRoute) => [
-                  onGenerateRoute(RouteSettings(name: initialRoute)),
+                  widget.onGenerateRoute(RouteSettings(name: initialRoute)),
                 ],
               ),
             ),

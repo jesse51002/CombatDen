@@ -36,6 +36,14 @@ class MemberClassHistoryRow {
   final String originalTime;
   final int durationMinutes;
 
+  /// Points this class was worth — the "+N points" the post-class celebration
+  /// count-up rolls to for an attended row. Mirrors the `points_worth` column
+  /// added to each history row. Defaults to 0 when a row omits it (the column
+  /// is being rolled out concurrently), so parsing the shared
+  /// reservations/history feed never breaks on an older backend.
+  @JsonKey(defaultValue: 0)
+  final int pointsWorth;
+
   /// The attendance row's start instant — attended rows only (null otherwise).
   final String? occurredAt;
 
@@ -50,6 +58,7 @@ class MemberClassHistoryRow {
     required this.originalTime,
     required this.durationMinutes,
     required this.status,
+    this.pointsWorth = 0,
     this.occurredAt,
   });
 

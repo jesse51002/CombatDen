@@ -20,6 +20,7 @@ MemberClassHistoryRow _$MemberClassHistoryRowFromJson(
     json['status'],
     unknownValue: MemberClassHistoryStatus.unknown,
   ),
+  pointsWorth: (json['points_worth'] as num?)?.toInt() ?? 0,
   occurredAt: json['occurred_at'] as String?,
 );
 
