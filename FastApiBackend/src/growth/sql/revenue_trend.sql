@@ -84,7 +84,7 @@ SELECT jsonb_build_object(
     'granularity', 'month',
     'series', jsonb_build_array(
         jsonb_build_object(
-            'key', 'mrr',
+            'key', 'revenue',
             'label', 'Revenue',
             'points', COALESCE(
                 (

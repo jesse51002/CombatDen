@@ -496,7 +496,7 @@ async def test_revenue_buckets_by_gym_local_month(db_pool, created) -> None:
     )
 
     trend_def = REGISTRY_BY_KEY["revenue_trend"]
-    before = _series_points(await _run_metric(db_pool, trend_def), "mrr")
+    before = _series_points(await _run_metric(db_pool, trend_def), "revenue")
 
     amount = 4237
     async with db_pool.session() as session:
@@ -508,7 +508,7 @@ async def test_revenue_buckets_by_gym_local_month(db_pool, created) -> None:
         await session.commit()
     created.track_member(member_id)
 
-    after = _series_points(await _run_metric(db_pool, trend_def), "mrr")
+    after = _series_points(await _run_metric(db_pool, trend_def), "revenue")
 
     assert after.get(local_bucket, 0) - before.get(local_bucket, 0) == amount
     assert after.get(utc_bucket, 0) - before.get(utc_bucket, 0) == 0
@@ -527,7 +527,7 @@ async def test_revenue_trend_counts_one_time_charges(db_pool, created) -> None:
     """
     trend_def = REGISTRY_BY_KEY["revenue_trend"]
     before = sum(
-        _series_points(await _run_metric(db_pool, trend_def), "mrr").values()
+        _series_points(await _run_metric(db_pool, trend_def), "revenue").values()
     )
 
     amount = 7900
@@ -552,7 +552,7 @@ async def test_revenue_trend_counts_one_time_charges(db_pool, created) -> None:
     created.track_plan_db(plan_id)
 
     after = sum(
-        _series_points(await _run_metric(db_pool, trend_def), "mrr").values()
+        _series_points(await _run_metric(db_pool, trend_def), "revenue").values()
     )
 
     assert after - before == amount
