@@ -1,37 +1,37 @@
--- Conversion Rate (line, percent, monthly, all-time) - for each month's
--- trial COHORT, the share of it that has since converted to a recurring
--- membership.
+-- Conversion Rate (line, percent, monthly, all-time) - the share of each
+-- month's RESOLVED trial members that converted to a recurring membership,
+-- anchored on when the trial ENDED rather than when it started.
 --
--- A member belongs to the cohort of the month their FIRST trial started, so
--- a member who buys three trial packs is one cohort member, not three. They
--- count as converted once they hold any 'recurring' membership that started
--- on or after that first trial start - regardless of whether that membership
--- has since been cancelled, because the conversion still happened.
+-- A member's trial is RESOLVED once it has ended AND a grace week has passed:
+-- their trial terminal date - LEAST(cancel_date, end_date) taken over their
+-- trial memberships, using the LATEST such date because they stay "on trial"
+-- until their last trial ends - is non-null and at least 7 days in the past.
+-- A member whose trial has not ended, or ended less than a week ago, is NOT
+-- yet resolved and is excluded: the sign-up decision usually lands during the
+-- pack or in the days just after it lapses, so a grace week lets that outcome
+-- settle before the member is counted. The 7-day grace is hardcoded here, like
+-- the other fixed trial windows in this domain.
 --
--- ONLY MATURED COHORTS ARE PLOTTED. The maturity window is 60 days measured
--- from the END of the cohort month, so every trial in a plotted month has
--- had at least 60 days - and the earliest ones about 90 - to convert. The
--- number is chosen against how trials actually run here: trial plans are
--- days-to-weeks long, and the decision to sign up lands during the pack or
--- shortly after it lapses. A month whose members have not had that long is
--- EXCLUDED, never reported as a low rate: an immature cohort's 0% is a
--- measurement artefact, and drawing it would show a cliff at the right edge
--- of the chart every single month.
+-- A member is one cohort member however many trials they bought (the min /
+-- max rollup below collapses them). They count as CONVERTED once they hold any
+-- 'recurring' membership whose start_date is on or after their FIRST trial
+-- start - regardless of whether that recurring membership has since been
+-- cancelled, because the conversion still happened.
 --
--- Months with no trials at all are also omitted rather than plotted as 0% -
--- a conversion rate of an empty cohort is undefined, not zero. The line
--- therefore has gaps, which is honest.
+-- Each resolved member is bucketed by the MONTH their trial ended, and a
+-- month's rate is converted / resolved within that month. Only months with at
+-- least one resolved member get a point: the rate of an empty month is
+-- undefined, not zero, so the line keeps honest gaps rather than plotting 0%.
 WITH gym_day AS (
-    SELECT
-        g.timezone AS tz,
-        (now() AT TIME ZONE g.timezone)::date AS today
+    SELECT (now() AT TIME ZONE g.timezone)::date AS today
     FROM gyms g
     WHERE g.gym_id = CAST(:gym_id AS UUID)
 ),
 trials AS (
     SELECT
         mm.member_id,
-        mm.start_date
+        mm.start_date,
+        LEAST(mm.cancel_date, mm.end_date) AS term_date
     FROM member_memberships mm
     JOIN membership_plans p ON p.plan_id = mm.plan_id
     WHERE mm.gym_id = CAST(:gym_id AS UUID)
@@ -48,42 +48,40 @@ recurring AS (
       AND p.plan_type = 'recurring'
       AND mm.start_date IS NOT NULL
 ),
-cohort AS (
+member_trials AS (
     SELECT
         t.member_id,
-        min(t.start_date) AS trial_start
+        min(t.start_date) AS first_trial_start,
+        max(t.term_date) AS trial_end
     FROM trials t
     GROUP BY t.member_id
 ),
-cohort_months AS (
+resolved AS (
     SELECT
-        date_trunc('month', c.trial_start)::date AS month_start,
-        count(*)::bigint AS cohort_size,
+        mt.member_id,
+        mt.first_trial_start,
+        mt.trial_end
+    FROM member_trials mt
+    CROSS JOIN gym_day gd
+    WHERE mt.trial_end IS NOT NULL
+      -- The grace week: the outcome is only counted once the trial has been
+      -- over for 7 days. Hardcoded like the other trial windows here.
+      AND (mt.trial_end + INTERVAL '7 days')::date <= gd.today
+),
+end_months AS (
+    SELECT
+        date_trunc('month', r.trial_end)::date AS month_start,
+        count(*)::bigint AS resolved_size,
         count(*) FILTER (
             WHERE EXISTS (
                 SELECT 1
-                FROM recurring r
-                WHERE r.member_id = c.member_id
-                  AND r.start_date >= c.trial_start
+                FROM recurring rc
+                WHERE rc.member_id = r.member_id
+                  AND rc.start_date >= r.first_trial_start
             )
         )::bigint AS converted_size
-    FROM cohort c
-    GROUP BY date_trunc('month', c.trial_start)::date
-),
-matured AS (
-    SELECT
-        cm.month_start,
-        COALESCE(
-            round(
-                cm.converted_size::numeric
-                / NULLIF(cm.cohort_size, 0) * 100, 1
-            ),
-            0
-        ) AS rate
-    FROM cohort_months cm
-    CROSS JOIN gym_day gd
-    WHERE (cm.month_start + INTERVAL '1 month' + INTERVAL '60 days')::date
-          <= gd.today
+    FROM resolved r
+    GROUP BY date_trunc('month', r.trial_end)::date
 )
 SELECT jsonb_build_object(
     'unit', 'percent',
@@ -96,12 +94,15 @@ SELECT jsonb_build_object(
                 (
                     SELECT jsonb_agg(
                         jsonb_build_object(
-                            'date', to_char(m.month_start, 'YYYY-MM-DD'),
-                            'value', m.rate
+                            'date', to_char(em.month_start, 'YYYY-MM-DD'),
+                            'value', round(
+                                em.converted_size::numeric
+                                / NULLIF(em.resolved_size, 0) * 100, 1
+                            )
                         )
-                        ORDER BY m.month_start
+                        ORDER BY em.month_start
                     )
-                    FROM matured m
+                    FROM end_months em
                 ),
                 '[]'::jsonb
             )

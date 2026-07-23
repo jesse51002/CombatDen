@@ -87,6 +87,49 @@ class HeroSplitData(BaseModel):
     segments: list[HeroSegment]
 
 
+class MemberListColumnType(StrEnum):
+    """How one tabular column's cells should be rendered.
+
+    Shared by ``member_list`` and by the optional companion ``table`` a
+    ``line`` / ``bars`` metric may carry.
+    """
+
+    text = "text"
+    number = "number"
+    cents = "cents"
+    date = "date"
+
+
+class TableOrientation(StrEnum):
+    """Where a metric's companion table sits relative to its chart."""
+
+    stacked = "stacked"
+    beside = "beside"
+
+
+class MetricTableColumn(BaseModel):
+    """One column header of a metric's companion ``table``."""
+
+    key: str
+    label: str
+    type: MemberListColumnType
+    align: str | None = None
+
+
+class MetricTableRow(BaseModel):
+    """One companion-table row; ``cells`` is positional against ``columns``."""
+
+    cells: list[str | float | None]
+
+
+class MetricTable(BaseModel):
+    """A data table rendered alongside a chart (under it, or beside it)."""
+
+    orientation: TableOrientation
+    columns: list[MetricTableColumn]
+    rows: list[MetricTableRow]
+
+
 class SeriesPoint(BaseModel):
     """One (date, value) sample.
 
@@ -115,12 +158,18 @@ class ClassSeries(BaseModel):
 
 
 class LineData(BaseModel):
-    """Payload for ``line`` — one or more time series drawn as lines."""
+    """Payload for ``line`` — one or more time series drawn as lines.
+
+    ``table`` is an optional companion data table rendered alongside the chart
+    (e.g. a per-month breakdown under the line). ``None`` when the metric has
+    no table.
+    """
 
     unit: MetricUnit
     granularity: str
     series: list[MetricSeries]
     by_class: list[ClassSeries] | None = None
+    table: MetricTable | None = None
 
 
 class BarsData(BaseModel):
@@ -128,12 +177,15 @@ class BarsData(BaseModel):
 
     Structurally identical to ``LineData`` but declared separately: the two
     renderers evolve independently, and an alias would couple them.
+
+    ``table`` is the same optional companion data table ``LineData`` carries.
     """
 
     unit: MetricUnit
     granularity: str
     series: list[MetricSeries]
     by_class: list[ClassSeries] | None = None
+    table: MetricTable | None = None
 
 
 class BreakdownItem(BaseModel):
@@ -191,15 +243,6 @@ class HeatmapData(BaseModel):
     cols: list[str]
     cells: list[list[float | None]]
     by_class: list[ClassHeatmap] | None = None
-
-
-class MemberListColumnType(StrEnum):
-    """How one ``member_list`` column's cells should be rendered."""
-
-    text = "text"
-    number = "number"
-    cents = "cents"
-    date = "date"
 
 
 class MemberListColumn(BaseModel):

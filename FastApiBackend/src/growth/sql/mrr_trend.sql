@@ -1,8 +1,8 @@
--- Recurring Revenue (line, cents, monthly, all-time).
+-- Recurring Revenue (line, cents, monthly, all-time) + companion table.
 --
--- WHAT THIS SERIES MEANS: the recurring revenue ACTUALLY BILLED in each
--- gym-local month, read from payment history. It is NOT a contracted run-rate
--- "as of month end" - a point is money that moved, not money that was owed.
+-- THE LINE SERIES: the recurring revenue ACTUALLY BILLED in each gym-local
+-- month, read from payment history. It is NOT a contracted run-rate "as of
+-- month end" - a point is money that moved, not money that was owed.
 --
 -- Two consequences the CRM must not hide:
 --   * THE NEWEST POINT IS PARTIAL. The current month is still in progress, so
@@ -12,6 +12,11 @@
 --   * It does not equal the MRR tile. The tile is the current run-rate (what
 --     the gym bills per month going forward); this line is history.
 --
+-- THE COMPANION TABLE (stacked under the line): the SAME month grid, splitting
+-- the money that moved into Recurring (the identical figure the line plots) and
+-- One-time. The line itself stays recurring-only; the table adds the one-time
+-- column beside it.
+--
 -- WHY CHARGES AND NOT MEMBERSHIP DATES: a FROZEN member is not billed, so
 -- their contracted price must not count as revenue. Only the CURRENT freeze
 -- window is stored (members.freeze_start_date / freeze_end_date) - a freeze
@@ -20,26 +25,31 @@
 -- rule encoded permanently: a frozen member simply generates none.
 --
 -- ATTRIBUTION - a charge pays a whole INVOICE, which can mix recurring
--- membership lines with one-time / custom ones, so only the recurring portion
--- may count. Each succeeded charge is apportioned by its invoice's line items:
+-- membership lines with one-time / trial / custom ones, so each portion is
+-- attributed separately. Each succeeded charge is apportioned by its invoice's
+-- line items:
 --
 --     recurring_share = SUM(recurring membership line amounts)
 --                       / SUM(all recorded line amounts)
+--     one_time_share  = SUM(one_time/trial membership line amounts)
+--                       / SUM(all recorded line amounts)
 --
--- and the charge's own amount carries that share. The denominator is the
--- RECORDED LINE TOTAL rather than member_invoices.total_amount on purpose:
--- invoice-level discounts make the two differ, and a fully-recurring invoice
--- must attribute 100% of the cash that actually moved, whatever the list
--- lines summed to. Refunds ride the same invoice, are stored NEGATIVE, and get
--- the same share, so a plain SUM is already net of refunds.
+-- and the charge's own amount carries each share. recurring + one_time +
+-- non-membership shares therefore reconstruct the whole charge. The
+-- denominator is the RECORDED LINE TOTAL rather than member_invoices
+-- .total_amount on purpose: invoice-level discounts make the two differ, and a
+-- fully-recurring invoice must attribute 100% of the cash that actually moved,
+-- whatever the list lines summed to. Refunds ride the same invoice, are stored
+-- NEGATIVE, and get the same share, so a plain SUM is already net of refunds.
 --
--- AN INVOICE WITH NO RECORDED LINES COUNTS AS FULLY RECURRING. The invoice
--- webhook deliberately skips proration lines, so a purely-prorated invoice
--- (a mid-cycle start, upgrade or plan change) stores real money with no lines
--- at all. Prorations only ever arise on a subscription, so that money is
+-- AN INVOICE WITH NO RECORDED LINES COUNTS AS FULLY RECURRING (never one-time).
+-- The invoice webhook deliberately skips proration lines, so a purely-prorated
+-- invoice (a mid-cycle start, upgrade or plan change) stores real money with no
+-- lines at all. Prorations only ever arise on a subscription, so that money is
 -- recurring; dropping it would silently understate every month in which a
--- membership changed mid-cycle. One-time and custom invoices always keep their
--- lines and so are never caught by this branch.
+-- membership changed mid-cycle. One-time and trial invoices always keep their
+-- lines and so are never caught by this branch - the one-time column only ever
+-- counts real one_time/trial line items.
 --
 -- The month grid runs from the gym's first succeeded charge through the
 -- current gym-local month with zero-filled gaps - the same grid
@@ -58,7 +68,11 @@ invoice_split AS (
         COALESCE(sum(li.amount) FILTER (
             WHERE li.item_type = 'membership'
               AND p.plan_type = 'recurring'
-        ), 0)::numeric AS recurring_cents
+        ), 0)::numeric AS recurring_cents,
+        COALESCE(sum(li.amount) FILTER (
+            WHERE li.item_type = 'membership'
+              AND p.plan_type IN ('one_time', 'trial')
+        ), 0)::numeric AS onetime_cents
     FROM member_invoice_line_items li
     LEFT JOIN member_memberships mm ON mm.item_id = li.item_id
     LEFT JOIN membership_plans p ON p.plan_id = mm.plan_id
@@ -74,7 +88,14 @@ charges AS (
             ELSE COALESCE(
                 s.recurring_cents / NULLIF(s.recorded_cents, 0), 0
             )
-        END AS recurring_cents
+        END AS recurring_cents,
+        c.amount * CASE
+            -- No recorded lines is recurring, so it carries no one-time share.
+            WHEN s.invoice_id IS NULL THEN 0::numeric
+            ELSE COALESCE(
+                s.onetime_cents / NULLIF(s.recorded_cents, 0), 0
+            )
+        END AS onetime_cents
     FROM member_charges c
     CROSS JOIN gym_day gd
     LEFT JOIN invoice_split s ON s.invoice_id = c.invoice_id
@@ -104,7 +125,8 @@ months AS (
 points AS (
     SELECT
         mo.month_start,
-        round(COALESCE(sum(ch.recurring_cents), 0))::bigint AS value
+        round(COALESCE(sum(ch.recurring_cents), 0))::bigint AS recurring,
+        round(COALESCE(sum(ch.onetime_cents), 0))::bigint AS onetime
     FROM months mo
     LEFT JOIN charges ch
         ON ch.charge_date >= mo.month_start
@@ -123,7 +145,7 @@ SELECT jsonb_build_object(
                     SELECT jsonb_agg(
                         jsonb_build_object(
                             'date', to_char(p.month_start, 'YYYY-MM-DD'),
-                            'value', p.value
+                            'value', p.recurring
                         )
                         ORDER BY p.month_start
                     )
@@ -131,6 +153,34 @@ SELECT jsonb_build_object(
                 ),
                 '[]'::jsonb
             )
+        )
+    ),
+    'table', jsonb_build_object(
+        'orientation', 'stacked',
+        'columns', jsonb_build_array(
+            jsonb_build_object('key', 'month', 'label', 'Month', 'type', 'date'),
+            jsonb_build_object(
+                'key', 'recurring', 'label', 'Recurring', 'type', 'cents'
+            ),
+            jsonb_build_object(
+                'key', 'one_time', 'label', 'One-time', 'type', 'cents'
+            )
+        ),
+        'rows', COALESCE(
+            (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'cells', jsonb_build_array(
+                            to_char(p.month_start, 'YYYY-MM-DD'),
+                            p.recurring,
+                            p.onetime
+                        )
+                    )
+                    ORDER BY p.month_start
+                )
+                FROM points p
+            ),
+            '[]'::jsonb
         )
     )
 ) AS data

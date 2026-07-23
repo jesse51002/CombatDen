@@ -144,7 +144,7 @@ SELECT jsonb_build_object(
         ),
         jsonb_build_object(
             'key', 'redemptions',
-            'label', 'Redemptions',
+            'label', 'Reward redemptions',
             'value', rd.redeemed_now,
             'unit', 'count',
             'delta_abs', rd.redeemed_now - rd.redeemed_prev,
