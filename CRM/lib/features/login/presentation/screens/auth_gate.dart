@@ -11,6 +11,10 @@ import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/gym_setup/data/models/gym_with_role.dart';
 import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
 import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_locked_screen.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/presentation/screens/gym_picker_screen.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
@@ -184,10 +188,22 @@ class _AuthenticatedGateState
         }
         // One gym was auto-activated in _resolveGyms; a picked gym
         // sets it via onSelected. Either way, an active gym → mount
-        // the workspace.
+        // the workspace — UNLESS Kiosk Mode is engaged, in which case
+        // the member self-serve surface intercepts it. The kiosk branch
+        // lives INSIDE the authenticated branch on purpose: a persisted
+        // kiosk flag is only ever honored while a session exists, so a
+        // flag without a session is inert (it fails closed to the login
+        // screen above). The admin session + selectedGym stay live
+        // underneath; leaving kiosk is what signs out.
         if (selectedGym.gymId != null) {
-          return _MembersWorkspace(
-            onGenerateRoute: widget.onGenerateRoute,
+          return BlocBuilder<KioskSessionCubit, KioskSessionState>(
+            builder: (context, kiosk) {
+              if (kiosk.isEnded) return const KioskLockedScreen();
+              if (kiosk.isKioskVisible) return const KioskScreen();
+              return _MembersWorkspace(
+                onGenerateRoute: widget.onGenerateRoute,
+              );
+            },
           );
         }
         return GymPickerScreen(

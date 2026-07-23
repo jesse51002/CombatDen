@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/navigation/app_routes.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/add_member_flow.dart';
@@ -26,12 +27,18 @@ void goToSection(BuildContext context, String route) {
   Navigator.of(context).pushReplacementNamed(route);
 }
 
-/// Tap handler for a [NavSection]: the primary CTA opens the add-member flow;
-/// any other section navigates to its route.
+/// Tap handler for a [NavSection]: a flow-opening item (`action != null`) opens
+/// its flow; every other section navigates to its route.
 void onNavSectionTap(BuildContext context, NavSection section) {
-  if (section.isPrimary) {
-    _openAddMemberFlow(context);
-    return;
+  switch (section.action) {
+    case NavSectionAction.addMember:
+      _openAddMemberFlow(context);
+      return;
+    case NavSectionAction.enterKiosk:
+      _confirmEnterKiosk(context);
+      return;
+    case null:
+      break;
   }
   final route = section.route;
   if (route == null) {
@@ -39,6 +46,26 @@ void onNavSectionTap(BuildContext context, NavSection section) {
     return;
   }
   goToSection(context, route);
+}
+
+/// Confirm, then enter Kiosk Mode. Reads the [KioskSessionCubit] *before* the
+/// await (the tapped rail item's element can be rebuilt away while the dialog
+/// is open, so we never touch a `BuildContext` across the async gap). On
+/// confirm, `enterKiosk()` flips the app-root cubit, which the auth gate turns
+/// into the swap from the admin workspace to the member kiosk surface — the
+/// admin session stays live underneath; leaving kiosk is what signs out.
+Future<void> _confirmEnterKiosk(BuildContext context) async {
+  final cubit = context.read<KioskSessionCubit>();
+  final confirmed = await ConfirmationModal.show(
+    context: context,
+    title: 'Enter Kiosk Mode?',
+    message: 'This locks the iPad to a member self-serve screen. Leaving '
+        'Kiosk Mode signs you out, so you’ll need to sign back in to manage '
+        'your gym.',
+    confirmLabel: 'Enter Kiosk',
+  );
+  if (!confirmed) return;
+  cubit.enterKiosk();
 }
 
 /// Opens the add-member flow from the primary nav CTA. When it closes without
