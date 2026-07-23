@@ -113,7 +113,7 @@ class _Head extends StatelessWidget {
         Text('IN THE APP', style: DesignConstants.kioskEyebrow),
         Text(
           title,
-          style: DesignConstants.h1,
+          style: DesignConstants.kioskPanelTitle,
           textAlign: TextAlign.center,
         ),
       ],
@@ -163,7 +163,10 @@ class _Note extends StatelessWidget {
     final titles = slides.map((s) => s.title.toLowerCase()).join(' · ');
     return Text(
       reduceMotion ? 'Tap a dot to browse' : 'Auto-rotates: $titles',
-      style: DesignConstants.p.copyWith(color: DesignConstants.text3rd),
+      style: DesignConstants.kioskMicro.copyWith(
+        fontWeight: FontWeight.w500,
+        color: DesignConstants.text2nd,
+      ),
       textAlign: TextAlign.center,
     );
   }

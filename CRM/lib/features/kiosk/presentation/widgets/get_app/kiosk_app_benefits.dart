@@ -41,7 +41,7 @@ class _Benefit extends StatelessWidget {
           weight: DesignConstants.iconWeight,
           color: DesignConstants.primaryColor,
         ),
-        Text(label, style: DesignConstants.pBig),
+        Text(label, style: DesignConstants.kioskCaption),
       ],
     );
   }

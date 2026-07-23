@@ -197,7 +197,7 @@ class _Initials extends StatelessWidget {
     return Center(
       child: Text(
         _initials(channelName),
-        style: DesignConstants.pSmallBold.copyWith(
+        style: DesignConstants.kioskTag.copyWith(
           color: DesignConstants.text2nd,
         ),
       ),
@@ -228,7 +228,7 @@ class _Meta extends StatelessWidget {
       children: [
         Text(
           video.title,
-          style: DesignConstants.h3,
+          style: DesignConstants.kioskMicro,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -236,8 +236,9 @@ class _Meta extends StatelessWidget {
         // an empty line (or inventing a count).
         Text(
           views.isEmpty ? video.channelName : '$views views',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text3rd,
+          style: DesignConstants.kioskTag.copyWith(
+            fontWeight: FontWeight.w500,
+            color: DesignConstants.text2nd,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

@@ -34,7 +34,7 @@ class KioskAppLine extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            style: DesignConstants.pBig.copyWith(
+            style: DesignConstants.kioskCaption.copyWith(
               color: DesignConstants.text2nd,
             ),
             textAlign: TextAlign.center,

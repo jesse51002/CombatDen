@@ -184,9 +184,24 @@ tracking; body stays neutral.
 - **Label** (`h3`, 600, 13px): table headers, chips, metadata.
 - **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
-**Kiosk-scale display** (`kioskDisplay`, 700, 40px; `kioskTitle`, 600, 21px): the member
-self-serve kiosk (a supervised iPad) is read from ~2m, so its home title and panel sub-titles
-run one step larger than the admin ramp. Kiosk-only — the admin surfaces never use these.
+**The kiosk ramp** (`kiosk*`, 19 roles, 112 → 11px): the member self-serve kiosk (a supervised
+iPad) is read from ~2m, so it runs a **complete second ramp** transcribed from the approved
+mockup rather than borrowing the admin ramp for its smaller text — `kioskStreakNum` 112 ·
+`kioskDisplay` 40 · `kioskMetric` 30 · `kioskPanelTitle` 25 · `kioskStatement` 22 ·
+`kioskFieldText` 22 · `kioskTitle` 21 · `kioskButtonPrimaryLabel` 19 · `kioskName` 19 ·
+`kioskSubtitle` 18 · `kioskButtonOutlineLabel` 17 · `kioskBody` 17 · `kioskLabel` 16 ·
+`kioskSectionText` 16 · `kioskCaption` 15 · `kioskMicro` 13 · `kioskMonoValue` 13 ·
+`kioskEyebrow` 12 · `kioskTag` 11. Kiosk-only — the admin surfaces never use these, and a
+kiosk change never touches the admin ramp.
+
+**The Kiosk-Moves-As-A-Set Rule.** Never re-scale one kiosk role alone. The mockup's ramp is
+internally proportional, so lifting only *some* roles (the buttons, say) leaves labels at desk
+scale and makes a button out-shout the copy beside it — a half-applied ramp is the same bug as
+none. Change the ladder or nothing; a test asserts the ordering.
+
+**Kiosk text holds the AA floor.** Muted words on a kiosk surface use `text2nd`, never
+`text3rd` (3.05:1 on the ground, under the 4.5:1 AA floor and unreadable at 2m). `text3rd`
+stays for non-text only — hairlines, progress tracks, placeholder glyphs.
 
 ### Named Rules
 **The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Geist, never from

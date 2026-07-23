@@ -410,29 +410,43 @@ class DesignConstants {
   static TextStyle get big2Bold => big2.copyWith(fontWeight: FontWeight.w700);
   static TextStyle get big2Light => big2.copyWith(fontWeight: FontWeight.w300);
 
-  // ── Kiosk display type ──
-  // The kiosk iPad is read from ~2m, so its titles run larger/tracked-tighter
-  // than the admin ramp (which tops out at big2/32). Like the other text
-  // getters these carry `color: text`; callers apply a muted color where the
-  // mockup uses ink-3 (e.g. a panel's sub-text via `.copyWith(color: text3rd)`).
-
-  /// Kiosk "Check in" home title — 40px bold, kiosk-scale display type (read
-  /// from a distance). Mockup `.home-title h1`.
-  static TextStyle get kioskDisplay => baseFont.copyWith(
-        fontWeight: FontWeight.w700,
-        fontSize: 40,
-        color: text,
-        letterSpacing: -1.2,
-      );
-
-  /// Kiosk panel sub-title ("Scan with app" / "Name search") — 21px semibold,
-  /// kiosk-scale display type (read from a distance). Mockup `.sub-title`.
-  static TextStyle get kioskTitle => baseFont.copyWith(
-        fontWeight: FontWeight.w600,
-        fontSize: 21,
-        color: text,
-        letterSpacing: -0.2,
-      );
+  // ══ KIOSK TYPE RAMP ══
+  // The member kiosk (a supervised iPad read from ~2m) runs its OWN COMPLETE
+  // type ramp, transcribed from `KIOSK_MOCKUPS.html` — it does NOT borrow the
+  // admin ramp for its smaller text. That is the whole point: a kiosk screen
+  // whose headline is kiosk-scale but whose labels are admin-scale reads
+  // broken, because the button labels then out-size the copy around them.
+  //
+  // **The ramp moves as a SET.** Never re-scale one kiosk role on its own —
+  // a change here is a change to the whole ladder, and the ordering test in
+  // `test/features/kiosk/presentation/kiosk_type_ramp_test.dart` fails if the
+  // ladder stops descending. Every kiosk call site reads one of these tokens;
+  // none restates a size. The admin ramp (h1/h2/h3/p, `AppPrimaryButton`,
+  // `AppOutlineButton`) is untouched by any of it.
+  //
+  // The ladder, largest first (mockup element in each token's doc):
+  //   kioskStreakNum 112 · kioskDisplay 40 · kioskMetric 30 ·
+  //   kioskPanelTitle 25 · kioskStatement 22 · kioskFieldText 22 ·
+  //   kioskTitle 21 · kioskButtonPrimaryLabel 19 · kioskName 19 ·
+  //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 · kioskBody 17 ·
+  //   kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 ·
+  //   kioskMicro 13 · kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
+  //
+  // Like the other text getters these carry `color: text`; callers apply a
+  // muted color where the mockup uses ink-2 (e.g. a section's sub-text via
+  // `.copyWith(color: text2nd)`) and a heavier/lighter weight where one mockup
+  // element in a role differs (never a different SIZE).
+  //
+  // **Muted kiosk text is [text2nd], never [text3rd].** `text3rd` (#878D99)
+  // measures 3.05:1 on the ground / 3.33:1 on white — under the 4.5:1 WCAG AA
+  // floor `PRODUCT.md` holds as a hard requirement, and unreadable anyway on a
+  // screen viewed from ~2m. The mockup tints several of these roles `--ink-3`;
+  // the kiosk deliberately lifts every one of them that carries WORDS
+  // (timer label, section sub-text, eyebrows, search hint + empty line, "or"
+  // seam, header kicker, belt names, view counts, the rotate caption) to
+  // `text2nd`. `text3rd` survives on kiosk surfaces ONLY for non-text: a
+  // hairline, a divider, a progress-bar track, a decorative placeholder glyph.
+  // Admin surfaces keep their own `text3rd` usage — that is a separate call.
 
   /// The post-check-in glance's hero streak numeral — 112px bold, sized for the
   /// 2-metre glance (bigger than the whole admin ramp, which tops out at
@@ -446,14 +460,141 @@ class DesignConstants {
         letterSpacing: -5.6,
       );
 
-  /// The glance's tracked mono eyebrow ("YOUR POINTS") — a Geist-Mono
-  /// micro-label above the points balance. Always muted (`text3rd`) and
-  /// letter-tracked. Mockup `.eyebrow`.
-  static TextStyle get kioskEyebrow => monoFont.copyWith(
+  /// A kiosk SCREEN's title — the one line that anchors the whole view
+  /// ("Check in", "Hi Marcus, pick your class", "Nice one, Marcus.", "Let's
+  /// sort this at the front desk"). 40px bold. Mockup `.home-title h1` /
+  /// `.blocked h1` (40) and `.screen-head h1` / `.glance-top h1` (42) — one
+  /// token for all four, at the pair's lower value.
+  static TextStyle get kioskDisplay => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 40,
+        color: text,
+        letterSpacing: -1.2,
+      );
+
+  /// A big NUMBER inside a kiosk panel — the glance's points balance, and (at
+  /// w600) the "week streak" word under the hero numeral. Mockup `.points .n`
+  /// (30/700) and `.streak-word` (29/600).
+  static TextStyle get kioskMetric => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 30,
+        color: text,
+        letterSpacing: -0.9,
+      );
+
+  /// A kiosk PANEL's own title — the "Get the app" card's heading, the
+  /// showcase's rotating slide title, the idle-warning card. 25px bold, one
+  /// clear step under [kioskDisplay] so a panel never competes with the
+  /// screen. Mockup `.app-card-title`.
+  static TextStyle get kioskPanelTitle => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 25,
+        color: text,
+        letterSpacing: -0.5,
+      );
+
+  /// ONE important sentence set apart — the blocked screen's why-box reason,
+  /// and a class card's name on the kiosk class pick. Mockup
+  /// `.why-box .why-reason` (22/600) / `.class-name` (23/600).
+  static TextStyle get kioskStatement => baseFont.copyWith(
         fontWeight: FontWeight.w600,
-        fontSize: 12,
-        color: text3rd,
-        letterSpacing: 1.9,
+        fontSize: 22,
+        color: text,
+        letterSpacing: -0.35,
+      );
+
+  /// The kiosk's one text INPUT — the name-search field's typed text and its
+  /// hint. Deliberately large and light: a member types it standing up, from
+  /// arm's length. Mockup `.search-field .ph`.
+  static TextStyle get kioskFieldText => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 22,
+        color: text,
+        letterSpacing: -0.22,
+      );
+
+  /// A SECTION head inside a kiosk screen ("Scan with app" / "Name search") —
+  /// 21px semibold. Mockup `.sub-title`.
+  static TextStyle get kioskTitle => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 21,
+        color: text,
+        letterSpacing: -0.2,
+      );
+
+  /// A NAME rendered as a tap target or an identity — a search result row, the
+  /// gym's name in the kiosk header. 19px semibold (it coincides with
+  /// [kioskButtonPrimaryLabel]; the mockup sizes both at 19). Mockup
+  /// `.name-row .nm` / `.wordmark`.
+  static TextStyle get kioskName => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 19,
+        color: text,
+        letterSpacing: -0.19,
+      );
+
+  /// The muted explanatory line under a [kioskDisplay] SCREEN title — the class
+  /// pick's "Open for check-in right now…", the blocked screen's reassurance,
+  /// the closing screen's line. Mockup `.screen-head .sub` / `.blocked-rea`.
+  static TextStyle get kioskSubtitle => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 18,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// Body copy inside a kiosk panel — the streak's keep-it-alive note, and (at
+  /// w600) the "points" unit beside the balance. Mockup `.streak-note` (17/400)
+  /// / `.points .u` (17/600).
+  static TextStyle get kioskBody => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 17,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// A strong small LABEL on a kiosk surface — a week-strip day letter, the
+  /// "+N pts" chip (w700), a reward tile's title and its points line (w700), a
+  /// class card's time / instructor line (w500). Mockup `.day-badge .dl` /
+  /// `.earned-chip` / `.reward-name` / `.reward-pts` / `.class-when`.
+  static TextStyle get kioskLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 16,
+        color: text,
+        letterSpacing: -0.16,
+      );
+
+  /// The muted explanatory line under a [kioskTitle] SECTION head — the home
+  /// halves' "Scan QR code with app for instant check in". One step under
+  /// [kioskSubtitle] because it answers a 21px head, not a 40px title. Mockup
+  /// `.sub-text`.
+  static TextStyle get kioskSectionText => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 16,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// A quiet supporting line — the app-adoption nudge, the auto-return
+  /// countdown, a sign-in step, a benefit check, a showcase slide's caption.
+  /// Mockup `.app-line` / `.timer-label` / `.step-t` / `.app-benefits .b` /
+  /// `.slide-copy`.
+  static TextStyle get kioskCaption => baseFont.copyWith(
+        fontWeight: FontWeight.w500,
+        fontSize: 15,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// The smallest kiosk label — the "or" seam badge, a reward tile's
+  /// "{balance} / {cost}" fraction, a showcase video's title, the numbered
+  /// step discs, the marketing Book pill. Mockup `.seam-badge` /
+  /// `.reward-pts.frac` / `.vcard-title` / `.step-n` / `.bc-book`.
+  static TextStyle get kioskMicro => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: text,
+        letterSpacing: -0.13,
       );
 
   /// A literal value rendered as a kiosk chip — the sign-in email on the "Get
@@ -465,6 +606,29 @@ class DesignConstants {
         fontSize: 13,
         color: text,
         letterSpacing: 0,
+      );
+
+  /// The kiosk's tracked mono eyebrow ("YOUR POINTS", "IN THE APP", "WHY") — a
+  /// Geist-Mono micro-label above the thing it names. Muted and letter-tracked.
+  /// Mockup `.eyebrow` (which tints it `--ink-3`; the kiosk lifts every muted
+  /// WORD to [text2nd] — see the contrast note at the top of this ramp).
+  static TextStyle get kioskEyebrow => monoFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        color: text2nd,
+        letterSpacing: 1.9,
+      );
+
+  /// A TAG pinned on artwork or the tiniest meta line — a reward tile's price
+  /// pill, the rank ladder's belt names and "You're here" pill, a showcase
+  /// video's view count (w500). The one kiosk role the mockup keeps genuinely
+  /// tiny: it always sits ON an image or inside a dense strip. Mockup
+  /// `.price-pill` / `.belt-tag` / `.belt-here` / `.vcard-views`.
+  static TextStyle get kioskTag => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 11,
+        color: text,
+        letterSpacing: -0.11,
       );
 
   /// Inner content measure for the glance's two panels — the width the reward
@@ -484,9 +648,12 @@ class DesignConstants {
   // ── Kiosk button scale ──
   // The kiosk is read (and pressed) from standing distance on a supervised
   // iPad, so its buttons run a full step larger than the admin defaults
-  // (13px label / 16x8 padding) — the same reason the kiosk display type
-  // above exists. Mockup `.btn-primary` / `.btn-outline`. These are applied
-  // ONLY through `KioskPrimaryButton` / `KioskOutlineButton`
+  // (13px label / 16x8 padding). They are two rungs OF the kiosk ramp above,
+  // not a separate scale — the primary label sits with [kioskName] (19) and
+  // the outline label between [kioskSubtitle] (18) and [kioskBody] (17),
+  // exactly as the mockup pairs them. Mockup `.btn-primary` /
+  // `.btn-outline`. Applied ONLY through `KioskPrimaryButton` /
+  // `KioskOutlineButton`
   // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`) so the whole
   // kiosk button set scales together and no call site restates a size; the
   // admin app keeps the `AppPrimaryButton` / `AppOutlineButton` defaults.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/shared/widgets/measured_max_width.dart';
 
 /// One slide of the welcome showcase: the [title] the panel head rotates to
 /// (and the dot's label), plus the [body] it fades in.
@@ -35,13 +36,14 @@ class KioskSlideBody extends StatelessWidget {
       children: [
         Flexible(child: content),
         if (line != null)
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: DesignConstants.kioskGlanceMeasure,
-            ),
+          // MeasuredMaxWidth, not ConstrainedBox: the caption wraps at this
+          // measure inside the welcome grid's IntrinsicHeight, and a plain cap
+          // reports its height at the full panel width (see that widget).
+          MeasuredMaxWidth(
+            maxWidth: DesignConstants.kioskGlanceMeasure,
             child: Text(
               line,
-              style: DesignConstants.pBig.copyWith(
+              style: DesignConstants.kioskCaption.copyWith(
                 color: DesignConstants.text2nd,
               ),
               textAlign: TextAlign.center,

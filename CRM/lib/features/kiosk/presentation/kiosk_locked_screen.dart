@@ -29,12 +29,12 @@ class KioskLockedScreen extends StatelessWidget {
                 children: [
                   Text(
                     'Session ended',
-                    style: DesignConstants.h1,
+                    style: DesignConstants.kioskDisplay,
                     textAlign: TextAlign.center,
                   ),
                   Text(
                     'Please see the front desk to continue.',
-                    style: DesignConstants.pBig.copyWith(
+                    style: DesignConstants.kioskSubtitle.copyWith(
                       color: DesignConstants.text2nd,
                     ),
                     textAlign: TextAlign.center,

@@ -53,7 +53,7 @@ class _Head extends StatelessWidget {
         Text('Hi $name, pick your class', style: DesignConstants.kioskDisplay),
         Text(
           'Open for check-in right now · tap a class to check in',
-          style: DesignConstants.pBig.copyWith(
+          style: DesignConstants.kioskSubtitle.copyWith(
             color: DesignConstants.text2nd,
           ),
         ),
@@ -102,7 +102,8 @@ class _Note extends StatelessWidget {
       child: Center(
         child: Text(
           message,
-          style: DesignConstants.h3Regular.copyWith(
+          style: DesignConstants.kioskLabel.copyWith(
+            fontWeight: FontWeight.w500,
             color: DesignConstants.text2nd,
           ),
           textAlign: TextAlign.center,

@@ -82,7 +82,7 @@ class _BookRow extends StatelessWidget {
               children: [
                 Text(
                   occurrence.className,
-                  style: DesignConstants.h2,
+                  style: DesignConstants.kioskLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -106,7 +106,10 @@ class _WhenLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = DesignConstants.p.copyWith(color: DesignConstants.text2nd);
+    final base = DesignConstants.kioskMicro.copyWith(
+      fontWeight: FontWeight.w500,
+      color: DesignConstants.text2nd,
+    );
     return Text.rich(
       TextSpan(
         style: base,
@@ -158,6 +161,8 @@ class _ThumbPlaceholder extends StatelessWidget {
     return ColoredBox(
       color: DesignConstants.backgroundAlt,
       child: Center(
+        // A decorative glyph, not words — the kiosk's AA text floor doesn't
+        // reach it, and it should stay quieter than the class name beside it.
         child: Icon(
           Symbols.image_sharp,
           size: DesignConstants.iconSizeMedium,
@@ -188,7 +193,9 @@ class _BookPill extends StatelessWidget {
       ),
       child: Text(
         'Book',
-        style: DesignConstants.h3.copyWith(color: DesignConstants.onAccent),
+        style: DesignConstants.kioskMicro.copyWith(
+          color: DesignConstants.onAccent,
+        ),
       ),
     );
   }

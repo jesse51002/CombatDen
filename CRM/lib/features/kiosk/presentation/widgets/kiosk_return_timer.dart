@@ -28,8 +28,8 @@ class KioskReturnTimer extends StatelessWidget {
         children: [
           Text(
             'Back to start in ${secondsLeft}s',
-            style: DesignConstants.pBig.copyWith(
-              color: DesignConstants.text3rd,
+            style: DesignConstants.kioskCaption.copyWith(
+              color: DesignConstants.text2nd,
             ),
             textAlign: TextAlign.center,
           ),
@@ -41,7 +41,10 @@ class KioskReturnTimer extends StatelessWidget {
 }
 
 /// A thin track that drains left-to-right over the countdown. Each 1-second
-/// step slides smoothly via [TweenAnimationBuilder].
+/// step slides smoothly via [TweenAnimationBuilder]. The fill keeps
+/// [DesignConstants.text3rd]: it is the one part of this widget that carries no
+/// words, so the kiosk's AA text floor doesn't apply and the quieter tint keeps
+/// the bar reading as the label's underline rather than a second line of ink.
 class _DrainBar extends StatelessWidget {
   final double fraction;
 

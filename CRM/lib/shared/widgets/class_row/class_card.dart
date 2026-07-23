@@ -49,6 +49,15 @@ class ClassCard extends StatelessWidget {
   /// dense day-column sizes.
   final bool large;
 
+  /// KIOSK type scale (name 22, captions 16/15) — the member self-serve iPad,
+  /// read from ~2m, where a card sits under a 40px screen title. It reads the
+  /// kiosk ramp in `DesignConstants` (mockup `.class-name` / `.class-when` /
+  /// `.class-coach .nm` / `.pill`), so the card's type moves with the rest of
+  /// the kiosk instead of staying at the admin scale under a kiosk headline.
+  /// Wins over [large] when both are set. Off by default: every admin surface
+  /// keeps its existing dense / roomy sizes untouched.
+  final bool kiosk;
+
   /// Marks this card as the current pick on a selection surface (the member
   /// check-in dialog's occurrence cards): a primary border + check badge
   /// overlay and a `primaryColor10` wash — the same treatment
@@ -73,9 +82,33 @@ class ClassCard extends StatelessWidget {
     this.occurrenceInPast = false,
     this.isCancelled = false,
     this.large = false,
+    this.kiosk = false,
     this.selected = false,
     this.onTap,
   });
+
+  /// The card's title style for the active scale.
+  TextStyle get nameStyle {
+    if (kiosk) return DesignConstants.kioskStatement;
+    return large ? DesignConstants.h2 : DesignConstants.h3;
+  }
+
+  /// The card's caption style (time line) for the active scale.
+  TextStyle get captionStyle {
+    if (kiosk) {
+      return DesignConstants.kioskLabel.copyWith(fontWeight: FontWeight.w500);
+    }
+    return large ? DesignConstants.h3Regular : DesignConstants.p;
+  }
+
+  /// The style for the card's muted meta lines — the instructor name and the
+  /// points / headcount chips. Only the kiosk scale lifts these off `p`.
+  TextStyle get metaStyle {
+    if (kiosk) {
+      return DesignConstants.kioskCaption.copyWith(fontWeight: FontWeight.w600);
+    }
+    return DesignConstants.p;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -222,20 +255,17 @@ class _CardDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text(
-          card.name,
-          style: card.large ? DesignConstants.h2 : DesignConstants.h3,
-        ),
+        Text(card.name, style: card.nameStyle),
         Text(
           card.timeLabel,
-          style: (card.large ? DesignConstants.h3Regular : DesignConstants.p)
-              .copyWith(color: DesignConstants.text),
+          style: card.captionStyle.copyWith(color: DesignConstants.text),
         ),
         if (card.isCancelled)
           ClassMetaChip(
             icon: Symbols.cancel_sharp,
             text: 'Cancelled',
             color: DesignConstants.badRed,
+            textStyle: card.metaStyle,
           ),
         if (card.instructorName != null) _InstructorLine(card: card),
         if (card.pointsWorth != null || card.signupCount != null)
@@ -264,7 +294,9 @@ class _InstructorLine extends StatelessWidget {
         Expanded(
           child: Text(
             card.instructorName!,
-            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+            style: card.kiosk
+                ? card.captionStyle.copyWith(color: DesignConstants.text2nd)
+                : DesignConstants.p.copyWith(color: DesignConstants.text2nd),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -291,18 +323,21 @@ class _MetaRow extends StatelessWidget {
             icon: Symbols.workspace_premium_sharp,
             text: '${card.pointsWorth} pts',
             color: DesignConstants.primaryColor,
+            textStyle: card.metaStyle,
           ),
         if (card.signupCount != null)
           ClassMetaChip(
             icon: Symbols.group_sharp,
             text: '${card.signupCount} reserved',
             color: DesignConstants.text2nd,
+            textStyle: card.metaStyle,
           ),
         if (card.signupCount != null && card.occurrenceInPast)
           ClassMetaChip(
             icon: Symbols.check_circle_sharp,
             text: '${card.attendeeCount ?? 0} attended',
             color: DesignConstants.text2nd,
+            textStyle: card.metaStyle,
           ),
       ],
     );

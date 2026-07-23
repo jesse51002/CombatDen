@@ -29,7 +29,7 @@ class KioskClosingScreen extends StatelessWidget {
           ),
           Text(
             'Please see the front desk to check in.',
-            style: DesignConstants.pBig.copyWith(
+            style: DesignConstants.kioskSubtitle.copyWith(
               color: DesignConstants.text2nd,
             ),
             textAlign: TextAlign.center,

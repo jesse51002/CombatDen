@@ -67,6 +67,10 @@ class _DayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The day LETTER is text: it holds the kiosk's AA contrast token. The dash
+    // glyph under it is decoration, so it keeps the quieter tint — that
+    // difference is what makes a missed day read as absent rather than as a
+    // second label.
     final labelColor =
         completed ? DesignConstants.primaryColor : DesignConstants.text2nd;
     final iconColor =
@@ -86,7 +90,10 @@ class _DayBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          Text(label, style: DesignConstants.h2.copyWith(color: labelColor)),
+          Text(
+            label,
+            style: DesignConstants.kioskLabel.copyWith(color: labelColor),
+          ),
           Icon(
             completed ? Symbols.check_circle_sharp : Symbols.circle_sharp,
             weight: DesignConstants.iconWeight,

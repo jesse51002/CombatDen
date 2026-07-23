@@ -56,14 +56,14 @@ class _Identity extends StatelessWidget {
             children: [
               Text(
                 gymName,
-                style: DesignConstants.h2,
+                style: DesignConstants.kioskName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
                 'Check in',
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text3rd,
+                style: DesignConstants.kioskTag.copyWith(
+                  color: DesignConstants.text2nd,
                   fontWeight: FontWeight.w600,
                 ),
               ),

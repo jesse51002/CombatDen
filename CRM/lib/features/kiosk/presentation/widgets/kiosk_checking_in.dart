@@ -22,7 +22,7 @@ class KioskCheckingIn extends StatelessWidget {
             const AppSpinner(),
             Text(
               'Checking you in…',
-              style: DesignConstants.h2.copyWith(
+              style: DesignConstants.kioskSubtitle.copyWith(
                 color: DesignConstants.text2nd,
               ),
               textAlign: TextAlign.center,

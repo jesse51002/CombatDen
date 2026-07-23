@@ -36,7 +36,7 @@ class KioskAppCard extends StatelessWidget {
         children: [
           Text(
             'Get the CombatDen App',
-            style: DesignConstants.h1,
+            style: DesignConstants.kioskPanelTitle,
             textAlign: TextAlign.center,
           ),
           const KioskAppBenefits(),

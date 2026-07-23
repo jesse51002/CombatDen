@@ -27,8 +27,8 @@ class KioskSectionHead extends StatelessWidget {
         ),
         Text(
           subtitle,
-          style: DesignConstants.pBig.copyWith(
-            color: DesignConstants.text3rd,
+          style: DesignConstants.kioskSectionText.copyWith(
+            color: DesignConstants.text2nd,
           ),
           textAlign: TextAlign.center,
         ),

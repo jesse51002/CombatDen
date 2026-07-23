@@ -49,12 +49,12 @@ class KioskIdleWarning extends StatelessWidget {
                     const _TimerIcon(),
                     Text(
                       'Are you still there?',
-                      style: DesignConstants.h1,
+                      style: DesignConstants.kioskPanelTitle,
                       textAlign: TextAlign.center,
                     ),
                     Text(
                       'Returning to the start in $seconds seconds.',
-                      style: DesignConstants.pBig.copyWith(
+                      style: DesignConstants.kioskBody.copyWith(
                         color: DesignConstants.text2nd,
                       ),
                       textAlign: TextAlign.center,

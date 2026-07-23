@@ -186,6 +186,42 @@ body{
 .btn-outline:hover{ background:rgba(20,22,30,0.03); }
 .btn-outline.soft{ border-color:var(--line); color:var(--ink-2); }
 .btn-outline.soft:hover{ border-color:rgba(20,22,30,0.18); color:var(--ink); }
+/* ESCAPE tier — the quietest button in the kiosk ladder, one step below
+   .btn-outline.soft. Same .btn geometry and ink-2 label as soft, minus the
+   border and the fill: no chrome at all, so it can never read as a call to
+   action. It is the ONLY tier used for leaving a flow.
+   Ladder: .btn-primary (gradient) > .btn-outline (2px ink) >
+           .btn-outline.soft (hairline) > .btn-ghost (nothing).
+   ink-2 (#565B66) on the ground is 6.2:1 — ink-3 would have been prettier at
+   3.1:1 and fails the AA floor PRODUCT.md holds as hard. Padding keeps the hit
+   box at 45px tall, above the 44pt touch minimum, even with a 16px label. */
+.btn-ghost{
+  background:transparent; border:0;
+  color:var(--ink-2); font-weight:500;
+  font-size:17px; letter-spacing:-0.01em;   /* the kiosk interactive floor, = .btn-outline */
+  padding:13px 18px; border-radius:var(--r-btn);
+}
+.btn-ghost:hover{ color:var(--ink); background:rgba(20,22,30,0.045); }
+.btn-ghost svg{ width:19px; height:19px; flex:0 0 auto; }
+
+/* ESCAPE FOOT — the fixed slot the escape lives in, on every kiosk screen that
+   has one. A hairline band pinned to the bottom of the stage, three columns so
+   whatever sits in the middle stays optically centred and the escape is exiled
+   to the LEFT gutter: far from the primary action, far from the tappable
+   content, same place every screen. The reach cost is the point — this is an
+   escape hatch, and a mis-tap that destroys a half-filled flow is worse than a
+   slightly longer reach. Deliberately mirrors .glance-foot / .flow-foot: the
+   kiosk's one rule is "the way out is along the bottom hairline". */
+.escape-foot{
+  flex:0 0 auto;
+  display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  padding-top:12px; margin-top:4px;
+  border-top:1px solid var(--line-soft);
+}
+/* pulled left by its own padding so the GLYPH lands on the screen's content
+   rail (flush with the h1 and the first card), not 18px inside it. The tap
+   target keeps its full padded width; only the optical edge moves. */
+.escape-foot .esc{ justify-self:start; margin-left:-18px; }
 
 .pill{
   display:inline-flex; align-items:center; gap:7px;
@@ -309,11 +345,26 @@ body{
 .screen-head .sub{ font-size:18px; font-weight:400; color:var(--ink-2); }
 .dotsep{ display:inline-block; width:4px; height:4px; border-radius:999px; background:var(--ink-3); margin:0 10px; vertical-align:middle; }
 
-.screen[data-screen="class"]{ padding-top:30px; }
+/* The class step is the one screen whose content genuinely exceeds the 820px
+   iPad fold (two rows of 16:9 cards), so it CONTAINS rather than overflows:
+   overflow:hidden -> height:100% -> min-height:0 -> overflow:auto on the grid.
+   The grid scrolls INSIDE the step while the head and the escape foot stay
+   pinned. Without this the escape would scroll off the bottom and be invisible
+   to exactly the member who needs it. */
+.screen[data-screen="class"]{ padding-top:30px; overflow:hidden; }
+.screen[data-screen="class"] .stage{ height:100%; min-height:0; }
 .class-grid{
-  margin-top:22px; flex:1 1 auto;
+  margin-top:22px; flex:1 1 auto; min-height:0; overflow:auto;
   display:grid; grid-template-columns:1fr 1fr; gap:22px;
+  /* max-content rows, not auto: .class-card is overflow:hidden, so its
+     automatic minimum size is 0 and auto rows would let a capped-height grid
+     SQUASH the cards (name / time / coach clipped away) instead of scrolling.
+     max-content pins each row to the card's natural height and sends the
+     overflow to the scrollbar, which is the whole point of containing here. */
+  grid-auto-rows:max-content;
   align-content:start;
+  /* room for the card hover-lift + its soft shadow inside the scroll box */
+  padding:4px 4px 12px; margin-inline:-4px;
 }
 .class-card{
   background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card);
@@ -749,6 +800,54 @@ body{
             <div class="d">More classes later today. The front desk can help.</div>
           </div>
 
+        </div>
+
+        <!-- ====================================================================
+             ESCAPE · "Not Marcus?"   (founder-reported gap, live kiosk)
+             A member taps the wrong name on home, lands here, and today has NO
+             way back — they are stranded until the 5-minute flow-idle guard
+             fires. This is the one screen the founder actually got stuck on.
+
+             WHY THIS WORDING, not "Back" or "Cancel": the head one line above
+             asserts "Hi Marcus, pick your class". The escape has to ANSWER that
+             assertion, so it names the person, not the navigation. A member who
+             is not Marcus reads their own situation in the button; "Back" would
+             make them work out what "back" means. The chevron is honest here —
+             home really is exactly one screen back.
+
+             WHY NO CONFIRMATION: nothing has been entered, nothing has been
+             written, and no charge exists. The member is already flustered
+             (they mis-tapped once); a confirm dialog would be a second trap.
+             Confirmation is reserved for the two signup steps that can destroy
+             typed card details — see kiosk_signup_round2.html.
+
+             FLUTTER SEMANTICS — this needs NO new cubit work, only the button:
+             · onPressed -> KioskFlowCubit.goHome().
+               That method already does the whole job: cancels the search
+               debounce / glance / app-modal timers, bumps _searchSeq,
+               _classesSeq and _glanceSeq so in-flight fetches are dropped,
+               calls _endFlowIfStarted(), emits _freshHome, and re-syncs the
+               idle timer. Do NOT hand-roll a navigation that skips it.
+             · CLEARS THE DRAFT: _freshHome wipes the selected member, the live
+               name-search query and its results. No name, no PII and no
+               occurrence selection may survive on a shared lobby iPad — the
+               same privacy rule the 5-minute idle guard already enforces.
+             · RELEASES THE FLOW COUNT: _endFlowIfStarted() is the load-bearing
+               line. KioskSessionCubit counts in-progress flows via
+               beginFlow()/endFlow() to decide whether the T+11h45 lockout signs
+               out immediately or grants a grace window. An escape path that
+               returns home WITHOUT endFlow() leaks the count permanently: the
+               session then believes a flow is forever in progress and the
+               kiosk never signs itself out at lockout. Exactly one endFlow()
+               per beginFlow() — that is what the _flowStarted latch guards.
+             · Lands on kiosk home with the search field empty and focused, so
+               the member's very next action is retyping their name.
+             ==================================================================== -->
+        <div class="escape-foot">
+          <button class="btn btn-ghost esc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5.5 8.5 12l6.5 6.5"/></svg>
+            Not Marcus?
+          </button>
         </div>
       </div>
     </section>

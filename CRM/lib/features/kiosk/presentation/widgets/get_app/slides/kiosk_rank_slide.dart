@@ -103,10 +103,11 @@ class _Belt extends StatelessWidget {
         ),
         Text(
           step.name,
-          style: DesignConstants.pSmallSemibold.copyWith(
+          style: DesignConstants.kioskTag.copyWith(
+            fontWeight: FontWeight.w600,
             color: step.isCurrent
                 ? DesignConstants.primaryColor
-                : DesignConstants.text3rd,
+                : DesignConstants.text2nd,
           ),
         ),
       ],
@@ -130,7 +131,7 @@ class _HerePill extends StatelessWidget {
       ),
       child: Text(
         'You\'re here',
-        style: DesignConstants.pSmallBold.copyWith(
+        style: DesignConstants.kioskTag.copyWith(
           color: DesignConstants.onAccent,
         ),
       ),

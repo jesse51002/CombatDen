@@ -104,10 +104,13 @@ class _Balance extends StatelessWidget {
       textBaseline: TextBaseline.alphabetic,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text(formatKioskPoints(balance), style: DesignConstants.big2Bold),
+        Text(formatKioskPoints(balance), style: DesignConstants.kioskMetric),
         Text(
           'points',
-          style: DesignConstants.h2.copyWith(color: DesignConstants.text2nd),
+          style: DesignConstants.kioskBody.copyWith(
+            fontWeight: FontWeight.w600,
+            color: DesignConstants.text2nd,
+          ),
         ),
       ],
     );
@@ -133,7 +136,10 @@ class _EarnedChip extends StatelessWidget {
       ),
       child: Text(
         '+${formatKioskPoints(awarded)} pts',
-        style: DesignConstants.h2Bold.copyWith(color: DesignConstants.onAccent),
+        style: DesignConstants.kioskLabel.copyWith(
+          fontWeight: FontWeight.w700,
+          color: DesignConstants.onAccent,
+        ),
       ),
     );
   }

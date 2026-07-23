@@ -50,9 +50,8 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         'or',
-        style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.text3rd,
-          fontWeight: FontWeight.w600,
+        style: DesignConstants.kioskMicro.copyWith(
+          color: DesignConstants.text2nd,
         ),
       ),
     );

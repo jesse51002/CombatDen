@@ -77,7 +77,7 @@ class KioskRewardTile extends StatelessWidget {
                     alignment: Alignment.topCenter,
                     child: Text(
                       reward.title,
-                      style: DesignConstants.h2,
+                      style: DesignConstants.kioskLabel,
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -140,6 +140,8 @@ class _ImagePlaceholder extends StatelessWidget {
     return ColoredBox(
       color: DesignConstants.backgroundAlt,
       child: Center(
+        // A decorative glyph, not words — the kiosk's AA text floor doesn't
+        // reach it, and it should stay quieter than the reward's own name.
         child: Icon(
           Symbols.image_sharp,
           size: DesignConstants.iconSizeBig,
@@ -169,7 +171,7 @@ class _PriceTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: DesignConstants.pSmallBold.copyWith(
+        style: DesignConstants.kioskTag.copyWith(
           color: DesignConstants.onAccent,
         ),
       ),
@@ -202,7 +204,8 @@ class _RewardStatus extends StatelessWidget {
         else
           Text(
             '${formatKioskPoints(cost)} pts',
-            style: DesignConstants.h2Bold.copyWith(
+            style: DesignConstants.kioskLabel.copyWith(
+              fontWeight: FontWeight.w700,
               color: DesignConstants.primaryColor,
             ),
             textAlign: TextAlign.center,
@@ -227,7 +230,9 @@ class _FractionText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = DesignConstants.h3.copyWith(color: DesignConstants.primaryColor);
+    final base = DesignConstants.kioskMicro.copyWith(
+      color: DesignConstants.primaryColor,
+    );
     return Text.rich(
       TextSpan(
         style: base,

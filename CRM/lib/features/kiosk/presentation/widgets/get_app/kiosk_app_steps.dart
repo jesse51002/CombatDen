@@ -54,7 +54,7 @@ class _Step extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingSmall,
             children: [
-              Text(label, style: DesignConstants.pBig),
+              Text(label, style: DesignConstants.kioskCaption),
               if (address != null) _EmailChip(email: address),
             ],
           ),
@@ -82,7 +82,9 @@ class _StepNumber extends StatelessWidget {
       ),
       child: Text(
         '$number',
-        style: DesignConstants.h3.copyWith(color: DesignConstants.onAccent),
+        style: DesignConstants.kioskMicro.copyWith(
+          color: DesignConstants.onAccent,
+        ),
       ),
     );
   }

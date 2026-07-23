@@ -61,7 +61,10 @@ class _KioskNameSearchState extends State<KioskNameSearch> {
           AppSearchBox(
             controller: _controller,
             hintText: 'Start typing your name',
-            textStyle: DesignConstants.h2,
+            textStyle: DesignConstants.kioskFieldText,
+            // The kiosk lifts muted WORDS off `text3rd` — see the contrast
+            // note on the kiosk type ramp in `design_constants.dart`.
+            hintColor: DesignConstants.text2nd,
             onChanged: (value) => context.read<KioskFlowCubit>().search(value),
           ),
           const KioskSearchResults(),

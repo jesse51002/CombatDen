@@ -97,7 +97,7 @@ class _NameRow extends StatelessWidget {
           // initial must stay distinguishable at the moment they tap to check
           // in (a first-initial abbreviation collides silently).
           row.name,
-          style: DesignConstants.h2,
+          style: DesignConstants.kioskName,
           textAlign: TextAlign.center,
         ),
       ),
@@ -128,7 +128,9 @@ class _StatusText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       message,
-      style: DesignConstants.pBig.copyWith(color: DesignConstants.text3rd),
+      style: DesignConstants.kioskSectionText.copyWith(
+        color: DesignConstants.text2nd,
+      ),
       textAlign: TextAlign.center,
     );
   }

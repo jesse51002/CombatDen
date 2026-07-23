@@ -50,7 +50,7 @@ class KioskBlockedScreen extends StatelessWidget {
               Text(
                 'Nothing\'s wrong. The coach at the desk can sort it and '
                 'check you in from there.',
-                style: DesignConstants.pBig.copyWith(
+                style: DesignConstants.kioskSubtitle.copyWith(
                   color: DesignConstants.text2nd,
                 ),
                 textAlign: TextAlign.center,
@@ -111,15 +111,8 @@ class _WhyBox extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          Text(
-            'WHY',
-            style: DesignConstants.monoFont.copyWith(
-              fontSize: DesignConstants.pSmall.fontSize,
-              fontWeight: FontWeight.w600,
-              color: DesignConstants.text3rd,
-            ),
-          ),
-          Text(reason, style: DesignConstants.h1Regular),
+          Text('WHY', style: DesignConstants.kioskEyebrow),
+          Text(reason, style: DesignConstants.kioskStatement),
         ],
       ),
     );

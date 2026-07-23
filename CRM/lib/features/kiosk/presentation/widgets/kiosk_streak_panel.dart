@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_week_strip.dart';
+import 'package:crm/shared/widgets/measured_max_width.dart';
 
 /// The glance's left half — a static replica of the member app's resting streak
 /// state (mockup `.streak`): the big sapphire week numeral over "week streak",
@@ -27,13 +28,15 @@ class KioskStreakPanel extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           _StreakStack(weeks: weeks),
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: DesignConstants.kioskGlanceMeasure,
-            ),
+          // MeasuredMaxWidth, not ConstrainedBox: the note wraps at this
+          // measure, and the glance equalizes its two panels with an
+          // IntrinsicHeight — a plain cap would report the note's height at
+          // the full panel width (one line) and overflow once it really wraps.
+          MeasuredMaxWidth(
+            maxWidth: DesignConstants.kioskGlanceMeasure,
             child: Text(
               'Come back this week to keep it alive.',
-              style: DesignConstants.pBig.copyWith(
+              style: DesignConstants.kioskBody.copyWith(
                 color: DesignConstants.text2nd,
               ),
               textAlign: TextAlign.center,
@@ -63,7 +66,12 @@ class _StreakStack extends StatelessWidget {
             color: DesignConstants.primaryColor,
           ),
         ),
-        Text('week streak', style: DesignConstants.big2),
+        Text(
+          'week streak',
+          style: DesignConstants.kioskMetric.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
