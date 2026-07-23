@@ -39,6 +39,17 @@ class ClassOccurrence {
   final String? resolvedInstructorId;
   final String? resolvedInstructorName;
 
+  /// The resolved instructor's public bio, when set — shown on the class
+  /// detail screen's Instructor section.
+  final String? resolvedInstructorBio;
+
+  /// The resolved instructor's photo URL, when set.
+  final String? resolvedInstructorImageUrl;
+
+  /// The class's long-form description, when set — the detail screen's
+  /// Details section.
+  final String? classDescription;
+
   /// The class image. Never null — `gym_classes.image_url` is NOT NULL.
   final String imageUrl;
   final int pointsWorth;
@@ -69,6 +80,9 @@ class ClassOccurrence {
     required this.hasRangeException,
     this.resolvedInstructorId,
     this.resolvedInstructorName,
+    this.resolvedInstructorBio,
+    this.resolvedInstructorImageUrl,
+    this.classDescription,
     this.maxCapacity,
     this.cancellingRangeId,
     this.attendanceCount = 0,

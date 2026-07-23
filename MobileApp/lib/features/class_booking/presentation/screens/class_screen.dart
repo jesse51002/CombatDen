@@ -11,6 +11,8 @@ import 'package:mobile_app/features/class_booking/data/class_detail_args.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_booking_footer.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_detail_topbar.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_image_banner.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_instructor_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_location_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_meta_section.dart';
 import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
@@ -161,6 +163,13 @@ class _Body extends StatelessWidget {
 
   final ClassOccurrence occurrence;
 
+  bool get _hasDescription =>
+      occurrence.classDescription?.trim().isNotEmpty ?? false;
+
+  bool get _hasInstructor =>
+      (occurrence.resolvedInstructorBio?.trim().isNotEmpty ?? false) ||
+      (occurrence.resolvedInstructorImageUrl?.isNotEmpty ?? false);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -178,6 +187,18 @@ class _Body extends StatelessWidget {
             occurrence: occurrence,
             gymName: selectedMember.gymName ?? '',
           ),
+          if (_hasDescription) ...[
+            const SectionDivider(),
+            ClassDetailsSection(description: occurrence.classDescription),
+          ],
+          if (_hasInstructor) ...[
+            const SectionDivider(),
+            ClassInstructorSection(
+              name: occurrence.resolvedInstructorName,
+              bio: occurrence.resolvedInstructorBio,
+              imageUrl: occurrence.resolvedInstructorImageUrl,
+            ),
+          ],
           const SectionDivider(),
           ClassLocationSection(gymName: selectedMember.gymName ?? ''),
         ],
