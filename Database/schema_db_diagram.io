@@ -34,6 +34,8 @@ Table gyms {
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
   stripe_onboarding_status stripe_onboarding_status [not null, default: 'not_started', note: 'enum: not_started | pending | complete | disabled']
   theme_design_id text [note: 'nullable; ThemeService design_id; written by presets import']
+  app_store_url text [note: 'nullable; per-gym white-label iOS App Store listing; NULL = fall back to CombatDen default (Settings)']
+  play_store_url text [note: 'nullable; per-gym white-label Google Play listing; NULL = fall back to CombatDen default (Settings)']
 }
 
 Table gym_employees {

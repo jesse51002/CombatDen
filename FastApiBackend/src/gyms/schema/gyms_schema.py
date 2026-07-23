@@ -151,6 +151,21 @@ class GymThemeResponse(BaseModel):
     theme_design_id: str
 
 
+class GymAppLinksResponse(BaseModel):
+    """Resolved member-app store links for a gym (public read).
+
+    Returned by ``GET /api/v1/gyms/{gym_id}/app-links`` — the public
+    per-gym app-download page (opened from a QR on any phone). Each link
+    resolves to the gym's own white-label listing
+    (``gyms.app_store_url`` / ``gyms.play_store_url``) when set, else the
+    CombatDen default listing (``settings.combatden_app_store_url`` /
+    ``combatden_play_store_url``). Both are therefore always populated.
+    """
+
+    ios_url: str
+    android_url: str
+
+
 class GymCreateResponse(BaseModel):
     """Response for POST /api/v1/gyms/ (Stripe onboarding path).
 

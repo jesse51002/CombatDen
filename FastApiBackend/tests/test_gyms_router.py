@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
+from src.core.config import settings
 from src.gyms.schema.gyms_schema import GymCreateResponse
 
 
@@ -361,3 +362,64 @@ def test_update_my_theme_422_on_unknown_value(client, auth_headers):
         headers=auth_headers,
     )
     assert response.status_code == 422
+
+
+# ── GET /{gym_id}/app-links (PUBLIC) ──────────────────────────
+
+
+def _app_links_session(db_pool_mock, row):
+    """Wire db_pool_mock.session() to yield a single-row read of ``row``."""
+    session = db_pool_mock.session.return_value
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = row
+    session.execute = AsyncMock(return_value=result)
+
+
+def test_app_links_returns_gym_links_when_set(client, db_pool_mock):
+    """A gym with its own white-label links gets them back verbatim.
+
+    No auth header is sent — the endpoint is PUBLIC (opened from a QR on
+    any phone), so it must resolve without a bearer token.
+    """
+    gym_id = uuid4()
+    _app_links_session(
+        db_pool_mock,
+        {
+            "gym_id": gym_id,
+            "app_store_url": "https://apps.apple.com/app/aztec-mma",
+            "play_store_url": "https://play.google.com/store/apps/details?id=com.aztec",
+        },
+    )
+
+    response = client.get(f"/api/v1/gyms/{gym_id}/app-links")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ios_url"] == "https://apps.apple.com/app/aztec-mma"
+    assert body["android_url"] == (
+        "https://play.google.com/store/apps/details?id=com.aztec"
+    )
+
+
+def test_app_links_falls_back_to_combatden_defaults_when_null(
+    client, db_pool_mock
+):
+    """A gym with NULL links resolves to the CombatDen default listing."""
+    gym_id = uuid4()
+    _app_links_session(
+        db_pool_mock,
+        {"gym_id": gym_id, "app_store_url": None, "play_store_url": None},
+    )
+
+    response = client.get(f"/api/v1/gyms/{gym_id}/app-links")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ios_url"] == settings.combatden_app_store_url
+    assert body["android_url"] == settings.combatden_play_store_url
+
+
+def test_app_links_404_when_gym_not_found(client, db_pool_mock):
+    """An unknown gym_id is a 404 — never a default-filled 200 for a bad QR."""
+    _app_links_session(db_pool_mock, None)
+
+    response = client.get(f"/api/v1/gyms/{uuid4()}/app-links")
+    assert response.status_code == 404, response.text

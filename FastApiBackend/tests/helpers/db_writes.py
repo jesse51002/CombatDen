@@ -109,3 +109,35 @@ async def set_auth_email_confirmed(
             {"confirmed": confirmed, "id": str(user_id)},
         )
         await session.commit()
+
+
+async def set_gym_app_links(
+    db_pool: DirectDatabasePool,
+    gym_id: UUID,
+    *,
+    app_store_url: str | None,
+    play_store_url: str | None,
+) -> None:
+    """Force a gym's white-label member-app store links to known values.
+
+    A direct write for test setup only: it sets (or, with ``None``, clears
+    back to the seed's NULL) the two nullable ``gyms`` columns the public
+    ``GET /api/v1/gyms/{gym_id}/app-links`` endpoint resolves. Reversible —
+    a test sets them, asserts, then restores NULL in a ``finally`` — so the
+    shared seeded gym is left exactly as found.
+    """
+    async with db_pool.session() as session:
+        await session.execute(
+            text(
+                "UPDATE gyms "
+                "SET app_store_url = :app_store_url, "
+                "play_store_url = :play_store_url "
+                "WHERE gym_id = :gym_id"
+            ),
+            {
+                "app_store_url": app_store_url,
+                "play_store_url": play_store_url,
+                "gym_id": str(gym_id),
+            },
+        )
+        await session.commit()

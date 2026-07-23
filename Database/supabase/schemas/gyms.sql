@@ -41,6 +41,13 @@ CREATE TABLE gyms (
     -- The "app id" is NOT stored here — it is a single hardcoded API/Settings
     -- constant (one app for now). Client-editable, so absent from immutable GYMS.
     theme_design_id TEXT,
+    -- Per-gym white-label member-app store listings, feeding the public
+    -- app-download page in Kiosk Mode's app-adoption funnel. NULL = the gym
+    -- has not set its own listing, so the public GET .../app-links endpoint
+    -- falls back to the CombatDen default listing (Settings). Client-editable
+    -- (white-label), so both stay OUT of the immutable GYMS frozenset.
+    app_store_url TEXT,
+    play_store_url TEXT,
     PRIMARY KEY (gym_id)
 );
 
