@@ -58,6 +58,11 @@ GrowthMetric trimMetricToRange(GrowthMetric metric, GrowthRange range) {
         granularity: data.granularity,
         series: _trimSeries(data.series, months),
         byClass: _trimByClass(data.byClass, months),
+        // Carry the companion table through the trim — rebuilding without it
+        // silently drops the per-month breakdown table whenever a non-"All"
+        // range pill is active. Its rows keep full history for now (window
+        // trimming of the table is a separate, open UX decision).
+        table: data.table,
       );
     case final BarsData data:
       trimmed = BarsData(
@@ -65,6 +70,8 @@ GrowthMetric trimMetricToRange(GrowthMetric metric, GrowthRange range) {
         granularity: data.granularity,
         series: _trimSeries(data.series, months),
         byClass: _trimByClass(data.byClass, months),
+        // See the LineData note above: keep the companion table on trim.
+        table: data.table,
       );
     default:
       return metric;

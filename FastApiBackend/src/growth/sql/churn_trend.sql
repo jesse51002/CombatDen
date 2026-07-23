@@ -1,10 +1,15 @@
 -- Churn Rate (line, percent, monthly, all-time).
 --
 -- One series over the same all-time month grid members_trend and
--- members_gained_lost use. A month's value is the share of the members who
--- were still active when that month OPENED who crossed into dormancy during
--- it - the exact ratio the churn donut's 12-month average is a mean of, so a
--- point on this line and a bar on Gained vs Lost can never disagree.
+-- members_gained_lost use. A month's value is the share of the OPENING base --
+-- members who joined before the month and were still active when it OPENED --
+-- who crossed into dormancy during it. Numerator AND denominator are both
+-- restricted to that opening cohort, so the ratio is always in [0, 100]. A
+-- member who joined AND went dormant inside the SAME month is a raw "lost"
+-- count on Gained vs Lost but is deliberately NOT part of this rate's cohort
+-- (they were never in the opening base), so a churn-rate point and a
+-- Gained-vs-Lost bar MAY differ by exactly those same-month joiners -- a rate
+-- needs a matching cohort, a count does not.
 WITH
 {dormant_cte},
 bounds AS (
@@ -41,6 +46,11 @@ points AS (
             SELECT count(*)
             FROM member_dormancy d
             WHERE d.dormant
+              -- Restrict the numerator to the SAME opening cohort as `base`:
+              -- a member who joined during the month was never in the base,
+              -- so counting their churn against it would push the rate > 100%.
+              AND d.first_start IS NOT NULL
+              AND d.first_start < mo.month_start
               AND d.dormant_since >= mo.month_start
               AND d.dormant_since < mo.next_month_start
         )::numeric AS lost
