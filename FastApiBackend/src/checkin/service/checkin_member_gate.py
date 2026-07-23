@@ -64,17 +64,27 @@ from src.checkin.service.checkin_queries import CheckinQueries
 from src.checkin.service.checkin_writer import CheckinWriter
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import is_membership_overdue
 
 # Order a set of blocking reasons into a single primary ``skip_reason`` for a
 # rejected kiosk check-in: the room being full and a missing membership are the
 # hardest stops, then the unsigned-waiver legal gate, then punch-card
-# depletion, then plan ineligibility.
+# depletion, then plan ineligibility, and finally the billing heads-up.
+#
+# EVERY CheckinWarning member must appear here. Both ``_primary_reason`` and
+# ``_checkin_staff`` order by ``.index``, which raises ValueError on a member
+# that is missing — an omission would 500 every staff check-in that raises it.
+#
+# ``overdue`` sorts LAST on purpose: it is the only entry that never blocks a
+# kiosk (it is absent from ``GateEvaluation.blocked``), and a coverage problem
+# is always the more actionable thing to show a staff member first.
 _REASON_PRIORITY: tuple[CheckinWarning, ...] = (
     CheckinWarning.over_capacity,
     CheckinWarning.no_membership,
     CheckinWarning.unsigned_waiver,
     CheckinWarning.out_of_classes,
     CheckinWarning.ineligible_plan,
+    CheckinWarning.overdue,
 )
 
 
@@ -319,7 +329,7 @@ class CheckinMemberGate:
         eligible: set[UUID],
         evaluation: GateEvaluation,
     ) -> None:
-        """Flag ineligibility / depletion of the attribution target."""
+        """Flag ineligibility / depletion / past-due of the attribution target."""
         if forced is None:
             return
         if forced.plan_id not in eligible:
@@ -329,6 +339,14 @@ class CheckinMemberGate:
             and forced.classes_used >= forced.class_count
         ):
             evaluation.reasons.add(CheckinWarning.out_of_classes)
+        # The ONE shared overdue rule, evaluated against the occurrence's
+        # gym-local date rather than a bare "now" so a retroactive check-in
+        # is judged as of the class it is recording — the same anchoring
+        # ``covers_reference`` uses.
+        if is_membership_overdue(
+            forced.status, forced.renew_date, forced.reference_date
+        ):
+            evaluation.reasons.add(CheckinWarning.overdue)
 
     @staticmethod
     def _primary_reason(reasons: set[CheckinWarning]) -> CheckinWarning:

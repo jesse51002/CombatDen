@@ -11,17 +11,22 @@ from src.checkin.schema.cycle_counts_schema import MembershipUsage
 
 
 class CheckinWarning(StrEnum):
-    """A gate condition that would block a kiosk check-in.
+    """A gate condition raised on a check-in.
 
     The gate evaluates these once per (member, occurrence). ``is_member``
     decides what they mean:
 
-    * ``is_member=True`` (kiosk mode) — a blocking condition *rejects* the
+    * ``is_member=True`` (kiosk mode) — a *blocking* condition rejects the
       check-in (returned as the response ``skip_reason``, nothing written).
-    * ``is_member=False`` (staff / admin) — the same conditions come back as
-      ``warnings`` that hold the check-in for confirmation
+      Which conditions block is decided by ``GateEvaluation.blocked``, NOT by
+      membership of this enum.
+    * ``is_member=False`` (staff / admin) — EVERY condition here comes back as
+      a ``warning`` that holds the check-in for confirmation
       (``requires_confirmation``, nothing written) unless ``ignore_warnings``
       overrides, which records through them.
+
+    Most members block a kiosk; ``overdue`` deliberately does not (see its
+    entry below), which is why the two concepts are kept separate.
 
     Attributes:
         no_membership: The member has no active membership; an overridden staff
@@ -37,6 +42,18 @@ class CheckinWarning(StrEnum):
             they have not signed at a version >= its re-sign floor (the same
             set the member-detail Waivers section shows). Reservations are
             deliberately NOT gated — only the check-in.
+        overdue: The attributed membership is past due — active with a
+            ``next_due_date`` already behind the occurrence's gym-local date
+            (the ONE shared rule in ``src/shared/membership_status.py``, the
+            same one the members-list Overdue tab and the revenue tiles use).
+            Surfaces a failed renewal to the front desk at the one moment it
+            is actionable. **Deliberately NOT a kiosk blocker** — it is not in
+            ``GateEvaluation.blocked``: a past-due date is often a false alarm
+            (a Stripe retry in flight, a cash payment not yet recorded, a
+            family-payer edge), and billing is not a legal gate the way the
+            waiver is, so turning a member away at the scanner over it would
+            cost more in churn than it collects. Staff see it and decide.
+            Reservations are NOT gated, matching the waiver precedent.
     """
 
     no_membership = "no_membership"
@@ -44,6 +61,7 @@ class CheckinWarning(StrEnum):
     ineligible_plan = "ineligible_plan"
     over_capacity = "over_capacity"
     unsigned_waiver = "unsigned_waiver"
+    overdue = "overdue"
 
 
 class GateEvaluation(BaseModel):

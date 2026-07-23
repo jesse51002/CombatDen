@@ -207,6 +207,7 @@ class CycleCountsService:
                     plan_type=PlanType(row["plan_type"]),
                     status=row["status"],
                     covers_reference=row["covers_reference"],
+                    reference_date=row["reference_date"],
                     class_count=row["class_count"],
                     classes_used=row["classes_used"],
                     classes_remaining=row["classes_remaining"],

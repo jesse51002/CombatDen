@@ -59,6 +59,7 @@ def _usage(
         plan_type=plan_type,
         status=status,
         covers_reference=covers_reference,
+        reference_date=date(2026, 6, 1),
         class_count=10,
         classes_used=1,
         classes_remaining=9,

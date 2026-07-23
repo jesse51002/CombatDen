@@ -13,6 +13,10 @@ stays real). Covers the ``is_member`` block-vs-warn split:
   reasons as ``warnings``, UNLESS ``ignore_warnings`` overrides — which records,
   attributing to the best available membership (NULL when none, over-drawing a
   depleted pack). Points are awarded on every new row (membership or not).
+
+``overdue`` is the one reason that warns staff but never blocks a kiosk (it is
+absent from ``GateEvaluation.blocked``), so it has its own block of tests at the
+bottom — including the negative one that locks that rule in.
 """
 
 from datetime import UTC, date, datetime, time
@@ -58,18 +62,28 @@ def _usage(
     *,
     item_id: UUID | None = None,
     start_date: date | None = None,
+    status: str = "active",
+    renew_date: date | None = None,
+    reference_date: date | None = None,
 ) -> MembershipUsage:
+    """Build a membership usage row.
+
+    ``status`` / ``renew_date`` / ``reference_date`` default to a
+    NOT-overdue membership (no due date at all), so every pre-existing
+    test keeps its original meaning; the overdue cases set them.
+    """
     remaining = None if class_count is None else max(0, class_count - classes_used)
     return MembershipUsage(
         item_id=item_id or uuid4(),
         plan_id=plan_id,
         start_date=start_date or date(2024, 1, 1),
         plan_type=plan_type,
-        status="active",
+        status=status,
+        reference_date=reference_date or date(2026, 6, 1),
         class_count=class_count,
         classes_used=classes_used,
         classes_remaining=remaining,
-        renew_date=None,
+        renew_date=renew_date,
         end_date=None,
     )
 
@@ -565,3 +579,152 @@ async def test_unsigned_waiver_flagged_even_without_coverage() -> None:
     assert CheckinWarning.no_membership in res.warnings
     assert CheckinWarning.unsigned_waiver in res.warnings
     writer.assert_not_awaited()
+
+
+# ── overdue gate (staff-warn only, never a kiosk block) ──────────────
+
+# The occurrence's gym-local date the gate compares against, and a due
+# date safely behind it.
+_REF = date(2026, 6, 1)
+_PAST_DUE = date(2026, 5, 1)
+
+
+async def test_staff_overdue_needs_confirmation() -> None:
+    """A past-due membership holds a staff check-in for confirmation."""
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=_PAST_DUE,
+        reference_date=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.requires_confirmation is True
+    assert res.log_id is None
+    assert res.warnings == [CheckinWarning.overdue]
+    writer.assert_not_awaited()
+
+
+async def test_staff_overdue_override_records() -> None:
+    """``ignore_warnings`` records through the overdue warning, attributing
+    normally and echoing the warning on the recorded response."""
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=_PAST_DUE,
+        reference_date=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(
+        _resolved_class(), uuid4(), is_member=False, ignore_warnings=True
+    )
+
+    assert res.log_id is not None
+    assert res.chosen_plan_id == plan
+    assert CheckinWarning.overdue in res.warnings
+    writer.assert_awaited_once()
+
+
+async def test_kiosk_overdue_is_admitted_not_blocked() -> None:
+    """THE load-bearing rule: overdue must NEVER reject a kiosk check-in.
+
+    Billing is not a legal gate the way the waiver is, and a past-due date
+    is often a false alarm (a Stripe retry in flight, cash not yet
+    recorded). Turning a paying member away at the scanner would cost more
+    in churn than it collects — so ``overdue`` is deliberately absent from
+    ``GateEvaluation.blocked`` and the kiosk records normally.
+    """
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=_PAST_DUE,
+        reference_date=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
+
+    assert res.log_id is not None
+    assert res.skip_reason is None
+    assert res.chosen_plan_id == plan
+    writer.assert_awaited_once()
+
+
+async def test_overdue_sorts_last_among_warnings() -> None:
+    """Overdue is the softest reason: a coverage problem is always shown
+    to staff first."""
+    plan = uuid4()
+    pack = _usage(
+        plan,
+        PlanType.one_time,
+        class_count=3,
+        classes_used=3,
+        renew_date=_PAST_DUE,
+        reference_date=_REF,
+    )
+    gate, _ = _gate(memberships=[pack], eligible=set())
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.warnings == [
+        CheckinWarning.out_of_classes,
+        CheckinWarning.ineligible_plan,
+        CheckinWarning.overdue,
+    ]
+
+
+async def test_not_overdue_when_membership_is_not_active() -> None:
+    """A non-active membership is never overdue, even with a stale date.
+
+    The shared rule is active-only: a frozen membership bills $0 and an
+    ended one is finished, so neither is money the gym can still collect.
+    """
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        status="frozen",
+        renew_date=_PAST_DUE,
+        reference_date=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.warnings == []
+    assert res.log_id is not None
+    writer.assert_awaited_once()
+
+
+async def test_not_overdue_when_due_date_is_the_occurrence_date() -> None:
+    """Strictly past — the due date DAY itself is not yet overdue."""
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=_REF,
+        reference_date=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.warnings == []
+    assert res.log_id is not None
+    writer.assert_awaited_once()

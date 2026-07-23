@@ -42,6 +42,12 @@ class MembershipUsage(BaseModel):
             ``status == active``). THE check-in gate's candidacy predicate:
             an ended trial still covers a class that ran inside its window;
             a membership started after the occurrence does not.
+        reference_date: The gym-LOCAL date of that same reference instant
+            (today when no reference was passed). Carried so a consumer can
+            evaluate a date rule against the occurrence rather than against
+            a bare UTC "now" — the check-in gate's overdue warning compares
+            ``renew_date`` to this, staying occurrence-anchored exactly like
+            ``covers_reference``.
         class_count: Max classes allowed for this membership — the plan's
             ``class_count`` times the membership's ``quantity`` (None =
             unlimited). NOT the raw plan value when the pack is stacked.
@@ -60,6 +66,7 @@ class MembershipUsage(BaseModel):
     plan_type: PlanType
     status: str
     covers_reference: bool = True
+    reference_date: date
     class_count: int | None
     classes_used: int
     classes_remaining: int | None
