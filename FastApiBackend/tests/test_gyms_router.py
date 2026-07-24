@@ -9,6 +9,12 @@ from fastapi import HTTPException, status
 from src.core.config import settings
 from src.gyms.schema.gyms_schema import GymCreateResponse
 
+# Every gym row the router maps to a GymResponse carries created_at (the
+# reports/exports month-picker floor) — `gyms_list_for_user.sql` selects it
+# and `update_gym.sql` RETURNINGs it, so a mock row that omits it fails
+# validation and 500s/400s where production would not.
+GYM_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+
 
 def test_create_gym_returns_201_with_onboarding_url(client, auth_headers):
     """POST /api/v1/gyms/ creates the gym + Stripe account and returns onboarding."""
@@ -66,7 +72,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     rows = [
         {
             "gym_id": gym_a,
-            "created_at": datetime.now(UTC),
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -77,7 +83,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
         },
         {
             "gym_id": gym_b,
-            "created_at": datetime.now(UTC),
+            "created_at": GYM_CREATED_AT,
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
             "timezone": "America/New_York",
@@ -195,7 +201,7 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
-            "created_at": datetime.now(UTC),
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -227,7 +233,7 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
-            "created_at": datetime.now(UTC),
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -260,7 +266,7 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
-            "created_at": datetime.now(UTC),
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",

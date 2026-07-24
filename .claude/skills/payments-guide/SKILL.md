@@ -259,6 +259,16 @@ back to active because the DB says it's current.
   which does the CRM write. (Note: Stripe does not propagate subscription
   metadata to generated invoices, so the webhook recovers `member_id` via
   sub-item lookup; only the cash flag rides on the invoice itself.)
+- `pay_open_subscription_invoice_on_card` — the CARD twin of the above: the same
+  open invoice, then `invoices.pay` with **empty** `InvoicePayParams()` — no
+  `paid_out_of_band`, no `payment_method`, no cash metadata. **Omitting both
+  params is what makes Stripe charge the customer's saved DEFAULT card**, so this
+  is the manual retry of a failed renewal charge. Same `invoice.paid` webhook
+  does the CRM write; a decline raises out of `pay_async` and is deliberately
+  left to propagate. Both methods share ONE private lookup,
+  `_find_open_subscription_invoice` (unknown subscription →
+  `PaymentsResourceNotFoundError`, no open invoice → `ValueError`), so cash and
+  card can never drift on what "the open invoice" is.
 - **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,
   limit, customer=None)`, `list_refunds(account_id, *, created_gte, limit)`,
   `list_invoice_payments(account_id, invoice_id, *, limit)`,

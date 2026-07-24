@@ -4,7 +4,7 @@ Pure unit tests (no DB / Stripe / network):
 
 * **C-079** — the staff-managed billing writes (start, cancel, reprice,
   upgrade, add/remove-discounts, freeze, unfreeze, mark-paid-cash,
-  charge-card, refund) must gate on ``verify_gym_employee_for_member``
+  retry-card, charge-card, refund) must gate on ``verify_gym_employee_for_member``
   AT THE ``STAFF`` ROLE SET (owner/admin/front_desk) — the money ops are
   front-desk work. Each test pins the awaited ``staff_roles`` kwarg so a
   regression that widened a money op to ``ALL_EMPLOYEES`` (trainer) or
@@ -30,6 +30,7 @@ from src.memberships.memberships_router import (
     mark_membership_paid_cash,
     preview_start_membership,
     refund_charge,
+    retry_membership_card,
     start_membership,
     unfreeze_membership,
 )
@@ -115,6 +116,26 @@ async def test_mark_paid_cash_uses_staff_only_guard() -> None:
     tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
 
     await mark_membership_paid_cash(
+        request=MagicMock(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    auth.verify_gym_employee_for_member.assert_awaited_once()
+    _assert_guarded_at_staff(auth)
+
+
+@pytest.mark.asyncio
+async def test_retry_card_uses_staff_only_guard() -> None:
+    auth = _make_auth()
+    service = MagicMock()
+    service.retry_card = AsyncMock(return_value=None)
+    tasks_service = MagicMock()
+    tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
+
+    await retry_membership_card(
         request=MagicMock(),
         credentials=MagicMock(),
         auth=auth,

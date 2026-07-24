@@ -18,6 +18,16 @@ import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 /// it…"), so no line here may carry an error code, jargon, or any hint the
 /// member did something wrong. Anything unrecognised — an unknown code, a
 /// foreign 400, a 5xx, a dropped network — lands on the same calm generic line.
+///
+/// **The overdue line is deliberately discreet, and that is not squeamishness.**
+/// This screen faces a LOBBY with a queue behind it, so it is read by people who
+/// are not the member. The staff label for the same gate condition is "Payment
+/// overdue" (`CheckInWarning.overdue.displayLabel`) and that is right for a
+/// desk-side surface, but announcing a failed renewal to a room is a different
+/// act from telling a member. "A billing detail" still names the domain — so
+/// they know to bring a card to the desk rather than arriving puzzled — without
+/// publishing that they are behind on money. Do not "clarify" it back to
+/// "overdue" or "unpaid".
 String kioskBlockedCopy({
   CheckInWarning? reason,
   bool failed = false,
@@ -30,6 +40,7 @@ String kioskBlockedCopy({
     CheckInWarning.outOfClasses => 'You\'re out of classes on your plan.',
     CheckInWarning.ineligiblePlan => 'Your plan doesn\'t include this class.',
     CheckInWarning.unsignedWaiver => 'There\'s a waiver to sign.',
+    CheckInWarning.overdue => 'There\'s a billing detail to sort out.',
     CheckInWarning.unknown || null => 'Let\'s get you checked in at the desk.',
   };
 }

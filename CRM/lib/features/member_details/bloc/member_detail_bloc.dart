@@ -17,6 +17,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_mark_
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -99,6 +100,10 @@ class MemberDetailBloc
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
+    on<RetryCardPaymentRequested>(_onRetryCardPayment);
+    on<RetryCardPaymentOutcomeCleared>(
+      _onRetryCardPaymentOutcomeCleared,
+    );
 
     on<AddDiscountsRequested>(_onAddDiscounts);
     on<RemoveDiscountsRequested>(_onRemoveDiscounts);
@@ -793,6 +798,81 @@ class MemberDetailBloc
         ),
       ),
     );
+  }
+
+  /// The retry-payment dialog's mutation — the cash-free sibling of
+  /// [_onMarkPaidCash]. Unlike that one it does NOT ride
+  /// [_runMutation]: a decline is the expected failure and has to
+  /// reach the dialog's own terminal error step, so the outcome lands
+  /// on `isRetryingPayment` / `retryPaymentSuccess` /
+  /// `retryPaymentError` and the screen-level overlay + error dialog
+  /// stay out of the way (mirrors [_onCancelOneTimeMembership]).
+  Future<void> _onRetryCardPayment(
+    RetryCardPaymentRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isRetryingPayment: true,
+      clearRetryPaymentOutcome: true,
+    ));
+    try {
+      await _repository.retryMembershipCard(
+        MemberMembershipsRetryCardRequest(
+          itemId: event.itemId,
+          memberId: event.memberId,
+          idempotencyKey: const Uuid().v4(),
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Retry card payment failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isRetryingPayment: false,
+        retryPaymentError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // The charge went through. Commit success now so a follow-up
+    // refresh failure can't make a real payment look failed.
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
+      isRetryingPayment: false,
+      retryPaymentSuccess: committed.retryPaymentSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
+    ));
+    try {
+      final refreshed =
+          await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Retry succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+    // Stripe marks the invoice paid out of band (webhook), so poll the
+    // billing surfaces the way mark-paid-cash / charge do.
+    _startInvoicePolling();
+  }
+
+  void _onRetryCardPaymentOutcomeCleared(
+    RetryCardPaymentOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearRetryPaymentOutcome: true));
   }
 
   Future<void> _onAddDiscounts(

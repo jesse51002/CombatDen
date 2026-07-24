@@ -353,12 +353,37 @@ rejects an occurrence starting >2h out. Retroactive any-date check-ins work
 ignore_warnings)`:
 - **`is_member=True`** (kiosk / member self) — strict: a blocking condition
   (`no_membership | out_of_classes | ineligible_plan | over_capacity |
-  unsigned_waiver`) **rejects** (`skip_reason`, nothing written).
+  unsigned_waiver`) **rejects** (`skip_reason`, nothing written). What blocks
+  is `GateEvaluation.blocked`, **not** membership of `CheckinWarning` —
+  `overdue` is a warning that deliberately does NOT block (see below).
 - **`is_member=False`** (staff, CRM default) — a clean check-in records, but
   a warned one is **NOT recorded**: `requires_confirmation=true` +
   `warnings`; resend with **`ignore_warnings=true`** to record
   (best-available / NULL attribution). Batch has a `needs_confirmation` item
-  status.
+  status. EVERY reason warns staff, including `overdue`.
+- **The overdue warning** (`overdue`): the attributed membership is past due
+  — evaluated with the ONE shared rule in
+  `src/shared/membership_status.py` (`is_membership_overdue`, active-only),
+  the same text the members-list Overdue tab, its tally, its filter and the
+  growth revenue tiles use. It compares `renew_date` to `gym_today` (the gym-local CURRENT date,
+  carried on `MembershipUsage`) — NOT to the occurrence's date. "Does this
+  member owe money" is a question about the present, and `status` is
+  now-anchored too, so both halves of the test share one clock. (Coverage and
+  usage stay occurrence-anchored via `covers_reference` / `reference_date`;
+  only this one check is now-anchored, deliberately.) It tests EVERY covering
+  membership, not just the attribution target — overdue is member-level, so an
+  overdue recurring plan sitting behind a higher-priority trial pack still
+  warns. **Blocks a kiosk** like every other reason (it IS in
+  `GateEvaluation.blocked`): an unpaid member is sent to the front desk rather
+  than self-admitting, and `ignore_warnings` never loosens the kiosk. Staff keep
+  the override — the CRM holds the check-in and records it on "Check in anyway".
+  Known caveat: `next_due_date` can read past-due while Stripe shows everything
+  paid (a missed webhook the reconciler has not yet swept), so a kiosk rejection
+  is occasionally a false alarm the desk has to clear.
+  It sorts LAST in `_REASON_PRIORITY` — a coverage problem is more actionable.
+  Sign-ups are NOT gated by it, matching the waiver precedent. **Every**
+  `CheckinWarning` member must appear in `_REASON_PRIORITY`; that tuple is
+  ordered by `.index`, which raises on a missing member.
 - **The waiver gate** (`unsigned_waiver`,
   `checkin/sql/checkin_unsigned_waivers.sql`): a waiver required by any of
   the member's CURRENT (active/frozen) memberships' plans that they haven't

@@ -286,6 +286,14 @@ class MemberMembershipsMarkPaidCashRequest(BaseModel):
     idempotency_key: UUID
 
 
+class MemberMembershipsRetryCardRequest(BaseModel):
+    """Retry the payer's saved card on a recurring membership's open invoice."""
+
+    item_id: UUID
+    member_id: UUID
+    idempotency_key: UUID
+
+
 class MemberMembershipsChargeCardRequest(BaseModel):
     """Charge an ad-hoc amount for a member, billed to an explicit payer.
 

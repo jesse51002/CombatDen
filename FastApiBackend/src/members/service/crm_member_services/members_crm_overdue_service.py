@@ -12,6 +12,7 @@ from src.members.schema.members_crm_members_list_schema import (
     OverdueViewRow,
 )
 from src.members.service.crm_member_services.members_crm_base_service import (
+    OVERDUE_SQL,
     CrmBaseViewService,
 )
 from src.shared.formatters import format_price
@@ -48,7 +49,7 @@ class CrmOverdueViewService(CrmBaseViewService):
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
             SQL_DIR / "crm_views" / "overdue_view.sql",
-            {"where_clause": where},
+            {"where_clause": where, "is_overdue": OVERDUE_SQL},
         )
         params["limit"] = count
         params["offset"] = start_index

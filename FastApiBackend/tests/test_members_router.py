@@ -272,11 +272,14 @@ def test_list_members_hydrates_nested_rank(client, auth_headers, fake_gym_id, fa
 
 def test_total_counts_returns_per_status(client, auth_headers, fake_gym_id):
     """GET /api/v1/members/counts returns counts for each status."""
+    # Distinct values per tally so a mis-mapped field can't pass by luck.
+    # These are independent counts, not a partition — a member can be in
+    # more than one (an overdue member is also active), so they need not sum.
     mock_response = MembersListTotalCounts(
         active=6,
         trial=2,
         frozen=1,
-        overdue=1,
+        overdue=5,
         dormant=3,
         incomplete=4,
     )
@@ -300,7 +303,7 @@ def test_total_counts_returns_per_status(client, auth_headers, fake_gym_id):
         "active": 6,
         "trial": 2,
         "frozen": 1,
-        "overdue": 1,
+        "overdue": 5,
         "dormant": 3,
         "incomplete": 4,
     }

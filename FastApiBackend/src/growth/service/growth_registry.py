@@ -40,6 +40,7 @@ from src.growth.schema.growth_schema import (
     LineData,
     MemberListData,
 )
+from src.shared.membership_status import load_membership_overdue_sql
 from src.shared.sql_loader import load_sql
 
 # The canonical DORMANT / lost-member derivation, written once and injected
@@ -51,6 +52,23 @@ DORMANT_CTE = load_sql(SQL_DIR / "_dormant_members.sql")
 # reference it as ``{dormant_cte}`` and must therefore escape any literal
 # brace — in practice they simply contain none.
 DORMANT_SQL_VARIABLES: dict[str, str] = {"dormant_cte": DORMANT_CTE}
+
+# The canonical OVERDUE predicate (src/shared/membership_status.py) — the SAME
+# one text the members list, its tally, its status filter and the check-in gate
+# use, so the money tiles can no longer drift from what the Overdue tab lists.
+# Rendered once per date-CTE alias, because the metric files name their
+# gym-local "today" differently; every one of them aliases the membership row
+# as ``mms``. Consumers reference it as ``{is_overdue}``.
+OVERDUE_VS_BOUNDS: dict[str, str] = {
+    "is_overdue": load_membership_overdue_sql("mms", "b.today"),
+}
+OVERDUE_VS_GYM_DAY: dict[str, str] = {
+    "is_overdue": load_membership_overdue_sql("mms", "gd.today"),
+}
+DORMANT_AND_OVERDUE_VS_GYM_DAY: dict[str, str] = {
+    **DORMANT_SQL_VARIABLES,
+    **OVERDUE_VS_GYM_DAY,
+}
 
 # The bind sets a metric file may declare, named once so the entries below
 # stay readable.
@@ -89,6 +107,7 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         order=10,
         sql_file="revenue_hero.sql",
         model=HeroSplitData,
+        sql_variables=OVERDUE_VS_BOUNDS,
     ),
     GrowthMetricDef(
         key="members_kpis",
@@ -142,7 +161,7 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         sql_file="membership_status_mix.sql",
         model=BreakdownData,
         params=GYM_AND_DORMANCY,
-        sql_variables=DORMANT_SQL_VARIABLES,
+        sql_variables=DORMANT_AND_OVERDUE_VS_GYM_DAY,
     ),
     GrowthMetricDef(
         key="member_tenure",
@@ -205,6 +224,7 @@ GROWTH_REGISTRY: tuple[GrowthMetricDef, ...] = (
         order=240,
         sql_file="revenue_quality_kpis.sql",
         model=KpiGroupData,
+        sql_variables=OVERDUE_VS_GYM_DAY,
     ),
     # ── Attendance ──────────────────────────────────────────────
     GrowthMetricDef(

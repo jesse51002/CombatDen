@@ -25,8 +25,7 @@ JOIN membership_plans mp
     AND m.gym_id = mp.gym_id
 JOIN gyms g ON g.gym_id = p.gym_id
 {where_clause}
-    AND m.status != 'cancelled'
-    AND m.next_due_date < (now() AT TIME ZONE g.timezone)::date
+    AND ({is_overdue})
 GROUP BY p.member_id, p.first_name, p.last_name, p.photo_url,
     p.email, p.phone, g.timezone
 ORDER BY
