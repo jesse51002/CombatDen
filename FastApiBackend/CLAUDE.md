@@ -433,6 +433,15 @@ src/
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
   - This applies to `.sql` files **and** any SET/VALUES clause built dynamically in Python (e.g. an f-string `f"{col} = CAST(:{col} AS JSONB)"`, never `f"{col} = :{col}::jsonb"`). This bug has recurred — it bit the membership-plans update path.
+- **NEVER write a `{variable}` template placeholder inside a SQL `--` comment
+  either.** `load_sql` runs `str.format_map` over the WHOLE file, comments
+  included, so a comment that *names* a structural variable in braces (e.g.
+  "the predicate injected as `{is_incomplete}`") gets the entire injected SQL
+  spliced into the comment block — its first line stays commented, its later
+  lines land as bare SQL mid-file, and the query dies with an opaque
+  `syntax error at or near "..."` pointing at code that looks correct. Name the
+  variable without braces (`is_incomplete`, `the where-clause`). This bit
+  `incomplete_view.sql`.
 - **NEVER write a bare `:word` placeholder inside a SQL `--` comment.** `text()` scans the WHOLE statement — comment lines included — for `:name` bind markers, so a generic placeholder (`:col`, `:param`, `:x`) in a comment becomes an orphan bind param no code supplies, and the query 500s with `A value is required for bind parameter '<word>'`. Describe params in prose or a non-colon form (`the col column`, `<col>`) instead. (A real, always-bound param name in a comment is fine because it's supplied; `:col::type` is also safe — the trailing `::` suppresses it — but a standalone `:col` in a comment is not.) This bit `update_rank.sql`, whose comment used `:col` as a placeholder.
 
 **Repository Pattern**
@@ -494,6 +503,17 @@ The analytics side mirrors the same rule in
 `src/growth/sql/_dormant_members.sql` (which additionally treats
 all-memberships-terminal as lost, deliberately — see that file's header);
 the two must be kept in agreement.
+
+`incomplete` (the members list's Incomplete tab — signups that never
+finished) is the second fragment of that shape,
+`src/members/sql/crm_views/_member_incomplete.sql`: a member with NO
+membership of their own who is ALSO not the payer on anyone else's (without
+that second half a non-training parent paying for their kid would sit in the
+list forever with nothing to finish). One `NOT EXISTS` covering both halves,
+injected into the list (`incomplete_view.sql`) and the tally
+(`total_counts.sql`) so the tab and its count can never disagree. It binds no
+parameters, and unlike `dormant` it is never a row badge — there is no
+`CrmMemberStatus.incomplete`.
 
 ## Ranks domain
 

@@ -22,6 +22,10 @@ class MembersManagementUpdateRequest extends Equatable {
   final String? email;
   final String? currentRankId;
   final String? phone;
+
+  /// Date of birth as a bare `YYYY-MM-DD` calendar date — never an instant. A
+  /// birthday has no timezone, and the backend column is a `DATE`.
+  final String? dateOfBirth;
   final String? address;
   final String? emergencyContactName;
   final String? emergencyContactPhone;
@@ -34,6 +38,7 @@ class MembersManagementUpdateRequest extends Equatable {
     this.email,
     this.currentRankId,
     this.phone,
+    this.dateOfBirth,
     this.address,
     this.emergencyContactName,
     this.emergencyContactPhone,
@@ -52,6 +57,7 @@ class MembersManagementUpdateRequest extends Equatable {
       if (currentRankId != null)
         'current_rank_id': currentRankId,
       if (phone != null) 'phone': phone,
+      if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
       if (address != null) 'address': address,
       if (emergencyContactName != null)
         'emergency_contact_name': emergencyContactName,
@@ -71,6 +77,7 @@ class MembersManagementUpdateRequest extends Equatable {
         email,
         currentRankId,
         phone,
+        dateOfBirth,
         address,
         emergencyContactName,
         emergencyContactPhone,

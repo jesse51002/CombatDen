@@ -1,27 +1,35 @@
-"""Regression test for C-086: the one-time membership start must be idempotent
-on the DB insert, not only on the Stripe charge.
+"""The membership start must be idempotent on the DB INSERT, not only on the
+Stripe charge — for EVERY plan type.
 
-The bug: the start idempotency key keyed only the Stripe CHARGES. ``_insert_all``
-/ ``_crm_insert`` inserted pending one-time rows with NO existing-row guard, and
-one-time / trial rows are intentionally allowed to stack (only recurring is
-blocked by a trigger). On a client RETRY with the SAME ``request.idempotency_key``
-(the canonical "server finished but the 200 was lost" case) N duplicate pending
-one-time rows were re-inserted; the charge dedup'd at Stripe (original invoice
-returned) but the writeback then stamped the retry's N rows ``applied`` too ->
-2N membership rows for one payment (double passes/credits).
+The original bug: the start idempotency key keyed only the Stripe CHARGES.
+``_insert_all`` / ``_crm_insert`` inserted pending one-time rows with NO
+existing-row guard, and one-time / trial rows are intentionally allowed to stack.
+On a client RETRY with the SAME ``request.idempotency_key`` (the canonical
+"server finished but the 200 was lost" case) N duplicate pending one-time rows
+were re-inserted; the charge dedup'd at Stripe (original invoice returned) but
+the writeback then stamped the retry's N rows ``applied`` too -> 2N membership
+rows for one payment (double passes/credits).
 
-The fix derives a DETERMINISTIC per-row ``idempotency_key`` for one-time / trial
-rows — ``uuid5(request.idempotency_key, "<member_id>:<price_id>")`` — and a
-partial unique index + ``ON CONFLICT (idempotency_key) DO NOTHING`` make a
-retry's duplicate rows collide (and the caller reject the replay) instead of
-stacking. Recurring rows keep a NULL key (the trigger guards them); preview rows
-keep a NULL key (so a leaked preview row never collides with the real insert);
-distinct purchases carry a different request key, so they still stack.
+The fix derives a DETERMINISTIC per-row ``idempotency_key`` —
+``uuid5(request.idempotency_key, "<member_id>:<price_id>")`` — and a partial
+unique index + ``ON CONFLICT (idempotency_key) DO NOTHING`` make a retry's
+duplicate rows collide (and the caller reject the replay) instead of stacking.
+
+RECURRING rows carry the key too. They were originally left NULL on the grounds
+that ``trg_recurring_no_active_memberships`` already blocks a duplicate — but
+that trigger is a ``SELECT COUNT`` inside a ``BEFORE INSERT`` trigger, i.e.
+correct but NOT race-safe: two concurrent re-fires (a kiosk double-tap) each read
+before the other commits, both pass, and both insert. Two rows means two
+subscription line items and a double bill. The partial unique index is the only
+guard that serializes that race, so it has to cover recurring rows as well.
+Preview (``preview_add``) rows still keep a NULL key, so a leaked preview row can
+never collide with a real insert; distinct purchases carry a different request
+key, so they still insert normally.
 
 These tests are PURE UNIT tests over the key derivation in
 ``MemberMembershipsBase._build_pending_rows`` — no DB, Stripe, or network. The
-DB-level ``ON CONFLICT`` dedup is an integration concern (real Supabase), written
-below as a skipped test.
+DB-level ``ON CONFLICT`` dedup (including the concurrent double-fire) is covered
+against the real database in ``test_recurring_insert_idempotency.py``.
 """
 
 from __future__ import annotations
@@ -166,26 +174,77 @@ def test_key_differs_per_member_and_price_within_a_request() -> None:
     assert len(set(keys)) == len(keys)
 
 
-def test_recurring_rows_have_null_key() -> None:
-    """Recurring rows keep a NULL key — the no-active trigger guards them, and a
-    NULL key is excluded from the partial unique index."""
+def test_recurring_rows_also_get_a_key() -> None:
+    """Recurring rows carry the same deterministic key.
+
+    ``trg_recurring_no_active_memberships`` is a ``SELECT COUNT`` in a
+    ``BEFORE INSERT`` trigger — two concurrent re-fires both read before either
+    commits, so both pass it and both insert. The partial unique index is the
+    only race-safe guard, so recurring rows have to be keyed for it to apply.
+    """
     member, price, plan = uuid4(), uuid4(), uuid4()
+    req_key = uuid4()
     item = MemberMembershipsStartItem(member_id=member, price_id=price)
     plan_prices = {price: _plan_price(plan, PlanType.recurring)}
 
     rows = _base()._build_pending_rows(
+        _request(req_key, [item]), plan_prices, START_DATE,
+    )
+
+    assert rows[0]["idempotency_key"] == uuid5(req_key, f"{member}:{price}")
+
+
+def test_recurring_key_is_deterministic_across_retries() -> None:
+    """A re-fired recurring-only cart reproduces the SAME per-row key.
+
+    This is what makes the re-fire collide on the partial unique index — the
+    whole point of keying recurring rows.
+    """
+    member, price, plan = uuid4(), uuid4(), uuid4()
+    req_key = uuid4()
+    item = MemberMembershipsStartItem(member_id=member, price_id=price)
+    plan_prices = {price: _plan_price(plan, PlanType.recurring)}
+    base = _base()
+
+    rows_a = base._build_pending_rows(
+        _request(req_key, [item]), plan_prices, START_DATE,
+    )
+    rows_b = base._build_pending_rows(
+        _request(req_key, [item]), plan_prices, START_DATE,
+    )
+
+    assert rows_a[0]["idempotency_key"] == rows_b[0]["idempotency_key"]
+
+
+def test_recurring_key_differs_per_request() -> None:
+    """A genuinely separate recurring purchase (new request key) does not
+    collide — re-subscribing after a cancel must still insert."""
+    member, price, plan = uuid4(), uuid4(), uuid4()
+    item = MemberMembershipsStartItem(member_id=member, price_id=price)
+    plan_prices = {price: _plan_price(plan, PlanType.recurring)}
+    base = _base()
+
+    rows1 = base._build_pending_rows(
+        _request(uuid4(), [item]), plan_prices, START_DATE,
+    )
+    rows2 = base._build_pending_rows(
         _request(uuid4(), [item]), plan_prices, START_DATE,
     )
 
-    assert rows[0]["idempotency_key"] is None
+    assert rows1[0]["idempotency_key"] != rows2[0]["idempotency_key"]
 
 
-def test_preview_rows_have_null_key() -> None:
-    """Preview-staged (``preview_add``) rows keep a NULL key, so a leaked
-    preview row can never collide with the real start's insert."""
+@pytest.mark.parametrize(
+    "plan_type",
+    [PlanType.one_time, PlanType.trial, PlanType.recurring],
+)
+def test_preview_rows_have_null_key(plan_type: PlanType) -> None:
+    """Preview-staged (``preview_add``) rows keep a NULL key for EVERY plan
+    type, so a leaked preview row can never collide with the real start's
+    insert."""
     member, price, plan = uuid4(), uuid4(), uuid4()
     item = MemberMembershipsStartItem(member_id=member, price_id=price)
-    plan_prices = {price: _plan_price(plan, PlanType.one_time)}
+    plan_prices = {price: _plan_price(plan, plan_type)}
 
     rows = _base()._build_pending_rows(
         _request(uuid4(), [item]),
@@ -197,10 +256,12 @@ def test_preview_rows_have_null_key() -> None:
     assert rows[0]["idempotency_key"] is None
 
 
-def test_mixed_request_keys_only_one_time_rows() -> None:
-    """In a mixed cart, only the one-time row carries a key; recurring is NULL.
+def test_mixed_cart_keys_every_row() -> None:
+    """In a mixed cart BOTH rows carry their own key — one-time and recurring.
 
-    Both land in ONE multi-row insert, so the key array must line up per row.
+    Both land in ONE multi-row insert, so the key array must line up per row,
+    and a re-fire must drop BOTH halves (any shortfall rejects the whole
+    request, which is what keeps a mixed cart from half-applying).
     """
     member = uuid4()
     one_time_price, recurring_price = uuid4(), uuid4()
@@ -222,30 +283,12 @@ def test_mixed_request_keys_only_one_time_rows() -> None:
     assert rows[0]["idempotency_key"] == uuid5(
         req_key, f"{member}:{one_time_price}",
     )
-    assert rows[1]["idempotency_key"] is None
+    assert rows[1]["idempotency_key"] == uuid5(
+        req_key, f"{member}:{recurring_price}",
+    )
+    assert rows[0]["idempotency_key"] != rows[1]["idempotency_key"]
 
 
-@pytest.mark.skip(
-    reason="integration: needs a real Supabase DB (FK rows + ON CONFLICT). "
-    "C-086 DB-level dedup — not run in the unit suite.",
-)
-async def test_retry_insert_is_deduped_at_the_db(created, db_pool) -> None:  # type: ignore[no-untyped-def]
-    """A second ``_crm_insert`` with the same per-row idempotency_key is dropped.
-
-    Integration shape (requires the real shared local Supabase DB + the migrated
-    ``idempotency_key`` column + partial unique index):
-
-    1. Create a member + a ONE-TIME plan with an active price (data factory).
-    2. Build a pending one-time row for that (member, price) and insert it via
-       ``_crm_insert`` — succeeds, returns one item_id.
-    3. Build the SAME row again (same member/price -> same deterministic
-       idempotency_key) and insert it AGAIN — simulating the lost-200 retry.
-       ``ON CONFLICT (idempotency_key) DO NOTHING`` drops it, so the RETURNING
-       set is empty and ``_crm_insert`` raises the duplicate-replay RuntimeError.
-    4. Assert exactly ONE ``member_memberships_unfiltered`` row exists for the
-       (member, price) — never 2 — proving the 2N-rows bug is closed.
-
-    Left as documentation of the DB-level contract; the partial unique index is
-    also the backstop for two concurrent retries racing into the INSERT.
-    """
-    pytest.skip("integration placeholder — see docstring")
+# The DB-level ``ON CONFLICT`` dedup — including the concurrent double-fire the
+# recurring key exists for — is covered for real in
+# ``tests/memberships/test_recurring_insert_idempotency.py``.

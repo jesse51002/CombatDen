@@ -38,6 +38,7 @@ from src.members.service.crm_member_services.members_crm_base_service import (
 )
 from src.members.service.crm_member_services.members_crm_total_counts_service import (
     DORMANT_COUNT_SQL,
+    INCOMPLETE_COUNT_SQL,
 )
 from src.members.service.members_status_mapping import (
     DORMANT_YIELDS_TO,
@@ -313,20 +314,24 @@ async def test_total_counts_tallies_dormant_members(db_pool) -> None:
         ),
         member_memberships_status AS (
             SELECT * FROM (VALUES
-                (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
+                (CAST(:m_a AS UUID), CAST(:m_a AS UUID),
+                 CAST(:gym_id AS UUID),
                  CAST(:plan_trial AS UUID), 'active',
                  CAST(:start_old AS DATE), CAST(NULL AS DATE)),
-                (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
+                (CAST(:m_b AS UUID), CAST(:m_b AS UUID),
+                 CAST(:gym_id AS UUID),
                  CAST(:plan_trial AS UUID), 'active',
                  CAST(:start_old AS DATE), CAST(NULL AS DATE)),
-                (CAST(:m_c AS UUID), CAST(:gym_id AS UUID),
+                (CAST(:m_c AS UUID), CAST(:m_c AS UUID),
+                 CAST(:gym_id AS UUID),
                  CAST(:plan_recurring AS UUID), 'active',
                  CAST(:start_old AS DATE), CAST(NULL AS DATE))
-            ) AS v(member_id, gym_id, plan_id, status, start_date,
-                   next_due_date)
+            ) AS v(member_id, paid_by_member_id, gym_id, plan_id, status,
+                   start_date, next_due_date)
         )
         {load_sql(SQL_DIR / "crm_views" / "total_counts.sql",
-                  {"is_dormant": DORMANT_COUNT_SQL})}
+                  {"is_dormant": DORMANT_COUNT_SQL,
+                   "is_incomplete": INCOMPLETE_COUNT_SQL})}
     """
     params = {
         "gym_id": gym_id,
@@ -350,12 +355,16 @@ async def test_total_counts_tallies_dormant_members(db_pool) -> None:
         frozen=row["frozen"],
         overdue=row["overdue"],
         dormant=row["dormant"],
+        incomplete=row["incomplete"],
     )
     assert counts.dormant == 2
     # The tallies overlap by design: the two dormant members hold trials
     # and are still counted there too.
     assert counts.trial == 2
     assert counts.active == 1
+    # Every synthetic member holds a membership, so nobody is an
+    # incomplete signup — the two tallies stay independent.
+    assert counts.incomplete == 0
 
 
 async def test_total_counts_overdue_excludes_cancelled(db_pool) -> None:
@@ -396,17 +405,20 @@ async def test_total_counts_overdue_excludes_cancelled(db_pool) -> None:
         ),
         member_memberships_status AS (
             SELECT * FROM (VALUES
-                (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
+                (CAST(:m_a AS UUID), CAST(:m_a AS UUID),
+                 CAST(:gym_id AS UUID),
                  CAST(:plan_recurring AS UUID), 'active',
                  CAST(:start_old AS DATE), CAST(:past_due AS DATE)),
-                (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
+                (CAST(:m_b AS UUID), CAST(:m_b AS UUID),
+                 CAST(:gym_id AS UUID),
                  CAST(:plan_recurring AS UUID), 'cancelled',
                  CAST(:start_old AS DATE), CAST(:past_due AS DATE))
-            ) AS v(member_id, gym_id, plan_id, status, start_date,
-                   next_due_date)
+            ) AS v(member_id, paid_by_member_id, gym_id, plan_id, status,
+                   start_date, next_due_date)
         )
         {load_sql(SQL_DIR / "crm_views" / "total_counts.sql",
-                  {"is_dormant": DORMANT_COUNT_SQL})}
+                  {"is_dormant": DORMANT_COUNT_SQL,
+                   "is_incomplete": INCOMPLETE_COUNT_SQL})}
     """
     params = {
         "gym_id": gym_id,
@@ -429,11 +441,16 @@ async def test_total_counts_overdue_excludes_cancelled(db_pool) -> None:
         frozen=row["frozen"],
         overdue=row["overdue"],
         dormant=row["dormant"],
+        incomplete=row["incomplete"],
     )
     # Only the active past-due membership is overdue; the cancelled one,
     # despite its stale past next_due_date, is excluded.
     assert counts.overdue == 1
     assert counts.active == 1
+    # A cancelled membership still disqualifies its member from the
+    # incomplete list — they finished a signup once, they are lapsed, not
+    # unfinished.
+    assert counts.incomplete == 0
 
 
 # -- Badge precedence (hermetic) --

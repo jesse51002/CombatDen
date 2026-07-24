@@ -207,7 +207,7 @@ async def update_member(
     description=(
         "Returns a filtered, sorted, paginated list of gym members "
         "for the CRM members list screen. The view (all / trial / "
-        "frozen / overdue) decides the row shape; the filters and "
+        "frozen / overdue / incomplete) decides the row shape; the filters and "
         "pagination are applied as given (the view and filters are "
         "independent — no reconciliation), and the rows are "
         "pre-formatted per view. Membership status is derived from "
@@ -254,8 +254,10 @@ async def list_members(
     summary="Unfiltered member counts per status",
     description=(
         "Returns unfiltered member counts per status (active / trial / "
-        "frozen / overdue) for the CRM members list subtitle. Counts are "
-        "membership-derived from member_memberships_status."
+        "frozen / overdue / dormant / incomplete) for the CRM members list "
+        "subtitle. Counts are membership-derived from "
+        "member_memberships_status; incomplete counts members with no "
+        "membership who also pay for nobody."
     ),
     responses={
         200: {"description": "Counts retrieved"},

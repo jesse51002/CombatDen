@@ -7,9 +7,9 @@ description: >-
   backend calls. Use whenever the user wants to "QA the pages", "make sure the
   pages work", "smoke test the CRM", "screenshot every screen", "check the app
   visually", "test the Flutter pages", or after a change that could affect
-  routing, auth, the members list, or member detail. Catches render crashes,
-  stuck spinners, stale-build regressions, and broken backend wiring that
-  `flutter analyze` can't see.
+  routing, auth, the members list, member detail, or Kiosk Mode (check-in +
+  self-serve signup). Catches render crashes, stuck spinners, stale-build
+  regressions, and broken backend wiring that `flutter analyze` can't see.
 ---
 
 # QA the CRM pages (browser pass)
@@ -190,8 +190,6 @@ multi-agent sweep would have agents colliding on one session. Run the pages
 **sequentially** in one browser. A true parallel sweep needs a browser instance
 per agent on its own port — only set that up if the user explicitly wants it.
 
-## Keep this skill current
-
 ## Driving CanvasKit dialogs (wizards, pickers)
 
 CanvasKit renders to a canvas, so DOM clicks can't reach dialog content
@@ -208,6 +206,85 @@ directly — but the semantics tree can be driven:
 4. **Dev-server wedge**: after a browser restart, DDC may load every
    script but never run `main()` (stale DWDS debug session) — restart
    `flutter run`, then reload the page once.
+
+## 8. Kiosk Mode: check-in + self-serve signup (no URL — driven by UI state)
+
+**Kiosk views have no route at all — this is a harder version of the "can't be
+clicked" gotcha in §3/§5, not just another page to `goto`.** Every other screen
+in this skill is still reachable by URL fragment even when a dialog on it isn't
+clickable. Kiosk Mode is different: `KioskSessionCubit` swaps the **entire**
+authenticated subtree — `AuthGate` mounts `KioskScreen` *instead of*
+`_MembersWorkspace` (see `CRM/CLAUDE.md`'s Kiosk Mode paragraph and the
+`kiosk-guide` skill) — so there is no `#/kiosk` fragment, no deep link, and no
+way to `$B goto` into any kiosk screen, ever. The **only** way in is: sign in as
+staff with kiosk access, enable semantics, and tap the real nav item. Drive
+every step below with the *Driving CanvasKit dialogs* technique above — this is
+true for the admin nav rail tap that enters kiosk and for every kiosk screen
+after that, since the kiosk is itself just more CanvasKit.
+
+**Enter kiosk.** `owner1@test.com` (the seeded owner) has
+`RolePolicy.canOperateKiosk`, so the standard dev-auto-login boot (§2) is
+enough — no separate kiosk account exists.
+
+1. Enable semantics, then find and tap the **"Kiosk Mode"** nav rail item.
+2. A confirm dialog opens ("Enter Kiosk Mode?"); tap **"Enter Kiosk"**. This
+   calls `enterKiosk()`, which flips the cubit and swaps the whole screen — the
+   next `$B screenshot` should show the kiosk home (the name-search / QR split,
+   "New here? Sign up" beneath it), with no nav rail and no admin chrome at all.
+3. To leave and get the admin workspace back for further QA, tap the header
+   padlock, confirm **"This signs the iPad out"** — this signs out
+   completely (not just kiosk), so re-run dev auto-login (§2) to come back.
+
+**Money paths use Stripe's documented test cards** in the signup's card step
+— any future expiry, any 3-digit CVC, any 5-digit ZIP:
+
+- `4242 4242 4242 4242` → succeeds (the happy-path and group-path runs below).
+- `4000 0000 0000 0002` → a generic decline (the declined-card run below).
+
+**Caveat to verify on first real run:** `CardFieldBox` (`flutter_stripe`'s
+`CardField`) renders Stripe Elements as a **real HTML iframe on web**, not a
+CanvasKit-painted control — it may be reachable by ordinary DOM interaction
+rather than the semantics-tree technique above, or it may need the `browse`
+tool's iframe/frame targeting if it has one. Confirm which on the first live
+pass and update this note with the working recipe — don't guess at a command
+that hasn't been proven against the real page.
+
+**Solo happy path.** From the kiosk home, tap **"New here? Sign up"**, then
+walk the spine (Plan precedes Waiver — see the `kiosk-guide` skill §11): fill
+the details step (name/email/phone) → the optional extra-details step (skip or
+fill address/DOB) → pick a plan → the waiver step (**"Sign and continue"**)
+→ the card step (`4242…`, then **"Review"**) → the review step
+(**"Pay $…"**) → Paying → **Welcome**. Screenshot at the review step (confirm
+the real plan price + due-today figure) and at Welcome.
+
+**Duplicate-payer stop.** Run the details step again with the **same email**
+as a payer who already exists (the member the happy-path run just created, or
+any seeded member's email) and continue. The signup dead-ends on the
+blame-free **"You already have an account here."** stop screen — no "Start
+over" button (the fresh-card law forbids it; see `kiosk-guide` §3) — and it
+auto-returns to the kiosk home on its own short hold, so just let it clear.
+Confirm afterward, via the members list's **Incomplete** tab
+(`http://localhost:8080/#/members`, then switch views), that the abandoned
+shell shows up there with a **Finish signup** row action.
+
+**Declined card.** Same spine as the happy path, but enter `4000 0000 0000
+0002` at the card step and continue through to Pay. Confirm the **Declined**
+screen appears with **"Try another card"** and **"Get help at the desk"** —
+and confirms there is no "Start over" button here either (§2 of the
+`kiosk-guide` skill: a declined payment has already committed a member row +
+Stripe customer + signed waiver, so this is a front-desk handoff, not a retry
+from scratch).
+
+**Group / family path.** After the payer's own details step, the **"Anyone
+else joining?"** roster step ("People") is always visited. Tap **"Add someone
+new"**, fill that person's name/email, and continue — a new payee walks
+match/no-match, per-person plan pick, and their own waiver (payer-auth first
+if they're an existing member being linked, then their liability waiver),
+before returning to the roster. Tap **Continue** to reach the **group review**
+(one block per person, "Pay $…" totals every person's cart) and pay through to
+Welcome the same way as the solo path.
+
+## Keep this skill current
 
 This is a living document (see `CLAUDE.md`). When a route is added/renamed, the
 auto-login account changes, a new gotcha bites, or the page list grows, update

@@ -37,6 +37,8 @@ sealed class MemberRow extends Equatable {
         FrozenViewRow.fromJson(json),
       MembersListView.overdue =>
         OverdueViewRow.fromJson(json),
+      MembersListView.incomplete =>
+        IncompleteViewRow.fromJson(json),
     };
   }
 }
@@ -198,5 +200,46 @@ class OverdueViewRow extends MemberRow {
         phone,
         membershipText,
         daysLate,
+      ];
+}
+
+/// Row for the Incomplete view.
+///
+/// A signup that stalled before any membership was bought — the front
+/// desk's "finish this for them" queue. Carries the contact pair staff
+/// need to chase it plus [daysWaiting], how long the shell row has been
+/// sitting there (a gym-LOCAL day count computed by the backend, never
+/// re-derived here).
+@JsonSerializable(
+  fieldRename: FieldRename.snake,
+  createToJson: false,
+)
+class IncompleteViewRow extends MemberRow {
+  final String? email;
+  final String? phone;
+  final int daysWaiting;
+
+  const IncompleteViewRow({
+    required super.memberId,
+    required super.name,
+    super.avatarUrl,
+    this.email,
+    this.phone,
+    required this.daysWaiting,
+  });
+
+  factory IncompleteViewRow.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      _$IncompleteViewRowFromJson(json);
+
+  @override
+  List<Object?> get props => [
+        memberId,
+        name,
+        avatarUrl,
+        email,
+        phone,
+        daysWaiting,
       ];
 }

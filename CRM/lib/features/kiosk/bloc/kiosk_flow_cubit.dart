@@ -270,6 +270,25 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     unawaited(_loadClasses(seq));
   }
 
+  /// Open the member-facing SELF-SERVE SIGNUP lane — but only while the
+  /// session can start a flow, exactly like [selectMember]. Past the lockout
+  /// mark, show the calm closing message instead.
+  ///
+  /// It deliberately does NOT call [_startFlow]: the signup lane owns its own
+  /// `beginFlow` latch (in `KioskSignupCubit`'s constructor), so calling it
+  /// here too would double-count the session's in-progress flows and stop the
+  /// kiosk ever signing itself out at its T+11h45 lockout.
+  void startSignup() {
+    registerActivity();
+    if (!_session.state.canStartFlow) {
+      emit(state.copyWith(view: KioskView.closing));
+      _syncIdleTimer();
+      return;
+    }
+    emit(state.copyWith(view: KioskView.signup));
+    _syncIdleTimer();
+  }
+
   /// The CHECK-IN flow's class list: TODAY's occurrences, narrowed to the ones
   /// this member can check into right now. Read fresh per member — never
   /// served from the entry-time showcase cache, whose window is a week wide and
@@ -749,6 +768,11 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     // The "Get the app" modal runs its own 60s clock — suppress the idle guard
     // beneath it (it can sit over an engaged home draft).
     if (state.appModalOpen) return;
+    // The signup lane runs its OWN 5-minute guard inside `KioskSignupCubit`
+    // (same constants), because only that cubit knows which of its steps may
+    // be interrupted. Two guards over one surface would race: this one would
+    // abandon to home mid-signup without releasing the signup's flow count.
+    if (state.view == KioskView.signup) return;
     if (_engaged && !state.idleWarningActive) {
       _idleTimer = Timer(kKioskIdleTimeout, _onIdle);
     }

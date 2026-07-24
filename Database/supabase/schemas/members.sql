@@ -41,6 +41,10 @@ CREATE TABLE members (
     photo_url VARCHAR,
     phone VARCHAR,
     address VARCHAR,
+    -- Optional date of birth, captured by the kiosk self-serve signup's
+    -- optional-details step (and editable by staff). Nullable like every other
+    -- contact column: an engagement-only member may have none on file.
+    date_of_birth DATE,
     emergency_contact_name VARCHAR,
     emergency_contact_phone VARCHAR,
     emergency_contact_email VARCHAR,

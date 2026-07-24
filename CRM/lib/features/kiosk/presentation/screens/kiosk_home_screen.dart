@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_adopt_strip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_name_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_signup_stub.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
 /// The kiosk idle home: a centered "Check in" title over a horizontal
@@ -56,7 +57,11 @@ class KioskHomeScreen extends StatelessWidget {
           Center(
             child: KioskOutlineButton(
               text: 'New here? Sign up',
-              onPressed: () => showKioskSignupStub(context),
+              // Gated exactly like `selectMember`: past the T+11h45 lockout
+              // this shows the calm closing screen instead of starting a
+              // flow. It does NOT begin the session flow — `KioskSignupCubit`
+              // owns that latch.
+              onPressed: () => context.read<KioskFlowCubit>().startSignup(),
             ),
           ),
           const KioskAdoptStrip(),

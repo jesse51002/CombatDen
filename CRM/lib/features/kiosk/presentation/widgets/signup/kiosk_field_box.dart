@@ -1,0 +1,239 @@
+import 'package:flutter/material.dart';
+
+import 'package:crm/core/constants/design_constants.dart';
+
+/// The kiosk's labeled text input: a label above, an optional leading glyph
+/// inside the box, and an optional hint (or error line) below.
+///
+/// The BOX geometry is `KioskNameSearch`'s, verbatim — the shipped kiosk
+/// field, so the signup's fields and the home's search read as the same
+/// control at the same size: [DesignConstants.card] fill,
+/// [DesignConstants.radiusBig] corners, [DesignConstants.kioskFieldText] value
+/// type, and a hint lifted to [DesignConstants.text2nd] (the kiosk's AA floor
+/// applies to every muted WORD). What the search box has no need of, and this
+/// adds, is the focus / error border pair the mockup draws: sapphire on focus,
+/// [DesignConstants.badRed] in error, over the resting hairline.
+///
+/// **No `autofillHints`, and never add any.** This is a SHARED front-desk
+/// iPad: browser/OS autofill would offer the PREVIOUS member's address (or
+/// card) to the next person standing at it. The absence is load-bearing —
+/// see the kiosk-guide skill.
+class KioskFieldBox extends StatefulWidget {
+  final TextEditingController controller;
+
+  /// The label above the box.
+  final String label;
+
+  /// The muted word beside the label ("optional"). Used only where optional
+  /// is the EXCEPTION among required fields; a panel where optional is the
+  /// rule says so once at the top instead of five times down the form.
+  final String? labelNote;
+
+  final String hintText;
+
+  /// Guidance under the box. Replaced by [errorText] while the field is in
+  /// error, so the two never stack.
+  final String? helperText;
+
+  /// The failed-validation line. Non-null puts the box in its error state.
+  final String? errorText;
+
+  final IconData? icon;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onSubmitted;
+
+  const KioskFieldBox({
+    super.key,
+    required this.controller,
+    required this.label,
+    required this.hintText,
+    this.labelNote,
+    this.helperText,
+    this.errorText,
+    this.icon,
+    this.keyboardType,
+    this.textInputAction,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  @override
+  State<KioskFieldBox> createState() => _KioskFieldBoxState();
+}
+
+class _KioskFieldBoxState extends State<KioskFieldBox> {
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_onFocusChanged);
+  }
+
+  void _onFocusChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocusChanged);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = widget.errorText;
+    final note = widget.helperText;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        _FieldLabel(label: widget.label, note: widget.labelNote),
+        _Box(
+          controller: widget.controller,
+          focusNode: _focus,
+          hintText: widget.hintText,
+          icon: widget.icon,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          onChanged: widget.onChanged,
+          onSubmitted: widget.onSubmitted,
+          focused: _focus.hasFocus,
+          bad: error != null,
+        ),
+        if (error != null)
+          Text(
+            error,
+            style: DesignConstants.kioskCaption.copyWith(
+              color: DesignConstants.badRed,
+              fontWeight: FontWeight.w500,
+            ),
+          )
+        else if (note != null)
+          Text(
+            note,
+            style: DesignConstants.kioskCaption.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The label, and the one place an "optional" note may sit beside it.
+class _FieldLabel extends StatelessWidget {
+  final String label;
+  final String? note;
+
+  const _FieldLabel({required this.label, this.note});
+
+  @override
+  Widget build(BuildContext context) {
+    final word = note;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Flexible(child: Text(label, style: DesignConstants.kioskLabel)),
+        if (word != null)
+          Text(
+            word,
+            style: DesignConstants.kioskCaption.copyWith(
+              color: DesignConstants.text2nd,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The input box itself, at the shipped kiosk field geometry.
+class _Box extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String hintText;
+  final IconData? icon;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onSubmitted;
+  final bool focused;
+  final bool bad;
+
+  const _Box({
+    required this.controller,
+    required this.focusNode,
+    required this.hintText,
+    required this.focused,
+    required this.bad,
+    this.icon,
+    this.keyboardType,
+    this.textInputAction,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = icon;
+    final border = bad
+        ? DesignConstants.badRed
+        : focused
+            ? DesignConstants.primaryColor
+            : DesignConstants.text;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: DesignConstants.paddingSmall,
+        vertical: DesignConstants.spacingMedium,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.card,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        border: Border.all(color: border),
+        boxShadow: DesignConstants.controlShadow,
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          if (glyph != null)
+            Icon(
+              glyph,
+              size: DesignConstants.iconSizeLarge,
+              weight: DesignConstants.iconWeight,
+              color: DesignConstants.text2nd,
+            ),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              keyboardType: keyboardType,
+              textInputAction: textInputAction,
+              onChanged: onChanged,
+              onSubmitted: (_) => onSubmitted?.call(),
+              style: DesignConstants.kioskFieldText,
+              cursorColor: DesignConstants.primaryColor,
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: hintText,
+                hintStyle: DesignConstants.kioskFieldText.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

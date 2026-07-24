@@ -28,12 +28,20 @@ class MembersListTotalCounts extends Equatable {
   @JsonKey(defaultValue: 0)
   final int dormant;
 
+  /// Signups that never finished: no membership of their own, and not
+  /// the payer on anyone else's. The one tally that cannot overlap the
+  /// others — every other heading requires a membership row. Defaults
+  /// to 0 so a client running against an older backend still parses.
+  @JsonKey(defaultValue: 0)
+  final int incomplete;
+
   const MembersListTotalCounts({
     required this.active,
     required this.trial,
     required this.frozen,
     required this.overdue,
     this.dormant = 0,
+    this.incomplete = 0,
   });
 
   factory MembersListTotalCounts.fromJson(
@@ -48,5 +56,6 @@ class MembersListTotalCounts extends Equatable {
         frozen,
         overdue,
         dormant,
+        incomplete,
       ];
 }

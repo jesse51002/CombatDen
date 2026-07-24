@@ -42,6 +42,9 @@ class MemberCreate(SeedModel):
     photo_url: str | None = None
     phone: str | None = None
     address: str | None = None
+    # Optional; the kiosk self-serve signup captures it, staff can edit it.
+    # The seed does not set it, so seeded members read back NULL.
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None

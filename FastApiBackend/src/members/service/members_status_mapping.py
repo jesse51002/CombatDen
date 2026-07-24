@@ -16,6 +16,12 @@ filters, and the member detail endpoints stay in agreement.
   :func:`load_member_dormant_sql`) and Python only decides where the
   resulting flag sits in the badge precedence
   (:func:`is_member_dormant`).
+- **Incomplete**: a member who holds no membership of their own AND
+  pays for nobody else's — an unfinished signup. Also an aggregate over
+  the member's whole membership set (as subject and as payer), so it too
+  lives in SQL (``sql/crm_views/_member_incomplete.sql``, loaded by
+  :func:`load_member_incomplete_sql`). It has no badge precedence to
+  apply: it is a list view + a tally, never a row badge.
 
 This module is a class-less *concern module* — free functions by
 design, the sanctioned exception to the no-loose-module-level-functions
@@ -62,6 +68,7 @@ DORMANT_YIELDS_TO: frozenset[CrmMemberStatus] = frozenset(
 )
 
 DORMANT_SQL_PATH = SQL_DIR / "crm_views" / "_member_dormant.sql"
+INCOMPLETE_SQL_PATH = SQL_DIR / "crm_views" / "_member_incomplete.sql"
 
 
 def is_membership_overdue(
@@ -129,5 +136,30 @@ def load_member_dormant_sql(
     """
     return load_sql(
         DORMANT_SQL_PATH,
+        {"member_id": member_id_expr, "gym_id": gym_id_expr},
+    )
+
+
+def load_member_incomplete_sql(
+    member_id_expr: str,
+    gym_id_expr: str,
+) -> str:
+    """Load the correlated incomplete-signup predicate for an outer query.
+
+    The one text backs the Incomplete tab's list (``incomplete_view.sql``)
+    and its tally (``total_counts.sql``), so the two can never drift.
+    Unlike the dormancy predicate it binds no parameters.
+
+    Args:
+        member_id_expr: SQL expression for the outer query's member id
+            (e.g. ``"p.member_id"``).
+        gym_id_expr: SQL expression for the outer query's gym id (e.g.
+            ``"p.gym_id"``).
+
+    Returns:
+        A self-contained boolean SQL expression.
+    """
+    return load_sql(
+        INCOMPLETE_SQL_PATH,
         {"member_id": member_id_expr, "gym_id": gym_id_expr},
     )

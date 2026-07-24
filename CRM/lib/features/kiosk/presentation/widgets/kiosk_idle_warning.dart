@@ -11,20 +11,45 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 /// clock (the whole kiosk surface listens for pointer activity); on expiry the
 /// cubit abandons the draft and returns home. Shown only while a flow is in
 /// progress, never on the idle home screen.
+///
+/// **One warning surface, two lanes.** The check-in lane's guard lives on
+/// [KioskFlowCubit] and the signup lane runs its own (same constants, its own
+/// cubit, because only that cubit knows which of its steps may be
+/// interrupted). [onStillHere] is how the signup lane routes "I'm still here"
+/// to the clock that is actually running — without it the button would answer
+/// a timer that isn't ticking and the member would still be ejected. Omitted,
+/// it defaults to the check-in lane's `registerActivity`, so no existing call
+/// site changes.
 class KioskIdleWarning extends StatelessWidget {
   final int seconds;
 
-  const KioskIdleWarning({super.key, required this.seconds});
+  /// Answers the countdown. Defaults to [KioskFlowCubit.registerActivity].
+  final VoidCallback? onStillHere;
+
+  const KioskIdleWarning({
+    super.key,
+    required this.seconds,
+    this.onStillHere,
+  });
 
   @override
   Widget build(BuildContext context) {
     // An opaque gesture detector so a tap on the veil dismisses the warning
     // AND is absorbed here — it must never leak through to a class card behind
     // it and trigger a check-in.
+    void stillHere() {
+      final answer = onStillHere;
+      if (answer != null) {
+        answer();
+      } else {
+        context.read<KioskFlowCubit>().registerActivity();
+      }
+    }
+
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => context.read<KioskFlowCubit>().registerActivity(),
+        onTap: stillHere,
         child: ColoredBox(
           color: DesignConstants.backgroundColor.withValues(alpha: 0.92),
           child: Center(
@@ -61,8 +86,7 @@ class KioskIdleWarning extends StatelessWidget {
                     ),
                     KioskPrimaryButton(
                       text: 'I\'m still here',
-                      onPressed: () =>
-                          context.read<KioskFlowCubit>().registerActivity(),
+                      onPressed: stillHere,
                     ),
                   ],
                 ),

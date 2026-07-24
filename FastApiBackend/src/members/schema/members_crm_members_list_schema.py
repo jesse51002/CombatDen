@@ -9,12 +9,19 @@ from pydantic import BaseModel, Field
 
 
 class MembersListView(StrEnum):
-    """Available views for the members list screen."""
+    """Available views for the members list screen.
+
+    ``incomplete`` is the staff follow-up list for signups that never
+    finished: a member row with no membership of their own who is also
+    not the payer on anyone else's. Its rule lives in SQL
+    (``sql/crm_views/_member_incomplete.sql``).
+    """
 
     all = "all"
     trial = "trial"
     frozen = "frozen"
     overdue = "overdue"
+    incomplete = "incomplete"
 
 
 class CrmMemberStatus(StrEnum):
@@ -162,8 +169,26 @@ class OverdueViewRow(BaseRow):
     days_late: int
 
 
+class IncompleteViewRow(BaseRow):
+    """Row for the Incomplete view.
+
+    A signup that stalled before any membership was bought. Carries the
+    contact details staff need to chase it (same pair as the Overdue
+    view) plus how long the shell row has been sitting there.
+    """
+
+    view: Literal[MembersListView.incomplete] = MembersListView.incomplete
+    email: str | None = None
+    phone: str | None = None
+    days_waiting: int
+
+
 MembersListRow = Annotated[
-    AllViewRow | TrialViewRow | FrozenViewRow | OverdueViewRow,
+    AllViewRow
+    | TrialViewRow
+    | FrozenViewRow
+    | OverdueViewRow
+    | IncompleteViewRow,
     Field(discriminator="view"),
 ]
 
@@ -183,6 +208,10 @@ class MembersListTotalCounts(BaseModel):
     counts the dormancy RULE — a dormant member whose membership is
     frozen or past due is counted here even though a higher-precedence
     badge claims their row in the list.
+
+    ``incomplete`` is the one tally that cannot overlap the others: it
+    counts members with no membership at all (and who pay for nobody),
+    while every other tally requires a membership row.
     """
 
     active: int
@@ -190,6 +219,7 @@ class MembersListTotalCounts(BaseModel):
     frozen: int
     overdue: int
     dormant: int
+    incomplete: int
 
 
 class CrmMembersListResponse(BaseModel):

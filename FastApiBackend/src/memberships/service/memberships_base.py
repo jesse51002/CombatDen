@@ -325,15 +325,15 @@ class MemberMembershipsBase:
 
         Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
         price_id, start_date, end_date, last_paid_date, next_due_date,
-        stripe_item_id, total_price, quantity, ``idempotency_key`` (C-086 —
-        the deterministic per-row dedup key on one-time/trial real-start rows,
-        ``None`` for recurring + preview rows), and optionally sync_status
-        (default ``not_added`` — the real start's pending row; the start preview
-        passes ``preview_add`` so the dry-run sees it but the real path never
-        bills it). All rows appear atomically, or none. The DB generates each
-        row's ``item_id`` (PK default); we return them via ``RETURNING``. The
-        INSERT's ``ON CONFLICT (idempotency_key) DO NOTHING`` silently drops a
-        retried start's duplicate one-time rows; this method detects the
+        stripe_item_id, total_price, quantity, ``idempotency_key`` (the
+        deterministic per-row dedup key on EVERY real-start row — one-time,
+        trial and recurring alike; ``None`` only for preview rows), and
+        optionally sync_status (default ``not_added`` — the real start's pending
+        row; the start preview passes ``preview_add`` so the dry-run sees it but
+        the real path never bills it). All rows appear atomically, or none. The
+        DB generates each row's ``item_id`` (PK default); we return them via
+        ``RETURNING``. The INSERT's ``ON CONFLICT (idempotency_key) DO NOTHING``
+        silently drops a retried start's duplicate rows; this method detects the
         resulting RETURNING shortfall and rejects the replay (see below).
 
         Returns:
@@ -368,9 +368,9 @@ class MemberMembershipsBase:
                 r.get("sync_status", StripeSyncStatus.not_added).value
                 for r in rows
             ],
-            # C-086: per-row idempotency key (one-time/trial real-start rows
-            # only; NULL for recurring + preview rows). A retry reproduces these,
-            # and the INSERT's ON CONFLICT drops the colliding rows.
+            # Per-row idempotency key (every real-start row — one-time, trial
+            # and recurring; NULL only for preview rows). A retry reproduces
+            # these, and the INSERT's ON CONFLICT drops the colliding rows.
             "idempotency_keys": [
                 str(key) if (key := r.get("idempotency_key")) else None
                 for r in rows
@@ -389,12 +389,12 @@ class MemberMembershipsBase:
                 # rejected loudly — and the check runs BEFORE commit so the raise
                 # ROLLS BACK any rows that did insert, rather than committing a
                 # ghost `not_added` row that is never charged or cleaned up:
-                #  - C-086 idempotent REPLAY: the INSERT's
+                #  - idempotent REPLAY: the INSERT's
                 #    `ON CONFLICT (idempotency_key) DO NOTHING` dropped a retry's
-                #    one-time/trial rows because their deterministic keys already
-                #    exist from the original (completed) start. We must NOT
-                #    continue: re-running Phase B would re-apply discounts to the
-                #    existing rows and re-charge. Raise so the original rows +
+                #    rows (of ANY plan type) because their deterministic keys
+                #    already exist from the original (completed) start. We must
+                #    NOT continue: re-running Phase B would re-apply discounts to
+                #    the existing rows and re-charge. Raise so the original rows +
                 #    their discounts + their charge stand untouched.
                 #  - collapse: two rows shared (member_id, price_id) — the
                 #    request dedup should make this impossible.
@@ -438,25 +438,36 @@ class MemberMembershipsBase:
                     plan_price["duration_amount"],
                     plan_price["duration_unit"],
                 )
-            # C-086: stamp a deterministic per-row idempotency key on the REAL
-            # start's ONE-TIME / TRIAL pending rows so a retried start request
-            # (same request.idempotency_key) reproduces the SAME key per row and
-            # its duplicate rows collide on the partial unique index (dropped via
-            # the INSERT's ON CONFLICT) instead of stacking into 2N rows for one
-            # payment. Gated tightly:
-            #   - sync_status == not_added -> ONLY the real start's pending rows;
-            #     a preview's preview_add rows stay NULL so a leaked preview row
-            #     can never collide with a real insert;
-            #   - non-recurring ONLY -> recurring rows stay NULL because a
-            #     duplicate recurring insert is already blocked by
-            #     trg_recurring_no_active_memberships.
+            # Stamp a deterministic per-row idempotency key on EVERY one of the
+            # REAL start's pending rows — one-time, trial AND recurring — so a
+            # retried start request (same request.idempotency_key) reproduces
+            # the SAME key per row and its duplicate rows collide on the partial
+            # unique index (dropped via the INSERT's ON CONFLICT) instead of
+            # being inserted twice for one payment.
+            #
+            # Recurring rows carry the key too because the trigger that
+            # nominally guards them, trg_recurring_no_active_memberships, is a
+            # SELECT COUNT inside a BEFORE INSERT trigger: it is a correctness
+            # check, NOT a race-safe one. Two concurrent re-fires (a kiosk
+            # double-tap, a client retry that overlaps the original) each read
+            # before the other commits, both see no live membership, and both
+            # insert — two rows, two subscription line items, a double bill.
+            # The partial unique index is the only guard that serializes that
+            # race: the second inserter blocks on the index until the first
+            # commits, then ON CONFLICT DO NOTHING drops its row and
+            # _crm_insert's shortfall check rejects the whole replay.
+            #
+            # Still gated on sync_status == not_added -> ONLY the real start's
+            # pending rows; a preview's preview_add rows stay NULL so a leaked
+            # preview row can never collide with a real insert.
+            #
             # (member_id, price_id) is unique within a request (the request
             # dedup) so it needs no row-index, and it is order-independent — a
             # retry that reorders its items still reproduces each row's key. A
             # genuinely distinct purchase carries a different request key, hence
-            # a different per-row key, hence still stacks.
+            # a different per-row key, hence still inserts normally.
             idempotency_key: UUID | None = None
-            if sync_status == StripeSyncStatus.not_added and not is_recurring:
+            if sync_status == StripeSyncStatus.not_added:
                 idempotency_key = uuid5(
                     request.idempotency_key,
                     f"{item.member_id}:{item.price_id}",

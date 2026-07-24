@@ -1,8 +1,12 @@
 -- Independent tallies, not a partition: a member can land in more than one
--- (an overdue member is also counted as active). The dormant tally follows
--- that same shape, and is counted straight off the members table because
--- dormancy is member-level -- one row per member, no membership join to
--- de-duplicate. The predicate is the shared one every dormant surface uses.
+-- (an overdue member is also counted as active). The dormant and incomplete
+-- tallies follow that same shape, and are counted straight off the members
+-- table because both rules are member-level -- one row per member, no
+-- membership join to de-duplicate. Each predicate is the shared one its own
+-- surface uses (_member_dormant.sql / _member_incomplete.sql).
+--
+-- incomplete is the one tally that CANNOT overlap the others: it counts
+-- members with no membership at all, and every other tally requires one.
 --
 -- The tally applies the RULE; the badge additionally applies a precedence
 -- (see DORMANT_YIELDS_TO in members_status_mapping), so a dormant member
@@ -34,7 +38,19 @@ SELECT
         FROM members dormant_m
         WHERE dormant_m.gym_id = :gym_id
         AND {is_dormant}
-    ) AS dormant
+    ) AS dormant,
+    -- Incomplete signups. Counted straight off the members table for the same
+    -- reason as dormant: the rule is member-level (no membership of their own
+    -- AND not paying for anyone), so it cannot be expressed by FILTERing the
+    -- membership-joined scan above — a member with no memberships contributes
+    -- no row to it at all. The predicate is the shared one the Incomplete tab
+    -- lists with (_member_incomplete.sql).
+    (
+        SELECT count(*)
+        FROM members incomplete_m
+        WHERE incomplete_m.gym_id = :gym_id
+        AND {is_incomplete}
+    ) AS incomplete
 FROM member_memberships_status m
 JOIN membership_plans mp
     ON m.plan_id = mp.plan_id

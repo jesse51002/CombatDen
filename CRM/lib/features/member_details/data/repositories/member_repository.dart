@@ -405,13 +405,22 @@ class MemberRepository {
   ///
   /// Throws [WaiverGateException] on 422 when required waiver signatures are
   /// missing — the wizard routes to its sign-waivers step in that case.
+  ///
+  /// [receiveTimeout] overrides the shared 30s response wait for this ONE
+  /// request. The call creates a subscription, converges it and takes the
+  /// money server-side, so a Connect charge legitimately runs 10–60s and the
+  /// default would false-fail a charge that actually went through. Only the
+  /// kiosk signup passes it (a staff member watching the CRM wizard can retry;
+  /// an unattended iPad cannot).
   Future<MemberMembershipsStartResponse> startMemberships(
-    MemberMembershipsStartRequest req,
-  ) async {
+    MemberMembershipsStartRequest req, {
+    Duration? receiveTimeout,
+  }) async {
     try {
       final response = await _apiClient.post(
         '/api/v1/member_memberships/',
         data: req.toJson(),
+        receiveTimeout: receiveTimeout,
       );
       return MemberMembershipsStartResponse.fromJson(
         response.data as Map<String, dynamic>,

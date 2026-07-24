@@ -317,6 +317,48 @@ void main() {
     );
   });
 
+  group('starting a signup (the same canStartFlow gate)', () {
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'startSignup opens the signup lane but does NOT begin the flow — the '
+      'signup cubit owns that latch',
+      build: build,
+      act: (cubit) => cubit.startSignup(),
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.signup);
+        // Double-counting here would leave the session permanently "busy" and
+        // the kiosk would never sign itself out at its T+11h45 lockout.
+        verifyNever(() => session.beginFlow());
+      },
+    );
+
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'startSignup shows the closing screen when the session cannot start '
+      'a flow (locked)',
+      setUp: () => when(() => session.state).thenReturn(lockedState),
+      build: build,
+      act: (cubit) => cubit.startSignup(),
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.closing);
+        verifyNever(() => session.beginFlow());
+      },
+    );
+
+    test('the signup view suppresses the check-in lane\'s idle guard — the '
+        'signup lane runs its own', () {
+      fakeAsync((async) {
+        final cubit = build();
+        cubit.startSignup();
+        async.elapse(kKioskIdleTimeout + const Duration(seconds: 1));
+
+        // Two guards over one surface would race: this one would abandon to
+        // home mid-signup without releasing the signup's flow count.
+        expect(cubit.state.view, KioskView.signup);
+        expect(cubit.state.idleWarningActive, isFalse);
+        cubit.close();
+      });
+    });
+  });
+
   group('recording the check-in', () {
     blocTest<KioskFlowCubit, KioskFlowState>(
       'a recorded check-in advances to the glance and ends the flow',

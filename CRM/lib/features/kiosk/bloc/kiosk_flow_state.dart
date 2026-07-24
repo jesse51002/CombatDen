@@ -20,6 +20,13 @@ enum KioskView {
   /// The chosen member's today-classes grid, ready to pick + check in.
   classPick,
 
+  /// The member-facing SELF-SERVE SIGNUP lane (Phase D/E). A single arm here,
+  /// because the whole multi-step flow lives behind `KioskSignupCubit` — the
+  /// signup's own steps are a separate state machine, not more [KioskView]
+  /// values, and `KioskSignupScreen` provides that cubit so its lifetime is
+  /// the flow's lifetime.
+  signup,
+
   /// The check-in request is in flight (spinner).
   checkingIn,
 

@@ -4,7 +4,7 @@ List, counts, and detail schemas are membership-derived and live in
 members_crm_members_list_schema and members_billing_schema.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -24,6 +24,8 @@ class MemberCreateRequest(BaseModel):
     # engagement-only members with no contact info on file.
     phone: str | None = None
     address: str | None = None
+    # Optional date of birth (the kiosk signup's optional-details step).
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: EmailStr | None = None
@@ -66,6 +68,7 @@ class MemberUpdateData(BaseModel):
     email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: EmailStr | None = None
@@ -103,6 +106,7 @@ class MemberResponse(BaseModel):
     created_at: datetime
     phone: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None

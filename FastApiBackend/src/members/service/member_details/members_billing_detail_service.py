@@ -209,6 +209,7 @@ class MembersBillingDetailService:
                 phone=target_row["phone"],
                 email=target_row["email"],
                 address=target_row["address"],
+                date_of_birth=target_row["date_of_birth"],
                 emergency_contact_name=(target_row["emergency_contact_name"]),
                 emergency_contact_phone=(target_row["emergency_contact_phone"]),
                 emergency_contact_email=(target_row["emergency_contact_email"]),

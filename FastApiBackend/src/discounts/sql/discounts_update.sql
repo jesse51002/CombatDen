@@ -1,4 +1,5 @@
--- Update a discount IDENTITY. The {set_clause} is built from the changed
+-- Update a discount IDENTITY. The set_clause (named without braces on purpose --
+-- load_sql format_maps the comments too) is built from the changed
 -- DiscountUpdateIdentity fields (guarded against GYM_DISCOUNTS), so adding a
 -- future editable identity column needs no change here. Value/lifetime edits do
 -- NOT happen here — they mint a new gym_discount_values version. Edits affect

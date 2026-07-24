@@ -13,6 +13,7 @@ import 'package:crm/features/kiosk/presentation/screens/kiosk_class_pick_screen.
 import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_glance_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
+import 'package:crm/features/kiosk/presentation/screens/kiosk_signup_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_checking_in.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_slide.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
@@ -36,8 +37,10 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// Get-the-App modal (the app-adoption funnel), and while that modal is open a
 /// tap does neither.
 ///
-/// The Phase C2 retention glance (streak + rewards) is live; the Phase D signup
-/// flow is still a front-desk placeholder dialog.
+/// The Phase C2 retention glance (streak + rewards) is live, and so is the
+/// Phase D signup lane's entry — `KioskView.signup` mounts `KioskSignupScreen`,
+/// which provides its OWN `KioskSignupCubit` (a sibling of [KioskFlowCubit])
+/// and runs its own 5-minute idle guard.
 class KioskScreen extends StatelessWidget {
   const KioskScreen({super.key});
 
@@ -138,6 +141,11 @@ class _ViewSwitcher extends StatelessWidget {
           KioskView.checkedIn => const KioskGlanceScreen(),
           KioskView.blocked => const KioskBlockedScreen(),
           KioskView.closing => const KioskClosingScreen(),
+          // The signup lane's own multi-step machine lives inside this
+          // screen, which provides its own `KioskSignupCubit` — leaving the
+          // view unmounts that subtree, so the typed PII (and later the card)
+          // is disposed structurally.
+          KioskView.signup => const KioskSignupScreen(),
         };
         return AnimatedSwitcher(
           duration: MediaQuery.disableAnimationsOf(context)

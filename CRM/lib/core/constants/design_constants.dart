@@ -677,6 +677,26 @@ class DesignConstants {
   /// a single control.
   static const double kioskAdoptMeasure = 640.0;
 
+  /// Content measure for a signup step's FORM panel — the width the field
+  /// panel is capped at (and centred within) on the wide kiosk stage.
+  ///
+  /// A form stretched across a full iPad puts a member's eye through a
+  /// half-metre sweep between a label and its box; capping the panel keeps
+  /// each 2-up field pair inside one comfortable scan. Wider than
+  /// [kioskAdoptMeasure] because this holds two side-by-side controls, not
+  /// one sentence.
+  static const double kioskFormMeasure = 860.0;
+
+  /// Height of the kiosk's date WHEEL (`KioskDobField`'s bottom sheet).
+  ///
+  /// A `CupertinoDatePicker` has no intrinsic height — it must be given a
+  /// bounded box — and the value is a MEASURE, not a type size, so it lives
+  /// here beside the other kiosk measures rather than at the call site. Five
+  /// rows of [kioskFieldText] plus its own overscroll shading: tall enough
+  /// that the neighbouring dates are readable at 2m (which is how a wheel is
+  /// steered), short enough to leave the sheet's Done button on the fold.
+  static const double kioskWheelHeight = 260.0;
+
   // ── Kiosk button scale ──
   // The kiosk is read (and pressed) from standing distance on a supervised
   // iPad, so its buttons run a full step larger than the admin defaults

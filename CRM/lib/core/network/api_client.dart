@@ -59,16 +59,30 @@ class ApiClient {
 
   /// Sends a POST request to [path] with optional
   /// [data] body and/or [queryParameters].
+  ///
+  /// [receiveTimeout] overrides the shared 30s response wait for THIS request
+  /// only — for an endpoint whose server-side work legitimately runs longer
+  /// than the default (the kiosk signup's start call, which creates
+  /// subscriptions and charges a card inside one request). It follows the
+  /// [getBytes] precedent exactly: only the *receive* wait moves, never
+  /// `connectTimeout` — a host that can't be reached should still fail fast,
+  /// and stretching the connect wait would just hide an offline kiosk behind a
+  /// long spinner. Omit it and nothing changes; the client default is
+  /// untouched.
   Future<Response<T>> post<T>(
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    Duration? receiveTimeout,
   }) async {
     return _handleRequest(
       () => _dio.post<T>(
         path,
         data: data,
         queryParameters: queryParameters,
+        options: receiveTimeout == null
+            ? null
+            : Options(receiveTimeout: receiveTimeout),
       ),
     );
   }

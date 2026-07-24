@@ -1,0 +1,888 @@
+import 'package:equatable/equatable.dart';
+
+import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/members_list/data/models/member_row.dart';
+import 'package:crm/features/memberships/data/models/waiver_response.dart';
+
+/// The signup lane's step spine — the whole solo (D) + group (E) flow, in the
+/// order the approved mockups walk it.
+///
+/// Solo: [details] → [extraDetails] *(the member is created here)* → [people]
+/// → [plans] → [waivers] → [card] → [review] → [paying] → [welcome].
+/// Group adds the roster loop ([personDetails], [match]) off [people].
+///
+/// [plans] comes BEFORE [waivers] deliberately: a plan's `waiverIds` is a
+/// property of the plan, so there is nothing to sign until one is picked.
+///
+/// [declined] and [stop] are the two failure terminals and they are NOT the
+/// same: [declined] is retryable (the card was refused; members, signatures
+/// and links are all committed and are never re-executed), while [stop] is a
+/// terminal front-desk handoff.
+enum KioskSignupStep {
+  /// D1 — first / last / email (required) / phone.
+  details,
+
+  /// D1a — date of birth, address, emergency contact. Always shown.
+  /// Continue **or** Skip fires the single `createMember` call.
+  extraDetails,
+
+  /// E1 — the roster: "It's just me" or add someone.
+  people,
+
+  /// E1a — one added person's own details.
+  personDetails,
+
+  /// E2 — find an EXISTING member to add to the cart.
+  match,
+
+  /// D3 — pick one plan per person.
+  plans,
+
+  /// D4 / E3 — sign the plan's waivers (and, per payee, the payer-auth link).
+  waivers,
+
+  /// D5 — the fresh card. Never a saved card, never a payer picker.
+  card,
+
+  /// D6 / E4 — what will be charged, then Pay.
+  review,
+
+  /// D7 — the start call is in flight. No buttons, no escape, no idle guard.
+  paying,
+
+  /// D8 — the charge was refused. Retries PAY only.
+  declined,
+
+  /// The signup succeeded.
+  welcome,
+
+  /// A terminal front-desk handoff ([KioskSignupState.stopReason] says which).
+  stop,
+}
+
+/// How complete one roster person's optional details are — the readout the
+/// group roster chip renders ("Details on file" / "Some details").
+enum KioskSignupDetailsStatus {
+  /// Nothing optional was given.
+  none,
+
+  /// Some optional fields were given.
+  partial,
+
+  /// Every optional field was given.
+  complete,
+}
+
+/// Why the signup stopped dead and handed off to the front desk.
+///
+/// Every one of these is TERMINAL: the screen's single action returns home.
+/// The copy for each lives in `presentation/kiosk_signup_stop_copy.dart` —
+/// the ONE place a reason becomes member-facing words, mirroring
+/// `kiosk_blocked_copy.dart`.
+///
+/// Adding a reason means adding its line in
+/// `presentation/kiosk_signup_stop_copy.dart` in the same change — the switch
+/// there is exhaustive on purpose so a new reason can never ship without
+/// words.
+///
+/// Two of them are **retryable** ([isRetryable]): the read behind them can
+/// simply be attempted again, so the screen offers a "Try again" and the
+/// session's flow count is deliberately NOT released while the member is still
+/// standing there. Every other reason is a true dead end.
+enum KioskSignupStopReason {
+  /// `POST /members/` came back 409 `duplicate_member`.
+  ///
+  /// A duplicate on the PAYER is terminal by the fresh-card law: the kiosk may
+  /// only charge a card belonging to a member it created in THIS signup, so
+  /// "that's me, use my account" cannot exist here. The 409's `matches` are
+  /// deliberately never rendered — confirming an account exists to whoever is
+  /// standing at a shared iPad is an account-existence leak.
+  duplicateMember,
+
+  /// `POST /members/` came back 400 — the gym has no Stripe Connect account,
+  /// so no member (and no customer) can be created at all. A gym-setup
+  /// problem, never the member's.
+  paymentsUnavailable,
+
+  /// The create call failed for any other reason (a 5xx, a dropped network,
+  /// an unrecognised 4xx). Nothing was written.
+  signupFailed,
+
+  /// The gym offers no plan a self-serve iPad may sell — none is public with
+  /// an active price. A gym-setup fact, not a failure, so it gets its own
+  /// words rather than the generic apology.
+  noPlansOffered,
+
+  /// The plan catalogue could not be read. Retryable — nothing is wrong with
+  /// the signup, one read just failed.
+  plansUnavailable,
+
+  /// The charge preview failed. Retryable for the same reason: the preview
+  /// stages rows and calls Stripe on the default 30s timeout, so a slow
+  /// moment must never leave the member on a blank screen.
+  previewFailed,
+
+  /// The start call failed outright (a 5xx or a dropped connection).
+  /// **Nothing was charged** — the copy says so, because that is the only
+  /// question the member has.
+  paymentFailed,
+
+  /// A start attempt was already sent for this idempotency key and its
+  /// outcome is unknown, so the kiosk will NOT send it again — an auto-retry
+  /// is the one thing that could double-charge. The desk resolves it.
+  paymentUnconfirmed,
+
+  /// The card was refused and the member is out of attempts (or asked for
+  /// help). Everything already committed stays committed — this is a handoff,
+  /// never an abandon.
+  cardDeclined;
+
+  /// Whether the stop screen offers a "Try again" that returns to the step.
+  ///
+  /// Only the two pure-read failures qualify. A money path never auto-retries
+  /// and a duplicate never resolves itself, so neither may offer a button that
+  /// implies it might.
+  bool get isRetryable =>
+      this == plansUnavailable || this == previewFailed;
+}
+
+/// One waiver signed during THIS signup — WHO it was signed for, the id (so
+/// it is never presented to that person twice), the waiver's name and the
+/// legal name that was typed, both of which the review screen renders back.
+///
+/// **[memberId] is what makes the group run correct.** Two children on the
+/// same plan must each sign that plan's liability waiver; keying the "already
+/// signed" set on the waiver id alone would silently skip the second child's
+/// signature and hand the backend an unsigned member at the start call.
+///
+/// A signature is COMMITTED the moment it is recorded, so this list only ever
+/// grows: walking Back never un-signs anything.
+class KioskSignedWaiver extends Equatable {
+  /// The member the signature binds — never the signer, who may be a parent.
+  final String memberId;
+
+  final String waiverId;
+  final String name;
+  final String signerName;
+
+  const KioskSignedWaiver({
+    required this.memberId,
+    required this.waiverId,
+    required this.name,
+    required this.signerName,
+  });
+
+  @override
+  List<Object?> get props => [memberId, waiverId, name, signerName];
+}
+
+/// One EXISTING member offered as a match for a payee being added (E2).
+///
+/// It is the single shape behind both routes into that offer — the 409's
+/// `matches` and a name-search row — so the confirm card renders one thing.
+///
+/// **It carries only what a lobby iPad may print**: a full name (a first name
+/// plus an initial collides silently) and an email the card masks before it
+/// renders. Never a phone, never a photo, never a membership status.
+class KioskSignupMatch extends Equatable {
+  final String memberId;
+  final String firstName;
+  final String lastName;
+  final String? email;
+
+  const KioskSignupMatch({
+    required this.memberId,
+    required this.firstName,
+    required this.lastName,
+    this.email,
+  });
+
+  String get fullName => '$firstName $lastName'.trim();
+
+  @override
+  List<Object?> get props => [memberId, firstName, lastName, email];
+}
+
+/// One person in the signup's roster. The payer is always index 0 and is
+/// always brand new (the fresh-card law); payees may be new or existing.
+///
+/// [memberId] is null until `createMember` (or, for an existing payee, a
+/// match) supplies one — that null is the "nothing has been written yet"
+/// signal the whole abandon story rests on.
+class KioskSignupPerson extends Equatable {
+  /// Set once this person exists on the backend. Null before that.
+  final String? memberId;
+
+  final String firstName;
+  final String lastName;
+
+  /// REQUIRED for every person, payer and payee alike — it keeps the
+  /// duplicate gate live for everyone and gives each person app sign-in.
+  final String email;
+
+  final String? phone;
+
+  /// Date of birth, collected on the wheel (never free text). Sent as
+  /// `YYYY-MM-DD`.
+  final DateTime? dob;
+
+  final String? address;
+  final String? ecName;
+  final String? ecPhone;
+  final String? ecEmail;
+
+  /// Whether this person pays for the whole cart. Exactly one person is the
+  /// payer, and it is always the person who started the signup.
+  final bool isPayer;
+
+  /// Whether this person is training (and so needs a plan). The payer's
+  /// "Training too" defaults ON; a non-training payer is a parent paying for
+  /// their kids.
+  final bool training;
+
+  /// True when this person was matched to an EXISTING member rather than
+  /// created here. Only ever true for a payee.
+  final bool wasExisting;
+
+  /// True once `PUT /members/{id}/link` has authorized the payer to pay for
+  /// this person. **It is the group flow's commit marker**: there is no unlink
+  /// call, so a linked person can no longer be removed from the roster, and
+  /// the start request is not assembled at all until every payee carries it.
+  final bool linked;
+
+  final KioskSignupDetailsStatus detailsStatus;
+
+  /// The plan this person picked. Null until the plans step.
+  final String? selectedPlanId;
+
+  const KioskSignupPerson({
+    this.memberId,
+    this.firstName = '',
+    this.lastName = '',
+    this.email = '',
+    this.phone,
+    this.dob,
+    this.address,
+    this.ecName,
+    this.ecPhone,
+    this.ecEmail,
+    this.isPayer = false,
+    this.training = true,
+    this.wasExisting = false,
+    this.linked = false,
+    this.detailsStatus = KioskSignupDetailsStatus.none,
+    this.selectedPlanId,
+  });
+
+  /// True once this person exists on the backend — the marker that turns a
+  /// second Continue from a committed step into a PUT instead of a create.
+  bool get isCreated => memberId != null;
+
+  static const Object _keep = Object();
+
+  KioskSignupPerson copyWith({
+    Object? memberId = _keep,
+    String? firstName,
+    String? lastName,
+    String? email,
+    Object? phone = _keep,
+    Object? dob = _keep,
+    Object? address = _keep,
+    Object? ecName = _keep,
+    Object? ecPhone = _keep,
+    Object? ecEmail = _keep,
+    bool? isPayer,
+    bool? training,
+    bool? wasExisting,
+    bool? linked,
+    KioskSignupDetailsStatus? detailsStatus,
+    Object? selectedPlanId = _keep,
+  }) {
+    return KioskSignupPerson(
+      memberId:
+          identical(memberId, _keep) ? this.memberId : memberId as String?,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      email: email ?? this.email,
+      phone: identical(phone, _keep) ? this.phone : phone as String?,
+      dob: identical(dob, _keep) ? this.dob : dob as DateTime?,
+      address: identical(address, _keep) ? this.address : address as String?,
+      ecName: identical(ecName, _keep) ? this.ecName : ecName as String?,
+      ecPhone: identical(ecPhone, _keep) ? this.ecPhone : ecPhone as String?,
+      ecEmail: identical(ecEmail, _keep) ? this.ecEmail : ecEmail as String?,
+      isPayer: isPayer ?? this.isPayer,
+      training: training ?? this.training,
+      wasExisting: wasExisting ?? this.wasExisting,
+      linked: linked ?? this.linked,
+      detailsStatus: detailsStatus ?? this.detailsStatus,
+      selectedPlanId: identical(selectedPlanId, _keep)
+          ? this.selectedPlanId
+          : selectedPlanId as String?,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        memberId,
+        firstName,
+        lastName,
+        email,
+        phone,
+        dob,
+        address,
+        ecName,
+        ecPhone,
+        ecEmail,
+        isPayer,
+        training,
+        wasExisting,
+        linked,
+        detailsStatus,
+        selectedPlanId,
+      ];
+}
+
+/// Immutable state of the `KioskSignupCubit` — one FLAT state carrying the
+/// current [step], the roster, and everything each step renders. It mirrors
+/// `KioskFlowState`'s shape deliberately, including the `_keep` sentinel in
+/// [copyWith]: a nullable field is preserved unless an explicit `null` is
+/// passed, which is how a fresh failure drops a stale value.
+///
+/// Nothing here survives the flow: the cubit is provided by
+/// `KioskSignupScreen`, so leaving the view unmounts the subtree and disposes
+/// every field on this object. That is the shared-iPad privacy contract made
+/// structural rather than remembered.
+class KioskSignupState extends Equatable {
+  final KioskSignupStep step;
+
+  /// The roster. Index 0 is always the payer and always exists.
+  final List<KioskSignupPerson> persons;
+
+  /// Which person the per-person steps ([personDetails], [plans], [waivers])
+  /// are currently acting on.
+  final int activePersonIndex;
+
+  /// The steps whose work has been COMMITTED to the backend.
+  ///
+  /// This is ruling 11's marker. Back into [KioskSignupStep.details] /
+  /// [KioskSignupStep.extraDetails] after the member exists is allowed (so a
+  /// typo'd email is fixable), but Continue from a committed step fires
+  /// `updateMember` (PUT), never a second `createMember` — a second create
+  /// would dead-end the member on the duplicate stop for their own
+  /// just-created account.
+  final Set<KioskSignupStep> committedSteps;
+
+  /// A network call for the current step is in flight — the primary is
+  /// disabled and shows its busy state.
+  final bool submitting;
+
+  // ── Group: the roster (E1) ──
+  /// The payee being added, held OFF the roster until the backend has made
+  /// them. A create that 409s leaves this set (it is the "You typed" half of
+  /// the match card) and the roster untouched, so backing out of the offer
+  /// drops a draft rather than stranding a member with no id on the roster.
+  final KioskSignupPerson? pendingPayee;
+
+  /// The optional-details PUT for a payee failed. An INLINE retry, never a
+  /// stop: the person already exists, and ending a family signup because an
+  /// optional address didn't save would orphan everyone on the roster.
+  final bool personDetailsFailed;
+
+  // ── Group: find an existing member (E2) ──
+  /// The ONE existing member being offered as this payee's match.
+  ///
+  /// Reached two ways — a 409 on the payee create, or a name search — and it
+  /// is deliberately singular: a shared screen offers one identity to confirm,
+  /// not a list of the gym's members to browse.
+  ///
+  /// **The payer's own 409 never reaches here.** A duplicate PAYER is terminal
+  /// (see [KioskSignupStopReason.duplicateMember]) because the kiosk may only
+  /// charge a card belonging to a member it created; a duplicate PAYEE is an
+  /// offer, because a payee pays nothing.
+  final KioskSignupMatch? matchCandidate;
+
+  /// The match step is showing the name search rather than the confirm card.
+  final bool matchSearchOpen;
+
+  /// What is typed in that search.
+  final String matchQuery;
+  final bool matchSearching;
+  final bool matchSearchFailed;
+
+  /// Name-search matches for the "add someone who's already a member" step.
+  ///
+  /// Never confused with the 409 duplicate `matches`, which are NEVER
+  /// rendered for a PAYER (see [KioskSignupStopReason.duplicateMember]).
+  final List<MemberRow> matches;
+
+  // ── Plans (D3) ──
+  /// The gym's kiosk-eligible plans — `isPublic && activePrice != null` —
+  /// warmed once at entry so the step opens with no network wait.
+  final List<MembershipPlanResponse> plans;
+  final bool plansLoading;
+  final bool plansFailed;
+
+  // ── Waivers (D4 / E3) ──
+  /// The waivers this step has to walk, in order — the selected plan's
+  /// `waiverIds` (or, after a server waiver gate, exactly the ids it named).
+  /// It is the numbering behind "waiver 1 of N", so it keeps entries that are
+  /// already signed rather than shrinking as they are.
+  final List<String> waiverQueue;
+
+  /// Which entry of [waiverQueue] is on screen.
+  final int waiverIndex;
+
+  /// The loaded waiver, body included. Null while it loads.
+  final WaiverResponse? waiver;
+  final bool waiverLoading;
+
+  /// The last waiver read or sign failed. It is an INLINE retry, never a
+  /// terminal stop: a member has already been created by this point, and the
+  /// escape is still in the gutter if they want out.
+  final bool waiverFailed;
+
+  /// The gym republished this waiver between the read and the sign (409). The
+  /// body is reloaded and the member must read and sign the NEW version.
+  final bool waiverStale;
+
+  /// Waivers signed during THIS signup. A signed waiver stays signed across
+  /// Back navigation — it is committed, and nothing un-signs it.
+  final List<KioskSignedWaiver> signedWaivers;
+
+  // ── Group: the per-person waiver run (E3, ruling 9) ──
+  /// The roster indexes the waiver phase walks, in order: every payee first
+  /// (each one's payer-auth link, then their own liability waivers), and the
+  /// payer's own liability waiver LAST. That is how a family actually passes
+  /// a tablet — once per person, not once per document.
+  final List<int> waiverPersonQueue;
+
+  /// Where in [waiverPersonQueue] the run is.
+  final int waiverPersonIndex;
+
+  /// The waiver on screen is the PAYER-AUTH agreement for the active payee,
+  /// not that payee's liability waiver. The signer is the payer every time.
+  final bool payerAuthPending;
+
+  /// The loaded authorized-payer agreement. Null while it loads.
+  final AuthorizedPayerWaiver? payerAuthWaiver;
+  final bool payerAuthLoading;
+  final bool payerAuthFailed;
+
+  /// The gym republished the payer-auth waiver between the read and the link
+  /// (409). The body is reloaded and the payer signs the NEW text.
+  final bool payerAuthStale;
+
+  /// Exactly the (member, waiver) pairs a server waiver gate (422) named.
+  ///
+  /// The server is authoritative, so these are folded INTO the person's own
+  /// liability queue on the way round again — a plan whose `waiverIds` no
+  /// longer matches what the backend demands would otherwise loop the member
+  /// through a run that never satisfies the gate.
+  final List<WaiverGateItem> waiverGate;
+
+  // ── Card (D5) ──
+  /// The freshly-entered card's Stripe payment-method id. Only ever a card
+  /// typed in the current signup, for the payer created in the current
+  /// signup — the fresh-card law.
+  final String? paymentMethodId;
+
+  /// The card's brand and last four, straight off the tokenized
+  /// PaymentMethod — the only card facts the kiosk ever holds. Rendered on
+  /// the review, paying and declined screens so the member can see which card
+  /// is being charged.
+  final String? cardBrand;
+  final String? cardLast4;
+
+  // ── Review / pay (D6–D8) ──
+  final MemberMembershipsStartPreview? preview;
+  final bool previewLoading;
+
+  /// The idempotency key for the current start attempt. A deliberate retry
+  /// after a decline mints a NEW key; a double-tap reuses this one.
+  final String? idempotencyKey;
+
+  /// How many times the card has been declined. Three strikes is terminal.
+  final int declineCount;
+
+  /// The failed items from a 207 — a decline arrives as a RESULT in the body,
+  /// not as an HTTP error, so this is what "declined" actually means.
+  final List<MemberMembershipsStartResultItem> failedItems;
+
+  /// Seconds left on the welcome screen's auto-return. 0 off the welcome.
+  final int welcomeCountdown;
+
+  // ── Terminal stop ──
+  final KioskSignupStopReason? stopReason;
+
+  /// Seconds left on the stop screen's auto-return. 0 off the stop screen.
+  final int stopCountdown;
+
+  // ── Flow-idle guard (the signup lane's own 5-min / 30-s clock) ──
+  final bool idleWarningActive;
+  final int idleCountdown;
+
+  // ── Abandon ──
+  /// The "Start over?" confirmation is up. Shown only from the steps where
+  /// real work would die (card / review); every earlier step abandons on the
+  /// first tap. The 5-minute clock keeps running behind it.
+  final bool abandonConfirmActive;
+
+  /// The flow is over and the surface must return home. `KioskSignupScreen`
+  /// watches this and calls `KioskFlowCubit.goHome()` — the ONE abandon path.
+  /// The cubit cannot navigate itself, so it raises this instead.
+  final bool abandoned;
+
+  const KioskSignupState({
+    this.step = KioskSignupStep.details,
+    this.persons = const [KioskSignupPerson(isPayer: true)],
+    this.activePersonIndex = 0,
+    this.committedSteps = const {},
+    this.submitting = false,
+    this.pendingPayee,
+    this.personDetailsFailed = false,
+    this.matchCandidate,
+    this.matchSearchOpen = false,
+    this.matchQuery = '',
+    this.matchSearching = false,
+    this.matchSearchFailed = false,
+    this.matches = const [],
+    this.plans = const [],
+    this.plansLoading = false,
+    this.plansFailed = false,
+    this.waiverQueue = const [],
+    this.waiverIndex = 0,
+    this.waiver,
+    this.waiverLoading = false,
+    this.waiverFailed = false,
+    this.waiverStale = false,
+    this.signedWaivers = const [],
+    this.waiverPersonQueue = const [],
+    this.waiverPersonIndex = 0,
+    this.payerAuthPending = false,
+    this.payerAuthWaiver,
+    this.payerAuthLoading = false,
+    this.payerAuthFailed = false,
+    this.payerAuthStale = false,
+    this.waiverGate = const [],
+    this.paymentMethodId,
+    this.cardBrand,
+    this.cardLast4,
+    this.preview,
+    this.previewLoading = false,
+    this.idempotencyKey,
+    this.declineCount = 0,
+    this.failedItems = const [],
+    this.welcomeCountdown = 0,
+    this.stopReason,
+    this.stopCountdown = 0,
+    this.idleWarningActive = false,
+    this.idleCountdown = 0,
+    this.abandonConfirmActive = false,
+    this.abandoned = false,
+  });
+
+  /// The person the per-person steps are acting on. Index 0 (the payer) is
+  /// the fallback, so this can never throw on a corrupt index.
+  KioskSignupPerson get activePerson =>
+      (activePersonIndex >= 0 && activePersonIndex < persons.length)
+          ? persons[activePersonIndex]
+          : persons.first;
+
+  /// The payer — always the first roster entry.
+  KioskSignupPerson get payer => persons.first;
+
+  /// Whether the roster carries anyone besides the payer, which is what
+  /// re-labels the step rail from the 6-step solo template to the 7-step
+  /// group one (ruling 8).
+  bool get isGroup => persons.length > 1;
+
+  /// The ids of every waiver signed in this signup, across everyone.
+  List<String> get signedWaiverIds => [
+        for (final signed in signedWaivers) signed.waiverId,
+      ];
+
+  /// The ids [memberId] has signed — the skip list that keeps a waiver from
+  /// being presented to the SAME person twice, while still presenting the same
+  /// document to the next child on the roster.
+  List<String> signedWaiverIdsFor(String? memberId) => [
+        for (final signed in signedWaivers)
+          if (memberId != null && signed.memberId == memberId) signed.waiverId,
+      ];
+
+  /// Every roster index that needs a plan, in roster order. The payer is in it
+  /// only while "Training too" is on — a parent paying for their kids is
+  /// `payer_member_id` and nothing else.
+  List<int> get trainingPersonIndexes => [
+        for (var i = 0; i < persons.length; i++)
+          if (persons[i].training) i,
+      ];
+
+  /// Whether the roster can leave for the plan step at all.
+  ///
+  /// **The empty-cart guard.** A payer who turned "Training too" off with
+  /// nobody else on the roster would send `memberships: []` and take a 400, so
+  /// that state must never be able to advance.
+  bool get canLeavePeople => persons.any((p) => p.training);
+
+  /// Whether every payee has been authorized. The start call NEVER links, so
+  /// this has to be true before a request is even assembled.
+  bool get everyPayeeLinked {
+    for (var i = 1; i < persons.length; i++) {
+      if (!persons[i].linked) return false;
+    }
+    return true;
+  }
+
+  /// Whether [index] may still be taken off the roster.
+  ///
+  /// The ✕ disappears the moment that person's link (or a signature of theirs)
+  /// has committed: **there is no unlink call**, so removal is only offered
+  /// while it is still free. A person created but not yet linked simply drops
+  /// out of the cart — their member shell is harmless and surfaces in the
+  /// staff "Incomplete" list. The payer is never removable.
+  bool canRemovePerson(int index) {
+    if (index <= 0 || index >= persons.length) return false;
+    final person = persons[index];
+    if (person.linked) return false;
+    final id = person.memberId;
+    if (id != null && signedWaivers.any((w) => w.memberId == id)) return false;
+    return true;
+  }
+
+  /// The waiver on screen, or null when the queue is exhausted.
+  String? get currentWaiverId =>
+      (waiverIndex >= 0 && waiverIndex < waiverQueue.length)
+          ? waiverQueue[waiverIndex]
+          : null;
+
+  /// The warmed plan carrying [planId], or null when it isn't offered.
+  MembershipPlanResponse? planById(String? planId) {
+    if (planId == null) return null;
+    for (final plan in plans) {
+      if (plan.planId == planId) return plan;
+    }
+    return null;
+  }
+
+  /// The plan the active person picked.
+  MembershipPlanResponse? get selectedPlan =>
+      planById(activePerson.selectedPlanId);
+
+  /// Whether anything in the cart bills again after today.
+  ///
+  /// It decides `set_default` on the start call — a subscription can only bill
+  /// the payer's saved default, so a recurring cart MUST keep the card — and
+  /// it decides which card-kept sentence the card step tells the member.
+  bool get cartHasRecurring {
+    for (final person in persons) {
+      if (!person.training) continue;
+      if (planById(person.selectedPlanId)?.planType == PlanType.recurring) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// **The ONLY arithmetic the kiosk does on money**: the one-time invoice
+  /// plus the recurring amount due now, both straight off the preview.
+  ///
+  /// This mirrors the CRM's own `_totalDueToday`
+  /// (`start_preview_step.dart:281-284`) and is safe here **only because the
+  /// kiosk pins `prorate_to_anchor`**: the CRM reads `_effectiveDueNow`, which
+  /// nulls the due-now half for a `no_charge` proration, and the kiosk never
+  /// offers that choice. A price is never derived from a plan row.
+  int get dueTodayMinorUnits =>
+      (preview?.oneTime?.total ?? 0) + (preview?.dueNow?.total ?? 0);
+
+  /// True when the payer's statement will show TWO charges today — a non-zero
+  /// one-time invoice AND a non-zero recurring amount due now.
+  ///
+  /// It tests the AMOUNTS, exactly like the CRM's `_chargedTwiceToday`
+  /// (`start_preview_step.dart:276-278`), never nullness and never
+  /// `preview.recurring`: a $0 one-time line is a present invoice with nothing
+  /// on it, and calling that "two charges" would be a lie about the member's
+  /// own bank statement.
+  bool get chargedTwiceToday =>
+      (preview?.oneTime?.total ?? 0) > 0 && (preview?.dueNow?.total ?? 0) > 0;
+
+  /// The currency every figure on the review is rendered in — whichever half
+  /// of the preview exists, in the CRM's own order of preference.
+  String get currency =>
+      preview?.oneTime?.currency ??
+      preview?.dueNow?.currency ??
+      preview?.recurring?.currency ??
+      'usd';
+
+  static const Object _keep = Object();
+
+  KioskSignupState copyWith({
+    KioskSignupStep? step,
+    List<KioskSignupPerson>? persons,
+    int? activePersonIndex,
+    Set<KioskSignupStep>? committedSteps,
+    bool? submitting,
+    Object? pendingPayee = _keep,
+    bool? personDetailsFailed,
+    Object? matchCandidate = _keep,
+    bool? matchSearchOpen,
+    String? matchQuery,
+    bool? matchSearching,
+    bool? matchSearchFailed,
+    List<MemberRow>? matches,
+    List<MembershipPlanResponse>? plans,
+    bool? plansLoading,
+    bool? plansFailed,
+    List<String>? waiverQueue,
+    int? waiverIndex,
+    Object? waiver = _keep,
+    bool? waiverLoading,
+    bool? waiverFailed,
+    bool? waiverStale,
+    List<KioskSignedWaiver>? signedWaivers,
+    List<int>? waiverPersonQueue,
+    int? waiverPersonIndex,
+    bool? payerAuthPending,
+    Object? payerAuthWaiver = _keep,
+    bool? payerAuthLoading,
+    bool? payerAuthFailed,
+    bool? payerAuthStale,
+    List<WaiverGateItem>? waiverGate,
+    Object? paymentMethodId = _keep,
+    Object? cardBrand = _keep,
+    Object? cardLast4 = _keep,
+    Object? preview = _keep,
+    bool? previewLoading,
+    Object? idempotencyKey = _keep,
+    int? declineCount,
+    List<MemberMembershipsStartResultItem>? failedItems,
+    int? welcomeCountdown,
+    Object? stopReason = _keep,
+    int? stopCountdown,
+    bool? idleWarningActive,
+    int? idleCountdown,
+    bool? abandonConfirmActive,
+    bool? abandoned,
+  }) {
+    return KioskSignupState(
+      step: step ?? this.step,
+      persons: persons ?? this.persons,
+      activePersonIndex: activePersonIndex ?? this.activePersonIndex,
+      committedSteps: committedSteps ?? this.committedSteps,
+      submitting: submitting ?? this.submitting,
+      pendingPayee: identical(pendingPayee, _keep)
+          ? this.pendingPayee
+          : pendingPayee as KioskSignupPerson?,
+      personDetailsFailed: personDetailsFailed ?? this.personDetailsFailed,
+      matchCandidate: identical(matchCandidate, _keep)
+          ? this.matchCandidate
+          : matchCandidate as KioskSignupMatch?,
+      matchSearchOpen: matchSearchOpen ?? this.matchSearchOpen,
+      matchQuery: matchQuery ?? this.matchQuery,
+      matchSearching: matchSearching ?? this.matchSearching,
+      matchSearchFailed: matchSearchFailed ?? this.matchSearchFailed,
+      matches: matches ?? this.matches,
+      plans: plans ?? this.plans,
+      plansLoading: plansLoading ?? this.plansLoading,
+      plansFailed: plansFailed ?? this.plansFailed,
+      waiverQueue: waiverQueue ?? this.waiverQueue,
+      waiverIndex: waiverIndex ?? this.waiverIndex,
+      waiver: identical(waiver, _keep)
+          ? this.waiver
+          : waiver as WaiverResponse?,
+      waiverLoading: waiverLoading ?? this.waiverLoading,
+      waiverFailed: waiverFailed ?? this.waiverFailed,
+      waiverStale: waiverStale ?? this.waiverStale,
+      signedWaivers: signedWaivers ?? this.signedWaivers,
+      waiverPersonQueue: waiverPersonQueue ?? this.waiverPersonQueue,
+      waiverPersonIndex: waiverPersonIndex ?? this.waiverPersonIndex,
+      payerAuthPending: payerAuthPending ?? this.payerAuthPending,
+      payerAuthWaiver: identical(payerAuthWaiver, _keep)
+          ? this.payerAuthWaiver
+          : payerAuthWaiver as AuthorizedPayerWaiver?,
+      payerAuthLoading: payerAuthLoading ?? this.payerAuthLoading,
+      payerAuthFailed: payerAuthFailed ?? this.payerAuthFailed,
+      payerAuthStale: payerAuthStale ?? this.payerAuthStale,
+      waiverGate: waiverGate ?? this.waiverGate,
+      paymentMethodId: identical(paymentMethodId, _keep)
+          ? this.paymentMethodId
+          : paymentMethodId as String?,
+      cardBrand:
+          identical(cardBrand, _keep) ? this.cardBrand : cardBrand as String?,
+      cardLast4:
+          identical(cardLast4, _keep) ? this.cardLast4 : cardLast4 as String?,
+      preview: identical(preview, _keep)
+          ? this.preview
+          : preview as MemberMembershipsStartPreview?,
+      previewLoading: previewLoading ?? this.previewLoading,
+      idempotencyKey: identical(idempotencyKey, _keep)
+          ? this.idempotencyKey
+          : idempotencyKey as String?,
+      declineCount: declineCount ?? this.declineCount,
+      failedItems: failedItems ?? this.failedItems,
+      welcomeCountdown: welcomeCountdown ?? this.welcomeCountdown,
+      stopReason: identical(stopReason, _keep)
+          ? this.stopReason
+          : stopReason as KioskSignupStopReason?,
+      stopCountdown: stopCountdown ?? this.stopCountdown,
+      idleWarningActive: idleWarningActive ?? this.idleWarningActive,
+      idleCountdown: idleCountdown ?? this.idleCountdown,
+      abandonConfirmActive: abandonConfirmActive ?? this.abandonConfirmActive,
+      abandoned: abandoned ?? this.abandoned,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        step,
+        persons,
+        activePersonIndex,
+        committedSteps,
+        submitting,
+        pendingPayee,
+        personDetailsFailed,
+        matchCandidate,
+        matchSearchOpen,
+        matchQuery,
+        matchSearching,
+        matchSearchFailed,
+        matches,
+        plans,
+        plansLoading,
+        plansFailed,
+        waiverQueue,
+        waiverIndex,
+        waiver,
+        waiverLoading,
+        waiverFailed,
+        waiverStale,
+        signedWaivers,
+        waiverPersonQueue,
+        waiverPersonIndex,
+        payerAuthPending,
+        payerAuthWaiver,
+        payerAuthLoading,
+        payerAuthFailed,
+        payerAuthStale,
+        waiverGate,
+        paymentMethodId,
+        cardBrand,
+        cardLast4,
+        preview,
+        previewLoading,
+        idempotencyKey,
+        declineCount,
+        failedItems,
+        welcomeCountdown,
+        stopReason,
+        stopCountdown,
+        idleWarningActive,
+        idleCountdown,
+        abandonConfirmActive,
+        abandoned,
+      ];
+}

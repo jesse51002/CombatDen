@@ -112,6 +112,7 @@ Table members {
   photo_url varchar
   phone varchar
   address varchar
+  date_of_birth date [note: 'nullable; captured by the kiosk signup optional-details step, editable by staff']
   emergency_contact_name varchar
   emergency_contact_phone varchar
   emergency_contact_email varchar
@@ -481,7 +482,7 @@ Table member_memberships_unfiltered {
   total_price integer [not null, note: 'CHECK >= 0']
   quantity integer [not null, default: 1, note: 'CHECK > 0; how many units this row bills as. one_time/trial packs stack as ONE row with quantity = N (one Stripe line with that quantity, $-coupon applies once, class_count*quantity classes); recurring forced = 1 (trigger); set at INSERT, immutable after']
   stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']
-  idempotency_key uuid [note: 'nullable; set once at INSERT (service_role); partial unique WHERE NOT NULL; one-time/trial start dedup key (C-086) — retried start reproduces same key, collides, INSERT DO NOTHING drops duplicate rows; NULL for recurring + preview rows']
+  idempotency_key uuid [note: 'nullable; set once at INSERT (service_role); partial unique WHERE NOT NULL; start dedup key on EVERY plan type (one-time, trial AND recurring) — retried start reproduces same key, collides, INSERT DO NOTHING drops duplicate rows; NULL only for preview rows. Recurring included because trg_recurring_no_active_memberships is not race-safe']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {

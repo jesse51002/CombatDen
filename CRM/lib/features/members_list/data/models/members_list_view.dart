@@ -1,12 +1,18 @@
 import 'package:json_annotation/json_annotation.dart';
 
 /// Available views for the members list screen.
+///
+/// [incomplete] is the staff follow-up queue for signups that never
+/// finished: a member row holding no membership of their own who is also
+/// not the payer on anyone else's. The rule lives in the backend
+/// (`src/members/sql/crm_views/_member_incomplete.sql`).
 @JsonEnum(valueField: 'value')
 enum MembersListView {
   all('all', 'All'),
   trial('trial', 'Trial'),
   frozen('frozen', 'Frozen'),
-  overdue('overdue', 'Overdue');
+  overdue('overdue', 'Overdue'),
+  incomplete('incomplete', 'Incomplete');
 
   const MembersListView(this.value, this.displayLabel);
 

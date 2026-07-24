@@ -17,14 +17,18 @@ description: >-
   `code`), the TWO separate class lists (check-in window vs the forward-looking
   showcase), the four gym-wide catalogues warmed once at entry, the four
   independent timers, the kiosk type ramp / AA contrast / fixed QR polarity
-  design laws, and the real-vs-illustrative data rule. Load this whenever you
-  touch anything kiosk-shaped: `CRM/lib/features/kiosk/`, `auth_gate.dart`'s
-  kiosk branch, the `is_member: true` check-in call, the "Get the app" modal,
-  the kiosk QR, or the unbuilt Phase D/E signup and Phase G rotating check-in
-  QR. Trigger on "kiosk", "front-desk iPad", "self check-in", "the glance",
-  "get the app modal", "fresh-card law", "12-hour runway", "beginFlow /
-  endFlow", "kiosk escape / start over / cancel", "autofill on the kiosk",
-  "skip_reason", "kiosk type ramp", or "rotating QR".
+  design laws, the real-vs-illustrative data rule, and the built SOLO +
+  GROUP self-serve **signup** lane (its own cubit, the double-charge
+  defences, the payer/payee duplicate asymmetry, and the CRM's Incomplete
+  tab as the staff-side resolution for an abandoned draft). Load this
+  whenever you touch anything kiosk-shaped: `CRM/lib/features/kiosk/`,
+  `auth_gate.dart`'s kiosk branch, the `is_member: true` check-in call, the
+  "Get the app" modal, the kiosk QR, the signup lane, or the unbuilt Phase G
+  rotating check-in QR. Trigger on "kiosk", "front-desk iPad", "self
+  check-in", "the glance", "get the app modal", "fresh-card law", "12-hour
+  runway", "beginFlow / endFlow", "kiosk escape / start over / cancel",
+  "autofill on the kiosk", "skip_reason", "kiosk type ramp", "rotating QR",
+  "kiosk signup", "duplicate payer", or "Incomplete tab".
 ---
 
 # Kiosk Mode — a member surface inside the admin app
@@ -38,10 +42,13 @@ same change** (it is a living document — see the bottom).
 app. A staff member with `canOperateKiosk` taps *Kiosk Mode* in the nav rail,
 confirms, and the authenticated app swaps the whole admin workspace for
 `KioskScreen` — a full-viewport member surface with no nav rail, no admin route
-table, and no way back except signing out. A member walks up, finds their name
-(or, in Phase G, scans a QR), picks their class, gets checked in, and sees a
-retention **glance** — their streak, their points, this gym's reward tiles —
-before the screen resets for the next person.
+table, and no way back except signing out. An existing member walks up, finds
+their name (or, in Phase G, scans a QR), picks their class, gets checked in,
+and sees a retention **glance** — their streak, their points, this gym's
+reward tiles — before the screen resets for the next person. A brand-new
+member instead taps *"New here? Sign up"* and walks a self-serve **signup**
+spine — details, plan, waiver, card, review, pay, welcome (§10, §11), solo or
+as a group/family — before landing on the same app-adoption push.
 
 **Why it exists.** Two reasons, both product, both load-bearing:
 
@@ -222,6 +229,20 @@ happens in `selectMember`; end happens on **every** terminal:
 - `close()` — a mid-flow teardown (`endFlow` is a pure in-memory decrement, safe
   post-close).
 
+**`KioskSignupCubit` brackets the SIGNUP lane the same way, with its own
+latch.** `beginFlow()` fires exactly once, in its constructor (reaching that
+constructor *is* the flow starting — `KioskFlowCubit.startSignup()` has already
+checked `canStartFlow`, and it deliberately does **not** call `beginFlow`
+itself, which would double-count). `_endFlowIfStarted()` fires on entering
+`welcome` or `stop`, on `abandon()`, and in `close()`; `declined` does **not**
+release (the member is still there and can retry) and `paying` **never** does.
+The latch makes the pair exactly-once however many of those run.
+
+The signup cubit cannot navigate — `goHome()` is `KioskFlowCubit`'s — so every
+signup exit raises `KioskSignupState.abandoned` and `KioskSignupScreen`'s
+`BlocListener` routes it to `goHome()`. That indirection is what keeps the ONE
+abandon path one.
+
 **If a new exit path skips `endFlow`, the count leaks permanently and the kiosk
 never signs itself out at lockout.** The iPad then sits on a member surface past
 the runway it was supposed to be bounded by. There is no self-healing: a reload
@@ -370,6 +391,21 @@ a member created in that same signup.** Consequences:
   member" — that would attach a kiosk charge to a member the kiosk did not
   create.
 
+**This same gate is what a returning abandoner hits.** A member who started a
+signup, typed their own details far enough to create their payer row, then
+walked away before paying has already become a member with no membership. If
+they come back to the same iPad and try again, the duplicate check stops
+them on their OWN half-finished account — `kiosk_signup_stop_copy.dart`'s
+blame-free "You already have an account here." — and the fresh-card law
+forbids the obvious fix ("use the existing member") for a payer. The CRM's
+**Incomplete** tab on the members list is the front-desk resolution: it lists
+exactly these no-membership shells (a member who holds no membership and pays
+for nobody else's — `src/members/sql/crm_views/_member_incomplete.sql`), and
+each row's **Finish signup** button opens that member's page straight into
+the CRM's own start-membership wizard, so staff pick up where the kiosk left
+off in about a minute instead of hunting for the stranded row or telling the
+member to make a second account.
+
 For a **recurring** plan the entered card IS kept (a subscription can only bill
 the saved default, so `set_default` must be true); for **one_time / trial** it is
 attach → pay → detach. The card copy branches on the plan for exactly that
@@ -379,6 +415,28 @@ This is a **frontend guard** (accepted, given the supervised iPad + Guided
 Access). Which means: it holds only as long as no kiosk screen imports a
 payer/card-selection widget. Treat any such import as a defect.
 
+**Where it now lives in code.** `presentation/widgets/signup/kiosk_card_step.dart`
+is the ONE card surface on the kiosk: it wraps the shared
+`member_details/presentation/dialogs/card_field_box.dart` (a single-line
+combined Stripe element — the mockup's four separate boxes are superseded),
+tokenizes there with `Stripe.instance.createPaymentMethod`, and hands the cubit
+only `pm.id` / `pm.card.brand` / `pm.card.last4`. It copies the tokenize CALL
+from `one_time_card_dialog.dart` but **may never import it** — that module is on
+the banned list below. The payer is always the member created in the same
+signup (`KioskSignupState.payer`), and `set_default` is decided by
+`cartHasRecurring`, never by a picker.
+
+**It is enforced in CI, not by convention.**
+`CRM/test/features/kiosk/kiosk_forbidden_imports_test.dart` walks every file
+under `CRM/lib/features/kiosk/` and fails on an import of `saved_card_section`
+· `one_time_card_dialog` · `update_card_dialog` · `discount_picker_dialog` ·
+`draft_discounts_card` · `added_discount_chip` · any `custom_discount_*` ·
+`live_discounted_price` · `start_payer_step` · `choose_payer_view` ·
+`payer_radio_tile`, and separately fails on the word "discount" appearing
+anywhere in the kiosk feature at all. It also asserts each guarded file still
+EXISTS, so a rename can't silently turn the ban into theatre — if one of those
+modules is legitimately renamed, rename it in both lists in the same change.
+
 ### NO discounts reach the kiosk — enforced structurally
 
 Neither staff-applied discounts nor member-entered promo codes exist on the
@@ -387,11 +445,12 @@ not by a flag.** A `showDiscounts: false` parameter is one wrong default, one
 flipped boolean, or one new call site away from a member discounting their own
 membership.
 
-The invariant to preserve when Phase D lands: **`grep -ri discount
-CRM/lib/features/kiosk/` returns nothing.** The shared add-member modules the
-kiosk will reuse (`features/member_details/presentation/dialogs/add_member/`)
-must therefore be extracted with the discount surface as a *separate widget the
-kiosk does not import* — not as a parameter the kiosk passes `false` to.
+The invariant: **`grep -ri discount CRM/lib/features/kiosk/` returns
+nothing**, and the forbidden-imports test above is what keeps it that way.
+Phase D does not reuse the CRM's `start_memberships/` wizard at all — it is
+kiosk-native presentation over the existing data layer, precisely so the kiosk
+is never dragged through a future discount change; `add_member/` and
+`start_memberships/` are READ-ONLY pattern references.
 
 ---
 
@@ -568,14 +627,28 @@ name them precisely:
 | --- | --- | --- | --- |
 | **Runway** (`KioskSessionCubit`) | 12h absolute, lockout at 11h45 | the whole session | sign out |
 | **Flow-idle** (`kKioskIdleTimeout`) | 5 min, then a 30s visible countdown (`kKioskIdleCountdown`) | any *engaged* flow page | `goHome()` — abandons the draft |
+| **Signup stop** (`kKioskSignupStopHold`) | 15s | a terminal signup stop only | abandon → `goHome()` |
 | **Glance hold** (`kKioskGlanceHold`) | 10s, started at the LAST reveal beat | the glance only | `goHome()` |
 | **App modal** (`kKioskAppModalTimeout`) | 60s | the modal overlay only | `goHome()` |
 
 `_syncIdleTimer()` is the arbiter: the idle guard runs only while `_engaged`
 (past home, or typing into home's search) and is **suppressed entirely** on the
-glance (`view == checkedIn`) and while the app modal is open. Any pointer-down on
-the kiosk surface calls `registerActivity()` ("I'm still here") — except while
-the modal is open, where it is a no-op.
+glance (`view == checkedIn`), while the app modal is open, and on the signup
+view. Any pointer-down on the kiosk surface calls `registerActivity()` ("I'm
+still here") — except while the modal is open, where it is a no-op.
+
+**The signup lane runs its OWN flow-idle guard**, in `KioskSignupCubit`, off
+the SAME `kKioskIdleTimeout` / `kKioskIdleCountdown` constants. It is a
+separate timer, not a shared one, because only that cubit knows which of its
+steps may be interrupted (it suspends across the payment step and skips the
+stop / welcome terminals, which own their own clocks). Two guards over one
+surface would race — `KioskFlowCubit`'s would abandon to home mid-signup
+*without* releasing the signup's flow count — hence the early return in
+`_syncIdleTimer()`. `KioskSignupScreen` therefore hosts its own pointer
+`Listener` (the body-level one in `kiosk_screen.dart` reads a cubit provided
+ABOVE the signup subtree and cannot reach into it), and `KioskIdleWarning`
+takes an optional `onStillHere` so the button answers the clock that is
+actually ticking. Omitted, it still defaults to `KioskFlowCubit`.
 
 **The glance hold starts at the last beat, not on entry.** `kKioskGlanceLastBeat`
 (2220ms) must equal `KioskRevealTimings.panels`; a test asserts exactly that.
@@ -648,12 +721,22 @@ the outline button's label + padding tokens rather than declaring a third size �
 for a filled button that must sit beside a secondary one without out-shouting it
 (the home adopt strip's *Get it* is its one user).
 
-The one deliberate exception is a dialog built on the shared `AppDialog` (the
-Phase D signup stub): the whole shell stays on the dialog's own
-internally-proportional scale rather than putting *only* its body on the kiosk
-ramp. A kiosk-scale dialog shell would mean a `kiosk` opt-in through `AppDialog`
-/ `AppDialogTitle` / `AppDialogActions` — a separate call, not something to
-half-do.
+The signup lane's own controls follow the same discipline. Its footer's Skip
+rides `KioskOutlineButton` exactly like Back rather than styling an
+`AppOutlineButton` at the call site (the mockup's quieter "soft outline" rung
+does not exist as a token, and half-adding it is how a ramp desyncs); its
+input is `KioskFieldBox`, which reuses `KioskNameSearch`'s box geometry and
+`kioskFieldText` verbatim and only adds the focus/error border pair.
+
+**A kiosk surface built on the shared `AppDialog` keeps the DIALOG's own
+scale**, body included — `AppDialog` owns an internally-proportional ladder
+(title `h1` 24 > body `pBig` 16 > `AppDialogActions`' 13px buttons), and
+putting *only* its body on the kiosk ramp desyncs it from the title and
+buttons around it the next time the kiosk ramp moves. A genuinely kiosk-scale
+dialog shell means a `kiosk` opt-in through `AppDialog` / `AppDialogTitle` /
+`AppDialogActions` — a separate call, not something to half-do. (The kiosk
+mounts no `AppDialog` today; the signup's modals are the `KioskIdleWarning`
+composition instead — see the abandon confirm in §2.)
 
 ### 8.2 Kiosk text meets the AA contrast floor
 
@@ -923,19 +1006,47 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   proportional scale-down. **Never add a `SingleChildScrollView` here**: a
   scrollbar on a kiosk is content nobody will ever see.
 
+- **Phase D — the SOLO signup, end to end.** The kiosk's "New here? Sign up"
+  calls `KioskFlowCubit.startSignup()` (the same `canStartFlow` gate
+  `selectMember` uses; it does **not** `beginFlow`), which routes
+  `KioskView.signup` to `KioskSignupScreen`. That screen provides its own
+  **`KioskSignupCubit`** — a sibling of `KioskFlowCubit`, never more fields on
+  it — so the cubit's lifetime IS the flow's lifetime and PII disposal is
+  structural. Built: the `KioskSignupStep` spine + flat `KioskSignupState`,
+  the details and extra-details steps, the ONE `createMember` call carrying
+  both, **the plan pick, the waiver run, the card, the review, the pay lock,
+  the decline and the welcome**, every front-desk stop, the lane's own 5-min
+  idle guard, the abandon path, and the shared chrome under
+  `presentation/widgets/signup/` (flow rail, three-column foot, field box,
+  consent check, DOB wheel, stop screen, abandon confirm). See §11 for the
+  money-path rules that lane encodes.
+
+- **Phase E — the GROUP (family) signup.** The roster loop is built on the same
+  cubit: `people` (always visited — ruling 8), `personDetails`, `match`, the
+  per-payee payer-auth link, per-person plans and waivers, and the group
+  review. `KioskSignupPerson` grew `linked`; `KioskSignedWaiver` grew
+  `memberId`. Screens under `presentation/widgets/signup/`: `kiosk_people_step`
+  + `kiosk_roster_row` + `kiosk_det_chip` + `kiosk_training_toggle` +
+  `kiosk_person_adder`, `kiosk_match_step` + `kiosk_match_card` +
+  `kiosk_match_search`, `kiosk_payer_waiver_step`, and
+  `kiosk_review_group_panel` + `kiosk_person_block` + `kiosk_money_labels`.
+  `kiosk_signup_optional_step` serves BOTH the payer's D1a and every payee's
+  E1a (one widget, parameterized by the active person; the fields live in
+  `kiosk_optional_fields`). See §11.5 for the group's own money rules.
+
+- **`date_of_birth`, end to end.** The optional-details step's DOB wheel
+  writes through to a real column: `members.date_of_birth` (nullable `DATE`,
+  hand-authored migration `20260724013459_members_date_of_birth.sql`) is
+  carried by the create/update request + response schemas, `insert_member.sql`
+  / `update_member.sql`, and the billing-detail read
+  (`members_billing_detail_service.py`) alongside the other optional contact
+  fields (phone, address, emergency contact) it sits beside.
+
+- **The CRM's Incomplete tab, the staff-side counterpart of an abandoned
+  signup** — see §3 for the duplicate-gate mechanics it resolves.
+
 **Not built:**
 
-- **Phase D (solo signup) + Phase E (group / family add).** The kiosk's "New
-  here? Sign up" button currently opens `showKioskSignupStub` — a calm
-  front-desk handoff dialog, explicitly a placeholder. The approved design spec
-  is **`KIOSK_SIGNUP_MOCKUPS.html` at the repo root** (12 screens: details →
-  extra details → duplicate stop → plan → waiver → card → review → paying →
-  declined, plus the group add / existing-match / payer-waiver / group-review
-  set, plus the idle-warning, abandon-confirm and welcome states). Its HTML
-  comments carry the backend contract per screen and are the build spec. The
-  post-signup **welcome screen** is D's tail. D is the kiosk's first
-  money-moving surface — the repo's billing rule (small, individually approved
-  pieces) applies.
 - **Phase G — the rotating check-in QR.** The kiosk home's QR is a static,
   deliberately inert glyph (`widgets/kiosk_qr_panel.dart`, `_QrPlaceholder`),
   already sitting in `KioskQrFrame` so the live code drops into a tile with the
@@ -960,6 +1071,149 @@ the moment they tap to check in), while greetings use `kioskFirstName`
 
 ---
 
+## 11. The signup's money path — the rules that keep it from charging twice
+
+The solo signup is the kiosk's only money-moving surface. Everything below is
+structural: it holds by construction, not by remembering.
+
+### 11.1 Two independent double-charge defences, not one
+
+`KioskSignupCubit.pay()` carries both, and **neither may be removed on the
+grounds that the other covers it**:
+
+1. **The synchronous step guard.** `pay()` returns immediately if the step is
+   already `paying`, and it emits `paying` **before its first `await`** — so a
+   second tap in the same frame sees the new step. A double-tap is exactly one
+   charge. (The Paying screen also has no buttons at all; that is a third
+   layer, not a substitute.)
+2. **The "sent" latch** (`_sentAttempts`). Once a start POST has gone out for an
+   idempotency key, that key is **never posted again**, whatever happened to the
+   response. An ambiguous outcome (a dropped connection, a timeout) therefore
+   routes to `KioskSignupStopReason.paymentUnconfirmed` — a front-desk handoff
+   that says plainly it will not retry — and **never auto-retries**.
+
+The backend's `ON CONFLICT (idempotency_key)` replay guard is the second line,
+not the first. The client latch has to stand on its own.
+
+### 11.2 Response routing — a decline is a RESULT, not an error
+
+| outcome | goes to |
+| --- | --- |
+| 201 (no failed items) | `welcome` |
+| **409** `MembershipStartReplayError` | `welcome` — an idempotent replay; the ORIGINAL start stands, and charging again is the one thing it must never become |
+| 207 (`results` carries failed items) | `declined`, carrying `failedItems` |
+| 422 `WaiverGateException` | back to `waivers`, seeded with exactly the ids the server named |
+| 500 / transport | `stop` — "nothing was charged" |
+
+A 207 is a **2xx**, so the split is read off `result.hasFailures`, never off a
+status code. Treating a 409 as a failure would double-charge on the retry;
+treating a 207 as a success would tell a member they joined when they did not.
+
+**The 422 route drops the named waivers from the signup's own signed set.** The
+server is authoritative — skipping a waiver it is blocking on loops the member
+forever.
+
+### 11.3 Flow-count discipline on the money screens
+
+`paying` **never** releases (a live charge is exactly what the T+11h45 grace
+window exists for) · `declined` **does not** release on entry (the member is
+still standing there and can retry) · `welcome` and every terminal `stop`
+release exactly once · a **retryable** stop (`plansUnavailable`,
+`previewFailed`) deliberately does **not** release, because "Try again" returns
+to a live flow; its auto-return `abandon()` releases it if the member walks off.
+
+### 11.4 The rules the copy and the request encode
+
+- **`set_default` branches on the cart.** A recurring cart MUST keep the card (a
+  subscription can only bill the saved default, and the backend rejects a
+  recurring start without one); a purely one-time cart is attach → pay → detach.
+  The card step's "what happens to my card" line branches on the same predicate,
+  because writing "only used for this signup" on a recurring plan is a lie.
+  **Do not copy `start_memberships_wizard.dart`'s retry card logic** — the CRM
+  deliberately sends NO card for a recurring cart because it reuses the payer's
+  saved default, and the kiosk has none.
+- **ONE request builder.** `_buildStartRequest` is the only place a start
+  request is assembled, for the preview and the charge alike, so there is a
+  single place to audit that nothing price-reducing is ever sent (each item
+  carries the model's empty defaults) and that `paidWithCash` is pinned false.
+- **The ONE piece of client arithmetic** is due-today =
+  `(oneTime?.total ?? 0) + (dueNow?.total ?? 0)`
+  (`KioskSignupState.dueTodayMinorUnits`), mirroring the CRM's
+  `start_preview_step.dart:281-284`. It is safe **only because the kiosk pins
+  `prorate_to_anchor`** — the CRM reads `_effectiveDueNow`, which nulls the
+  due-now half for `no_charge`, a proration the kiosk never offers. Never derive
+  a price from a plan row.
+- **The "two separate charges today" note tests AMOUNTS**, not nullness, and
+  never falls back to `recurring`:
+  `(oneTime?.total ?? 0) > 0 && (dueNow?.total ?? 0) > 0`
+  (`start_preview_step.dart:276-278`). A $0 one-time line is a present invoice
+  with nothing on it; calling that two charges lies about the member's own bank
+  statement.
+- **Three strikes.** The third decline removes "Try another card" and the screen
+  becomes the terminal stop. The two buttons on `declined` are "Try another
+  card" and "Get help at the desk" — and there is deliberately no "Start over"
+  (§2).
+- **The start call, and only the start call, runs on a ~90s `receiveTimeout`**
+  (`kKioskSignupStartTimeout`, passed through `MemberRepository.startMemberships`
+  to `ApiClient.post`). A Connect charge legitimately takes 10–60s and the
+  shared 30s default would false-fail a charge that actually went through.
+- **A waiver read/sign failure is an INLINE retry, never a stop.** By that point
+  a member row and a Stripe customer exist; ending the signup over one flaky
+  call orphans them for nothing. A **preview** failure is different — it is a
+  retryable stop, because a review with no figures on it is a blank screen.
+- **Signed stays signed.** Signatures append to `KioskSignupState.signedWaivers`
+  and are keyed on the MEMBER (`signedWaiverIdsFor(memberId)`); walking Back
+  skips what that person already signed and nothing un-signs it. Back out of
+  the card lands on the PLAN, not the waiver behind it, for exactly that reason.
+
+### 11.5 The GROUP's own money rules
+
+- **Link before start, structurally.** The start call never links, so
+  `_buildStartRequest` returns null unless `KioskSignupState.everyPayeeLinked`.
+  That one guard covers the preview and the charge alike: a roster with an
+  unauthorized payee cannot assemble a request at all, let alone send one.
+- **`PUT /members/{payee}/link` signs and links in ONE call** and commits
+  immediately — there is no group transaction and no rollback. A 409 means the
+  gym republished the payer-auth agreement, so the body reloads and the payer
+  re-signs; nothing is recorded against text nobody saw.
+- **Waivers are grouped by PERSON, not by document** (ruling 9): every payee
+  first (their payer-auth, then their own liability waivers), the payer's own
+  liability waiver last. `waiverPersonQueue` / `waiverPersonIndex` drive it, and
+  `payerAuthPending` is what splits the one `waivers` step between
+  `KioskPayerWaiverStep` and `KioskWaiverStep`. The iPad changes hands once per
+  person.
+- **A signature is keyed on (member, waiver).** Two children on the same plan
+  each sign that plan's waiver; keying on the waiver id alone would skip the
+  second child and hand the backend an unsigned member at the start.
+- **"Training too" decides whether the payer is in the CART.**
+  `payer_member_id` is identity-only server-side, so a non-training payer pays
+  for others with no membership of their own. `canLeavePeople` is the
+  empty-cart guard: a non-training payer with zero payees would send
+  `memberships: []` and take a 400, so that state cannot leave the roster.
+- **A 207 retry carries ONLY the failed items.** `_startItems` filters to
+  `state.failedItems` whenever it is non-empty, so anything already created
+  stands and is never re-charged — and no member, signature or link is ever
+  re-executed. The retry mints a new `pm_` and a new key.
+- **Roster removal is offered only while it is FREE.** There is no unlink call,
+  so `canRemovePerson` goes false the moment that person is linked or has
+  signed anything. A person created but never linked simply drops out of the
+  cart; their member shell is harmless and surfaces in the staff "Incomplete"
+  list.
+- **The lobby-screen privacy rules.** A payee matched to an existing member
+  gets the details screen with every field BLANK (subtitle: "… already has
+  details with us — we don't show them on a shared screen"), and their PUT
+  sends only the optional fields typed there — never name or email — so a form
+  that never showed a value cannot wipe it. The match card shows a full name
+  and a MASKED email (`kioskMaskedEmail`), never a phone, photo or membership
+  status. The name search is avatar-free for the same reason the home's is.
+- **A 409 is asymmetric.** PAYER → terminal stop, matches never rendered.
+  PAYEE → the match offer. That asymmetry is the single most important thing
+  about this half of the flow, and
+  `test/features/kiosk/bloc/kiosk_signup_group_test.dart` asserts both sides in
+  one test.
+
+---
+
 ## Key files
 
 **CRM — the kiosk feature** (`CRM/lib/features/kiosk/`):
@@ -969,6 +1223,38 @@ the moment they tap to check in), while greetings use `kioskFirstName`
 - `bloc/kiosk_flow_cubit.dart` + `kiosk_flow_state.dart` — the check-in lane,
   the two class lists (§5), the four catalogues (§6), the timers (§7). All the
   tunable constants live at the top of the cubit file.
+- `bloc/kiosk_signup_cubit.dart` + `kiosk_signup_state.dart` — the SIGNUP lane
+  (§10, §11): the `KioskSignupStep` spine, the roster (`KioskSignupPerson`), the
+  `committedSteps` marker that turns a second Continue into a PUT instead of a
+  second create, the waiver queue + `signedWaivers`, the money path
+  (`_buildStartRequest` / `pay` / `_onDeclined` / `_enterWelcome`, the
+  `_sentAttempts` latch, `kKioskSignupStartTimeout`), the
+  `KioskSignupStopReason`s and their `isRetryable` split, and the lane's own
+  begin/endFlow latch + idle guard.
+- `presentation/screens/kiosk_signup_screen.dart` — provides that cubit (so its
+  lifetime is the flow's), hosts the signup's activity listener, and routes
+  `abandoned` → `goHome()`.
+  `presentation/widgets/signup/` — the signup chrome (rail, three-column foot,
+  field box, consent check, DOB wheel, stop screen, abandon confirm) and the
+  built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` + `kiosk_plan_labels`
+  (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import),
+  `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
+  `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
+  `kiosk_card_step` + `kiosk_secure_strip` + `kiosk_card_facts` (wrapping the
+  shared `CardFieldBox`), `kiosk_review_step` + `kiosk_review_side_panel` +
+  `kiosk_money_panel` + `kiosk_buy_row` + `kiosk_card_chip`,
+  `kiosk_paying_screen`, `kiosk_declined_screen`, and `kiosk_welcome_screen`
+  (which COMPOSES the shipped `get_app/` set off the flow cubit's warmed
+  catalogues — zero fetches), plus the GROUP half: `kiosk_people_step` +
+  `kiosk_roster_row` + `kiosk_det_chip` + `kiosk_training_toggle` +
+  `kiosk_person_adder`, `kiosk_match_step` + `kiosk_match_card` +
+  `kiosk_match_search`, `kiosk_payer_waiver_step`, `kiosk_review_group_panel` +
+  `kiosk_person_block`, and `kiosk_money_labels` (the by-person attribution of
+  a preview line, via its `stripe_price_id`).
+  `presentation/kiosk_signup_stop_copy.dart` — the ONE map from a stop reason to
+  member copy, mirroring `kiosk_blocked_copy.dart`.
+  `presentation/kiosk_name_format.dart` — `kioskFirstName` + `kioskMaskedEmail`,
+  the two display transforms the kiosk shares.
 - `data/kiosk_session_store.dart` (fate-shared persistence),
   `data/kiosk_server_clock.dart` (the HTTP `Date` read).
 - `presentation/kiosk_screen.dart` — the mounted surface: header, the cross-faded
@@ -1010,9 +1296,24 @@ the moment they tap to check in), while greetings use `kioskFirstName`
 **Specs for unbuilt phases (repo root):** `KIOSK_SIGNUP_MOCKUPS.html` (D+E),
 `PHASE_G_QR_PLAN.md` (G), `APP_DOWNLOAD_PAGE_MOCKUP.html`.
 
-**Tests:** `CRM/test/features/kiosk/` — `bloc/kiosk_session_cubit_test.dart`
-(the runway + the SEC-1/2/3 seams), `bloc/kiosk_flow_cubit_test.dart`, and the
-presentation guards `kiosk_type_ramp_test.dart`, `kiosk_get_app_modal_test.dart`
+**Tests:** `CRM/test/features/kiosk/` — `kiosk_forbidden_imports_test.dart`
+(the fresh-card law in CI, §3), `bloc/kiosk_session_cubit_test.dart`
+(the runway + the SEC-1/2/3 seams), `bloc/kiosk_flow_cubit_test.dart`,
+`bloc/kiosk_signup_cubit_test.dart` (the signup lane's flow-count discipline,
+the one-call create, ruling 11's PUT-not-create, the stops, the idle guard),
+`bloc/kiosk_signup_money_test.dart` (the §11 money path: double-tap Pay = ONE
+repository call, the sent latch, 409-as-success, 207 → declined, 422 →
+waivers, 500 → "nothing charged", three strikes, the two retryable stops, the
+request builder's empty price-reduction fields + `paidWithCash: false` +
+`set_default`, and the due-today / two-charges arithmetic),
+`bloc/kiosk_signup_group_test.dart` (the §11.5 group rules: the payer/payee 409
+asymmetry, adopt-vs-recreate, link-before-start both ways, the per-training-person
+cart, the 207 partial retry, roster removal, the empty-cart guard, the search
+debounce + sequence guard, and the per-member signature keying),
+and the
+presentation guards `kiosk_type_ramp_test.dart`, `kiosk_group_steps_test.dart`
+(the roster / match / blank-details screens compose at 1180×820 with the email
+masked), `kiosk_get_app_modal_test.dart`
 (no overflow / no vertical scroll at 1180×820 and 1024×700),
 `kiosk_rank_slide_test.dart`, `kiosk_home_columns_test.dart`,
 `kiosk_glance_screen_test.dart`.
