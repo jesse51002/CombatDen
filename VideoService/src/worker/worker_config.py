@@ -89,7 +89,12 @@ class WorkerSettings(BaseSettings):
     # away candidates already paid for at full price.
     worker_max_results_per_query: int = 50
     # Hard cap on candidates scanned in one run (tier 1 first, then tier 2).
-    scan_budget_per_run: int = 1000
+    # Sized above one gym scrape's raw yield (video_query_count 25 ×
+    # worker_max_results_per_query 50 = 1250) so the deeper page size actually
+    # reaches scan instead of being truncated here; tier 2 tops up from the
+    # shared pool. Scan is text-only (~$0.001/video) and enrich is once-per-video
+    # pool-wide, so the extra headroom is cheap.
+    scan_budget_per_run: int = 1500
     # Videos judged per scan LLM call.
     scan_batch_size: int = 12
     # Enrich sweep batch: videos per sweep chunk == texts per embed call == the

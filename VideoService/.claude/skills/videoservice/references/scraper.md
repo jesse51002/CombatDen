@@ -93,7 +93,7 @@ a lazy fetch at enrich time (`scan.md`).
 
 ### Funnel
 
-Pick up to `scan_budget_per_run` (1000) candidates:
+Pick up to `scan_budget_per_run` (1500) candidates:
 
 - **Tier 1** — pool rows whose `source_queries` overlap the spec queries AND match
   a gym discipline (or are untagged, so this scrape's fresh results are included),
