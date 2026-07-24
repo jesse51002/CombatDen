@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
-import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/mark_paid_cash_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/retry_payment_dialog.dart';
+import 'package:crm/features/member_details/presentation/sections/invoices_pick.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -14,9 +14,7 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/section_card.dart';
-
-/// Stripe invoice status that counts as outstanding/open.
-const _kOpenStatus = 'open';
+import 'package:crm/shared/widgets/warning_message.dart';
 
 /// A payer whose invoice this card surfaces — the member themselves
 /// (self-pay) or their linked parent. Under per-payer billing a member's
@@ -53,30 +51,9 @@ class InvoicePayer {
 /// A payer paired with the one invoice picked for them (or none).
 class _PayerInvoice {
   final InvoicePayer payer;
-  final _PickedInvoice? picked;
+  final PickedInvoice? picked;
 
   const _PayerInvoice({required this.payer, this.picked});
-}
-
-/// The single invoice a payer's card surfaces.
-class _PickedInvoice {
-  final bool overdue;
-  final int amount;
-  final String currency;
-  final DateTime? date;
-
-  /// The upcoming preview (carries line items) when this is the
-  /// upcoming invoice; null for an open/overdue invoice, which the
-  /// list endpoint surfaces as an amount only.
-  final PreviewInvoice? preview;
-
-  const _PickedInvoice({
-    required this.overdue,
-    required this.amount,
-    required this.currency,
-    required this.date,
-    this.preview,
-  });
 }
 
 /// Account-level Invoices card (sits with the membership in the right
@@ -149,41 +126,10 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         final upcoming = await repo.getUpcomingInvoice(p.memberId);
         return _PayerInvoice(
           payer: p,
-          picked: _pick(invoices, upcoming, p.nextDueDate),
+          picked: pickPayerInvoice(invoices, upcoming, p.nextDueDate),
         );
       }),
     );
-  }
-
-  /// Pick the one invoice to show for a payer: an overdue (open) one
-  /// first, otherwise the upcoming one, otherwise none.
-  _PickedInvoice? _pick(
-    List<PaymentsInvoiceResponse> invoices,
-    PreviewInvoice? upcoming,
-    DateTime? nextDueDate,
-  ) {
-    final open = invoices
-        .where((i) => i.status == _kOpenStatus)
-        .toList();
-    if (open.isNotEmpty) {
-      final i = open.first;
-      return _PickedInvoice(
-        overdue: true,
-        amount: i.amountRemaining,
-        currency: i.currency,
-        date: i.createdAt,
-      );
-    }
-    if (upcoming != null) {
-      return _PickedInvoice(
-        overdue: false,
-        amount: upcoming.amountDue,
-        currency: upcoming.currency,
-        date: nextDueDate,
-        preview: upcoming,
-      );
-    }
-    return null;
   }
 
   @override
@@ -238,7 +184,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
 /// the settlement actions. The enclosing [InvoicesSection] owns the
 /// card and stacks one of these per payer.
 class _InvoiceBody extends StatelessWidget {
-  final _PickedInvoice invoice;
+  final PickedInvoice invoice;
   final InvoicePayer payer;
 
   const _InvoiceBody({
@@ -269,6 +215,19 @@ class _InvoiceBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingMedium,
         children: [
+          // A backlog means settling clears only the newest invoice while
+          // the rest stay unpaid — and paying it advances the due date, so
+          // the member drops off the Overdue list still owing. Say so.
+          if (invoice.hasBacklog)
+            WarningMessage(
+              title: '${invoice.openCount} unpaid invoices',
+              message:
+                  '${formatMinorUnits(invoice.openTotal, currency: invoice.currency)} '
+                  'is outstanding across ${invoice.openCount} invoices. '
+                  'Both actions below settle only the most recent '
+                  '(${formatMinorUnits(invoice.amount, currency: invoice.currency)}) '
+                  '— the rest stay unpaid.',
+            ),
           AppOutlineButton(
             fullWidth: true,
             text: 'Retry payment',
