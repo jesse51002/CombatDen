@@ -10,10 +10,14 @@ Scenarios:
 
 1. ``test_settle_pays_then_applies_the_invoice`` — happy path: ``pay`` is
    called with the PAYER's monthly subscription, the gym's Connect account,
-   and the op's idempotency key, and the invoice it returns is applied through
-   ``invoice_fetch.apply_invoice`` IN-REQUEST (the fix — so ``next_due_date`` +
-   the invoice/charge rows are current before the op returns, not left to the
-   webhook/sweep, which never cover an old failed-renewal invoice).
+   and the op's idempotency key, and the invoice it returns is applied BY VALUE
+   through ``invoice_fetch.apply_invoice`` IN-REQUEST (the fix — so
+   ``next_due_date`` + the invoice/charge rows are current before the op
+   returns, not left to the webhook/sweep, which never cover an old
+   failed-renewal invoice).
+1b. ``test_settle_apply_failure_does_not_fail_the_charge`` — an apply failure
+   AFTER a successful charge is swallowed (logged), never surfaced as a failed
+   settle, so a charged card is never reported to staff as a failure.
 2. non-recurring / unlinked / canceled / no-subscription — each raises
    ``ValueError`` before any Stripe call, and nothing is applied.
 3. ``test_settle_no_open_invoice_propagates`` — the "already settled"
@@ -42,6 +46,10 @@ GYM_TIMEZONE = "America/Chicago"
 STRIPE_ACCOUNT_ID = "acct_test_settle"
 STRIPE_SUB_ID = "sub_test_settle"
 PAID_INVOICE_ID = "in_test_settle"
+# The ``pay`` strategy returns the now-paid invoice BY VALUE (the plain nested
+# dict the record seam consumes), not just its id — so apply records it
+# without a re-retrieve.
+PAID_INVOICE = {"id": PAID_INVOICE_ID, "status": "paid"}
 
 
 def _membership_row(**overrides) -> dict:
@@ -87,10 +95,10 @@ def _build(row: dict, *, sub_id: str | None = STRIPE_SUB_ID):
     """Build the settle service over doubles.
 
     Returns ``(settle, pay, invoice_fetch)`` where ``pay`` is the AsyncMock
-    strategy that returns the paid invoice id, and ``invoice_fetch`` carries
-    the ``apply_invoice`` AsyncMock the settle must call in-request.
+    strategy that returns the paid invoice (by value), and ``invoice_fetch``
+    carries the ``apply_invoice`` AsyncMock the settle must call in-request.
     """
-    pay = AsyncMock(return_value=PAID_INVOICE_ID)
+    pay = AsyncMock(return_value=PAID_INVOICE)
 
     payer_resolver = MagicMock()
     payer_resolver.resolve_payer = AsyncMock(
@@ -134,11 +142,37 @@ async def test_settle_pays_then_applies_the_invoice() -> None:
         STRIPE_ACCOUNT_ID,
         idempotency_key=str(key),
     )
-    # THE FIX: the exact invoice just paid is applied in-request, so
+    # THE FIX: the exact invoice just paid is applied in-request BY VALUE, so
     # next_due_date + the invoice/charge rows are current before we return
-    # — not left to the webhook/sweep (which never cover an old invoice).
+    # — not left to the webhook/sweep (which never cover an old invoice), and
+    # with no re-retrieve that could read a stale state.
     invoice_fetch.apply_invoice.assert_awaited_once_with(
-        row["gym_id"], STRIPE_ACCOUNT_ID, PAID_INVOICE_ID
+        row["gym_id"], STRIPE_ACCOUNT_ID, PAID_INVOICE
+    )
+
+
+@pytest.mark.asyncio
+async def test_settle_apply_failure_does_not_fail_the_charge() -> None:
+    """An apply failure AFTER a successful charge must NOT surface as a failed
+    settle — the card already moved money, so reporting failure would tell
+    staff nothing was collected and invite a double collection. The apply is
+    swallowed (logged); the webhook + reconciler finalize the CRM rows."""
+    row = _membership_row()
+    settle, pay, invoice_fetch = _build(row)
+    invoice_fetch.apply_invoice.side_effect = RuntimeError("stripe read blew up")
+    key = uuid4()
+
+    # Must NOT raise, even though apply_invoice did.
+    await settle.settle_open_invoice(uuid4(), row["member_id"], key, pay=pay)
+
+    # The charge happened and the apply was attempted with the paid invoice.
+    pay.assert_awaited_once_with(
+        STRIPE_SUB_ID,
+        STRIPE_ACCOUNT_ID,
+        idempotency_key=str(key),
+    )
+    invoice_fetch.apply_invoice.assert_awaited_once_with(
+        row["gym_id"], STRIPE_ACCOUNT_ID, PAID_INVOICE
     )
 
 

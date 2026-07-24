@@ -399,11 +399,11 @@ for the `invoice.paid` / `invoice_payment.paid` webhooks (which can arrive secon
 minutes later). Webhooks + the twice-daily reconciler sweep remain backstops.
 
 The two **settle** ops (`mark_paid_cash` / `retry_card`) are the deliberate exception: they
-pay a KNOWN invoice and get its id back, so instead of the time-windowed runner they apply
-that exact invoice **synchronously by id** (§7.1). This is not an optimisation — the runner's
-`created >= op_start` window structurally **cannot** apply an OLD failed-renewal invoice
-(created on a prior cycle, before the settle op started), which is exactly the invoice a
-settle collects.
+pay a KNOWN invoice and get that paid invoice BACK, so instead of the time-windowed runner
+they apply that exact invoice **synchronously, by value** (§7.1). This is not an optimisation
+— the runner's `created >= op_start` window structurally **cannot** apply an OLD
+failed-renewal invoice (created on a prior cycle, before the settle op started), which is
+exactly the invoice a settle collects.
 
 **Key design points:**
 
@@ -439,10 +439,12 @@ settle collects.
   `RefundHandler` — they **stay in `src/stripe_webhooks/`**; the engine only injects them).
 - Full-account sweeps include refunds; customer-scoped on-demand fetches skip refunds
   (refunds have their own op + webhook + cron backstop).
-- `apply_invoice(gym_id, account_id, invoice_id)` — the synchronous single-invoice apply
-  the settle path uses: retrieve THAT invoice by id and record it through the same
-  `_record_invoice` seam a sweep uses (a one-item `SweepResult(name=ON_DEMAND_NAME)`). No
-  time window, no retry loop — the id is already known, so there is nothing to poll for.
+- `apply_invoice(gym_id, account_id, invoice)` — the synchronous single-invoice apply the
+  settle path uses: record THAT invoice (the paid invoice `invoices.pay` returned, passed BY
+  VALUE) through the same `_record_invoice` seam a sweep uses (a one-item
+  `SweepResult(name=ON_DEMAND_NAME)`). No time window, no retry loop, and no re-retrieve — the
+  paid invoice is already in hand, so there is nothing to poll for and no window where a stale
+  read could book the collected charge as a failed attempt.
 
 **Config** (all `Settings` fields in `src/core/config.py`):
 
@@ -452,7 +454,7 @@ settle collects.
 | `invoice_fetch_buffer_seconds` | `120` | clock-skew buffer subtracted from `op_start` to compute the Stripe `created` query cutoff |
 | `invoice_fetch_retry_delays_seconds` | `[0, 3, 8, 15, 25]` | delays (seconds) between retry attempts; `0` = immediate first try |
 
-### 7.1 The settle path — one shared body, synchronous apply-by-id
+### 7.1 The settle path — one shared body, synchronous apply-by-value
 
 `mark_paid_cash` and `retry_card` are the SAME operation with two payment strategies:
 collect a payer's one open subscription invoice, then bring the CRM up to date **in the same
@@ -472,20 +474,28 @@ strategy:
 2. Resolve the row's PAYER (`paid_by_member_id`) → the payer's **monthly** subscription
    (`stripe_sub_id_month`; missing ⇒ `ValueError("No active monthly subscription…")`) and the
    gym's Connect account.
-3. `invoice_id = await pay(sub, account, idempotency_key=str(key))`. The pay primitive lists the
-   subscription's OPEN invoices (`subscription_open_invoice_limit`, default 20; warns on >1,
-   pays the first) and raises **"This invoice is already settled — nothing left to collect."**
-   when there are none — so a double-click or an already-paid membership is a clean error, not a
-   phantom charge. A card decline raises out of Stripe and propagates.
-4. `await invoice_fetch.apply_invoice(payer.gym_id, account, invoice_id)` — **the fix.** The
-   exact invoice just paid is retrieved and recorded synchronously (§7's `apply_invoice`), so
-   `next_due_date` is advanced from the invoice `period.end` **and** the `member_invoices` /
-   `member_charges` rows exist before the op returns. Nothing is left to the webhook or the
-   twice-daily sweep — neither of which reliably covers an OLD failed-renewal invoice.
+3. `invoice = await pay(sub, account, idempotency_key=str(key))` — returns the now-PAID invoice
+   (by value). The pay primitive lists the subscription's OPEN invoices
+   (`subscription_open_invoice_limit`, default 20; warns on >1, pays the newest — a backlog is
+   a KNOWN case that is technically unreachable with our one-subscription usage) and raises
+   **"This invoice is already settled — nothing left to collect."** when there are none — so a
+   double-click or an already-paid membership is a clean error, not a phantom charge. A card
+   decline raises out of Stripe and propagates; a card retry that returns WITHOUT collecting
+   (SCA needs authentication, no decline raised) is turned into an error too, never booked as a
+   phantom success.
+4. `await invoice_fetch.apply_invoice(payer.gym_id, account, invoice)` — **the fix.** The exact
+   invoice just paid (the one `invoices.pay` returned) is recorded synchronously BY VALUE (§7's
+   `apply_invoice`), so `next_due_date` is advanced from the invoice `period.end` **and** the
+   `member_invoices` / `member_charges` rows exist before the op returns. Nothing is left to the
+   webhook or the twice-daily sweep — neither of which reliably covers an OLD failed-renewal
+   invoice.
 
-A raise anywhere in 1–3 applies nothing (a failed settle must never read as a success). The
-webhook + reconciler stay backstops for the same rows, and every write is idempotent on
-`stripe_invoice_id`, so the in-request apply racing a webhook is safe. Unit-covered in
+A raise anywhere in 1–3 applies nothing (a failed settle must never read as a success). Step 4,
+by contrast, runs AFTER the charge has already completed, so it is best-effort: an apply failure
+is logged and **swallowed** (never raised) — reporting a charged card as a failed settle would
+tell staff nothing was collected and invite a double collection. The webhook + reconciler stay
+backstops for the same rows, and every write is idempotent on `stripe_invoice_id`, so the
+in-request apply racing a webhook — or falling back to it on failure — is safe. Unit-covered in
 `tests/memberships/test_memberships_settle.py`; the live DB assertions (next_due advanced,
 invoice `paid`, no webhook needed) live in `tests/memberships/test_memberships_retry_card_live.py`.
 

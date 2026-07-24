@@ -47,6 +47,7 @@ from src.payments.service.payments_stripe_members_service import (
 )
 
 INVOICE_STATUS_OPEN = "open"
+INVOICE_STATUS_PAID = "paid"
 
 logger = logging.getLogger(__name__)
 
@@ -431,11 +432,17 @@ class PaymentsStripePaymentService:
 
         Shared by the out-of-band (cash) settle and the on-card retry so the
         two can never drift on what "the open invoice" is. Both settle
-        ``[0]`` — the newest — but they receive the whole list so a stacked
-        backlog is visible rather than silently discarded: settling the newest
-        advances ``next_due_date``, which drops the member off every overdue
-        surface, so an unnoticed older invoice would become permanently
-        invisible.
+        ``[0]`` — the newest.
+
+        **Why a list at all, when a settle only ever pays one invoice?** So a
+        stacked backlog is *visible* rather than silently discarded. A single
+        monthly subscription under Stripe's standard dunning holds at most ONE
+        open invoice at a time, so ``len > 1`` is a KNOWN case that is
+        **technically unreachable with how we use Stripe** — not a supported
+        flow. Returning the whole list is purely so we can DETECT that
+        unreachable backlog and warn (below): settling the newest advances
+        ``next_due_date``, which drops the member off every overdue surface, so
+        an unnoticed older invoice would otherwise become permanently invisible.
 
         Returns:
             Every open invoice on the subscription (capped by
@@ -485,9 +492,10 @@ class PaymentsStripePaymentService:
             )
 
         if len(invoices) > 1:
-            # Rare (see the Settings comment), but a real backlog: settling one
-            # advances next_due_date and hides the rest. Log loudly so it is
-            # discoverable even before the CRM surfaces it to staff.
+            # KNOWN + technically unreachable with our one-subscription usage
+            # (see the docstring): a real backlog would mean settling one
+            # advances next_due_date and hides the rest, so log loudly to make
+            # the never-expected case discoverable rather than silent.
             logger.warning(
                 "Subscription %s has %d open invoices totalling %d; a settle "
                 "pays only the newest (%s) and the remainder stays unpaid",
@@ -505,13 +513,17 @@ class PaymentsStripePaymentService:
         stripe_account_id: str,
         *,
         idempotency_key: str,
-    ) -> str:
+    ) -> dict:
         """Mark a subscription's currently-open invoice as paid via cash.
 
-        Finds the single open invoice belonging to the subscription
-        and calls ``invoices.pay`` with ``paid_out_of_band=True``.
-        Stripe fires the normal ``invoice.paid`` webhook, which
-        handles the CRM write.
+        Finds the single open invoice belonging to the subscription and calls
+        ``invoices.pay`` with ``paid_out_of_band=True``, then returns that
+        now-paid invoice so the caller can record it in-request. Stripe still
+        fires the ``invoice.paid`` webhook as a backstop.
+
+        Returns:
+            The paid invoice as the plain nested dict the record seams consume
+            (the same shape a webhook event carries).
         """
         invoices = await self._list_open_subscription_invoices(
             stripe_subscription_id,
@@ -541,7 +553,7 @@ class PaymentsStripePaymentService:
         pay_params = InvoicePayParams()
         pay_params["paid_out_of_band"] = True
         try:
-            await self._stripe.v1.invoices.pay_async(
+            paid = await self._stripe.v1.invoices.pay_async(
                 invoice.id,
                 params=pay_params,
                 options=self._client.connect_opts(
@@ -552,7 +564,7 @@ class PaymentsStripePaymentService:
         except stripe.InvalidRequestError as exc:
             raise self._pay_invoice_error(exc, invoice.id) from exc
 
-        return invoice.id
+        return json.loads(str(paid))
 
     @staticmethod
     def _pay_invoice_error(
@@ -576,13 +588,32 @@ class PaymentsStripePaymentService:
             )
         return PaymentsStripeError(str(exc), stripe_error_code=exc.code)
 
+    @staticmethod
+    def _require_card_collected(invoice: stripe.Invoice) -> None:
+        """Guard that a card retry actually COLLECTED before it's booked paid.
+
+        ``invoices.pay`` raises ``stripe.CardError`` on an outright decline,
+        but an off-session invoice whose PaymentIntent needs authentication
+        (SCA / 3-D Secure) can come back with the invoice still ``open``
+        instead of raising. Booking that as success would clear the member off
+        every overdue surface while no money moved, so a non-``paid`` return is
+        turned into a ``PaymentsStripeError`` staff can see and act on (surfaced
+        as a 500 with this message, never a phantom success).
+        """
+        if invoice.status != INVOICE_STATUS_PAID:
+            raise PaymentsStripeError(
+                "The card on file could not be charged automatically — the "
+                "payment needs extra authorization the member has to complete. "
+                "Collect payment another way."
+            )
+
     async def pay_open_subscription_invoice_on_card(
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
         *,
         idempotency_key: str,
-    ) -> str:
+    ) -> dict:
         """Retry the customer's DEFAULT card on a subscription's open invoice.
 
         The card twin of
@@ -590,9 +621,14 @@ class PaymentsStripePaymentService:
         lookup, then ``invoices.pay`` with **empty** params — no
         ``paid_out_of_band`` and no ``payment_method``. Omitting both is what
         makes Stripe charge the customer's saved default card, so nothing here
-        stamps the cash metadata either. Stripe fires the normal
-        ``invoice.paid`` webhook, which handles the CRM write; a decline
-        raises out of ``pay_async`` and is left to propagate.
+        stamps the cash metadata either. A decline raises out of ``pay_async``
+        and is left to propagate; a return that did NOT collect (SCA) is turned
+        into an error by :meth:`_require_card_collected`. On success returns the
+        now-paid invoice so the caller records it in-request; Stripe still fires
+        the ``invoice.paid`` webhook as a backstop.
+
+        Returns:
+            The paid invoice as the plain nested dict the record seams consume.
         """
         invoices = await self._list_open_subscription_invoices(
             stripe_subscription_id,
@@ -601,7 +637,7 @@ class PaymentsStripePaymentService:
         invoice = invoices[0]
 
         try:
-            await self._stripe.v1.invoices.pay_async(
+            paid = await self._stripe.v1.invoices.pay_async(
                 invoice.id,
                 params=InvoicePayParams(),
                 options=self._client.connect_opts(
@@ -612,7 +648,8 @@ class PaymentsStripePaymentService:
         except stripe.InvalidRequestError as exc:
             raise self._pay_invoice_error(exc, invoice.id) from exc
 
-        return invoice.id
+        self._require_card_collected(paid)
+        return json.loads(str(paid))
 
     # ── Paginated read primitives (lists → plain nested dicts) ───
     #
@@ -644,24 +681,6 @@ class PaymentsStripePaymentService:
                 break
             starting_after = data[-1].id
         return out
-
-    async def retrieve_invoice(
-        self,
-        invoice_id: str,
-        stripe_account_id: str,
-    ) -> dict:
-        """Retrieve ONE invoice by id, as the plain nested dict the record
-        seams consume (the same shape a webhook event carries).
-
-        Used by the settle path to apply the exact invoice it just paid,
-        rather than waiting for the `created`-windowed on-demand fetch (which
-        never covers an old failed-renewal invoice) or the webhook.
-        """
-        invoice = await self._stripe.v1.invoices.retrieve_async(
-            invoice_id,
-            options=self._client.connect_opts_readonly(stripe_account_id),
-        )
-        return json.loads(str(invoice))
 
     async def list_invoices(
         self,

@@ -7,17 +7,24 @@ that single step is passed in as ``pay`` and everything else (the validations,
 the payer/subscription/account resolution, and applying the paid invoice back
 to the CRM) lives here once.
 
-Applying the paid invoice is done SYNCHRONOUSLY, by id, right after paying —
-NOT via the fire-and-forget on-demand fetch. A settle pays a specific open
-invoice, usually a failed renewal created weeks ago; the on-demand
-``fetch_for_payer`` only ever looks at invoices created at/after the op and the
-reconciler's lookback window is far too short to reach it, so without the
-direct apply the paid invoice would advance ``next_due_date`` and finalize the
-invoice/charge rows only when the ``invoice.paid`` webhook happened to land
-(never on localhost). ``apply_invoice`` routes the exact invoice through the
-same idempotent ``record()`` seam the webhook uses, so the CRM reflects the
-payment the instant the op returns and a later webhook re-applying it is a
-clean no-op.
+Applying the paid invoice is done SYNCHRONOUSLY, right after paying — NOT via
+the fire-and-forget on-demand fetch. A settle pays a specific open invoice,
+usually a failed renewal created weeks ago; the on-demand ``fetch_for_payer``
+only ever looks at invoices created at/after the op and the reconciler's
+lookback window is far too short to reach it, so without the direct apply the
+paid invoice would advance ``next_due_date`` and finalize the invoice/charge
+rows only when the ``invoice.paid`` webhook happened to land (never on
+localhost). ``pay`` returns the invoice it just marked paid and
+``apply_invoice`` records THAT invoice BY VALUE through the same idempotent
+``record()`` seam the webhook uses — no re-retrieve, so no window where a stale
+read could book the collected charge as a failed attempt — and a later webhook
+re-applying it is a clean no-op.
+
+The in-request apply is best-effort ON TOP OF a completed charge: the money has
+already moved by the time we apply, so an apply failure is logged and swallowed
+(the webhook + reconciler remain the backstop) rather than surfaced as a failed
+settle — surfacing it would tell staff nothing was collected and invite a
+double collection.
 """
 
 from __future__ import annotations
@@ -48,9 +55,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Pays ONE open invoice on a subscription and returns the paid invoice id.
-# The card / cash difference is entirely captured by which of these is passed.
-PayOpenInvoice = Callable[..., Awaitable[str]]
+# Pays ONE open invoice on a subscription and returns that now-paid invoice as
+# the plain nested dict the record seam consumes. The card / cash difference is
+# entirely captured by which of these is passed.
+PayOpenInvoice = Callable[..., Awaitable[dict]]
 
 
 class MemberMembershipsSettle(MemberMembershipsBase):
@@ -87,7 +95,9 @@ class MemberMembershipsSettle(MemberMembershipsBase):
         row's ``paid_by_member_id``) to its monthly subscription; pays that
         subscription's open invoice via ``pay``; then applies the paid invoice
         to the CRM synchronously so ``next_due_date`` and the invoice/charge
-        rows are up to date before this returns.
+        rows are up to date before this returns. The apply is best-effort — the
+        charge has already completed, so an apply failure is logged and
+        swallowed (the webhook + reconciler finalize the rows), never raised.
 
         Args:
             item_id: The membership row id.
@@ -133,14 +143,30 @@ class MemberMembershipsSettle(MemberMembershipsBase):
             payer.gym_id,
         )
 
-        invoice_id = await pay(
+        invoice = await pay(
             payer.stripe_sub_id_month,
             stripe_account_id,
             idempotency_key=str(idempotency_key),
         )
 
-        # Apply the exact invoice we just paid, in-request — the webhook +
-        # reconciler stay as (now-redundant) backstops.
-        await self._invoice_fetch.apply_invoice(
-            payer.gym_id, stripe_account_id, invoice_id
-        )
+        # Apply the exact invoice we just paid, in-request. The card was
+        # ALREADY charged above, so a failure HERE must not surface as a failed
+        # settle — that would tell staff nothing was collected and invite a
+        # double collection. Swallow it (logged) and let the invoice.paid
+        # webhook + reconciler finalize next_due_date / the CRM rows, exactly
+        # as the pre-in-request settle relied on them.
+        try:
+            await self._invoice_fetch.apply_invoice(
+                payer.gym_id, stripe_account_id, invoice
+            )
+        except Exception:
+            logger.error(
+                "Settle charged invoice %s for member %s (item %s) but the "
+                "in-request apply failed; next_due_date / the CRM invoice+"
+                "charge rows will be finalized by the invoice.paid webhook + "
+                "reconciler backstop",
+                invoice.get("id"),
+                member_id,
+                item_id,
+                exc_info=True,
+            )

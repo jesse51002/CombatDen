@@ -12,9 +12,15 @@ the load-bearing difference between them:
 * the CASH path still stamps that metadata and still passes
   ``paid_out_of_band=True``;
 * both raise the same errors from the shared lookup (unknown subscription →
-  ``PaymentsResourceNotFoundError``; no open invoice → ``ValueError``).
+  ``PaymentsResourceNotFoundError``; no open invoice → ``ValueError``);
+* both RETURN the now-paid invoice (the plain nested dict the record seam
+  consumes) so the settle can apply it in-request; the CARD path additionally
+  refuses to return success when ``invoices.pay`` came back without collecting
+  (SCA needs authentication) — a non-``paid`` return raises rather than being
+  booked as a phantom success.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -45,15 +51,21 @@ def _build_service(
     invoice.id = INVOICE_ID
     invoice.metadata.to_dict.return_value = {"existing": "kept"}
 
+    invoices_list = [invoice] if invoices is None else invoices
+    # ``invoices.pay`` returns the invoice you paid (invoices[0]), now settled.
+    # Model that: the pay return carries a ``paid`` status and a JSON ``str()``
+    # (the record seam consumes ``json.loads(str(invoice))``).
+    paid = invoices_list[0] if invoices_list else invoice
+    paid.status = "paid"
+    paid.__str__.return_value = json.dumps({"id": paid.id, "status": "paid"})
+
     fake_stripe = MagicMock()
     fake_stripe.v1.invoices.list_async = AsyncMock(
         side_effect=list_error,
-        return_value=MagicMock(
-            data=[invoice] if invoices is None else invoices,
-        ),
+        return_value=MagicMock(data=invoices_list),
     )
-    fake_stripe.v1.invoices.update_async = AsyncMock(return_value=invoice)
-    fake_stripe.v1.invoices.pay_async = AsyncMock(return_value=invoice)
+    fake_stripe.v1.invoices.update_async = AsyncMock(return_value=paid)
+    fake_stripe.v1.invoices.pay_async = AsyncMock(return_value=paid)
 
     stripe_client = MagicMock()
     stripe_client.client = fake_stripe
@@ -71,13 +83,13 @@ async def test_on_card_pays_with_empty_params() -> None:
     """The card retry omits BOTH paid_out_of_band and payment_method."""
     service, fake_stripe = _build_service()
 
-    invoice_id = await service.pay_open_subscription_invoice_on_card(
+    result = await service.pay_open_subscription_invoice_on_card(
         STRIPE_SUB_ID,
         STRIPE_ACCOUNT_ID,
         idempotency_key=IDEMPOTENCY_KEY,
     )
 
-    assert invoice_id == INVOICE_ID
+    assert result == {"id": INVOICE_ID, "status": "paid"}
     fake_stripe.v1.invoices.pay_async.assert_awaited_once()
     call = fake_stripe.v1.invoices.pay_async.await_args
     assert call.args[0] == INVOICE_ID
@@ -105,13 +117,13 @@ async def test_out_of_band_still_stamps_cash_and_pays_out_of_band() -> None:
     """The cash path is unchanged by the shared-lookup extraction."""
     service, fake_stripe = _build_service()
 
-    invoice_id = await service.pay_open_subscription_invoice_out_of_band(
+    result = await service.pay_open_subscription_invoice_out_of_band(
         STRIPE_SUB_ID,
         STRIPE_ACCOUNT_ID,
         idempotency_key=IDEMPOTENCY_KEY,
     )
 
-    assert invoice_id == INVOICE_ID
+    assert result == {"id": INVOICE_ID, "status": "paid"}
     update_call = fake_stripe.v1.invoices.update_async.await_args
     assert update_call.kwargs["params"]["metadata"] == {
         "existing": "kept",
@@ -198,6 +210,30 @@ async def test_on_card_decline_propagates() -> None:
             STRIPE_SUB_ID,
             STRIPE_ACCOUNT_ID,
             idempotency_key=IDEMPOTENCY_KEY,
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_card_uncollected_return_raises_not_phantom_success() -> None:
+    """A card retry that returns WITHOUT collecting must not be booked paid.
+
+    ``invoices.pay`` raises ``CardError`` on an outright decline, but an
+    off-session invoice needing authentication (SCA / 3-D Secure) can come back
+    with the invoice still ``open`` and no exception. Booking that as success
+    would clear the member off every overdue surface while no money moved, so
+    the card path turns a non-``paid`` return into a ``PaymentsStripeError``.
+    """
+    service, fake_stripe = _build_service()
+    uncollected = MagicMock()
+    uncollected.status = "open"
+    uncollected.__str__.return_value = json.dumps(
+        {"id": INVOICE_ID, "status": "open"}
+    )
+    fake_stripe.v1.invoices.pay_async.return_value = uncollected
+
+    with pytest.raises(PaymentsStripeError, match="could not be charged"):
+        await service.pay_open_subscription_invoice_on_card(
+            STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
         )
 
 
@@ -297,12 +333,12 @@ async def test_settle_pays_the_newest_of_a_stacked_backlog(caplog) -> None:
     service, fake_stripe = _build_service(invoices=backlog)
 
     with caplog.at_level("WARNING"):
-        invoice_id = await service.pay_open_subscription_invoice_on_card(
+        result = await service.pay_open_subscription_invoice_on_card(
             STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
         )
 
-    # Stripe lists newest-first, so [0] is what gets settled.
-    assert invoice_id == "in_newest"
+    # Stripe lists newest-first, so [0] is what gets settled and returned.
+    assert result["id"] == "in_newest"
     assert fake_stripe.v1.invoices.pay_async.await_args.args[0] == "in_newest"
     # The backlog is surfaced, not swallowed.
     messages = [r.getMessage() for r in caplog.records]
