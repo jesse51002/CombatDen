@@ -728,3 +728,47 @@ async def test_not_overdue_when_due_date_is_the_occurrence_date() -> None:
     assert res.warnings == []
     assert res.log_id is not None
     writer.assert_awaited_once()
+
+
+async def test_overdue_flagged_when_it_hides_behind_a_higher_priority_pack() -> None:
+    """Overdue is MEMBER-level: any covering membership being past due warns.
+
+    The selector ranks trial -> one_time -> recurring, so a member holding
+    a fresh trial pack AND an overdue recurring membership attributes to
+    the TRIAL. Testing only the attribution target would let them check in
+    with no warning while the members list shows them Overdue.
+    """
+    trial_plan, recurring_plan = uuid4(), uuid4()
+    trial = _usage(
+        trial_plan, PlanType.trial, class_count=10, classes_used=0,
+        renew_date=None, reference_date=_REF,
+    )
+    overdue_recurring = _usage(
+        recurring_plan, PlanType.recurring, class_count=None, classes_used=0,
+        renew_date=_PAST_DUE, reference_date=_REF,
+    )
+    gate, writer = _gate(
+        memberships=[trial, overdue_recurring],
+        eligible={trial_plan, recurring_plan},
+    )
+
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    # Attributed to the trial (priority order) yet still warned.
+    assert res.requires_confirmation is True
+    assert res.warnings == [CheckinWarning.overdue]
+    writer.assert_not_awaited()
+
+
+def test_every_checkin_warning_is_prioritized() -> None:
+    """Structural invariant: _REASON_PRIORITY must list EVERY warning.
+
+    Both ``_primary_reason`` and ``_checkin_staff`` order by
+    ``_REASON_PRIORITY.index``, which raises ValueError on a member that
+    is missing — so an omission would 500 every staff check-in that
+    raised it. Fail here in CI instead of in production.
+    """
+    from src.checkin.service.checkin_member_gate import _REASON_PRIORITY
+
+    assert set(_REASON_PRIORITY) == set(CheckinWarning)
+    assert len(_REASON_PRIORITY) == len(set(_REASON_PRIORITY))

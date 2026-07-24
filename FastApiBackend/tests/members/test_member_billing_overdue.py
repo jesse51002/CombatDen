@@ -290,3 +290,23 @@ def test_overview_frozen_wins_over_overdue():
         total=12000, has_frozen=True, has_overdue=True, paying_count=0
     )
     assert grouper.build_membership_overview(ctx) == "Account is Frozen"
+
+
+def test_card_keeps_raw_status_when_past_due_but_not_active():
+    """A non-active membership never badges Overdue on the detail card.
+
+    Locks the active-only rule in at the REAL consumer (the member-detail
+    card), not just at the pure predicate: a frozen / ended / cancelled
+    membership bills nothing further, so a stale next_due_date must leave
+    its own status showing rather than reading as collectable debt.
+    """
+    grouper = MembersBillingGrouper()
+
+    for raw in ("frozen", "ended", "cancelled"):
+        row = _membership_row(status=raw, next_due=PAST)
+        cards = grouper.build_membership_cards([row], {}, TODAY)
+
+        assert len(cards) == 1
+        assert cards[0].status == CrmMemberStatus(raw), (
+            f"{raw} membership with a stale due date must not badge overdue"
+        )

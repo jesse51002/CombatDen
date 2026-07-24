@@ -154,7 +154,9 @@ class CrmBaseViewService:
 
         - active: a paid, non-trial membership that is not past due
         - trial: an active trial that is not past due
-        - overdue: a non-cancelled membership past its due date
+        - overdue: an ACTIVE membership past its due date (the shared
+          src/shared/sql/membership_overdue.sql predicate — a frozen /
+          cancelled / ended row never matches)
         - frozen: a frozen membership
         - dormant: only short live packs + gone quiet, on a row that is
           live and not past due — a member-level check

@@ -214,8 +214,10 @@ class MembersBillingGrouper:
     ) -> CrmMemberStatus:
         """Map a raw DB membership status to its CRM display status.
 
-        Returns ``overdue`` for a non-cancelled membership whose next
-        due date has passed; otherwise the raw status unchanged.
+        Returns ``overdue`` for an ACTIVE membership whose next due date
+        has passed (the one shared rule in
+        ``src/shared/membership_status.py``); a frozen / cancelled /
+        ended membership keeps its raw status.
 
         Args:
             raw_status: The DB-derived membership status.

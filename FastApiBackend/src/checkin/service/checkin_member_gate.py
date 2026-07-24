@@ -321,6 +321,19 @@ class CheckinMemberGate:
             active
         )
         self._add_membership_reasons(evaluation.forced, eligible, evaluation)
+        # Overdue is MEMBER-level, not attribution-level: the question is
+        # "does this member owe money", so it tests EVERY covering
+        # membership rather than only the attribution target. Testing
+        # ``forced`` alone would silently miss the common case of an
+        # overdue recurring membership sitting behind a trial / one_time
+        # pack, which outranks it in the selector's priority order — the
+        # member would show Overdue on the members list yet check in with
+        # no warning at the counter.
+        if any(
+            is_membership_overdue(m.status, m.renew_date, m.reference_date)
+            for m in active
+        ):
+            evaluation.reasons.add(CheckinWarning.overdue)
         return evaluation
 
     @staticmethod
@@ -339,14 +352,6 @@ class CheckinMemberGate:
             and forced.classes_used >= forced.class_count
         ):
             evaluation.reasons.add(CheckinWarning.out_of_classes)
-        # The ONE shared overdue rule, evaluated against the occurrence's
-        # gym-local date rather than a bare "now" so a retroactive check-in
-        # is judged as of the class it is recording — the same anchoring
-        # ``covers_reference`` uses.
-        if is_membership_overdue(
-            forced.status, forced.renew_date, forced.reference_date
-        ):
-            evaluation.reasons.add(CheckinWarning.overdue)
 
     @staticmethod
     def _primary_reason(reasons: set[CheckinWarning]) -> CheckinWarning:
