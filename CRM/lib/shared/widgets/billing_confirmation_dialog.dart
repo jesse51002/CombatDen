@@ -113,7 +113,7 @@ class _Body extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: DesignConstants.spacingSmall,
             children:
-                effects.map((e) => _EffectRow(effect: e)).toList(),
+                effects.map((e) => BillingEffectRow(effect: e)).toList(),
           ),
         if (affected.isNotEmpty) _AffectedList(people: affected),
         if (warning != null) _WarningBanner(message: warning!),
@@ -122,10 +122,17 @@ class _Body extends StatelessWidget {
   }
 }
 
-class _EffectRow extends StatelessWidget {
+/// One bulleted [BillingEffect] line — an icon plus the effect text.
+///
+/// Public so a flow that owns its own dialog shell (e.g. the retry-payment
+/// confirm → processing → terminal steps, which can't use
+/// [BillingConfirmationDialog]'s pop-on-confirm scaffold) renders the SAME
+/// effect-row language as every other billing dialog instead of hand-copying
+/// it. Change the look here and every billing effect row moves together.
+class BillingEffectRow extends StatelessWidget {
   final BillingEffect effect;
 
-  const _EffectRow({required this.effect});
+  const BillingEffectRow({super.key, required this.effect});
 
   @override
   Widget build(BuildContext context) {
