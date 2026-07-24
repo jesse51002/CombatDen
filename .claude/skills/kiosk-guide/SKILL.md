@@ -8,18 +8,22 @@ description: >-
   `restoring` state + non-lazy provider that closes the reload seam, the
   absolute 12-hour server-anchored runway (lockout at T+11h45, grace, hard
   revoke at T+12h) and its fail-closed persistence, the beginFlow/endFlow
-  balance contract and the single `goHome()` abandon path, the fresh-card law
-  and the structural no-discounts rule, the TWO rejection shapes (a 200 with
-  `skip_reason` vs a thrown error carrying a stable `code`), the TWO separate
-  class lists (check-in window vs the forward-looking showcase), the four
-  gym-wide catalogues warmed once at entry, the four independent timers, the
-  kiosk type ramp / AA contrast / fixed QR polarity design laws, and the
-  real-vs-illustrative data rule. Load this whenever you touch anything
-  kiosk-shaped: `CRM/lib/features/kiosk/`, `auth_gate.dart`'s kiosk branch, the
-  `is_member: true` check-in call, the "Get the app" modal, the kiosk QR, or
-  the unbuilt Phase D/E signup and Phase G rotating check-in QR. Trigger on
-  "kiosk", "front-desk iPad", "self check-in", "the glance", "get the app
-  modal", "fresh-card law", "12-hour runway", "beginFlow / endFlow",
+  balance contract, the escape / cancel contract (ghost tier in the left gutter,
+  wording that answers the screen, the single `goHome()` abandon path, and the
+  screens that get a handoff INSTEAD because an escape there would orphan
+  committed state), the draft-clearing privacy rule and the shared-iPad autofill
+  hazard, the fresh-card law and the structural no-discounts rule, the TWO
+  rejection shapes (a 200 with `skip_reason` vs a thrown error carrying a stable
+  `code`), the TWO separate class lists (check-in window vs the forward-looking
+  showcase), the four gym-wide catalogues warmed once at entry, the four
+  independent timers, the kiosk type ramp / AA contrast / fixed QR polarity
+  design laws, and the real-vs-illustrative data rule. Load this whenever you
+  touch anything kiosk-shaped: `CRM/lib/features/kiosk/`, `auth_gate.dart`'s
+  kiosk branch, the `is_member: true` check-in call, the "Get the app" modal,
+  the kiosk QR, or the unbuilt Phase D/E signup and Phase G rotating check-in
+  QR. Trigger on "kiosk", "front-desk iPad", "self check-in", "the glance",
+  "get the app modal", "fresh-card law", "12-hour runway", "beginFlow /
+  endFlow", "kiosk escape / start over / cancel", "autofill on the kiosk",
   "skip_reason", "kiosk type ramp", or "rotating QR".
 ---
 
@@ -190,7 +194,13 @@ weaken an in-app rule on the grounds that Guided Access covers it either.
 
 ---
 
-## 2. `beginFlow` / `endFlow` — the balance contract
+## 2. Leaving a flow — the balance contract, the escape, and the draft
+
+Three rules that all hang off the same moment (a member walking away from a
+half-finished flow): the session bookkeeping that must balance, the affordance
+that lets them leave on purpose, and what has to be wiped when they do.
+
+### `beginFlow` / `endFlow` — the balance contract
 
 **Exactly one `endFlow()` per `beginFlow()`, on EVERY exit path.** This is the
 single easiest thing to break in the kiosk and the breakage is silent.
