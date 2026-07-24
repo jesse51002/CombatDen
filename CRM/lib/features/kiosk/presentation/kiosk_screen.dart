@@ -32,7 +32,9 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// It hosts the check-in lane: a persistent header, the swapping sub-screen
 /// ([KioskFlowCubit] drives which), and the flow-idle warning overlay. The
 /// whole surface listens for pointer activity — a tap resets the 5-minute idle
-/// guard everywhere except the retention glance, where it dismisses to home.
+/// guard everywhere except the retention glance, where a tap instead opens the
+/// Get-the-App modal (the app-adoption funnel), and while that modal is open a
+/// tap does neither.
 ///
 /// The Phase C2 retention glance (streak + rewards) is live; the Phase D signup
 /// flow is still a front-desk placeholder dialog.

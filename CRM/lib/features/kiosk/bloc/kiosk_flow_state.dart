@@ -132,8 +132,10 @@ class KioskFlowState extends Equatable {
   /// The per-glance data fetch (rewards + balance) is in flight.
   final bool glanceLoading;
 
-  /// Seconds left on the glance's 8-second auto-return to home. Drives the
-  /// "Back to start in Ns" label + the drain bar. 0 off the glance.
+  /// Seconds left on the glance's hold before it returns home
+  /// ([kKioskGlanceHold], which starts AFTER the reveal's last beat, not on
+  /// entry). Drives the "Back to start in Ns" label + the drain bar. 0 off
+  /// the glance.
   final int glanceCountdown;
 
   // ── Flow-idle warning ──
