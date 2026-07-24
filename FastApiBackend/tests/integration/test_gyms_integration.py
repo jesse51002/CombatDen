@@ -93,18 +93,30 @@ class TestListMyGyms:
             parsed = uuid.UUID(str(gym["gym_id"]))
             assert str(parsed) == str(gym["gym_id"])
 
-    def test_no_extra_stripe_fields_leaked(self, api: httpx.Client) -> None:
-        """The list must NOT expose Stripe fields (stripe_account_id etc.)."""
+    def test_stripe_account_id_exposed_but_no_other_stripe_state(
+        self, api: httpx.Client
+    ) -> None:
+        """The list exposes the connected-account id (client-safe) but no
+        other Stripe state.
+
+        ``stripe_account_id`` rides on this authenticated staff read so the
+        CRM can set the Stripe.js connected-account context (a
+        browser-tokenized card must be minted on the gym's connected
+        account). Onboarding status / hosted-onboarding URLs stay off it —
+        those live on the owner-only onboarding endpoint.
+        """
         response = api.get("/api/v1/gyms/")
         assert response.status_code == 200, response.text
         forbidden_fields = {
-            "stripe_account_id",
             "stripe_onboarding_status",
             "onboarding_url",
         }
         for gym in response.json():
+            assert "stripe_account_id" in gym, (
+                f"connected-account id missing from gym list item: {gym}"
+            )
             leaked = forbidden_fields & set(gym.keys())
-            assert not leaked, f"Stripe fields leaked into gym list: {leaked}"
+            assert not leaked, f"Stripe state leaked into gym list: {leaked}"
 
     def test_unauthenticated_returns_401_or_403(self) -> None:
         """GET /api/v1/gyms/ without auth returns 401 or 403."""

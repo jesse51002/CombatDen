@@ -71,6 +71,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "gym_description": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
+            "stripe_account_id": "acct_aztec",
             "employee_type": "owner",
             "theme_preference": "dark",
         },
@@ -81,6 +82,8 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "gym_description": "No-gi",
             "timezone": "America/New_York",
             "sub_rank_type": "div",
+            # Not onboarded yet — the id is NULL until onboarding completes.
+            "stripe_account_id": None,
             "employee_type": "admin",
             "theme_preference": "system",
         },
@@ -99,8 +102,11 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     # The caller's saved theme rides along so the CRM can hydrate at login.
     assert body[0]["theme_preference"] == "dark"
     assert body[1]["theme_preference"] == "system"
-    # GymResponse fields must not leak Stripe state.
-    assert "stripe_account_id" not in body[0]
+    # The connected-account id IS exposed on this authenticated staff read
+    # (client-safe; the CRM sets the Stripe.js connected-account context from
+    # it). It is NULL until the gym finishes Stripe onboarding.
+    assert body[0]["stripe_account_id"] == "acct_aztec"
+    assert body[1]["stripe_account_id"] is None
 
 
 def test_onboarding_status_403_when_not_owner(client, auth_mock, auth_headers):

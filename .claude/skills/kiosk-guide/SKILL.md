@@ -597,6 +597,20 @@ from `one_time_card_dialog.dart` but **may never import it** — that module is 
 the banned list below. `set_default` is decided by `cartHasRecurring`, never by
 a picker.
 
+**The card is tokenized on the gym's CONNECTED account, not the platform.** The
+backend runs direct-charge Connect (customer + card + subscription all live on
+the gym's connected account), and a platform-owned `pm_…` cannot attach to a
+connected-account customer — so the browser must mint the PaymentMethod on the
+connected account. `CardFieldBox` gates its Stripe `CardField` on the
+`stripeAccountContext` seam (`lib/core/network/stripe_account_context.dart`),
+which `selectedGym.setActiveGym(...)` drove with the gym's `stripe_account_id`
+at login; the field mounts only once the account is applied (a `CardField` binds
+to whichever JS Stripe object exists at mount time). This is not kiosk-specific
+plumbing — it is the same seam the CRM billing dialogs use — but it is what makes
+the kiosk's browser-tokenized card actually attachable. A gym with no connected
+account (not onboarded) fails closed: the field never mounts, mirroring the
+backend's `paymentsUnavailable` stop.
+
 **Every attempt gets a genuinely FRESH field.** The `CardField` is a Stripe
 iframe whose web platform view is CACHED across mounts, so a retry after a
 decline would otherwise reuse the iframe still holding the declined number and

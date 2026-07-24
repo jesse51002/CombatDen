@@ -102,6 +102,24 @@ Every public service method takes `stripe_account_id` and threads it into the
 opts. The `PaymentsStripeClient` itself is constructed from the platform secret
 key (`stripe.StripeClient`) and is the single shared client.
 
+**The client tokenizes on the connected account too — because attach is
+connected-account-scoped.** A member's card is attached to a customer that lives
+on the gym's connected account (`create_customer` / `update_customer` /
+`attach_payment_method` all use `connect_opts(stripe_account_id)`), so the
+PaymentMethod the browser tokenizes must ALSO be minted on that connected
+account — a platform-owned `pm_…` cannot attach to a connected-account customer
+(Stripe raises `InvalidRequestError: … a platform-owned payment method ID`).
+So the CRM/kiosk sets the Stripe.js connected-account context before any card
+field mounts: `GET /api/v1/gyms/` exposes `stripe_account_id` on
+`GymWithRoleResponse` (the authenticated staff read — the `acct_…` id is
+client-safe, it rides in the browser in every Connect direct-charge
+integration), and the client sets `Stripe.stripeAccountId` + `applySettings()`
+from it when the active gym is established. The regression guard
+`tests/members/test_members_card_platform_pm_guard.py` locks the attach-side
+invariant (a platform-minted pm → `update_customer` raises). (Stripe's magic
+`pm_card_visa` test token crosses accounts, which is why the seed never
+surfaced this — a genuinely browser-tokenized card does not cross.)
+
 ### Metadata pinning — every Stripe resource carries its CRM id
 
 Each Stripe resource we create is written with a **typed metadata envelope** so

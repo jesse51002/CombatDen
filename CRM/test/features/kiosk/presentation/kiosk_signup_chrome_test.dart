@@ -96,6 +96,9 @@ void main() {
       role: EmployeeRole.owner,
       timezone: 'America/Chicago',
       logoUrl: null,
+      // A connected account so CardFieldBox mounts the live card field
+      // (payments available); the suite no-ops the real Stripe apply.
+      stripeAccountId: 'acct_iron',
     );
     createSeq = 0;
     memberships = _MockMembershipsRepository();

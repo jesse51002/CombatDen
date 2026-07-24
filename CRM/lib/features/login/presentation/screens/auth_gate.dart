@@ -163,6 +163,10 @@ class _AuthenticatedGateState
       timezone: gym.timezone,
       logoUrl: gym.logoUrl,
       savedThemeDesignId: gym.themeDesignId,
+      // Applies the gym's connected account to Stripe.js so browser-tokenized
+      // cards are minted on it (direct-charge Connect); re-applied on a gym
+      // switch, null-safe (payments unavailable until onboarded).
+      stripeAccountId: gym.stripeAccountId,
       createdAt: gym.createdAt,
     );
     // Seed the content gym (drives the read-only member-app content surfaces);
