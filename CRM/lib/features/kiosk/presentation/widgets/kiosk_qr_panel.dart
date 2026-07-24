@@ -1,25 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/state/selected_gym.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
-import 'package:crm/features/kiosk/presentation/kiosk_app_copy.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_adopt_strip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
-import 'package:crm/shared/widgets/hairline.dart';
 
 /// The "Scan with app" half of the kiosk home, as the three slots the home's
 /// band layout places (mockup `.home-panel`): the section head, the QR tile
-/// that floats in the flexible middle (`.qr-wrap`), and the app-adoption block
-/// pinned below it behind a hairline (`.qr-adopt`).
+/// that floats in the flexible middle (`.qr-wrap`), and the one-row
+/// [KioskAdoptStrip] pinned below it behind a hairline.
 ///
 /// The QR is a static visual placeholder — the live check-in nonce is Phase G,
-/// so it renders but does nothing. The adoption block's "Get it" opens the
+/// so it renders but does nothing. The adopt strip's "Get it" opens the
 /// "Get the app" modal (UX-5).
 ///
 /// Handing the head/body/foot to [KioskHomeColumns] rather than stacking them
@@ -32,7 +26,7 @@ KioskHomeHalf kioskQrHalf() => const KioskHomeHalf(
         subtitle: 'Scan QR code with app for instant check in',
       ),
       body: Center(child: _QrPlaceholder()),
-      foot: _AdoptFooter(),
+      foot: KioskAdoptStrip(),
     );
 
 /// A framed QR tile carrying a QR glyph — a placeholder only (the real
@@ -58,45 +52,6 @@ class _QrPlaceholder extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The app-adoption block that closes the QR half, separated from the flexible
-/// QR band by a hairline so it reads as the column's footer rather than
-/// content floating below the code.
-///
-/// **Its button runs at the SECONDARY size** (`compact`), matching the
-/// "New here? Sign up" button below the two columns. It keeps the gradient —
-/// the founder asked for a primary here — but at the loud primary scale it was
-/// the heaviest thing on an otherwise calm screen and tipped the whole
-/// composition into the left column ("this really doesn't look balanced").
-/// Filled for emphasis, sized like its neighbour so the home reads as one set.
-class _AdoptFooter extends StatelessWidget {
-  const _AdoptFooter();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        const Hairline(),
-        Center(
-          // White-labelled: the member downloads THEIR GYM's app — see
-          // `kiosk_app_copy.dart`. `selectedGym` is the same source the kiosk
-          // header names the gym from.
-          child: KioskAppLine(text: kioskAppStoreLine(selectedGym.gymName)),
-        ),
-        Center(
-          child: KioskPrimaryButton(
-            text: 'Don\'t have the app? Get it',
-            compact: true,
-            onPressed: () => context.read<KioskFlowCubit>().openAppModal(),
-          ),
-        ),
-      ],
     );
   }
 }

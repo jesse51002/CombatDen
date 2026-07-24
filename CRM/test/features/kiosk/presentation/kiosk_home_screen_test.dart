@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,8 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_adopt_strip.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_name_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_search_results.dart';
@@ -27,6 +31,7 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 
 class _MockMembersListRepository extends Mock
     implements MembersListRepository {}
@@ -104,10 +109,11 @@ void main() {
   Future<void> pumpHome(
     WidgetTester tester, {
     ThemeMode themeMode = ThemeMode.light,
+    Size size = const Size(1180, 760),
   }) async {
     themeController.setMode(themeMode);
     addTearDown(() => themeController.setMode(ThemeMode.light));
-    await tester.binding.setSurfaceSize(const Size(1180, 760));
+    await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
@@ -224,7 +230,9 @@ void main() {
     final button = tester.widget<AppPrimaryButton>(
       find.byType(AppPrimaryButton),
     );
-    expect(button.text, 'Don\'t have the app? Get it');
+    // Short on purpose: the line beside it already says what and where, so
+    // the button only has to carry the verb.
+    expect(button.text, 'Get it');
     // The default AppPrimaryButton look IS the brand gradient — no solid
     // override, so it carries the primary colour.
     expect(button.backgroundColor, isNull);
@@ -236,6 +244,89 @@ void main() {
 
     expect(find.text('Get the Iron Den app in the App Store.'), findsOneWidget);
     expect(find.textContaining('CombatDen'), findsNothing);
+  });
+
+  group('the adopt strip is ONE row', () {
+    testWidgets('the app line and the Get-it button share a vertical band',
+        (tester) async {
+      await pumpHome(tester);
+
+      final line = tester.getRect(find.byType(KioskAppLine));
+      final button = tester.getRect(find.byType(AppPrimaryButton));
+
+      // Side by side, not stacked: the sentence sits LEFT of the button, and
+      // the two ride one centre line.
+      expect(line.right, lessThanOrEqualTo(button.left));
+      expect(line.center.dy, moreOrLessEquals(button.center.dy, epsilon: 0.5));
+      // The line's whole box lies inside the button's band — the strip is one
+      // row tall, and the taller of the pair is what sets that height.
+      expect(line.top, greaterThanOrEqualTo(button.top));
+      expect(line.bottom, lessThanOrEqualTo(button.bottom));
+    });
+
+    testWidgets('the foot is shorter than the stacked block it replaced',
+        (tester) async {
+      await pumpHome(tester);
+
+      final strip = tester.getRect(find.byType(KioskAdoptStrip)).height;
+      final rule = tester
+          .getRect(
+            find.descendant(
+              of: find.byType(KioskAdoptStrip),
+              matching: find.byType(Hairline),
+            ),
+          )
+          .height;
+      final line = tester.getRect(find.byType(KioskAppLine)).height;
+      final button = tester.getRect(find.byType(AppPrimaryButton)).height;
+
+      // Stacked, the foot was rule + gap + line + gap + button. One row drops
+      // a whole line AND a gap out of the column — that height is exactly the
+      // weight the search half had nothing to answer with.
+      const gap = DesignConstants.spacingLarge;
+      expect(strip, lessThan(rule + gap + line + gap + button));
+      // Concretely: the row band is the TALLER of the pair, never their sum.
+      expect(
+        strip,
+        moreOrLessEquals(rule + gap + math.max(line, button), epsilon: 0.5),
+      );
+    });
+
+    testWidgets('a long gym name narrows the sentence, never the button',
+        (tester) async {
+      // The line is white-labelled, so the gym's own name decides how long it
+      // runs. It must never push the button out of the column or off screen.
+      selectedGym.setActiveGym(
+        gymId: 'gym-1',
+        displayName: 'Northside Brazilian Jiu-Jitsu & Fitness Academy',
+        role: EmployeeRole.owner,
+        timezone: 'America/Chicago',
+        logoUrl: null,
+      );
+      await pumpHome(tester, size: const Size(1024, 700));
+
+      expect(tester.takeException(), isNull);
+
+      final strip = tester.getRect(find.byType(KioskAdoptStrip));
+      final line = tester.getRect(find.byType(KioskAppLine));
+      final button = tester.getRect(find.byType(AppPrimaryButton));
+
+      // Still one row, still inside the column.
+      expect(line.center.dy, moreOrLessEquals(button.center.dy, epsilon: 0.5));
+      expect(button.left, greaterThanOrEqualTo(strip.left));
+      expect(button.right, lessThanOrEqualTo(strip.right));
+
+      // The sentence is what gives: it wraps, then ellipsizes at two lines so
+      // no gym name can grow the strip back into a stack.
+      final text = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(KioskAppLine),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(text.maxLines, 2);
+      expect(text.overflow, TextOverflow.ellipsis);
+    });
   });
 
   group('every kiosk button runs at kiosk scale', () {
