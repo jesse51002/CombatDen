@@ -2,7 +2,7 @@
 
 Both ``pay_open_subscription_invoice_out_of_band`` (cash) and
 ``pay_open_subscription_invoice_on_card`` (retry the saved default card) share
-ONE open-invoice lookup, ``_find_open_subscription_invoice``. These tests pin
+ONE open-invoice lookup, ``_list_open_subscription_invoices``. These tests pin
 the load-bearing difference between them:
 
 * the CARD path pays with EMPTY ``InvoicePayParams`` — no ``paid_out_of_band``
@@ -258,3 +258,42 @@ async def test_cash_path_already_paid_also_surfaces_real_message() -> None:
         )
     assert not isinstance(caught.value, PaymentsResourceNotFoundError)
     assert "already paid" in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_settle_pays_the_newest_of_a_stacked_backlog(caplog) -> None:
+    """With several open invoices, the settle pays the NEWEST and says so.
+
+    Stacking is rare (Stripe drafts/auto-closes later invoices while past_due,
+    and the cancel end-action kills the sub inside the retry window), but the
+    branch exists. The danger is silence: paying one advances next_due_date,
+    which drops the member off every overdue surface while the rest stay
+    unpaid. The lookup therefore returns ALL of them and logs the backlog.
+    """
+    def _open(invoice_id: str) -> MagicMock:
+        inv = MagicMock()
+        inv.id = invoice_id
+        inv.amount_remaining = 12000
+        inv.metadata.to_dict.return_value = {}
+        return inv
+
+    # Stripe lists newest-first.
+    backlog = [_open("in_newest"), _open("in_older"), _open("in_oldest")]
+    service, fake_stripe = _build_service(invoices=backlog)
+
+    with caplog.at_level("WARNING"):
+        invoice_id = await service.pay_open_subscription_invoice_on_card(
+            STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
+        )
+
+    # Stripe lists newest-first, so [0] is what gets settled.
+    assert invoice_id == "in_newest"
+    assert fake_stripe.v1.invoices.pay_async.await_args.args[0] == "in_newest"
+    # The backlog is surfaced, not swallowed.
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("3 open invoices" in m for m in messages), (
+        f"expected a backlog warning, got: {messages}"
+    )
+    assert any("36000" in m for m in messages), (
+        "the warning must state the total still owed"
+    )

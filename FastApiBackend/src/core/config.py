@@ -294,7 +294,17 @@ class Settings(BaseSettings):
     # invoice.lines page holds only Stripe's default 10, so a >10-line invoice
     # (large family / class-pack) is paged in full at this limit.
     invoice_line_items_page_limit: int = 100
-    subscription_open_invoice_limit: int = 1
+    # A settle (cash or card retry) pays the NEWEST open invoice, but we fetch
+    # several so a stacked backlog is DETECTED rather than silently ignored —
+    # paying the newest advances next_due_date, which would drop the member off
+    # every overdue surface while older invoices stayed unpaid.
+    #
+    # Stacking is rare by construction: Stripe leaves later invoices as DRAFTS
+    # while past_due and auto-closes them once the sub is `unpaid`, and the
+    # recommended cancel end-action terminates the sub inside the ~2-3 week
+    # retry window, before the next monthly renewal. This limit is the guard
+    # for the one branch that can stack (end-action = leave past_due).
+    subscription_open_invoice_limit: int = 20
 
     # Billing cycle anchors
     monthly_billing_anchor_day: int = 1  # 1st of month

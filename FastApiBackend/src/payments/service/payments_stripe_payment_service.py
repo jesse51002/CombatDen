@@ -422,15 +422,24 @@ class PaymentsStripePaymentService:
 
     # ── Pay the Open Subscription Invoice (cash / card) ──────────
 
-    async def _find_open_subscription_invoice(
+    async def _list_open_subscription_invoices(
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
-    ) -> stripe.Invoice:
-        """Return the subscription's single currently-open invoice.
+    ) -> list[stripe.Invoice]:
+        """Return the subscription's open invoices, NEWEST FIRST.
 
         Shared by the out-of-band (cash) settle and the on-card retry so the
-        two can never drift on what "the open invoice" is.
+        two can never drift on what "the open invoice" is. Both settle
+        ``[0]`` — the newest — but they receive the whole list so a stacked
+        backlog is visible rather than silently discarded: settling the newest
+        advances ``next_due_date``, which drops the member off every overdue
+        surface, so an unnoticed older invoice would become permanently
+        invisible.
+
+        Returns:
+            Every open invoice on the subscription (capped by
+            ``settings.subscription_open_invoice_limit``), newest first.
 
         Raises:
             PaymentsResourceNotFoundError: If Stripe rejects the lookup (the
@@ -460,7 +469,20 @@ class PaymentsStripePaymentService:
         if not invoices:
             raise ValueError(f"No open invoice for subscription {stripe_subscription_id}")
 
-        return invoices[0]
+        if len(invoices) > 1:
+            # Rare (see the Settings comment), but a real backlog: settling one
+            # advances next_due_date and hides the rest. Log loudly so it is
+            # discoverable even before the CRM surfaces it to staff.
+            logger.warning(
+                "Subscription %s has %d open invoices totalling %d; a settle "
+                "pays only the newest (%s) and the remainder stays unpaid",
+                stripe_subscription_id,
+                len(invoices),
+                sum(inv.amount_remaining or 0 for inv in invoices),
+                invoices[0].id,
+            )
+
+        return invoices
 
     async def pay_open_subscription_invoice_out_of_band(
         self,
@@ -476,10 +498,11 @@ class PaymentsStripePaymentService:
         Stripe fires the normal ``invoice.paid`` webhook, which
         handles the CRM write.
         """
-        invoice = await self._find_open_subscription_invoice(
+        invoices = await self._list_open_subscription_invoices(
             stripe_subscription_id,
             stripe_account_id,
         )
+        invoice = invoices[0]
 
         # Stripe does not propagate subscription metadata to its
         # generated invoices, so we cannot round-trip this through
@@ -556,10 +579,11 @@ class PaymentsStripePaymentService:
         ``invoice.paid`` webhook, which handles the CRM write; a decline
         raises out of ``pay_async`` and is left to propagate.
         """
-        invoice = await self._find_open_subscription_invoice(
+        invoices = await self._list_open_subscription_invoices(
             stripe_subscription_id,
             stripe_account_id,
         )
+        invoice = invoices[0]
 
         try:
             await self._stripe.v1.invoices.pay_async(
