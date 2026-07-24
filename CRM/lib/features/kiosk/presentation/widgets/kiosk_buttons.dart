@@ -26,8 +26,9 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 ///
 /// Pass [compact] where a filled button has to sit BESIDE a secondary one and
 /// must not out-shout it (the home's "Get it", which shares a screen with
-/// "New here? Sign up"). Compact keeps the gradient — it is still the primary
-/// tier — and only drops to the OUTLINE button's own metrics, reusing that
+/// "Start Trial / Membership"). Compact keeps the gradient — it is still the
+/// primary tier — and only drops to the OUTLINE button's own metrics, reusing
+/// that
 /// token rather than declaring a third size, so the two can never drift apart
 /// and the ramp still moves as one set.
 class KioskPrimaryButton extends StatelessWidget {
@@ -60,8 +61,8 @@ class KioskPrimaryButton extends StatelessWidget {
   }
 }
 
-/// The kiosk's secondary action (Done / Okay / Sign up) — the ink-outlined
-/// button at kiosk scale.
+/// The kiosk's secondary action (Done / Okay / the home's "Start Trial /
+/// Membership") — the ink-outlined button at kiosk scale.
 class KioskOutlineButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;

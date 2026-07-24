@@ -33,7 +33,7 @@ import 'package:crm/features/members_list/data/repositories/members_list_reposit
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 /// The member-facing SELF-SERVE SIGNUP lane, mounted by `KioskScreen`'s view
-/// switcher when the home's "Sign up" starts one.
+/// switcher when the home's "Start Trial / Membership" starts one.
 ///
 /// **It provides its own `KioskSignupCubit`, and that is load-bearing**: the
 /// cubit's lifetime is therefore exactly the flow's lifetime. Leaving the view

@@ -56,7 +56,7 @@ table, and no way back except signing out. An existing member walks up, finds
 their name (or, in Phase G, scans a QR), picks their class, gets checked in,
 and sees a retention **glance** — their streak, their points, this gym's
 reward tiles — before the screen resets for the next person. A brand-new
-member instead taps *"New here? Sign up"* and walks a self-serve **signup**
+member instead taps *"Start Trial / Membership"* and walks a self-serve **signup**
 spine — details, plan, waiver, card, review, pay, welcome (§10, §11), solo or
 as a group/family — before landing on the same app-adoption push.
 
@@ -1183,11 +1183,12 @@ construction rather than by tuning one side down**.
   the one reason `KioskAppLine` takes a cap) while the button holds its width
   and its place beside it. The button's label is deliberately short: the line
   already says what and where, so the button carries only the verb.
-- **Order: "New here? Sign up" sits ABOVE the strip.** Both are footer-weight
-  bands and only one can own the terminal slot, so the strip's hairline is the
-  home's single categorical boundary: above it, every way to get in RIGHT NOW
-  (scan / search / sign up); below it, the one thing that is about later. A
-  newcomer with no account is *blocked* at the kiosk and outranks a nudge nobody
+- **Order: "Start Trial / Membership" sits ABOVE the strip.** Both are
+  footer-weight bands and only one can own the terminal slot, so the strip's
+  hairline is the home's single categorical boundary: above it, every way to get
+  in RIGHT NOW (scan / search / buy); below it, the one thing that is about
+  later. Somebody with nothing to train on is *blocked* at the kiosk and
+  outranks a nudge nobody
   is waiting on. Never add a second rule to give the strip its own band — that
   turns one boundary into two footers competing for the same role.
 
@@ -1375,7 +1376,8 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   proportional scale-down. **Never add a `SingleChildScrollView` here**: a
   scrollbar on a kiosk is content nobody will ever see.
 
-- **Phase D — the SOLO signup, end to end.** The kiosk's "New here? Sign up"
+- **Phase D — the SOLO signup, end to end.** The kiosk's "Start Trial /
+  Membership"
   calls `KioskFlowCubit.startSignup()` (the same `canStartFlow` gate
   `selectMember` uses; it does **not** `beginFlow`), which routes
   `KioskView.signup` to `KioskSignupScreen`. That screen provides its own

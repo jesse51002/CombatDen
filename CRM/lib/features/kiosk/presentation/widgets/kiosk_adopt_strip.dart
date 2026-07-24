@@ -22,11 +22,11 @@ import 'package:crm/shared/widgets/measured_max_width.dart';
 /// strip got (founder). Spanning it empties both feet, so the two columns
 /// balance by construction rather than by tuning one side down.
 ///
-/// **It is the LAST band on the screen, below "New here? Sign up".** The rule
-/// is the one categorical boundary on the home: above it is every way to get in
-/// right now (scan, search, sign up), below it is the one thing that is about
-/// later. A person who is blocked at the kiosk — a newcomer with no account —
-/// outranks a nudge nobody is waiting on, so the sign-up entry keeps the higher
+/// **It is the LAST band on the screen, below "Start Trial / Membership".** The
+/// rule is the one categorical boundary on the home: above it is every way to
+/// get in right now (scan, search, buy), below it is the one thing that is
+/// about later. A person who is blocked at the kiosk — nothing to train on
+/// yet — outranks a nudge nobody is waiting on, so that entry keeps the higher
 /// slot and the adoption strip takes the terminal one.
 ///
 /// **The rule spans; the pair does not.** The hairline runs the full width
@@ -42,8 +42,8 @@ import 'package:crm/shared/widgets/measured_max_width.dart';
 ///
 /// **The button keeps its `compact` primary treatment** — filled because it is
 /// the one adopt action, at the secondary rung's metrics so it doesn't
-/// out-shout the "New here? Sign up" button above it. It is not a third size;
-/// see [KioskPrimaryButton].
+/// out-shout the "Start Trial / Membership" button above it. It is not a third
+/// size; see [KioskPrimaryButton].
 ///
 /// **The row degrades by narrowing the SENTENCE, never the button.** The line
 /// is the only [Flexible] child, so a long gym name ("Get the Northside

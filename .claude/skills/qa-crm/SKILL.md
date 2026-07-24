@@ -230,7 +230,8 @@ enough — no separate kiosk account exists.
 2. A confirm dialog opens ("Enter Kiosk Mode?"); tap **"Enter Kiosk"**. This
    calls `enterKiosk()`, which flips the cubit and swaps the whole screen — the
    next `$B screenshot` should show the kiosk home (the name-search / QR split,
-   "New here? Sign up" beneath it), with no nav rail and no admin chrome at all.
+   "Start Trial / Membership" beneath it), with no nav rail and no admin chrome
+   at all.
 3. To leave and get the admin workspace back for further QA, tap the header
    padlock, confirm **"This signs the iPad out"** — this signs out
    completely (not just kiosk), so re-run dev auto-login (§2) to come back.
@@ -249,12 +250,14 @@ tool's iframe/frame targeting if it has one. Confirm which on the first live
 pass and update this note with the working recipe — don't guess at a command
 that hasn't been proven against the real page.
 
-**Solo happy path.** From the kiosk home, tap **"New here? Sign up"**, then
-walk the spine (Plan precedes Waiver — see the `kiosk-guide` skill §11): fill
-the details step (name/email/phone) → the optional extra-details step (skip or
+**Solo happy path.** From the kiosk home, tap **"Start Trial / Membership"**,
+then walk the spine (the New/Existing choice leads it, and Plan precedes
+Waiver — see the `kiosk-guide` skill §11): tap **"I'm new here"** → fill the
+details step (name/email/phone) → the optional extra-details step (skip or
 fill address/DOB) → pick a plan → the waiver step (**"Sign and continue"**)
 → the card step (`4242…`, then **"Review"**) → the review step
-(**"Pay $…"**) → Paying → **Welcome**. Screenshot at the review step (confirm
+(**"Sign Membership · $…"**) → Paying → **Welcome**. Screenshot at the review
+step (confirm
 the real plan price + due-today figure) and at Welcome.
 
 **Duplicate-payer stop.** Run the details step again with the **same email**

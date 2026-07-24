@@ -138,7 +138,7 @@ void main() {
     expect(find.text('Scan with app'), findsOneWidget);
     expect(find.text('Name search'), findsOneWidget);
     expect(find.text('or'), findsOneWidget);
-    expect(find.text('New here? Sign up'), findsOneWidget);
+    expect(find.text('Start Trial / Membership'), findsOneWidget);
   });
 
   testWidgets('lays the two halves side by side with the seam between them',
@@ -467,7 +467,7 @@ void main() {
       final outline = tester.widget<AppOutlineButton>(
         find.byType(AppOutlineButton),
       );
-      expect(outline.text, 'New here? Sign up');
+      expect(outline.text, 'Start Trial / Membership');
       expect(outline.textStyle, DesignConstants.kioskButtonOutlineLabel);
       expect(outline.padding, DesignConstants.kioskButtonOutlinePadding);
       expect(outline.textStyle?.fontSize, 17);

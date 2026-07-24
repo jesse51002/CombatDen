@@ -25,9 +25,10 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step
 ///
 /// **The two buttons are deliberately different tiers.** Two gradient primaries
 /// side by side break the kiosk button ladder and two outlines leave the screen
-/// with no primary, which reads flat at 2m. The asymmetry maps to real
-/// frequency: this lane is reached from the home's "New here? Sign up", so the
-/// new-member path is the majority case. [KioskOutlineButton] is still a
+/// with no primary, which reads flat at 2m. Primary goes to the new-member
+/// path: it is the majority case at a signup kiosk, and it is also the only one
+/// with no alternative — an existing member can always be handled at the desk,
+/// a walk-in with no account cannot. [KioskOutlineButton] is still a
 /// full-weight 17px control with a 2px ink border — never the ghost escape
 /// tier, so it cannot read as "leave".
 class KioskEntryChoiceStep extends StatelessWidget {
