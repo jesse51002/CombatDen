@@ -520,8 +520,10 @@ async def test_mark_paid_cash_no_open_invoice(
 
     Scenario: a recurring membership is active (normal first payment went
     through), but no additional open invoice has been injected. Calling
-    ``mark_paid_cash`` should fail with ``ValueError`` containing
-    "No open invoice" and must not create any new charges or invoices.
+    ``mark_paid_cash`` should fail with a ValueError explaining the invoice
+    is "already settled" (the staff-facing wording shared with the card
+    retry — it deliberately carries no Stripe id) and must not create any
+    new charges or invoices.
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -546,7 +548,7 @@ async def test_mark_paid_cash_no_open_invoice(
         )
 
         # Active sub, no open invoice — must raise.
-        with pytest.raises(ValueError, match="No open invoice"):
+        with pytest.raises(ValueError, match="already settled"):
             await memberships_service.mark_paid_cash(
                 item_id=mm_row["item_id"],
                 member_id=member.member_id,
@@ -868,7 +870,7 @@ async def test_mark_paid_cash_idempotency(
         )
 
         # Second call — same key, no open invoice left; must raise.
-        with pytest.raises(ValueError, match="No open invoice"):
+        with pytest.raises(ValueError, match="already settled"):
             await memberships_service.mark_paid_cash(
                 item_id=mm_row["item_id"],
                 member_id=member.member_id,

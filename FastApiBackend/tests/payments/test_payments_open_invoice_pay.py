@@ -141,15 +141,30 @@ async def test_both_paths_share_the_open_invoice_lookup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_on_card_no_open_invoice_raises() -> None:
+async def test_on_card_no_open_invoice_raises_without_leaking_stripe_id() -> None:
+    """No open invoice is an ALREADY-SETTLED explanation, not a decline.
+
+    This message reaches the front desk verbatim, in the slot reserved for
+    the card-decline reason — so it must read as an explanation and must
+    never surface a raw ``sub_...`` id as the reason a card "failed".
+    """
     service, fake_stripe = _build_service(invoices=[])
 
-    with pytest.raises(ValueError, match="No open invoice for subscription"):
+    with pytest.raises(ValueError) as caught:
         await service.pay_open_subscription_invoice_on_card(
             STRIPE_SUB_ID,
             STRIPE_ACCOUNT_ID,
             idempotency_key=IDEMPOTENCY_KEY,
         )
+
+    message = str(caught.value)
+    assert STRIPE_SUB_ID not in message, (
+        f"the Stripe subscription id leaked to staff: {message!r}"
+    )
+    assert "sub_" not in message
+    assert "already settled" in message.lower()
+    # Must NOT contain "not found" — the router maps that substring to a 404.
+    assert "not found" not in message.lower()
 
     fake_stripe.v1.invoices.pay_async.assert_not_awaited()
 

@@ -190,10 +190,10 @@ async def test_retry_card_no_open_invoice_raises() -> None:
     row = _membership_row()
     service, payment_service = _build_service(row)
     payment_service.pay_open_subscription_invoice_on_card.side_effect = (
-        ValueError(f"No open invoice for subscription {STRIPE_SUB_ID}")
+        ValueError("This invoice is already settled — nothing left to collect.")
     )
 
-    with pytest.raises(ValueError, match="No open invoice for subscription"):
+    with pytest.raises(ValueError, match="already settled"):
         await service.retry_card(uuid4(), row["member_id"], uuid4())
 
 

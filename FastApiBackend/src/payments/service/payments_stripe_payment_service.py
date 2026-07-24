@@ -467,7 +467,22 @@ class PaymentsStripePaymentService:
 
         invoices = invoice_list.data or []
         if not invoices:
-            raise ValueError(f"No open invoice for subscription {stripe_subscription_id}")
+            # Reaching here means the CRM offered a settle for an invoice that
+            # is gone by the time it was clicked — Stripe's own dunning retry
+            # succeeded, someone settled it in cash seconds earlier, or the page
+            # is stale. NOTHING was declined, and this message is rendered to
+            # staff verbatim in the slot reserved for the card-decline reason,
+            # so it must read as an explanation, not a failure, and must not
+            # leak the Stripe id. The id stays in the log for debugging.
+            logger.info(
+                "Settle requested but subscription %s has no open invoice "
+                "(already paid or settled elsewhere)",
+                stripe_subscription_id,
+            )
+            raise ValueError(
+                "This invoice is already settled — nothing left to collect. "
+                "Refresh to see the current balance."
+            )
 
         if len(invoices) > 1:
             # Rare (see the Settings comment), but a real backlog: settling one
