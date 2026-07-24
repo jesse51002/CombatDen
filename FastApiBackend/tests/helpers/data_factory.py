@@ -56,14 +56,25 @@ class TestReward:
 async def create_payment_method(
     stripe_client: PaymentsStripeClient,
     connect_opts: stripe.RequestOptions,
+    *,
+    token: str = "tok_visa",
 ) -> str:
-    """Create a test Visa payment method on a connected account.
+    """Create a card payment method on a connected account.
+
+    Args:
+        stripe_client: Configured Stripe client.
+        connect_opts: Stripe Connect request options.
+        token: The Stripe test card token to build the card from. The default
+            ``tok_visa`` attaches AND charges successfully. Tests that need a
+            genuinely failing charge pass a failure token — e.g.
+            ``tok_chargeCustomerFail``, which attaches cleanly but declines
+            every charge against the customer.
 
     Returns:
         The payment method ID (``pm_...``).
     """
     pm = await stripe_client.client.v1.payment_methods.create_async(
-        params={"type": "card", "card": {"token": "tok_visa"}},
+        params={"type": "card", "card": {"token": token}},
         options=connect_opts,
     )
     return pm.id

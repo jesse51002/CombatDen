@@ -12,13 +12,11 @@ from src.members.schema.members_billing_schema import (
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
 )
-from src.members.service.members_status_mapping import (
-    is_membership_overdue,
-)
 from src.memberships.memberships_schema import (
     MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
+from src.shared.membership_status import is_membership_overdue
 
 
 class MembershipOverviewContext(BaseModel):
@@ -216,8 +214,10 @@ class MembersBillingGrouper:
     ) -> CrmMemberStatus:
         """Map a raw DB membership status to its CRM display status.
 
-        Returns ``overdue`` for a non-cancelled membership whose next
-        due date has passed; otherwise the raw status unchanged.
+        Returns ``overdue`` for an ACTIVE membership whose next due date
+        has passed (the one shared rule in
+        ``src/shared/membership_status.py``); a frozen / cancelled /
+        ended membership keeps its raw status.
 
         Args:
             raw_status: The DB-derived membership status.

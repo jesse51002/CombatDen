@@ -269,7 +269,12 @@ def test_list_members_hydrates_nested_rank(client, auth_headers, fake_gym_id, fa
 
 def test_total_counts_returns_per_status(client, auth_headers, fake_gym_id):
     """GET /api/v1/members/counts returns counts for each status."""
-    mock_response = MembersListTotalCounts(active=6, trial=2, frozen=1, overdue=1)
+    # Distinct values per tally so a mis-mapped field can't pass by luck.
+    # These are independent counts, not a partition — a member can be in
+    # more than one (an overdue member is also active), so they need not sum.
+    mock_response = MembersListTotalCounts(
+        active=6, trial=2, frozen=1, overdue=1, dormant=3
+    )
 
     mock_service = MagicMock()
     mock_service.get_total_counts = AsyncMock(return_value=mock_response)
@@ -286,7 +291,13 @@ def test_total_counts_returns_per_status(client, auth_headers, fake_gym_id):
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {"active": 6, "trial": 2, "frozen": 1, "overdue": 1}
+    assert body == {
+        "active": 6,
+        "trial": 2,
+        "frozen": 1,
+        "overdue": 1,
+        "dormant": 3,
+    }
 
 
 def test_member_detail_includes_streak_and_redemptions(

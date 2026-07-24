@@ -42,6 +42,15 @@ class MembershipUsage(BaseModel):
             ``status == active``). THE check-in gate's candidacy predicate:
             an ended trial still covers a class that ran inside its window;
             a membership started after the occurrence does not.
+        gym_today: The gym-LOCAL CURRENT date — always now-anchored, even on
+            a retroactive read where the rest of this row is anchored to the
+            occurrence. The check-in gate's overdue warning compares
+            ``renew_date`` to this, because "does this member owe money" is a
+            question about the present, not about the class being recorded.
+            Pairing it with ``status`` (also now-anchored) keeps both halves
+            of that test on the same clock; mixing a now-status with an
+            occurrence-date made the warning neither a reliable "owes now"
+            nor "owed then".
         class_count: Max classes allowed for this membership — the plan's
             ``class_count`` times the membership's ``quantity`` (None =
             unlimited). NOT the raw plan value when the pack is stacked.
@@ -60,6 +69,7 @@ class MembershipUsage(BaseModel):
     plan_type: PlanType
     status: str
     covers_reference: bool = True
+    gym_today: date
     class_count: int | None
     classes_used: int
     classes_remaining: int | None

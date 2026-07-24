@@ -39,8 +39,8 @@ from src.memberships.service.memberships_freeze import (
 from src.memberships.service.memberships_linked import (
     MemberMembershipsLinked,
 )
-from src.memberships.service.memberships_mark_paid_cash import (
-    MemberMembershipsMarkPaidCash,
+from src.memberships.service.memberships_settle import (
+    MemberMembershipsSettle,
 )
 from src.memberships.service.memberships_start import (
     MemberMembershipsStart,
@@ -63,6 +63,9 @@ if TYPE_CHECKING:
     )
     from src.members.service.management.members_management_service import (
         MembersManagementService,
+    )
+    from src.memberships.service.memberships_invoice_fetch import (
+        MemberMembershipsInvoiceFetch,
     )
     from src.memberships.service.memberships_invoice_fetch_runner import (
         MembershipsInvoiceFetchRunner,
@@ -114,6 +117,7 @@ class MemberMembershipsService:
         members_management_service: MembersManagementService,
         waivers_service: WaiversService,
         invoice_fetch_runner: MembershipsInvoiceFetchRunner,
+        invoice_fetch: MemberMembershipsInvoiceFetch,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
         # across its pre-sync + DB write + sync) so no two ops converge the
@@ -161,11 +165,15 @@ class MemberMembershipsService:
             discounts_service=discounts_service,
             validation=self._start_validation,
         )
-        self._mark_paid_cash = MemberMembershipsMarkPaidCash(
+        # ONE settle path behind both mark-paid-cash and retry-card — they
+        # differ only in HOW the open invoice is paid (see the two facade
+        # methods below).
+        self._settle = MemberMembershipsSettle(
             *deps,
-            payment_service=payment_service,
             payer_resolver=payer_resolver,
+            invoice_fetch=invoice_fetch,
         )
+        self._payment_service = payment_service
         self._charge_card = MemberMembershipsChargeCard(
             *deps,
             payment_service=payment_service,
@@ -367,15 +375,42 @@ class MemberMembershipsService:
         member_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Mark a recurring membership's open Stripe invoice as paid via cash."""
+        """Mark a recurring membership's open Stripe invoice as paid via cash.
+
+        The settle applies the paid invoice in-request, so no fire-and-forget
+        fetch is needed — a settle pays an OLD open invoice, which the
+        created-windowed on-demand fetch never covered anyway.
+        """
         payer_id = await self._get_payer_for_item(item_id)
-        op_start = int(time.time())
         async with self._paying_lock.lock([payer_id]):
-            await self._mark_paid_cash.mark_paid_cash(
-                item_id, member_id, idempotency_key,
+            await self._settle.settle_open_invoice(
+                item_id,
+                member_id,
+                idempotency_key,
+                pay=self._payment_service.pay_open_subscription_invoice_out_of_band,
             )
-        # Cash settles an open invoice → still finalizes invoice/charge rows.
-        self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
+
+    # ── Retry Card (the open invoice, on the saved default) ────
+
+    async def retry_card(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        idempotency_key: UUID,
+    ) -> None:
+        """Retry the payer's default card on the membership's open invoice.
+
+        Identical to ``mark_paid_cash`` but pays on the saved default card
+        instead of out of band — the single differing step.
+        """
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
+            await self._settle.settle_open_invoice(
+                item_id,
+                member_id,
+                idempotency_key,
+                pay=self._payment_service.pay_open_subscription_invoice_on_card,
+            )
 
     # ── Charge Card (ad-hoc amount) ────────────────────────────
 
