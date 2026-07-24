@@ -21,14 +21,15 @@ decline at *start* is a different path (``payment_behavior=error_if_incomplete``
 makes Stripe 402 the create and leave no subscription behind) and is not what
 this test is about.
 
-**Assertions are Stripe-side only.** Stripe cannot reach localhost, so the
-``invoice.paid`` webhook never fires here and no CRM ``member_invoices`` /
-``member_charges`` row is written by this test. The on-demand invoice-fetch
-fast path is also disabled suite-wide by the ``_disable_on_demand_invoice_fetch``
-autouse fixture. CRM-side mirroring is covered by
-``tests/memberships/test_invoice_fetch_e2e.py`` and the webhook tests; here the
-proof of record is Stripe's own invoice status / ``amount_paid`` and the
-subscription status.
+**Both Stripe-side AND CRM-side are asserted.** Stripe cannot reach localhost,
+so the ``invoice.paid`` webhook never fires here — but ``retry_card`` now
+applies the paid invoice IN-REQUEST (``MemberMembershipsSettle`` →
+``MemberMembershipsInvoiceFetch.apply_invoice``), not via the fire-and-forget
+runner (which the ``_disable_on_demand_invoice_fetch`` autouse fixture turns
+off suite-wide, and which never covered an old failed-renewal invoice anyway).
+So this test proves the fix end to end: after the retry, the CRM
+``member_memberships.next_due_date`` has advanced and the ``member_invoices``
+row is ``paid`` — with no webhook and no sweep in play.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from uuid import uuid4
 import pytest
 import stripe
 from schema.task import ProrationBehavior
+from sqlalchemy import text
 
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
@@ -86,6 +88,32 @@ async def _retrieve_invoice(
         invoice_id,
         options=connect_opts,
     )
+
+
+async def _crm_next_due_date(db_pool, item_id):
+    """The CRM's stored next_due_date for one membership (None if unset)."""
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT next_due_date FROM member_memberships "
+                "WHERE item_id = :item_id"
+            ),
+            {"item_id": str(item_id)},
+        )
+        return result.scalar_one_or_none()
+
+
+async def _crm_invoice_status(db_pool, stripe_invoice_id):
+    """The CRM member_invoices status for a Stripe invoice (None if unrecorded)."""
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT status FROM member_invoices "
+                "WHERE stripe_invoice_id = :sid"
+            ),
+            {"sid": stripe_invoice_id},
+        )
+        return result.scalar_one_or_none()
 
 
 async def _await_finalized_invoice(
@@ -244,6 +272,11 @@ async def test_retry_card_pays_a_real_failed_renewal(
         good_pm_id,
     )
 
+    # The CRM's next_due_date BEFORE the retry (nothing local has advanced it:
+    # the failed renewal's invoice.payment_failed webhook never reached
+    # localhost, and no sweep ran).
+    due_before = await _crm_next_due_date(db_pool, item_id)
+
     await memberships_service.retry_card(item_id, member.member_id, uuid4())
 
     paid = await _retrieve_invoice(stripe_client, renewal.id, connect_opts)
@@ -265,4 +298,24 @@ async def test_retry_card_pays_a_real_failed_renewal(
     assert settled_sub.status == "active", (
         f"Subscription {settled_sub.id} status={settled_sub.status}, expected "
         f"active once the open invoice was paid"
+    )
+
+    # ── 4. THE FIX: the CRM is updated IN-REQUEST, no webhook/sweep ──────
+    # retry_card applied the paid invoice synchronously, so both the due date
+    # and the invoice row are current the instant the op returned.
+    due_after = await _crm_next_due_date(db_pool, item_id)
+    assert due_before is not None and due_after is not None, (
+        f"next_due_date should be set both sides (before={due_before}, "
+        f"after={due_after})"
+    )
+    assert due_after > due_before, (
+        f"retry-card did not advance the CRM next_due_date: before={due_before} "
+        f"after={due_after}. Without the in-request apply this only moves when "
+        f"the (localhost-unreachable) invoice.paid webhook lands."
+    )
+
+    invoice_status = await _crm_invoice_status(db_pool, renewal.id)
+    assert invoice_status == "paid", (
+        f"member_invoices row for {renewal.id} is {invoice_status!r}, expected "
+        f"'paid' — the record seam did not run in-request"
     )

@@ -645,6 +645,24 @@ class PaymentsStripePaymentService:
             starting_after = data[-1].id
         return out
 
+    async def retrieve_invoice(
+        self,
+        invoice_id: str,
+        stripe_account_id: str,
+    ) -> dict:
+        """Retrieve ONE invoice by id, as the plain nested dict the record
+        seams consume (the same shape a webhook event carries).
+
+        Used by the settle path to apply the exact invoice it just paid,
+        rather than waiting for the `created`-windowed on-demand fetch (which
+        never covers an old failed-renewal invoice) or the webhook.
+        """
+        invoice = await self._stripe.v1.invoices.retrieve_async(
+            invoice_id,
+            options=self._client.connect_opts_readonly(stripe_account_id),
+        )
+        return json.loads(str(invoice))
+
     async def list_invoices(
         self,
         stripe_account_id: str,

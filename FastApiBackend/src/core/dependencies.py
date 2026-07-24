@@ -841,6 +841,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         members_management_service=members_management_service,
         waivers_service=waivers_service,
         invoice_fetch_runner=memberships_invoice_fetch_runner,
+        invoice_fetch=member_memberships_invoice_fetch,
     )
     member_memberships_refund_service = providers.Factory(
         MemberMembershipsRefund,

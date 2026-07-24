@@ -189,6 +189,29 @@ class MemberMembershipsInvoiceFetch:
                     lambda s, r=refund: self._refund.record(s, r, gym_id),
                 )
 
+    async def apply_invoice(
+        self,
+        gym_id: UUID,
+        account_id: str,
+        invoice_id: str,
+    ) -> None:
+        """Apply ONE known invoice to the CRM, synchronously and by id.
+
+        The settle path (retry-card / mark-paid-cash) pays a specific OPEN
+        invoice — usually a failed renewal created weeks ago. The on-demand
+        `fetch_for_payer` cannot pick that up (it lists only invoices created
+        at/after the op), and the reconciler's lookback window is far too
+        short to reach it, so without this the paid invoice would advance
+        `next_due_date` and finalize the invoice/charge rows only when the
+        `invoice.paid` webhook happens to land (never on localhost). This
+        retrieves the exact invoice and routes it through the SAME idempotent
+        `_record_invoice` seam the webhook and sweep use, so a later webhook
+        re-applying it is a clean no-op.
+        """
+        invoice = await self._payments.retrieve_invoice(invoice_id, account_id)
+        result = SweepResult(name=ON_DEMAND_NAME)
+        await self._record_invoice(invoice, gym_id, account_id, result)
+
     async def _record_invoice(
         self,
         invoice: dict,

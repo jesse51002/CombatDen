@@ -274,6 +274,7 @@ def build_member_memberships_service(
         management_svc,
         waivers_svc,
         build_invoice_fetch_runner(db_pool, stripe_client),
+        build_invoice_fetch(db_pool, stripe_client),
     )
 
 
