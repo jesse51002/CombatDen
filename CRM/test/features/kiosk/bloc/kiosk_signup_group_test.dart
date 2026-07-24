@@ -384,7 +384,7 @@ void main() {
       final cubit = await atRoster();
       await addElla(cubit);
       // The parent pays but does not train.
-      cubit.setPayerTraining(false);
+      cubit.setPersonTraining(0, false);
       cubit.continueToPlans();
       // Only the payee picks — the plan step never opens for the payer.
       expect(cubit.state.activePersonIndex, 1);
@@ -515,16 +515,16 @@ void main() {
     test('an empty cart cannot advance, and "It\'s just me" reaches plans',
         () async {
       final cubit = await atRoster();
-      cubit.setPayerTraining(false);
+      cubit.setPersonTraining(0, false);
 
       // A payer who is not training with nobody else on the roster would send
       // `memberships: []` and take a 400.
-      expect(cubit.state.canLeavePeople, isFalse);
+      expect(cubit.state.anyoneTraining, isFalse);
       cubit.continueToPlans();
       expect(cubit.state.step, KioskSignupStep.people);
 
-      cubit.setPayerTraining(true);
-      expect(cubit.state.canLeavePeople, isTrue);
+      cubit.setPersonTraining(0, true);
+      expect(cubit.state.anyoneTraining, isTrue);
       cubit.continueToPlans();
       expect(cubit.state.step, KioskSignupStep.plans);
       expect(cubit.state.isGroup, isFalse);

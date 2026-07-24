@@ -7,11 +7,15 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_consent_check.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_roster_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_optional_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_training_toggle.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
@@ -125,8 +129,8 @@ void main() {
     await pump(tester, const KioskPeopleStep());
 
     expect(find.byType(KioskRosterRow), findsNWidgets(2));
-    // The payer alone carries the "Training too" switch and the Paying pill.
-    expect(find.byType(KioskTrainingToggle), findsOneWidget);
+    // The membership check is on EVERY row now, not just the payer's.
+    expect(find.byType(KioskConsentCheck), findsNWidgets(2));
     expect(find.text('Paying'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
     // Both were created here, so both may be corrected.
@@ -167,7 +171,124 @@ void main() {
     await createPayer();
     await pump(tester, const KioskPeopleStep());
 
-    expect(find.text('Someone else is paying'), findsOneWidget);
+    expect(find.text('Change who is paying'), findsOneWidget);
+    await cubit.close();
+  });
+
+  testWidgets('the membership check is per person, stacked, and ON by default',
+      (tester) async {
+    await createPayer();
+    await cubit.addPerson(
+      firstName: 'Ella',
+      lastName: 'Bell',
+      email: 'ella.bell@gmail.com',
+    );
+    cubit.skipPersonDetails();
+    await pump(tester, const KioskPeopleStep());
+
+    expect(find.byType(KioskConsentCheck), findsNWidgets(2));
+    expect(
+      find.text('Marcus is getting a membership as well'),
+      findsOneWidget,
+    );
+    expect(find.text('Ella is getting a membership as well'), findsOneWidget);
+    // Default ON for everybody, payer included.
+    expect(cubit.state.persons.every((p) => p.training), isTrue);
+    // The check sits on its OWN line under the identity row, not inline.
+    final row = tester.getRect(find.byType(KioskRosterRow).first);
+    final check = tester.getRect(find.byType(KioskConsentCheck).first);
+    expect(check.top, greaterThan(row.top));
+    expect(tester.takeException(), isNull);
+    await cubit.close();
+  });
+
+  testWidgets('a solo roster drops the "as well"', (tester) async {
+    await createPayer();
+    await pump(tester, const KioskPeopleStep());
+
+    expect(find.text('I\'m getting a membership'), findsOneWidget);
+    expect(find.textContaining('as well'), findsNothing);
+    await cubit.close();
+  });
+
+  testWidgets('unticking everyone blocks Continue and SAYS why',
+      (tester) async {
+    await createPayer();
+    cubit.setPersonTraining(0, false);
+    await pump(tester, const KioskPeopleStep());
+
+    // A disabled button is never left to explain itself.
+    expect(
+      find.textContaining('we need at least one to carry on'),
+      findsOneWidget,
+    );
+    final primary = tester.widget<KioskPrimaryButton>(
+      find.widgetWithText(KioskPrimaryButton, 'It\'s just me'),
+    );
+    expect(primary.onPressed, isNull);
+
+    // Ticking anybody releases it.
+    cubit.setPersonTraining(0, true);
+    // The emit reaches the builder on a microtask, so the frame after it is
+    // the one that carries the change.
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.textContaining('we need at least one to carry on'),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<KioskPrimaryButton>(
+            find.widgetWithText(KioskPrimaryButton, 'It\'s just me'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+    await cubit.close();
+  });
+
+  testWidgets('the picker lists the roster AND the CRM search together',
+      (tester) async {
+    await createPayer();
+    await cubit.addPerson(
+      firstName: 'Ella',
+      lastName: 'Bell',
+      email: 'ella.bell@gmail.com',
+    );
+    cubit.skipPersonDetails();
+    cubit.openPayerPick();
+    await pump(tester, const KioskPayerPickStep());
+
+    expect(find.text('Already here'), findsOneWidget);
+    expect(find.text('Someone else who trains here'), findsOneWidget);
+    // Ella is offered; the current payer is named as context, not as a row.
+    expect(find.byType(KioskNameRow), findsOneWidget);
+    expect(find.text('Ella Bell'), findsOneWidget);
+    expect(find.text('PAYING NOW'), findsOneWidget);
+    expect(find.byType(KioskMatchSearch), findsOneWidget);
+    // A shared iPad never prints an address in full.
+    expect(find.textContaining('ella.bell@'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await cubit.close();
+  });
+
+  testWidgets('the remove control asks before it removes', (tester) async {
+    await createPayer();
+    await cubit.addPerson(
+      firstName: 'Ella',
+      lastName: 'Bell',
+      email: 'ella.bell@gmail.com',
+    );
+    cubit.skipPersonDetails();
+    await pump(tester, const KioskPeopleStep());
+
+    await tester.tap(find.bySemanticsLabel('Remove Ella Bell'));
+    await tester.pump();
+    expect(cubit.state.removeConfirmIndex, 1);
+    // Nothing has happened yet.
+    expect(cubit.state.persons, hasLength(2));
     await cubit.close();
   });
 

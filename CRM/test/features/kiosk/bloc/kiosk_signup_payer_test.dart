@@ -302,7 +302,9 @@ void main() {
       expect(cubit.state.payer.memberId, 'mem-dad');
       expect(cubit.state.payer.wasExisting, isTrue);
       expect(cubit.state.payer.isPayer, isTrue);
-      expect(cubit.state.payer.training, isFalse);
+      // The membership check defaults ON for everybody, adopted included —
+      // they can untick it on the roster if they are only paying.
+      expect(cubit.state.payer.training, isTrue);
       expect(cubit.state.persons[1].memberId, 'mem-1');
       expect(cubit.state.persons[1].firstName, 'Marcus');
       expect(cubit.state.persons[1].isPayer, isFalse);
@@ -324,8 +326,10 @@ void main() {
       cubit.continueToPlans();
       cubit.selectPlan(planId);
       cubit.continueFromPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
       await _settle();
-      // The run opens on the payer-auth agreement for the signer.
+      // The run opens on the payer-auth agreement for the demoted signer.
       expect(cubit.state.payerAuthPending, isTrue);
       verifyNever(() => member.previewStartMemberships(any()));
 
@@ -343,6 +347,8 @@ void main() {
       expect(cubit.state.everyPayeeLinked, isTrue);
 
       await cubit.signWaiver(signerName: 'Rick Bell');
+      await _settle();
+      await cubit.signWaiver(signerName: 'Rick Bell');
       expect(cubit.state.step, KioskSignupStep.card);
       cubit.submitCard(paymentMethodId: 'pm_1', brand: 'visa', last4: '4242');
       await _settle();
@@ -355,9 +361,10 @@ void main() {
         ),
       ).captured.single as MemberMembershipsStartRequest;
       expect(request.payerMemberId, 'mem-dad');
-      // The payer buys nothing of their own; the signer's membership is the
-      // only item.
-      expect(request.memberships.single.memberId, 'mem-1');
+      expect(
+        request.memberships.map((m) => m.memberId),
+        containsAll(<String>['mem-dad', 'mem-1']),
+      );
       expect(cubit.state.step, KioskSignupStep.welcome);
       await cubit.close();
     });
@@ -400,14 +407,37 @@ void main() {
       await cubit.close();
     });
 
-    test('somebody already on the roster is refused WITHOUT a check',
+    test('a CRM hit already on the roster REDIRECTS to the list, no check',
         () async {
       final cubit = await submitPayer(build());
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
       cubit.openPayerPick();
-      await cubit.pickPayerRow(_row('mem-1', 'Marcus Bell'));
+      await cubit.pickPayerRow(_row('mem-2', 'Ella Bell'));
 
+      // A redirect, not a rejection: they are pickable from the roster list.
       expect(cubit.state.payerRefusal, KioskPayerEligibility.alreadyInSignup);
-      expect(cubit.state.persons, hasLength(1));
+      // And crucially NOT inserted a second time.
+      expect(cubit.state.persons, hasLength(2));
+      verifyNever(() => member.getPaymentMethodStatus(any()));
+      await cubit.close();
+    });
+
+    test('the CURRENT payer is not selectable, from either list', () async {
+      final cubit = await submitPayer(build());
+      cubit.openPayerPick();
+
+      // Not offered by the roster list...
+      expect(cubit.state.payerCandidateIndexes, isEmpty);
+      // ...and picking them anyway is a no-op that never reaches the gate.
+      await cubit.pickPayerFromRoster(0);
+      await cubit.pickPayerRow(_row('mem-1', 'Marcus Bell'));
+      expect(cubit.state.payer.memberId, 'mem-1');
+      expect(cubit.state.payerRefusal, isNull);
       verifyNever(() => member.getPaymentMethodStatus(any()));
       await cubit.close();
     });
@@ -445,6 +475,215 @@ void main() {
       expect(cubit.state.canSwitchPayer, isFalse);
       cubit.openPayerPick();
       expect(cubit.state.step, KioskSignupStep.people);
+      await cubit.close();
+    });
+  });
+
+  group('entry B — picking somebody already on the roster', () {
+    /// The payer, plus Ella, with the picker open.
+    Future<KioskSignupCubit> atPickerWithElla() async {
+      final cubit = await submitPayer(build());
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
+      cubit.openPayerPick();
+      expect(cubit.state.payerCandidateIndexes, [1]);
+      return cubit;
+    }
+
+    test('a roster pick promotes them and demotes the previous payer',
+        () async {
+      final cubit = await atPickerWithElla();
+      await cubit.pickPayerFromRoster(1);
+
+      expect(cubit.state.step, KioskSignupStep.people);
+      expect(cubit.state.persons, hasLength(2));
+      // A straight swap: promoted to the head, the old payer takes their seat.
+      expect(cubit.state.payer.memberId, 'mem-2');
+      expect(cubit.state.payer.firstName, 'Ella');
+      expect(cubit.state.payer.isPayer, isTrue);
+      // Promotion moves the PAYER role and nothing else — they were getting a
+      // membership before and they still are.
+      expect(cubit.state.payer.training, isTrue);
+      expect(cubit.state.persons[1].memberId, 'mem-1');
+      expect(cubit.state.persons[1].isPayer, isFalse);
+      expect(cubit.state.persons[1].training, isTrue);
+      // Nobody is created by a promotion.
+      verify(() => member.createMember(any())).called(2);
+      await cubit.close();
+    });
+
+    test('the gate runs for a ROSTER pick too — a card on file refuses',
+        () async {
+      final cubit = await atPickerWithElla();
+      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
+        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
+      );
+      await cubit.pickPayerFromRoster(1);
+
+      // No shortcut for somebody this signup created: the check runs, and it
+      // refuses exactly as a CRM pick would.
+      verify(() => member.getPaymentMethodStatus('mem-2')).called(1);
+      expect(cubit.state.payerRefusal, KioskPayerEligibility.hasPaymentMethod);
+      expect(cubit.state.payer.memberId, 'mem-1');
+      await cubit.close();
+    });
+
+    test('FAIL CLOSED — a failed check on a roster pick refuses', () async {
+      final cubit = await atPickerWithElla();
+      when(() => member.getPaymentMethodStatus(any()))
+          .thenThrow(const ServerException('boom', statusCode: 500));
+      await cubit.pickPayerFromRoster(1);
+
+      expect(cubit.state.payerRefusal, KioskPayerEligibility.unknown);
+      // The payer seat is untouched.
+      expect(cubit.state.payer.memberId, 'mem-1');
+      expect(cubit.state.persons[1].memberId, 'mem-2');
+      await cubit.close();
+    });
+
+    test('a promoted payer still authorizes everyone before any charge',
+        () async {
+      final cubit = await atPickerWithElla();
+      await cubit.pickPayerFromRoster(1);
+      expect(cubit.state.everyPayeeLinked, isFalse);
+
+      cubit.continueToPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      await _settle();
+      expect(cubit.state.payerAuthPending, isTrue);
+      verifyNever(() => member.previewStartMemberships(any()));
+
+      await cubit.signPayerAuth(signerName: 'Ella Bell');
+      await _settle();
+      verify(
+        () => member.linkMemberAccount(
+          'mem-1',
+          payerMemberId: 'mem-2',
+          waiverVersionId: any(named: 'waiverVersionId'),
+          signerName: 'Ella Bell',
+          consentAcknowledged: any(named: 'consentAcknowledged'),
+        ),
+      ).called(1);
+      expect(cubit.state.everyPayeeLinked, isTrue);
+      await cubit.close();
+    });
+  });
+
+  group('the empty-cart guard', () {
+    test('nothing advances, and no request is ever built, with none ticked',
+        () async {
+      final cubit = await submitPayer(build());
+      cubit.setPersonTraining(0, false);
+      expect(cubit.state.anyoneTraining, isFalse);
+
+      cubit.continueToPlans();
+      // Blocked, not skipped: there is no path past this that sends an empty
+      // cart, and nothing downstream is touched.
+      expect(cubit.state.step, KioskSignupStep.people);
+      verifyNever(() => member.previewStartMemberships(any()));
+      verifyNever(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      );
+
+      // Ticking anybody releases it immediately.
+      cubit.setPersonTraining(0, true);
+      expect(cubit.state.anyoneTraining, isTrue);
+      cubit.continueToPlans();
+      expect(cubit.state.step, KioskSignupStep.plans);
+      await cubit.close();
+    });
+
+    test('a MIXED roster charges only the people who are getting one',
+        () async {
+      final cubit = await submitPayer(build());
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
+      // The payer registers only; the child gets the membership.
+      cubit.setPersonTraining(0, false);
+      expect(cubit.state.trainingPersonIndexes, [1]);
+
+      cubit.continueToPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      await _settle();
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+      await cubit.signWaiver(signerName: 'Marcus Bell');
+      expect(cubit.state.step, KioskSignupStep.card);
+      cubit.submitCard(paymentMethodId: 'pm_1', brand: 'visa', last4: '4242');
+      await _settle();
+      await cubit.pay();
+
+      final request = verify(
+        () => member.startMemberships(
+          captureAny(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).captured.single as MemberMembershipsStartRequest;
+      // The unchecked payer is created and pays, but buys nothing.
+      expect(request.payerMemberId, 'mem-1');
+      expect(request.memberships.single.memberId, 'mem-2');
+      await cubit.close();
+    });
+  });
+
+  group('taking somebody off the roster asks first', () {
+    Future<KioskSignupCubit> withElla() async {
+      final cubit = await submitPayer(build());
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
+      return cubit;
+    }
+
+    test('cancelling keeps them; confirming removes them', () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(1);
+      expect(cubit.state.removeConfirmIndex, 1);
+
+      cubit.dismissRemovePerson();
+      expect(cubit.state.removeConfirmIndex, isNull);
+      expect(cubit.state.persons, hasLength(2));
+
+      cubit.askRemovePerson(1);
+      cubit.confirmRemovePerson();
+      expect(cubit.state.removeConfirmIndex, isNull);
+      expect(cubit.state.persons, hasLength(1));
+      await cubit.close();
+    });
+
+    test('it is not offered once that person is linked', () async {
+      final cubit = await withElla();
+      cubit.continueToPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      await _settle();
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+
+      // There is no unlink call, so removal stops being free.
+      expect(cubit.state.canRemovePerson(1), isFalse);
+      cubit.askRemovePerson(1);
+      expect(cubit.state.removeConfirmIndex, isNull);
       await cubit.close();
     });
   });

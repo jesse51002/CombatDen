@@ -413,7 +413,7 @@ body fails to parse rather than defaulting to `false`).
 | `eligible` | the check answered, and there is no payment method |
 | `hasPaymentMethod` | the check answered: there is one. Refuse. |
 | `unknown` | the check did NOT answer — 404, 5xx, timeout, dropped connection, unparsable body. Refuse. |
-| `alreadyInSignup` | decided locally before the check: they are already on this roster (a second entry for one member is a double charge waiting to happen). Refuse. |
+| `alreadyInSignup` | decided locally before the check: the CRM search turned up somebody already on this roster. A **redirect**, not a rejection — they are listed above and pickable there — and it still stops the CRM path INSERTING a second entry, which would be two cart items for one person. |
 
 > **FAIL CLOSED.** An indeterminate check is NOT eligible. A `false` inferred
 > from a failure is a billing incident, so `_payerEligibility` catches
@@ -433,16 +433,42 @@ account back to them leaks nothing. "Yes, that's me" adopts the id;
 terminal stop. A LIST of matches is still never rendered, and never a phone,
 photo or membership status.
 
-**B — "Someone else is paying".** A ghost affordance under the roster opens
-`KioskSignupStep.payerPick` — the shipped kiosk name search
-(`KioskMatchSearch(forPayer: true)`) driving the **one** debounced,
-sequence-guarded search the cubit already owns. Every pick runs the same gate.
-Eligible → the picked member takes the payer seat; **only the payer role
-moves**, so the person who started the signup stays on the roster as a payee
-and now needs the payer-authorization waiver like any other payee (which
-`everyPayeeLinked` enforces for free — see §11.5). Ineligible, or a failed
-check, is an **inline** refusal (`kiosk_payer_refusal_copy.dart`), never a
-stop: they pick somebody else or carry on paying themselves.
+**B — "Change who is paying".** A secondary-tier affordance under the roster
+opens `KioskSignupStep.payerPick`. It is a change-of-ROLE action and the label
+says so; "someone else is paying" announced a fact about a third party, which
+is not what the button does.
+
+**The picker offers the ROSTER first, then the CRM.** The people already on
+this signup are standing right there, so they are listed and directly pickable;
+the shipped kiosk name search (`KioskMatchSearch(forPayer: true)`) sits under
+them for anyone not on the roster yet, driving the **one** debounced,
+sequence-guarded search the cubit already owns. Both lists render through the
+same `KioskNameRow`, because they are two sources of one kind of answer rather
+than two kinds of control. **The current payer is not offered** — picking
+whoever is already paying is a no-op dressed as a choice — and is named in the
+pinned `PAYING NOW` strip instead, so the screen still says who it is changing
+FROM.
+
+**The gate runs on whoever is picked, uniformly.** `_gateThenSeat` is the ONE
+path a payer is ever seated by, and **nothing is special-cased for a person
+this signup created** — not even on the reasoning that they obviously have no
+card yet. One code path means one place the invariant lives and no branch a
+future change could route around; the cost is one cheap call.
+
+Two seatings, one gate:
+
+- **CRM pick** (`_seatNewPayer`) — INSERTS them at the head; the person who
+  started the signup keeps their seat as a payee and every index shifts by one.
+- **Roster pick** (`_promoteRosterPayer`) — a straight SWAP of positions 0 and
+  k, so every other index (and every signature, link and plan keyed on one) is
+  untouched. The promoted person keeps their own membership choice and plan:
+  they were signing up before and they still are.
+
+Either way **only the payer role moves**, so the demoted person now needs the
+payer-authorization waiver like any other payee — which `everyPayeeLinked`
+enforces for free (see §11.5). Ineligible, or a failed check, is an **inline**
+refusal (`kiosk_payer_refusal_copy.dart`), never a stop: they pick somebody
+else or carry on paying themselves.
 
 **The offer is withdrawn the moment anything commits.**
 `KioskSignupState.canSwitchPayer` is false once any payee is `linked` or
@@ -451,6 +477,48 @@ roster authorized to somebody who is no longer paying and assemble a start
 request against a payer the backend never authorized. It also refuses a
 **second** swap, which would strand the first adopted payer on the roster as a
 payee they never agreed to be.
+
+#### Everyone on the roster chooses, and at least one must say yes
+
+`KioskSignupPerson.training` is the same control on **every** roster row —
+"{Name} is getting a membership as well", or "I'm getting a membership" on a
+roster of one, where the comparison has nobody to be against — rendered with
+the shipped `KioskConsentCheck` and **defaulting ON** for everybody: payer,
+payee, created here or adopted. A payer-only special case was one more thing
+to explain on a screen that has to explain itself.
+
+It is **stacked**, on its own line under the identity row. Inline it was a
+15px label competing with an avatar, a pill and two icon buttons — unreadable
+at arm's length, on the one control in the row that decides whether a person is
+charged.
+
+**At least one person must keep it ticked** (`anyoneTraining`). An empty cart
+would send `memberships: []` and take a 400, so the roster cannot leave — and
+because every check is individually untickable, a member can reach that state
+by hand. The step therefore disables Continue **and says why**: "Tick whoever's
+getting a membership — we need at least one to carry on." A dead button with no
+explanation beside it is the failure mode that copy exists to prevent. Ticking
+anybody releases it immediately.
+
+`trainingPersonIndexes` drives the rest unchanged: only ticked people get a
+plan, their plan's waivers and a line in `memberships[]`. An unticked person is
+still created and still on the roster — a parent paying for their kids is
+exactly this, and so is a member who registers today and buys later.
+
+#### Removing somebody asks first
+
+The roster's remove control is a **trash** glyph and it opens
+`KioskRemoveConfirm` — the shipped `KioskIdleWarning` / `KioskAbandonConfirm`
+surface reused whole, so the kiosk keeps exactly ONE modal vocabulary. It
+**names the person** (a roster of four all wearing the same glyph cannot
+otherwise say which one is going), and it follows that pattern's weighting:
+**the SAFE choice is the primary**, so a member reaching for the biggest,
+bluest thing on the screen lands on "Keep them". Removal has no undo and the
+rows sit close together at kiosk scale.
+
+The control is still offered only while removal is FREE — the moment that
+person is `linked` or has signed anything it disappears rather than becoming a
+button that cannot do what it says (§11.5).
 
 #### An adopted existing member is a record the kiosk does not own
 
@@ -792,6 +860,13 @@ kiosk call site ever restates a size**, and the admin ramp (`h1`/`h2`/`h3`/`p`,
 `test/features/kiosk/presentation/kiosk_type_ramp_test.dart` is the structural
 guard: it fails if the ladder stops descending, if a button label out-sizes a
 heading, or if the admin sizes drift.
+
+**Ghost is the ESCAPE tier and nothing else uses it** — `KioskEscapeFoot` and
+`KioskFlowFoot`'s left gutter are its only call sites, which is what makes the
+rule above true rather than aspirational. It renders a back-chevron, so putting
+a non-escape action on it read as a way *out* of the flow; every secondary
+action that is a way *in* ("Add someone new", "or find an existing member",
+"Change who is paying") rides `KioskOutlineButton` instead.
 
 A shared widget the kiosk reuses gets an **opt-in, not a fork** — `ClassCard`
 takes a `kiosk` flag, `ClassMetaChip` a `textStyle`, `AppSearchBox` a
@@ -1161,7 +1236,7 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   per-payee payer-auth link, per-person plans and waivers, and the group
   review. `KioskSignupPerson` grew `linked`; `KioskSignedWaiver` grew
   `memberId`. Screens under `presentation/widgets/signup/`: `kiosk_people_step`
-  + `kiosk_roster_row` + `kiosk_training_toggle` + `kiosk_person_adder`,
+  + `kiosk_roster_row` + `kiosk_person_adder`,
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
   `kiosk_payer_waiver_step`, and `kiosk_review_group_panel` +
   `kiosk_person_block` + `kiosk_money_labels`. `kiosk_signup_optional_step`
@@ -1376,11 +1451,12 @@ backstop for a declined screen nobody is standing at.
 - **A signature is keyed on (member, waiver).** Two children on the same plan
   each sign that plan's waiver; keying on the waiver id alone would skip the
   second child and hand the backend an unsigned member at the start.
-- **"Training too" decides whether the payer is in the CART.**
-  `payer_member_id` is identity-only server-side, so a non-training payer pays
-  for others with no membership of their own. `canLeavePeople` is the
-  empty-cart guard: a non-training payer with zero payees would send
-  `memberships: []` and take a 400, so that state cannot leave the roster.
+- **The membership check decides who is in the CART, per person.**
+  `payer_member_id` is identity-only server-side, so an unticked payer pays for
+  others with no membership of their own. `anyoneTraining` is the empty-cart
+  guard: a roster with nobody ticked would send `memberships: []` and take a
+  400, so it cannot leave the People step — see §3 for the control and the
+  legible block.
 - **A 207 retry carries ONLY the failed items.** `_startItems` filters to
   `state.failedItems` whenever it is non-empty, so anything already created
   stands and is never re-charged — and no member, signature or link is ever
@@ -1409,19 +1485,27 @@ backstop for a declined screen nobody is standing at.
   otherwise (§3). `test/features/kiosk/bloc/kiosk_signup_group_test.dart` holds
   the payee side; `bloc/kiosk_signup_payer_test.dart` holds the payer side and
   its fail-closed pair.
-- **A swapped payer keeps everyone's seat.** Adopting an existing member as the
-  payer inserts them at index 0 and demotes the person who started the signup
-  to a payee — they are still signing up, so only the payer role moves. Every
-  index shifts by one (`activePersonIndex` included), the adopted payer defaults
-  to `training: false` (their roster toggle is still theirs if they train too),
-  and `everyPayeeLinked` now covers the original signer, so the new payer must
-  authorize them before a request can assemble. `canSwitchPayer` withdraws the
-  offer once anything is linked or signed (§3).
-- **The roster row's trailing control is EDIT, not a status chip.** What is or
-  is not on file is nobody's business at a glance on a shared iPad, and "None
-  yet" beside a name only ever read as a nag. It reuses `editPersonDetails`
-  rather than adding a parallel path, and it is absent for `wasExisting`
-  people, per the rule above.
+- **A swapped payer keeps everyone's seat.** A CRM pick inserts at index 0 and
+  shifts every index by one (`activePersonIndex` included); a roster pick swaps
+  positions 0 and k and shifts nothing. Either way the person who started the
+  signup stays on the roster — only the payer role moves — and the new payer
+  defaults to getting a membership like everybody else. `everyPayeeLinked` then
+  covers the demoted signer, so the new payer must authorize them before a
+  request can assemble.
+- **`canSwitchPayer` refuses a swap that would strand somebody who is not in
+  the room.** It goes false once anything is `linked` or signed (there is no
+  unlink call, so a later swap would leave the roster authorized to a payer who
+  no longer pays), and once the payer `wasExisting` — swapping away from an
+  ADOPTED outsider would leave them on the roster as a payee they never agreed
+  to be. Re-arranging among people who are actually present stays allowed,
+  which is the property that distinction buys.
+- **The roster row's trailing controls are EDIT and a TRASH that asks.** What
+  is or is not on file is nobody's business at a glance on a shared iPad, and
+  "None yet" beside a name only ever read as a nag; Edit reuses
+  `editPersonDetails` rather than adding a parallel path, and is absent for
+  `wasExisting` people per the rule above. Both ride the one `KioskRowAction`,
+  so the two cannot drift apart in size. See §3 for the membership check and
+  the remove confirmation.
 
 ---
 
@@ -1460,13 +1544,14 @@ backstop for a declined screen nobody is standing at.
   `kiosk_paying_screen`, `kiosk_declined_screen`, and `kiosk_welcome_screen`
   (which COMPOSES the shipped `get_app/` set off the flow cubit's warmed
   catalogues — zero fetches), plus the GROUP half: `kiosk_people_step` +
-  `kiosk_roster_row` + `kiosk_training_toggle` + `kiosk_person_adder`,
+  `kiosk_roster_row` + `kiosk_person_adder`,
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
   `kiosk_payer_waiver_step`, `kiosk_review_group_panel` + `kiosk_person_block`,
   and `kiosk_money_labels` (the by-person attribution of a preview line, via
   its `stripe_price_id`); the payer gate's `kiosk_payer_match_step` +
-  `kiosk_payer_pick_step`; the pinned `kiosk_who_for`; and
-  `kiosk_proration_note` (the part-period line, §11.4).
+  `kiosk_payer_pick_step` over the shared `kiosk_name_row`; the roster's
+  `kiosk_row_action` (Edit + trash) and `kiosk_remove_confirm`; the pinned
+  `kiosk_who_for`; and `kiosk_proration_note` (the part-period line, §11.4).
   `presentation/kiosk_signup_stop_copy.dart` — the ONE map from a stop reason to
   member copy, mirroring `kiosk_blocked_copy.dart`;
   `presentation/kiosk_payer_refusal_copy.dart` — the same for the payer

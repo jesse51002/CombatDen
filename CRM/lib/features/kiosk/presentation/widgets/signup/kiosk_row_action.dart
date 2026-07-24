@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// A quiet trailing control on a roster row — the Edit that reopens somebody's
-/// details, and the ✕ that takes them off the roster.
+/// details, and the trash that takes them off it.
 ///
 /// One widget for both, because they are the same object: a padded tap target
 /// carrying a muted glyph and, optionally, a muted word. Two hand-rolled

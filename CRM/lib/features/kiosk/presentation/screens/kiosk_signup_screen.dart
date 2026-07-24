@@ -18,6 +18,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waive
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_paying_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_remove_confirm.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_details_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_optional_step.dart';
@@ -86,6 +87,7 @@ class _KioskSignupBody extends StatelessWidget {
             _StepSwitcher(),
             _SignupIdleOverlay(),
             _AbandonOverlay(),
+            _RemoveOverlay(),
           ],
         ),
       ),
@@ -152,6 +154,29 @@ class _SignupIdleOverlay extends StatelessWidget {
           seconds: state.idleCountdown,
           onStillHere: () =>
               context.read<KioskSignupCubit>().registerActivity(),
+        );
+      },
+    );
+  }
+}
+
+/// The roster's "take them off this signup?" confirmation.
+class _RemoveOverlay extends StatelessWidget {
+  const _RemoveOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<KioskSignupCubit, KioskSignupState>(
+      buildWhen: (prev, cur) =>
+          prev.removeConfirmIndex != cur.removeConfirmIndex,
+      builder: (context, state) {
+        final index = state.removeConfirmIndex;
+        if (index == null || index >= state.persons.length) {
+          return const SizedBox.shrink();
+        }
+        final person = state.persons[index];
+        return KioskRemoveConfirm(
+          name: '${person.firstName} ${person.lastName}'.trim(),
         );
       },
     );

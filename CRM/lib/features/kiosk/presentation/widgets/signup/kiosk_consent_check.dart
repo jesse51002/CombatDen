@@ -11,8 +11,8 @@ import 'package:crm/core/constants/design_constants.dart';
 /// is sized for a mouse; this one has to be found and hit with a thumb from
 /// standing distance, so the whole row is the target, not just the box.
 ///
-/// Used by the waiver step's consent line and the group step's "Training too"
-/// toggle.
+/// Used by the waiver step's consent line and by every roster row's "getting a
+/// membership" check.
 class KioskConsentCheck extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;

@@ -112,9 +112,12 @@ enum KioskPayerEligibility {
   /// unparsable body. Treated exactly like a refusal.
   unknown,
 
-  /// Decided locally, before the check ever runs: this member is already on
-  /// this signup's roster. A second entry for the same member is a double
-  /// charge waiting to happen.
+  /// A REDIRECT, not a rejection: the CRM search turned up somebody who is
+  /// already on this roster. Being on the roster is the normal case now —
+  /// roster people are listed and directly pickable — so the answer is "pick
+  /// them from the list", not "no". It stays a distinct state because the CRM
+  /// path must still refuse to INSERT a second entry for one member: two cart
+  /// items for the same person is a double charge waiting to happen.
   alreadyInSignup,
 }
 
@@ -290,9 +293,16 @@ class KioskSignupPerson extends Equatable {
   /// payer, and it is always the person who started the signup.
   final bool isPayer;
 
-  /// Whether this person is training (and so needs a plan). The payer's
-  /// "Training too" defaults ON; a non-training payer is a parent paying for
-  /// their kids.
+  /// Whether this person is getting a membership (and so needs a plan, its
+  /// waivers, and a line in the cart).
+  ///
+  /// **It is the same control on EVERY roster row, and it defaults ON** —
+  /// payer, payee, adopted or created here. A payer-only special case was one
+  /// more thing to explain on a screen that has to explain itself.
+  ///
+  /// **At least one person must keep it ticked.** A signup with nothing in the
+  /// cart would send `memberships: []` and take a 400, so the roster cannot
+  /// leave until somebody is getting one — see [anyoneTraining].
   final bool training;
 
   /// True when this person was matched to an EXISTING member rather than
@@ -478,6 +488,11 @@ class KioskSignupState extends Equatable {
   final List<MemberRow> matches;
 
   // ── The payer picker ──
+  /// Which roster person the remove confirmation is asking about, or null
+  /// when it is not up. Removal is destructive and there is no undo, so the
+  /// trash control asks before it acts.
+  final int? removeConfirmIndex;
+
   /// Why the last payer pick was refused, or null when nothing was refused.
   ///
   /// It is an INLINE refusal on the picker, never a terminal stop: the member
@@ -628,6 +643,7 @@ class KioskSignupState extends Equatable {
     this.matchSearchFailed = false,
     this.matches = const [],
     this.payerRefusal,
+    this.removeConfirmIndex,
     this.plans = const [],
     this.plansLoading = false,
     this.plansFailed = false,
@@ -693,19 +709,22 @@ class KioskSignupState extends Equatable {
       ];
 
   /// Every roster index that needs a plan, in roster order. The payer is in it
-  /// only while "Training too" is on — a parent paying for their kids is
-  /// `payer_member_id` and nothing else.
+  /// only while their own membership check is ticked — a parent paying for
+  /// their kids is `payer_member_id` and nothing else.
   List<int> get trainingPersonIndexes => [
         for (var i = 0; i < persons.length; i++)
           if (persons[i].training) i,
       ];
 
-  /// Whether the roster can leave for the plan step at all.
+  /// Whether anybody on the roster is getting a membership — **the
+  /// empty-cart guard.**
   ///
-  /// **The empty-cart guard.** A payer who turned "Training too" off with
-  /// nobody else on the roster would send `memberships: []` and take a 400, so
-  /// that state must never be able to advance.
-  bool get canLeavePeople => persons.any((p) => p.training);
+  /// Every person's membership check can be unticked individually, so a member
+  /// can reach the all-unticked state by hand. It sends `memberships: []` and
+  /// takes a 400, so the roster cannot leave while it holds: the People step
+  /// disables Continue and says plainly that somebody needs a membership,
+  /// rather than presenting a dead button.
+  bool get anyoneTraining => persons.any((p) => p.training);
 
   /// Whether the payer may still be handed to an EXISTING member.
   ///
@@ -724,6 +743,16 @@ class KioskSignupState extends Equatable {
       signedWaivers.isEmpty &&
       !persons.any((p) => p.linked);
 
+  /// The roster indexes the payer picker offers, in roster order.
+  ///
+  /// The CURRENT payer is not among them — picking whoever is already paying
+  /// is a no-op dressed as a choice — and neither is anybody without a
+  /// `memberId`, who does not exist to pay yet.
+  List<int> get payerCandidateIndexes => [
+        for (var i = 1; i < persons.length; i++)
+          if (persons[i].memberId != null) i,
+      ];
+
   /// Whether every payee has been authorized. The start call NEVER links, so
   /// this has to be true before a request is even assembled.
   bool get everyPayeeLinked {
@@ -735,8 +764,8 @@ class KioskSignupState extends Equatable {
 
   /// Whether [index] may still be taken off the roster.
   ///
-  /// The ✕ disappears the moment that person's link (or a signature of theirs)
-  /// has committed: **there is no unlink call**, so removal is only offered
+  /// The trash control disappears the moment that person's link (or a
+  /// signature of theirs) has committed: **there is no unlink call**, so removal is only offered
   /// while it is still free. A person created but not yet linked simply drops
   /// out of the cart — their member shell is harmless and surfaces in the
   /// staff "Incomplete" list. The payer is never removable.
@@ -854,6 +883,7 @@ class KioskSignupState extends Equatable {
     bool? matchSearchFailed,
     List<MemberRow>? matches,
     Object? payerRefusal = _keep,
+    Object? removeConfirmIndex = _keep,
     List<MembershipPlanResponse>? plans,
     bool? plansLoading,
     bool? plansFailed,
@@ -910,6 +940,9 @@ class KioskSignupState extends Equatable {
       payerRefusal: identical(payerRefusal, _keep)
           ? this.payerRefusal
           : payerRefusal as KioskPayerEligibility?,
+      removeConfirmIndex: identical(removeConfirmIndex, _keep)
+          ? this.removeConfirmIndex
+          : removeConfirmIndex as int?,
       plans: plans ?? this.plans,
       plansLoading: plansLoading ?? this.plansLoading,
       plansFailed: plansFailed ?? this.plansFailed,
@@ -977,6 +1010,7 @@ class KioskSignupState extends Equatable {
         matchSearchFailed,
         matches,
         payerRefusal,
+        removeConfirmIndex,
         plans,
         plansLoading,
         plansFailed,

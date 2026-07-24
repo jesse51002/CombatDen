@@ -155,7 +155,10 @@ class _Head extends StatelessWidget {
         Expanded(
           child: Text('Add someone new', style: DesignConstants.kioskTitle),
         ),
-        KioskGhostButton(
+        // The SECONDARY tier, not the ghost one: finding an existing member
+        // is an alternative way IN, not a way out of the flow, and the ghost
+        // tier is reserved for leaving.
+        KioskOutlineButton(
           text: 'or find an existing member',
           onPressed: onFindExisting,
         ),

@@ -3,32 +3,47 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_consent_check.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_row_action.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_training_toggle.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
-/// One person on the signup roster: who they are, how to correct them, and —
-/// for the payer — whether they are training too.
+/// One person on the signup roster: who they are, whether they are getting a
+/// membership, and how to correct or remove them.
 ///
-/// It is `add_member/group_roster_row.dart`'s composition at kiosk scale
-/// (avatar + name pair + a trailing control run), with the one thing the desk
-/// version has no need of: **a remove ✕, and only while removal is still
-/// free.** There is no unlink call, so the moment this person's link or a
-/// signature of theirs commits the ✕ goes away rather than becoming a button
-/// that cannot do what it says.
+/// **It is STACKED, not one line.** The identity and its controls sit on the
+/// top row; the membership check gets a line of its own underneath. Crammed
+/// inline it was a 15px label competing with an avatar, a pill and two icon
+/// buttons — unreadable at arm's length on an iPad, and the one control on the
+/// row that decides whether this person is charged.
+///
+/// **The membership check is on EVERY row and defaults ON** — payer, payee,
+/// created here or matched to an existing member. A payer-only special case
+/// was one more thing to explain on a screen that has to explain itself, and
+/// unchecking everybody is a legitimate registration-only signup rather than
+/// an error.
 ///
 /// **Edit appears only for a person this signup CREATED.** An existing member
 /// is here by id alone: the kiosk deliberately never prints their stored
 /// details on a shared screen, so offering to "edit" fields it refuses to show
 /// would be an affordance that lies about what it opens.
+///
+/// **Remove is a trash control that ASKS first**, and only while removal is
+/// still free — there is no unlink call, so the moment this person's link or a
+/// signature of theirs commits it goes away rather than becoming a button that
+/// cannot do what it says.
 class KioskRosterRow extends StatelessWidget {
   final KioskSignupPerson person;
 
   /// Their position on the roster — what every callback is keyed on.
   final int index;
 
-  /// Whether the ✕ is offered at all (see [KioskSignupState.canRemovePerson]).
+  /// Whether the trash control is offered at all (see
+  /// [KioskSignupState.canRemovePerson]).
   final bool removable;
+
+  /// Whether this roster holds more than one person, which is the only thing
+  /// that makes "as well" mean anything.
+  final bool isGroup;
 
   final VoidCallback onDetails;
   final VoidCallback onRemove;
@@ -39,41 +54,57 @@ class KioskRosterRow extends StatelessWidget {
     required this.person,
     required this.index,
     required this.removable,
+    required this.isGroup,
     required this.onDetails,
     required this.onRemove,
     required this.onTrainingChanged,
   });
 
+  /// The founder's line, with "as well" earned rather than assumed: it only
+  /// means something beside somebody else, so a roster of one drops it instead
+  /// of comparing a person to nobody.
+  String get _checkLabel => isGroup
+      ? '${person.firstName.trim().isEmpty ? 'This person' : person.firstName}'
+          ' is getting a membership as well'
+      : 'I\'m getting a membership';
+
   @override
   Widget build(BuildContext context) {
     final name = '${person.firstName} ${person.lastName}'.trim();
-    return Row(
-      spacing: DesignConstants.spacingLarge,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingMedium,
       children: [
-        InstructorAvatar(name: name, diameter: DesignConstants.iconSizeBig),
-        Expanded(child: _Identity(name: name, person: person)),
-        // A plain verb, not a status readout: what is or isn't on file is
-        // nobody's business at a glance on a shared iPad, and "None yet"
-        // beside a name only ever read as a nag.
-        if (!person.wasExisting)
-          KioskRowAction(
-            semanticLabel: 'Edit $name',
-            icon: Symbols.edit_sharp,
-            label: 'Edit',
-            onTap: onDetails,
-          ),
-        if (person.isPayer)
-          KioskTrainingToggle(
-            value: person.training,
-            onChanged: onTrainingChanged,
-          ),
-        _Pill(person: person),
-        if (removable)
-          KioskRowAction(
-            semanticLabel: 'Remove $name',
-            icon: Symbols.close_sharp,
-            onTap: onRemove,
-          ),
+        Row(
+          spacing: DesignConstants.spacingLarge,
+          children: [
+            InstructorAvatar(name: name, diameter: DesignConstants.iconSizeBig),
+            Expanded(child: _Identity(name: name, person: person)),
+            // A plain verb, not a status readout: what is or isn't on file is
+            // nobody's business at a glance on a shared iPad, and "None yet"
+            // beside a name only ever read as a nag.
+            if (!person.wasExisting)
+              KioskRowAction(
+                semanticLabel: 'Edit $name',
+                icon: Symbols.edit_sharp,
+                label: 'Edit',
+                onTap: onDetails,
+              ),
+            _Pill(person: person),
+            if (removable)
+              KioskRowAction(
+                semanticLabel: 'Remove $name',
+                icon: Symbols.delete_sharp,
+                onTap: onRemove,
+              ),
+          ],
+        ),
+        KioskConsentCheck(
+          value: person.training,
+          onChanged: onTrainingChanged,
+          label: _checkLabel,
+        ),
       ],
     );
   }

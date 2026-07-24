@@ -5,7 +5,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/members_list/data/models/member_row.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
@@ -84,10 +84,19 @@ class _Results extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < state.matches.length; i++)
-                _NameRow(
-                  row: state.matches[i],
+                KioskNameRow(
+                  // The FULL name: two members sharing a first name and last
+                  // initial must stay distinguishable at the moment somebody
+                  // taps one of them.
+                  name: state.matches[i].name,
                   first: i == 0,
-                  forPayer: forPayer,
+                  onTap: () => forPayer
+                      ? context.read<KioskSignupCubit>().pickPayerRow(
+                            state.matches[i],
+                          )
+                      : context.read<KioskSignupCubit>().pickMatchRow(
+                            state.matches[i],
+                          ),
                 ),
             ],
           );
@@ -114,47 +123,6 @@ class _Results extends StatelessWidget {
         }
         return const SizedBox.shrink();
       },
-    );
-  }
-}
-
-class _NameRow extends StatelessWidget {
-  final MemberRow row;
-  final bool first;
-  final bool forPayer;
-
-  const _NameRow({
-    required this.row,
-    required this.first,
-    required this.forPayer,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cubit = context.read<KioskSignupCubit>();
-    return InkWell(
-      onTap: () =>
-          forPayer ? cubit.pickPayerRow(row) : cubit.pickMatchRow(row),
-      borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: first
-              ? null
-              : Border(top: BorderSide(color: DesignConstants.lineSoft)),
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignConstants.spacingMedium,
-          vertical: DesignConstants.spacingLarge,
-        ),
-        child: Text(
-          // The FULL name: two members sharing a first name and last initial
-          // must stay distinguishable at the moment someone taps one of them.
-          row.name,
-          style: DesignConstants.kioskName,
-          textAlign: TextAlign.center,
-        ),
-      ),
     );
   }
 }

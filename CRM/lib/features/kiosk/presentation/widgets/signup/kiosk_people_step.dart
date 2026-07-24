@@ -20,9 +20,12 @@ import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 /// and a parent who has already typed their own details is exactly the person
 /// who will not go looking for it.
 ///
-/// The primary is guarded against an empty cart: a payer who turned "Training
-/// too" off with nobody else on the roster would send `memberships: []` and
-/// take a 400, so that state cannot advance and says why.
+/// **At least one person must be getting a membership.** Every row's check can
+/// be unticked individually, so a member can reach the all-unticked state by
+/// hand — a cart of nothing would send `memberships: []` and take a 400. The
+/// primary goes unavailable there, and the screen says plainly why and what to
+/// do about it: a dead button with no explanation is the failure mode this
+/// avoids.
 class KioskPeopleStep extends StatefulWidget {
   const KioskPeopleStep({super.key});
 
@@ -46,7 +49,7 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
       builder: (context, state) {
         final count = state.persons.length;
         final busy = state.submitting;
-        final canGo = state.canLeavePeople && !busy;
+        final canGo = state.anyoneTraining && !busy;
         return KioskSignupStepScaffold(
           step: KioskSignupStep.people,
           title: 'Anyone else joining?',
@@ -72,10 +75,12 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
                     KioskRosterRow(
                       person: state.persons[i],
                       index: i,
+                      isGroup: state.isGroup,
                       removable: state.canRemovePerson(i),
                       onDetails: () => cubit.editPersonDetails(i),
-                      onRemove: () => cubit.removePerson(i),
-                      onTrainingChanged: cubit.setPayerTraining,
+                      onRemove: () => cubit.askRemovePerson(i),
+                      onTrainingChanged: (on) =>
+                          cubit.setPersonTraining(i, on),
                     ),
                   if (_adderOpen)
                     KioskPersonAdder(
@@ -86,7 +91,7 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
                 ],
               ),
               if (state.canSwitchPayer) const _PayerSwitchRow(),
-              if (!state.canLeavePeople) const _EmptyCartNote(),
+              if (!state.anyoneTraining) const _NeedsOneNote(),
             ],
           ),
         );
@@ -115,7 +120,9 @@ class _AddRow extends StatelessWidget {
       runSpacing: DesignConstants.spacingMedium,
       children: [
         KioskOutlineButton(text: 'Add someone new', onPressed: onAdd),
-        KioskGhostButton(
+        // The SECONDARY tier, not the ghost one: finding an existing member is
+        // another way IN, and the kiosk reserves ghost for leaving a flow.
+        KioskOutlineButton(
           text: 'or find an existing member',
           onPressed: cubit.openMatchSearch,
         ),
@@ -124,39 +131,48 @@ class _AddRow extends StatelessWidget {
   }
 }
 
-/// Hand the paying over to somebody who already trains here — a partner, a
-/// parent — without giving up your own seat on the roster.
+/// Hand the paying over to somebody else — a partner, a parent, or anyone
+/// already on this roster — without giving up your own seat.
 ///
-/// It sits BELOW the panel and outside the add row on purpose: adding a
-/// trainee and changing who pays are different acts, and a member reaching for
-/// one must never land on the other. It withdraws the moment anything commits
-/// (see [KioskSignupState.canSwitchPayer]) rather than becoming a control that
-/// would silently leave the roster authorized to the wrong person.
+/// It is a CHANGE-of-role action, and the label says so: "someone else is
+/// paying" announced a fact about a third party, which is not what the button
+/// does. It sits BELOW the panel and outside the add row on purpose — adding
+/// somebody and changing who pays are different acts, and a member reaching
+/// for one must never land on the other.
+///
+/// It withdraws the moment anything commits, and whenever nobody is getting a
+/// membership (see [KioskSignupState.canSwitchPayer]): with no money to move
+/// there is no payer to argue about.
 class _PayerSwitchRow extends StatelessWidget {
   const _PayerSwitchRow();
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: KioskGhostButton(
-        text: 'Someone else is paying',
+      // Secondary tier: this is an action, not an escape.
+      child: KioskOutlineButton(
+        text: 'Change who is paying',
         onPressed: context.read<KioskSignupCubit>().openPayerPick,
       ),
     );
   }
 }
 
-/// The one state this screen can reach with nothing to sell: the payer turned
-/// "Training too" off and nobody else is on the roster. It is a fact and a way
-/// forward, never an error.
-class _EmptyCartNote extends StatelessWidget {
-  const _EmptyCartNote();
+/// The one state this screen can reach with nothing to sell: every person's
+/// membership check is unticked.
+///
+/// It states the rule and points at the fix, and it never reads as an error —
+/// nobody did anything wrong, the screen just cannot go anywhere yet. It is
+/// what stops the disabled Continue from being a dead button with no
+/// explanation beside it.
+class _NeedsOneNote extends StatelessWidget {
+  const _NeedsOneNote();
 
   @override
   Widget build(BuildContext context) {
     return Text(
-      'Add someone, or switch "Training too" back on — there\'s nothing to '
-      'sign up for yet.',
+      'Tick whoever\'s getting a membership — we need at least one to carry '
+      'on.',
       style: DesignConstants.kioskCaption.copyWith(
         color: DesignConstants.text2nd,
       ),

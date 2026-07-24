@@ -427,43 +427,73 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _syncIdleTimer();
   }
 
-  /// A picked row becomes the payer — but only through the gate.
+  /// **The ONE path a payer is ever seated by.** Gate first; seat only on
+  /// [KioskPayerEligibility.eligible].
   ///
-  /// A refusal is INLINE (the member picks someone else, or carries on paying
-  /// themselves), never a stop. Everything that is not
-  /// [KioskPayerEligibility.eligible] refuses, so a failed check refuses too.
-  Future<void> pickPayerRow(MemberRow row) async {
-    registerActivity();
+  /// The roster and the CRM search both come through here and **nothing is
+  /// special-cased for a person this signup created** — not even on the
+  /// reasoning that they obviously have no card yet. One code path is the
+  /// point: there is exactly one place the invariant lives and no branch a
+  /// future change could route around. The cost is one cheap call.
+  ///
+  /// A refusal is INLINE (pick someone else, or carry on paying yourself),
+  /// never a stop, and everything that is not `eligible` refuses — so a failed
+  /// check refuses too.
+  Future<void> _gateThenSeat(String memberId, void Function() seat) async {
     if (_committing || !state.canSwitchPayer) return;
-    if (state.persons.any((p) => p.memberId == row.memberId)) {
-      emit(state.copyWith(
-        payerRefusal: KioskPayerEligibility.alreadyInSignup,
-      ));
-      return;
-    }
     _committing = true;
     emit(state.copyWith(submitting: true, payerRefusal: null));
     try {
-      final verdict = await _payerEligibility(row.memberId);
+      final verdict = await _payerEligibility(memberId);
       if (isClosed) return;
       if (verdict != KioskPayerEligibility.eligible) {
         emit(state.copyWith(submitting: false, payerRefusal: verdict));
         return;
       }
-      _adoptPayer(row);
+      seat();
     } finally {
       _committing = false;
     }
   }
 
-  /// Seat the adopted member at the head of the roster.
+  /// A CRM search row becomes the payer — somebody not on the roster yet.
+  ///
+  /// A hit that is ALREADY on the roster is a redirect, not a rejection: they
+  /// are listed above and directly pickable, and inserting a second entry for
+  /// one member would put two cart items on one person.
+  Future<void> pickPayerRow(MemberRow row) async {
+    registerActivity();
+    final at = state.persons.indexWhere((p) => p.memberId == row.memberId);
+    if (at == 0) return;
+    if (at > 0) {
+      emit(state.copyWith(
+        payerRefusal: KioskPayerEligibility.alreadyInSignup,
+      ));
+      return;
+    }
+    await _gateThenSeat(row.memberId, () => _seatNewPayer(row));
+  }
+
+  /// A person ALREADY on the roster becomes the payer.
+  ///
+  /// It runs the same gate as a CRM pick. Index 0 is refused rather than
+  /// handled: whoever is already paying cannot be picked to start paying.
+  Future<void> pickPayerFromRoster(int index) async {
+    registerActivity();
+    if (index <= 0 || index >= state.persons.length) return;
+    final memberId = state.persons[index].memberId;
+    if (memberId == null) return;
+    await _gateThenSeat(memberId, () => _promoteRosterPayer(index));
+  }
+
+  /// Seat a member who was NOT on the roster, inserting them at its head.
   ///
   /// **Only the PAYER role moves.** The person who started this signup keeps
   /// their seat — they are still signing up — and simply becomes a payee, so
   /// they now need the payer-authorization waiver exactly like every other
   /// payee. [KioskSignupState.everyPayeeLinked] therefore covers them for
   /// free: no request can assemble until the new payer has authorized them.
-  void _adoptPayer(MemberRow row) {
+  void _seatNewPayer(MemberRow row) {
     final name = row.name.trim();
     final space = name.indexOf(' ');
     final persons = <KioskSignupPerson>[
@@ -473,9 +503,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
         lastName: space < 0 ? '' : name.substring(space + 1).trim(),
         email: row is AllViewRow ? (row.email ?? '') : '',
         isPayer: true,
-        // They are PAYING, not signing up. The roster's own "Training too"
-        // switch is still theirs if they are training as well.
-        training: false,
         wasExisting: true,
       ),
       state.persons.first.copyWith(isPayer: false),
@@ -486,6 +513,29 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       persons: persons,
       // Every existing index shifted by the insert at the head.
       activePersonIndex: state.activePersonIndex + 1,
+      step: KioskSignupStep.people,
+      submitting: false,
+      payerRefusal: null,
+    ));
+    _syncIdleTimer();
+  }
+
+  /// Promote somebody already on the roster, demoting whoever was paying into
+  /// the seat they vacate.
+  ///
+  /// It is a straight SWAP of positions 0 and [index], so every other index —
+  /// and every signature, link and plan keyed on them — is untouched. The
+  /// promoted person keeps their own "getting a membership" choice and their
+  /// plan: they were signing up before and they still are, and only the payer
+  /// role moved.
+  void _promoteRosterPayer(int index) {
+    final persons = [...state.persons];
+    final promoted = persons[index].copyWith(isPayer: true);
+    persons[index] = persons[0].copyWith(isPayer: false);
+    persons[0] = promoted;
+    _clearSearch();
+    emit(state.copyWith(
+      persons: persons,
       step: KioskSignupStep.people,
       submitting: false,
       payerRefusal: null,
@@ -508,19 +558,24 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   // ── E1 · the roster ──
 
-  /// Turn the payer's "Training too" on or off.
+  /// Turn "getting a membership" on or off for ONE person.
   ///
-  /// It decides whether the payer is in the CART at all: `payer_member_id` is
+  /// It is the same control on every roster row, defaulting ON. It decides
+  /// whether that person is in the CART at all: `payer_member_id` is
   /// identity-only server-side, so a parent can pay for their kids without
-  /// buying anything themselves. Turning it off drops their plan with it —
-  /// carrying a stale pick would put a membership they cancelled back in the
-  /// request the moment they toggled it on again by accident.
-  void setPayerTraining(bool training) {
+  /// buying anything themselves — and everybody can be unchecked, which is a
+  /// registration-only signup rather than an error (see [continueToPlans]).
+  ///
+  /// Turning it off drops their plan with it — carrying a stale pick would put
+  /// a membership they cancelled back in the request the moment it was
+  /// re-checked by accident.
+  void setPersonTraining(int index, bool training) {
     registerActivity();
+    if (index < 0 || index >= state.persons.length) return;
     final persons = [...state.persons];
-    persons[0] = persons[0].copyWith(
+    persons[index] = persons[index].copyWith(
       training: training,
-      selectedPlanId: training ? persons[0].selectedPlanId : null,
+      selectedPlanId: training ? persons[index].selectedPlanId : null,
     );
     emit(state.copyWith(persons: persons));
   }
@@ -547,8 +602,33 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _syncIdleTimer();
   }
 
-  /// Take a person off the roster. Only ever offered while it is still free —
-  /// see [KioskSignupState.canRemovePerson]. Their member shell (if one was
+  /// Ask before taking somebody off the roster.
+  ///
+  /// There is no undo — the removal drops them from the cart and the roster in
+  /// one tap — and the rows sit close together at kiosk scale, so the trash
+  /// control asks first. The confirmation names the person.
+  void askRemovePerson(int index) {
+    registerActivity();
+    if (!state.canRemovePerson(index)) return;
+    emit(state.copyWith(removeConfirmIndex: index));
+  }
+
+  /// "Keep them" — dismiss the confirmation. It counts as interaction.
+  void dismissRemovePerson() {
+    emit(state.copyWith(removeConfirmIndex: null));
+    registerActivity();
+  }
+
+  /// "Yes, remove" — the confirmed removal.
+  void confirmRemovePerson() {
+    final index = state.removeConfirmIndex;
+    emit(state.copyWith(removeConfirmIndex: null));
+    if (index != null) removePerson(index);
+  }
+
+  /// Take a person off the roster. Only ever reached through the confirmation,
+  /// and only offered while it is still free — see
+  /// [KioskSignupState.canRemovePerson]. Their member shell (if one was
   /// created) is deliberately left alone: it is harmless, there is nothing to
   /// unlink, and it surfaces in the staff "Incomplete" list.
   void removePerson(int index) {
@@ -988,9 +1068,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// with nothing to sell → the gym-setup stop.
   void continueToPlans() {
     registerActivity();
-    // **The empty-cart guard.** A payer who is not training with nobody else
-    // on the roster would send `memberships: []` and take a 400, so that state
-    // never leaves the roster at all.
+    // **The empty-cart guard.** A roster with nobody getting a membership
+    // would send `memberships: []` and take a 400, so that state never leaves
+    // this step at all — the step disables Continue and says why.
     final order = state.trainingPersonIndexes;
     if (order.isEmpty) return;
     emit(state.copyWith(
@@ -1699,6 +1779,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idleWarningActive: false,
       idleCountdown: 0,
       abandonConfirmActive: false,
+      removeConfirmIndex: null,
       retryCooldown: 0,
       stopCountdown: kKioskSignupStopHold.inSeconds,
     ));
@@ -1788,6 +1869,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     emit(state.copyWith(
       abandoned: true,
       abandonConfirmActive: false,
+      removeConfirmIndex: null,
       idleWarningActive: false,
       idleCountdown: 0,
     ));

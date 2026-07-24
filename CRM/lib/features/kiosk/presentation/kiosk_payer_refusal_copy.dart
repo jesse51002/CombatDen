@@ -18,8 +18,9 @@ String kioskPayerRefusalCopy(KioskPayerEligibility? refusal) {
     KioskPayerEligibility.hasPaymentMethod =>
       'That member already has a card on file — the front desk can set this '
           'up for you.',
+    // A REDIRECT, not a rejection: they are listed above and pickable there.
     KioskPayerEligibility.alreadyInSignup =>
-      'They\'re already on this signup.',
+      'They\'re already on this signup — pick them from the list above.',
     KioskPayerEligibility.unknown ||
     KioskPayerEligibility.eligible ||
     null =>
