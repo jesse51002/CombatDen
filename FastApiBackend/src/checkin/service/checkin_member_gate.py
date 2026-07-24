@@ -330,7 +330,7 @@ class CheckinMemberGate:
         # member would show Overdue on the members list yet check in with
         # no warning at the counter.
         if any(
-            is_membership_overdue(m.status, m.renew_date, m.reference_date)
+            is_membership_overdue(m.status, m.renew_date, m.gym_today)
             for m in active
         ):
             evaluation.reasons.add(CheckinWarning.overdue)

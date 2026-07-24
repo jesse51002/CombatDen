@@ -313,10 +313,15 @@ ignore_warnings)`:
   — evaluated with the ONE shared rule in
   `src/shared/membership_status.py` (`is_membership_overdue`, active-only),
   the same text the members-list Overdue tab, its tally, its filter and the
-  growth revenue tiles use. It compares `renew_date` to the occurrence's
-  gym-local `reference_date` (carried on `MembershipUsage`), so a retroactive
-  check-in is judged as of the class it records — the same anchoring
-  `covers_reference` uses. **Never a kiosk blocker**: billing is not a legal
+  growth revenue tiles use. It compares `renew_date` to `gym_today` (the gym-local CURRENT date,
+  carried on `MembershipUsage`) — NOT to the occurrence's date. "Does this
+  member owe money" is a question about the present, and `status` is
+  now-anchored too, so both halves of the test share one clock. (Coverage and
+  usage stay occurrence-anchored via `covers_reference` / `reference_date`;
+  only this one check is now-anchored, deliberately.) It tests EVERY covering
+  membership, not just the attribution target — overdue is member-level, so an
+  overdue recurring plan sitting behind a higher-priority trial pack still
+  warns. **Never a kiosk blocker**: billing is not a legal
   gate the way the waiver is, and a past-due date is often a false alarm (a
   Stripe retry in flight, cash not yet recorded), so staff see it and decide.
   It sorts LAST in `_REASON_PRIORITY` — a coverage problem is more actionable.

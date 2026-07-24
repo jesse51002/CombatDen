@@ -36,7 +36,7 @@ def _usage(
         start_date=start_date or date(2024, 1, 1),
         plan_type=plan_type,
         status=status,
-        reference_date=date(2026, 6, 1),
+        gym_today=date(2026, 6, 1),
         class_count=class_count,
         classes_used=classes_used,
         classes_remaining=remaining,

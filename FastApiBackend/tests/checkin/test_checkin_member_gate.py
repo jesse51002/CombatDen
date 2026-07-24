@@ -64,7 +64,7 @@ def _usage(
     start_date: date | None = None,
     status: str = "active",
     renew_date: date | None = None,
-    reference_date: date | None = None,
+    gym_today: date | None = None,
 ) -> MembershipUsage:
     """Build a membership usage row.
 
@@ -79,7 +79,7 @@ def _usage(
         start_date=start_date or date(2024, 1, 1),
         plan_type=plan_type,
         status=status,
-        reference_date=reference_date or date(2026, 6, 1),
+        gym_today=gym_today or date(2026, 6, 1),
         class_count=class_count,
         classes_used=classes_used,
         classes_remaining=remaining,
@@ -585,7 +585,7 @@ async def test_unsigned_waiver_flagged_even_without_coverage() -> None:
 
 # The occurrence's gym-local date the gate compares against, and a due
 # date safely behind it.
-_REF = date(2026, 6, 1)
+_REF = date(2026, 6, 1)  # gym-local "today" for the overdue check
 _PAST_DUE = date(2026, 5, 1)
 
 
@@ -598,7 +598,7 @@ async def test_staff_overdue_needs_confirmation() -> None:
         class_count=None,
         classes_used=0,
         renew_date=_PAST_DUE,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, writer = _gate(memberships=[m], eligible={plan})
 
@@ -620,7 +620,7 @@ async def test_staff_overdue_override_records() -> None:
         class_count=None,
         classes_used=0,
         renew_date=_PAST_DUE,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, writer = _gate(memberships=[m], eligible={plan})
 
@@ -650,7 +650,7 @@ async def test_kiosk_overdue_is_admitted_not_blocked() -> None:
         class_count=None,
         classes_used=0,
         renew_date=_PAST_DUE,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, writer = _gate(memberships=[m], eligible={plan})
 
@@ -672,7 +672,7 @@ async def test_overdue_sorts_last_among_warnings() -> None:
         class_count=3,
         classes_used=3,
         renew_date=_PAST_DUE,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, _ = _gate(memberships=[pack], eligible=set())
 
@@ -699,7 +699,7 @@ async def test_not_overdue_when_membership_is_not_active() -> None:
         classes_used=0,
         status="frozen",
         renew_date=_PAST_DUE,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, writer = _gate(memberships=[m], eligible={plan})
 
@@ -719,7 +719,7 @@ async def test_not_overdue_when_due_date_is_the_occurrence_date() -> None:
         class_count=None,
         classes_used=0,
         renew_date=_REF,
-        reference_date=_REF,
+        gym_today=_REF,
     )
     gate, writer = _gate(memberships=[m], eligible={plan})
 
@@ -741,11 +741,11 @@ async def test_overdue_flagged_when_it_hides_behind_a_higher_priority_pack() -> 
     trial_plan, recurring_plan = uuid4(), uuid4()
     trial = _usage(
         trial_plan, PlanType.trial, class_count=10, classes_used=0,
-        renew_date=None, reference_date=_REF,
+        renew_date=None, gym_today=_REF,
     )
     overdue_recurring = _usage(
         recurring_plan, PlanType.recurring, class_count=None, classes_used=0,
-        renew_date=_PAST_DUE, reference_date=_REF,
+        renew_date=_PAST_DUE, gym_today=_REF,
     )
     gate, writer = _gate(
         memberships=[trial, overdue_recurring],
@@ -772,3 +772,31 @@ def test_every_checkin_warning_is_prioritized() -> None:
 
     assert set(_REASON_PRIORITY) == set(CheckinWarning)
     assert len(_REASON_PRIORITY) == len(set(_REASON_PRIORITY))
+
+
+async def test_overdue_is_now_anchored_not_occurrence_anchored() -> None:
+    """The overdue test asks "owes money NOW", not "owed on the class date".
+
+    A retroactive check-in records a class from BEFORE the due date. The
+    member is past due today, so the front desk must still be warned —
+    comparing against the occurrence's date instead would silently say
+    nothing at the one moment staff could collect. ``status`` is
+    now-anchored too, so both halves of the test share one clock.
+    """
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=date(2026, 5, 20),   # due date passed...
+        gym_today=date(2026, 6, 1),     # ...as of TODAY
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    # The occurrence itself is 2026-06-01 but could be any past date; the
+    # warning depends only on today vs the due date.
+    res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=False)
+
+    assert res.warnings == [CheckinWarning.overdue]
+    writer.assert_not_awaited()

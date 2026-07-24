@@ -35,6 +35,7 @@ SELECT
     ms.end_date,
     ms.status,
     ref.ref_date AS reference_date,
+    ref.gym_today,
     (
         ms.start_date <= ref.ref_date
         AND (ms.cancel_date IS NULL OR ms.cancel_date > ref.ref_date)
@@ -69,10 +70,16 @@ JOIN membership_plans mp
 JOIN gyms g
     ON g.gym_id = ms.gym_id
 CROSS JOIN LATERAL (
-    SELECT (
-        COALESCE(CAST(:reference_instant AS TIMESTAMPTZ), now())
-        AT TIME ZONE g.timezone
-    )::date AS ref_date
+    SELECT
+        (
+            COALESCE(CAST(:reference_instant AS TIMESTAMPTZ), now())
+            AT TIME ZONE g.timezone
+        )::date AS ref_date,
+        -- Gym-local TODAY, always now-anchored regardless of
+        -- :reference_instant. Coverage/usage are occurrence-anchored
+        -- (ref_date), but "does this member owe money" is a question about
+        -- the present, so the overdue check compares against this instead.
+        (now() AT TIME ZONE g.timezone)::date AS gym_today
 ) ref
 LEFT JOIN (
     SELECT

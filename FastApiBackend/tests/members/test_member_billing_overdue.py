@@ -151,7 +151,7 @@ def _usage(*, item_id, plan_id, **overrides) -> MembershipUsage:
         "start_date": date(2026, 1, 1),
         "plan_type": PlanType.recurring,
         "status": "active",
-        "reference_date": TODAY,
+        "gym_today": TODAY,
         "class_count": 12,
         "classes_used": 3,
         "classes_remaining": 9,
