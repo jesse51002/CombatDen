@@ -33,22 +33,24 @@ RewardResponse _reward(String title, int cost) => RewardResponse(
       createdAt: DateTime.utc(2026),
     );
 
-EffectiveClassInstance _occurrence(String name, String time) =>
-    EffectiveClassInstance(
-      classId: 'c-$name',
-      gymId: 'gym-1',
-      className: name,
-      classDate: DateTime.utc(2026, 7, 23),
-      originalDate: DateTime.utc(2026, 7, 23),
-      originalTime: time,
-      occurredAt: DateTime.utc(2026, 7, 23, 18),
-      resolvedClassTime: time,
-      resolvedDurationMinutes: 60,
-      pointsWorth: 10,
-      isCancelled: false,
-      hasInstanceException: false,
-      hasRangeException: false,
-    );
+EffectiveClassInstance _occurrence(String name, String time, {DateTime? date}) {
+  final day = date ?? DateTime.utc(2026, 7, 23);
+  return EffectiveClassInstance(
+    classId: 'c-$name',
+    gymId: 'gym-1',
+    className: name,
+    classDate: day,
+    originalDate: day,
+    originalTime: time,
+    occurredAt: DateTime.utc(day.year, day.month, day.day, 18),
+    resolvedClassTime: time,
+    resolvedDurationMinutes: 60,
+    pointsWorth: 10,
+    isCancelled: false,
+    hasInstanceException: false,
+    hasRangeException: false,
+  );
+}
 
 Video _video(String title, {int? views, String channel = 'Combat Culture'}) =>
     Video(
@@ -88,13 +90,19 @@ MainRank _rank(String name, int order) => MainRank(
 /// the dark theme, and that the modal's behaviour (timer label, Done → cubit)
 /// survives.
 ///
+/// The classes the "Book classes" slide renders are `showcaseClasses` — the
+/// gym-wide UPCOMING list warmed at kiosk entry — so the slide is present on
+/// the HOME path (no member known) exactly as it is off the glance. Feeding it
+/// the check-in flow's per-member list instead is the founder-reported "only 3
+/// slides" bug.
+///
 /// "Track rank" is the one slide whose CONTENT is deliberately illustrative
 /// (founder ruling — see `KioskRankSlide` and `kiosk_rank_slide_test.dart`);
 /// it stays conditional on the gym really running ranks like every other
 /// slide, and it never claims a rung for the viewer.
 void main() {
-  // The realistic populated case: the modal opened off a glance, so the flow
-  // holds classes AND the entry-warmed catalogues are all in.
+  // The realistic populated case: every entry-warmed catalogue is in — which,
+  // for classes, is true from the idle home too.
   final fullRewards = [_reward('Club t-shirt', 1500)];
   final fullClasses = [_occurrence('Muay Thai Fundamentals', '18:00:00')];
   final fullVideos = [_video('Clinch control fundamentals', views: 12000)];
@@ -109,7 +117,7 @@ void main() {
     int secondsLeft = 60,
     String? memberEmail,
     List<RewardResponse> rewards = const [],
-    List<EffectiveClassInstance> classes = const [],
+    List<EffectiveClassInstance> showcaseClasses = const [],
     List<Video> videos = const [],
     List<KioskRankStep> rankLadder = const [],
     ThemeMode themeMode = ThemeMode.light,
@@ -139,7 +147,7 @@ void main() {
                   secondsLeft: secondsLeft,
                   memberEmail: memberEmail,
                   rewards: rewards,
-                  classes: classes,
+                  showcaseClasses: showcaseClasses,
                   videos: videos,
                   rankLadder: rankLadder,
                 ),
@@ -168,7 +176,7 @@ void main() {
         themeMode: themeMode,
         surface: surface,
         rewards: fullRewards,
-        classes: fullClasses,
+        showcaseClasses: fullClasses,
         videos: fullVideos,
         rankLadder: fullLadder,
       );
@@ -189,7 +197,7 @@ void main() {
           _reward('Boxing gloves', 2000),
           _reward('1-on-1 PT session', 2500),
         ],
-        classes: [
+        showcaseClasses: [
           _occurrence('Muay Thai Fundamentals', '18:00:00'),
           _occurrence('Boxing Conditioning', '19:00:00'),
         ],
@@ -455,7 +463,7 @@ void main() {
       await pumpModal(
         tester,
         rewards: fullRewards,
-        classes: fullClasses,
+        showcaseClasses: fullClasses,
         rankLadder: fullLadder,
       );
 
@@ -483,7 +491,7 @@ void main() {
       await pumpModal(
         tester,
         rewards: fullRewards,
-        classes: fullClasses,
+        showcaseClasses: fullClasses,
         videos: fullVideos,
       );
 
@@ -497,8 +505,36 @@ void main() {
       );
     });
 
-    testWidgets('absent: opened from the idle home, the classes slide is off '
-        '(no member has picked one)', (tester) async {
+    testWidgets('present from the HOME path: the classes slide renders with '
+        'no member known', (tester) async {
+      // The founder-reported regression: opened from the home QR panel the
+      // modal showed "only 3 slides instead of 4". The classes it renders are
+      // the gym-wide UPCOMING list warmed at kiosk entry, so the slide (and
+      // its dot, and its mention) is there before anyone has typed a name.
+      await pumpFull(tester, memberEmail: null);
+
+      expect(find.text('Muay Thai Fundamentals'), findsOneWidget);
+      expect(find.text('Book classes'), findsNWidgets(2)); // benefit + slide
+      expect(
+        find.text(
+          'Auto-rotates: book classes · earn rewards · watch videos · '
+          'track rank',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(KioskShowcaseDots),
+          matching: find.byType(GestureDetector),
+        ),
+        findsNWidgets(4),
+      );
+    });
+
+    testWidgets('absent: a gym that runs no classes loses the slide, its dot '
+        'and its mention', (tester) async {
+      // The conditional is intact — a wider showcase window must not become a
+      // way to put a class on screen for a gym that has none.
       await pumpModal(
         tester,
         rewards: fullRewards,
@@ -506,10 +542,40 @@ void main() {
       );
 
       expect(find.text('Muay Thai Fundamentals'), findsNothing);
+      // "Book classes" survives ONLY as an app-card benefit check.
+      expect(find.text('Book classes'), findsOneWidget);
       expect(
         find.text('Auto-rotates: earn rewards · watch videos'),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byType(KioskShowcaseDots),
+          matching: find.byType(GestureDetector),
+        ),
+        findsNWidgets(2),
+      );
+    });
+
+    testWidgets('the row states the class\'s REAL day, never a fixed "Today"',
+        (tester) async {
+      // The showcase looks a week ahead, so the day word is read off each
+      // occurrence's own date. A hard-coded "Today" beside tomorrow's class
+      // would be an invented fact on a member-facing screen.
+      final today = DateTime.now();
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+      await pumpModal(
+        tester,
+        showcaseClasses: [
+          _occurrence('Muay Thai Fundamentals', '18:00:00', date: today),
+          _occurrence('Boxing Conditioning', '19:00:00', date: tomorrow),
+        ],
+      );
+
+      // The time half is `DateFormat.jm()`'s own output (its AM/PM separator
+      // is locale data, not ours) — the day word is what this pins.
+      expect(find.textContaining('Today · '), findsOneWidget);
+      expect(find.textContaining('Tomorrow · '), findsOneWidget);
     });
 
     testWidgets('invents no gym content when the kiosk holds none',

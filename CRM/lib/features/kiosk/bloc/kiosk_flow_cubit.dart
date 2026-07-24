@@ -82,6 +82,21 @@ const int kKioskGlanceRewardCount = 4;
 /// shows — a two-card row. Only this many are fetched.
 const int kKioskShowcaseVideoCount = 2;
 
+/// How far ahead the "Book classes" showcase slide looks, counted in days from
+/// today (so the board is read over an inclusive `[today, today + 7]` window).
+///
+/// Seven days forward is the smallest range that CANNOT go empty by time of
+/// day for a gym running a weekly schedule: every weekday recurs at least once
+/// inside it even after today's own occurrences have all finished, so a member
+/// reading the kiosk at 10pm still sees real classes they could book. A
+/// today-only range is what emptied the slide every evening.
+const int kKioskShowcaseClassDays = 7;
+
+/// How many upcoming occurrences the "Book classes" showcase slide shows — a
+/// two-row list, mirroring the video slide's two cards. Only this many are
+/// kept on the state.
+const int kKioskShowcaseClassCount = 2;
+
 /// How long the "Get the app" modal (UX-5) stays open before it auto-closes
 /// back to home, so the next member gets a clean home. A member can also leave
 /// early with Done — which returns them to the view underneath instead, see
@@ -122,7 +137,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         _gymId = gymId,
         _now = now,
         super(const KioskFlowState.home()) {
-    // Warm the three GYM-WIDE catalogues once, here at kiosk entry, and cache
+    // Warm the four GYM-WIDE catalogues once, here at kiosk entry, and cache
     // them for the whole session: they are identical for every member, and the
     // member-facing screens that render them (the glance, the "Get the app"
     // showcase) must open instantly — the modal in particular fires no fetch
@@ -130,6 +145,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     // glance degrades to points-only, and a showcase slide with no data is
     // simply omitted rather than showing an error on a member-facing screen.
     unawaited(_warmRewards());
+    unawaited(_warmShowcaseClasses());
     unawaited(_warmVideos());
     unawaited(_warmRankLadder());
   }
@@ -164,12 +180,16 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   List<RewardResponse>? _rewardsCache;
   Future<List<RewardResponse>>? _rewardsInFlight;
 
-  /// This gym's own curated video feed head + its main-rank ladder — the other
-  /// two gym-wide catalogues, likewise fetched once at entry. Unlike the
-  /// rewards catalog nothing re-attempts these mid-session: they feed showcase
-  /// slides only, and an absent slide is the designed degradation. They are
-  /// held here (not only on the state) so [goHome] can re-seed a fresh home
-  /// without re-fetching.
+  /// The gym's next upcoming occurrences, its own curated video feed head, and
+  /// its main-rank ladder — the other three gym-wide catalogues, likewise
+  /// fetched once at entry. Unlike the rewards catalog nothing re-attempts
+  /// these mid-session: they feed showcase slides only, and an absent slide is
+  /// the designed degradation. They are held here (not only on the state) so
+  /// [goHome] can re-seed a fresh home without re-fetching.
+  ///
+  /// [_showcaseClassesCache] is NOT the check-in flow's class list and must
+  /// never be substituted for it (or the reverse) — see [_warmShowcaseClasses].
+  List<EffectiveClassInstance> _showcaseClassesCache = const [];
   List<Video> _videosCache = const [];
   List<MainRank> _rankLadderCache = const [];
 
@@ -250,6 +270,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     unawaited(_loadClasses(seq));
   }
 
+  /// The CHECK-IN flow's class list: TODAY's occurrences, narrowed to the ones
+  /// this member can check into right now. Read fresh per member — never
+  /// served from the entry-time showcase cache, whose window is a week wide and
+  /// deliberately unfiltered by the check-in gate (see [_warmShowcaseClasses]).
   Future<void> _loadClasses(int seq) async {
     final n = _now();
     final today = DateTime(n.year, n.month, n.day);
@@ -421,6 +445,55 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     emit(state.copyWith(rewards: rewards));
   }
 
+  /// The gym's next few UPCOMING occurrences — the "Book classes" showcase
+  /// slide's own list, read ONCE at entry over `[today, today + N days]`
+  /// (`kKioskShowcaseClassDays`) and kept for the session.
+  ///
+  /// **This is a SECOND, separate class list, and it must stay that way.** The
+  /// check-in flow's [_loadClasses] is filtered to the CHECK-IN WINDOW (in
+  /// session or within the 2h early window, and not yet ended) because a kiosk
+  /// must never offer a class the member cannot actually check into. That
+  /// filter is correct there and wrong here: late in the evening nothing is in
+  /// the check-in window, so driving the marketing slide from it would empty it
+  /// exactly when the gym is busiest — the same "only 3 slides" bug the founder
+  /// hit from the idle home, moved to a different hour. Never collapse the two
+  /// into one list.
+  ///
+  /// This one looks FORWARD instead: occurrences that have not started yet,
+  /// soonest first, capped at [kKioskShowcaseClassCount]. Every row therefore
+  /// reads as something a member could really book, which is what the inert
+  /// Book pill beside it depicts — an already-finished class under a Book pill
+  /// would not. A gym that genuinely runs no classes still ends up with an
+  /// empty list, so the slide and its dot are still omitted; the conditional
+  /// is intact.
+  Future<void> _warmShowcaseClasses() async {
+    final n = _now();
+    final today = DateTime(n.year, n.month, n.day);
+    try {
+      final all = await _scheduleRepo.listEffectiveInstances(
+        _gymId,
+        today,
+        // Calendar arithmetic (not a Duration) so a DST shift inside the
+        // window can't land the end date a day short.
+        DateTime(n.year, n.month, n.day + kKioskShowcaseClassDays),
+      );
+      if (isClosed) return;
+      final now = _now();
+      final upcoming = (all
+              .where((i) => !i.isCancelled && i.occurredAt.isAfter(now))
+              .toList()
+            ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt)))
+          .take(kKioskShowcaseClassCount)
+          .toList();
+      _showcaseClassesCache = upcoming;
+      if (upcoming.isEmpty) return;
+      emit(state.copyWith(showcaseClasses: upcoming));
+    } catch (e, st) {
+      // Non-fatal: the slide is omitted, never an error on a member screen.
+      log('Kiosk showcase class load failed', error: e, stackTrace: st);
+    }
+  }
+
   /// The head of THIS gym's own curated feed (`GET /gyms/{id}/videos`) — the
   /// only per-gym feed the CRM can read. Deliberately not `selectedGym.detail`:
   /// that showcase belongs to a DEFAULT content gym, so rendering it here would
@@ -461,15 +534,36 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     }
   }
 
-  /// A fresh idle home that KEEPS the gym-wide catalogues (rewards, videos,
-  /// rank ladder) — they are identical for every member and were paid for once
-  /// at entry — while dropping every per-member field the plain
-  /// [KioskFlowState.home] constant clears.
+  /// A fresh idle home that KEEPS the gym-wide catalogues (rewards, the
+  /// showcase's upcoming classes, videos, rank ladder) — they are identical for
+  /// every member and were paid for once at entry — while dropping every
+  /// per-member field the plain [KioskFlowState.home] constant clears.
+  ///
+  /// Note which class list is re-seeded: the SHOWCASE's, never the check-in
+  /// flow's, which is per-member and must be re-read fresh for the next person.
+  /// [_pruneShowcaseClasses] runs first so the re-seeded list is still honest.
   KioskFlowState get _freshHome => const KioskFlowState.home().copyWith(
         rewards: _rewardsCache ?? const [],
+        showcaseClasses: _showcaseClassesCache,
         videos: _videosCache,
         rankLadder: _rankLadderCache,
       );
+
+  /// Drop showcase occurrences that have STARTED since the entry-time warm.
+  ///
+  /// A kiosk session runs for up to twelve hours on one warm, so without this
+  /// a class that finished at 7am would still sit under a Book pill at 8pm,
+  /// labelled "Today" — wrong content on a member-facing screen, which the
+  /// showcase's whole design forbids. Nothing re-fetches: when the cache
+  /// drains, the slide and its dot are omitted, which is the designed
+  /// degradation everywhere else in this showcase.
+  void _pruneShowcaseClasses() {
+    if (_showcaseClassesCache.isEmpty) return;
+    final now = _now();
+    _showcaseClassesCache = _showcaseClassesCache
+        .where((i) => i.occurredAt.isAfter(now))
+        .toList();
+  }
 
   /// Start the glance's 10-second hold — but only once the reveal's LAST beat
   /// has landed ([kKioskGlanceLastBeat]). The full countdown value is emitted
@@ -624,6 +718,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     _classesSeq++;
     _glanceSeq++; // drop any in-flight glance fetch
     _endFlowIfStarted();
+    _pruneShowcaseClasses();
     emit(_freshHome);
     _syncIdleTimer();
   }

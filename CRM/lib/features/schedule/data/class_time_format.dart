@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 final DateFormat _timeFormat = DateFormat.jm();
 final DateFormat _shortDateFormat = DateFormat('EEE, MMM d');
+final DateFormat _weekdayFormat = DateFormat('EEE');
 
 /// `6:00 PM - 7:00 PM` from a `HH:MM:SS` local start time + a duration in
 /// minutes. The anchor date is arbitrary (formatting only) — no timezone is
@@ -39,6 +40,24 @@ String classStartTimeLabel(String classTime) {
   final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
   final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
   return _timeFormat.format(DateTime(2000, 1, 1, hour, minute));
+}
+
+/// `Today` / `Tomorrow` / `Thu` — the DAY half of a compact occurrence label,
+/// for rows that carry the day in words beside a bare start time (the kiosk
+/// showcase's "Today · 6:00 PM"). [date] is the occurrence's gym-local date;
+/// [now] defaults to the device clock and exists so a caller (or a test) can
+/// pin the day it is measured against.
+///
+/// The word is DERIVED, never assumed: the kiosk's "Book classes" showcase
+/// looks a week ahead, so a hard-coded "Today" would label tomorrow's class as
+/// today's — an invented fact on a member-facing screen. Dates are compared as
+/// calendar days (not elapsed hours) so a DST boundary can't shift the word.
+String classDayWordLabel(DateTime date, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final day = DateTime(date.year, date.month, date.day);
+  if (day == DateTime(n.year, n.month, n.day)) return 'Today';
+  if (day == DateTime(n.year, n.month, n.day + 1)) return 'Tomorrow';
+  return _weekdayFormat.format(date);
 }
 
 /// `6:00 PM · Wed, Jul 2` — one occurrence's START time + short date, no

@@ -177,12 +177,16 @@ class _IdleOverlay extends StatelessWidget {
 /// is set — opened by a glance tap or the home adopt strip's "Get it"
 /// affordance.
 ///
-/// Everything it shows comes from state the cubit ALREADY holds: the three
-/// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's own
-/// video feed, its rank ladder), the classes the flow loaded, and the
-/// checked-in member's address. **No fetch is fired to open the modal** —
-/// that is what keeps it instant. A catalogue that came back empty simply
-/// drops its slide.
+/// Everything it shows comes from state the cubit ALREADY holds: the four
+/// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's upcoming
+/// classes, its own video feed, its rank ladder) plus the checked-in member's
+/// address. **No fetch is fired to open the modal** — that is what keeps it
+/// instant. A catalogue that came back empty simply drops its slide.
+///
+/// The classes it renders are `showcaseClasses`, NOT the check-in flow's
+/// `classes`: the flow's list is per-member and check-in-window filtered, so
+/// wiring it here is what left the "Book classes" slide missing from the home
+/// path (and would drop it every evening besides).
 class _AppModalOverlay extends StatelessWidget {
   const _AppModalOverlay();
 
@@ -193,7 +197,7 @@ class _AppModalOverlay extends StatelessWidget {
           prev.appModalOpen != cur.appModalOpen ||
           prev.appModalCountdown != cur.appModalCountdown ||
           prev.rewards != cur.rewards ||
-          prev.classes != cur.classes ||
+          prev.showcaseClasses != cur.showcaseClasses ||
           prev.videos != cur.videos ||
           prev.rankLadder != cur.rankLadder ||
           prev.selectedMember != cur.selectedMember,
@@ -208,7 +212,7 @@ class _AppModalOverlay extends StatelessWidget {
           secondsLeft: state.appModalCountdown,
           memberEmail: member is AllViewRow ? member.email : null,
           rewards: state.rewards,
-          classes: state.classes,
+          showcaseClasses: state.showcaseClasses,
           videos: state.videos,
           rankLadder: kioskRankSteps(state.rankLadder),
         );

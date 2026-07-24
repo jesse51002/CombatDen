@@ -54,6 +54,15 @@ class KioskFlowState extends Equatable {
   // ── Class pick ──
   final MemberRow? selectedMember;
   final bool classesLoading;
+
+  /// The occurrences the CHECK-IN FLOW may offer this member: today's,
+  /// filtered to the check-in window (in session or within the 2h early
+  /// window, and not yet ended). Loaded per member by
+  /// [KioskFlowCubit.selectMember] and cleared on the way home.
+  ///
+  /// **Never render this on the "Get the app" showcase** — that slide has its
+  /// own [showcaseClasses]. The two lists answer different questions and are
+  /// deliberately separate; see [showcaseClasses].
   final List<EffectiveClassInstance> classes;
   final bool classesFailed;
 
@@ -92,6 +101,18 @@ class KioskFlowState extends Equatable {
   final List<RewardResponse> rewards;
 
   // ── Gym-wide showcase catalogues (fetched once at kiosk entry) ──
+  /// The gym's next few UPCOMING occurrences — the "Book classes" showcase
+  /// slide, and a SEPARATE list from the check-in flow's [classes] on purpose.
+  ///
+  /// [classes] is filtered to the check-in window because the kiosk must never
+  /// offer a class a member cannot actually check into; this one looks a week
+  /// FORWARD, because a marketing slide must not empty itself at 9pm when
+  /// nothing is in the check-in window any more. Fetched once at kiosk entry
+  /// and reused (it survives [KioskFlowCubit.goHome]); empty for a gym that
+  /// runs no classes, or on a failed fetch — the slide (and its dot) is then
+  /// omitted, like every other showcase catalogue.
+  final List<EffectiveClassInstance> showcaseClasses;
+
   /// The head of this gym's OWN curated video feed — the "Watch videos"
   /// showcase slide. Fetched once at kiosk entry and reused (it survives
   /// [goHome]); empty when the gym's feed is empty or the fetch failed, and
@@ -149,6 +170,7 @@ class KioskFlowState extends Equatable {
     this.checkInErrorCode,
     this.pointsBalance,
     this.rewards = const [],
+    this.showcaseClasses = const [],
     this.videos = const [],
     this.rankLadder = const [],
     this.glanceLoading = false,
@@ -187,6 +209,7 @@ class KioskFlowState extends Equatable {
     Object? checkInErrorCode = _keep,
     Object? pointsBalance = _keep,
     List<RewardResponse>? rewards,
+    List<EffectiveClassInstance>? showcaseClasses,
     List<Video>? videos,
     List<MainRank>? rankLadder,
     bool? glanceLoading,
@@ -225,6 +248,7 @@ class KioskFlowState extends Equatable {
           ? this.pointsBalance
           : pointsBalance as int?,
       rewards: rewards ?? this.rewards,
+      showcaseClasses: showcaseClasses ?? this.showcaseClasses,
       videos: videos ?? this.videos,
       rankLadder: rankLadder ?? this.rankLadder,
       glanceLoading: glanceLoading ?? this.glanceLoading,
@@ -254,6 +278,7 @@ class KioskFlowState extends Equatable {
         checkInErrorCode,
         pointsBalance,
         rewards,
+        showcaseClasses,
         videos,
         rankLadder,
         glanceLoading,

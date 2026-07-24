@@ -16,15 +16,20 @@ const double _kThumbAspect = 16 / 9;
 /// Slide 1 — "Book classes": an illustration of the member app's booking row.
 ///
 /// **Data source: the gym's REAL classes.** The rows render
-/// [EffectiveClassInstance]s the flow already loaded for this member (today's
-/// occurrences open for check-in) — real class names, real gym-local start
-/// times, real class images. Nothing here is invented: demo placeholder
-/// class names ("Muay Thai Fundamentals" / "Boxing Conditioning") would, on a
-/// member-facing kiosk, read as this gym's actual schedule.
+/// [EffectiveClassInstance]s from `KioskFlowState.showcaseClasses` — the gym's
+/// next UPCOMING occurrences, warmed once at kiosk entry — with real class
+/// names, real gym-local start times and real class images. Nothing here is
+/// invented: demo placeholder class names ("Muay Thai Fundamentals" / "Boxing
+/// Conditioning") would, on a member-facing kiosk, read as this gym's actual
+/// schedule.
 ///
-/// The slide is only built when the flow really holds classes — from the idle
-/// home, before any member picked one, there are none and the slide is omitted
-/// entirely (see `kioskShowcaseSlides`), so [classes] here is always populated.
+/// **Not the check-in flow's class list.** That one is narrowed to the check-in
+/// window and empties every evening; a slide driven by it would vanish at the
+/// exact hour the gym is busiest. See `KioskFlowCubit._warmShowcaseClasses`.
+///
+/// The slide is only built when the kiosk really holds upcoming classes — a
+/// gym that runs none has an empty list and the slide is omitted entirely (see
+/// `kioskShowcaseSlides`), so [classes] here is always populated.
 ///
 /// The row anatomy is the MOBILE APP's booking row (thumb, name, when, Book
 /// pill), not a CRM list row — it is a picture of the app being marketed, so
@@ -86,7 +91,10 @@ class _BookRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                _WhenLine(time: occurrence.resolvedClassTime),
+                _WhenLine(
+                  date: occurrence.classDate,
+                  time: occurrence.resolvedClassTime,
+                ),
               ],
             ),
           ),
@@ -97,12 +105,15 @@ class _BookRow extends StatelessWidget {
   }
 }
 
-/// "**Today** · 6:00 PM" — the cubit only ever loads today's occurrences, so
-/// the day word is a fact, not a guess.
+/// "**Today** · 6:00 PM" — the day word READ OFF the occurrence's own date
+/// ("Today" / "Tomorrow" / "Thu"), never assumed. The showcase looks a week
+/// ahead, so a fixed "Today" would state something untrue about a real class
+/// on a member-facing screen.
 class _WhenLine extends StatelessWidget {
+  final DateTime date;
   final String time;
 
-  const _WhenLine({required this.time});
+  const _WhenLine({required this.date, required this.time});
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +126,7 @@ class _WhenLine extends StatelessWidget {
         style: base,
         children: [
           TextSpan(
-            text: 'Today',
+            text: classDayWordLabel(date),
             style: base.copyWith(
               color: DesignConstants.goodGreen,
               fontWeight: FontWeight.w600,

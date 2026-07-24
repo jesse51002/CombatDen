@@ -250,8 +250,16 @@ void main() {
         classId: id,
         gymId: gymId,
         className: id,
-        classDate: DateTime(2026, 1, 1),
-        originalDate: DateTime(2026, 1, 1),
+        classDate: DateTime(
+          occurredAt.year,
+          occurredAt.month,
+          occurredAt.day,
+        ),
+        originalDate: DateTime(
+          occurredAt.year,
+          occurredAt.month,
+          occurredAt.day,
+        ),
         originalTime: '00:00:00',
         occurredAt: occurredAt,
         resolvedClassTime: '00:00:00',
@@ -1036,6 +1044,259 @@ void main() {
       expect(cubit.state.view, KioskView.home);
       verifyNever(() => session.beginFlow());
       cubit.close();
+    });
+
+    test('opening the modal fires NO network call — every slide input is '
+        'already in memory', () {
+      // The modal must open instantly on a supervised iPad, so it is fed
+      // entirely from the catalogues warmed at entry. A per-open fetch would
+      // put a spinner (or a blank slide) in front of a member.
+      fakeAsync((async) {
+        final cubit = build();
+        async.flushMicrotasks(); // the entry warms all land
+        clearInteractions(schedule);
+        clearInteractions(rewards);
+        clearInteractions(content);
+        clearInteractions(ranks);
+        clearInteractions(member);
+        clearInteractions(members);
+
+        cubit.openAppModal();
+        async.flushMicrotasks();
+        expect(cubit.state.appModalOpen, isTrue);
+
+        verifyZeroInteractions(schedule);
+        verifyZeroInteractions(rewards);
+        verifyZeroInteractions(content);
+        verifyZeroInteractions(ranks);
+        verifyZeroInteractions(member);
+        verifyZeroInteractions(members);
+        cubit.close();
+      });
+    });
+  });
+
+  group('the showcase\'s OWN class list (warmed at kiosk ENTRY)', () {
+    // Fixed now = t0 = 2026-01-01 18:00. TWO class lists exist on purpose:
+    //  · the CHECK-IN flow's — today only, narrowed to the check-in window,
+    //    read per member (it must never offer an unbookable class);
+    //  · the SHOWCASE's — a week-wide FORWARD window, read once at entry (it
+    //    must not empty itself at 9pm, which is how the founder's "only 3
+    //    slides" bug would come back at a different hour).
+    // Collapsing them into one list re-introduces one bug or the other.
+    final showcaseStart = DateTime(2026, 1, 1);
+    final showcaseEnd = DateTime(2026, 1, 1 + kKioskShowcaseClassDays);
+
+    // 19:00 tonight: upcoming AND inside the 2h check-in window.
+    final soon = occAt('soon', t0.add(const Duration(hours: 1)));
+    // Tomorrow evening: upcoming, but far outside the check-in window — it can
+    // only ever reach the SHOWCASE.
+    final tomorrow = occAt('tomorrow', t0.add(const Duration(days: 1)));
+    // Finished two hours ago: never bookable, never shown.
+    final ended = occAt('ended', t0.subtract(const Duration(hours: 2)));
+    final cancelled = occAt(
+      'cancelled',
+      t0.add(const Duration(hours: 2)),
+      cancelled: true,
+    );
+
+    void stubShowcase(List<EffectiveClassInstance> board) {
+      when(() => schedule.listEffectiveInstances(
+          gymId, showcaseStart, showcaseEnd)).thenAnswer((_) async => board);
+    }
+
+    test('warms the gym\'s next upcoming classes at ENTRY, so the modal opened '
+        'from the HOME has its "Book classes" slide', () {
+      // The founder-reported bug: from the home QR panel the modal showed
+      // "only 3 slides instead of 4", because nothing warmed classes and
+      // `state.classes` is only filled once a member has been picked.
+      fakeAsync((async) {
+        stubShowcase([tomorrow, ended, soon, cancelled]);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        expect(cubit.state.view, KioskView.home);
+        // Soonest first; the finished and cancelled ones are dropped — a Book
+        // pill beside a class that already ended is not a real affordance.
+        expect(
+          cubit.state.showcaseClasses.map((c) => c.classId).toList(),
+          ['soon', 'tomorrow'],
+        );
+        // ONE call, over the forward window — not a per-open fetch.
+        verify(() => schedule.listEffectiveInstances(
+            gymId, showcaseStart, showcaseEnd)).called(1);
+        cubit.close();
+      });
+    });
+
+    test('caps at kKioskShowcaseClassCount — the slide is a two-row list, not '
+        'a schedule dump', () {
+      fakeAsync((async) {
+        stubShowcase([
+          soon,
+          tomorrow,
+          occAt('day-3', t0.add(const Duration(days: 3))),
+          occAt('day-5', t0.add(const Duration(days: 5))),
+        ]);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        expect(
+          cubit.state.showcaseClasses.length,
+          kKioskShowcaseClassCount,
+        );
+        cubit.close();
+      });
+    });
+
+    test('is INDEPENDENT of the check-in flow\'s filtered list — a class '
+        'outside the check-in window still reaches the showcase, and never '
+        'the class pick', () {
+      fakeAsync((async) {
+        stubShowcase([soon, tomorrow]);
+        // The flow reads TODAY only, and its own filter still governs it.
+        when(() => schedule.listEffectiveInstances(
+                gymId, showcaseStart, showcaseStart))
+            .thenAnswer((_) async => [occ1, tomorrow, ended]);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+
+        // The class pick offers ONLY what this member can check into right
+        // now — tomorrow's class and the finished one are both dropped. This
+        // filter is a live wrong-check-in guard; the showcase must never
+        // loosen it.
+        expect(
+          cubit.state.classes.map((c) => c.classId).toList(),
+          ['class-1'],
+        );
+        // And the showcase keeps looking forward, untouched by the flow.
+        expect(
+          cubit.state.showcaseClasses.map((c) => c.classId).toList(),
+          ['soon', 'tomorrow'],
+        );
+        cubit.close();
+      });
+    });
+
+    test('survives a return home — no re-fetch per member', () {
+      fakeAsync((async) {
+        stubShowcase([soon, tomorrow]);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        cubit.selectMember(member1); // the flow's own fetch runs
+        async.flushMicrotasks();
+        cubit.goHome();
+        async.flushMicrotasks();
+
+        expect(
+          cubit.state.showcaseClasses.map((c) => c.classId).toList(),
+          ['soon', 'tomorrow'],
+        );
+        // Still exactly one forward-window read — goHome re-seeds it from the
+        // entry-time cache.
+        verify(() => schedule.listEffectiveInstances(
+            gymId, showcaseStart, showcaseEnd)).called(1);
+        cubit.close();
+      });
+    });
+
+    test('drops a cached class once it has STARTED — a kiosk runs for hours '
+        'on one warm and must not advertise this morning\'s class tonight', () {
+      // The staleness this guards: one warm covers a 12-hour session, so
+      // without a prune a 7pm class would still sit under a Book pill at 10pm,
+      // labelled "Today". No re-fetch — the cache just drains, and an empty
+      // list omits the slide (the designed degradation).
+      fakeAsync((async) {
+        stubShowcase([soon, tomorrow]);
+        var clock = t0;
+        final cubit = KioskFlowCubit(
+          membersRepository: members,
+          scheduleRepository: schedule,
+          memberRepository: member,
+          rewardsRepository: rewards,
+          gymContentRepository: content,
+          ranksRepository: ranks,
+          session: session,
+          gymId: gymId,
+          now: () => clock,
+        );
+        async.flushMicrotasks();
+        expect(
+          cubit.state.showcaseClasses.map((c) => c.classId).toList(),
+          ['soon', 'tomorrow'],
+        );
+
+        clock = t0.add(const Duration(hours: 4)); // 19:00 has been and gone
+        cubit.goHome();
+        async.flushMicrotasks();
+
+        expect(
+          cubit.state.showcaseClasses.map((c) => c.classId).toList(),
+          ['tomorrow'],
+        );
+        // Still exactly one read — pruning costs no network.
+        verify(() => schedule.listEffectiveInstances(
+            gymId, showcaseStart, showcaseEnd)).called(1);
+        cubit.close();
+      });
+    });
+
+    test('a gym that runs no classes still gets an EMPTY list — the slide and '
+        'its dot stay omitted', () {
+      fakeAsync((async) {
+        stubShowcase(const []);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        expect(cubit.state.showcaseClasses, isEmpty);
+        expect(cubit.state.view, KioskView.home);
+        cubit.close();
+      });
+    });
+
+    test('a failed fetch degrades to an omitted slide, never an error state',
+        () {
+      fakeAsync((async) {
+        when(() => schedule.listEffectiveInstances(
+            gymId, showcaseStart, showcaseEnd)).thenThrow(
+          Exception('schedule down'),
+        );
+        final cubit = build();
+        async.flushMicrotasks();
+
+        expect(cubit.state.showcaseClasses, isEmpty);
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.classesFailed, isFalse); // not the flow's flag
+        cubit.close();
+      });
+    });
+
+    test('a failed showcase warm leaves the CHECK-IN flow working', () {
+      // The two reads are independent: a broken forward window must not cost a
+      // member their check-in.
+      fakeAsync((async) {
+        when(() => schedule.listEffectiveInstances(
+            gymId, showcaseStart, showcaseEnd)).thenThrow(
+          Exception('schedule down'),
+        );
+        when(() => schedule.listEffectiveInstances(
+                gymId, showcaseStart, showcaseStart))
+            .thenAnswer((_) async => [occ1]);
+        final cubit = build();
+        async.flushMicrotasks();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+
+        expect(cubit.state.classes.map((c) => c.classId).toList(),
+            ['class-1']);
+        expect(cubit.state.classesFailed, isFalse);
+        cubit.close();
+      });
     });
   });
 

@@ -46,10 +46,12 @@ const Key kKioskGetAppPopup = Key('kiosk-get-app-popup');
 /// and returns home — both live in `KioskFlowCubit.closeAppModal`.
 /// [secondsLeft] is the cubit's modal countdown; [gymId] scopes the QR.
 ///
-/// Every showcase input is a catalogue the flow cubit fetched ONCE at kiosk
-/// entry and cached — **this modal never fetches**, which is why it opens
-/// instantly. See `kioskShowcaseSlides` for what each slide renders and why a
-/// slide whose data is absent is omitted outright.
+/// Every showcase input — the reward catalogue, the upcoming classes, the
+/// video feed head, the rank ladder — is a gym-wide catalogue the flow cubit
+/// fetched ONCE at kiosk entry and cached, so **this modal never fetches**,
+/// which is why it opens instantly and why it renders identically from the
+/// idle home and from the glance. See `kioskShowcaseSlides` for what each slide
+/// renders and why a slide whose data is absent is omitted outright.
 class KioskGetAppModal extends StatelessWidget {
   final String gymId;
   final int secondsLeft;
@@ -66,9 +68,13 @@ class KioskGetAppModal extends StatelessWidget {
   /// The gym's cached reward catalogue — the "Earn rewards" slide.
   final List<RewardResponse> rewards;
 
-  /// Today's open classes already loaded by the flow — the "Book classes"
-  /// slide. Empty from the idle home, which omits that slide.
-  final List<EffectiveClassInstance> classes;
+  /// The gym's next upcoming occurrences — the "Book classes" slide. This is
+  /// `KioskFlowState.showcaseClasses` (warmed once at kiosk entry, a week-wide
+  /// forward window), **never** the check-in flow's `classes`: that list is
+  /// narrowed to the check-in window and is empty on the idle home and every
+  /// evening, which is exactly how this slide went missing. Empty only for a
+  /// gym that runs no classes at all, which omits the slide and its dot.
+  final List<EffectiveClassInstance> showcaseClasses;
 
   /// The head of the gym's OWN curated video feed — the "Watch videos" slide.
   /// Empty for a gym with no feed (or a failed fetch), which omits the slide.
@@ -87,7 +93,7 @@ class KioskGetAppModal extends StatelessWidget {
     this.gymName,
     this.memberEmail,
     this.rewards = const [],
-    this.classes = const [],
+    this.showcaseClasses = const [],
     this.videos = const [],
     this.rankLadder = const [],
   });
@@ -122,7 +128,7 @@ class KioskGetAppModal extends StatelessWidget {
                         secondsLeft: secondsLeft,
                         memberEmail: memberEmail,
                         slides: kioskShowcaseSlides(
-                          classes: classes,
+                          classes: showcaseClasses,
                           rewards: rewards,
                           videos: videos,
                           rankLadder: rankLadder,

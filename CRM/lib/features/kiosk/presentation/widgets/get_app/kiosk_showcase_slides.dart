@@ -9,8 +9,13 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 
 /// Assemble the welcome showcase's slide list from whatever the kiosk already
 /// holds in memory. Nothing here fetches — every argument is a gym-wide
-/// catalogue the flow cubit warmed once at kiosk entry (rewards, videos, the
-/// rank ladder), or the classes the flow already loaded for this member.
+/// catalogue the flow cubit warmed once at kiosk entry: the reward catalogue,
+/// the gym's next upcoming occurrences, its own video feed head, its rank
+/// ladder.
+///
+/// [classes] is `KioskFlowState.showcaseClasses` — the forward-looking list —
+/// and never the check-in flow's `classes`, which is per-member, narrowed to
+/// the check-in window, and empty both on the idle home and all evening.
 ///
 /// **Every slide is conditional on real data.** A slide whose list is empty is
 /// not added at all — no placeholder, no stand-in, no demo content. The gym's
@@ -21,7 +26,7 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 /// either.
 ///
 /// **The CONTENT of each slide is real too — with one deliberate exception.**
-/// "Book classes" draws the real occurrences the flow loaded, "Earn rewards"
+/// "Book classes" draws the gym's real upcoming occurrences, "Earn rewards"
 /// the gym's real cached catalogue, "Watch videos" the gym's own curated feed.
 /// "Track rank" draws the gym's real ladder but features a MIDDLE rung over an
 /// illustrative progress bar, on purpose — see `KioskRankSlide` for the
