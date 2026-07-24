@@ -669,7 +669,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     # ── Payment sync ─────────────────────────────────────────────
     # Shared payer resolver, injected wherever payer resolution is needed: the
     # sync and the lifecycle / validation callers (start, charge_card,
-    # mark_paid_cash).
+    # mark_paid_cash, retry_card).
     payer_resolver = providers.Factory(
         PayerResolver,
         db_pool=db_pool,

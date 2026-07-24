@@ -103,7 +103,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | View members | ✅ | ✅ | ✅ | ❌ |
 | Create members (API; CRM "Add Member" UI still deferred — see §6) | ✅ | ✅ | ✅ | ❌ |
 | Edit member contact / photo upload | ✅ | ✅ | ✅ | ❌ |
-| Member money mgmt (invoices, payment history, card add/update/remove, charge, mark-paid-cash, refund, membership start/preview/freeze/unfreeze/cancel/upgrade/cancel-one-time, apply/remove discounts) | ✅ | ✅ | ✅ (full) | ❌ |
+| Member money mgmt (invoices, payment history, card add/update/remove, charge, mark-paid-cash, retry-card, refund, membership start/preview/freeze/unfreeze/cancel/upgrade/cancel-one-time, apply/remove discounts) | ✅ | ✅ | ✅ (full) | ❌ |
 | Rewards redeem + approve/reject | ✅ | ✅ | ✅ | ❌ |
 | Reward point-value adjustments | ✅ | ✅ | ❌ | ❌ |
 | Check-ins (single/batch/undo, signups, rosters, history) | ✅ | ✅ | ✅ | ❌ (read rosters only) |

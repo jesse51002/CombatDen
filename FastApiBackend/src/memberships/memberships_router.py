@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated
 
+import stripe
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
@@ -29,6 +30,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsRefundRequest,
     MemberMembershipsRefundResponse,
     MemberMembershipsRemoveDiscountsRequest,
+    MemberMembershipsRetryCardRequest,
     MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
@@ -1106,6 +1108,100 @@ async def mark_membership_paid_cash(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark membership paid via cash",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/retry-card",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Retry the saved card on a recurring membership's open invoice",
+    description=(
+        "Charges the payer's saved default card for the membership's open "
+        "Stripe invoice. Recurring memberships only. A decline is a 500 whose "
+        "``detail`` carries Stripe's card-decline reason for staff."
+    ),
+    responses={
+        204: {"description": "Card charged successfully"},
+        400: {"description": "Not recurring, no open invoice, or invalid state"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Membership not found"},
+    },
+)
+@inject
+async def retry_membership_card(
+    request: MemberMembershipsRetryCardRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
+) -> None:
+    """Retry the payer's saved card on a recurring membership's open invoice."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(
+        request.member_id, user_payload, staff_roles=STAFF
+    )
+
+    try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
+        await memberships_service.retry_card(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            idempotency_key=request.idempotency_key,
+        )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except stripe.CardError as exc:
+        # The whole point of a retry: staff need the DECLINE reason to know
+        # what to do next (expired -> Update Card; insufficient -> tell the
+        # member). Stripe writes ``user_message`` to be shown to an end user,
+        # so surface it. Still a 500, never a 502/503/504 — no proxy replays a
+        # money-moving retry.
+        logger.warning(
+            "Retry card declined: item_id=%s, member_id=%s, code=%s",
+            request.item_id,
+            request.member_id,
+            exc.code,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(exc.user_message or str(exc)),
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        # Any other Stripe/upstream failure — a 500, never a 502/503/504, so
+        # no proxy replays a money-moving retry.
+        logger.error(
+            "Failed to retry the card on membership: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retry the card on membership",
         ) from None
 
 

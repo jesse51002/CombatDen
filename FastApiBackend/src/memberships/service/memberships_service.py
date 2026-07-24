@@ -42,6 +42,9 @@ from src.memberships.service.memberships_linked import (
 from src.memberships.service.memberships_mark_paid_cash import (
     MemberMembershipsMarkPaidCash,
 )
+from src.memberships.service.memberships_retry_card import (
+    MemberMembershipsRetryCard,
+)
 from src.memberships.service.memberships_start import (
     MemberMembershipsStart,
 )
@@ -162,6 +165,11 @@ class MemberMembershipsService:
             validation=self._start_validation,
         )
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
+            *deps,
+            payment_service=payment_service,
+            payer_resolver=payer_resolver,
+        )
+        self._retry_card = MemberMembershipsRetryCard(
             *deps,
             payment_service=payment_service,
             payer_resolver=payer_resolver,
@@ -375,6 +383,25 @@ class MemberMembershipsService:
                 item_id, member_id, idempotency_key,
             )
         # Cash settles an open invoice → still finalizes invoice/charge rows.
+        self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
+
+    # ── Retry Card (the open invoice, on the saved default) ────
+
+    async def retry_card(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        idempotency_key: UUID,
+    ) -> None:
+        """Retry the payer's default card on the membership's open invoice."""
+        payer_id = await self._get_payer_for_item(item_id)
+        op_start = int(time.time())
+        async with self._paying_lock.lock([payer_id]):
+            await self._retry_card.retry_card(
+                item_id, member_id, idempotency_key,
+            )
+        # A successful retry settles an open invoice → finalizes the CRM
+        # invoice/charge rows, exactly like the cash settle.
         self._invoice_fetch_runner.start_for_payer(payer_id, op_start)
 
     # ── Charge Card (ad-hoc amount) ────────────────────────────

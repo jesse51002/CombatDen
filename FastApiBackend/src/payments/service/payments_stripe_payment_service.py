@@ -57,7 +57,8 @@ class PaymentsStripePaymentService:
     Invoice charges are **itemized**: one invoice with a list of items, each a
     Stripe price or an ad-hoc amount, each with its own item-level discounts. A
     single charge is just a one-item list. Plus PaymentIntent refunds and the
-    out-of-band pay of a subscription's open invoice.
+    pay of a subscription's open invoice — out of band (cash) or on the
+    customer's default card (retry).
 
     All methods accept ``stripe_account_id`` for Stripe Connect.
     """
@@ -419,21 +420,22 @@ class PaymentsStripePaymentService:
             created=refund.created,
         )
 
-    # ── Pay Out of Band ──────────────────────────────────────────
+    # ── Pay the Open Subscription Invoice (cash / card) ──────────
 
-    async def pay_open_subscription_invoice_out_of_band(
+    async def _find_open_subscription_invoice(
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
-        *,
-        idempotency_key: str,
-    ) -> str:
-        """Mark a subscription's currently-open invoice as paid via cash.
+    ) -> stripe.Invoice:
+        """Return the subscription's single currently-open invoice.
 
-        Finds the single open invoice belonging to the subscription
-        and calls ``invoices.pay`` with ``paid_out_of_band=True``.
-        Stripe fires the normal ``invoice.paid`` webhook, which
-        handles the CRM write.
+        Shared by the out-of-band (cash) settle and the on-card retry so the
+        two can never drift on what "the open invoice" is.
+
+        Raises:
+            PaymentsResourceNotFoundError: If Stripe rejects the lookup (the
+                subscription does not exist on this account).
+            ValueError: If the subscription has no open invoice.
         """
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
 
@@ -458,7 +460,26 @@ class PaymentsStripePaymentService:
         if not invoices:
             raise ValueError(f"No open invoice for subscription {stripe_subscription_id}")
 
-        invoice = invoices[0]
+        return invoices[0]
+
+    async def pay_open_subscription_invoice_out_of_band(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> str:
+        """Mark a subscription's currently-open invoice as paid via cash.
+
+        Finds the single open invoice belonging to the subscription
+        and calls ``invoices.pay`` with ``paid_out_of_band=True``.
+        Stripe fires the normal ``invoice.paid`` webhook, which
+        handles the CRM write.
+        """
+        invoice = await self._find_open_subscription_invoice(
+            stripe_subscription_id,
+            stripe_account_id,
+        )
 
         # Stripe does not propagate subscription metadata to its
         # generated invoices, so we cannot round-trip this through
@@ -491,11 +512,66 @@ class PaymentsStripePaymentService:
                 ),
             )
         except stripe.InvalidRequestError as exc:
-            raise PaymentsResourceNotFoundError(
-                f"Invoice {invoice.id} not found",
-                resource_id=invoice.id,
+            raise self._pay_invoice_error(exc, invoice.id) from exc
+
+        return invoice.id
+
+    @staticmethod
+    def _pay_invoice_error(
+        exc: stripe.InvalidRequestError,
+        invoice_id: str,
+    ) -> PaymentsStripeError:
+        """Classify an ``invoices.pay`` InvalidRequestError.
+
+        Only ``resource_missing`` means the invoice genuinely does not exist;
+        everything else (e.g. the invoice is already paid on a second retry)
+        carries a real Stripe message that must reach the caller rather than
+        be flattened to a misleading "not found". Shared by the cash + card
+        pay paths so the two can't drift.
+        """
+        if exc.code == "resource_missing":
+            return PaymentsResourceNotFoundError(
+                f"Invoice {invoice_id} not found",
+                resource_id=invoice_id,
                 resource_type=StripeResourceType.invoice,
-            ) from exc
+                stripe_error_code=exc.code,
+            )
+        return PaymentsStripeError(str(exc), stripe_error_code=exc.code)
+
+    async def pay_open_subscription_invoice_on_card(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> str:
+        """Retry the customer's DEFAULT card on a subscription's open invoice.
+
+        The card twin of
+        :meth:`pay_open_subscription_invoice_out_of_band`: same open-invoice
+        lookup, then ``invoices.pay`` with **empty** params — no
+        ``paid_out_of_band`` and no ``payment_method``. Omitting both is what
+        makes Stripe charge the customer's saved default card, so nothing here
+        stamps the cash metadata either. Stripe fires the normal
+        ``invoice.paid`` webhook, which handles the CRM write; a decline
+        raises out of ``pay_async`` and is left to propagate.
+        """
+        invoice = await self._find_open_subscription_invoice(
+            stripe_subscription_id,
+            stripe_account_id,
+        )
+
+        try:
+            await self._stripe.v1.invoices.pay_async(
+                invoice.id,
+                params=InvoicePayParams(),
+                options=self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{idempotency_key}:pay",
+                ),
+            )
+        except stripe.InvalidRequestError as exc:
+            raise self._pay_invoice_error(exc, invoice.id) from exc
 
         return invoice.id
 
