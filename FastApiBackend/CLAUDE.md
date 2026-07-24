@@ -299,10 +299,14 @@ src/
   "Class is not active" because that string happens not to contain "not found".
   Catch the specific types first, then the domain base, then the generic
   fallback.
-- **The error body is `detail` (a plain STRING) + a SIBLING `code`.** The
-  status alone is not enough for a client to branch on, and matching on prose
-  client-side would just move the fragility across the wire. So a typed domain
-  rejection serializes as:
+- **When a client must branch on a specific error, add a machine-readable
+  `code` as a SIBLING of `detail` (a plain STRING).** The status alone is not
+  enough to branch on, and matching on prose client-side would just move the
+  fragility across the wire. `checkin` is the reference implementation — its
+  kiosk client switches on the `code` to show a real reason instead of a bare
+  400. This is opt-in per domain, not a universal shape: a domain whose clients
+  never branch past the status (most of them) needs only `detail` and no code
+  machinery. Where a code IS used, a typed domain rejection serializes as:
 
   ```json
   {"detail": "Class is not active", "code": "class_inactive"}
@@ -353,16 +357,21 @@ src/
   client codegen sees the enum. `code` is nullable because the generic
   `except ValueError` → 400 arm emits none — clients fall back to `detail` when
   it is absent. Model: `src/checkin/schema/checkin_error_schema.py`.
-- **Domain exception bases subclass `ValueError`.** Every router already has an
-  `except ValueError` → 400 arm, so subclassing keeps every existing handler
-  (including other domains' and any per-item `except` isolation) working
-  unchanged — a typed hierarchy is additive, never a breaking sweep — and an
-  unmapped domain error still lands as a 400 (bad input) rather than a 500.
-  Models: `src/checkin/checkin_exceptions.py`,
-  `src/employees/employees_exceptions.py`.
+- **An INPUT-VALIDATION domain's exception base subclasses `ValueError`** so an
+  unmapped domain error lands as a 400 (bad input), not a 500 — the router's
+  existing `except ValueError` → 400 arm catches it, so a typed hierarchy is
+  additive, never a breaking sweep. Models: `src/checkin/checkin_exceptions.py`,
+  `src/employees/employees_exceptions.py`. This is **deliberately not
+  universal**: the money / external-system domains (`payments`, `memberships`,
+  `tasks`, `stripe_webhooks`) base on `Exception` on purpose, because their
+  unmapped failures must map to 500 / retryable — never a 400 (see the Money &
+  external-system rules). Do NOT "fix" one of those to subclass `ValueError`; it
+  would silently turn a billing 500 into a 400.
 - **Keep the generic `except Exception` → 500 arm** (with
-  `logger.error(..., exc_info=True)`) below the typed arms, and a generic
-  `except ValueError` between them.
+  `logger.error(..., exc_info=True)`) below the typed arms. Add a generic
+  `except ValueError` → 400 arm between them **only on a handler whose service
+  actually raises a `ValueError` for bad input** — omit it where the service
+  raises none, or it becomes the catch-all bug described below.
 - **The type → (status, code) table belongs in a test, not in a comment.** A
   parametrized test over that table, using deliberately message-hostile strings
   (a 404 type whose message lacks "not found", a 400 type whose message
