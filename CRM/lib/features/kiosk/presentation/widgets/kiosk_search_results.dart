@@ -4,12 +4,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// The name-search results — plain, centered name rows (deliberately NO
-/// avatars/photos). Also renders the searching / no-match / failed states.
-/// Tapping a name hands off to the class pick via [KioskFlowCubit.selectMember].
+/// The name-search results — the kiosk's ONE affordant [KioskNameRow]
+/// (contained, bordered, ripple + chevron, deliberately NO avatars/photos), so
+/// a check-in row and a payer-pick row read identically. Also renders the
+/// searching / no-match / failed states. Tapping a name hands off to the class
+/// pick via [KioskFlowCubit.selectMember].
 ///
 /// Every populated state carries its OWN top gap and the resting state is a
 /// true zero-height box, so an empty result list adds nothing to the search
@@ -57,49 +60,24 @@ class _Results extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The populated state carries its OWN top gap (never a parent spacing), so
+    // an empty result list stays a zero-height box on the shared band centre.
     return Padding(
       padding: const EdgeInsets.only(top: DesignConstants.spacingLarge),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
         children: [
-          for (var i = 0; i < rows.length; i++)
-            _NameRow(row: rows[i], first: i == 0),
+          for (final row in rows)
+            KioskNameRow(
+              // The member's FULL name — two members who share a first name +
+              // last initial must stay distinguishable at the moment they tap
+              // to check in (a first-initial abbreviation collides silently).
+              name: row.name,
+              onTap: () => context.read<KioskFlowCubit>().selectMember(row),
+            ),
         ],
-      ),
-    );
-  }
-}
-
-class _NameRow extends StatelessWidget {
-  final MemberRow row;
-  final bool first;
-
-  const _NameRow({required this.row, required this.first});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => context.read<KioskFlowCubit>().selectMember(row),
-      borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: first
-              ? null
-              : Border(top: BorderSide(color: DesignConstants.lineSoft)),
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignConstants.spacingMedium,
-          vertical: DesignConstants.spacingLarge,
-        ),
-        child: Text(
-          // The member's FULL name — two members who share a first name + last
-          // initial must stay distinguishable at the moment they tap to check
-          // in (a first-initial abbreviation collides silently).
-          row.name,
-          style: DesignConstants.kioskName,
-          textAlign: TextAlign.center,
-        ),
       ),
     );
   }

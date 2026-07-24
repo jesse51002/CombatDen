@@ -433,27 +433,40 @@ account back to them leaks nothing. "Yes, that's me" adopts the id;
 terminal stop. A LIST of matches is still never rendered, and never a phone,
 photo or membership status.
 
-**B — "Change who is paying".** A secondary-tier affordance under the roster
-opens `KioskSignupStep.payerPick`. It is a change-of-ROLE action and the label
-says so; "someone else is paying" announced a fact about a third party, which
-is not what the button does.
+**B — the payer picker (`KioskSignupStep.payerPick`).** One screen serves two
+situations. **Changing** who pays while a payer exists — a secondary-tier
+affordance under the roster ("Change who is paying"), a change-of-ROLE action
+whose label says so ("someone else is paying" announced a fact about a third
+party, which is not what the button does). And **choosing** the first payer
+after the previous one was DELETED — reached straight from the trash, and
+re-openable from the People step's "Choose who's paying" affordance in the
+no-payer state (below).
 
 **The picker offers the ROSTER first, then the CRM.** The people already on
 this signup are standing right there, so they are listed and directly pickable;
 the shipped kiosk name search (`KioskMatchSearch(forPayer: true)`) sits under
 them for anyone not on the roster yet, driving the **one** debounced,
 sequence-guarded search the cubit already owns. Both lists render through the
-same `KioskNameRow`, because they are two sources of one kind of answer rather
-than two kinds of control. **The current payer is not offered** — picking
-whoever is already paying is a no-op dressed as a choice — and is named in the
-pinned `PAYING NOW` strip instead, so the screen still says who it is changing
-FROM.
+same affordant `KioskNameRow` — a **contained, bordered, ripple + chevron** row
+(the kiosk's ONE "tap a member" affordance, shared with the home check-in
+search), because a pickable member must read unmistakably as pressable rather
+than as a heading. The section heads (`KioskSectionHead(quiet: true)`) are
+demoted to quiet left-aligned labels so the rows dominate. **The current payer
+is not offered** while one exists — picking whoever is already paying is a no-op
+dressed as a choice — and is named in the pinned `PAYING NOW` strip instead. In
+the NO-PAYER state there is no one to exclude and no strip: every remaining
+person (index 0 included) is a candidate (`payerCandidateIndexes`), and the
+member must pick one to continue.
 
 **The gate runs on whoever is picked, uniformly.** `_gateThenSeat` is the ONE
 path a payer is ever seated by, and **nothing is special-cased for a person
 this signup created** — not even on the reasoning that they obviously have no
-card yet. One code path means one place the invariant lives and no branch a
-future change could route around; the cost is one cheap call.
+card yet. It runs for BOTH a switch and a first-choice after a delete (gated on
+`canAssignPayer`, which is true whenever nothing has committed the payer,
+whether or not one currently exists), so **a payer chosen after the previous one
+was deleted is seated through exactly this fail-closed gate — never a shortcut.**
+One code path means one place the invariant lives and no branch a future change
+could route around; the cost is one cheap call.
 
 Two seatings, one gate:
 
@@ -505,7 +518,7 @@ plan, their plan's waivers and a line in `memberships[]`. An unticked person is
 still created and still on the roster — a parent paying for their kids is
 exactly this, and so is a member who registers today and buys later.
 
-#### Removing somebody asks first
+#### Removing somebody asks first — the payer included
 
 The roster's remove control is a **trash** glyph and it opens
 `KioskRemoveConfirm` — the shipped `KioskIdleWarning` / `KioskAbandonConfirm`
@@ -519,6 +532,28 @@ rows sit close together at kiosk scale.
 The control is still offered only while removal is FREE — the moment that
 person is `linked` or has signed anything it disappears rather than becoming a
 button that cannot do what it says (§11.5).
+
+**The PAYER is deletable too** (founder ruling: nobody on the roster is
+special). It is offered only in a group (never the sole person — that is what
+"Start over" is for) and only while `canRemovePerson` holds for them: nothing
+`linked`, nothing signed — the same "nothing committed" condition a payer SWITCH
+needs, because deleting a payer a payee has authorized would strand that
+commitment. Unlike a switch, removal takes them off entirely, so an ADOPTED
+`wasExisting` payer CAN be deleted (there is no one to strand); clearing them
+leaves the roster coherent (their shell is left alone, like any removal, and
+surfaces in the Incomplete tab).
+
+**Deleting the current payer ALWAYS asks who pays next** (never auto-assign).
+`removePerson` clears the payer designation — the signup now has NO payer, none
+of the remaining people is one — and routes straight into `payerPick` to choose
+(`KioskRemoveConfirm` says so: "they're paying for everyone, so next you'll
+choose who pays"). The **no-payer state** can exist ONLY on the People and
+payer-pick steps: it is `!hasPayer` (`payerOrNull == null`), and the People step
+blocks Continue on it (in addition to the empty-cart guard) with a plain
+blame-free reason ("Choose who's paying to continue.") beside a "Choose who's
+paying" affordance — never a dead button. `continueToPlans` and
+`_buildStartRequest` both guard on `hasPayer`/`payerOrNull`, so **a no-payer
+signup can never reach Pay or assemble a charge.**
 
 #### An adopted existing member is a record the kiosk does not own
 
@@ -561,6 +596,15 @@ only `pm.id` / `pm.card.brand` / `pm.card.last4`. It copies the tokenize CALL
 from `one_time_card_dialog.dart` but **may never import it** — that module is on
 the banned list below. `set_default` is decided by `cartHasRecurring`, never by
 a picker.
+
+**Every attempt gets a genuinely FRESH field.** The `CardField` is a Stripe
+iframe whose web platform view is CACHED across mounts, so a retry after a
+decline would otherwise reuse the iframe still holding the declined number and
+the member could not type a new card at all. The step keys `CardFieldBox`
+(`fieldKey: ValueKey('kiosk-card-${state.cardAttempt}')`), and `retryCard()`
+bumps `cardAttempt` — so returning to the card step mounts a brand-new, empty
+iframe. `CardFieldBox` exposes an optional `fieldKey` (null for every non-kiosk
+caller) for exactly this.
 
 **The step names the PAYER, pinned, and reads them off the roster's payer seat
 — never off `activePersonIndex`.** In a family the active person is usually a
@@ -935,6 +979,19 @@ their own name is a strange way to address them.
 The same rule runs through the titles: **in a group, EVERY turn is named,
 including the payer's own.** An unnamed screen in the middle of a run of named
 ones is ambiguous exactly when it matters most.
+
+**The plan step confirms the pick, and returns to the top after one.** Tapping a
+card low in a tall grid otherwise gives no feedback and strands the member at
+the bottom, so on a pick `KioskPlanPickStep` scrolls its body back to the top
+(the scaffold threads a `bodyController` into `KioskStage`'s pinned scroll view)
+and surfaces `KioskPlanPickedBanner` there — a prominent "YOU'VE PICKED {plan}"
+confirmation that names the membership in words (the pinned identity strip
+already says WHO, so the banner never repeats the person). In a group each
+person's turn also starts at the top. The banner **names the plan, never a
+price** — money comes from the server preview on the review, so nothing is
+derived from a plan row here; and the plan card keeps its own selected mark, so
+"which card" and "which plan in words" agree. One plan per person, single-select,
+`quantity: 1` — no stepper — is unchanged.
 
 **The waiver's reading box fills the fold.** The waiver steps ask the scaffold
 for `fillBody: true`, which hands the body a bounded height instead of a
@@ -1356,11 +1413,16 @@ something that happens here.
 
 What repetition buys is a **cooldown**, not a cap. After
 `kKioskSignupDeclineCooldownAfter` (3) **consecutive** declines each further
-attempt waits `kKioskSignupDeclineCooldown` (30s), shown as a calm countdown on
-the review's own Pay button ("You can try again in 12s") and enforced by an
-early return in `pay()`. `KioskSignupState.retryCooldown` lives on the **cubit**,
-so walking back to the card step and returning does not clear it. A successful
-charge resets `declineCount` and the cooldown together.
+attempt waits `kKioskSignupDeclineCooldown` (30s), enforced by an early return
+in `pay()`. **The wait is shown BIG and central in the decline popup itself** —
+an unmistakable "You can try again in {n}s" countdown that is the popup's obvious
+focus and GATES the "Try another card" primary until it reaches zero — never a
+small number on a background button (which is where it used to hide, and the
+member could not tell why they were stuck). Because try-again is gated on the
+popup, a member can never reach the review while cooling, so the review Pay
+button carries only the amount. `KioskSignupState.retryCooldown` lives on the
+**cubit**, so walking back to the card step and returning does not clear it. A
+successful charge resets `declineCount` and the cooldown together.
 
 This is the industry shape: a generous allowance plus rate limiting (Stripe's
 own card-testing guidance is rate limiting + Radar, not a hard stop), rather
@@ -1405,9 +1467,17 @@ backstop for a declined screen nobody is standing at.
   (`start_preview_step.dart:276-278`). A $0 one-time line is a present invoice
   with nothing on it; calling that two charges lies about the member's own bank
   statement.
-- **The two buttons on `declined`** are "Try another card" and "Get help at the
-  desk", both always available, and there is deliberately no "Start over" (§2).
-  See §11.3a for why neither is ever forced.
+- **`declined` is a POPUP acknowledgement whose natural action returns to the
+  card-number page.** `KioskDeclinedScreen` is the kiosk's one modal vocabulary
+  (veil + centered popup card) carrying the blameless reason ("Your bank declined
+  the payment"), the card chip, the big cooldown timer when cooling (§11.3a), and
+  two buttons — "Try another card" (the primary, → `retryCard`, drops the member
+  back on the card step with a fresh empty field) and "Get help at the desk" (the
+  always-available SECONDARY handoff, → `getHelpAtDesk` → `_stop(cardDeclined)`,
+  holding committed state). Both are always available (except try-again while
+  cooling), there is deliberately no "Start over" (§2), and neither is ever
+  forced (§11.3a). Two kiosk-scale labels do not fit side by side in a
+  `dialogMaxWidth` popup, so they stack.
 - **A part-period charge SAYS it is one.** The kiosk pins `prorate_to_anchor`,
   so a mid-cycle joiner's due-today and per-cycle figures differ; the review
   explains that in one receipt-shaped line
@@ -1498,14 +1568,20 @@ backstop for a declined screen nobody is standing at.
   no longer pays), and once the payer `wasExisting` — swapping away from an
   ADOPTED outsider would leave them on the roster as a payee they never agreed
   to be. Re-arranging among people who are actually present stays allowed,
-  which is the property that distinction buys.
+  which is the property that distinction buys. `canSwitchPayer` is
+  `hasPayer && canAssignPayer`; `canAssignPayer` is the shared seat gate (nothing
+  linked, nothing signed, and not moving away from an adopted outsider) that also
+  permits CHOOSING the first payer in the no-payer state, where there is no
+  outsider to strand.
 - **The roster row's trailing controls are EDIT and a TRASH that asks.** What
   is or is not on file is nobody's business at a glance on a shared iPad, and
   "None yet" beside a name only ever read as a nag; Edit reuses
   `editPersonDetails` rather than adding a parallel path, and is absent for
   `wasExisting` people per the rule above. Both ride the one `KioskRowAction`,
-  so the two cannot drift apart in size. See §3 for the membership check and
-  the remove confirmation.
+  so the two cannot drift apart in size. **The trash is on the PAYER's row too**
+  (group-only, while nothing has committed against them); deleting the payer
+  clears the payer and asks who pays next (§3). See §3 for the membership check,
+  the remove confirmation, and the no-payer state.
 
 ---
 
@@ -1535,7 +1611,8 @@ backstop for a declined screen nobody is standing at.
   `presentation/widgets/signup/` — the signup chrome (rail, three-column foot,
   field box, consent check, DOB wheel, stop screen, abandon confirm) and the
   built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` + `kiosk_plan_labels`
-  (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import),
+  (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import) +
+  `kiosk_plan_picked_banner` (the "YOU'VE PICKED" confirmation, §8.1a),
   `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
   `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
   `kiosk_card_step` + `kiosk_secure_strip` + `kiosk_card_facts` (wrapping the

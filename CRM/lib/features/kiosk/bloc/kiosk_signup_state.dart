@@ -567,6 +567,14 @@ class KioskSignupState extends Equatable {
   final List<WaiverGateItem> waiverGate;
 
   // ── Card (D5) ──
+  /// Which card-entry ATTEMPT the field is on — a nonce bumped by [retryCard]
+  /// after a decline. It keys the Stripe `CardField` (`ValueKey`), so returning
+  /// to the card step for a retry mounts a brand-new, empty Stripe iframe rather
+  /// than reusing the one still holding the declined number — the field's web
+  /// platform view is cached across mounts, so without a changing key a member
+  /// literally cannot type a new card after a decline.
+  final int cardAttempt;
+
   /// The freshly-entered card's Stripe payment-method id. Only ever a card
   /// typed in the current signup, for the payer created in the current
   /// signup — the fresh-card law.
@@ -662,6 +670,7 @@ class KioskSignupState extends Equatable {
     this.payerAuthFailed = false,
     this.payerAuthStale = false,
     this.waiverGate = const [],
+    this.cardAttempt = 0,
     this.paymentMethodId,
     this.cardBrand,
     this.cardLast4,
@@ -687,8 +696,24 @@ class KioskSignupState extends Equatable {
           ? persons[activePersonIndex]
           : persons.first;
 
-  /// The payer — always the first roster entry.
+  /// The payer — the first roster entry, which is the payer WHENEVER one
+  /// exists. Only valid where [hasPayer] is guaranteed; prefer [payerOrNull]
+  /// anywhere the payer may have been deleted.
   KioskSignupPerson get payer => persons.first;
+
+  /// Whether the signup currently has a payer.
+  ///
+  /// The payer, when one exists, is always roster index 0. Deleting the payer
+  /// (a group-only act) clears the designation and **nothing is auto-assigned**
+  /// — [hasPayer] is false until the member chooses a new one through the
+  /// picker. A no-payer state can exist ONLY on the People and payer-pick
+  /// steps; it blocks Continue and can never reach Pay.
+  bool get hasPayer => persons.isNotEmpty && persons.first.isPayer;
+
+  /// The payer, or null once the designation has been cleared by deleting them
+  /// (see [hasPayer]). Every money-path read goes through this so a no-payer
+  /// signup can never assemble a charge.
+  KioskSignupPerson? get payerOrNull => hasPayer ? persons.first : null;
 
   /// Whether the roster carries anyone besides the payer, which is what
   /// re-labels the step rail from the 6-step solo template to the 7-step
@@ -738,19 +763,33 @@ class KioskSignupState extends Equatable {
   ///
   /// It also refuses a SECOND swap: the previous adopted payer would be left
   /// stranded on the roster as a payee they never agreed to be.
-  bool get canSwitchPayer =>
-      !payer.wasExisting &&
+  bool get canSwitchPayer => hasPayer && canAssignPayer;
+
+  /// Whether a payer may be seated right now — either switching an existing one
+  /// ([canSwitchPayer]) or choosing a first one after the payer was deleted.
+  ///
+  /// Both require that nothing has committed the payer: no payee linked, no
+  /// signature recorded (there is no unlink call, and a signature pins the
+  /// payer server-side, so a later change would corrupt the cart). Switching
+  /// additionally cannot move away from an ADOPTED outsider, who would be
+  /// stranded on the roster as a payee they never agreed to be — but there is
+  /// no such person to strand when there is no payer, so choosing the first
+  /// one stays allowed then.
+  bool get canAssignPayer =>
       signedWaivers.isEmpty &&
-      !persons.any((p) => p.linked);
+      !persons.any((p) => p.linked) &&
+      !(hasPayer && payer.wasExisting);
 
   /// The roster indexes the payer picker offers, in roster order.
   ///
-  /// The CURRENT payer is not among them — picking whoever is already paying
-  /// is a no-op dressed as a choice — and neither is anybody without a
-  /// `memberId`, who does not exist to pay yet.
+  /// While a payer exists it is NOT among them — picking whoever is already
+  /// paying is a no-op dressed as a choice. Once the payer has been DELETED
+  /// there is no one to exclude, so every created person (index 0 included) is
+  /// a candidate. Anybody without a `memberId` does not exist to pay yet and is
+  /// skipped either way.
   List<int> get payerCandidateIndexes => [
-        for (var i = 1; i < persons.length; i++)
-          if (persons[i].memberId != null) i,
+        for (var i = 0; i < persons.length; i++)
+          if (persons[i].memberId != null && !(hasPayer && i == 0)) i,
       ];
 
   /// Whether every payee has been authorized. The start call NEVER links, so
@@ -765,13 +804,28 @@ class KioskSignupState extends Equatable {
   /// Whether [index] may still be taken off the roster.
   ///
   /// The trash control disappears the moment that person's link (or a
-  /// signature of theirs) has committed: **there is no unlink call**, so removal is only offered
-  /// while it is still free. A person created but not yet linked simply drops
-  /// out of the cart — their member shell is harmless and surfaces in the
-  /// staff "Incomplete" list. The payer is never removable.
+  /// signature of theirs) has committed: **there is no unlink call**, so removal
+  /// is only offered while it is still free. A person created but not yet linked
+  /// simply drops out of the cart — their member shell is harmless and surfaces
+  /// in the staff "Incomplete" list.
+  ///
+  /// **The payer is removable too** (founder ruling: nobody on the roster is
+  /// special), but only in a group and only while nothing has committed against
+  /// them — no payee linked, no signature recorded. Deleting a payer a payee has
+  /// already authorized, or after any signature, would strand committed state,
+  /// so the payer's trash disappears exactly when a payer SWITCH would be
+  /// refused. Unlike a switch, removal takes them off the roster entirely, so
+  /// the "don't strand an adopted outsider" rule does not apply — an adopted
+  /// payer can be deleted, and the flow then asks who pays next.
   bool canRemovePerson(int index) {
-    if (index <= 0 || index >= persons.length) return false;
+    if (index < 0 || index >= persons.length) return false;
+    // Never the sole person: removing the only person is abandoning the whole
+    // signup, which is what "Start over" is for.
+    if (persons.length <= 1) return false;
     final person = persons[index];
+    if (person.isPayer) {
+      return signedWaivers.isEmpty && !persons.any((p) => p.linked);
+    }
     if (person.linked) return false;
     final id = person.memberId;
     if (id != null && signedWaivers.any((w) => w.memberId == id)) return false;
@@ -902,6 +956,7 @@ class KioskSignupState extends Equatable {
     bool? payerAuthFailed,
     bool? payerAuthStale,
     List<WaiverGateItem>? waiverGate,
+    int? cardAttempt,
     Object? paymentMethodId = _keep,
     Object? cardBrand = _keep,
     Object? cardLast4 = _keep,
@@ -965,6 +1020,7 @@ class KioskSignupState extends Equatable {
       payerAuthFailed: payerAuthFailed ?? this.payerAuthFailed,
       payerAuthStale: payerAuthStale ?? this.payerAuthStale,
       waiverGate: waiverGate ?? this.waiverGate,
+      cardAttempt: cardAttempt ?? this.cardAttempt,
       paymentMethodId: identical(paymentMethodId, _keep)
           ? this.paymentMethodId
           : paymentMethodId as String?,
@@ -1029,6 +1085,7 @@ class KioskSignupState extends Equatable {
         payerAuthFailed,
         payerAuthStale,
         waiverGate,
+        cardAttempt,
         paymentMethodId,
         cardBrand,
         cardLast4,

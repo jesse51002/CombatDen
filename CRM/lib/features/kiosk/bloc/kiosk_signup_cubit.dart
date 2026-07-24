@@ -410,14 +410,16 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   // ── "Someone else is paying" — the payer picker ──
 
-  /// Open the picker.
+  /// Open the picker — to CHANGE an existing payer, or to CHOOSE the first one
+  /// after the payer was deleted.
   ///
-  /// It reuses the ONE name search (debounce + sequence guard included); the
-  /// roster's own offer is withdrawn the moment anything commits, so this can
-  /// only ever run while the payer is still free to move.
+  /// It reuses the ONE name search (debounce + sequence guard included). It is
+  /// gated on [KioskSignupState.canAssignPayer], which is true both while a
+  /// payer is still free to move and while there is none yet — so the People
+  /// step's "Choose who's paying" affordance can open it in the no-payer state.
   void openPayerPick() {
     registerActivity();
-    if (!state.canSwitchPayer) return;
+    if (!state.canAssignPayer) return;
     _clearSearch();
     emit(state.copyWith(
       step: KioskSignupStep.payerPick,
@@ -439,8 +441,13 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// A refusal is INLINE (pick someone else, or carry on paying yourself),
   /// never a stop, and everything that is not `eligible` refuses — so a failed
   /// check refuses too.
+  ///
+  /// It runs for BOTH a switch and a first choice after a delete
+  /// ([KioskSignupState.canAssignPayer] covers both), so a payer chosen after
+  /// the previous one was deleted is seated through exactly this fail-closed
+  /// gate — never a shortcut.
   Future<void> _gateThenSeat(String memberId, void Function() seat) async {
-    if (_committing || !state.canSwitchPayer) return;
+    if (_committing || !state.canAssignPayer) return;
     _committing = true;
     emit(state.copyWith(submitting: true, payerRefusal: null));
     try {
@@ -476,11 +483,14 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   /// A person ALREADY on the roster becomes the payer.
   ///
-  /// It runs the same gate as a CRM pick. Index 0 is refused rather than
-  /// handled: whoever is already paying cannot be picked to start paying.
+  /// It runs the same gate as a CRM pick. Picking whoever ALREADY pays (index 0
+  /// while a payer exists) is refused as a no-op; but when the payer has been
+  /// deleted, index 0 is a real candidate like any other, so it is refused only
+  /// while there is still a payer sitting there.
   Future<void> pickPayerFromRoster(int index) async {
     registerActivity();
-    if (index <= 0 || index >= state.persons.length) return;
+    if (index < 0 || index >= state.persons.length) return;
+    if (state.hasPayer && index == 0) return;
     final memberId = state.persons[index].memberId;
     if (memberId == null) return;
     await _gateThenSeat(memberId, () => _promoteRosterPayer(index));
@@ -631,13 +641,35 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// [KioskSignupState.canRemovePerson]. Their member shell (if one was
   /// created) is deliberately left alone: it is harmless, there is nothing to
   /// unlink, and it surfaces in the staff "Incomplete" list.
+  ///
+  /// **Removing the PAYER always asks who pays next** (founder ruling: nobody
+  /// is auto-assigned). The signup is left with NO payer — none of the
+  /// remaining people is one — and routed straight into the picker to choose.
+  /// If the member Backs out of the picker without choosing, the People step
+  /// blocks Continue with a plain reason until a payer is set. A no-payer state
+  /// lives only on those two steps and can never reach Pay.
   void removePerson(int index) {
     registerActivity();
     if (!state.canRemovePerson(index)) return;
+    final removingPayer = state.persons[index].isPayer;
     final persons = [...state.persons]..removeAt(index);
-    final active = state.activePersonIndex >= persons.length
-        ? persons.length - 1
-        : state.activePersonIndex;
+    // Keep the active pointer valid across the shift the removal caused.
+    var active = state.activePersonIndex;
+    if (index < active) active -= 1;
+    if (active >= persons.length) active = persons.length - 1;
+    if (active < 0) active = 0;
+    if (removingPayer) {
+      _clearSearch();
+      emit(state.copyWith(
+        persons: persons,
+        activePersonIndex: active,
+        step: KioskSignupStep.payerPick,
+        payerRefusal: null,
+        submitting: false,
+      ));
+      _syncIdleTimer();
+      return;
+    }
     emit(state.copyWith(persons: persons, activePersonIndex: active));
   }
 
@@ -1068,6 +1100,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// with nothing to sell → the gym-setup stop.
   void continueToPlans() {
     registerActivity();
+    // **The no-payer guard.** Deleting the payer clears the designation and
+    // nothing is auto-assigned, so a signup with no payer cannot advance — the
+    // People step blocks Continue and points at the picker; this is the
+    // belt-and-suspenders guard so nothing routes past it into the money path.
+    if (!state.hasPayer) return;
     // **The empty-cart guard.** A roster with nobody getting a membership
     // would send `memberships: []` and take a 400, so that state never leaves
     // this step at all — the step disables Continue and says why.
@@ -1504,7 +1541,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     required String idempotencyKey,
     MemberMembershipsStartPayment? payment,
   }) {
-    final payerId = state.payer.memberId;
+    // No payer (the previous one was deleted and none chosen) can NEVER
+    // assemble a charge — this reads the designated payer, not merely index 0,
+    // so a demoted payee sitting at the head can never be billed as the payer.
+    final payer = state.payerOrNull;
+    if (payer == null) return null;
+    final payerId = payer.memberId;
     if (payerId == null) return null;
     // **Link before start, structurally.** The start call never links, so a
     // request is not assembled at all until every payee is authorized — the
@@ -1680,16 +1722,23 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     });
   }
 
-  /// "Try another card" — back to the card step with the element cleared.
+  /// "Try another card" — back to the card step with a genuinely FRESH field.
   ///
   /// The key is dropped rather than reused: [submitCard] mints a fresh one on
   /// the way into the review, so a deliberate retry is a genuinely new attempt
   /// with a new `pm_…`. Nothing else re-runs — no member is created, no waiver
   /// is re-signed, no plan is re-picked.
+  ///
+  /// **[KioskSignupState.cardAttempt] is bumped so the Stripe `CardField` is
+  /// re-keyed and mounts an EMPTY iframe.** The web card field's platform view
+  /// is cached across mounts, so without a changing key the retry would re-show
+  /// the declined number and the member could not type a new one — the bug this
+  /// bump fixes.
   void retryCard() {
     registerActivity();
     emit(state.copyWith(
       step: KioskSignupStep.card,
+      cardAttempt: state.cardAttempt + 1,
       paymentMethodId: null,
       cardBrand: null,
       cardLast4: null,

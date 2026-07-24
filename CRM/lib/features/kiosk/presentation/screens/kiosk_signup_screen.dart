@@ -177,6 +177,7 @@ class _RemoveOverlay extends StatelessWidget {
         final person = state.persons[index];
         return KioskRemoveConfirm(
           name: '${person.firstName} ${person.lastName}'.trim(),
+          asksNextPayer: person.isPayer,
         );
       },
     );

@@ -415,6 +415,34 @@ void main() {
       await cubit.close();
     });
 
+    test('each attempt bumps cardAttempt, so the card field is re-keyed and '
+        'mounts a fresh, empty Stripe iframe', () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      final cubit = await atReview(declineCooldown: Duration.zero);
+      // First attempt is nonce 0 — the initial field.
+      expect(cubit.state.cardAttempt, 0);
+
+      await cubit.pay();
+      expect(cubit.state.step, KioskSignupStep.declined);
+      cubit.retryCard();
+      // A retry mints a NEW field identity: the widget keys off this nonce
+      // (`ValueKey('kiosk-card-$cardAttempt')`), so the returning card step
+      // mounts a brand-new iframe instead of the one still holding the decline.
+      expect(cubit.state.cardAttempt, 1);
+
+      cubit.submitCard(paymentMethodId: 'pm_2', brand: 'visa', last4: '1881');
+      await _settle();
+      await cubit.pay();
+      cubit.retryCard();
+      expect(cubit.state.cardAttempt, 2);
+      await cubit.close();
+    });
+
     test('a decline is NEVER terminal — the member keeps trying, uncapped',
         () async {
       when(

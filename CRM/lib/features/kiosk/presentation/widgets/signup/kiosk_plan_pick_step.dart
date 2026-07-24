@@ -6,6 +6,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -21,49 +22,105 @@ import 'package:crm/shared/widgets/fill_grid.dart';
 /// stepper: a self-serve iPad sells one membership to one person, and a
 /// quantity control beside a price is a way to mis-tap into a bigger charge.
 ///
+/// **After a pick, the step scrolls back to the top** so the confirmation
+/// banner, the pinned person, and Continue are all in view — a member who taps
+/// a card low in a tall grid otherwise gets no feedback and is stranded at the
+/// bottom. In a group each person's turn also starts at the top.
+///
 /// The step only ever renders a warmed catalogue or its spinner. An empty
 /// catalogue and a failed read are not empty states here — the cubit routes
 /// both to a stop, because "no memberships" on a screen headed "Pick your
 /// membership" is a dead end dressed as a choice.
-class KioskPlanPickStep extends StatelessWidget {
+class KioskPlanPickStep extends StatefulWidget {
   const KioskPlanPickStep({super.key});
+
+  @override
+  State<KioskPlanPickStep> createState() => _KioskPlanPickStepState();
+}
+
+class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Return the body to the top. A pick animates (the member watches the
+  /// confirmation slide up into view); a new person JUMPS (a fresh turn should
+  /// simply start at the top, not appear to scroll).
+  void _toTop({required bool animate}) {
+    // Post-frame, so the scroll runs after the rebuild that added the banner /
+    // swapped the person — a scroll issued against the old extent would be
+    // clamped short.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      if (animate) {
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutQuart,
+        );
+      } else {
+        _scroll.jumpTo(0);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
-    return BlocBuilder<KioskSignupCubit, KioskSignupState>(
-      buildWhen: (prev, cur) =>
-          prev.plans != cur.plans ||
-          prev.plansLoading != cur.plansLoading ||
-          prev.persons != cur.persons ||
-          prev.activePersonIndex != cur.activePersonIndex ||
-          prev.activePerson.selectedPlanId != cur.activePerson.selectedPlanId,
-      builder: (context, state) {
-        final picked = state.activePerson.selectedPlanId;
-        return KioskSignupStepScaffold(
-          step: KioskSignupStep.plans,
-          title: _title(state),
-          subtitle: _subtitle(state),
-          // Pinned, so it cannot scroll away behind the grid. In a group it
-          // is the whole point of the screen: a parent picking three
-          // memberships in a row must never buy the wrong one for the wrong
-          // child. Solo there is only one person, and naming them would be an
-          // odd thing to tell someone about themselves.
-          identity: state.isGroup
-              ? KioskWhoFor(
-                  eyebrow: 'PICKING FOR',
-                  name: _fullName(state),
-                )
-              : null,
-          foot: KioskFlowFoot(
-            onPrimary: picked == null ? null : cubit.continueFromPlans,
-            onBack: cubit.back,
-          ),
-          child: state.plansLoading && state.plans.isEmpty
-              ? const _Loading()
-              : _PlanGrid(state: state, picked: picked),
-        );
-      },
+    return BlocListener<KioskSignupCubit, KioskSignupState>(
+      // A group advances person-by-person through the same step; each new turn
+      // starts at the top.
+      listenWhen: (prev, cur) =>
+          prev.activePersonIndex != cur.activePersonIndex,
+      listener: (_, _) => _toTop(animate: false),
+      child: BlocBuilder<KioskSignupCubit, KioskSignupState>(
+        buildWhen: (prev, cur) =>
+            prev.plans != cur.plans ||
+            prev.plansLoading != cur.plansLoading ||
+            prev.persons != cur.persons ||
+            prev.activePersonIndex != cur.activePersonIndex ||
+            prev.activePerson.selectedPlanId != cur.activePerson.selectedPlanId,
+        builder: (context, state) {
+          final picked = state.activePerson.selectedPlanId;
+          final pickedPlan = state.planById(picked);
+          return KioskSignupStepScaffold(
+            step: KioskSignupStep.plans,
+            title: _title(state),
+            subtitle: _subtitle(state),
+            bodyController: _scroll,
+            // Pinned, so it cannot scroll away behind the grid. In a group it
+            // is the whole point of the screen: a parent picking three
+            // memberships in a row must never buy the wrong one for the wrong
+            // child. Solo there is only one person, and naming them would be an
+            // odd thing to tell someone about themselves.
+            identity: state.isGroup
+                ? KioskWhoFor(
+                    eyebrow: 'PICKING FOR',
+                    name: _fullName(state),
+                  )
+                : null,
+            foot: KioskFlowFoot(
+              onPrimary: picked == null ? null : cubit.continueFromPlans,
+              onBack: cubit.back,
+            ),
+            child: state.plansLoading && state.plans.isEmpty
+                ? const _Loading()
+                : _PlanGrid(
+                    state: state,
+                    picked: picked,
+                    pickedPlanName: pickedPlan?.planName,
+                    onPick: (planId) {
+                      cubit.selectPlan(planId);
+                      _toTop(animate: true);
+                    },
+                  ),
+          );
+        },
+      ),
     );
   }
 
@@ -110,8 +167,8 @@ class _Loading extends StatelessWidget {
   }
 }
 
-/// The plans, three across on the kiosk stage, over the one quiet pointer at
-/// the desk.
+/// The confirmation banner, then the plans three across on the kiosk stage,
+/// over the one quiet pointer at the desk.
 ///
 /// The pointer is deliberately NOT the app-adoption line + glyph pair: that
 /// component means "get the app" everywhere else on this kiosk, and reusing it
@@ -119,17 +176,25 @@ class _Loading extends StatelessWidget {
 class _PlanGrid extends StatelessWidget {
   final KioskSignupState state;
   final String? picked;
+  final String? pickedPlanName;
+  final ValueChanged<String> onPick;
 
-  const _PlanGrid({required this.state, required this.picked});
+  const _PlanGrid({
+    required this.state,
+    required this.picked,
+    required this.pickedPlanName,
+    required this.onPick,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cubit = context.read<KioskSignupCubit>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
+        if (pickedPlanName != null)
+          KioskPlanPickedBanner(planName: pickedPlanName!),
         FillGrid(
           // A floor of two columns and a 300px minimum lands three across on
           // the kiosk stage while a narrower fold degrades to two, exactly as
@@ -141,7 +206,7 @@ class _PlanGrid extends StatelessWidget {
               KioskPlanCard(
                 plan: plan,
                 selected: plan.planId == picked,
-                onTap: () => cubit.selectPlan(plan.planId),
+                onTap: () => onPick(plan.planId),
               ),
           ],
         ),

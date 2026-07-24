@@ -485,8 +485,9 @@ void main() {
       final cubit = await atRoster();
       await addElla(cubit);
       expect(cubit.state.canRemovePerson(1), isTrue);
-      // The payer is never removable.
-      expect(cubit.state.canRemovePerson(0), isFalse);
+      // The payer is removable too now, while nothing has committed against
+      // them — see the dedicated no-payer group for what deleting them does.
+      expect(cubit.state.canRemovePerson(0), isTrue);
 
       cubit.removePerson(1);
       expect(cubit.state.persons.length, 1);
@@ -507,6 +508,9 @@ void main() {
       // method is inert even if something calls it anyway.
       expect(cubit.state.persons[1].linked, isTrue);
       expect(cubit.state.canRemovePerson(1), isFalse);
+      // A linked payee locks the PAYER's own trash too: deleting the payer a
+      // payee has authorized would strand that commitment.
+      expect(cubit.state.canRemovePerson(0), isFalse);
       cubit.removePerson(1);
       expect(cubit.state.persons.length, 2);
       await cubit.close();

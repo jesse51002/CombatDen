@@ -1,0 +1,88 @@
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import 'package:crm/core/constants/design_constants.dart';
+
+/// The plain confirmation that a membership was picked, sat at the TOP of the
+/// plan step's body.
+///
+/// It exists so the choice is unmistakable on an unattended kiosk: a member who
+/// taps a card low in a tall grid gets no signal otherwise, so after a pick the
+/// step scrolls back up and this names — in words — exactly which membership is
+/// now chosen. The pinned identity strip above already says WHO the choice is
+/// for (in a group), so this names only the plan and never repeats the person.
+///
+/// **It names the plan, never a price.** Money on this kiosk comes from the
+/// server preview on the review screen; here the member is confirming the plan
+/// identity, not a charge, so no amount is derived from a plan row.
+class KioskPlanPickedBanner extends StatelessWidget {
+  final String planName;
+
+  const KioskPlanPickedBanner({super.key, required this.planName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: DesignConstants.paddingBig,
+        vertical: DesignConstants.spacingLarge,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.primaryColor10,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          const _Check(),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Text(
+                  'YOU\'VE PICKED',
+                  style: DesignConstants.kioskEyebrow.copyWith(
+                    color: DesignConstants.primaryColor,
+                  ),
+                ),
+                Text(
+                  planName,
+                  style: DesignConstants.kioskStatement,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The sapphire tick disc — the kiosk's own "chosen" idiom, matching the plan
+/// card's own selected mark.
+class _Check extends StatelessWidget {
+  const _Check();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: DesignConstants.iconSizeBig,
+      height: DesignConstants.iconSizeBig,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: DesignConstants.primaryColor,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Symbols.check_sharp,
+        size: DesignConstants.iconSizeSmall,
+        weight: DesignConstants.iconWeight,
+        color: DesignConstants.onAccent,
+      ),
+    );
+  }
+}

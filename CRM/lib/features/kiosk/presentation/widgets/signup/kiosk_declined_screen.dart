@@ -6,28 +6,30 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 
-/// D8 — the card was refused. Retries the CHARGE, and only the charge.
+/// D8 — the card was refused, as a POPUP acknowledgement over the flow.
+///
+/// **Its natural action returns to the CARD-NUMBER page.** A decline is a
+/// wrong card, not a wrong signup, so the primary is a single clear "Try
+/// another card" that drops the member back on the card step with a fresh,
+/// empty, working field (see `retryCard`). "Get help at the desk" is the
+/// always-available SECONDARY handoff, never the forced destination — it
+/// `_stop`s to `cardDeclined`, holding every committed row for the staff
+/// incomplete-signups list.
 ///
 /// **The copy blames the bank, never the member.** "Your bank declined the
 /// payment" is true and blameless; "your card was rejected" reads as a verdict
-/// on the person standing in a lobby.
+/// on the person standing in a lobby. The reassurance is warm and UNCOUNTED —
+/// a tally beside a refusal reads as a countdown to being cut off, which is not
+/// what happens here.
 ///
-/// **Exactly two buttons, and neither of them is "Start over".** By this point
-/// the member row, the Stripe customer and every signature are committed and
-/// nothing rolls them back, so an abandon here would drop a half-built account
-/// at a clean home screen with nobody told. Giving up is a HANDOFF, not an
-/// abandon. The session's flow count is deliberately still held: the member is
-/// standing right there.
-///
-/// **Neither button is ever forced.** A refused card is retryable for as long
-/// as the member wants to keep trying — mistakes are ordinary and no count of
-/// them ends a signup — so "Try another card" is always there and "Get help at
-/// the desk" is the option beside it, never the destination. What repetition
-/// buys is a short wait before the next attempt; the review's Pay button shows
-/// it counting down.
+/// **The velocity cooldown lives HERE, big.** After a run of declines the wait
+/// is the popup's obvious focus — a large central countdown that gates
+/// try-again until it reaches zero — rather than a small number hiding on a
+/// background Pay button. The member row, Stripe customer and signatures are
+/// all committed and never re-run; the session flow count is deliberately still
+/// held, because the member is standing right there.
 class KioskDeclinedScreen extends StatelessWidget {
   const KioskDeclinedScreen({super.key});
 
@@ -36,99 +38,135 @@ class KioskDeclinedScreen extends StatelessWidget {
     final cubit = context.read<KioskSignupCubit>();
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
-          prev.declineCount != cur.declineCount ||
-          prev.cardLast4 != cur.cardLast4,
+          prev.cardBrand != cur.cardBrand ||
+          prev.cardLast4 != cur.cardLast4 ||
+          prev.retryCooldown != cur.retryCooldown,
       builder: (context, state) {
-        return KioskStage(
-          center: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              const _DeclinedIcon(),
-              Text(
-                'That card didn\'t go through',
-                style: DesignConstants.kioskDisplay,
-                textAlign: TextAlign.center,
-              ),
-              const _WhyBox(),
-              KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
-              Text(
-                _reassurance(state.declineCount),
-                style: DesignConstants.kioskSubtitle.copyWith(
-                  color: DesignConstants.text2nd,
+        final cooling = state.retryCooldown > 0;
+        return SizedBox.expand(
+          child: ColoredBox(
+            color: DesignConstants.backgroundColor.withValues(alpha: 0.92),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: DesignConstants.dialogMaxWidth,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                spacing: DesignConstants.spacingLarge,
-                children: [
-                  KioskOutlineButton(
-                    text: 'Get help at the desk',
-                    onPressed: cubit.getHelpAtDesk,
+                child: Container(
+                  // A tighter margin than the other kiosk modals: this popup
+                  // carries more (reason + chip + a big timer + two stacked
+                  // buttons), so it needs the extra vertical room to sit whole
+                  // on a short kiosk fold.
+                  margin: const EdgeInsets.all(DesignConstants.spacingLarge),
+                  padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                  decoration: BoxDecoration(
+                    color: DesignConstants.popup,
+                    borderRadius:
+                        BorderRadius.circular(DesignConstants.radiusCard),
+                    border: Border.all(color: DesignConstants.line),
+                    boxShadow: DesignConstants.cardShadow,
                   ),
-                  KioskPrimaryButton(
-                    text: 'Try another card',
-                    onPressed: cubit.retryCard,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: DesignConstants.spacingLarge,
+                    children: [
+                      const _DeclinedIcon(),
+                      Text(
+                        'Your bank declined the payment',
+                        style: DesignConstants.kioskPanelTitle,
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        'You haven\'t been charged, and everything else you '
+                        'filled in is saved.',
+                        style: DesignConstants.kioskBody.copyWith(
+                          color: DesignConstants.text2nd,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      KioskCardChip(
+                        brand: state.cardBrand,
+                        last4: state.cardLast4,
+                      ),
+                      if (cooling) _Cooldown(seconds: state.retryCooldown),
+                      _Actions(
+                        onRetry: cooling ? null : cubit.retryCard,
+                        onHelp: cubit.getHelpAtDesk,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
-
-  /// The reassurance, warm and UNCOUNTED. A repeat gets a slightly gentler
-  /// line rather than a tally: a member who has tried twice knows they have
-  /// tried twice, and printing the number only ever reads as a countdown to
-  /// being cut off — which is not something that happens here.
-  String _reassurance(int declines) {
-    const base = 'You haven\'t been charged, and everything else you filled '
-        'in is saved. ';
-    return declines > 1
-        ? '${base}Another card usually does it — take your time, or the desk '
-            'can help.'
-        : '${base}A different card usually works — or the desk can take it '
-            'from here.';
-  }
 }
 
-/// The one-line reason, boxed and eyebrowed — `KioskBlockedScreen`'s `_WhyBox`
-/// composition, verbatim. The reason is fixed here because a decline reason is
-/// the bank's, not ours: Stripe's own decline codes are guesses about someone
-/// else's decision and are no use to a member in a lobby.
-class _WhyBox extends StatelessWidget {
-  const _WhyBox();
+/// The velocity wait, made the popup's focus. A member cycling cards on an
+/// unattended iPad hits it immediately; a real person fixing a typo essentially
+/// never sees it. Try-again is gated until it elapses, so the number is the
+/// answer to "why can't I press it".
+class _Cooldown extends StatelessWidget {
+  final int seconds;
+
+  const _Cooldown({required this.seconds});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(
-        maxWidth: DesignConstants.dialogMaxWidth,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: DesignConstants.paddingSmall,
+        vertical: DesignConstants.spacingLarge,
       ),
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
-        color: DesignConstants.surface,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
-        border: Border.all(color: DesignConstants.line),
-        boxShadow: DesignConstants.cardShadow,
+        color: DesignConstants.accentSoft,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          Text('WHY', style: DesignConstants.kioskEyebrow),
           Text(
-            'Your bank declined the payment.',
-            style: DesignConstants.kioskStatement,
+            'You can try again in',
+            style: DesignConstants.kioskSubtitle.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            '${seconds}s',
+            style: DesignConstants.kioskDisplay.copyWith(
+              color: DesignConstants.primaryColor,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Try another card (the primary, gated while cooling), then the always-open
+/// desk handoff below it — stacked because two kiosk-scale labels do not fit
+/// side by side in a [DesignConstants.dialogMaxWidth] popup.
+class _Actions extends StatelessWidget {
+  final VoidCallback? onRetry;
+  final VoidCallback onHelp;
+
+  const _Actions({required this.onRetry, required this.onHelp});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        KioskPrimaryButton(text: 'Try another card', onPressed: onRetry),
+        KioskOutlineButton(text: 'Get help at the desk', onPressed: onHelp),
+      ],
     );
   }
 }
@@ -144,7 +182,7 @@ class _DeclinedIcon extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
         color: DesignConstants.yellowDark,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
+        shape: BoxShape.circle,
       ),
       child: Icon(
         Symbols.credit_card_off_sharp,

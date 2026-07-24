@@ -37,6 +37,12 @@ class KioskStage extends StatelessWidget {
   /// genuinely scroll something inside themselves should ask for it.
   final bool fillBody;
 
+  /// Drives the pinned-body scroll view, so a step can return it to the top
+  /// itself — the plan step scrolls back up after a pick so the confirmation,
+  /// the pinned identity and Continue are all in view. Only honoured on the
+  /// pinned (header/footer) path, which is the only one a step controls.
+  final ScrollController? bodyScrollController;
+
   const KioskStage({
     super.key,
     required this.child,
@@ -44,6 +50,7 @@ class KioskStage extends StatelessWidget {
     this.footer,
     this.header,
     this.fillBody = false,
+    this.bodyScrollController,
   });
 
   @override
@@ -57,6 +64,7 @@ class KioskStage extends StatelessWidget {
           footer: foot,
           body: child,
           fill: fillBody,
+          controller: bodyScrollController,
         ),
       );
     }
@@ -113,12 +121,14 @@ class _Pinned extends StatelessWidget {
   final Widget? header;
   final Widget? footer;
   final bool fill;
+  final ScrollController? controller;
 
   const _Pinned({
     required this.body,
     this.header,
     this.footer,
     this.fill = false,
+    this.controller,
   });
 
   @override
@@ -126,7 +136,9 @@ class _Pinned extends StatelessWidget {
     final head = header;
     final foot = footer;
     final content = Expanded(
-      child: fill ? body : SingleChildScrollView(child: body),
+      child: fill
+          ? body
+          : SingleChildScrollView(controller: controller, child: body),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

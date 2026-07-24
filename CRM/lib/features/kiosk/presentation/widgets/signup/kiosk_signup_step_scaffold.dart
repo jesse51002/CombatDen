@@ -49,6 +49,11 @@ class KioskSignupStepScaffold extends StatelessWidget {
   /// fill the fold and scroll inside itself.
   final bool fillBody;
 
+  /// Drives the scrolling body, so a step can return it to the top — the plan
+  /// step uses it to scroll back up after a plan is picked (and when the group
+  /// advances to the next person). See [KioskStage.bodyScrollController].
+  final ScrollController? bodyController;
+
   const KioskSignupStepScaffold({
     super.key,
     required this.step,
@@ -58,6 +63,7 @@ class KioskSignupStepScaffold extends StatelessWidget {
     this.subtitle,
     this.identity,
     this.fillBody = false,
+    this.bodyController,
   });
 
   @override
@@ -65,6 +71,7 @@ class KioskSignupStepScaffold extends StatelessWidget {
     return KioskStage(
       footer: foot,
       fillBody: fillBody,
+      bodyScrollController: bodyController,
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

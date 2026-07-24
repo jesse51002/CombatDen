@@ -91,7 +91,9 @@ class _KioskCardStepState extends State<KioskCardStep> {
       buildWhen: (prev, cur) =>
           prev.cartHasRecurring != cur.cartHasRecurring ||
           prev.persons != cur.persons ||
-          prev.selectedPlan != cur.selectedPlan,
+          prev.selectedPlan != cur.selectedPlan ||
+          // A retry bumps the attempt nonce; the field must re-key with it.
+          prev.cardAttempt != cur.cardAttempt,
       builder: (context, state) {
         final payerName = _payerName(state);
         return KioskSignupStepScaffold(
@@ -119,6 +121,12 @@ class _KioskCardStepState extends State<KioskCardStep> {
             children: [
               KioskSecureStrip(gymName: gym),
               CardFieldBox(
+                // A fresh, empty Stripe iframe per attempt: after a decline
+                // `retryCard()` bumps `cardAttempt`, so returning here mounts a
+                // brand-new field instead of reusing the cached one that still
+                // holds the declined card (the member could not otherwise type
+                // a new number at all).
+                fieldKey: ValueKey('kiosk-card-${state.cardAttempt}'),
                 onComplete: (isComplete) {
                   if (isComplete != _complete) {
                     setState(() => _complete = isComplete);

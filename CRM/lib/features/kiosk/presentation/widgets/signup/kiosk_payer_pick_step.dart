@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
@@ -14,18 +15,23 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 
-/// "Change who is paying" — pick the member who pays for this signup.
+/// "Who's paying?" — pick the member who pays for this signup.
+///
+/// It serves TWO situations through one screen:
+///
+/// * **Changing** who pays, while a payer already exists. The current payer is
+///   named in the pinned `PAYING NOW` strip and is NOT offered as a row (picking
+///   whoever already pays is a no-op dressed as a choice).
+/// * **Choosing** a payer after the previous one was DELETED. There is no payer
+///   yet, so the strip is gone and every remaining person is selectable — the
+///   flow cannot continue until one is chosen (see the People step's block).
 ///
 /// **The people already on this roster come FIRST.** They are standing right
-/// there, and making somebody search the whole gym for the person beside them
-/// is the wrong shape — so the roster is listed and directly pickable, with
-/// the CRM search underneath for anyone not on it yet. Both lists render
-/// through the same `KioskNameRow`, because they are two sources of one kind
-/// of answer rather than two kinds of control.
-///
-/// **The current payer is not offered.** Picking whoever is already paying is
-/// a no-op dressed as a choice; they are named in the pinned strip instead, so
-/// the screen still says who it is changing FROM.
+/// there, so the roster is listed and directly pickable, with the CRM search
+/// underneath for anyone not on it yet. Both lists render through the same
+/// affordant [KioskNameRow] — bordered, ripple, chevron — so a pickable member
+/// reads unmistakably as pressable, and the section heads are demoted to quiet
+/// labels so the rows dominate.
 ///
 /// **Every pick runs the same no-attached-card gate** — roster or CRM, created
 /// in this signup or not. A refusal is INLINE (pick someone else, or carry on
@@ -45,17 +51,23 @@ class KioskPayerPickStep extends StatelessWidget {
       builder: (context, state) {
         final refusal = state.payerRefusal;
         final candidates = state.payerCandidateIndexes;
-        final payer = state.payer;
+        final payer = state.payerOrNull;
         return KioskSignupStepScaffold(
           step: KioskSignupStep.payerPick,
           title: 'Who\'s paying?',
-          subtitle: 'Pick anyone here, or find another member. They enter '
-              'their card at the end, and everyone on the list is on it.',
-          // Who it is changing FROM, pinned so the answer does not scroll.
-          identity: KioskWhoFor(
-            eyebrow: 'PAYING NOW',
-            name: '${payer.firstName} ${payer.lastName}'.trim(),
-          ),
+          subtitle: payer == null
+              ? 'Pick who pays for everyone here. They enter their card at '
+                  'the end, and everyone on the list is on it.'
+              : 'Pick anyone here, or find another member. They enter their '
+                  'card at the end, and everyone on the list is on it.',
+          // Who it is changing FROM, pinned so the answer does not scroll. With
+          // no payer yet (the previous one was deleted) there is nothing to pin.
+          identity: payer == null
+              ? null
+              : KioskWhoFor(
+                  eyebrow: 'PAYING NOW',
+                  name: '${payer.firstName} ${payer.lastName}'.trim(),
+                ),
           foot: KioskFlowFoot(
             // The decision is a row in a list, so the footer carries only the
             // way back.
@@ -70,12 +82,14 @@ class KioskPayerPickStep extends StatelessWidget {
                 const KioskSectionHead(
                   title: 'Already here',
                   subtitle: 'Someone on this signup pays for everyone.',
+                  quiet: true,
                 ),
                 _RosterOptions(state: state, candidates: candidates),
               ],
               const KioskSectionHead(
                 title: 'Someone else who trains here',
                 subtitle: 'Find them by name.',
+                quiet: true,
               ),
               const KioskMatchSearch(forPayer: true),
             ],
@@ -86,7 +100,7 @@ class KioskPayerPickStep extends StatelessWidget {
   }
 }
 
-/// The roster, minus whoever is already paying.
+/// The roster candidates — everyone the picker offers, in roster order.
 ///
 /// The second line is each person's own masked email — the same treatment the
 /// CRM results and the match card wear, so a shared iPad never prints an
@@ -101,16 +115,17 @@ class _RosterOptions extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingMedium,
       children: [
-        for (var i = 0; i < candidates.length; i++)
+        for (final index in candidates)
           KioskNameRow(
-            name: '${state.persons[candidates[i]].firstName} '
-                    '${state.persons[candidates[i]].lastName}'
+            name: '${state.persons[index].firstName} '
+                    '${state.persons[index].lastName}'
                 .trim(),
-            note: kioskMaskedEmail(state.persons[candidates[i]].email),
-            first: i == 0,
-            onTap: () => cubit.pickPayerFromRoster(candidates[i]),
+            note: kioskMaskedEmail(state.persons[index].email),
+            onTap: () => cubit.pickPayerFromRoster(index),
           ),
       ],
     );

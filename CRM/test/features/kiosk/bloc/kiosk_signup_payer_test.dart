@@ -742,6 +742,123 @@ void main() {
       await cubit.close();
     });
   });
+
+  group('deleting the payer always asks who pays next', () {
+    /// Marcus (payer, mem-1) + Ella (payee, mem-2), on the roster.
+    Future<KioskSignupCubit> withElla() async {
+      final cubit = await submitPayer(build());
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
+      return cubit;
+    }
+
+    test('the payer is removable, and removing them clears the payer and '
+        'routes to the picker', () async {
+      final cubit = await withElla();
+      // The payer is removable now (group, nothing committed).
+      expect(cubit.state.canRemovePerson(0), isTrue);
+
+      cubit.askRemovePerson(0);
+      expect(cubit.state.removeConfirmIndex, 0);
+      cubit.confirmRemovePerson();
+
+      // Nothing is auto-assigned: the signup has NO payer, and the flow is
+      // parked on the picker to choose one.
+      expect(cubit.state.step, KioskSignupStep.payerPick);
+      expect(cubit.state.hasPayer, isFalse);
+      expect(cubit.state.payerOrNull, isNull);
+      expect(cubit.state.persons, hasLength(1));
+      expect(cubit.state.persons.single.memberId, 'mem-2');
+      expect(cubit.state.persons.single.isPayer, isFalse);
+      // Every remaining person is now a candidate, index 0 included.
+      expect(cubit.state.payerCandidateIndexes, [0]);
+      await cubit.close();
+    });
+
+    test('Continue is blocked until a payer is chosen', () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(0);
+      cubit.confirmRemovePerson();
+      // Back out of the picker without choosing: the People step is reached
+      // with no payer, and it cannot advance.
+      cubit.back();
+      expect(cubit.state.step, KioskSignupStep.people);
+      expect(cubit.state.hasPayer, isFalse);
+
+      cubit.continueToPlans();
+      expect(cubit.state.step, KioskSignupStep.people);
+      verifyNever(() => member.previewStartMemberships(any()));
+      verifyNever(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      );
+      await cubit.close();
+    });
+
+    test('a payer chosen after a delete still runs the fail-closed gate — a '
+        'card on file refuses', () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(0);
+      cubit.confirmRemovePerson();
+      // Ella (the only one left) has a card on file now.
+      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
+        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
+      );
+      await cubit.pickPayerFromRoster(0);
+
+      // The gate ran, and refused inline — no shortcut for the no-payer path.
+      verify(() => member.getPaymentMethodStatus('mem-2')).called(1);
+      expect(cubit.state.payerRefusal, KioskPayerEligibility.hasPaymentMethod);
+      expect(cubit.state.hasPayer, isFalse);
+      await cubit.close();
+    });
+
+    test('a payer chosen after a delete still runs the fail-closed gate — a '
+        'failed check refuses', () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(0);
+      cubit.confirmRemovePerson();
+      when(() => member.getPaymentMethodStatus(any()))
+          .thenThrow(const ServerException('boom', statusCode: 500));
+      await cubit.pickPayerFromRoster(0);
+
+      // A failure NEVER reads as "no card on file".
+      expect(cubit.state.payerRefusal, KioskPayerEligibility.unknown);
+      expect(cubit.state.hasPayer, isFalse);
+      await cubit.close();
+    });
+
+    test('an ELIGIBLE pick after a delete seats them and re-enables Continue',
+        () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(0);
+      cubit.confirmRemovePerson();
+      await cubit.pickPayerFromRoster(0);
+
+      // Ella is the payer now, at the head, and the flow can advance again.
+      expect(cubit.state.hasPayer, isTrue);
+      expect(cubit.state.payer.memberId, 'mem-2');
+      expect(cubit.state.payer.isPayer, isTrue);
+      expect(cubit.state.step, KioskSignupStep.people);
+      cubit.continueToPlans();
+      expect(cubit.state.step, KioskSignupStep.plans);
+      await cubit.close();
+    });
+
+    test('a solo payer is NOT removable — deleting the only person is not a '
+        'thing', () async {
+      final cubit = await submitPayer(build());
+      expect(cubit.state.isGroup, isFalse);
+      expect(cubit.state.canRemovePerson(0), isFalse);
+      await cubit.close();
+    });
+  });
 }
 
 /// Let the cubit's `unawaited` reads settle.

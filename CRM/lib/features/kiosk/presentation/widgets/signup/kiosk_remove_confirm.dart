@@ -27,7 +27,16 @@ class KioskRemoveConfirm extends StatelessWidget {
   /// rather than an empty gap in the sentence.
   final String name;
 
-  const KioskRemoveConfirm({super.key, required this.name});
+  /// This person is the current PAYER, so removing them clears the payer and
+  /// the next screen asks who pays. The body says so, because "you can add them
+  /// again" is not the whole story when the payer is the one leaving.
+  final bool asksNextPayer;
+
+  const KioskRemoveConfirm({
+    super.key,
+    required this.name,
+    this.asksNextPayer = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,8 +77,11 @@ class KioskRemoveConfirm extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                     Text(
-                      'They come off the list and out of the total. You can '
-                      'add them again.',
+                      asksNextPayer
+                          ? 'They\'re paying for everyone, so next you\'ll '
+                              'choose who pays. You can add them again.'
+                          : 'They come off the list and out of the total. You '
+                              'can add them again.',
                       style: DesignConstants.kioskBody.copyWith(
                         color: DesignConstants.text2nd,
                       ),

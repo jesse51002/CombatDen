@@ -49,7 +49,11 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
       builder: (context, state) {
         final count = state.persons.length;
         final busy = state.submitting;
-        final canGo = state.anyoneTraining && !busy;
+        final hasPayer = state.hasPayer;
+        // Continue needs BOTH a payer and at least one person getting a
+        // membership. Each block shows its own plain reason below — never a
+        // dead button.
+        final canGo = hasPayer && state.anyoneTraining && !busy;
         return KioskSignupStepScaffold(
           step: KioskSignupStep.people,
           title: 'Anyone else joining?',
@@ -59,10 +63,13 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
             primaryLabel:
                 count == 1 ? 'It\'s just me' : 'Continue with $count people',
             onPrimary: canGo ? cubit.continueToPlans : null,
-            // An ADOPTED existing payer has nothing behind this screen: the
-            // kiosk never typed their details and must not offer a route back
-            // into a form that would PUT over the gym's own record.
-            onBack: busy || state.payer.wasExisting ? null : cubit.back,
+            // No route back with no payer (there is no payer's screen behind
+            // this one), and an ADOPTED existing payer has nothing behind it
+            // either: the kiosk never typed their details and must not offer a
+            // route into a form that would PUT over the gym's own record.
+            onBack: busy || !hasPayer || state.payer.wasExisting
+                ? null
+                : cubit.back,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,8 +97,16 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
                     _AddRow(onAdd: () => setState(() => _adderOpen = true)),
                 ],
               ),
-              if (state.canSwitchPayer) const _PayerSwitchRow(),
-              if (!state.anyoneTraining) const _NeedsOneNote(),
+              // The payer was deleted: offer the way to choose the next one,
+              // and say plainly that the flow waits on it.
+              if (!hasPayer)
+                const _ChoosePayerRow()
+              else if (state.canSwitchPayer)
+                const _PayerSwitchRow(),
+              if (!hasPayer)
+                const _NeedsPayerNote()
+              else if (!state.anyoneTraining)
+                const _NeedsOneNote(),
             ],
           ),
         );
@@ -154,6 +169,42 @@ class _PayerSwitchRow extends StatelessWidget {
         text: 'Change who is paying',
         onPressed: context.read<KioskSignupCubit>().openPayerPick,
       ),
+    );
+  }
+}
+
+/// Choose the payer after the previous one was deleted. It is the REQUIRED
+/// fix for the no-payer block, so it is offered right where the block is — the
+/// same secondary tier as "Change who is paying", because choosing a payer is
+/// another way IN, not an escape.
+class _ChoosePayerRow extends StatelessWidget {
+  const _ChoosePayerRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: KioskOutlineButton(
+        text: 'Choose who\'s paying',
+        onPressed: context.read<KioskSignupCubit>().openPayerPick,
+      ),
+    );
+  }
+}
+
+/// The no-payer block's plain reason. The previous payer was deleted and none
+/// has been chosen, so Continue waits — and, exactly like the empty-cart note,
+/// it points at the fix rather than leaving a dead button to explain itself.
+class _NeedsPayerNote extends StatelessWidget {
+  const _NeedsPayerNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Choose who\'s paying to continue.',
+      style: DesignConstants.kioskCaption.copyWith(
+        color: DesignConstants.text2nd,
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }

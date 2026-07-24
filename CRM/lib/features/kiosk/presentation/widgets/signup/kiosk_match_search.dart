@@ -81,22 +81,19 @@ class _Results extends StatelessWidget {
       builder: (context, state) {
         if (state.matches.isNotEmpty) {
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
+            spacing: DesignConstants.spacingMedium,
             children: [
-              for (var i = 0; i < state.matches.length; i++)
+              for (final match in state.matches)
                 KioskNameRow(
                   // The FULL name: two members sharing a first name and last
                   // initial must stay distinguishable at the moment somebody
                   // taps one of them.
-                  name: state.matches[i].name,
-                  first: i == 0,
+                  name: match.name,
                   onTap: () => forPayer
-                      ? context.read<KioskSignupCubit>().pickPayerRow(
-                            state.matches[i],
-                          )
-                      : context.read<KioskSignupCubit>().pickMatchRow(
-                            state.matches[i],
-                          ),
+                      ? context.read<KioskSignupCubit>().pickPayerRow(match)
+                      : context.read<KioskSignupCubit>().pickMatchRow(match),
                 ),
             ],
           );

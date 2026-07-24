@@ -16,10 +16,21 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Stripe `::placeholder`) and the cursor must all be set, or
 /// the unset placeholder falls back to Stripe's dark default
 /// and reads as black-on-black in dark mode.
+///
+/// [fieldKey] keys the inner [CardField]. On web the field is a Stripe iframe
+/// whose platform view is CACHED across mounts, so a caller that must guarantee
+/// a fresh, empty field on re-entry (the kiosk signup, after a decline) passes a
+/// key that changes per attempt — without it the same iframe, still holding the
+/// declined number, is reused and cannot be cleared.
 class CardFieldBox extends StatelessWidget {
   final ValueChanged<bool> onComplete;
 
-  const CardFieldBox({super.key, required this.onComplete});
+  /// Identity for the inner Stripe [CardField]. Change it to force a brand-new,
+  /// empty field. Null keeps the default single cached field (every non-kiosk
+  /// caller).
+  final Key? fieldKey;
+
+  const CardFieldBox({super.key, required this.onComplete, this.fieldKey});
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +50,7 @@ class CardFieldBox extends StatelessWidget {
           horizontal: DesignConstants.spacingMedium,
         ),
         child: CardField(
+          key: fieldKey,
           enablePostalCode: true,
           style: DesignConstants.p.copyWith(
             color: DesignConstants.text,
