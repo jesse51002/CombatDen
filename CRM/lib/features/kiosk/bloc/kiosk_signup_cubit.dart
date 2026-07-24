@@ -36,22 +36,6 @@ const Duration kKioskSignupStopHold = Duration(seconds: 15);
 /// own 60-second clock.
 const Duration kKioskSignupWelcomeHold = Duration(seconds: 60);
 
-/// How many consecutive declines the kiosk lets through at full speed before
-/// each further attempt waits out [kKioskSignupDeclineCooldown].
-///
-/// **It is not a strike count.** No number of declines ends the signup: a
-/// mistyped card is an ordinary mistake and a member may keep trying. What is
-/// throttled is attempt VELOCITY in one session — the card-testing vector on
-/// an unattended device — which is the industry answer (Stripe's own guidance
-/// is rate limiting, not a hard stop). A real person fixing a typo
-/// essentially never reaches it.
-const int kKioskSignupDeclineCooldownAfter = 3;
-
-/// The wait each attempt serves once [kKioskSignupDeclineCooldownAfter]
-/// consecutive declines have gone by. Long enough to make cycling cards
-/// pointless, short enough that a member with the right card barely notices.
-const Duration kKioskSignupDeclineCooldown = Duration(seconds: 30);
-
 /// The response wait for the ONE start call.
 ///
 /// A real Stripe charge on a Connect account creates a customer's
@@ -96,7 +80,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     required String gymId,
     DateTime Function() now = DateTime.now,
     String Function() uuid = _defaultUuid,
-    Duration declineCooldown = kKioskSignupDeclineCooldown,
   })  : _memberRepo = memberRepository,
         _membershipsRepo = membershipsRepository,
         _membersListRepo = membersListRepository,
@@ -104,7 +87,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
         _gymId = gymId,
         _now = now,
         _uuid = uuid,
-        _declineCooldown = declineCooldown,
         super(const KioskSignupState()) {
     // The caller (`KioskFlowCubit.startSignup`) has already checked
     // `canStartFlow`; reaching this constructor IS the flow starting.
@@ -127,11 +109,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   final DateTime Function() _now;
   final String Function() _uuid;
 
-  /// The wait served before each attempt once the decline run is long enough.
-  /// Injected so a test can drive it deterministically; production always
-  /// takes [kKioskSignupDeclineCooldown]. A zero duration disables it.
-  final Duration _declineCooldown;
-
   /// `date_of_birth` goes over the wire as a bare `YYYY-MM-DD` date, never an
   /// instant — a birthday has no timezone.
   static final DateFormat _dobWire = DateFormat('yyyy-MM-dd');
@@ -141,7 +118,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   Timer? _stopTimer;
   Timer? _welcomeTimer;
   Timer? _searchDebounce;
-  Timer? _cooldownTimer;
 
   /// Which name-search response is still wanted. Every fetch takes the next
   /// number and a landing response that no longer holds it is DISCARDED, so a
@@ -1613,9 +1589,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// exactly the case the T+11h45 grace window exists for.
   Future<void> pay() async {
     if (state.step == KioskSignupStep.paying) return;
-    // The velocity cooldown. It gates the ATTEMPT, not the flow: the member
-    // may keep typing cards, they just cannot fire them off back to back.
-    if (state.retryCooldown > 0) return;
     final paymentMethodId = state.paymentMethodId;
     if (paymentMethodId == null) return;
     final key = state.idempotencyKey ?? newIdempotencyKey();
@@ -1685,49 +1658,52 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   /// A refused charge. The member row, the Stripe customer and every signature
   /// are already committed and are NEVER re-executed — only the charge is
-  /// retried, and only from the card step.
+  /// retried, from the decline popup.
   ///
-  /// **A decline never ends the signup.** Mistakes are ordinary: the member
-  /// may keep trying cards for as long as they like, and the desk is an
-  /// option they choose rather than a destination they are sent to. What
-  /// repetition buys is a [kKioskSignupDeclineCooldown] wait before each
-  /// further attempt once [kKioskSignupDeclineCooldownAfter] have gone by in
-  /// a row — velocity, not a cap.
+  /// **A decline never ends the signup, and there is no wait between attempts.**
+  /// Mistakes are ordinary: the member may retry immediately — the SAME card
+  /// ([retrySameCard], the common insufficient-funds case) or a fresh one
+  /// ([retryCard]) — as many times as they like. Attempt-velocity throttling
+  /// (the card-testing defence on an unattended device) rides entirely on the
+  /// platform Stripe Radar rule, not a client cooldown (founder decision). The
+  /// desk is an option the member chooses, never a destination they are sent to.
   void _onDeclined(List<MemberMembershipsStartResultItem> failed) {
-    final attempts = state.declineCount + 1;
     emit(state.copyWith(
-      declineCount: attempts,
       failedItems: failed,
       step: KioskSignupStep.declined,
       submitting: false,
     ));
-    if (attempts >= kKioskSignupDeclineCooldownAfter) _startCooldown();
     _syncIdleTimer();
   }
 
-  /// Run the retry cooldown down to zero, a second at a time.
-  void _startCooldown() {
-    _cooldownTimer?.cancel();
-    if (_declineCooldown.inSeconds <= 0) return;
-    emit(state.copyWith(retryCooldown: _declineCooldown.inSeconds));
-    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (isClosed) return;
-      final next = state.retryCooldown - 1;
-      if (next <= 0) {
-        _cooldownTimer?.cancel();
-        emit(state.copyWith(retryCooldown: 0));
-      } else {
-        emit(state.copyWith(retryCooldown: next));
-      }
-    });
+  /// "Retry" — re-attempt the SAME card. The most common decline is
+  /// insufficient funds: the member moves money, then retries the exact card
+  /// they already entered, without re-typing it.
+  ///
+  /// It keeps [KioskSignupState.paymentMethodId] / `cardBrand` / `cardLast4`
+  /// and mints a **NEW** idempotency key, then re-fires [pay]. A new key is
+  /// mandatory — reusing the already-sent key would replay the decline through
+  /// the [_sentAttempts] latch instead of making a genuine fresh attempt.
+  /// Nothing else re-runs: [_startItems] re-sends only `failedItems`, and no
+  /// member is created, no waiver re-signed, no payer re-linked.
+  ///
+  /// [pay]'s synchronous `paying` guard + the sent-key latch keep a double-tap
+  /// to exactly one charge; the `declined`-step guard here stops a second tap
+  /// from minting a stray key over an in-flight charge.
+  void retrySameCard() {
+    registerActivity();
+    if (state.step != KioskSignupStep.declined) return;
+    emit(state.copyWith(idempotencyKey: newIdempotencyKey()));
+    unawaited(pay());
   }
 
   /// "Try another card" — back to the card step with a genuinely FRESH field.
   ///
-  /// The key is dropped rather than reused: [submitCard] mints a fresh one on
-  /// the way into the review, so a deliberate retry is a genuinely new attempt
-  /// with a new `pm_…`. Nothing else re-runs — no member is created, no waiver
-  /// is re-signed, no plan is re-picked.
+  /// Unlike [retrySameCard], this CLEARS the card so the member enters a
+  /// different one. The key is dropped rather than reused: [submitCard] mints a
+  /// fresh one on the way into the review, so a deliberate retry is a genuinely
+  /// new attempt with a new `pm_…`. Nothing else re-runs — no member is
+  /// created, no waiver is re-signed, no plan is re-picked.
   ///
   /// **[KioskSignupState.cardAttempt] is bumped so the Stripe `CardField` is
   /// re-keyed and mounts an EMPTY iframe.** The web card field's platform view
@@ -1762,7 +1738,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void _enterWelcome() {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
-    _cooldownTimer?.cancel();
     // The flow is over: release the session's count here, exactly once.
     _endFlowIfStarted();
     emit(state.copyWith(
@@ -1770,9 +1745,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       submitting: false,
       idleWarningActive: false,
       idleCountdown: 0,
-      // A charge that went through resets the consecutive-decline run.
-      declineCount: 0,
-      retryCooldown: 0,
       failedItems: const [],
       welcomeCountdown: kKioskSignupWelcomeHold.inSeconds,
     ));
@@ -1819,7 +1791,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void _stop(KioskSignupStopReason reason) {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
-    _cooldownTimer?.cancel();
     if (!reason.isRetryable) _endFlowIfStarted();
     emit(state.copyWith(
       step: KioskSignupStep.stop,
@@ -1829,7 +1800,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idleCountdown: 0,
       abandonConfirmActive: false,
       removeConfirmIndex: null,
-      retryCooldown: 0,
       stopCountdown: kKioskSignupStopHold.inSeconds,
     ));
     _startStopCountdown();
@@ -1913,7 +1883,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _stopTimer?.cancel();
     _welcomeTimer?.cancel();
     _searchDebounce?.cancel();
-    _cooldownTimer?.cancel();
     _endFlowIfStarted();
     emit(state.copyWith(
       abandoned: true,
@@ -2057,7 +2026,6 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _stopTimer?.cancel();
     _welcomeTimer?.cancel();
     _searchDebounce?.cancel();
-    _cooldownTimer?.cancel();
     // Balance a mid-flow teardown: without this the session's flow count stays
     // incremented and the kiosk never signs itself out at its lockout.
     // `endFlow` is a pure in-memory decrement, safe post-close, and the latch

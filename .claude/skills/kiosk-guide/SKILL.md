@@ -20,7 +20,8 @@ description: >-
   design laws, the PINNED per-step identity band, the real-vs-illustrative
   data rule, and the built SOLO + GROUP self-serve **signup** lane (its own
   cubit, the double-charge defences, the fail-closed payer gate and its two
-  entry points, the uncapped-decline + velocity-cooldown model, and the CRM's
+  entry points, the uncapped, no-wait decline model with same-card + new-card
+  retry, and the CRM's
   Incomplete tab as the staff-side resolution for an abandoned draft). Load
   this
   whenever you touch anything kiosk-shaped: `CRM/lib/features/kiosk/`,
@@ -31,7 +32,7 @@ description: >-
   runway", "beginFlow / endFlow", "kiosk escape / start over / cancel",
   "autofill on the kiosk", "skip_reason", "kiosk type ramp", "rotating QR",
   "kiosk signup", "duplicate payer", "payment-method-status", "someone else is
-  paying", "decline cooldown", or "Incomplete tab".
+  paying", "decline retry", "retry same card", or "Incomplete tab".
 ---
 
 # Kiosk Mode — a member surface inside the admin app
@@ -1419,43 +1420,49 @@ terminal `stop` release exactly once · a **retryable** stop
 because "Try again" returns to a live flow; its auto-return `abandon()`
 releases it if the member walks off.
 
-### 11.3a A decline is never an ending — velocity is throttled, attempts are not
+### 11.3a A decline is never an ending, and there is no wait between attempts
 
-**No number of declines ends a signup.** Mistyped cards are ordinary, so "Try
-another card" is always there and **"Get help at the desk" is the option beside
-it, never the destination** — nothing ever routes a member to the desk on their
-behalf. The declined screen's reassurance is warm and **uncounted**: a tally
-next to a bank refusal reads as a countdown to being cut off, which is not
-something that happens here.
+**No number of declines ends a signup, and no attempt is ever gated by a
+client-side timer.** Mistyped cards and short balances are ordinary, so a member
+may retry immediately, as many times as they like. The declined screen's
+reassurance is warm and **uncounted**: a tally next to a bank refusal reads as a
+countdown to being cut off, which is not something that happens here.
 
-What repetition buys is a **cooldown**, not a cap. After
-`kKioskSignupDeclineCooldownAfter` (3) **consecutive** declines each further
-attempt waits `kKioskSignupDeclineCooldown` (30s), enforced by an early return
-in `pay()`. **The wait is shown BIG and central in the decline popup itself** —
-an unmistakable "You can try again in {n}s" countdown that is the popup's obvious
-focus and GATES the "Try another card" primary until it reaches zero — never a
-small number on a background button (which is where it used to hide, and the
-member could not tell why they were stuck). Because try-again is gated on the
-popup, a member can never reach the review while cooling, so the review Pay
-button carries only the amount. `KioskSignupState.retryCooldown` lives on the
-**cubit**, so walking back to the card step and returning does not clear it. A
-successful charge resets `declineCount` and the cooldown together.
+**The decline popup stacks THREE live actions, Retry first** (founder: retry is
+the most common case, because the most common decline is insufficient funds —
+the member moves money and tries the exact card again):
 
-This is the industry shape: a generous allowance plus rate limiting (Stripe's
-own card-testing guidance is rate limiting + Radar, not a hard stop), rather
-than a strike count. A real person fixing a typo essentially never reaches the
-wait; somebody cycling stolen cards on an unattended iPad hits it immediately
-and the attack stops being worth running. **Do not model Visa's per-card
-reattempt limit client-side** — every kiosk retry tokenizes a brand-new payment
-method, so the per-card limit is not the binding constraint, and classifying
-decline codes is the processor's job.
+- **Retry** (`KioskPrimaryButton` → `retrySameCard`) — re-attempts the **SAME**
+  card the member already entered, keeping `paymentMethodId` / `cardBrand` /
+  `cardLast4` and minting a **NEW** idempotency key, then re-firing `pay()`. It
+  does **not** clear the field or bump `cardAttempt`. A new key is mandatory:
+  reusing the sent key would replay the decline through the `_sentAttempts` latch
+  instead of making a genuine fresh attempt.
+- **Try another card** (`KioskOutlineButton` → `retryCard`) — CLEARS the card,
+  bumps `cardAttempt` (so the Stripe iframe re-mounts empty, §3), and drops the
+  member back on the card step for a different card, which re-mints its key
+  through `submitCard`.
+- **Get help at the desk** (`KioskOutlineButton` → `getHelpAtDesk` →
+  `_stop(cardDeclined)`) — the always-available handoff, holding committed state
+  for the staff Incomplete list. **Never the destination** — nothing routes a
+  member to the desk on their behalf.
 
-None of it weakens the money-safety properties: every retry still mints a NEW
-idempotency key and a NEW `pm_`, re-sends **only** `state.failedItems`, and
-never re-creates a member, re-signs a waiver or re-links a payer. The sent-key
-latch is untouched, and a 500 / transport failure is still the "nothing was
-charged" stop — this is the 207 path only. The 5-minute idle guard remains the
-backstop for a declined screen nobody is standing at.
+There is no cooldown, no timer, and no `pay()` gate on a decline run — a member
+can retry the same card back-to-back with no wait. Attempt-velocity throttling
+(the card-testing vector on an unattended device) rides **entirely on the
+platform Stripe Radar rule** (a founder decision), not the client. This is the
+industry shape: rate limiting + Radar, not a client-side strike count. **Do not
+model Visa's per-card reattempt limit client-side** — every "Try another card"
+tokenizes a brand-new payment method, and classifying decline codes is the
+processor's job.
+
+None of it weakens the money-safety properties: **both** retry paths mint a NEW
+idempotency key, re-send **only** `state.failedItems`, and never re-create a
+member, re-sign a waiver or re-link a payer. `pay()`'s synchronous `paying`
+guard + the sent-key latch keep a double-tap (of Retry or of Pay) to exactly one
+charge, and a 500 / transport failure is still the "nothing was charged" stop —
+this is the 207 path only. The 5-minute idle guard remains the backstop for a
+declined screen nobody is standing at.
 
 ### 11.4 The rules the copy and the request encode
 
@@ -1484,17 +1491,19 @@ backstop for a declined screen nobody is standing at.
   (`start_preview_step.dart:276-278`). A $0 one-time line is a present invoice
   with nothing on it; calling that two charges lies about the member's own bank
   statement.
-- **`declined` is a POPUP acknowledgement whose natural action returns to the
-  card-number page.** `KioskDeclinedScreen` is the kiosk's one modal vocabulary
-  (veil + centered popup card) carrying the blameless reason ("Your bank declined
-  the payment"), the card chip, the big cooldown timer when cooling (§11.3a), and
-  two buttons — "Try another card" (the primary, → `retryCard`, drops the member
-  back on the card step with a fresh empty field) and "Get help at the desk" (the
-  always-available SECONDARY handoff, → `getHelpAtDesk` → `_stop(cardDeclined)`,
-  holding committed state). Both are always available (except try-again while
-  cooling), there is deliberately no "Start over" (§2), and neither is ever
-  forced (§11.3a). Two kiosk-scale labels do not fit side by side in a
-  `dialogMaxWidth` popup, so they stack.
+- **`declined` is a POPUP acknowledgement whose primary action retries the SAME
+  card.** `KioskDeclinedScreen` is the kiosk's one modal vocabulary (veil +
+  centered popup card) carrying the blameless reason ("Your bank declined the
+  payment"), the card chip, and **three stacked buttons, no timer** (§11.3a):
+  "Retry" (primary, → `retrySameCard`, re-charges the same card with a new key),
+  "Try another card" (secondary, → `retryCard`, drops the member back on the card
+  step with a fresh empty field), and "Get help at the desk" (the
+  always-available handoff, → `getHelpAtDesk` → `_stop(cardDeclined)`, holding
+  committed state). All three are always available, there is deliberately no
+  "Start over" (§2), and none is ever forced (§11.3a). Three kiosk-scale labels
+  do not fit side by side in a `dialogMaxWidth` popup, so they stack; removing
+  the timer freed the vertical room, and a test renders all three at 1180×820
+  with no overflow.
 - **A part-period charge SAYS it is one.** The kiosk pins `prorate_to_anchor`,
   so a mid-cycle joiner's due-today and per-cycle figures differ; the review
   explains that in one receipt-shaped line
@@ -1630,10 +1639,10 @@ backstop for a declined screen nobody is standing at.
   (`KioskPayerEligibility`, `_payerEligibility`, `_offerPayerMatch`,
   `confirmPayerMatch`, `openPayerPick` / `pickPayerRow` / `_adoptPayer`,
   `canSwitchPayer`), the money path (`_buildStartRequest` / `pay` /
-  `_onDeclined` / `_startCooldown` / `_enterWelcome`, the `_sentAttempts`
-  latch, `kKioskSignupStartTimeout`, `kKioskSignupDeclineCooldownAfter` +
-  `kKioskSignupDeclineCooldown`), the `KioskSignupStopReason`s and their
-  `isRetryable` split, and the lane's own begin/endFlow latch + idle guard.
+  `_onDeclined` / `retrySameCard` (same card, new key) / `retryCard` (new card) /
+  `_enterWelcome`, the `_sentAttempts` latch, `kKioskSignupStartTimeout`), the
+  `KioskSignupStopReason`s and their `isRetryable` split, and the lane's own
+  begin/endFlow latch + idle guard.
 - `presentation/screens/kiosk_signup_screen.dart` — provides that cubit (so its
   lifetime is the flow's), hosts the signup's activity listener, and routes
   `abandoned` → `goHome()`.
@@ -1705,8 +1714,9 @@ backstop for a declined screen nobody is standing at.
 - `FastApiBackend/src/checkin/checkin_exceptions.py` — `CheckinErrorCode`, the
   public code contract.
 
-**Specs for unbuilt phases (repo root):** `KIOSK_SIGNUP_MOCKUPS.html` (D+E),
-`PHASE_G_QR_PLAN.md` (G), `APP_DOWNLOAD_PAGE_MOCKUP.html`.
+**Specs for unbuilt phases (repo root):** `PHASE_G_QR_PLAN.md` (G),
+`APP_DOWNLOAD_PAGE_MOCKUP.html`. (The D+E signup mockup was removed once the
+flow shipped.)
 
 **Tests:** `CRM/test/features/kiosk/` — `kiosk_forbidden_imports_test.dart`
 (the fresh-card law in CI, §3), `bloc/kiosk_session_cubit_test.dart`
@@ -1715,8 +1725,10 @@ backstop for a declined screen nobody is standing at.
 the one-call create, ruling 11's PUT-not-create, the stops, the idle guard),
 `bloc/kiosk_signup_money_test.dart` (the §11 money path: double-tap Pay = ONE
 repository call, the sent latch, 409-as-success, 207 → declined, 422 →
-waivers, 500 → "nothing charged", the uncapped decline model + the velocity
-cooldown + its reset on success, the two retryable stops, the request builder's
+waivers, 500 → "nothing charged", the uncapped no-wait decline model — Retry
+re-sends the SAME card with a NEW key while "Try another card" re-enters, a
+double-tap Retry is one charge, and neither re-creates/re-signs anything — the
+two retryable stops, the request builder's
 empty price-reduction fields + `paidWithCash: false` + `set_default`, and the
 due-today / two-charges arithmetic),
 `bloc/kiosk_signup_group_test.dart` (the §11.5 group rules: the payee 409

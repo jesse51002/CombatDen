@@ -595,19 +595,6 @@ class KioskSignupState extends Equatable {
   /// after a decline mints a NEW key; a double-tap reuses this one.
   final String? idempotencyKey;
 
-  /// How many times the card has been declined IN A ROW. It is never a strike
-  /// count — no number of declines ends the signup — it only decides when the
-  /// velocity cooldown engages, and a successful charge resets it.
-  final int declineCount;
-
-  /// Seconds left before another Pay attempt is allowed. 0 = no wait.
-  ///
-  /// A real person fixing a typo essentially never reaches it; someone
-  /// cycling stolen cards on an unattended iPad hits it immediately, which is
-  /// the whole point. It lives HERE rather than on the card widget so walking
-  /// back to the card step and returning cannot clear it.
-  final int retryCooldown;
-
   /// The failed items from a 207 — a decline arrives as a RESULT in the body,
   /// not as an HTTP error, so this is what "declined" actually means.
   final List<MemberMembershipsStartResultItem> failedItems;
@@ -677,8 +664,6 @@ class KioskSignupState extends Equatable {
     this.preview,
     this.previewLoading = false,
     this.idempotencyKey,
-    this.declineCount = 0,
-    this.retryCooldown = 0,
     this.failedItems = const [],
     this.welcomeCountdown = 0,
     this.stopReason,
@@ -966,8 +951,6 @@ class KioskSignupState extends Equatable {
     Object? preview = _keep,
     bool? previewLoading,
     Object? idempotencyKey = _keep,
-    int? declineCount,
-    int? retryCooldown,
     List<MemberMembershipsStartResultItem>? failedItems,
     int? welcomeCountdown,
     Object? stopReason = _keep,
@@ -1038,8 +1021,6 @@ class KioskSignupState extends Equatable {
       idempotencyKey: identical(idempotencyKey, _keep)
           ? this.idempotencyKey
           : idempotencyKey as String?,
-      declineCount: declineCount ?? this.declineCount,
-      retryCooldown: retryCooldown ?? this.retryCooldown,
       failedItems: failedItems ?? this.failedItems,
       welcomeCountdown: welcomeCountdown ?? this.welcomeCountdown,
       stopReason: identical(stopReason, _keep)
@@ -1095,8 +1076,6 @@ class KioskSignupState extends Equatable {
         preview,
         previewLoading,
         idempotencyKey,
-        declineCount,
-        retryCooldown,
         failedItems,
         welcomeCountdown,
         stopReason,

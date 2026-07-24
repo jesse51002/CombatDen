@@ -64,8 +64,8 @@ class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 /// The four surfaces the founder called out, rendered at the real fold
 /// (1180x820): the payer picker's pickable rows read as controls, the payer is
 /// deletable and its absence blocks the flow legibly, the plan pick confirms
-/// the choice, and the decline is a popup whose timer is big — and whose
-/// try-again returns to a genuinely fresh card field.
+/// the choice, and the decline is a popup with no timer that stacks three live
+/// actions (Retry the same card, Try another card, Get help) without overflow.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -367,47 +367,31 @@ void main() {
       await cubit.close();
     });
 
-    testWidgets('a decline returns to the card page and holds no timer',
-        (tester) async {
+    testWidgets('the decline popup stacks Retry / Try another card / Get help, '
+        'with no timer and no overflow at the fold', (tester) async {
       cubit = newCubit();
       await declineTimes(tester, 1);
-      expect(cubit.state.retryCooldown, 0);
       await pump(tester, const KioskDeclinedScreen());
 
       expect(find.text('Your bank declined the payment'), findsOneWidget);
+      // No cooldown timer of any kind — a member may retry immediately.
       expect(find.text('You can try again in'), findsNothing);
-      // The natural action is enabled and goes back to the card page.
+
+      // Retry (the primary) re-attempts the SAME card; the two secondaries are
+      // "Try another card" and the desk handoff. All three are live.
       final retry = tester.widget<KioskPrimaryButton>(
-        find.widgetWithText(KioskPrimaryButton, 'Try another card'),
+        find.widgetWithText(KioskPrimaryButton, 'Retry'),
       );
       expect(retry.onPressed, isNotNull);
+      final tryAnother = tester.widget<KioskOutlineButton>(
+        find.widgetWithText(KioskOutlineButton, 'Try another card'),
+      );
+      expect(tryAnother.onPressed, isNotNull);
       final help = tester.widget<KioskOutlineButton>(
         find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
       );
       expect(help.onPressed, isNotNull);
-      expect(tester.takeException(), isNull);
-      await cubit.close();
-    });
-
-    testWidgets('a cooldown shows the big timer and gates try-again',
-        (tester) async {
-      cubit = newCubit();
-      await declineTimes(tester, 3);
-      expect(cubit.state.retryCooldown, 30);
-      await pump(tester, const KioskDeclinedScreen());
-
-      // The wait is the popup's focus, not a buried button state.
-      expect(find.text('You can try again in'), findsOneWidget);
-      expect(find.text('30s'), findsOneWidget);
-      // Try-again is gated; help is still open.
-      final retry = tester.widget<KioskPrimaryButton>(
-        find.widgetWithText(KioskPrimaryButton, 'Try another card'),
-      );
-      expect(retry.onPressed, isNull);
-      final help = tester.widget<KioskOutlineButton>(
-        find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
-      );
-      expect(help.onPressed, isNotNull);
+      // Three stacked buttons at the real fold (1180×820) must not overflow.
       expect(tester.takeException(), isNull);
       await cubit.close();
     });

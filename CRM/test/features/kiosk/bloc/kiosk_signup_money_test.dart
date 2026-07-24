@@ -112,10 +112,7 @@ void main() {
     ).thenAnswer((_) async => _startResponse());
   });
 
-  KioskSignupCubit build({
-    Duration declineCooldown = kKioskSignupDeclineCooldown,
-  }) =>
-      KioskSignupCubit(
+  KioskSignupCubit build() => KioskSignupCubit(
         memberRepository: member,
         membershipsRepository: memberships,
         membersListRepository: membersList,
@@ -125,14 +122,11 @@ void main() {
         // Every key is distinct, so "a NEW key" is a real assertion rather
         // than an artefact of a constant stub.
         uuid: () => 'key-${++uuidSeq}',
-        declineCooldown: declineCooldown,
       );
 
   /// Walk a solo signup from the first field to the review, ready to pay.
-  Future<KioskSignupCubit> atReview({
-    Duration declineCooldown = kKioskSignupDeclineCooldown,
-  }) async {
-    final cubit = build(declineCooldown: declineCooldown);
+  Future<KioskSignupCubit> atReview() async {
+    final cubit = build();
     cubit.submitDetails(
       firstName: 'Marcus',
       lastName: 'Bell',
@@ -346,7 +340,8 @@ void main() {
   });
 
   group('declined — retries the CHARGE and nothing else', () {
-    test('a 207 declines, holds the flow count, and offers a retry', () async {
+    test('a 207 declines, holds the flow count, and keeps the card for retry',
+        () async {
       when(
         () => member.startMemberships(
           any(),
@@ -357,15 +352,16 @@ void main() {
       await cubit.pay();
 
       expect(cubit.state.step, KioskSignupStep.declined);
-      expect(cubit.state.declineCount, 1);
       expect(cubit.state.failedItems, hasLength(1));
+      // The card the member entered is kept — it is what "Retry" re-uses.
+      expect(cubit.state.paymentMethodId, 'pm_1');
       // The member is still standing there: a decline is NOT an exit.
       verifyNever(() => session.endFlow());
       await cubit.close();
     });
 
-    test('the retry uses a NEW key and never re-creates or re-signs anything',
-        () async {
+    test('"Try another card" uses a NEW key and a NEW card, re-creating or '
+        're-signing nothing', () async {
       when(
         () => member.startMemberships(
           any(),
@@ -380,7 +376,7 @@ void main() {
       clearInteractions(memberships);
       cubit.retryCard();
       expect(cubit.state.step, KioskSignupStep.card);
-      // The element is cleared: the retry must carry a genuinely new card.
+      // The element is cleared: this path must carry a genuinely new card.
       expect(cubit.state.paymentMethodId, isNull);
 
       cubit.submitCard(
@@ -415,15 +411,15 @@ void main() {
       await cubit.close();
     });
 
-    test('each attempt bumps cardAttempt, so the card field is re-keyed and '
-        'mounts a fresh, empty Stripe iframe', () async {
+    test('each "Try another card" bumps cardAttempt, so the card field is '
+        're-keyed and mounts a fresh, empty Stripe iframe', () async {
       when(
         () => member.startMemberships(
           any(),
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       ).thenAnswer((_) async => _startResponse(failed: true));
-      final cubit = await atReview(declineCooldown: Duration.zero);
+      final cubit = await atReview();
       // First attempt is nonce 0 — the initial field.
       expect(cubit.state.cardAttempt, 0);
 
@@ -443,35 +439,38 @@ void main() {
       await cubit.close();
     });
 
-    test('a decline is NEVER terminal — the member keeps trying, uncapped',
-        () async {
+    test('a decline is NEVER terminal or gated — the member retries the same '
+        'card, uncapped and with no wait', () async {
       when(
         () => member.startMemberships(
           any(),
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       ).thenAnswer((_) async => _startResponse(failed: true));
-      // The cooldown is a separate control with its own test; this one is
-      // about the ABSENCE of a cap, so it runs with the wait disabled.
-      final cubit = await atReview(declineCooldown: Duration.zero);
+      final cubit = await atReview();
 
       await cubit.pay();
       // From here on, nothing already committed may be touched again.
       clearInteractions(member);
       clearInteractions(memberships);
       final keys = <String>[cubit.state.idempotencyKey!];
-      for (var i = 2; i <= 7; i++) {
+      // A long run of same-card retries: every one fires immediately (there is
+      // no cooldown to gate it) and stays on `declined`, never a stop.
+      for (var i = 2; i <= 8; i++) {
         expect(cubit.state.step, KioskSignupStep.declined);
-        await _retryAndPay(cubit, 'pm_$i');
+        cubit.retrySameCard();
+        await _settle();
         keys.add(cubit.state.idempotencyKey!);
       }
 
       // Well past the old three-strike ending: still retryable, never a stop.
       expect(cubit.state.step, KioskSignupStep.declined);
-      expect(cubit.state.declineCount, 7);
       expect(cubit.state.stopReason, isNull);
       // Every retry is a genuinely new attempt.
       expect(keys.toSet().length, keys.length);
+      // The SAME card was re-sent every time — never cleared, never re-keyed.
+      expect(cubit.state.cardAttempt, 0);
+      expect(cubit.state.paymentMethodId, 'pm_1');
       // Nothing already committed is ever re-executed.
       verifyNever(() => member.createMember(any()));
       verifyNever(
@@ -489,73 +488,8 @@ void main() {
       await cubit.close();
     });
 
-    test('a run of declines engages the 30s cooldown, and it gates PAY',
-        () async {
-      when(
-        () => member.startMemberships(
-          any(),
-          receiveTimeout: any(named: 'receiveTimeout'),
-        ),
-      ).thenAnswer((_) async => _startResponse(failed: true));
-      final cubit = await atReview();
-
-      await cubit.pay();
-      expect(cubit.state.retryCooldown, 0);
-      await _retryAndPay(cubit, 'pm_2');
-      expect(cubit.state.retryCooldown, 0);
-      await _retryAndPay(cubit, 'pm_3');
-
-      // The third consecutive decline starts the wait.
-      expect(
-        cubit.state.retryCooldown,
-        kKioskSignupDeclineCooldown.inSeconds,
-      );
-      expect(cubit.state.step, KioskSignupStep.declined);
-      // Walking back to the card step and returning does NOT clear it: the
-      // countdown lives on the cubit, not on the widget.
-      cubit.retryCard();
-      cubit.submitCard(paymentMethodId: 'pm_4', brand: 'visa', last4: '4242');
-      await _settle();
-      expect(cubit.state.retryCooldown, greaterThan(0));
-
-      // Three attempts have left the device; Pay is inert while the wait
-      // runs, so a fourth does not.
-      await cubit.pay();
-      verify(
-        () => member.startMemberships(
-          any(),
-          receiveTimeout: any(named: 'receiveTimeout'),
-        ),
-      ).called(3);
-      expect(cubit.state.step, KioskSignupStep.review);
-      await cubit.close();
-    });
-
-    test('the cooldown elapses on its own and Pay comes back', () async {
-      when(
-        () => member.startMemberships(
-          any(),
-          receiveTimeout: any(named: 'receiveTimeout'),
-        ),
-      ).thenAnswer((_) async => _startResponse(failed: true));
-      final cubit = await atReview(
-        declineCooldown: const Duration(seconds: 1),
-      );
-      await cubit.pay();
-      await _retryAndPay(cubit, 'pm_2');
-      await _retryAndPay(cubit, 'pm_3');
-      expect(cubit.state.retryCooldown, 1);
-
-      await Future<void>.delayed(const Duration(milliseconds: 1300));
-      expect(cubit.state.retryCooldown, 0);
-
-      await _retryAndPay(cubit, 'pm_4');
-      expect(cubit.state.step, KioskSignupStep.declined);
-      expect(cubit.state.declineCount, 4);
-      await cubit.close();
-    });
-
-    test('a successful charge resets the consecutive-decline run', () async {
+    test('"Retry" re-attempts the SAME card with a NEW key, re-sending only '
+        'the failed items and re-running nothing else', () async {
       when(
         () => member.startMemberships(
           any(),
@@ -564,19 +498,76 @@ void main() {
       ).thenAnswer((_) async => _startResponse(failed: true));
       final cubit = await atReview();
       await cubit.pay();
-      expect(cubit.state.declineCount, 1);
+      expect(cubit.state.step, KioskSignupStep.declined);
+      final firstKey = cubit.state.idempotencyKey;
 
+      clearInteractions(member);
+      clearInteractions(memberships);
+      // The member moved funds; the same card now approves.
       when(
         () => member.startMemberships(
           any(),
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       ).thenAnswer((_) async => _startResponse());
-      await _retryAndPay(cubit, 'pm_2');
 
+      cubit.retrySameCard();
+      await _settle();
+
+      final request = verify(
+        () => member.startMemberships(
+          captureAny(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).captured.single as MemberMembershipsStartRequest;
+      // The SAME card — never re-entered — with a genuinely NEW key. Reusing
+      // the sent key would replay the decline through the latch.
+      expect(request.payment!.paymentMethodId, 'pm_1');
+      expect(request.idempotencyKey, isNot(firstKey));
+      // Only the failed items are re-sent.
+      expect(request.memberships.single.memberId, 'mem-new');
+      // The card was NOT cleared or re-keyed — this is the same-card path.
+      expect(cubit.state.cardAttempt, 0);
+      // Nothing already committed is re-executed.
+      verifyNever(() => member.createMember(any()));
+      verifyNever(
+        () => memberships.recordWaiverSignature(
+          waiverId: any(named: 'waiverId'),
+          gymId: any(named: 'gymId'),
+          memberId: any(named: 'memberId'),
+          waiverVersionId: any(named: 'waiverVersionId'),
+          signerName: any(named: 'signerName'),
+        ),
+      );
       expect(cubit.state.step, KioskSignupStep.welcome);
-      expect(cubit.state.declineCount, 0);
-      expect(cubit.state.retryCooldown, 0);
+      await cubit.close();
+    });
+
+    test('two synchronous "Retry" taps are exactly ONE charge', () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      final cubit = await atReview();
+      await cubit.pay();
+      expect(cubit.state.step, KioskSignupStep.declined);
+      clearInteractions(member);
+
+      // Two taps in the same frame. `retrySameCard` re-fires `pay()`, which
+      // emits `paying` BEFORE its first await, so the second tap's step guard
+      // (and pay's own) sees the new step and drops it.
+      cubit.retrySameCard();
+      cubit.retrySameCard();
+      await _settle();
+
+      verify(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).called(1);
       await cubit.close();
     });
 
@@ -831,14 +822,6 @@ void main() {
 
 /// Let the cubit's `unawaited` reads settle.
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
-
-/// "Try another card" → a fresh card → Pay.
-Future<void> _retryAndPay(KioskSignupCubit cubit, String pm) async {
-  cubit.retryCard();
-  cubit.submitCard(paymentMethodId: pm, brand: 'visa', last4: '4242');
-  await _settle();
-  await cubit.pay();
-}
 
 MembershipPlanResponse _recurringPlan() => MembershipPlanResponse(
       planId: 'plan-1',

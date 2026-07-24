@@ -38,11 +38,9 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
-        // The velocity cooldown after a run of declines lives on the decline
-        // popup, big and central — never here. A member can never reach this
-        // screen while cooling (try-again is gated on the popup until it
-        // elapses), so the Pay button carries only the amount. `pay()` still
-        // refuses while `retryCooldown > 0` as the belt-and-suspenders guard.
+        // The Pay button carries only the amount. A decline routes to the
+        // decline popup — where the member retries the same card or another —
+        // never back through a gated Pay here; there is no attempt cooldown.
         return KioskSignupStepScaffold(
           step: KioskSignupStep.review,
           title: 'Check this over',
