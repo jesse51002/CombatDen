@@ -421,7 +421,7 @@ no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing
    server-side. This is the direct lesson of the deleted branch: a caller must never choose the gate
    they are judged by.
 
-**What it admits** (13 routes, all thin delegation to the SAME services the CRM uses): the caller's
+**What it admits** (14 routes, all thin delegation to the SAME services the CRM uses): the caller's
 member rows; their own profile (rank progress, points balance, streak, membership cards, recent +
 pending redemptions — a projection of `MembersBillingDetailService`); their streak and class history;
 their gym's **schedule board**; their own **reservations** (`POST`/`DELETE .../signup`); their gym's
