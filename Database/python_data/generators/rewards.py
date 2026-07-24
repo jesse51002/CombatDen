@@ -86,8 +86,22 @@ REWARD_TEMPLATES = [
 ]
 
 
+# The first UNIVERSAL_COUNT templates are the rewards EVERY preset gym gets;
+# the rest are the interchangeable discipline gear slot.
+UNIVERSAL_COUNT = 3
+
+
 def generate(gym_id: uuid.UUID, count: int) -> list[GymRewardCreate]:
-    templates = random.sample(REWARD_TEMPLATES, min(count, len(REWARD_TEMPLATES)))
+    # Mirror the preset catalogue's COMPOSITION, not just its contents: pin the
+    # universals and sample only the gear slot. A flat sample over all six could
+    # deal a gym four discounted items and no "Free" reward at all (1 draw in
+    # 15) — a lineup no preset-imported gym can ever have.
+    universals = REWARD_TEMPLATES[:UNIVERSAL_COUNT]
+    gear = REWARD_TEMPLATES[UNIVERSAL_COUNT:]
+    templates = universals[:count]
+    gear_slots = count - len(templates)
+    if gear_slots > 0:
+        templates = templates + random.sample(gear, min(gear_slots, len(gear)))
     return [
         GymRewardCreate(
             reward_id=uuid.uuid4(),
