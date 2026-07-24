@@ -42,7 +42,7 @@ names those seams but defers their internals.
 | `reward_id` | PK |
 | `gym_id` | scope (composite `UNIQUE (reward_id, gym_id)`) |
 | `title` | `CHECK (title <> '')` |
-| `price_label` | the member-app value badge (e.g. `"Free"`, `"30% off"`) — **NOT NULL**, purely cosmetic, never used in the points math; **required on create** (`RewardCreateRequest.price_label` has `min_length=1` — the client must supply it, no backend fallback on a live create call) |
+| `price_label` | the member-app value **badge** (e.g. `"Free"`, `"25% off"`, `"1 week"`) — **NOT NULL**, purely cosmetic, never used in the points math; **required on create** (`RewardCreateRequest.price_label` has `min_length=1` — the client must supply it, no backend fallback on a live create call). **A SHORT BADGE, NEVER A DESCRIPTION** — see below |
 | `image_url` | **NOT NULL** — optional on the create *request* (`RewardCreateRequest.image_url` stays `str \| None`); when omitted, `RewardsService.create_reward` fills the platform default (`settings.default_reward_image_url`, a "prize box" hand-off photo) before the INSERT, mirroring `gym_classes.image_url` / `ClassesCrudService` exactly. Set via the uploads domain (§6) when the creator does upload one. |
 | `point_cost` | `CHECK (point_cost > 0)` — always positive; a reward can never cost 0 or negative points |
 | `is_active` | soft-delete flag; default `true` |
@@ -60,6 +60,43 @@ default instead of rejecting it — rewards deliberately diverges here per a
 founder decision that the two required fields must never silently change
 value out from under an explicit `null`).
 
+### `price_label` is a SHORT VALUE BADGE, not a description
+
+The member-facing reward card (and the kiosk glance) renders `price_label`
+inside a **small pill** next to the title. It answers one question — *what
+does this cost me on top of my points?* — in a couple of words:
+
+- ✅ `Free` · `10% off` · `25% off` · `50% off` · `1 week` · `BOGO`
+- ❌ `Post-workout recovery` · `Bring a friend for free` ·
+  `Add 1 week to membership` · `Official gym branded tee`
+
+**Aim for ≤ 16 characters.** Anything longer is a description, and a
+description crammed into a pill is unreadable at card size.
+
+Two rules that go with it:
+
+- **`gym_rewards` has NO description column, and that is deliberate — do not
+  park subtitle copy in `price_label` because there is nowhere else to put
+  it.** That is exactly how the seed shipped descriptions into the badge
+  (fixed in `Database/python_data/generators/rewards.py`); if a reward
+  genuinely needs a subtitle, that is a schema decision to raise, never a
+  reuse of this field.
+- **The badge must be TRUE for its title.** A "Free T-Shirt" is `Free`; a
+  "Gym Bag" sold at a discount is `25% off`. Never put `Free` on something
+  the title implies is discounted or vice versa — adjust the title instead
+  if that is what makes the pair coherent.
+
+Writers to keep in line with this: the seed generator
+(`Database/python_data/generators/rewards.py`), the preset/template
+catalogue (`template_gym_reward`, authored in the `VideoService/gyms/*.yaml`
+gym files, which already use `Free` / `25% off` / `50% off` only), and the
+CRM's own create/edit form — `CRM/lib/features/rewards/presentation/widgets/
+value_badge_field.dart` labels the field **"Value badge"**, offers
+`Free` / `10% off` / `25% off` / `50% off` as one-tap chips, and caps input
+at 16 characters while staying free-text for everything else. The seed no
+longer picks its own badges at all — it copies the preset catalogue's, see
+*The preset catalogue is the ONLY reward vocabulary* below.
+
 **CRUD is plain and coupon-free** (`RewardsService`, `src/rewards/service/rewards_service.py`):
 create / update / soft-delete (`deactivate_reward` = `update_reward(is_active=False)`)
 / get / list. `list_rewards` orders by `point_cost ASC` and defaults to
@@ -72,6 +109,55 @@ request time (§2), so an in-place edit never rewrites history.
 **Preset import also writes this table** — importing a gym's preset catalog
 inserts `gym_rewards` rows through the same production insert path (no
 demo-only shortcut).
+
+### The preset catalogue is the ONLY reward vocabulary — the seed mirrors it
+
+There is exactly one curated reward catalogue, and everything that writes
+`gym_rewards` draws from it:
+
+- **Authored in `VideoService/gyms/*.yaml`** — each gym file's `rewards:`
+  block. This is the authoritative source; a reward that is not in these
+  files does not exist.
+- **Synced into `template_gym_reward`** by
+  `VideoService/scripts/shared/video_db_writer.py` (via
+  `VideoService/scripts/sql/insert_gym_reward.sql`), run by
+  `make -C VideoService sync-gyms`.
+- **Imported into `gym_rewards`** by the backend preset path,
+  `FastApiBackend/src/presets/sql/presets_insert_reward.sql` (which first
+  runs `presets_deactivate_rewards.sql`, so an import replaces rather than
+  stacks).
+- **Mirrored by the seed** — `Database/python_data/generators/rewards.py`
+  carries the combat-sports slice of that catalogue as literals (titles,
+  badges, point costs and image URLs copied verbatim) and samples
+  `REWARDS_PER_GYM` of them per gym, so a seeded gym is indistinguishable
+  from a gym that imported presets.
+
+**Never invent a seed-only reward.** The generator used to carry its own
+vocabulary (`Free T-Shirt`, `Private Lesson`, `Guest Pass`, `Protein Shake`,
+`Gym Bag`, `Competition Entry`, `Membership Extension`) — several of which
+implied product capabilities that do not exist, and none of which a real gym
+would ever see. That is precisely the demo-shaped data
+`FastApiBackend/CLAUDE.md` ("Domain builds") forbids: *presets/demos/imports
+go through the production write paths and produce production-shaped data*.
+This rule exists to keep the seed from re-growing a second reward vocabulary.
+
+**The seed mirrors as LITERALS, not a live read, and that is deliberate.**
+`Database/Makefile`'s `seed` target runs `python python_data/main.py` FIRST
+and `make -C ../VideoService sync-gyms` SECOND, so on a fresh
+`make reset && make seed` the `template_gym_reward` table is still empty when
+rewards are seeded — a live sample would produce zero rewards and zero
+redemptions. The generator's header comment names the source and says so; if
+that ordering is ever inverted, switch the generator to read
+`template_gym_reward` and delete the literals. **Until then, changing a
+reward in `VideoService/gyms/*.yaml` means updating the generator's mirror in
+the same change.**
+
+The preset catalogue's own shape: every gym gets **4 rewards** — three
+universal (`Bring a friend` Free/1000, `Club t-shirt` Free/1500,
+`1-on-1 PT session` 50% off/2500) plus **one discipline-specific gear item**
+at 25% off/2000 (`Boxing gloves` for boxing/mma/muay_thai/kickboxing/
+krav_maga, `BJJ gi`, `Jump rope`, `Water bottle`, …). It uses only
+`Free` / `25% off` / `50% off` as badges.
 
 ---
 
@@ -262,7 +348,12 @@ angle.
 
 - **Loyalty tab** (`CRM/lib/features/rewards/` — `RewardsBloc` +
   `RewardsRepository`): catalog CRUD (`reward_form_dialog.dart`,
-  `reward_delete_dialog.dart`) and the gym-wide approval queue.
+  `reward_delete_dialog.dart`) and the gym-wide approval queue. The form's
+  badge input is `presentation/widgets/value_badge_field.dart`
+  (`ValueBadgeField`) — quick-pick chips over the shared `FilterPills` plus
+  a 16-char-capped free-text field; the chips *reflect* the field (the
+  matching preset lights, a custom badge lights none) rather than
+  constraining it.
 - **Member page** (`CRM/lib/features/member_details/`): pending-approval
   actions and the redeem-for-member dialog
   (`redeem_reward_dialog.dart`), which surfaces the drain-to-zero warning
@@ -283,6 +374,15 @@ angle.
 - **Models/enums:** `Database/python_data/schema/gym_reward.py`,
   `member_reward_redemption.py` (`RewardRedemptionStatus`),
   `immutable_columns.py` (`GYM_REWARDS`, `MEMBER_REWARD_REDEMPTIONS`).
+- **The one reward catalogue (§1):** authored in `VideoService/gyms/*.yaml`
+  → synced to `template_gym_reward` by
+  `VideoService/scripts/shared/video_db_writer.py` +
+  `VideoService/scripts/sql/insert_gym_reward.sql` → imported to
+  `gym_rewards` by `FastApiBackend/src/presets/sql/presets_insert_reward.sql`
+  (+ `presets_deactivate_rewards.sql`, read via
+  `presets_load_template.sql`) → mirrored as literals by the seed generator
+  `Database/python_data/generators/rewards.py` (inserted by
+  `Database/python_data/bootstrap/rewards.py`).
 - **Backend domain:** `FastApiBackend/src/rewards/` — `rewards_router.py`;
   `service/rewards_service.py` (`RewardsService` — catalog CRUD, takes a
   `default_image_url` constructor arg, DI-wired from
