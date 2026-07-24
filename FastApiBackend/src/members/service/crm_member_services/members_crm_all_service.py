@@ -16,9 +16,11 @@ from src.members.schema.members_crm_members_list_schema import (
     MembersListFilters,
 )
 from src.members.service.crm_member_services.members_crm_base_service import (
+    DORMANT_SQL,
     CrmBaseViewService,
 )
 from src.members.service.members_status_mapping import (
+    is_member_dormant,
     is_membership_overdue,
 )
 from src.shared.formatters import format_price
@@ -57,8 +59,11 @@ class CrmAllViewService(CrmBaseViewService):
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
             SQL_DIR / "crm_views" / "all_view.sql",
-            {"where_clause": where},
+            {"where_clause": where, "is_dormant": DORMANT_SQL},
         )
+        # The badge always needs the dormancy flag, so the window is
+        # bound here whether or not the user filtered by dormant.
+        params["dormancy_days"] = self._dormancy_days
         query = text(sql)
 
         result = await session.execute(query, params)
@@ -162,8 +167,18 @@ class CrmAllViewService(CrmBaseViewService):
         status = CrmMemberStatus(row["status"])
         next_due = row.get("next_due_date")
 
+        # Badge precedence: overdue > frozen > dormant > trial > active.
+        # frozen needs no branch — it is already the row's raw status, so
+        # falling through leaves it in place, and is_member_dormant
+        # refuses to overwrite it. dormant deliberately beats trial: a
+        # dormant member holds a trial / one_time pack by definition, so
+        # the two always collide, and "Trial" is the least honest label
+        # for someone who bought a pack and then vanished. See
+        # DORMANT_YIELDS_TO in members_status_mapping.
         if is_membership_overdue(status, next_due, today):
             status = CrmMemberStatus.overdue
+        elif is_member_dormant(status, row.get("is_dormant")):
+            status = CrmMemberStatus.dormant
         elif row.get("plan_type") == PlanType.trial:
             status = CrmMemberStatus.trial
 

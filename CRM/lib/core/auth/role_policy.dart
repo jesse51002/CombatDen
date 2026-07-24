@@ -33,6 +33,11 @@ extension RolePolicy on EmployeeRole {
   bool get canEditSchedule => _isStaffAdmin;
   bool get canBulkReprice => _isStaffAdmin;
   bool get canRemovePayerLink => _isStaffAdmin;
+  // Download the gym's records as zipped CSVs (the Settings → Reports & exports
+  // section, backed by the owner/admin-only backend report + full-export
+  // routes). Its own capability, not [canManageGymSettings]: front desk reaches
+  // the Settings screen for appearance / QR but must never see this section.
+  bool get canExportReports => _isStaffAdmin;
   // The Dashboard's overview / financial cards (the Total Members hero now, a
   // gym-income module later) — owner/admin only, even though front desk can
   // reach the Dashboard itself for its operational cards ([canViewDashboard]).

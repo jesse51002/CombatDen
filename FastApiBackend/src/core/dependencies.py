@@ -39,6 +39,8 @@ from src.classes.service.classes_versions_service import (
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
 from src.employees.service.employees_service import EmployeesService
+from src.growth.service.growth_compute_service import GrowthComputeService
+from src.growth.service.growth_service import GrowthService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
@@ -126,6 +128,10 @@ from src.reconciler.service.reconciler.reconciler_stale_task_sweep import (
 from src.reconciler.service.reconciler.reconciler_subscription_orphan_sweep import (
     SubscriptionOrphanSweep,
 )
+from src.reports.service.reports_full_export_service import (
+    ReportsFullExportService,
+)
+from src.reports.service.reports_period_service import ReportsPeriodService
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -216,9 +222,11 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.main",
             "src.checkin.checkin_router",
             "src.classes.classes_router",
+            "src.growth.growth_router",
             "src.gyms.gyms_router",
             "src.members.members_router",
             "src.ranks.ranks_router",
+            "src.reports.reports_router",
             "src.rewards.rewards_router",
             "src.waivers.waivers_router",
             "src.employees.employees_router",
@@ -414,6 +422,17 @@ class DependencyInjector(containers.DeclarativeContainer):
         default_image_url=settings.default_reward_image_url,
     )
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
+
+    # Reports & CSV exports: two read-only zip builders (period report + full
+    # raw export). No Stripe, no writes — just gym-scoped reads.
+    reports_period_service = providers.Factory(
+        ReportsPeriodService,
+        db_pool=db_pool,
+    )
+    reports_full_export_service = providers.Factory(
+        ReportsFullExportService,
+        db_pool=db_pool,
+    )
 
     # Ranks: a thin facade over four concern services. RanksPresets
     # composes RanksMembers for the shared lowest-rank backfill (seeding a
@@ -834,10 +853,12 @@ class DependencyInjector(containers.DeclarativeContainer):
     crm_members_list_service = providers.Factory(
         CrmMembersListService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
     crm_total_counts_service = providers.Factory(
         CrmTotalCountsService,
         db_pool=db_pool,
+        dormancy_days=settings.member_dormancy_days,
     )
 
     # ── Members billing/management ───────────────────────────────
@@ -949,6 +970,20 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         subscription_service=payments_subscription_service,
     )
+    # ── Growth metrics ───────────────────────────────────────────
+    # Read path: pure cache read, no compute. Write path: the scheduled
+    # sweep, guarded across app instances by the generic resource lock.
+    growth_service = providers.Factory(GrowthService, db_pool=db_pool)
+    growth_compute_service = providers.Factory(
+        GrowthComputeService,
+        db_pool=db_pool,
+        resource_lock=resource_lock,
+        dormancy_days=settings.member_dormancy_days,
+        at_risk_days=settings.growth_at_risk_days,
+        lock_key=settings.growth_compute_lock_key,
+        lock_ttl_seconds=settings.growth_compute_lock_ttl_seconds,
+    )
+
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,

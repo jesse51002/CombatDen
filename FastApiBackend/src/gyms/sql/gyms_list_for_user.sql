@@ -13,6 +13,7 @@
 -- WHERE is_sso_user = false, so a join could match several rows and
 -- duplicate the gym. EXISTS cannot fan out.
 SELECT g.gym_id,
+       g.created_at,
        g.gym_name,
        g.gym_description,
        g.timezone,

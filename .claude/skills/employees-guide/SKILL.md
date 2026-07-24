@@ -85,6 +85,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Dashboard — operational cards (live attendance, overdue payments, upcoming classes) | ✅ | ✅ | ✅ | ❌ |
 | Dashboard — overview/income cards (Total Members hero now, gym-income module later) | ✅ | ✅ | ❌ | ❌ |
 | Growth / analytics | ✅ | ✅ | ❌ | ❌ |
+| Reports & CSV exports (Settings section; `GET /gyms/{id}/reports/report` + `/reports/full-export` zips — `canExportReports`, backend `OWNER_ADMIN`) | ✅ | ✅ | ❌ | ❌ |
 | Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
 | Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
 | Member-app theme/showcase — CHANGE the theme (`PUT /gyms/{id}/theme`) | ✅ | ✅ | ❌ | ❌ |
@@ -141,11 +142,13 @@ member's app can re-theme), plus their own theme preference — nothing else. A 
 
 - **Backend**: every route names the exact role set it admits (`OWNER_ONLY` / `OWNER_ADMIN` / `STAFF` /
   `ALL_EMPLOYEES` or a custom `frozenset[EmployeeType]`, passed to `Auth.verify_roles` — see §5).
-  **Two matrix rows have no backend counterpart and cannot have one: "Dashboard — overview/income" and
-  "Growth / analytics" are CRM-NAVIGATION gates only.** There is no owner/admin-only endpoint behind
-  either — front desk legitimately reads the same numbers from `GET /api/v1/members/counts` (`STAFF`)
-  for its own dashboard cards, and the CRM's `growth/` surface makes no backend calls at all
-  (`lib/features/growth/data/mock_growth.dart`). Don't go looking for a backend gate there.
+  **The Growth page and the Dashboard's revenue cards ARE backend-gated: `GET /api/v1/growth/` is
+  `OWNER_ADMIN` (`growth_router.py`), so front desk can't pull a gym's growth metrics even by calling the
+  endpoint directly.** The CRM `growth/` surface is a live bloc/repository feature reading that endpoint,
+  and the Dashboard's revenue hero card reads the SAME endpoint — so `canViewGymAnalytics` (owner/admin)
+  is a CRM-navigation mirror of a real `OWNER_ADMIN` gate, not a client-only fiction. Front desk's
+  OPERATIONAL Dashboard cards (live attendance, overdue payments, upcoming classes) read their own
+  `STAFF`-gated endpoints instead — e.g. `GET /api/v1/members/counts` (`STAFF`) — never the growth endpoint.
 - **CRM**: `RolePolicy` extension on `EmployeeRole` (`CRM/lib/core/auth/role_policy.dart`) exposes one
   boolean getter per capability (`canManageStaff`, `canViewDashboard`, `canCreateMembers`, …), each keyed
   to a tier. Nav, route access, and section visibility all read these getters — **nothing hard-codes a
