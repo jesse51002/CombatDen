@@ -7,7 +7,7 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
-/// The glance's system footer (mockup `.glance-foot`): a hairline, the
+/// The glance's system footer: a hairline, the
 /// "Back to start in Ns" auto-return countdown over a draining track, and a
 /// visible Done button that returns home early. A tap anywhere else on the
 /// glance opens the "Get the app" modal (wired at the glance surface); Done is

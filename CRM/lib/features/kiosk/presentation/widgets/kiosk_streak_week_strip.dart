@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// Monday-first day labels for the week strip (mockup `.week-strip`):
+/// Monday-first day labels for the week strip:
 /// Mon Tue Wed Thu Fri Sat Sun.
 const List<String> _kWeekLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 

@@ -12,9 +12,8 @@ class KioskShowcaseSlide {
   const KioskShowcaseSlide({required this.title, required this.body});
 }
 
-/// A slide's centred stack: its content over the muted one-line caption
-/// (mockup `.slide`/`.slide-copy`). [caption] is optional — the rewards slide
-/// speaks for itself.
+/// A slide's centred stack: its content over the muted one-line caption.
+/// [caption] is optional — the rewards slide speaks for itself.
 ///
 /// Every slide's content is the gym's REAL data. There is deliberately no
 /// "nothing to show" variant here: a slide the kiosk cannot back up is never

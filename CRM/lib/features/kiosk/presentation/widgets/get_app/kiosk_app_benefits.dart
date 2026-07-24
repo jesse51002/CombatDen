@@ -3,9 +3,9 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The app card's three value props (mockup `.app-benefits`) — a centered wrap
-/// of sapphire-checked items. Deliberately the SAME three the showcase panel
-/// rotates through, so the card states the promise and the slideshow shows it.
+/// The app card's three value props — a centered wrap of sapphire-checked
+/// items. Deliberately the SAME three the showcase panel rotates through,
+/// so the card states the promise and the slideshow shows it.
 class KioskAppBenefits extends StatelessWidget {
   const KioskAppBenefits({super.key});
 

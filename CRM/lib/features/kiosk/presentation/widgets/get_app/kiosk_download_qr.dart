@@ -5,9 +5,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 
-/// The REAL, scannable app-download QR (mockup `.dl-qr`): a live `qr_flutter`
-/// code encoding [data], framed in the shared [KioskQrFrame] with the brand
-/// glyph badged over its centre (`.dl-badge`).
+/// The REAL, scannable app-download QR: a live `qr_flutter` code encoding
+/// [data], framed in the shared [KioskQrFrame] with the brand glyph badged
+/// over its centre.
 ///
 /// The modules are pinned to [DesignConstants.kioskQrModule] on
 /// [DesignConstants.kioskQrQuietZone] — fixed dark-on-white in BOTH themes,

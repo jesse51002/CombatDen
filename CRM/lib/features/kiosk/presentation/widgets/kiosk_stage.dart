@@ -2,17 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The centered, max-width content stage every kiosk sub-screen sits in —
-/// mirrors the mockup `.stage` (centered column capped at a content width, on
-/// the kiosk ground). Scrolls when the content is taller than the viewport so
-/// nothing is ever clipped on a short iPad fold; otherwise [center] decides
-/// whether the content sits centered (result screens) or top-aligned (home /
-/// class pick).
+/// The centered, max-width content stage every kiosk sub-screen sits in — a
+/// centered column capped at a content width, on the kiosk ground. Scrolls
+/// when the content is taller than the viewport so nothing is ever clipped on
+/// a short iPad fold; otherwise [center] decides whether the content sits
+/// centered (result screens) or top-aligned (home / class pick).
 ///
-/// A [footer] is PINNED to the bottom of the fold and the content scrolls
-/// beneath it (mockup: `.class-grid{ overflow:auto }` under a fixed
-/// `.escape-foot`). That is the whole point for the escape hatch: a way out
-/// that a tall class grid can push below the fold is not a way out. Without a
+/// A [footer] is PINNED to the bottom of the fold while the content scrolls
+/// beneath it. That is the whole point for the escape hatch: a way out that a
+/// tall class grid can push below the fold is not a way out. Without a
 /// footer the stage keeps its plain scroll-the-whole-thing behaviour, so no
 /// existing screen changes.
 class KioskStage extends StatelessWidget {

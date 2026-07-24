@@ -14,11 +14,11 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 /// half, split by a vertical "or" seam — then the lower-emphasis "New here?
 /// Sign up" entry, and last the full-width [KioskAdoptStrip]. Full-viewport on
 /// the iPad, so it fills the kiosk stage's width rather than a narrow dialog
-/// measure (mockup `home` screen).
+/// measure.
 ///
 /// [KioskHomeColumns] lays the two halves out as shared head / body bands, so
 /// the QR and the search field are co-centred while the two headings stay
-/// top-aligned — see its doc for why that departs from the mockup.
+/// top-aligned — see its doc for why that departs from an earlier design.
 ///
 /// **The adopt strip SPANS both columns instead of sitting inside one.**
 /// Getting the app is a property of the whole screen, so it never belonged in

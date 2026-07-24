@@ -9,10 +9,10 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 /// wearing the kiosk display scale instead of the admin defaults, plus the
 /// kiosk-only ghost (escape) tier.
 ///
-/// The kiosk is read and pressed from standing distance, so its labels and hit
-/// boxes run a step larger (mockup `.btn-primary` 19px / 18x34,
-/// `.btn-outline` 17px / 15x30, `.btn-ghost` 17px / 13x18) than the
-/// 13px / 16x8 admin buttons. These wrappers are the ONLY place those tokens
+/// The kiosk is read and pressed from standing distance, so its labels and
+/// hit boxes run a step larger (19px / 18x34 primary, 17px / 15x30 outline,
+/// 17px / 13x18 ghost) than the 13px / 16x8 admin buttons. These wrappers
+/// are the ONLY place those tokens
 /// are applied: every kiosk button goes through them, so the whole set scales
 /// together and can never desync, and no kiosk call site ever restates a size.
 /// The admin surfaces keep the base buttons untouched.
@@ -83,8 +83,8 @@ class KioskOutlineButton extends StatelessWidget {
   }
 }
 
-/// The kiosk's ESCAPE tier (mockup `.btn-ghost`) — no border, no fill, a muted
-/// label behind a back chevron. The quietest rung of the ladder, and the only
+/// The kiosk's ESCAPE tier — no border, no fill, a muted label behind a
+/// back chevron. The quietest rung of the ladder, and the only
 /// one used for LEAVING a flow: an escape hatch must be findable without ever
 /// competing with the action the member came to take.
 ///

@@ -50,10 +50,10 @@ class ClassCard extends StatelessWidget {
   final bool large;
 
   /// KIOSK type scale (name 22, captions 16/15) — the member self-serve iPad,
-  /// read from ~2m, where a card sits under a 40px screen title. It reads the
-  /// kiosk ramp in `DesignConstants` (mockup `.class-name` / `.class-when` /
-  /// `.class-coach .nm` / `.pill`), so the card's type moves with the rest of
-  /// the kiosk instead of staying at the admin scale under a kiosk headline.
+  /// read from ~2m, where a card sits under a 40px screen title. It reads
+  /// the kiosk ramp in `DesignConstants`, so the card's type moves with the
+  /// rest of the kiosk instead of staying at the admin scale under a kiosk
+  /// headline.
   /// Wins over [large] when both are set. Off by default: every admin surface
   /// keeps its existing dense / roomy sizes untouched.
   final bool kiosk;

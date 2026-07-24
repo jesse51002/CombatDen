@@ -30,7 +30,7 @@ String kioskGetAppTitle(String? gymName) {
   return name == null ? 'Get the App' : 'Get the $name App';
 }
 
-/// The home QR half's quiet adoption line (mockup `.qr-adopt .app-line`).
+/// The home QR half's quiet adoption line.
 String kioskAppStoreLine(String? gymName) {
   final name = kioskGymName(gymName);
   return name == null

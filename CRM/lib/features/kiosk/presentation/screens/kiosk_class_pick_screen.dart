@@ -11,8 +11,7 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// The chosen member's today-classes screen: a greeting head over the grid of
-/// classes open for check-in right now, closed by the escape foot. Mirrors the
-/// mockup class-pick screen.
+/// classes open for check-in right now, closed by the escape foot.
 ///
 /// The escape is load-bearing, not decoration: a member who taps the WRONG
 /// name on home lands here, and without it there is no way back — they are

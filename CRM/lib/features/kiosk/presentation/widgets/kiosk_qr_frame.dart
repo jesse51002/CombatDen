@@ -8,8 +8,8 @@ import 'package:crm/core/constants/design_constants.dart';
 /// would vanish on this always-white tile.
 const double _kQuietZoneHairlineAlpha = 0.09;
 
-/// The white tile every kiosk QR sits in (mockup `.qr-frame`): a fixed quiet
-/// zone, a hairline, the soft card lift, and a rounded corner.
+/// The white tile every kiosk QR sits in: a fixed quiet zone, a hairline,
+/// the soft card lift, and a rounded corner.
 ///
 /// **Deliberately theme-independent.** A QR's contrast is functional, not
 /// decorative — scanners expect dark modules on a light quiet zone and many
@@ -18,8 +18,8 @@ const double _kQuietZoneHairlineAlpha = 0.09;
 /// `surface`. It is the ONE place that treatment lives; a QR surface elsewhere
 /// in the kiosk composes this rather than restating the colours.
 ///
-/// Pass [accent] for the download QR's sapphire-tinted border (mockup
-/// `.qr-frame.download`); the neutral hairline is the default.
+/// Pass [accent] for the download QR's sapphire-tinted border; the neutral
+/// hairline is the default.
 class KioskQrFrame extends StatelessWidget {
   final Widget child;
   final bool accent;

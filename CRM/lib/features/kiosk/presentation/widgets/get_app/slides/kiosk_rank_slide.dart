@@ -32,7 +32,7 @@ class KioskRankStep {
 /// member is known, or a member with no rank assigned — simply leaves every
 /// rung untagged: the ladder still markets the belt journey, and no rung is
 /// guessed. Sub-ranks are deliberately not drawn: the ladder is the gym's
-/// MAIN progression, which is what the mockup's belt strip shows.
+/// MAIN progression.
 List<KioskRankStep> kioskRankSteps(
   List<MainRank> ladder, {
   String? currentRankId,
@@ -47,17 +47,17 @@ List<KioskRankStep> kioskRankSteps(
     ];
 
 /// Slide 4 — "Track rank": the gym's belt ladder with the member's current
-/// rung called out (mockup `.belt-strip`).
+/// rung called out.
 ///
 /// **Conditional.** It renders only for a gym that really runs ranks — the
 /// cubit reads the gym's rank-enabled flag AND its ladder at kiosk entry, and
 /// either coming up short omits the slide (and its dot), so a no-ranks gym
 /// never sees belts.
 ///
-/// The mockup's progress bar ("14 / 25 classes to Purple") is deliberately NOT
-/// drawn: the kiosk holds no promotion-progress data, and a bar filled with an
-/// invented fraction is exactly the fabricated member data this screen must
-/// not show. Add it when real progress is available.
+/// A promotion-progress bar ("14 / 25 classes to Purple") is deliberately
+/// NOT drawn: the kiosk holds no promotion-progress data, and a bar filled
+/// with an invented fraction is exactly the fabricated member data this
+/// screen must not show. Add it when real progress is available.
 class KioskRankSlide extends StatelessWidget {
   final List<KioskRankStep> ladder;
 

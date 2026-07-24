@@ -18,9 +18,9 @@ const double _kThumbAspect = 16 / 9;
 /// **Data source: the gym's REAL classes.** The rows render
 /// [EffectiveClassInstance]s the flow already loaded for this member (today's
 /// occurrences open for check-in) — real class names, real gym-local start
-/// times, real class images. Nothing here is invented; the mockup's "Muay Thai
-/// Fundamentals / Boxing Conditioning" rows are demo content that on a
-/// member-facing kiosk would read as this gym's schedule.
+/// times, real class images. Nothing here is invented: demo placeholder
+/// class names ("Muay Thai Fundamentals" / "Boxing Conditioning") would, on a
+/// member-facing kiosk, read as this gym's actual schedule.
 ///
 /// The slide is only built when the flow really holds classes — from the idle
 /// home, before any member picked one, there are none and the slide is omitted
@@ -54,7 +54,7 @@ class KioskClassesSlide extends StatelessWidget {
   }
 }
 
-/// One class as the app's booking row (mockup `.bc-row`).
+/// One class as the app's booking row.
 class _BookRow extends StatelessWidget {
   final EffectiveClassInstance occurrence;
 

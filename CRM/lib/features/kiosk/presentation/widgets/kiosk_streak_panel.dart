@@ -7,9 +7,9 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_week_strip.
 import 'package:crm/shared/widgets/animation/count_up_text.dart';
 import 'package:crm/shared/widgets/measured_max_width.dart';
 
-/// The glance's left half — a replica of the member app's resting streak state
-/// (mockup `.streak`): the big sapphire week numeral over "week streak", a
-/// keep-it-alive note, and the Monday→Sunday week strip. Vertically centred in
+/// The glance's left half — a replica of the member app's resting streak
+/// state: the big sapphire week numeral over "week streak", a keep-it-alive
+/// note, and the Monday→Sunday week strip. Vertically centred in
 /// its panel like the app's resting composition.
 ///
 /// The numeral ROLLS UP to [weeks] on the member app's own odometer

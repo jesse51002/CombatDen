@@ -7,8 +7,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 
 /// The "Scan with app" half of the kiosk home, as the two slots the home's
-/// band layout places (mockup `.home-panel`): the section head, and the QR tile
-/// that floats in the flexible middle (`.qr-wrap`).
+/// band layout places: the section head, and the QR tile that floats in the
+/// flexible middle.
 ///
 /// The QR is a static visual placeholder — the live check-in nonce is Phase G,
 /// so it renders but does nothing.

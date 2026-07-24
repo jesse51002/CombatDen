@@ -6,8 +6,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_exit_lock.dart';
 import 'package:crm/shared/widgets/navigation/gym_logo.dart';
 
 /// The persistent kiosk header: gym identity on the left, the discreet
-/// staff-exit lock on the right, a hairline beneath — the mockup's
-/// `.kiosk-header`. Fixed above the swapping sub-screen body.
+/// staff-exit lock on the right, a hairline beneath. Fixed above the
+/// swapping sub-screen body.
 class KioskHeader extends StatelessWidget {
   const KioskHeader({super.key});
 

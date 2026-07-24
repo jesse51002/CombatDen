@@ -9,9 +9,9 @@ const double _kActiveDotWidth = DesignConstants.spacingBig;
 /// How long a dot takes to stretch / relax between slides.
 const Duration _kDotMorph = Duration(milliseconds: 300);
 
-/// The showcase's clickable dot pager (mockup `.showcase-dots`): a muted dot
-/// per slide, the active one stretched into a sapphire capsule. Tapping a dot
-/// jumps to that slide and restarts the dwell.
+/// The showcase's clickable dot pager: a muted dot per slide, the active one
+/// stretched into a sapphire capsule. Tapping a dot jumps to that slide and
+/// restarts the dwell.
 class KioskShowcaseDots extends StatelessWidget {
   final List<String> labels;
   final int index;

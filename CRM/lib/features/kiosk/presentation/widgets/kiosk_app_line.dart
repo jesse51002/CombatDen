@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// The muted "get / use the app" line — a tiny brand glyph beside a soft
-/// caption (mockup `.app-line`). A calm nudge, never a loud CTA.
+/// caption. A calm nudge, never a loud CTA.
 class KioskAppLine extends StatelessWidget {
   final String text;
 

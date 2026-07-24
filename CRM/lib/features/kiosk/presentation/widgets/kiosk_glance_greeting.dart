@@ -6,8 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 
 /// The glance's confirmation — a filled green check disc beside ONE
-/// kiosk-scale statement naming the class the member is now checked into
-/// (mockup `.glance-top`).
+/// kiosk-scale statement naming the class the member is now checked into.
 ///
 /// **One line, and it is a fact.** At this instant the member wants to know
 /// whether it worked and into what; a congratulatory "Nice one, Marcus." above

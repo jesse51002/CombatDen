@@ -31,7 +31,7 @@ class _MockKioskFlowCubit extends MockCubit<KioskFlowState>
 /// The post-check-in glance is the member-facing money screen. This proves it
 /// lays out at iPad-landscape size with no exception (the greeting + two
 /// `IntrinsicHeight` panels + reward grid + footer interplay is the fragile
-/// part), renders the mockup's copy, and splits reward tiles into READY (a
+/// part), renders the expected copy, and splits reward tiles into READY (a
 /// filled disc) vs IN-PROGRESS (a ring) purely from the points balance.
 void main() {
   final createdAt = DateTime.utc(2026, 1, 1);

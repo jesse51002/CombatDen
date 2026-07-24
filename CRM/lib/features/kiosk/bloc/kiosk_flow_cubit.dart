@@ -28,7 +28,7 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// A member must type at least this many characters before a name search runs.
 const int kKioskSearchMinChars = 2;
 
-/// How many name matches the search shows (the mockup lists a short list).
+/// How many name matches the search shows — a short, scannable list.
 const int kKioskSearchResultCount = 8;
 
 /// Debounce before a keystroke fires the name-search fetch.
@@ -78,8 +78,8 @@ const Duration kKioskGlanceLastBeat = Duration(milliseconds: 2220);
 /// a gym with more rewards surfaces the nearest few, the rest live in the app.
 const int kKioskGlanceRewardCount = 4;
 
-/// How many of this gym's own videos the "Watch videos" showcase slide shows
-/// (mockup `.vc-grid` is a two-card row). Only this many are fetched.
+/// How many of this gym's own videos the "Watch videos" showcase slide
+/// shows — a two-card row. Only this many are fetched.
 const int kKioskShowcaseVideoCount = 2;
 
 /// How long the "Get the app" modal (UX-5) stays open before it auto-closes

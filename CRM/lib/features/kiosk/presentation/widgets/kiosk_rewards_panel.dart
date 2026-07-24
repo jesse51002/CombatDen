@@ -14,8 +14,8 @@ import 'package:crm/shared/widgets/fill_grid.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The glance's right half — the member's points balance + the just-earned
-/// delta over the image-first reward tiles, always closing on a calm app nudge
-/// (mockup `.rewards`). The nudge never disappears: with rewards it points at
+/// delta over the image-first reward tiles, always closing on a calm app
+/// nudge. The nudge never disappears: with rewards it points at
 /// redemption, without them (or a failed catalog fetch) it points at booking,
 /// so a no-rewards gym's glance isn't a lone "YOUR POINTS" eyebrow over empty
 /// space. Degrades gracefully otherwise: a null [pointsBalance] (billing fetch

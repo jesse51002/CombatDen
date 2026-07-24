@@ -55,7 +55,7 @@ class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 /// sign-up entry below it, and a full-width app-adoption strip closing the
 /// screen. This proves it renders at iPad-landscape size with no layout
 /// exception — the seam + `IntrinsicHeight` + stretch interplay is the fragile
-/// part — and that the mockup's copy is on screen.
+/// part — and that the expected copy is on screen.
 void main() {
   late KioskFlowCubit cubit;
 
@@ -174,10 +174,11 @@ void main() {
       final qrCenter = tester.getRect(find.byType(KioskQrFrame)).center.dy;
       final fieldCenter = tester.getRect(find.byType(AppSearchBox)).center.dy;
 
-      // The founder-approved departure from the mockup: the two bodies share
-      // one flexible band, so they land on the SAME centre — the QR half's
-      // adoption footer no longer drags the field below the code. Exact, not
-      // a tolerance: nothing in the layout is measured or pixel-pinned.
+      // The founder-approved departure from an earlier layout: the two
+      // bodies share one flexible band, so they land on the SAME centre —
+      // the QR half's adoption footer no longer drags the field below the
+      // code. Exact, not a tolerance: nothing in the layout is measured or
+      // pixel-pinned.
       expect(fieldCenter, moreOrLessEquals(qrCenter, epsilon: 0.5));
     });
 

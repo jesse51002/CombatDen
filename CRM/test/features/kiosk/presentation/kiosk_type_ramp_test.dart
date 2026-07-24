@@ -6,13 +6,13 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Structural guards on the kiosk type ramp.
 ///
 /// The bug these exist to catch: a pass that re-scales SOME kiosk roles and
-/// leaves the rest on the admin ramp. That is how the "Get it" button's label
-/// ended up bigger than the copy around it — the buttons had been lifted to
-/// the mockup's kiosk sizes while the labels stayed at admin scale. The
-/// mockup's ramp is internally proportional; ours only stays proportional if
-/// the whole ladder moves as a SET, so these tests assert the ORDER rather
-/// than any one number, and a half-finished future change fails here instead
-/// of on a kiosk in a gym.
+/// leaves the rest on the admin ramp. That is how the "Get it" button's
+/// label ended up bigger than the copy around it — the buttons had been
+/// lifted to kiosk sizes while the labels stayed at admin scale. The ramp is
+/// internally proportional; it only stays proportional if the whole ladder
+/// moves as a SET, so these tests assert the ORDER rather than any one
+/// number, and a half-finished future change fails here instead of on a
+/// kiosk in a gym.
 ///
 /// The ladder itself, and what each role is for, is documented on the ramp
 /// comment in `design_constants.dart`.
@@ -59,10 +59,9 @@ void main() {
     testWidgets(
       'section head > subtitle > outline button label > app line',
       (tester) async {
-        // The exact chain the founder called out: a heading must out-size the
-        // copy under it, and a BUTTON must never out-size either. Mockup
-        // `.sub-title` 21 / `.screen-head .sub` 18 / `.btn-outline` 17 /
-        // `.app-line` 15.
+        // The exact chain the founder called out: a heading must out-size
+        // the copy under it, and a BUTTON must never out-size either:
+        // section head 21 / subtitle 18 / outline button 17 / app line 15.
         final head = size(DesignConstants.kioskTitle);
         final subtitle = size(DesignConstants.kioskSubtitle);
         final outlineLabel = size(DesignConstants.kioskButtonOutlineLabel);
@@ -88,7 +87,7 @@ void main() {
         expect(outlineLabel, lessThan(size(heading)));
         expect(ghostLabel, lessThan(size(heading)));
       }
-      // The pair keeps its own order too (the mockup pairs 19 with 17).
+      // The pair keeps its own order too (primary 19, outline 17).
       expect(primaryLabel, greaterThan(outlineLabel));
     });
 
@@ -112,7 +111,7 @@ void main() {
     });
 
     testWidgets('the whole ladder descends, largest first', (tester) async {
-      // Ties are legal (the mockup genuinely sizes some roles alike); an
+      // Ties are legal (some roles are genuinely sized alike by design); an
       // INVERSION is not — that is a role that moved on its own.
       final steps = ladder();
       final names = steps.keys.toList();

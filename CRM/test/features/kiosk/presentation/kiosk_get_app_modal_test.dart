@@ -509,8 +509,8 @@ void main() {
         (tester) async {
       await pumpModal(tester);
 
-      // The mockup's demo rows/rewards/videos/belts must never ship as if they
-      // were real, and no stand-in slide takes their place.
+      // Demo placeholder rows/rewards/videos/belts must never ship as if
+      // they were real, and no stand-in slide takes their place.
       expect(find.text('Muay Thai Fundamentals'), findsNothing);
       expect(find.text('Bring a friend'), findsNothing);
       expect(find.text('Clinch control fundamentals'), findsNothing);

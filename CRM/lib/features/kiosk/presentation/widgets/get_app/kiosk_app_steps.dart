@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The two numbered sign-in steps under the download QR (mockup `.app-steps`).
+/// The two numbered sign-in steps under the download QR.
 ///
 /// Step 2 shows the member's own address as a mono chip ONLY when the kiosk
 /// actually knows it ([memberEmail] non-empty) — i.e. after a check-in, where
@@ -90,8 +90,8 @@ class _StepNumber extends StatelessWidget {
   }
 }
 
-/// The member's own sign-in address, set apart as a mono chip so it reads as a
-/// literal value to copy, not prose (mockup `.step-email`).
+/// The member's own sign-in address, set apart as a mono chip so it reads as
+/// a literal value to copy, not prose.
 class _EmailChip extends StatelessWidget {
   final String email;
 

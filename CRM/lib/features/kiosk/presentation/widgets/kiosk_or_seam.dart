@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The vertical "or" seam between the two home halves — a full-height hairline
-/// rule with a small round "or" badge centered on it (mockup `.home-seam` /
-/// `.seam-badge`). Vertical because the two halves sit side by side.
+/// The vertical "or" seam between the two home halves — a full-height
+/// hairline rule with a small round "or" badge centered on it. Vertical
+/// because the two halves sit side by side.
 ///
-/// The rule is `Positioned.fill` (mirroring the mockup's absolutely-positioned
-/// `::before`) so it fills whatever height the taller half sets without ever
-/// claiming its own height — only the finite badge drives the seam's size, so
-/// the parent's stretch/IntrinsicHeight resolve cleanly. The ground-colored
-/// badge breaks the rule at its middle.
+/// The rule is `Positioned.fill` so it fills whatever height the taller half
+/// sets without ever claiming its own height — only the finite badge drives
+/// the seam's size, so the parent's stretch/IntrinsicHeight resolve cleanly.
+/// The ground-colored badge breaks the rule at its middle.
 class KioskOrSeam extends StatelessWidget {
   const KioskOrSeam({super.key});
 

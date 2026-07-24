@@ -19,10 +19,10 @@ const double _kRewardImageAspect = 1.5;
 const double _kRingStrokeRatio = 0.16;
 
 /// One reward as the glance's image-first tile — a 1:1 rebuild of the member
-/// app reward card's anatomy (`RewardImageHero` + `RewardPriceTag` + the fixed
-/// two-line title slot + a brand points line) against `DesignConstants`, with
-/// the store card's Redeem CTA replaced by the kiosk STATUS row (mockup
-/// `.reward` / `.reward.ready`):
+/// app reward card's anatomy (`RewardImageHero` + `RewardPriceTag` + the
+/// fixed two-line title slot + a brand points line) against
+/// `DesignConstants`, with the store card's Redeem CTA replaced by the kiosk
+/// STATUS row:
 ///   * affordable (`balance >= cost`): "{cost} pts" + a filled ready disc, and
 ///     the tile gains the brand accent border.
 ///   * in progress (`balance < cost`): "{balance} / {cost}" + a progress ring.
@@ -179,8 +179,8 @@ class _PriceTag extends StatelessWidget {
   }
 }
 
-/// The kiosk status row — the points line with its trailing indicator stacked
-/// below it (a fixed position across tiles), mockup `.reward-status`.
+/// The kiosk status row — the points line with its trailing indicator
+/// stacked below it (a fixed position across tiles).
 class _RewardStatus extends StatelessWidget {
   final int cost;
   final int? balance;
@@ -221,7 +221,7 @@ class _RewardStatus extends StatelessWidget {
   }
 }
 
-/// "{balance} / {cost}" — numerator bold, both brand-coloured (mockup `.frac`).
+/// "{balance} / {cost}" — numerator bold, both brand-coloured.
 class _FractionText extends StatelessWidget {
   final int balance;
   final int cost;

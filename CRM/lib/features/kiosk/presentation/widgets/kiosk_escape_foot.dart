@@ -6,7 +6,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
-/// The way OUT of an in-progress flow (mockup `.escape-foot`): a hairline band
+/// The way OUT of an in-progress flow: a hairline band
 /// closing the screen, carrying a single ghost-tier button exiled to the LEFT
 /// gutter — far from the primary action and far from the tappable content, in
 /// the same place on every screen that has one. The reach cost is the point:

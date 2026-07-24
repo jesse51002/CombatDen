@@ -10,9 +10,9 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart'
 import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/measured_max_width.dart';
 
-/// The "Name search" half of the kiosk home, as the two slots the home's band
-/// layout places (mockup `.home-panel`): the section head, and the live search
-/// field + result list that floats in the flexible middle (`.search-wrap`).
+/// The "Name search" half of the kiosk home, as the two slots the home's
+/// band layout places: the section head, and the live search field + result
+/// list that floats in the flexible middle.
 /// Neither half has a footer: the app-adoption strip spans the whole screen
 /// below the columns rather than closing one of them, so this half has no
 /// weight to answer and both bodies share one flexible band.

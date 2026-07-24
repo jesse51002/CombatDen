@@ -13,8 +13,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_rewards_panel.dart
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
-/// The post-check-in retention "glance" — the member-facing money screen shown
-/// once a check-in is recorded (mockup `glance` / `claim`). A one-line
+/// The post-check-in retention "glance" — the member-facing money screen
+/// shown once a check-in is recorded. A one-line
 /// confirmation over two panels — the streak (left) and the points + reward
 /// tiles (right) — with an auto-return timer + Done below. A tap anywhere
 /// returns home (wired at the kiosk surface). Its data (streak + earned points

@@ -119,8 +119,8 @@ void main() {
       'beneath it, never past it', (tester) async {
     // The whole point of an escape hatch is that it is reachable without
     // hunting. A stage that scrolled the foot away with the content would
-    // strand exactly the flustered member it exists for. The mockup pins it
-    // (`.class-grid{ overflow:auto }` under a fixed `.escape-foot`).
+    // strand exactly the flustered member it exists for. The stage pins the
+    // foot and scrolls only the content beneath it.
     final many = [
       for (var i = 0; i < 6; i++)
         EffectiveClassInstance(

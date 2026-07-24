@@ -185,8 +185,8 @@ tracking; body stays neutral.
 - **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
 **The kiosk ramp** (`kiosk*`, 19 roles, 112 → 11px): the member self-serve kiosk (a supervised
-iPad) is read from ~2m, so it runs a **complete second ramp** transcribed from the approved
-mockup rather than borrowing the admin ramp for its smaller text — `kioskStreakNum` 112 ·
+iPad) is read from ~2m, so it runs a **complete second ramp** with its own dedicated sizes
+rather than borrowing the admin ramp for its smaller text — `kioskStreakNum` 112 ·
 `kioskDisplay` 40 · `kioskMetric` 30 · `kioskPanelTitle` 25 · `kioskStatement` 22 ·
 `kioskFieldText` 22 · `kioskTitle` 21 · `kioskButtonPrimaryLabel` 19 · `kioskName` 19 ·
 `kioskSubtitle` 18 · `kioskButtonOutlineLabel` 17 · `kioskBody` 17 · `kioskLabel` 16 ·
@@ -194,7 +194,7 @@ mockup rather than borrowing the admin ramp for its smaller text — `kioskStrea
 `kioskEyebrow` 12 · `kioskTag` 11. Kiosk-only — the admin surfaces never use these, and a
 kiosk change never touches the admin ramp.
 
-**The Kiosk-Moves-As-A-Set Rule.** Never re-scale one kiosk role alone. The mockup's ramp is
+**The Kiosk-Moves-As-A-Set Rule.** Never re-scale one kiosk role alone. This ramp is
 internally proportional, so lifting only *some* roles (the buttons, say) leaves labels at desk
 scale and makes a button out-shout the copy beside it — a half-applied ramp is the same bug as
 none. Change the ladder or nothing; a test asserts the ordering.

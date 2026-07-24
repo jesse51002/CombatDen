@@ -6,17 +6,17 @@ import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_s
 import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 
-/// The video card's 16:9 thumbnail (mockup `.vcard-thumb`).
+/// The video card's 16:9 thumbnail.
 const double _kThumbAspect = 16 / 9;
 
-/// The channel avatar disc (mockup `.vcard-avatar`).
+/// The channel avatar disc.
 const double _kAvatarSize = 28.0;
 
-/// The play disc floating on the thumbnail (mockup `.play`).
+/// The play disc floating on the thumbnail.
 const double _kPlayDiscSize = 30.0;
 
 /// Slide 3 — "Watch videos": the head of THIS gym's own curated feed, drawn as
-/// the member app's video card (mockup `.vc-grid` / `.vcard`).
+/// the member app's video card.
 ///
 /// **Data source: the gym's REAL feed.** The cubit fetches
 /// `GET /api/v1/gyms/{gymId}/videos` once at kiosk entry and caches it, so
@@ -40,9 +40,8 @@ class KioskVideosSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KioskSlideBody(
-      // Centred fixed-width cards (mockup `.vc-grid { justify-content:
-      // center }`), so one video reads as deliberate rather than as a
-      // half-empty grid.
+      // Centred fixed-width cards, so one video reads as deliberate rather
+      // than as a half-empty grid.
       content: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -61,8 +60,8 @@ class KioskVideosSlide extends StatelessWidget {
   }
 }
 
-/// One video as the app's feed card (mockup `.vcard`): a 16:9 thumbnail with
-/// the play disc, then the channel avatar beside the title + view count.
+/// One video as the app's feed card: a 16:9 thumbnail with the play disc,
+/// then the channel avatar beside the title + view count.
 class _VideoCard extends StatelessWidget {
   final Video video;
 

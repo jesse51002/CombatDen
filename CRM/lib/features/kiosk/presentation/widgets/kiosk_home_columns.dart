@@ -31,17 +31,16 @@ class KioskHomeHalf {
   });
 }
 
-/// The kiosk home's two-column composition (mockup `.home-panel` x2 split by
-/// `.home-seam`) — and the one thing it guarantees: the two bodies are
-/// **co-centred**.
+/// The kiosk home's two-column composition — split by a vertical "or" seam
+/// — and the one thing it guarantees: the two bodies are **co-centred**.
 ///
 /// The halves are not laid out as two independent columns. They are laid out
 /// as shared horizontal BANDS — heads, bodies, and an optional feet band — so
 /// the QR tile and the search field float in the *same* flexible band and
 /// therefore land on the *same* optical centre, no matter what either half
-/// carries below it. That is a deliberate, founder-approved departure from the
-/// mockup, whose left column reserves an app-adopt block the right column has
-/// nothing to answer with.
+/// carries below it. That is a deliberate, founder-approved departure from an
+/// earlier two-column design, whose left column reserved an app-adopt block
+/// the right column had nothing to answer with.
 ///
 /// Three properties fall out of the band structure rather than from any
 /// measured height, so nothing here is pinned to a pixel value:
@@ -55,8 +54,8 @@ class KioskHomeHalf {
 ///    adopt strip spans the screen instead), so the band is always absent on
 ///    the live home; it exists for any future screen that needs one.
 ///
-/// The "or" seam is drawn ONCE across all three bands as a decorative overlay
-/// (the mockup's absolutely-positioned rule), so the rule spans the whole
+/// The "or" seam is drawn ONCE across all three bands as a decorative
+/// overlay — an absolutely-positioned rule — so the rule spans the whole
 /// composition and its badge lands on the block's centre. Each band reserves
 /// the seam's exact width in its middle, so the overlay's centred rule sits
 /// precisely in that reserved gutter.

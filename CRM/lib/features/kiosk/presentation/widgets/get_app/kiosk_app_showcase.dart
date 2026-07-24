@@ -11,10 +11,10 @@ import 'package:crm/shared/widgets/shrink_to_fit.dart';
 /// How long each showcase slide dwells before the next one fades in.
 const Duration kKioskShowcaseInterval = Duration(seconds: 5);
 
-/// The cross-fade between two slides (mockup `.slide` opacity transition).
+/// The cross-fade between two slides.
 const Duration kKioskShowcaseFade = Duration(milliseconds: 450);
 
-/// The welcome screen's right panel (mockup `.showcase`): a fixed head
+/// The welcome screen's right panel: a fixed head
 /// (mono eyebrow + the current slide's title) over an auto-advancing slide
 /// stage, closed by the clickable dot pager and its caption.
 ///
@@ -24,9 +24,8 @@ const Duration kKioskShowcaseFade = Duration(milliseconds: 450);
 /// rotation is off and the caption says so; the dots still work.
 ///
 /// Every slide sits in ONE box (a [Stack], so the box is as tall as the
-/// tallest slide) and only its opacity changes — the mockup's rule that "the
-/// one-page welcome fit holds on every slide", i.e. the modal never resizes
-/// mid-rotation.
+/// tallest slide) and only its opacity changes, so the modal never resizes
+/// mid-rotation — the one-page welcome fit holds on every slide.
 class KioskAppShowcase extends StatefulWidget {
   final List<KioskShowcaseSlide> slides;
 
@@ -156,7 +155,7 @@ class _SlideStage extends StatelessWidget {
   }
 }
 
-/// The caption under the dots (mockup `.showcase-note`) — derived from the
+/// The caption under the dots — derived from the
 /// live slide list, so it never advertises a slide that isn't there (e.g. a
 /// no-ranks gym), and it tells the truth when rotation is off.
 class _Note extends StatelessWidget {
