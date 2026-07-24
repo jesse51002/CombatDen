@@ -33,6 +33,12 @@ GYM_TODAY_SQL = "(now() AT TIME ZONE g.timezone)::date"
 # Every view aliases members as `p`, so the shared dormancy predicate is
 # correlated to the same two id expressions everywhere.
 DORMANT_SQL = load_member_dormant_sql("p.member_id", "p.gym_id")
+# Every view aliases the membership row as `m`, so the shared overdue
+# predicate renders once at import, like DORMANT_SQL above. Its negation is
+# derived from the SAME text so "is overdue" and "is not overdue" can never
+# drift apart.
+OVERDUE_SQL = load_membership_overdue_sql("m", GYM_TODAY_SQL)
+NOT_OVERDUE_SQL = f"NOT ({OVERDUE_SQL})"
 
 
 class CrmBaseViewService:
@@ -161,11 +167,7 @@ class CrmBaseViewService:
             conditions: List of WHERE conditions to append to.
             params: Dict of query params to append to.
         """
-        # Both the overdue filter and its negation are derived from the
-        # ONE shared predicate, so "is overdue" and "is not overdue" can
-        # never drift apart the way two hand-written texts would.
-        overdue_sql = load_membership_overdue_sql("m", GYM_TODAY_SQL)
-        not_overdue = f"NOT ({overdue_sql})"
+        not_overdue = NOT_OVERDUE_SQL
 
         if CrmMemberStatus.active in statuses:
             conditions.append(
@@ -188,7 +190,7 @@ class CrmBaseViewService:
             params["st_frozen"] = MembershipDbStatus.frozen.value
 
         if CrmMemberStatus.overdue in statuses:
-            conditions.append(f"({overdue_sql})")
+            conditions.append(f"({OVERDUE_SQL})")
 
         if CrmMemberStatus.dormant in statuses:
             # Matches exactly when the dormant badge renders: the member
