@@ -3,22 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_or_seam.dart';
 
-/// One half of the kiosk home, expressed as the three vertical slots
+/// One half of the kiosk home, expressed as the vertical slots
 /// [KioskHomeColumns] lays out: the [head] (section title + sub-text), the
 /// [body] that floats in the flexible middle (the QR tile / the search field),
-/// and an optional [foot] pinned under it (the QR half's app-adoption block).
+/// and an optional [foot] pinned under it.
+///
+/// **Neither home half carries a foot today, and that is the point.** Getting
+/// the app is a property of the whole screen, not of the QR column, so the
+/// adopt strip that used to sit in this slot now spans BOTH halves below the
+/// composition (`kiosk_home_screen.dart`). With no foot on either side the two
+/// columns balance by construction rather than by tuning one down. The slot
+/// stays because the band structure is general — a screen that really does need
+/// a per-column foot gets one, and [KioskHomeColumns] drops the band entirely
+/// when neither half fills it.
 class KioskHomeHalf {
   final Widget head;
   final Widget body;
 
-  /// The block pinned below the flexible middle. Only the QR half has one; the
-  /// name-search half leaves it empty.
-  final Widget foot;
+  /// The block pinned below the flexible middle, or null when this half has
+  /// none. The whole foot band collapses when BOTH halves leave it null.
+  final Widget? foot;
 
   const KioskHomeHalf({
     required this.head,
     required this.body,
-    this.foot = const SizedBox.shrink(),
+    this.foot,
   });
 }
 
@@ -27,19 +36,24 @@ class KioskHomeHalf {
 /// **co-centred**.
 ///
 /// The halves are not laid out as two independent columns. They are laid out
-/// as three shared horizontal BANDS — heads, bodies, feet — so the QR tile and
-/// the search field float in the *same* flexible band and therefore land on
-/// the *same* optical centre, no matter how much the QR half's adoption footer
+/// as shared horizontal BANDS — heads, bodies, and an optional feet band — so
+/// the QR tile and the search field float in the *same* flexible band and
+/// therefore land on the *same* optical centre, no matter what either half
 /// carries below it. That is a deliberate, founder-approved departure from the
 /// mockup, whose left column reserves an app-adopt block the right column has
-/// nothing to answer with (ours adds a "Get it" button on top of that, so the
-/// drift was worse than the mockup's).
+/// nothing to answer with.
 ///
-/// Two properties fall out of the band structure rather than from any measured
-/// height, so nothing here is pinned to a pixel value:
+/// Three properties fall out of the band structure rather than from any
+/// measured height, so nothing here is pinned to a pixel value:
 ///  * both heads sit in the first band, top-aligned to each other — the fix
 ///    never pushes one heading down to chase the other column;
-///  * both bodies sit in the (single, flexible) middle band, centred in it.
+///  * both bodies sit in the (single, flexible) middle band, centred in it;
+///  * the feet band is OMITTED, not emptied, when neither half fills it — an
+///    empty band still costs the column's spacing above it, which would leave a
+///    reserved gap under the bodies and steal that height from the flexible
+///    middle the bodies are centred in. Today neither half has a foot (the
+///    adopt strip spans the screen instead), so the band is always absent on
+///    the live home; it exists for any future screen that needs one.
 ///
 /// The "or" seam is drawn ONCE across all three bands as a decorative overlay
 /// (the mockup's absolutely-positioned rule), so the rule spans the whole
@@ -58,6 +72,8 @@ class KioskHomeColumns extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final leftFoot = left.foot;
+    final rightFoot = right.foot;
     // IntrinsicHeight gives the unbounded scroll body a height, so the middle
     // band's Expanded (and the seam's stretch) resolve against it.
     return IntrinsicHeight(
@@ -79,7 +95,13 @@ class KioskHomeColumns extends StatelessWidget {
                   align: CrossAxisAlignment.center,
                 ),
               ),
-              _Band(left: left.foot, right: right.foot),
+              // Omitted, never emptied — a zero-height band still costs the
+              // column's spacing above it. See the class doc.
+              if (leftFoot != null || rightFoot != null)
+                _Band(
+                  left: leftFoot ?? const SizedBox.shrink(),
+                  right: rightFoot ?? const SizedBox.shrink(),
+                ),
             ],
           ),
         ],

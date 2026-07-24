@@ -23,8 +23,8 @@ String kioskAppDownloadUrl(String gymId) => '$kKioskAppDownloadBaseUrl/$gymId';
 const Key kKioskGetAppPopup = Key('kiosk-get-app-popup');
 
 /// The member-facing "Get the app" modal (founder feature UX-5) — the kiosk's
-/// app-adoption funnel, opened by a tap on the retention glance or by the home
-/// QR panel's "Get it" button.
+/// app-adoption funnel, opened by a tap on the retention glance or by the
+/// home adopt strip's "Get it" button.
 ///
 /// **It is ONE solid popup carrying two nested cards** (founder ruling): a
 /// single lifted surface over the veil, holding the accent-soft app card

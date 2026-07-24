@@ -658,6 +658,21 @@ class DesignConstants {
   /// [kioskGlanceMeasure] because this is one long control, not a tile grid.
   static const double kioskHomeMeasure = 440.0;
 
+  /// Content measure for the home's SPANNING adopt strip — the width its
+  /// adoption line + "Get it" button pair is capped at (and centered within)
+  /// under a hairline that runs the full stage.
+  ///
+  /// The strip is not a column foot any more; it spans both halves, so the
+  /// band it sits in is roughly twice as wide as the column that used to hold
+  /// it. Capping the PAIR (never the rule) is what keeps the two reading as one
+  /// object on the stage's centre line instead of a sentence and a button
+  /// drifting toward opposite edges, and it holds the sentence inside a
+  /// readable measure (~70 characters at [kioskCaption]) rather than letting a
+  /// long gym name run the full width of an iPad. Wider than
+  /// [kioskHomeMeasure] because this is a sentence AND a button on one row, not
+  /// a single control.
+  static const double kioskAdoptMeasure = 640.0;
+
   // ── Kiosk button scale ──
   // The kiosk is read (and pressed) from standing distance on a supervised
   // iPad, so its buttons run a full step larger than the admin defaults

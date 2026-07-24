@@ -16,6 +16,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_adopt_strip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_name_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_search_results.dart';
@@ -50,10 +51,11 @@ class _MockRanksRepository extends Mock implements RanksRepository {}
 class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 
 /// The kiosk home is a full-viewport, horizontal two-column composition
-/// (QR half | vertical "or" seam | name-search half) with a big title above
-/// and a sign-up entry below. This proves it renders at iPad-landscape size
-/// with no layout exception — the seam + `IntrinsicHeight` + stretch interplay
-/// is the fragile part — and that the mockup's copy is on screen.
+/// (QR half | vertical "or" seam | name-search half) with a big title above, a
+/// sign-up entry below it, and a full-width app-adoption strip closing the
+/// screen. This proves it renders at iPad-landscape size with no layout
+/// exception — the seam + `IntrinsicHeight` + stretch interplay is the fragile
+/// part — and that the mockup's copy is on screen.
 void main() {
   late KioskFlowCubit cubit;
 
@@ -179,20 +181,34 @@ void main() {
       expect(fieldCenter, moreOrLessEquals(qrCenter, epsilon: 0.5));
     });
 
-    testWidgets('that shared centre really is below both heads and above the '
-        'adopt footer', (tester) async {
+    testWidgets('that shared centre floats in a middle band that runs to the '
+        'bottom of the columns', (tester) async {
       await pumpHome(tester);
 
-      final headBottom = tester
-          .getRect(find.text('Scan QR code with app for instant check in'))
-          .bottom;
-      final adoptTop = tester.getRect(find.byType(AppPrimaryButton)).top;
+      final headBottom = math.max(
+        tester
+            .getRect(find.text('Scan QR code with app for instant check in'))
+            .bottom,
+        tester
+            .getRect(find.text('Search for your name for a quick check in'))
+            .bottom,
+      );
+      final columns = tester.getRect(find.byType(KioskHomeColumns));
       final qrCenter = tester.getRect(find.byType(KioskQrFrame)).center.dy;
+      final bandTop = headBottom + DesignConstants.spacingBig;
 
       // Both bodies float in the middle band rather than stacking under their
-      // heads, and the footer stays pinned below that band.
-      expect(qrCenter, greaterThan(headBottom + DesignConstants.spacingBig));
-      expect(qrCenter, lessThan(adoptTop - DesignConstants.spacingBig));
+      // heads...
+      expect(qrCenter, greaterThan(bandTop));
+      // ...and that band runs from the heads all the way to the bottom of the
+      // composition, so the QR sits on its exact midpoint. Neither half carries
+      // a foot any more, and this is what proves the collapsed foot band costs
+      // nothing: a reserved band (or just the spacing above one) would lift
+      // this centre off the midpoint.
+      expect(
+        qrCenter,
+        moreOrLessEquals((bandTop + columns.bottom) / 2, epsilon: 0.5),
+      );
     });
 
     testWidgets('an empty result list adds no height under the field',
@@ -246,6 +262,89 @@ void main() {
     expect(find.textContaining('CombatDen'), findsNothing);
   });
 
+  group('the adopt strip SPANS both columns', () {
+    testWidgets('it is as wide as the whole composition, not one column',
+        (tester) async {
+      await pumpHome(tester);
+
+      final strip = tester.getRect(find.byType(KioskAdoptStrip));
+      final columns = tester.getRect(find.byType(KioskHomeColumns));
+      final qr = tester.getRect(find.byType(KioskQrFrame));
+      final field = tester.getRect(find.byType(AppSearchBox));
+
+      // Getting the app is a property of the whole screen, so the strip runs
+      // the full stage — the same width the two columns cover together.
+      expect(strip.width, moreOrLessEquals(columns.width, epsilon: 0.5));
+      // Materially wider than the half it used to live in: a column (seam and
+      // gutters included) is under 55% of the composition.
+      expect(strip.width, greaterThan(columns.width * 0.55));
+      // Centred on the STAGE, not on the QR column it used to foot — it now
+      // reaches past the content of BOTH halves.
+      expect(
+        strip.center.dx,
+        moreOrLessEquals(columns.center.dx, epsilon: 0.5),
+      );
+      expect(strip.center.dx, greaterThan(qr.center.dx));
+      expect(strip.left, lessThan(qr.left));
+      expect(strip.right, greaterThan(field.right));
+    });
+
+    testWidgets('it is the LAST band, below the sign-up entry',
+        (tester) async {
+      await pumpHome(tester);
+
+      final columns = tester.getRect(find.byType(KioskHomeColumns));
+      final signup = tester.getRect(find.byType(AppOutlineButton));
+      final strip = tester.getRect(find.byType(KioskAdoptStrip));
+
+      // Sign-up answers a person who is BLOCKED (no account yet); the strip is
+      // a nudge nobody is waiting on, so the strip's rule closes the screen
+      // rather than splitting the two ways in from the third.
+      expect(signup.top, greaterThan(columns.bottom));
+      expect(strip.top, greaterThan(signup.bottom));
+    });
+
+    testWidgets('no empty foot band is reserved under the columns',
+        (tester) async {
+      await pumpHome(tester);
+
+      final columns = tester.getRect(find.byType(KioskHomeColumns));
+      final signup = tester.getRect(find.byType(AppOutlineButton));
+
+      // With neither half carrying a foot, the band collapses and hands its
+      // height to the shared middle: the only gap left below the columns is the
+      // home's own section spacing.
+      expect(
+        signup.top - columns.bottom,
+        moreOrLessEquals(DesignConstants.spacingBig, epsilon: 0.5),
+      );
+    });
+
+    testWidgets('the pair stays centred as a GROUP, never marooned at the '
+        'band\'s edges', (tester) async {
+      await pumpHome(tester);
+
+      final strip = tester.getRect(find.byType(KioskAdoptStrip));
+      final line = tester.getRect(find.byType(KioskAppLine));
+      final button = tester.getRect(find.byType(AppPrimaryButton));
+      final pair = line.expandToInclude(button);
+
+      // The row holds them together at its own spacing — nothing in it pushes
+      // one to each end of a band this wide.
+      expect(
+        button.left - line.right,
+        moreOrLessEquals(DesignConstants.spacingLarge, epsilon: 0.5),
+      );
+      // Capped, and centred on the strip's centre line.
+      expect(
+        pair.width,
+        lessThanOrEqualTo(DesignConstants.kioskAdoptMeasure + 0.5),
+      );
+      expect(pair.width, lessThan(strip.width));
+      expect(pair.center.dx, moreOrLessEquals(strip.center.dx, epsilon: 0.5));
+    });
+  });
+
   group('the adopt strip is ONE row', () {
     testWidgets('the app line and the Get-it button share a vertical band',
         (tester) async {
@@ -264,7 +363,7 @@ void main() {
       expect(line.bottom, lessThanOrEqualTo(button.bottom));
     });
 
-    testWidgets('the foot is shorter than the stacked block it replaced',
+    testWidgets('the strip is shorter than the stacked block it replaced',
         (tester) async {
       await pumpHome(tester);
 
@@ -280,9 +379,8 @@ void main() {
       final line = tester.getRect(find.byType(KioskAppLine)).height;
       final button = tester.getRect(find.byType(AppPrimaryButton)).height;
 
-      // Stacked, the foot was rule + gap + line + gap + button. One row drops
-      // a whole line AND a gap out of the column — that height is exactly the
-      // weight the search half had nothing to answer with.
+      // Stacked, the strip was rule + gap + line + gap + button. One row drops
+      // a whole line AND a gap out of the screen's foot.
       const gap = DesignConstants.spacingLarge;
       expect(strip, lessThan(rule + gap + line + gap + button));
       // Concretely: the row band is the TALLER of the pair, never their sum.

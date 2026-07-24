@@ -174,7 +174,8 @@ class _IdleOverlay extends StatelessWidget {
 
 /// The "Get the CombatDen App" modal (UX-5), rendered over the current view
 /// (like the idle warning) whenever the cubit's [KioskFlowState.appModalOpen]
-/// is set — opened by a glance tap or the home QR panel's "Get it" affordance.
+/// is set — opened by a glance tap or the home adopt strip's "Get it"
+/// affordance.
 ///
 /// Everything it shows comes from state the cubit ALREADY holds: the three
 /// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's own

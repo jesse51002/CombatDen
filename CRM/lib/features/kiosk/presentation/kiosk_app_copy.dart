@@ -4,7 +4,8 @@
 /// gym's* app, so a member-facing kiosk line names the GYM — never
 /// "CombatDen", which is the platform's name and means nothing to the person
 /// standing at the iPad. Founder ruling; it applies to the "Get the app" modal,
-/// the home QR half's adoption line, and the glance's redeem/book nudges alike.
+/// the home's spanning adoption line, and the glance's redeem/book nudges
+/// alike.
 ///
 /// The gym name comes from `selectedGym.gymName`, which is nullable (and can be
 /// blank for a gym that never set one), so every builder here degrades to

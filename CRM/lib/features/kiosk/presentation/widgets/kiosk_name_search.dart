@@ -13,8 +13,9 @@ import 'package:crm/shared/widgets/measured_max_width.dart';
 /// The "Name search" half of the kiosk home, as the two slots the home's band
 /// layout places (mockup `.home-panel`): the section head, and the live search
 /// field + result list that floats in the flexible middle (`.search-wrap`).
-/// There is no footer — the QR half's adoption block no longer costs this half
-/// its alignment, because both bodies share one flexible band.
+/// Neither half has a footer: the app-adoption strip spans the whole screen
+/// below the columns rather than closing one of them, so this half has no
+/// weight to answer and both bodies share one flexible band.
 KioskHomeHalf kioskNameSearchHalf() => const KioskHomeHalf(
       head: KioskSectionHead(
         title: 'Name search',

@@ -531,7 +531,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   /// Open the member-facing "Get the app" modal — opened by a tap on the
   /// retention glance (the founder's UX-5 ruling: the glance tap now offers
-  /// the app instead of ejecting home) or the home QR panel's "Get it"
+  /// the app instead of ejecting home) or the home adopt strip's "Get it"
   /// affordance. Opening it PAUSES the glance's auto-return — in EITHER phase,
   /// the pre-hold reveal window or the running 10-second hold, since both ride
   /// the one [_glanceTimer] — and any flow-idle guard, and starts the modal's
@@ -585,9 +585,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   ///
   /// The modal is an overlay, so dismissing it reveals the view it opened over
   /// — the retention glance when it was opened by a glance tap, the idle home
-  /// when it came from the home QR panel's "Get it". It used to call [goHome]
-  /// unconditionally, which ejected a member out of their own check-in result
-  /// the moment they pressed Done (founder-reported bug).
+  /// when it came from the home adopt strip's "Get it". It used to call
+  /// [goHome] unconditionally, which ejected a member out of their own
+  /// check-in result the moment they pressed Done (founder-reported bug).
   ///
   /// Returning to the glance RESTARTS its hold at full [kKioskGlanceHold]: the
   /// member spent their reading time in the modal, so they get the whole ten

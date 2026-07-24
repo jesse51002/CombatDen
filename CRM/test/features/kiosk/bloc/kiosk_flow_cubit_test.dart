@@ -1056,7 +1056,7 @@ void main() {
         async.flushMicrotasks();
 
         // All three land on the IDLE HOME, so the "Get the app" modal opened
-        // from the home QR panel already has them and fires no fetch.
+        // from the home adopt strip already has them and fires no fetch.
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.rewards, [rewardCheap, rewardPricey]);
         expect(cubit.state.videos, [video1]);

@@ -123,7 +123,7 @@ class KioskFlowState extends Equatable {
 
   // ── "Get the app" modal (UX-5) ──
   /// Whether the member-facing "Get the app" modal is open — an overlay funnel
-  /// opened from a glance tap or the home QR panel. While open it pauses the
+  /// opened from a glance tap or the home adopt strip. While open it pauses the
   /// glance's auto-return and runs its OWN 60-second timer
   /// ([appModalCountdown]). Done clears it and reveals the view underneath
   /// (restarting the glance hold at full); the 60 seconds running out means
