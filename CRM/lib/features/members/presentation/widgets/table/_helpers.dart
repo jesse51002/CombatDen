@@ -14,6 +14,7 @@ Color lastClassColor(int daysAgo) {
 
 /// Display label for the "Last Class" cell, e.g. "3 days ago".
 String lastClassLabel(int daysAgo) {
+  if (daysAgo <= 0) return 'Today';
   if (daysAgo == 1) return '1 day ago';
   return '$daysAgo days ago';
 }
