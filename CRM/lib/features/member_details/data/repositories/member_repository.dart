@@ -15,6 +15,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -725,6 +726,31 @@ class MemberRepository {
       '/api/v1/member_memberships/mark-paid-cash',
       data: req.toJson(),
     );
+  }
+
+  /// `POST /api/v1/member_memberships/retry-card` — re-charge the payer's
+  /// SAVED DEFAULT card against the membership's open Stripe invoice. The
+  /// cash-free sibling of [markMembershipPaidCash]: same body, no card
+  /// input. A declined card comes back as a 500 whose `detail` carries the
+  /// decline reason, so it rides [ServerException] to the dialog's terminal
+  /// error step rather than being swallowed.
+  Future<void> retryMembershipCard(
+    MemberMembershipsRetryCardRequest req,
+  ) async {
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/retry-card',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   // ----- Class check-in -----

@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/payments_invoice_respons
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/mark_paid_cash_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/retry_payment_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -83,7 +84,8 @@ class _PickedInvoice {
 /// up to two when their memberships are split between self-pay and a
 /// linked payer. Each card surfaces that payer's overdue invoice if any,
 /// otherwise their next (upcoming) one, with the payer, amount, due date,
-/// and an in-card mark-paid-with-cash action. When no payer has an
+/// and — while the invoice is overdue — the in-card settlement actions
+/// (retry the saved card, mark paid with cash). When no payer has an
 /// invoice, the section renders nothing. Read-only side reads (its own
 /// [FutureBuilder], like Waivers).
 class InvoicesSection extends StatefulWidget {
@@ -233,8 +235,8 @@ class _InvoicesSectionState extends State<InvoicesSection> {
 
 /// One payer's invoice block inside the shared Invoices card: the
 /// payer header (eyebrow, name, due date), the amount breakdown, and
-/// the cash action. The enclosing [InvoicesSection] owns the card and
-/// stacks one of these per payer.
+/// the settlement actions. The enclosing [InvoicesSection] owns the
+/// card and stacks one of these per payer.
 class _InvoiceBody extends StatelessWidget {
   final _PickedInvoice invoice;
   final InvoicePayer payer;
@@ -257,20 +259,43 @@ class _InvoiceBody extends StatelessWidget {
     );
   }
 
-  Widget? _cashAction(BuildContext context) {
+  /// The settlement actions for an OVERDUE (open) invoice — retry the
+  /// saved card, or record the money as taken in cash. Both act on the
+  /// same membership handle and only exist while the invoice is open;
+  /// an upcoming invoice gets the explanatory note instead.
+  Widget? _settleAction(BuildContext context) {
     if (invoice.overdue && payer.cashItemId != null) {
-      return AppOutlineButton(
-        fullWidth: true,
-        text: 'Mark paid with cash',
-        borderRadius: DesignConstants.radiusSmall,
-        onPressed: () => MarkPaidCashDialog.show(
-          context: context,
-          amount: invoice.amount,
-          currency: invoice.currency,
-          itemId: payer.cashItemId!,
-          coveredMemberId: payer.cashMemberId!,
-          payerName: payer.name,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          AppOutlineButton(
+            fullWidth: true,
+            text: 'Retry payment',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => RetryPaymentDialog.show(
+              context: context,
+              amount: invoice.amount,
+              currency: invoice.currency,
+              itemId: payer.cashItemId!,
+              coveredMemberId: payer.cashMemberId!,
+              payerName: payer.name,
+            ),
+          ),
+          AppOutlineButton(
+            fullWidth: true,
+            text: 'Mark paid with cash',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => MarkPaidCashDialog.show(
+              context: context,
+              amount: invoice.amount,
+              currency: invoice.currency,
+              itemId: payer.cashItemId!,
+              coveredMemberId: payer.cashMemberId!,
+              payerName: payer.name,
+            ),
+          ),
+        ],
       );
     }
     if (!invoice.overdue) {
@@ -285,7 +310,8 @@ class _InvoiceBody extends StatelessWidget {
         ),
       );
     }
-    // overdue but payer.cashItemId == null — no action.
+    // overdue but payer.cashItemId == null — no membership handle to
+    // settle against, so neither action can be offered.
     return null;
   }
 
@@ -309,7 +335,7 @@ class _InvoiceBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final action = _cashAction(context);
+    final action = _settleAction(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,

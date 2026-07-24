@@ -102,6 +102,21 @@ class MemberDetailLoaded extends MemberDetailState {
   /// the charge dialog is open (mirrors [startError]).
   final String? chargeCardError;
 
+  /// True while the retry-card POST is in flight. Separate from
+  /// [isMutating] so the retry-payment dialog owns its own loading
+  /// + terminal treatment (mirrors [isChargingCard]).
+  final bool isRetryingPayment;
+
+  /// Monotonic token bumped once a card retry succeeds. The retry
+  /// dialog watches it to flip to its success step.
+  final int retryPaymentSuccess;
+
+  /// The last card-retry failure — a decline comes back as the
+  /// backend's 500 `detail`. Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while the retry
+  /// dialog is open (mirrors [chargeCardError]).
+  final String? retryPaymentError;
+
   /// True while the upgrade POST is in flight. Separate from
   /// [isMutating] so the upgrade dialog owns its own loading +
   /// success treatment (mirrors [isChargingCard]).
@@ -192,6 +207,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isChargingCard = false,
     this.chargeCardSuccess = 0,
     this.chargeCardError,
+    this.isRetryingPayment = false,
+    this.retryPaymentSuccess = 0,
+    this.retryPaymentError,
     this.isUpgrading = false,
     this.upgradeSuccess = 0,
     this.upgradeError,
@@ -241,6 +259,10 @@ class MemberDetailLoaded extends MemberDetailState {
     int? chargeCardSuccess,
     String? chargeCardError,
     bool clearChargeOutcome = false,
+    bool? isRetryingPayment,
+    int? retryPaymentSuccess,
+    String? retryPaymentError,
+    bool clearRetryPaymentOutcome = false,
     bool? isUpgrading,
     int? upgradeSuccess,
     String? upgradeError,
@@ -300,6 +322,13 @@ class MemberDetailLoaded extends MemberDetailState {
       chargeCardError: clearChargeOutcome
           ? null
           : (chargeCardError ?? this.chargeCardError),
+      isRetryingPayment:
+          isRetryingPayment ?? this.isRetryingPayment,
+      retryPaymentSuccess:
+          retryPaymentSuccess ?? this.retryPaymentSuccess,
+      retryPaymentError: clearRetryPaymentOutcome
+          ? null
+          : (retryPaymentError ?? this.retryPaymentError),
       isUpgrading: isUpgrading ?? this.isUpgrading,
       upgradeSuccess: upgradeSuccess ?? this.upgradeSuccess,
       upgradeError: clearUpgradeOutcome
@@ -350,6 +379,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isChargingCard,
         chargeCardSuccess,
         chargeCardError,
+        isRetryingPayment,
+        retryPaymentSuccess,
+        retryPaymentError,
         isUpgrading,
         upgradeSuccess,
         upgradeError,
