@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_panel.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_reveal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_reward_tile.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -147,6 +149,13 @@ class _EarnedChip extends StatelessWidget {
 
 /// The vertically-centred tile grid — a spinner while loading, the 2x2 grid
 /// when rewards exist, or nothing (points-only) for a gym with no rewards.
+///
+/// The tiles arrive ONE BY ONE ([KioskRevealTimings.tileStagger]) rather than
+/// as a block, so the payout reads as a payout. The stagger is measured from
+/// this grid's own mount, because the catalog + balance are still in flight
+/// when the glance opens and the grid replaces its spinner whenever they land;
+/// the whole panel's reveal is what holds the tiles behind the streak, no
+/// matter how fast the fetch was.
 class _GridArea extends StatelessWidget {
   final List<RewardResponse> rewards;
   final int? balance;
@@ -172,8 +181,11 @@ class _GridArea extends StatelessWidget {
           stretchShortRows: false,
           spacing: DesignConstants.spacingLarge,
           children: [
-            for (final reward in rewards)
-              KioskRewardTile(reward: reward, balance: balance),
+            for (final (index, reward) in rewards.indexed)
+              KioskReveal(
+                delay: KioskRevealTimings.tileStagger * index,
+                child: KioskRewardTile(reward: reward, balance: balance),
+              ),
           ],
         ),
       ),

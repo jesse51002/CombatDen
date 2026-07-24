@@ -4,20 +4,30 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
-import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_greeting.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_reveal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_rewards_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
 /// The post-check-in retention "glance" — the member-facing money screen shown
-/// once a check-in is recorded (mockup `glance` / `claim`). A celebratory
-/// greeting over two panels — the streak (left) and the points + reward tiles
-/// (right) — with an auto-return timer + Done below. A tap anywhere returns
-/// home (wired at the kiosk surface). Its data (streak + earned points from the
-/// check-in response; balance + reward catalog fetched by the cubit) rides on
-/// [KioskFlowState]; it degrades gracefully when a fetch fails.
+/// once a check-in is recorded (mockup `glance` / `claim`). A one-line
+/// confirmation over two panels — the streak (left) and the points + reward
+/// tiles (right) — with an auto-return timer + Done below. A tap anywhere
+/// returns home (wired at the kiosk surface). Its data (streak + earned points
+/// from the check-in response; balance + reward catalog fetched by the cubit)
+/// rides on [KioskFlowState]; it degrades gracefully when a fetch fails.
+///
+/// **It arrives in beats, and the order is the hierarchy** ([KioskRevealTimings]):
+/// the CONFIRMATION fades in first (the check disc popping in beside the named
+/// class — the answer to "did it work, and into what?"), then the streak with
+/// its numeral rolling up, then the reward tiles cascading in one by one. Each
+/// beat is slow enough to be seen individually, and the footer's 8-second
+/// dwell clock only starts ticking once the whole thing has settled
+/// (`kKioskGlanceRevealSettle`) so the reveal never eats the reading time. A
+/// reduced-motion viewer gets every beat at once.
 ///
 /// The week strip reads `current_week_days` (Monday-first, index 0 = Monday)
 /// off the check-in response — one badge per weekday attended this week.
@@ -29,7 +39,7 @@ class KioskGlanceScreen extends StatelessWidget {
     return BlocBuilder<KioskFlowCubit, KioskFlowState>(
       buildWhen: (prev, cur) =>
           prev.checkInResult != cur.checkInResult ||
-          prev.selectedMember != cur.selectedMember ||
+          prev.selectedClassName != cur.selectedClassName ||
           prev.pointsBalance != cur.pointsBalance ||
           prev.rewards != cur.rewards ||
           prev.glanceLoading != cur.glanceLoading ||
@@ -56,29 +66,42 @@ class KioskGlanceScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: DesignConstants.spacingBig,
                   children: [
-                    KioskGlanceGreeting(
-                      firstName: kioskFirstName(state.selectedMember?.name),
-                      alreadyCheckedIn: alreadyCheckedIn,
+                    // Beat 1 — did it work, and which class.
+                    KioskReveal(
+                      delay: KioskRevealTimings.confirmation,
+                      duration: KioskRevealTimings.confirmationFade,
+                      child: KioskGlanceGreeting(
+                        className: state.selectedClassName,
+                        alreadyCheckedIn: alreadyCheckedIn,
+                      ),
                     ),
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         spacing: DesignConstants.spacingLarge,
                         children: [
+                          // Beat 2 — the streak (its numeral counts up).
                           Expanded(
-                            child: KioskStreakPanel(
-                              weeks: result?.classStreakWeeks ?? 0,
-                              daysCompleted:
-                                  result?.currentWeekDays ?? _kEmptyWeek,
+                            child: KioskReveal(
+                              delay: KioskRevealTimings.streak,
+                              child: KioskStreakPanel(
+                                weeks: result?.classStreakWeeks ?? 0,
+                                daysCompleted:
+                                    result?.currentWeekDays ?? _kEmptyWeek,
+                              ),
                             ),
                           ),
+                          // Beat 3 — the payout, its tiles cascading inside.
                           Expanded(
-                            child: KioskRewardsPanel(
-                              pointsBalance: state.pointsBalance,
-                              pointsAwarded: result?.pointsAwarded ?? 0,
-                              rewards: state.rewards,
-                              loading: state.glanceLoading,
-                              alreadyCheckedIn: alreadyCheckedIn,
+                            child: KioskReveal(
+                              delay: KioskRevealTimings.rewards,
+                              child: KioskRewardsPanel(
+                                pointsBalance: state.pointsBalance,
+                                pointsAwarded: result?.pointsAwarded ?? 0,
+                                rewards: state.rewards,
+                                loading: state.glanceLoading,
+                                alreadyCheckedIn: alreadyCheckedIn,
+                              ),
                             ),
                           ),
                         ],

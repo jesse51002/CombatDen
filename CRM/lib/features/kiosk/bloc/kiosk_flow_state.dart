@@ -61,6 +61,12 @@ class KioskFlowState extends Equatable {
   final CheckInResponse? checkInResult;
   final CheckInWarning? blockedReason;
 
+  /// The name of the class the member just tapped, carried from the picked
+  /// occurrence so the glance can CONFIRM which class they are checked into
+  /// (the check-in response carries only a `class_id`). Null before a class is
+  /// picked; cleared on the way home like every other per-member field.
+  final String? selectedClassName;
+
   /// The check-in call itself failed (network / 5xx) — distinct from a gate
   /// rejection, which carries a [blockedReason].
   final bool checkInFailed;
@@ -139,6 +145,7 @@ class KioskFlowState extends Equatable {
     this.classesFailed = false,
     this.checkInResult,
     this.blockedReason,
+    this.selectedClassName,
     this.checkInFailed = false,
     this.checkInErrorCode,
     this.pointsBalance,
@@ -177,6 +184,7 @@ class KioskFlowState extends Equatable {
     bool? classesFailed,
     Object? checkInResult = _keep,
     Object? blockedReason = _keep,
+    Object? selectedClassName = _keep,
     bool? checkInFailed,
     Object? checkInErrorCode = _keep,
     Object? pointsBalance = _keep,
@@ -209,6 +217,9 @@ class KioskFlowState extends Equatable {
       blockedReason: identical(blockedReason, _keep)
           ? this.blockedReason
           : blockedReason as CheckInWarning?,
+      selectedClassName: identical(selectedClassName, _keep)
+          ? this.selectedClassName
+          : selectedClassName as String?,
       checkInFailed: checkInFailed ?? this.checkInFailed,
       checkInErrorCode: identical(checkInErrorCode, _keep)
           ? this.checkInErrorCode
@@ -244,6 +255,7 @@ class KioskFlowState extends Equatable {
         classesFailed,
         checkInResult,
         blockedReason,
+        selectedClassName,
         checkInFailed,
         checkInErrorCode,
         pointsBalance,

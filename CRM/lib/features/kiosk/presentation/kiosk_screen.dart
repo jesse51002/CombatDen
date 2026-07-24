@@ -7,6 +7,7 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_blocked_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_class_pick_screen.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_closing_screen.dart';
@@ -103,6 +104,23 @@ class _KioskScreenBody extends StatelessWidget {
   }
 }
 
+/// The current kiosk sub-screen, cross-faded rather than hard-cut.
+///
+/// The swap that mattered is "Checking you in…" → the glance: a hard cut there
+/// makes a recorded check-in feel like a page reload instead of a result, and
+/// it is the one moment the member is watching for an answer. The fade lets
+/// the spinner RESOLVE into the glance while the glance's own confirmation
+/// beat is already running underneath. The tap itself is acknowledged before
+/// any of this — `ClassCard` inks on press and the cubit emits the
+/// checking-in view synchronously.
+///
+/// [KioskRevealTimings.element] is the same duration every other kiosk
+/// entrance uses; reduced motion collapses it to an instant swap.
+///
+/// The layout builder mirrors AnimatedSwitcher's default but with
+/// [StackFit.passthrough] and a top-left alignment, so each screen is laid out
+/// under exactly the constraints it got before this wrapper existed — the
+/// cross-fade is layout-transparent.
 class _ViewSwitcher extends StatelessWidget {
   const _ViewSwitcher();
 
@@ -111,7 +129,7 @@ class _ViewSwitcher extends StatelessWidget {
     return BlocBuilder<KioskFlowCubit, KioskFlowState>(
       buildWhen: (prev, cur) => prev.view != cur.view,
       builder: (context, state) {
-        return switch (state.view) {
+        final screen = switch (state.view) {
           KioskView.home => const KioskHomeScreen(),
           KioskView.classPick => const KioskClassPickScreen(),
           KioskView.checkingIn => const KioskCheckingIn(),
@@ -119,6 +137,19 @@ class _ViewSwitcher extends StatelessWidget {
           KioskView.blocked => const KioskBlockedScreen(),
           KioskView.closing => const KioskClosingScreen(),
         };
+        return AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : KioskRevealTimings.element,
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeOut,
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            alignment: Alignment.topLeft,
+            fit: StackFit.passthrough,
+            children: [...previousChildren, ?currentChild],
+          ),
+          child: KeyedSubtree(key: ValueKey(state.view), child: screen),
+        );
       },
     );
   }

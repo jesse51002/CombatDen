@@ -1,23 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:theme_flutter/theme/animation/scale_reveal.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 
-/// The glance's celebratory header — a filled green check disc beside a
-/// kiosk-scale greeting, centered (mockup `.glance-top`). A fresh check-in
-/// reads "Nice one, {FirstName}."; a repeat ([alreadyCheckedIn]) softens to
-/// "You're already checked in for today, {FirstName}." so a same-day re-tap
-/// (which earns nothing) doesn't read as a fresh celebration. The greeting is
-/// [firstName] already reduced to the first name by the caller.
+/// The glance's confirmation — a filled green check disc beside ONE
+/// kiosk-scale statement naming the class the member is now checked into
+/// (mockup `.glance-top`).
+///
+/// **One line, and it is a fact.** At this instant the member wants to know
+/// whether it worked and into what; a congratulatory "Nice one, Marcus." above
+/// or below it adds no information and delays the answer, so there is nothing
+/// beneath this line. The celebration is the streak and the rewards under it —
+/// this part just has to be unambiguous.
+///
+/// A repeat ([alreadyCheckedIn]) says so, because a same-day re-tap earns
+/// nothing and must not read as a fresh check-in. [className] is omitted only
+/// when it genuinely isn't known (a state with no picked occurrence), and the
+/// line falls back to the bare fact rather than a guess.
 class KioskGlanceGreeting extends StatelessWidget {
-  final String firstName;
+  final String? className;
   final bool alreadyCheckedIn;
 
   const KioskGlanceGreeting({
     super.key,
-    required this.firstName,
+    this.className,
     this.alreadyCheckedIn = false,
   });
+
+  /// The one statement, with or without a known class.
+  String get _line {
+    final name = className?.trim() ?? '';
+    if (name.isEmpty) {
+      return alreadyCheckedIn ? 'Already checked in today' : 'Checked in';
+    }
+    return alreadyCheckedIn
+        ? 'Already checked into $name'
+        : 'Checked into $name';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +50,7 @@ class KioskGlanceGreeting extends StatelessWidget {
         const _CheckDisc(),
         Flexible(
           child: Text(
-            alreadyCheckedIn
-                ? 'You\'re already checked in for today, $firstName.'
-                : 'Nice one, $firstName.',
+            _line,
             style: DesignConstants.kioskDisplay,
             textAlign: TextAlign.center,
           ),
@@ -41,12 +60,16 @@ class KioskGlanceGreeting extends StatelessWidget {
   }
 }
 
+/// The check mark itself, popping in as the statement fades up beside it — the
+/// shared [ScaleReveal] the member app's celebrations already use, so the
+/// "it worked" beat lands with a little weight instead of appearing. Flat and
+/// immediate under reduced motion.
 class _CheckDisc extends StatelessWidget {
   const _CheckDisc();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final disc = Container(
       padding: const EdgeInsets.all(DesignConstants.spacingMedium),
       decoration: BoxDecoration(
         color: DesignConstants.goodGreen,
@@ -58,6 +81,11 @@ class _CheckDisc extends StatelessWidget {
         weight: DesignConstants.iconWeight,
         color: DesignConstants.onFill(DesignConstants.goodGreen),
       ),
+    );
+    if (MediaQuery.disableAnimationsOf(context)) return disc;
+    return ScaleReveal(
+      duration: KioskRevealTimings.confirmationFade,
+      child: disc,
     );
   }
 }

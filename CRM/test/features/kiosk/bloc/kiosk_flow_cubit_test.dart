@@ -332,6 +332,9 @@ void main() {
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.checkInResult?.pointsAwarded, 15);
         expect(cubit.state.checkInResult?.classStreakWeeks, 3);
+        // The picked class's NAME rides along — the response carries only a
+        // class_id, and the glance has to confirm WHICH class it was.
+        expect(cubit.state.selectedClassName, 'Muay Thai Fundamentals');
         verify(() => session.beginFlow()).called(1);
         verify(() => session.endFlow()).called(1);
       },
@@ -636,6 +639,8 @@ void main() {
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
 
+        async.elapse(kKioskGlanceRevealSettle); // the reveal plays out
+
         // Halfway the glance is still up (the 5-minute idle never fired).
         async.elapse(const Duration(seconds: 4));
         expect(cubit.state.view, KioskView.checkedIn);
@@ -645,6 +650,130 @@ void main() {
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.selectedMember, isNull);
         expect(cubit.state.glanceCountdown, 0);
+        cubit.close();
+      });
+    });
+
+    test('the 8-second dwell starts AFTER the reveal settles, not on entry — '
+        'the member gets the full eight seconds to read', () {
+      // The bug this guards: starting the countdown on screen entry lets the
+      // ~1s reveal choreography eat the dwell, leaving under 7 seconds to
+      // actually read the streak. The full value is on screen from the first
+      // frame (the footer never shows a drained "0s" mid-reveal); only the
+      // DECREMENT waits.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+
+        // Through the whole reveal window the countdown has NOT moved.
+        async.elapse(kKioskGlanceRevealSettle);
+        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+
+        // The first tick lands one second AFTER the settle, not one second
+        // after entry.
+        async.elapse(const Duration(seconds: 1));
+        expect(
+          cubit.state.glanceCountdown,
+          kKioskGlanceAutoReturn.inSeconds - 1,
+        );
+
+        // A full eight seconds of dwell measured from the settle, no sooner:
+        // at settle + 7s the glance is still up with a second to go.
+        async.elapse(const Duration(seconds: 6));
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.glanceCountdown, 1);
+
+        async.elapse(const Duration(seconds: 1)); // settle + 8s -> home
+        expect(cubit.state.view, KioskView.home);
+        cubit.close();
+      });
+    });
+
+    test('leaving the glance during the reveal cancels the pending dwell — no '
+        'late auto-return over the next member', () {
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        cubit.goHome(); // Done, tapped mid-reveal
+        expect(cubit.state.view, KioskView.home);
+
+        // The settle timer never promotes itself into a periodic countdown.
+        async.elapse(const Duration(minutes: 1));
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.glanceCountdown, 0);
+        cubit.close();
+      });
+    });
+  });
+
+  group('the class-pick escape ("Not Marcus?")', () {
+    // The founder-reported gap: a member taps the WRONG name on home, lands on
+    // class pick, and without an escape is stranded until the 5-minute idle
+    // guard fires. The escape button is wired to goHome() — which is already
+    // the whole abandon contract — and these prove it stays that way.
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'returns to a clean home and BALANCES beginFlow/endFlow',
+      build: build,
+      act: (cubit) async {
+        cubit.selectMember(member1); // beginFlow
+        await Future<void>.delayed(Duration.zero); // class load settles
+        cubit.goHome(); // the escape
+      },
+      verify: (cubit) {
+        expect(cubit.state.view, KioskView.home);
+        // Exactly one end per begin. An escape that skipped endFlow would leak
+        // the session's in-progress flow count permanently, and the kiosk
+        // would then never sign itself out at the T+11h45 lockout.
+        verify(() => session.beginFlow()).called(1);
+        verify(() => session.endFlow()).called(1);
+      },
+    );
+
+    blocTest<KioskFlowCubit, KioskFlowState>(
+      'leaves NO trace of the mis-tapped member on the shared iPad',
+      build: build,
+      act: (cubit) async {
+        cubit.search('mar');
+        cubit.selectMember(member1);
+        await Future<void>.delayed(Duration.zero);
+        cubit.goHome();
+      },
+      verify: (cubit) {
+        // The same privacy rule the idle guard enforces: no name, no query, no
+        // results, no picked class may survive on a shared lobby kiosk.
+        expect(cubit.state.selectedMember, isNull);
+        expect(cubit.state.searchQuery, isEmpty);
+        expect(cubit.state.searchResults, isEmpty);
+        expect(cubit.state.selectedClassName, isNull);
+        expect(cubit.state.classes, isEmpty);
+      },
+    );
+
+    test('a second escape does not double-end the flow', () {
+      // _flowStarted is the latch; a double tap on the escape (or an escape
+      // then an idle timeout) must not decrement the session's count twice.
+      fakeAsync((async) {
+        final cubit = build();
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.goHome();
+        cubit.goHome();
+        verify(() => session.beginFlow()).called(1);
+        verify(() => session.endFlow()).called(1);
         cubit.close();
       });
     });

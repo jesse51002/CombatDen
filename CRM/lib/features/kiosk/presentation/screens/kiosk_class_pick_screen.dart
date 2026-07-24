@@ -6,11 +6,17 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_class_grid.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_escape_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// The chosen member's today-classes screen: a greeting head over the grid of
-/// classes open for check-in right now. Mirrors the mockup class-pick screen.
+/// classes open for check-in right now, closed by the escape foot. Mirrors the
+/// mockup class-pick screen.
+///
+/// The escape is load-bearing, not decoration: a member who taps the WRONG
+/// name on home lands here, and without it there is no way back — they are
+/// stranded until the 5-minute flow-idle guard fires. See [KioskEscapeFoot].
 class KioskClassPickScreen extends StatelessWidget {
   const KioskClassPickScreen({super.key});
 
@@ -25,6 +31,9 @@ class KioskClassPickScreen extends StatelessWidget {
       builder: (context, state) {
         final name = kioskFirstName(state.selectedMember?.name);
         return KioskStage(
+          // Pinned, not appended: a class grid tall enough to scroll must
+          // never push the way out below the fold.
+          footer: KioskEscapeFoot(firstName: name),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: DesignConstants.spacingBig,

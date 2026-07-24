@@ -50,6 +50,23 @@ const Duration kKioskIdleCountdown = Duration(seconds: 30);
 /// 5-minute flow-idle guard (the flow has already ended by the glance).
 const Duration kKioskGlanceAutoReturn = Duration(seconds: 8);
 
+/// The window the glance's reveal choreography needs to settle, waited out
+/// BEFORE the [kKioskGlanceAutoReturn] dwell clock starts ticking.
+///
+/// Without it the reveal eats the dwell: the confirmation, the streak count-up
+/// and the reward-tile cascade all run inside it, so a member who only gets 8
+/// seconds from screen ENTRY loses a quarter of them to animation. The dwell
+/// is time to READ, so it starts when there is something finished to read; the
+/// glance's total life is therefore this plus the eight, by design. The full
+/// countdown value is shown from the first frame (the footer never reads "0s"
+/// during the reveal); only the decrementing starts late.
+///
+/// It must cover the last beat of `KioskRevealTimings` — the streak count-up,
+/// which lands latest — with a little headroom; the glance test asserts that.
+/// Under reduced motion nothing animates and the member simply gets this much
+/// extra dwell, which is the safe direction to err.
+const Duration kKioskGlanceRevealSettle = Duration(milliseconds: 2200);
+
 /// The glance's 2x2 tile grid shows at most this many rewards (cheapest-first);
 /// a gym with more rewards surfaces the nearest few, the rest live in the app.
 const int kKioskGlanceRewardCount = 4;
@@ -272,7 +289,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     // emit the prior member's glance/blocked over the next person. Mirrors the
     // stale-drop the search / class-load / glance fetches already do.
     final seq = _classesSeq;
-    emit(state.copyWith(view: KioskView.checkingIn));
+    // The picked class's NAME rides along from here: the check-in response
+    // carries only a `class_id`, and the glance has to confirm WHICH class the
+    // member is now checked into.
+    emit(state.copyWith(
+      view: KioskView.checkingIn,
+      selectedClassName: occ.className,
+    ));
     _syncIdleTimer();
     try {
       final resp = await _memberRepo.checkInMember(
@@ -445,20 +468,32 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         rankLadder: _rankLadderCache,
       );
 
-  /// Start the glance's 8-second auto-return. One per-second countdown drives
-  /// the visible timer and, at zero, returns home (mirrors the idle countdown).
+  /// Start the glance's 8-second auto-return — but only once the reveal has
+  /// settled ([kKioskGlanceRevealSettle]). The full countdown value is emitted
+  /// immediately so the footer reads "Back to start in 8s" with a full drain
+  /// bar from the first frame; what waits is the DECREMENT, so the reveal
+  /// never eats the member's reading time. After the settle one per-second
+  /// countdown drives the visible timer and, at zero, returns home (mirrors
+  /// the idle countdown).
+  ///
+  /// Both timers share [_glanceTimer], so every existing cancel site (goHome,
+  /// openAppModal, close) still kills the auto-return whichever phase it is
+  /// in — cancelling during the settle simply means the periodic never starts.
   void _startGlanceReturn() {
     _glanceTimer?.cancel();
     emit(state.copyWith(glanceCountdown: kKioskGlanceAutoReturn.inSeconds));
-    _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _glanceTimer = Timer(kKioskGlanceRevealSettle, () {
       if (isClosed) return;
-      final next = state.glanceCountdown - 1;
-      if (next <= 0) {
-        _glanceTimer?.cancel();
-        goHome();
-      } else {
-        emit(state.copyWith(glanceCountdown: next));
-      }
+      _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (isClosed) return;
+        final next = state.glanceCountdown - 1;
+        if (next <= 0) {
+          _glanceTimer?.cancel();
+          goHome();
+        } else {
+          emit(state.copyWith(glanceCountdown: next));
+        }
+      });
     });
   }
 
@@ -511,6 +546,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   /// Abandon any in-progress draft and return to the idle home screen. Ends
   /// the flow if one was started; cancels the search + idle timers.
+  ///
+  /// This is the ONE abandon path — Done, the idle timeout, the app modal's
+  /// expiry, and the class-pick escape ("Not Marcus?", `KioskEscapeFoot`) all
+  /// come through here. Never hand-roll another: dropping [_endFlowIfStarted]
+  /// leaks the session's in-progress flow count and the kiosk then never signs
+  /// itself out at the T+11h45 lockout, and dropping the sequence bumps lets a
+  /// late fetch paint the previous member's data over the next person's home.
   void goHome() {
     _searchDebounce?.cancel();
     _glanceTimer?.cancel();

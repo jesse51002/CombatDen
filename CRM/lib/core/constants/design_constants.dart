@@ -428,7 +428,8 @@ class DesignConstants {
   //   kioskStreakNum 112 · kioskDisplay 40 · kioskMetric 30 ·
   //   kioskPanelTitle 25 · kioskStatement 22 · kioskFieldText 22 ·
   //   kioskTitle 21 · kioskButtonPrimaryLabel 19 · kioskName 19 ·
-  //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 · kioskBody 17 ·
+  //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 ·
+  //   kioskButtonGhostLabel 17 · kioskBody 17 ·
   //   kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 ·
   //   kioskMicro 13 · kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
   //
@@ -685,6 +686,33 @@ class DesignConstants {
   static const EdgeInsets kioskButtonOutlinePadding = EdgeInsets.symmetric(
     horizontal: 30,
     vertical: 15,
+  );
+
+  /// Kiosk GHOST (escape) button label — 17px medium in [text2nd] (mockup
+  /// `.btn-ghost`). The quietest rung of the kiosk button ladder
+  /// (primary gradient > outline 2px ink > outline soft hairline > ghost
+  /// nothing): no border, no fill, muted label, so it can never read as a
+  /// call to action. It is the ONLY tier used for LEAVING a flow.
+  ///
+  /// It keeps the outline label's 17px — the kiosk's interactive floor, read
+  /// from ~2m — and drops a weight instead (w500 vs w600), which is what
+  /// demotes it. `text2nd` (not `text3rd`) because it carries words: the AA
+  /// floor applies to every kiosk label, escape included.
+  static TextStyle get kioskButtonGhostLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w500,
+        fontSize: 17,
+        color: text2nd,
+        letterSpacing: -0.17,
+      );
+
+  /// Kiosk GHOST button box — 13/18 (mockup `.btn-ghost` padding). Tighter
+  /// than the outline on both axes (it has no chrome to balance), while the
+  /// vertical 13 + a 17px label still clears the 44pt touch minimum. Its
+  /// horizontal value doubles as the optical pull that lands the ghost's
+  /// GLYPH on the screen's content rail — see `KioskEscapeFoot`.
+  static const EdgeInsets kioskButtonGhostPadding = EdgeInsets.symmetric(
+    horizontal: 18,
+    vertical: 13,
   );
 
   /// H2 text style (semibold, 16)

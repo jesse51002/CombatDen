@@ -44,6 +44,7 @@ void main() {
         'kioskName': DesignConstants.kioskName,
         'kioskSubtitle': DesignConstants.kioskSubtitle,
         'kioskButtonOutlineLabel': DesignConstants.kioskButtonOutlineLabel,
+        'kioskButtonGhostLabel': DesignConstants.kioskButtonGhostLabel,
         'kioskBody': DesignConstants.kioskBody,
         'kioskLabel': DesignConstants.kioskLabel,
         'kioskSectionText': DesignConstants.kioskSectionText,
@@ -76,6 +77,7 @@ void main() {
     testWidgets('no kiosk button label out-sizes a heading', (tester) async {
       final primaryLabel = size(DesignConstants.kioskButtonPrimaryLabel);
       final outlineLabel = size(DesignConstants.kioskButtonOutlineLabel);
+      final ghostLabel = size(DesignConstants.kioskButtonGhostLabel);
 
       for (final heading in <TextStyle>[
         DesignConstants.kioskDisplay,
@@ -84,9 +86,29 @@ void main() {
       ]) {
         expect(primaryLabel, lessThan(size(heading)));
         expect(outlineLabel, lessThan(size(heading)));
+        expect(ghostLabel, lessThan(size(heading)));
       }
       // The pair keeps its own order too (the mockup pairs 19 with 17).
       expect(primaryLabel, greaterThan(outlineLabel));
+    });
+
+    testWidgets('the escape tier is DEMOTED by weight, not by shrinking',
+        (tester) async {
+      // The ghost is the quietest button in the ladder, but a member has to
+      // find it from ~2m. It keeps the outline's 17px (the kiosk interactive
+      // floor) and drops a weight instead — shrinking it below the floor is
+      // the failure mode this guards.
+      final outline = DesignConstants.kioskButtonOutlineLabel;
+      final ghost = DesignConstants.kioskButtonGhostLabel;
+
+      expect(size(ghost), size(outline));
+      expect(
+        ghost.fontWeight!.value,
+        lessThan(outline.fontWeight!.value),
+        reason: 'the escape tier is demoted by weight, never by size',
+      );
+      // And it still reads: text2nd clears AA where text3rd would not.
+      expect(ghost.color, DesignConstants.text2nd);
     });
 
     testWidgets('the whole ladder descends, largest first', (tester) async {

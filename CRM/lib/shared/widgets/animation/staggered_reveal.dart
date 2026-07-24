@@ -3,6 +3,12 @@ import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `StaggeredReveal`: one-shot fade + translateY
 /// entrance, fired once on initState after [delay]. Ease-out-quart.
+///
+/// Shared across the app: the member-app theme preview (`lib/showcase/`) and
+/// the kiosk's post-check-in glance both cascade with this one widget. It has
+/// no reduced-motion opinion of its own — a caller that must honor
+/// `MediaQuery.disableAnimationsOf` decides whether to wrap at all (see
+/// `KioskReveal`).
 class StaggeredReveal extends StatefulWidget {
   const StaggeredReveal({
     super.key,
