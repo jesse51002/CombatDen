@@ -25,8 +25,9 @@ class CheckinWarning(StrEnum):
       (``requires_confirmation``, nothing written) unless ``ignore_warnings``
       overrides, which records through them.
 
-    Most members block a kiosk; ``overdue`` deliberately does not (see its
-    entry below), which is why the two concepts are kept separate.
+    Every member currently blocks a kiosk, but that is a property of
+    ``GateEvaluation.blocked``, not of this enum — the two are kept separate so
+    a future warning can warn staff without rejecting a self-serve scan.
 
     Attributes:
         no_membership: The member has no active membership; an overridden staff
@@ -42,17 +43,23 @@ class CheckinWarning(StrEnum):
             they have not signed at a version >= its re-sign floor (the same
             set the member-detail Waivers section shows). Reservations are
             deliberately NOT gated — only the check-in.
-        overdue: The attributed membership is past due — active with a
-            ``next_due_date`` already behind the occurrence's gym-local date
-            (the ONE shared rule in ``src/shared/membership_status.py``, the
-            same one the members-list Overdue tab and the revenue tiles use).
-            Surfaces a failed renewal to the front desk at the one moment it
-            is actionable. **Deliberately NOT a kiosk blocker** — it is not in
-            ``GateEvaluation.blocked``: a past-due date is often a false alarm
-            (a Stripe retry in flight, a cash payment not yet recorded, a
-            family-payer edge), and billing is not a legal gate the way the
-            waiver is, so turning a member away at the scanner over it would
-            cost more in churn than it collects. Staff see it and decide.
+        overdue: The MEMBER is past due — ANY covering membership is active
+            with a ``next_due_date`` behind the gym's CURRENT local date
+            (``gym_today``, not the occurrence's date: "do they owe money" is a
+            question about now). The ONE shared rule in
+            ``src/shared/membership_status.py`` — the same text the members-list
+            Overdue tab, its tally and the revenue tiles use.
+            It is MEMBER-level, not attribution-level: an overdue recurring
+            plan sitting behind a higher-priority trial pack still raises it.
+            **Blocks a kiosk**, like the other conditions (it IS in
+            ``GateEvaluation.blocked``) — an unpaid member is sent to the front
+            desk instead of self-admitting, which is the point of surfacing it
+            at the door. Staff keep the override: the CRM holds the check-in
+            with this warning and records it on "Check in anyway".
+            Known caveat: ``next_due_date`` can read past-due while Stripe
+            shows everything paid (a missed webhook the reconciler has not yet
+            swept), so a kiosk rejection here is occasionally a false alarm the
+            front desk has to clear.
             Reservations are NOT gated, matching the waiver precedent.
     """
 
@@ -89,12 +96,13 @@ class GateEvaluation(BaseModel):
         """Whether the strict kiosk gate rejects this member.
 
         Blocked iff the room is full, a required waiver is unsigned, the
-        member has no membership, or no eligible covering membership has
-        remaining capacity (``strict`` None).
+        member is past due, the member has no membership, or no eligible
+        covering membership has remaining capacity (``strict`` None).
         """
         return (
             CheckinWarning.over_capacity in self.reasons
             or CheckinWarning.unsigned_waiver in self.reasons
+            or CheckinWarning.overdue in self.reasons
             or self.forced is None
             or self.strict is None
         )
@@ -117,13 +125,15 @@ class CheckinRequest(BaseModel):
     who the caller is:
 
     * ``True`` — kiosk mode (a terminal staff put in front of members). The
-      strict gate applies: if
-      no eligible covering membership has remaining capacity, the member is out
-      of classes, the room is full, or the plan is ineligible, the check-in is
-      rejected (``log_id = null`` + a ``skip_reason``, nothing written).
+      strict gate applies: if no eligible covering membership has remaining
+      capacity, the member is out of classes, the room is full, the plan is
+      ineligible, a required waiver is unsigned, or the member is past due, the
+      check-in is rejected (``log_id = null`` + a ``skip_reason``, nothing
+      written).
     * ``False`` (default — staff / admin) — a clean check-in is recorded. But if
       the gate raises any warning (no membership / out of classes / ineligible /
-      over capacity), the check-in is NOT recorded: the response comes back with
+      over capacity / unsigned waiver / overdue), the check-in is NOT recorded:
+      the response comes back with
       ``requires_confirmation = true`` and the ``warnings``, so staff can decide.
       To go ahead anyway, resend with ``ignore_warnings = true`` — then it is
       recorded (attributed to the best available membership, NULL plan/item when

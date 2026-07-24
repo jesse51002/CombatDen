@@ -14,9 +14,10 @@ stays real). Covers the ``is_member`` block-vs-warn split:
   attributing to the best available membership (NULL when none, over-drawing a
   depleted pack). Points are awarded on every new row (membership or not).
 
-``overdue`` is the one reason that warns staff but never blocks a kiosk (it is
-absent from ``GateEvaluation.blocked``), so it has its own block of tests at the
-bottom — including the negative one that locks that rule in.
+``overdue`` has its own block of tests at the bottom: it blocks a kiosk like
+every other reason, warns staff with the usual override, is MEMBER-level (an
+overdue plan behind a higher-priority pack still raises it), and is now-anchored
+(``gym_today``, not the occurrence date).
 """
 
 from datetime import UTC, date, datetime, time
@@ -634,14 +635,13 @@ async def test_staff_overdue_override_records() -> None:
     writer.assert_awaited_once()
 
 
-async def test_kiosk_overdue_is_admitted_not_blocked() -> None:
-    """THE load-bearing rule: overdue must NEVER reject a kiosk check-in.
+async def test_kiosk_overdue_is_blocked() -> None:
+    """A past-due member cannot self-admit at a kiosk.
 
-    Billing is not a legal gate the way the waiver is, and a past-due date
-    is often a false alarm (a Stripe retry in flight, cash not yet
-    recorded). Turning a paying member away at the scanner would cost more
-    in churn than it collects — so ``overdue`` is deliberately absent from
-    ``GateEvaluation.blocked`` and the kiosk records normally.
+    ``overdue`` is in ``GateEvaluation.blocked`` alongside the other
+    conditions: an unpaid member is sent to the front desk rather than
+    scanning themselves in. Staff keep the override on the CRM path
+    (``requires_confirmation`` + "Check in anyway"); kiosk mode never does.
     """
     plan = uuid4()
     m = _usage(
@@ -656,10 +656,36 @@ async def test_kiosk_overdue_is_admitted_not_blocked() -> None:
 
     res = await gate.checkin_member(_resolved_class(), uuid4(), is_member=True)
 
-    assert res.log_id is not None
-    assert res.skip_reason is None
-    assert res.chosen_plan_id == plan
-    writer.assert_awaited_once()
+    assert res.log_id is None
+    assert res.skip_reason == CheckinWarning.overdue
+    assert res.points_awarded == 0
+    writer.assert_not_awaited()
+
+
+async def test_kiosk_overdue_is_not_overridable() -> None:
+    """``ignore_warnings`` is a STAFF override — it never loosens the kiosk.
+
+    Guards the asymmetry Jesse asked for: kiosk blocks, CRM warns with an
+    override. A kiosk terminal passing the flag must still be rejected.
+    """
+    plan = uuid4()
+    m = _usage(
+        plan,
+        PlanType.recurring,
+        class_count=None,
+        classes_used=0,
+        renew_date=_PAST_DUE,
+        gym_today=_REF,
+    )
+    gate, writer = _gate(memberships=[m], eligible={plan})
+
+    res = await gate.checkin_member(
+        _resolved_class(), uuid4(), is_member=True, ignore_warnings=True
+    )
+
+    assert res.log_id is None
+    assert res.skip_reason == CheckinWarning.overdue
+    writer.assert_not_awaited()
 
 
 async def test_overdue_sorts_last_among_warnings() -> None:

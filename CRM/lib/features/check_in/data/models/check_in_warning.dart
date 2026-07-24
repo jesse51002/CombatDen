@@ -5,15 +5,18 @@ import 'package:json_annotation/json_annotation.dart';
 /// Mirrors the backend `CheckinWarning`
 /// (`../FastApiBackend/src/checkin/schema/checkin_schema.py`). The backend uses
 /// one enum for both the (kiosk-only) `skip_reason` and the staff `warnings`
-/// list. A CRM check-in is always staff (`is_member: false`), so it ALWAYS
-/// records — these arrive as non-blocking `warnings` on a recorded check-in,
-/// never as a rejection. [unknown] is the resilient fallback so a new backend
-/// value never crashes the UI.
+/// list. A CRM check-in is always staff (`is_member: false`), so it is never
+/// rejected outright — but a warning does NOT record it either: the response
+/// comes back `requires_confirmation` with `log_id: null` and nothing written,
+/// and "Check in anyway" (`ignore_warnings: true`) is what records it. A clean
+/// check-in records on the first request. [unknown] is the resilient fallback
+/// so a new backend value never crashes the UI.
 ///
-/// [overdue] is the one condition that warns staff but never blocks a kiosk
-/// check-in — a past-due date is often a false alarm (a payment retry in
-/// flight, cash not yet recorded), so the backend surfaces it and lets the
-/// front desk decide.
+/// [overdue] means the member is past due. It blocks a member self-admitting
+/// at a kiosk, but on this staff surface it is a warning like any other: the
+/// check-in is held and "Check in anyway" records it. A past-due date can be a
+/// false alarm (a payment retry in flight, cash not yet recorded), which is
+/// exactly why the front desk keeps the override.
 @JsonEnum(valueField: 'value')
 enum CheckInWarning {
   noMembership('no_membership', 'No active membership'),

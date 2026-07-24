@@ -10,8 +10,9 @@
   punch-card capacity + the room's ``max_capacity``, and check in against the
   best covering plan (trial -> one_time -> recurring, then lowest class_count,
   then oldest pack). If no eligible covering membership has capacity, the room
-  is full, or the member has no membership, the check-in is *rejected* (skipped,
-  ``log_id`` None, with a ``skip_reason``); nothing is written.
+  is full, the member has no membership, a required waiver is unsigned, or the
+  member is PAST DUE, the check-in is *rejected* (skipped, ``log_id`` None,
+  with a ``skip_reason``); nothing is written.
 * ``is_member=False`` (staff / admin — the default) — the check-in is ALWAYS
   recorded. It is attributed to the member's best available membership via
   ``select_best_membership_forced`` (eligibility + remaining count ignored, an
@@ -75,9 +76,10 @@ from src.shared.membership_status import is_membership_overdue
 # ``_checkin_staff`` order by ``.index``, which raises ValueError on a member
 # that is missing — an omission would 500 every staff check-in that raises it.
 #
-# ``overdue`` sorts LAST on purpose: it is the only entry that never blocks a
-# kiosk (it is absent from ``GateEvaluation.blocked``), and a coverage problem
-# is always the more actionable thing to show a staff member first.
+# ``overdue`` sorts LAST on purpose: a coverage problem (no membership, out of
+# classes, ineligible plan) is always the more actionable thing to put in front
+# of a staff member than a billing heads-up. It DOES block a kiosk like the
+# rest — the ordering is about which reason is shown first, not severity.
 _REASON_PRIORITY: tuple[CheckinWarning, ...] = (
     CheckinWarning.over_capacity,
     CheckinWarning.no_membership,

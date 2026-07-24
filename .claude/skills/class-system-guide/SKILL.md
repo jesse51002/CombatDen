@@ -321,9 +321,13 @@ ignore_warnings)`:
   only this one check is now-anchored, deliberately.) It tests EVERY covering
   membership, not just the attribution target — overdue is member-level, so an
   overdue recurring plan sitting behind a higher-priority trial pack still
-  warns. **Never a kiosk blocker**: billing is not a legal
-  gate the way the waiver is, and a past-due date is often a false alarm (a
-  Stripe retry in flight, cash not yet recorded), so staff see it and decide.
+  warns. **Blocks a kiosk** like every other reason (it IS in
+  `GateEvaluation.blocked`): an unpaid member is sent to the front desk rather
+  than self-admitting, and `ignore_warnings` never loosens the kiosk. Staff keep
+  the override — the CRM holds the check-in and records it on "Check in anyway".
+  Known caveat: `next_due_date` can read past-due while Stripe shows everything
+  paid (a missed webhook the reconciler has not yet swept), so a kiosk rejection
+  is occasionally a false alarm the desk has to clear.
   It sorts LAST in `_REASON_PRIORITY` — a coverage problem is more actionable.
   Sign-ups are NOT gated by it, matching the waiver precedent. **Every**
   `CheckinWarning` member must appear in `_REASON_PRIORITY`; that tuple is
