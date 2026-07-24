@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_app_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
@@ -18,7 +20,7 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///
 /// The QR is a static visual placeholder — the live check-in nonce is Phase G,
 /// so it renders but does nothing. The adoption block's "Get it" opens the
-/// "Get the CombatDen App" modal (UX-5).
+/// "Get the app" modal (UX-5).
 ///
 /// Handing the head/body/foot to [KioskHomeColumns] rather than stacking them
 /// here is what lets the search half's field land on this QR's exact optical
@@ -60,9 +62,16 @@ class _QrPlaceholder extends StatelessWidget {
   }
 }
 
-/// The mockup's `.qr-adopt`: the app-adoption block that closes the QR half,
-/// separated from the flexible QR band by a hairline so it reads as the
-/// column's footer rather than content floating below the code.
+/// The app-adoption block that closes the QR half, separated from the flexible
+/// QR band by a hairline so it reads as the column's footer rather than
+/// content floating below the code.
+///
+/// **Its button runs at the SECONDARY size** (`compact`), matching the
+/// "New here? Sign up" button below the two columns. It keeps the gradient —
+/// the founder asked for a primary here — but at the loud primary scale it was
+/// the heaviest thing on an otherwise calm screen and tipped the whole
+/// composition into the left column ("this really doesn't look balanced").
+/// Filled for emphasis, sized like its neighbour so the home reads as one set.
 class _AdoptFooter extends StatelessWidget {
   const _AdoptFooter();
 
@@ -74,14 +83,16 @@ class _AdoptFooter extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         const Hairline(),
-        const Center(
-          child: KioskAppLine(
-            text: 'Get the CombatDen app in the App Store.',
-          ),
+        Center(
+          // White-labelled: the member downloads THEIR GYM's app — see
+          // `kiosk_app_copy.dart`. `selectedGym` is the same source the kiosk
+          // header names the gym from.
+          child: KioskAppLine(text: kioskAppStoreLine(selectedGym.gymName)),
         ),
         Center(
           child: KioskPrimaryButton(
             text: 'Don\'t have the app? Get it',
+            compact: true,
             onPressed: () => context.read<KioskFlowCubit>().openAppModal(),
           ),
         ),

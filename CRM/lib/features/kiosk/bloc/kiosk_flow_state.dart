@@ -122,11 +122,12 @@ class KioskFlowState extends Equatable {
   final int idleCountdown;
 
   // ── "Get the app" modal (UX-5) ──
-  /// Whether the member-facing "Get the CombatDen App" modal is open — an
-  /// overlay funnel opened from a glance tap or the home QR panel. While open
-  /// it pauses the glance's 8-second auto-return and runs its OWN 60-second
-  /// timer ([appModalCountdown]); on Done or expiry the cubit returns home.
-  /// Reset to false only via [KioskFlowState.home].
+  /// Whether the member-facing "Get the app" modal is open — an overlay funnel
+  /// opened from a glance tap or the home QR panel. While open it pauses the
+  /// glance's auto-return and runs its OWN 60-second timer
+  /// ([appModalCountdown]). Done clears it and reveals the view underneath
+  /// (restarting the glance hold at full); the 60 seconds running out means
+  /// nobody is there and returns home.
   final bool appModalOpen;
 
   /// Seconds left on the app modal's 60-second auto-close. Drives its "Back to

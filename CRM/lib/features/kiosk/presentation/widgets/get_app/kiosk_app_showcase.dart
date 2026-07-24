@@ -6,6 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_dots.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_slide.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_panel.dart';
+import 'package:crm/shared/widgets/shrink_to_fit.dart';
 
 /// How long each showcase slide dwells before the next one fades in.
 const Duration kKioskShowcaseInterval = Duration(seconds: 5);
@@ -123,6 +124,12 @@ class _Head extends StatelessWidget {
 
 /// All slides stacked in one box; only the active one is visible and
 /// hit-testable, so the panel keeps a stable height as they rotate.
+///
+/// Each slide is wrapped in a [ShrinkToFit]: the four slides are not the same
+/// natural height (a 2x2 reward grid is far taller than a belt strip), and the
+/// popup must never scroll, so a slide taller than the stage scales down as a
+/// whole rather than overflowing. That also keeps the promise the stage
+/// exists for — one fixed box, so the popup never resizes mid-rotation.
 class _SlideStage extends StatelessWidget {
   final List<KioskShowcaseSlide> slides;
   final int index;
@@ -141,7 +148,7 @@ class _SlideStage extends StatelessWidget {
               opacity: i == index ? 1 : 0,
               duration: kKioskShowcaseFade,
               curve: Curves.easeOut,
-              child: slides[i].body,
+              child: ShrinkToFit(child: slides[i].body),
             ),
           ),
       ],

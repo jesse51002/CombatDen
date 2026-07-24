@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
@@ -12,6 +14,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/kiosk/presentation/screens/kiosk_home_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_name_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_search_results.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/video_feed.dart';
@@ -50,6 +53,15 @@ void main() {
   late KioskFlowCubit cubit;
 
   setUp(() {
+    // The home's app line is WHITE-LABELLED off the active gym, the same
+    // source the kiosk header names it from.
+    selectedGym.setActiveGym(
+      gymId: 'gym-1',
+      displayName: 'Iron Den',
+      role: EmployeeRole.owner,
+      timezone: 'America/Chicago',
+      logoUrl: null,
+    );
     final session = _MockKioskSessionCubit();
     when(() => session.state).thenReturn(
       KioskSessionState(
@@ -184,10 +196,24 @@ void main() {
       // The resting results slot must be a true zero-height box: reserving a
       // gap for it (a parent column spacing) would nudge the field off the
       // shared centre asserted above.
-      final field = tester.getRect(find.byType(AppSearchBox));
-      final band = tester.getRect(find.byType(KioskNameSearch));
+      expect(tester.getRect(find.byType(KioskSearchResults)).height, 0);
+    });
 
-      expect(band.height, field.height);
+    testWidgets('the search field is capped and centred, never run to the '
+        'edge of the column', (tester) async {
+      await pumpHome(tester);
+
+      final field = tester.getRect(find.byType(AppSearchBox));
+      final column = tester.getRect(find.byType(KioskNameSearch));
+
+      // A field stretched across a whole half of an iPad reads as running off
+      // the screen; it is capped at the home measure and centred in its half.
+      expect(field.width, DesignConstants.kioskHomeMeasure);
+      expect(field.width, lessThan(column.width));
+      expect(
+        field.center.dx,
+        moreOrLessEquals(column.center.dx, epsilon: 0.5),
+      );
     });
   });
 
@@ -204,17 +230,49 @@ void main() {
     expect(button.backgroundColor, isNull);
   });
 
+  testWidgets('the app line names the GYM\'s app, never the platform',
+      (tester) async {
+    await pumpHome(tester);
+
+    expect(find.text('Get the Iron Den app in the App Store.'), findsOneWidget);
+    expect(find.textContaining('CombatDen'), findsNothing);
+  });
+
   group('every kiosk button runs at kiosk scale', () {
-    testWidgets('the primary and the outline both carry the kiosk tokens, '
-        'never the admin defaults', (tester) async {
+    testWidgets('the two home buttons are the SAME size as each other',
+        (tester) async {
+      // The founder's balance complaint: a 19px/18x34 filled button beside a
+      // 17px/15x30 outline one made the QR column read far heavier than the
+      // search column. "Get it" keeps its filled primary treatment and drops
+      // to the secondary rung's metrics, so the pair reads as one set. This
+      // asserts they stay tied together rather than drifting apart again.
       await pumpHome(tester);
 
       final primary = tester.widget<AppPrimaryButton>(
         find.byType(AppPrimaryButton),
       );
-      expect(primary.textStyle, DesignConstants.kioskButtonPrimaryLabel);
-      expect(primary.padding, DesignConstants.kioskButtonPrimaryPadding);
-      expect(primary.textStyle?.fontSize, 19);
+      final outline = tester.widget<AppOutlineButton>(
+        find.byType(AppOutlineButton),
+      );
+
+      expect(primary.textStyle, outline.textStyle);
+      expect(primary.padding, outline.padding);
+      expect(
+        tester.getRect(find.byType(AppPrimaryButton)).height,
+        tester.getRect(find.byType(AppOutlineButton)).height,
+      );
+    });
+
+    testWidgets('both still carry kiosk tokens, never the admin defaults',
+        (tester) async {
+      await pumpHome(tester);
+
+      final primary = tester.widget<AppPrimaryButton>(
+        find.byType(AppPrimaryButton),
+      );
+      expect(primary.textStyle, DesignConstants.kioskButtonOutlineLabel);
+      expect(primary.padding, DesignConstants.kioskButtonOutlinePadding);
+      expect(primary.textStyle?.fontSize, 17);
 
       final outline = tester.widget<AppOutlineButton>(
         find.byType(AppOutlineButton),

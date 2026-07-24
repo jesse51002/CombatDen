@@ -14,8 +14,8 @@ import 'package:crm/core/constants/design_constants.dart';
 /// than any one number, and a half-finished future change fails here instead
 /// of on a kiosk in a gym.
 ///
-/// Sizes are transcribed from `KIOSK_MOCKUPS.html` — see the ramp comment in
-/// `design_constants.dart` for the per-token mockup element.
+/// The ladder itself, and what each role is for, is documented on the ramp
+/// comment in `design_constants.dart`.
 ///
 /// These are `testWidgets` rather than plain `test`s only because the tokens
 /// resolve their family through `GoogleFonts.geist()`: the widget-test binding

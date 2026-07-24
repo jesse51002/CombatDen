@@ -9,6 +9,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_showcase.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_dots.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_slide.dart';
@@ -71,18 +72,20 @@ MainRank _rank(String name, int order) => MainRank(
       createdAt: DateTime.utc(2026),
     );
 
-/// The "Get the CombatDen App" modal (UX-5) IS the approved kiosk welcome
-/// screen: a spanning gym header over the accent-soft app card (title, benefit
-/// checks, a REAL scannable download QR, the sign-in steps) beside the
-/// auto-advancing "In the app" showcase, over the shared 60-second timer +
-/// Done foot.
+/// The "Get the app" modal (UX-5) is the kiosk's app-adoption funnel: ONE
+/// solid popup surface holding two nested cards — the accent-soft app card
+/// (white-labelled title, benefit checks, a REAL scannable download QR, the
+/// sign-in steps) beside the auto-advancing "In the app" showcase — over the
+/// 60-second timer + Done foot, which sits INSIDE that surface too.
 ///
-/// These prove the composition lays out at iPad-landscape size with no
-/// exception, that the header states only what the kiosk really knows, that
-/// EVERY showcase slide is conditional on real data (present when the gym has
-/// it, omitted outright when it doesn't — never a stand-in), that the QR keeps
-/// its fixed dark-on-white contrast even under the dark theme, and that the
-/// modal's existing behaviour (timer label, Done → cubit) survives.
+/// These prove the structure the founder asked for (one popup, two nested
+/// cards, Done inside, no "Welcome to {gym}" header), that it FITS an iPad
+/// landscape fold with nothing scrolling, that the app is named after the GYM
+/// and never the platform, that EVERY showcase slide is conditional on real
+/// data (present when the gym has it, omitted outright when it doesn't — never
+/// a stand-in), that the QR keeps its fixed dark-on-white contrast even under
+/// the dark theme, and that the modal's behaviour (timer label, Done → cubit)
+/// survives.
 void main() {
   // The realistic populated case: the modal opened off a glance, so the flow
   // holds classes AND the entry-warmed catalogues are all in.
@@ -165,48 +168,15 @@ void main() {
         rankLadder: fullLadder,
       );
 
-  group('composition', () {
-    testWidgets('renders the header and both welcome panels with no layout '
-        'error', (tester) async {
-      await pumpFull(tester);
-
-      expect(tester.takeException(), isNull);
-      // Spanning header.
-      expect(find.text('Welcome to Iron Den'), findsOneWidget);
-      // Left panel — the app card.
-      expect(find.text('Get the CombatDen App'), findsOneWidget);
-      expect(find.text('Earn rewards'), findsWidgets);
-      expect(find.text('Watch videos'), findsWidgets);
-      expect(find.text('Scan to download the app'), findsOneWidget);
-      expect(
-        find.text('Sign in with the email you signed up with'),
-        findsOneWidget,
-      );
-      // Right panel — the showcase.
-      expect(find.text('IN THE APP'), findsOneWidget);
-      // "Book classes" is both a card benefit and the first slide's title.
-      expect(find.text('Book classes'), findsNWidgets(2));
-      // Foot.
-      expect(find.text('Back to start in 60s'), findsOneWidget);
-      expect(find.text('Done'), findsOneWidget);
-    });
-
-    testWidgets('lays the app card left of the showcase', (tester) async {
-      await pumpFull(tester);
-
-      final cardX = tester.getCenter(find.text('Get the CombatDen App')).dx;
-      final showcaseX = tester.getCenter(find.text('IN THE APP')).dx;
-
-      expect(cardX, lessThan(showcaseX));
-    });
-
-    testWidgets('fits a short iPad fold with every slide populated',
-        (tester) async {
-      // Worst case: all four slides carry content, on the smallest landscape
-      // fold the kiosk targets (minus the persistent kiosk header).
-      await pumpModal(
+  /// The worst-case populated modal: every slide carries content and the
+  /// member is known, so nothing is omitted and every panel is at its tallest.
+  Future<_MockKioskFlowCubit> pumpWorstCase(
+    WidgetTester tester, {
+    required Size surface,
+  }) =>
+      pumpModal(
         tester,
-        surface: const Size(1024, 700),
+        surface: surface,
         memberEmail: 'marcus.bell@gmail.com',
         rewards: [
           _reward('Bring a friend', 1000),
@@ -234,9 +204,37 @@ void main() {
         ),
       );
 
-      // No overflow anywhere — the body scrolls rather than clipping the QR.
+  group('composition', () {
+    testWidgets('renders both nested cards with no layout error',
+        (tester) async {
+      await pumpFull(tester);
+
       expect(tester.takeException(), isNull);
-      expect(find.byType(QrImageView), findsOneWidget);
+      // Left card — the app card, white-labelled after the gym.
+      expect(find.text('Get the Iron Den App'), findsOneWidget);
+      expect(find.text('Earn rewards'), findsWidgets);
+      expect(find.text('Watch videos'), findsWidgets);
+      expect(find.text('Scan to download the app'), findsOneWidget);
+      expect(
+        find.text('Sign in with the email you signed up with'),
+        findsOneWidget,
+      );
+      // Right card — the showcase.
+      expect(find.text('IN THE APP'), findsOneWidget);
+      // "Book classes" is both a card benefit and the first slide's title.
+      expect(find.text('Book classes'), findsNWidgets(2));
+      // Foot.
+      expect(find.text('Back to start in 60s'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+    });
+
+    testWidgets('lays the app card left of the showcase', (tester) async {
+      await pumpFull(tester);
+
+      final cardX = tester.getCenter(find.text('Get the Iron Den App')).dx;
+      final showcaseX = tester.getCenter(find.text('IN THE APP')).dx;
+
+      expect(cardX, lessThan(showcaseX));
     });
 
     testWidgets('the auto-rotate note lists exactly the live slides',
@@ -253,37 +251,114 @@ void main() {
     });
   });
 
-  group('the spanning header', () {
-    testWidgets('names the gym the kiosk is running at', (tester) async {
-      await pumpFull(tester, gymName: 'Ocean Pilates');
-
-      expect(find.text('Welcome to Ocean Pilates'), findsOneWidget);
-    });
-
-    testWidgets('never carries a member name, even off the glance',
-        (tester) async {
-      await pumpFull(tester, memberEmail: 'marcus.bell@gmail.com');
-
-      // The mockup's post-signup "Welcome to Iron Den, Marcus!" is not
-      // reusable here: the modal also opens from the idle home.
-      expect(find.text('Welcome to Iron Den'), findsOneWidget);
-      expect(find.textContaining('Marcus'), findsNothing);
-    });
-
-    testWidgets('drops the gym clause rather than inventing one when the name '
-        'is unknown', (tester) async {
-      await pumpFull(tester, gymName: null);
-
-      expect(find.text('Welcome'), findsOneWidget);
-      expect(find.textContaining('Welcome to'), findsNothing);
-    });
-
-    testWidgets('is a kiosk-scale line, matching the glance greeting',
+  group('ONE solid popup, two nested cards, Done inside', () {
+    testWidgets('the popup is a real surface, not two panels on the veil',
         (tester) async {
       await pumpFull(tester);
 
-      final header = tester.widget<Text>(find.text('Welcome to Iron Den'));
-      expect(header.style, DesignConstants.kioskDisplay);
+      final popup = tester.widget<Container>(find.byKey(kKioskGetAppPopup));
+      final decoration = popup.decoration as BoxDecoration;
+      // The kiosk's own popup chrome — the same one the idle warning wears.
+      expect(decoration.color, DesignConstants.popup);
+      expect(decoration.boxShadow, DesignConstants.cardShadow);
+      expect(
+        decoration.borderRadius,
+        BorderRadius.circular(DesignConstants.radiusCard),
+      );
+    });
+
+    testWidgets('both cards AND the Done foot sit inside that surface',
+        (tester) async {
+      await pumpFull(tester);
+
+      final popup = tester.getRect(find.byKey(kKioskGetAppPopup));
+      final parts = <String, Finder>{
+        'the app card': find.byType(KioskAppCard),
+        'the showcase': find.byType(KioskAppShowcase),
+        'Done': find.text('Done'),
+        'the countdown': find.text('Back to start in 60s'),
+      };
+      parts.forEach((name, finder) {
+        final rect = tester.getRect(finder);
+        expect(
+          popup.contains(rect.topLeft) && popup.contains(rect.bottomRight),
+          isTrue,
+          reason: '$name must be nested INSIDE the popup',
+        );
+      });
+    });
+
+    testWidgets('there is no spanning "Welcome to {gym}" header any more',
+        (tester) async {
+      // A deliberate reversal of an earlier decision: the gym is already named
+      // on the kiosk header and on the app card's own title, and the third
+      // naming only cost height on a screen that must not scroll.
+      await pumpFull(tester);
+
+      expect(find.textContaining('Welcome'), findsNothing);
+    });
+  });
+
+  group('it FITS the fold — nothing scrolls', () {
+    for (final fold in const <Size>[Size(1180, 820), Size(1024, 700)]) {
+      testWidgets('no overflow and no vertical scroll at '
+          '${fold.width.toInt()}x${fold.height.toInt()}', (tester) async {
+        await pumpWorstCase(tester, surface: fold);
+
+        // An overflow would surface here.
+        expect(tester.takeException(), isNull);
+        expect(find.byType(QrImageView), findsOneWidget);
+
+        // A member standing at a kiosk never finds content below a fold, so
+        // nothing in this modal may scroll vertically. (The belt ladder's
+        // horizontal scroller is fine — it is a sideways strip, not hidden
+        // content.)
+        for (final scrollable
+            in tester.widgetList<Scrollable>(find.byType(Scrollable))) {
+          expect(
+            axisDirectionToAxis(scrollable.axisDirection),
+            Axis.horizontal,
+            reason: 'the kiosk popup must never scroll vertically',
+          );
+        }
+
+        // And it really is inside the viewport, top to bottom.
+        final popup = tester.getRect(find.byKey(kKioskGetAppPopup));
+        expect(popup.top, greaterThanOrEqualTo(0));
+        expect(popup.bottom, lessThanOrEqualTo(fold.height));
+      });
+    }
+  });
+
+  group('the app is named after the GYM, never the platform', () {
+    testWidgets('the card title white-labels to the gym', (tester) async {
+      await pumpFull(tester, gymName: 'Ocean Pilates');
+
+      expect(find.text('Get the Ocean Pilates App'), findsOneWidget);
+      expect(find.textContaining('CombatDen'), findsNothing);
+    });
+
+    testWidgets('an unknown gym name degrades to a neutral title, never an '
+        'empty or broken one', (tester) async {
+      await pumpFull(tester, gymName: null);
+
+      expect(find.text('Get the App'), findsOneWidget);
+      expect(find.textContaining('  '), findsNothing);
+    });
+
+    testWidgets('a blank gym name is treated as no name at all',
+        (tester) async {
+      await pumpFull(tester, gymName: '   ');
+
+      expect(find.text('Get the App'), findsOneWidget);
+    });
+
+    testWidgets('the title is a kiosk PANEL title, one step under a screen '
+        'title', (tester) async {
+      await pumpFull(tester);
+
+      final title = tester.widget<Text>(find.text('Get the Iron Den App'));
+      expect(title.style, DesignConstants.kioskPanelTitle);
     });
   });
 
@@ -440,12 +515,11 @@ void main() {
       expect(find.text('Bring a friend'), findsNothing);
       expect(find.text('Clinch control fundamentals'), findsNothing);
       expect(find.text('You\'re here'), findsNothing);
-      // With nothing to show, the showcase panel is dropped outright and the
-      // app card carries the screen alone.
+      // With nothing to show, the showcase card is dropped outright and the
+      // app card carries the popup alone.
       expect(find.byType(KioskAppShowcase), findsNothing);
       expect(find.text('IN THE APP'), findsNothing);
-      expect(find.text('Get the CombatDen App'), findsOneWidget);
-      expect(find.text('Welcome to Iron Den'), findsOneWidget);
+      expect(find.text('Get the Iron Den App'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

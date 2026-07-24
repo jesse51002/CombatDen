@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,6 +8,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:theme_flutter/theme/animation/scale_reveal.dart';
 
+import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
@@ -104,13 +108,19 @@ void main() {
     KioskFlowState state, {
     bool reduceMotion = false,
     bool settle = true,
+    Stream<KioskFlowState> states = const Stream<KioskFlowState>.empty(),
   }) async {
-    final cubit = _MockKioskFlowCubit();
-    whenListen(
-      cubit,
-      const Stream<KioskFlowState>.empty(),
-      initialState: state,
+    // The rewards panel's app nudge is WHITE-LABELLED off the active gym —
+    // the same source the kiosk header names it from.
+    selectedGym.setActiveGym(
+      gymId: 'gym-1',
+      displayName: 'Iron Den',
+      role: EmployeeRole.owner,
+      timezone: 'America/Chicago',
+      logoUrl: null,
     );
+    final cubit = _MockKioskFlowCubit();
+    whenListen(cubit, states, initialState: state);
     addTearDown(cubit.close);
     await tester.binding.setSurfaceSize(const Size(1180, 820));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -176,7 +186,7 @@ void main() {
     expect(find.text('week streak'), findsOneWidget);
     expect(find.text('YOUR POINTS'), findsOneWidget);
     expect(find.text('+15 pts'), findsOneWidget);
-    expect(find.text('Redeem rewards in the CombatDen app'), findsOneWidget);
+    expect(find.text('Redeem rewards in the Iron Den app'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
     expect(find.textContaining('Back to start in'), findsOneWidget);
   });
@@ -202,8 +212,8 @@ void main() {
     expect(find.text('YOUR POINTS'), findsOneWidget);
     expect(find.byType(ProgressArc), findsNothing);
     // The redeem line is gone but the funnel is not — it points at booking.
-    expect(find.text('Redeem rewards in the CombatDen app'), findsNothing);
-    expect(find.text('Get the CombatDen app to book classes'), findsOneWidget);
+    expect(find.text('Redeem rewards in the Iron Den app'), findsNothing);
+    expect(find.text('Get the Iron Den app to book classes'), findsOneWidget);
   });
 
   testWidgets('a repeat check-in says so and drops the +pts chip',
@@ -398,6 +408,38 @@ void main() {
         ),
       );
       await settleReveal(tester);
+    });
+
+    testWidgets('the choreography does NOT replay when the "Get the app" modal '
+        'closes back onto a settled glance', (tester) async {
+      // Done on the modal hands the member back to the glance with its hold
+      // restarted at full — but the glance itself must stay exactly where they
+      // left it. Replaying the confirmation lift (or re-rolling the streak)
+      // would make a member who pressed Done watch the whole screen assemble
+      // itself a second time.
+      final states = StreamController<KioskFlowState>();
+      addTearDown(states.close);
+      await pumpGlance(tester, glanceState, states: states.stream);
+
+      final greetingBefore = tester.getRect(find.byType(KioskGlanceGreeting));
+
+      // The cubit restarts the hold at full on close — the only thing that
+      // changes on the glance's own state.
+      states.add(glanceState.copyWith(glanceCountdown: 10));
+      await tester.pump();
+
+      // No travelling copy: the lift did not start again.
+      expect(find.byKey(kKioskGlanceTravellingConfirmation), findsNothing);
+      // The confirmation is still landed in its slot, not back at the centre.
+      expect(
+        tester.getRect(find.byType(KioskGlanceGreeting)),
+        greetingBefore,
+      );
+      // Both cards are still fully landed, not re-fading from zero.
+      expect(revealOpacity(tester, 'week streak'), 1);
+      expect(revealOpacity(tester, 'YOUR POINTS'), 1);
+      // And the streak numeral is its final value, not rolling up again.
+      expect(find.text('7'), findsOneWidget);
     });
 
     testWidgets('the lift moves the confirmation ONLY — nothing else on the '

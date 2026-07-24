@@ -18,17 +18,31 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 /// The admin surfaces keep the base buttons untouched.
 ///
 /// The ladder, loudest first: [KioskPrimaryButton] (gradient) >
-/// [KioskOutlineButton] (2px ink) > [KioskGhostButton] (nothing).
+/// [KioskOutlineButton] (2px ink) > [KioskGhostButton] (nothing). A primary
+/// may borrow the outline's SIZE (`compact: true`) without leaving its tier —
+/// see [KioskPrimaryButton].
 
 /// The kiosk's primary action — the brand gradient CTA at kiosk scale.
+///
+/// Pass [compact] where a filled button has to sit BESIDE a secondary one and
+/// must not out-shout it (the home's "Get it", which shares a screen with
+/// "New here? Sign up"). Compact keeps the gradient — it is still the primary
+/// tier — and only drops to the OUTLINE button's own metrics, reusing that
+/// token rather than declaring a third size, so the two can never drift apart
+/// and the ramp still moves as one set.
 class KioskPrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
+
+  /// Size this filled button to the secondary rung ([KioskOutlineButton]'s
+  /// label + padding) instead of the loud primary rung.
+  final bool compact;
 
   const KioskPrimaryButton({
     super.key,
     required this.text,
     this.onPressed,
+    this.compact = false,
   });
 
   @override
@@ -36,8 +50,12 @@ class KioskPrimaryButton extends StatelessWidget {
     return AppPrimaryButton(
       text: text,
       onPressed: onPressed,
-      textStyle: DesignConstants.kioskButtonPrimaryLabel,
-      padding: DesignConstants.kioskButtonPrimaryPadding,
+      textStyle: compact
+          ? DesignConstants.kioskButtonOutlineLabel
+          : DesignConstants.kioskButtonPrimaryLabel,
+      padding: compact
+          ? DesignConstants.kioskButtonOutlinePadding
+          : DesignConstants.kioskButtonPrimaryPadding,
     );
   }
 }

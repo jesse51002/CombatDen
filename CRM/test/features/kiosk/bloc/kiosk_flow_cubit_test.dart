@@ -919,7 +919,69 @@ void main() {
       });
     });
 
-    test('Done closes the modal, returns home, and cancels the 60s timer', () {
+    test('Done returns to the GLANCE it opened over, not home, and gives the '
+        'member the WHOLE hold back', () {
+      // The founder-reported bug: Done ejected the member out of their own
+      // check-in result. The modal is an overlay, so closing it must reveal
+      // what was underneath — and because the member spent their reading time
+      // inside the modal, the ten seconds start again from full rather than
+      // handing back the few that were left.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        // Burn most of the hold, then open the modal over it.
+        async.elapse(kKioskGlanceLastBeat + const Duration(seconds: 8));
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 8);
+        cubit.openAppModal();
+
+        cubit.closeAppModal(); // Done
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.appModalOpen, isFalse);
+        expect(cubit.state.appModalCountdown, 0);
+        // The member's own result is still there — nothing was abandoned.
+        expect(cubit.state.selectedMember, member1);
+        expect(cubit.state.checkInResult, recorded);
+        // Reset to FULL, not the two seconds that were left.
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
+
+        // And the restarted hold drains immediately — it does NOT wait out the
+        // reveal's last beat a second time (the glance is already settled).
+        async.elapse(const Duration(seconds: 1));
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 1);
+
+        // Ten full seconds from Done, then home on the glance's own clock.
+        async.elapse(const Duration(seconds: 8));
+        expect(cubit.state.view, KioskView.checkedIn);
+        async.elapse(const Duration(seconds: 1));
+        expect(cubit.state.view, KioskView.home);
+        cubit.close();
+      });
+    });
+
+    test('Done from the HOME returns to the home it opened over', () {
+      fakeAsync((async) {
+        final cubit = build();
+        cubit.openAppModal();
+        expect(cubit.state.appModalOpen, isTrue);
+
+        cubit.closeAppModal(); // Done
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.appModalOpen, isFalse);
+        cubit.close();
+      });
+    });
+
+    test('Done cancels the modal\'s own 60s timer', () {
+      // A surviving timer would fire a goHome long after the member had moved
+      // on — off the glance they were handed back to, or over the next
+      // person's flow.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -930,14 +992,46 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks();
         cubit.openAppModal();
-        expect(cubit.state.appModalOpen, isTrue);
+        cubit.closeAppModal();
 
-        cubit.closeAppModal(); // Done
+        // The glance's own 10s hold takes it home; nothing at the 60s mark
+        // re-fires, and no pending-timer crash.
+        async.elapse(const Duration(seconds: 120));
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.appModalOpen, isFalse);
+        cubit.close();
+      });
+    });
 
-        // The modal timer was cancelled — no late goHome, no pending-timer crash.
-        async.elapse(const Duration(seconds: 120));
+    test('EXPIRY goes home even off the glance — nobody is standing there', () {
+      // The deliberate split from Done: sixty seconds of no interaction means
+      // the member walked away, and leaving their name + streak up on a shared
+      // iPad for the next person is the wrong default.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+        cubit.openAppModal();
+
+        async.elapse(kKioskAppModalTimeout);
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.appModalOpen, isFalse);
+        expect(cubit.state.selectedMember, isNull);
+        expect(cubit.state.checkInResult, isNull);
+        cubit.close();
+      });
+    });
+
+    test('closing a modal that is not open is a no-op', () {
+      fakeAsync((async) {
+        final cubit = build();
+        cubit.closeAppModal();
+        expect(cubit.state.appModalOpen, isFalse);
         expect(cubit.state.view, KioskView.home);
         cubit.close();
       });

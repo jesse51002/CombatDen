@@ -82,11 +82,12 @@ const int kKioskGlanceRewardCount = 4;
 /// (mockup `.vc-grid` is a two-card row). Only this many are fetched.
 const int kKioskShowcaseVideoCount = 2;
 
-/// How long the "Get the CombatDen App" modal (UX-5) stays open before it
-/// auto-closes back to home, so the next member gets a clean home. A member can
-/// also leave early with Done. It is the modal's OWN clock — a plain countdown
-/// that member interaction does NOT reset (unlike the 5-minute idle guard); the
-/// modal is a self-dismissing overlay, not an in-progress draft.
+/// How long the "Get the app" modal (UX-5) stays open before it auto-closes
+/// back to home, so the next member gets a clean home. A member can also leave
+/// early with Done — which returns them to the view underneath instead, see
+/// [KioskFlowCubit.closeAppModal]. It is the modal's OWN clock — a plain
+/// countdown that member interaction does NOT reset (unlike the 5-minute idle
+/// guard); the modal is a self-dismissing overlay, not an in-progress draft.
 const Duration kKioskAppModalTimeout = Duration(seconds: 60);
 
 /// Drives the kiosk check-in lane's internal navigation: the current
@@ -491,23 +492,45 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     emit(state.copyWith(glanceCountdown: kKioskGlanceHold.inSeconds));
     _glanceTimer = Timer(kKioskGlanceLastBeat, () {
       if (isClosed) return;
-      _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (isClosed) return;
-        final next = state.glanceCountdown - 1;
-        if (next <= 0) {
-          _glanceTimer?.cancel();
-          goHome();
-        } else {
-          emit(state.copyWith(glanceCountdown: next));
-        }
-      });
+      _startGlanceCountdown();
     });
+  }
+
+  /// The hold itself — one per-second countdown that returns home at zero.
+  /// Split out of [_startGlanceReturn] because closing the "Get the app" modal
+  /// restarts the hold on a glance that has ALREADY finished revealing, and
+  /// that path must not wait out [kKioskGlanceLastBeat] a second time.
+  void _startGlanceCountdown() {
+    _glanceTimer?.cancel();
+    _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (isClosed) return;
+      final next = state.glanceCountdown - 1;
+      if (next <= 0) {
+        _glanceTimer?.cancel();
+        goHome();
+      } else {
+        emit(state.copyWith(glanceCountdown: next));
+      }
+    });
+  }
+
+  /// Give the glance its WHOLE hold back after the modal closes over it.
+  ///
+  /// The member spent their read-time inside the modal, so handing them the
+  /// two seconds that happened to be left when they opened it would eject them
+  /// mid-sentence. The countdown is reset to [kKioskGlanceHold] in full and
+  /// starts draining immediately — the glance behind the modal is settled, so
+  /// there is no reveal left to wait for (and the glance screen never
+  /// re-mounts, so its choreography does not replay either).
+  void _restartGlanceHold() {
+    emit(state.copyWith(glanceCountdown: kKioskGlanceHold.inSeconds));
+    _startGlanceCountdown();
   }
 
   // ── "Get the app" modal (UX-5) ──
 
-  /// Open the member-facing "Get the CombatDen App" modal — opened by a tap on
-  /// the retention glance (the founder's UX-5 ruling: the glance tap now offers
+  /// Open the member-facing "Get the app" modal — opened by a tap on the
+  /// retention glance (the founder's UX-5 ruling: the glance tap now offers
   /// the app instead of ejecting home) or the home QR panel's "Get it"
   /// affordance. Opening it PAUSES the glance's auto-return — in EITHER phase,
   /// the pre-hold reveal window or the running 10-second hold, since both ride
@@ -516,6 +539,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   /// NOT begin a member flow (no
   /// [KioskSessionCubit.beginFlow]) — so it never touches the grace-window
   /// bookkeeping. Idempotent while already open.
+  ///
+  /// The paused glance timer is not resumed on close, it is RESTARTED at full
+  /// ([closeAppModal]) — the modal ate the member's reading time.
   void openAppModal() {
     if (state.appModalOpen) return;
     // Pause the glance auto-return + suppress the idle guard: the modal's own
@@ -534,6 +560,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   /// The modal's 60-second auto-close. One per-second countdown drives the
   /// visible timer and, at zero, returns home (mirrors the glance/idle timers).
+  ///
+  /// **Expiry goes HOME, unlike Done.** Sixty seconds of no interaction means
+  /// nobody is standing at the kiosk, and dropping back onto a glance would
+  /// leave a member's name, streak and points on a shared iPad for the next
+  /// person to read. So the timer running out is treated as "they walked away"
+  /// and clears the surface, while Done — a deliberate press by someone still
+  /// there — hands them back what they were looking at ([closeAppModal]).
   void _startAppModalTimer() {
     _appModalTimer?.cancel();
     _appModalTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -548,17 +581,43 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     });
   }
 
-  /// Close the modal (Done) and return to a fresh home for the next member.
-  void closeAppModal() => goHome();
+  /// Close the modal (Done) and return to WHATEVER WAS UNDERNEATH IT.
+  ///
+  /// The modal is an overlay, so dismissing it reveals the view it opened over
+  /// — the retention glance when it was opened by a glance tap, the idle home
+  /// when it came from the home QR panel's "Get it". It used to call [goHome]
+  /// unconditionally, which ejected a member out of their own check-in result
+  /// the moment they pressed Done (founder-reported bug).
+  ///
+  /// Returning to the glance RESTARTS its hold at full [kKioskGlanceHold]: the
+  /// member spent their reading time in the modal, so they get the whole ten
+  /// seconds again rather than the few that were left. The glance's reveal
+  /// choreography does NOT replay — the screen stayed mounted behind the
+  /// overlay, so only its countdown is restarted. Returning to home simply
+  /// re-arms the 5-minute flow-idle guard the modal suppressed.
+  ///
+  /// Idempotent when the modal isn't open, and it always cancels the modal's
+  /// own 60-second timer so no late tick can fire a [goHome] afterwards.
+  void closeAppModal() {
+    if (!state.appModalOpen) return;
+    _appModalTimer?.cancel();
+    emit(state.copyWith(appModalOpen: false, appModalCountdown: 0));
+    if (state.view == KioskView.checkedIn) {
+      _restartGlanceHold();
+    } else {
+      _syncIdleTimer();
+    }
+  }
 
   // ── Return to home (Done / cancel / idle timeout) ──
 
   /// Abandon any in-progress draft and return to the idle home screen. Ends
   /// the flow if one was started; cancels the search + idle timers.
   ///
-  /// This is the ONE abandon path — Done, the idle timeout, the app modal's
-  /// expiry, and the class-pick escape ("Not Marcus?", `KioskEscapeFoot`) all
-  /// come through here. Never hand-roll another: dropping [_endFlowIfStarted]
+  /// This is the ONE abandon path — the glance's Done, the idle timeout, the
+  /// app modal's EXPIRY (never its Done, which returns to the view underneath)
+  /// and the class-pick escape ("Not Marcus?", `KioskEscapeFoot`) all come
+  /// through here. Never hand-roll another: dropping [_endFlowIfStarted]
   /// leaks the session's in-progress flow count and the kiosk then never signs
   /// itself out at the T+11h45 lockout, and dropping the sequence bumps lets a
   /// late fetch paint the previous member's data over the next person's home.

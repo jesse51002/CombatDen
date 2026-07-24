@@ -1,19 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
-import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_card.dart';
-import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_showcase.dart';
-import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_slide.dart';
+import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_get_app_body.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_slides.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_slide.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
-import 'package:crm/shared/widgets/hairline.dart';
 
 /// The app-download page base URL a member's kiosk QR points at. The per-gym
 /// download page (`/get-app/<gymId>`) is a separate workstream; the kiosk only
@@ -24,26 +17,33 @@ const String kKioskAppDownloadBaseUrl = 'https://www.combatden.net/get-app';
 /// Build the app-download URL the QR encodes for [gymId].
 String kioskAppDownloadUrl(String gymId) => '$kKioskAppDownloadBaseUrl/$gymId';
 
-/// The member-facing "Get the CombatDen App" modal (founder feature UX-5) —
-/// the approved kiosk WELCOME screen, shown as an overlay funnel opened from a
-/// glance tap or the home QR panel.
+/// The one solid popup surface the whole modal sits on. Named so a test can
+/// assert the founder's structural rule — ONE popup, with the two cards and
+/// the Done foot nested INSIDE it, nothing floating on the veil.
+const Key kKioskGetAppPopup = Key('kiosk-get-app-popup');
+
+/// The member-facing "Get the app" modal (founder feature UX-5) — the kiosk's
+/// app-adoption funnel, opened by a tap on the retention glance or by the home
+/// QR panel's "Get it" button.
 ///
-/// It is the welcome screen's own composition: a spanning header naming the
-/// gym, then the accent-soft app card on the left (title, benefit checks, the
-/// real scannable download QR, the sign-in steps) beside the auto-advancing
-/// "In the app" showcase on the right, over the shared timer + Done foot. It
-/// is a big modal on purpose.
+/// **It is ONE solid popup carrying two nested cards** (founder ruling): a
+/// single lifted surface over the veil, holding the accent-soft app card
+/// (white-labelled title, the book/earn/watch checks, the real scannable
+/// download QR, the two sign-in steps) beside the auto-advancing "In the app"
+/// showcase — with the countdown and Done INSIDE that surface, not dangling
+/// under it. There is deliberately no spanning "Welcome to {gym}" header: the
+/// gym is already named on the persistent kiosk header and on the app card's
+/// own title, so a third naming only cost height on a screen that must not
+/// scroll.
 ///
-/// Two deliberate departures from the mockup's screen, both because the modal
-/// can open with NO member known (from the idle home):
-///  * the header names the GYM only (`Welcome to {gym}`). The mockup's
-///    `Welcome to {gym}, {name}!` sits after a signup; a member name here
-///    would sometimes be a guess, so it is never shown;
-///  * step 2's address renders only when [memberEmail] is really known.
+/// **Nothing here scrolls.** A member standing at a kiosk never discovers what
+/// sits below a fold, so the whole composition fits the iPad landscape viewport
+/// outright — see [KioskGetAppBody].
 ///
-/// A veil over the current kiosk view (rendered like the idle warning). The
-/// scrim absorbs taps so an accidental touch doesn't dismiss it — only Done or
-/// the 60-second timer closes it, both returning to a fresh home.
+/// The veil absorbs taps so an accidental touch doesn't dismiss it: only Done
+/// or the 60-second timer closes it. Done returns the member to whatever was
+/// underneath (the glance, or the home); expiry means nobody is standing there
+/// and returns home — both live in `KioskFlowCubit.closeAppModal`.
 /// [secondsLeft] is the cubit's modal countdown; [gymId] scopes the QR.
 ///
 /// Every showcase input is a catalogue the flow cubit fetched ONCE at kiosk
@@ -54,8 +54,9 @@ class KioskGetAppModal extends StatelessWidget {
   final String gymId;
   final int secondsLeft;
 
-  /// The gym's real name, for the spanning header. Null / empty (no active gym
-  /// name) drops the "to {gym}" clause rather than inventing a stand-in.
+  /// The gym's real name, which white-labels the app card's title. Null /
+  /// empty (no active gym name) falls back to naming the app generically
+  /// rather than inventing a stand-in gym.
   final String? gymName;
 
   /// The checked-in member's sign-in address, when one is known (the glance
@@ -102,24 +103,29 @@ class KioskGetAppModal extends StatelessWidget {
           color: DesignConstants.backgroundColor.withValues(alpha: 0.92),
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(DesignConstants.paddingBig),
+              padding: const EdgeInsets.all(DesignConstants.paddingSmall),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
                     maxWidth: DesignConstants.dialogMaxWidthWide,
                   ),
-                  // Scrolls on a short fold rather than clipping the QR.
-                  child: SingleChildScrollView(
-                    child: _WelcomeBody(
-                      gymId: gymId,
-                      gymName: gymName,
-                      secondsLeft: secondsLeft,
-                      memberEmail: memberEmail,
-                      slides: kioskShowcaseSlides(
-                        classes: classes,
-                        rewards: rewards,
-                        videos: videos,
-                        rankLadder: rankLadder,
+                  // The popup takes the whole veiled area rather than
+                  // shrink-wrapping: a bounded height is what lets the body
+                  // lay the foot out first and give the cards the rest, which
+                  // is how this composition guarantees it never scrolls.
+                  child: SizedBox.expand(
+                    child: _Popup(
+                      child: KioskGetAppBody(
+                        gymId: gymId,
+                        gymName: gymName,
+                        secondsLeft: secondsLeft,
+                        memberEmail: memberEmail,
+                        slides: kioskShowcaseSlides(
+                          classes: classes,
+                          rewards: rewards,
+                          videos: videos,
+                          rankLadder: rankLadder,
+                        ),
                       ),
                     ),
                   ),
@@ -133,123 +139,31 @@ class KioskGetAppModal extends StatelessWidget {
   }
 }
 
-/// The welcome composition itself (mockup `.glance-top` + `.welcome-grid` +
-/// `.glance-foot`): the spanning header over two equal-height panels, over the
-/// auto-return foot.
-class _WelcomeBody extends StatelessWidget {
-  final String gymId;
-  final String? gymName;
-  final int secondsLeft;
-  final String? memberEmail;
-  final List<KioskShowcaseSlide> slides;
-
-  const _WelcomeBody({
-    required this.gymId,
-    required this.gymName,
-    required this.secondsLeft,
-    required this.memberEmail,
-    required this.slides,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final card = KioskAppCard(
-      downloadUrl: kioskAppDownloadUrl(gymId),
-      memberEmail: memberEmail,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        _Header(gymName: gymName),
-        if (slides.isEmpty)
-          // A gym with nothing to show yet (no classes loaded, no rewards, no
-          // feed, no ranks): the app card carries the screen alone rather than
-          // an empty panel or a stand-in slide. Capped so it doesn't stretch
-          // across the full welcome measure.
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: DesignConstants.dialogMaxWidth,
-              ),
-              child: card,
-            ),
-          )
-        else
-          // Equal-height halves, like the glance's two panels: IntrinsicHeight
-          // gives the unbounded scroll body a height for the stretch to resolve
-          // against, so the showcase's slide stage gets a bounded box.
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingLarge,
-              children: [
-                Expanded(child: card),
-                Expanded(child: KioskAppShowcase(slides: slides)),
-              ],
-            ),
-          ),
-        _Foot(secondsLeft: secondsLeft),
-      ],
-    );
-  }
-}
-
-/// The header spanning both panels (mockup `.glance-top`): one kiosk-scale
-/// line that anchors the composition and says where the member is.
+/// The single solid surface the whole modal lives on — the same popup chrome
+/// the kiosk's idle warning already uses (`popup` fill, the object-card radius,
+/// a hairline border, the soft layered `cardShadow`), just at welcome-screen
+/// width.
 ///
-/// It states only what the kiosk certainly knows — the gym on the header and
-/// in `selectedGym`. It never carries a member name: the modal also opens from
-/// the idle home, where nobody has identified themselves.
-class _Header extends StatelessWidget {
-  final String? gymName;
+/// It is what makes the modal read as ONE thing that opened rather than two
+/// panels floating on a veil, and it is the surface the two nested cards and
+/// the Done foot all sit inside.
+class _Popup extends StatelessWidget {
+  final Widget child;
 
-  const _Header({required this.gymName});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = gymName?.trim() ?? '';
-    return Text(
-      name.isEmpty ? 'Welcome' : 'Welcome to $name',
-      style: DesignConstants.kioskDisplay,
-      textAlign: TextAlign.center,
-      // A very long gym name wraps once, then clips — it must never push the
-      // two panels off a short iPad fold.
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-}
-
-/// The modal's own footer: a hairline, the 60-second auto-close countdown, and
-/// a Done button that returns to a fresh home.
-class _Foot extends StatelessWidget {
-  final int secondsLeft;
-
-  const _Foot({required this.secondsLeft});
+  const _Popup({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        const Hairline(),
-        Center(
-          child: KioskReturnTimer(
-            total: kKioskAppModalTimeout.inSeconds,
-            secondsLeft: secondsLeft,
-          ),
-        ),
-        Center(
-          child: KioskOutlineButton(
-            text: 'Done',
-            onPressed: () => context.read<KioskFlowCubit>().closeAppModal(),
-          ),
-        ),
-      ],
+    return Container(
+      key: kKioskGetAppPopup,
+      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+      decoration: BoxDecoration(
+        color: DesignConstants.popup,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
+        border: Border.all(color: DesignConstants.line),
+        boxShadow: DesignConstants.cardShadow,
+      ),
+      child: child,
     );
   }
 }

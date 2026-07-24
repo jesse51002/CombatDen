@@ -412,7 +412,7 @@ class DesignConstants {
 
   // ══ KIOSK TYPE RAMP ══
   // The member kiosk (a supervised iPad read from ~2m) runs its OWN COMPLETE
-  // type ramp, transcribed from `KIOSK_MOCKUPS.html` — it does NOT borrow the
+  // type ramp — it does NOT borrow the
   // admin ramp for its smaller text. That is the whole point: a kiosk screen
   // whose headline is kiosk-scale but whose labels are admin-scale reads
   // broken, because the button labels then out-size the copy around them.
@@ -645,6 +645,18 @@ class DesignConstants {
   /// AND a title line, so squeezing it to the reward-tile measure crushes
   /// both.
   static const double kioskVideoCardWidth = 192.0;
+
+  /// Inner content measure for a HOME half — the width the name-search field
+  /// and its result rows are capped at (and centered within) inside their
+  /// column.
+  ///
+  /// A home half is nearly half the iPad's width; a search field stretched to
+  /// all of it reads as running off the edge of the screen and leaves the two
+  /// columns feeling lopsided. Capping the control (not the column) keeps the
+  /// two heads full-width and the seam where it is, while the field lands as a
+  /// deliberate object on the column's centre line. Wider than
+  /// [kioskGlanceMeasure] because this is one long control, not a tile grid.
+  static const double kioskHomeMeasure = 440.0;
 
   // ── Kiosk button scale ──
   // The kiosk is read (and pressed) from standing distance on a supervised

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_app_copy.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_app_line.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_panel.dart';
@@ -217,9 +219,12 @@ class _AppFooter extends StatelessWidget {
         const Hairline(),
         Center(
           child: KioskAppLine(
+            // White-labelled: it is the GYM's app, not the platform's — see
+            // `kiosk_app_copy.dart`. The gym is read straight off the global
+            // `selectedGym`, the same way the kiosk header names it.
             text: hasRewards
-                ? 'Redeem rewards in the CombatDen app'
-                : 'Get the CombatDen app to book classes',
+                ? kioskRedeemInAppLine(selectedGym.gymName)
+                : kioskBookInAppLine(selectedGym.gymName),
           ),
         ),
       ],
