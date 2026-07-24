@@ -102,13 +102,11 @@ class KioskFlowState extends Equatable {
   /// Fetched once at kiosk entry and reused (it survives [goHome]). EMPTY
   /// when the gym has ranks switched off, has configured none, or the fetch
   /// failed; the slide (and its dot) is then omitted.
+  ///
+  /// There is deliberately NO member-rank field beside it: the rank slide
+  /// features a middle rung and an illustrative bar in every state, so it
+  /// needs no member data at all (see `KioskRankSlide`).
   final List<MainRank> rankLadder;
-
-  /// The checked-in member's current main-rank id, from the glance's member
-  /// fetch — it tags the "You're here" rung on the rank slide. Null from the
-  /// idle home (no member is known there), which simply leaves the ladder
-  /// untagged rather than guessing a rung.
-  final String? currentRankId;
 
   /// The per-glance data fetch (rewards + balance) is in flight.
   final bool glanceLoading;
@@ -153,7 +151,6 @@ class KioskFlowState extends Equatable {
     this.rewards = const [],
     this.videos = const [],
     this.rankLadder = const [],
-    this.currentRankId,
     this.glanceLoading = false,
     this.glanceCountdown = 0,
     this.idleWarningActive = false,
@@ -192,7 +189,6 @@ class KioskFlowState extends Equatable {
     List<RewardResponse>? rewards,
     List<Video>? videos,
     List<MainRank>? rankLadder,
-    Object? currentRankId = _keep,
     bool? glanceLoading,
     int? glanceCountdown,
     bool? idleWarningActive,
@@ -231,9 +227,6 @@ class KioskFlowState extends Equatable {
       rewards: rewards ?? this.rewards,
       videos: videos ?? this.videos,
       rankLadder: rankLadder ?? this.rankLadder,
-      currentRankId: identical(currentRankId, _keep)
-          ? this.currentRankId
-          : currentRankId as String?,
       glanceLoading: glanceLoading ?? this.glanceLoading,
       glanceCountdown: glanceCountdown ?? this.glanceCountdown,
       idleWarningActive: idleWarningActive ?? this.idleWarningActive,
@@ -263,7 +256,6 @@ class KioskFlowState extends Equatable {
         rewards,
         videos,
         rankLadder,
-        currentRankId,
         glanceLoading,
         glanceCountdown,
         idleWarningActive,

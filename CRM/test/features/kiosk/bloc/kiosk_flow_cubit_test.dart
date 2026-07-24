@@ -16,7 +16,6 @@ import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
-import 'package:crm/features/member_details/data/models/rank.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/video_feed.dart';
@@ -194,14 +193,6 @@ void main() {
         classStreakWeeks: 3,
         pointsBalance: 2150,
         videosWatched: 0,
-      ),
-    );
-    when(() => detail.rank).thenReturn(
-      const Rank(
-        rankId: 'rank-blue',
-        name: 'Blue',
-        classesToNextMajor: 25,
-        classesTillNextStep: 25,
       ),
     );
     when(() => member.getMemberDetail(any()))
@@ -1136,24 +1127,29 @@ void main() {
       });
     });
 
-    test('the glance also records the member\'s rank, for the "You\'re here" '
-        'rung', () {
+    test('a check-in leaves the rank showcase input untouched — that slide '
+        'holds NO member link', () {
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
         final cubit = build();
+        async.flushMicrotasks();
+        final ladderAtEntry = cubit.state.rankLadder;
 
         cubit.selectMember(member1);
         async.flushMicrotasks();
         cubit.selectClass(occ1);
         async.flushMicrotasks();
 
+        // The glance's member fetch still lands — it pays for the points
+        // balance — but nothing rank-shaped is taken off it. The "Track rank"
+        // slide features a MIDDLE rung over an illustrative bar in every
+        // state (see `KioskRankSlide`), so there is no per-member rank field
+        // that could follow the next person home.
         expect(cubit.state.view, KioskView.checkedIn);
-        expect(cubit.state.currentRankId, 'rank-blue');
-
-        // …and it is per-member, so it never follows the next person home.
-        cubit.goHome();
-        expect(cubit.state.currentRankId, isNull);
+        expect(cubit.state.pointsBalance, 2150);
+        expect(cubit.state.rankLadder, ladderAtEntry);
+        expect(cubit.state.rankLadder, [blueRank]);
         cubit.close();
       });
     });

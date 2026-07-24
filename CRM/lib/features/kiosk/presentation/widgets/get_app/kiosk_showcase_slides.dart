@@ -19,6 +19,14 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 /// not exist: the rotating title, the dots and the auto-rotate caption are all
 /// derived from this list, so none of them can advertise a missing slide
 /// either.
+///
+/// **The CONTENT of each slide is real too — with one deliberate exception.**
+/// "Book classes" draws the real occurrences the flow loaded, "Earn rewards"
+/// the gym's real cached catalogue, "Watch videos" the gym's own curated feed.
+/// "Track rank" draws the gym's real ladder but features a MIDDLE rung over an
+/// illustrative progress bar, on purpose — see `KioskRankSlide` for the
+/// founder ruling behind it. Do not read that exception as licence to invent
+/// content on the other three.
 List<KioskShowcaseSlide> kioskShowcaseSlides({
   required List<EffectiveClassInstance> classes,
   required List<RewardResponse> rewards,

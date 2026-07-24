@@ -180,8 +180,8 @@ class _IdleOverlay extends StatelessWidget {
 /// Everything it shows comes from state the cubit ALREADY holds: the three
 /// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's own
 /// video feed, its rank ladder), the classes the flow loaded, and the
-/// checked-in member's address + rank. **No fetch is fired to open the modal**
-/// — that is what keeps it instant. A catalogue that came back empty simply
+/// checked-in member's address. **No fetch is fired to open the modal** —
+/// that is what keeps it instant. A catalogue that came back empty simply
 /// drops its slide.
 class _AppModalOverlay extends StatelessWidget {
   const _AppModalOverlay();
@@ -196,7 +196,6 @@ class _AppModalOverlay extends StatelessWidget {
           prev.classes != cur.classes ||
           prev.videos != cur.videos ||
           prev.rankLadder != cur.rankLadder ||
-          prev.currentRankId != cur.currentRankId ||
           prev.selectedMember != cur.selectedMember,
       builder: (context, state) {
         if (!state.appModalOpen) return const SizedBox.shrink();
@@ -211,10 +210,7 @@ class _AppModalOverlay extends StatelessWidget {
           rewards: state.rewards,
           classes: state.classes,
           videos: state.videos,
-          rankLadder: kioskRankSteps(
-            state.rankLadder,
-            currentRankId: state.currentRankId,
-          ),
+          rankLadder: kioskRankSteps(state.rankLadder),
         );
       },
     );

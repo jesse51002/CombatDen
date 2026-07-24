@@ -371,13 +371,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     final seq = ++_glanceSeq;
     final rewards = await _ensureRewards();
     int? balance;
-    String? rankId;
     try {
       final detail = await _memberRepo.getMemberDetail(member.memberId);
       balance = detail.retention.pointsBalance;
-      // Also the "You're here" rung on the rank showcase slide — the same
-      // fetch already pays for it, so no extra call.
-      rankId = detail.rank?.rankId;
     } catch (e, st) {
       log('Kiosk points balance load failed', error: e, stackTrace: st);
     }
@@ -385,7 +381,6 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     emit(state.copyWith(
       rewards: rewards,
       pointsBalance: balance,
-      currentRankId: rankId,
       glanceLoading: false,
     ));
   }

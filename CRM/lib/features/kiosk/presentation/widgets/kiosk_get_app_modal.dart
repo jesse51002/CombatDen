@@ -74,8 +74,9 @@ class KioskGetAppModal extends StatelessWidget {
   /// Empty for a gym with no feed (or a failed fetch), which omits the slide.
   final List<Video> videos;
 
-  /// The gym's belt ladder, already tagged with the member's rung — the
-  /// "Track rank" slide. Empty when the gym doesn't run ranks, which omits the
+  /// The gym's belt ladder — the "Track rank" slide. Carries no member link:
+  /// that slide features a MIDDLE rung and an illustrative bar by design (see
+  /// `KioskRankSlide`). Empty when the gym doesn't run ranks, which omits the
   /// slide and its dot.
   final List<KioskRankStep> rankLadder;
 

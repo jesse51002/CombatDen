@@ -387,6 +387,16 @@ class DesignConstants {
   static const double progressBarThickness = 4.0;
   static const double verticalDividerHeight = 16.0;
 
+  /// The kiosk's CONTENT progress rail — the "Track rank" showcase bar. Twice
+  /// [progressBarThickness] for the same reason the kiosk type ramp exists:
+  /// this bar is the point of its slide and is read from ~2m, where a 4px rail
+  /// disappears. It is a separate token BY ROLE, not a re-scale of the thin
+  /// one — the kiosk's own SUBORDINATE bar, `KioskReturnTimer`'s drain track,
+  /// deliberately stays on [progressBarThickness] so it keeps reading as its
+  /// label's underline (the same way `chartStroke` / `dividerThickness` /
+  /// `buttonBorder` are kept apart by role rather than by size).
+  static const double kioskProgressBarThickness = 8.0;
+
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -616,9 +626,10 @@ class DesignConstants {
       );
 
   /// A TAG pinned on artwork or the tiniest meta line — a reward tile's price
-  /// pill, the rank ladder's belt names and "You're here" pill, a showcase
-  /// video's view count (w500). The one kiosk role that stays genuinely
-  /// tiny: it always sits ON an image or inside a dense strip.
+  /// pill, the rank ladder's RESTING belt names (its featured rung steps up to
+  /// [kioskLabel]), a showcase video's view count (w500). The one kiosk role
+  /// that stays genuinely tiny: it always sits ON an image or inside a dense
+  /// strip.
   static TextStyle get kioskTag => baseFont.copyWith(
         fontWeight: FontWeight.w700,
         fontSize: 11,

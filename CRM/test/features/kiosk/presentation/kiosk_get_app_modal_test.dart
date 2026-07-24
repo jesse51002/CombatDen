@@ -12,6 +12,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_app_showcase.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_dots.dart';
+import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_progress.dart';
 import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_rank_slide.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
 import 'package:crm/features/members/data/video_feed.dart';
@@ -86,6 +87,11 @@ MainRank _rank(String name, int order) => MainRank(
 /// a stand-in), that the QR keeps its fixed dark-on-white contrast even under
 /// the dark theme, and that the modal's behaviour (timer label, Done → cubit)
 /// survives.
+///
+/// "Track rank" is the one slide whose CONTENT is deliberately illustrative
+/// (founder ruling — see `KioskRankSlide` and `kiosk_rank_slide_test.dart`);
+/// it stays conditional on the gym really running ranks like every other
+/// slide, and it never claims a rung for the viewer.
 void main() {
   // The realistic populated case: the modal opened off a glance, so the flow
   // holds classes AND the entry-warmed catalogues are all in.
@@ -94,7 +100,6 @@ void main() {
   final fullVideos = [_video('Clinch control fundamentals', views: 12000)];
   final fullLadder = kioskRankSteps(
     [_rank('White', 1), _rank('Blue', 2), _rank('Purple', 3)],
-    currentRankId: 'rank-Blue',
   );
 
   Future<_MockKioskFlowCubit> pumpModal(
@@ -192,16 +197,13 @@ void main() {
           _video('Clinch control fundamentals', views: 12000),
           _video('Guard retention basics', views: 8400),
         ],
-        rankLadder: kioskRankSteps(
-          [
-            _rank('White', 1),
-            _rank('Blue', 2),
-            _rank('Purple', 3),
-            _rank('Brown', 4),
-            _rank('Black', 5),
-          ],
-          currentRankId: 'rank-Blue',
-        ),
+        rankLadder: kioskRankSteps([
+          _rank('White', 1),
+          _rank('Blue', 2),
+          _rank('Purple', 3),
+          _rank('Brown', 4),
+          _rank('Black', 5),
+        ]),
       );
 
   group('composition', () {
@@ -432,9 +434,12 @@ void main() {
       // Videos — THIS gym's own curated feed, with its real view count.
       expect(find.text('Clinch control fundamentals'), findsOneWidget);
       expect(find.text('12K views'), findsOneWidget);
-      // Ranks — the real ladder, with the member's rung tagged.
+      // Ranks — the gym's real belt names. WHICH rung is featured and how full
+      // its bar sits are illustrative by design (see `KioskRankSlide`), so
+      // nothing on that slide claims a rung for the person standing there.
       expect(find.text('Blue'), findsOneWidget);
-      expect(find.text('You\'re here'), findsOneWidget);
+      expect(find.byType(KioskRankProgress), findsOneWidget);
+      expect(find.text('You\'re here'), findsNothing);
       // Four slides -> four dots.
       expect(
         find.descendant(
@@ -483,7 +488,9 @@ void main() {
       );
 
       expect(find.text('Track rank'), findsNothing);
-      expect(find.text('You\'re here'), findsNothing);
+      // No belts, and no rank progress bar either — the whole slide is gone.
+      expect(find.text('Blue'), findsNothing);
+      expect(find.byType(KioskRankProgress), findsNothing);
       expect(
         find.text('Auto-rotates: book classes · earn rewards · watch videos'),
         findsOneWidget,
@@ -514,7 +521,7 @@ void main() {
       expect(find.text('Muay Thai Fundamentals'), findsNothing);
       expect(find.text('Bring a friend'), findsNothing);
       expect(find.text('Clinch control fundamentals'), findsNothing);
-      expect(find.text('You\'re here'), findsNothing);
+      expect(find.byType(KioskRankProgress), findsNothing);
       // With nothing to show, the showcase card is dropped outright and the
       // app card carries the popup alone.
       expect(find.byType(KioskAppShowcase), findsNothing);
