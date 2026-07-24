@@ -81,7 +81,9 @@ incremental (unchanged) vs fresh (changed) carry-forward mode at feed-write time
 Two official calls **per spec query** — `search.list` for the video ids + snippet
 (100 quota units), then a batched `videos.list` for stats + the ISO-8601 duration
 (~1 unit) — concurrency `worker_scrape_concurrency` (4),
-`worker_max_results_per_query` (20, capped at the API's ≤50) each. The API is
+`worker_max_results_per_query` (50 — pinned AT the API's ≤50 cap, since page size
+does not affect quota: `search.list` is a flat 100 units at any page size and the
+`videos.list` batch stays one call) each. The API is
 **free within the daily quota** (10k units/day ≈ 3 gym-scrapes/day). A failed
 query is dropped, not fatal. Results are **merge-upserted** into the shared
 `video` pool: `source_queries` accumulate, `relevance_index` keeps the best, and

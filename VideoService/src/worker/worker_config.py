@@ -82,8 +82,12 @@ class WorkerSettings(BaseSettings):
     worker_enrich_concurrency: int = 8
 
     # --- budgets -------------------------------------------------------------
-    # Cap per query on the YouTube search (the API's search.list maxResults, ≤50).
-    worker_max_results_per_query: int = 20
+    # Cap per query on the YouTube search (the API's search.list maxResults, ≤50)
+    # — pinned AT the cap, because maxResults does not affect quota: search.list
+    # costs a flat 100 units per call at any page size, and the follow-up
+    # videos.list batches ≤50 ids into one 1-unit call. A smaller page throws
+    # away candidates already paid for at full price.
+    worker_max_results_per_query: int = 50
     # Hard cap on candidates scanned in one run (tier 1 first, then tier 2).
     scan_budget_per_run: int = 1000
     # Videos judged per scan LLM call.
