@@ -151,11 +151,17 @@ class _EarnedChip extends StatelessWidget {
 /// when rewards exist, or nothing (points-only) for a gym with no rewards.
 ///
 /// The tiles arrive ONE BY ONE ([KioskRevealTimings.tileStagger]) rather than
-/// as a block, so the payout reads as a payout. The stagger is measured from
-/// this grid's own mount, because the catalog + balance are still in flight
-/// when the glance opens and the grid replaces its spinner whenever they land;
-/// the whole panel's reveal is what holds the tiles behind the streak, no
-/// matter how fast the fetch was.
+/// as a block, so the payout reads as a payout.
+///
+/// **Each tile carries the panel's own beat offset, not just its stagger
+/// slot.** A `KioskReveal` delay runs from the widget's MOUNT, and this grid
+/// mounts whenever the catalog + balance land — which is long before the
+/// panels beat. A bare `tileStagger * index` would therefore cascade the tiles
+/// invisibly, behind a card that is still at zero opacity, and the member
+/// would see four tiles simply present. Starting each tile at
+/// [KioskRevealTimings.panels] puts the cascade back inside the beat that
+/// actually shows it; a slow fetch only pushes the tiles that fetch's own
+/// latency behind their card, never in front of it.
 class _GridArea extends StatelessWidget {
   final List<RewardResponse> rewards;
   final int? balance;
@@ -183,7 +189,8 @@ class _GridArea extends StatelessWidget {
           children: [
             for (final (index, reward) in rewards.indexed)
               KioskReveal(
-                delay: KioskRevealTimings.tileStagger * index,
+                delay: KioskRevealTimings.panels +
+                    KioskRevealTimings.tileStagger * index,
                 child: KioskRewardTile(reward: reward, balance: balance),
               ),
           ],

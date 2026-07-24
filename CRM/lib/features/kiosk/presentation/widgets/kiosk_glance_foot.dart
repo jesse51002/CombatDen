@@ -12,7 +12,10 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// visible Done button that returns home early. A tap anywhere else on the
 /// glance opens the "Get the app" modal (wired at the glance surface); Done is
 /// the explicit go-home affordance. The countdown [secondsLeft] is driven by
-/// the cubit's 8s timer.
+/// the cubit's 10-second hold, which only starts once the reveal's last beat
+/// has landed — so the foot shows its full value (and a full drain bar) while
+/// the glance is still assembling itself. Done works throughout, including
+/// while the confirmation is still centred.
 class KioskGlanceFoot extends StatelessWidget {
   final int secondsLeft;
 
@@ -28,7 +31,7 @@ class KioskGlanceFoot extends StatelessWidget {
         const Hairline(),
         Center(
           child: KioskReturnTimer(
-            total: kKioskGlanceAutoReturn.inSeconds,
+            total: kKioskGlanceHold.inSeconds,
             secondsLeft: secondsLeft,
           ),
         ),

@@ -80,7 +80,7 @@ class _StreakStack extends StatelessWidget {
             target: weeks,
             style: numeral,
             duration: KioskRevealTimings.countUp,
-            delay: KioskRevealTimings.streak,
+            delay: KioskRevealTimings.panels,
           ),
         Text(
           'week streak',

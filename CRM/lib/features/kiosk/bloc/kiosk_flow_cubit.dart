@@ -36,7 +36,7 @@ const Duration kKioskSearchDebounce = Duration(milliseconds: 300);
 
 /// Inactivity on an in-progress flow page before the warning modal pops. Never
 /// runs on the idle home screen (home is the rest state) NOR on the retention
-/// glance (which has its own [kKioskGlanceAutoReturn]). Distinct from the
+/// glance (which has its own [kKioskGlanceHold]). Distinct from the
 /// Phase B 12h runway.
 const Duration kKioskIdleTimeout = Duration(minutes: 5);
 
@@ -44,28 +44,35 @@ const Duration kKioskIdleTimeout = Duration(minutes: 5);
 /// returns to home. Confirmed 30s — this one line is the switch.
 const Duration kKioskIdleCountdown = Duration(seconds: 30);
 
-/// How long the post-check-in retention glance stays up before auto-returning
-/// to home, so the next member gets a clean home. A member can also leave early
-/// (Done / a tap anywhere). This is the glance's OWN clock — it is not the
-/// 5-minute flow-idle guard (the flow has already ended by the glance).
-const Duration kKioskGlanceAutoReturn = Duration(seconds: 8);
+/// How long the post-check-in retention glance HOLDS once its last beat has
+/// landed, before auto-returning to home so the next member gets a clean home.
+/// A member can also leave early (Done / a tap anywhere). This is the glance's
+/// OWN clock — it is not the 5-minute flow-idle guard (the flow has already
+/// ended by the glance).
+///
+/// Ten seconds is the founder's number, and it is time to READ a finished
+/// screen: it deliberately does NOT start on screen entry (see
+/// [kKioskGlanceLastBeat]).
+const Duration kKioskGlanceHold = Duration(seconds: 10);
 
-/// The window the glance's reveal choreography needs to settle, waited out
-/// BEFORE the [kKioskGlanceAutoReturn] dwell clock starts ticking.
+/// When the glance's LAST beat lands — the streak + rewards cards, which
+/// arrive together. The [kKioskGlanceHold] clock is waited out from here, not
+/// from screen entry.
 ///
-/// Without it the reveal eats the dwell: the confirmation, the streak count-up
-/// and the reward-tile cascade all run inside it, so a member who only gets 8
-/// seconds from screen ENTRY loses a quarter of them to animation. The dwell
-/// is time to READ, so it starts when there is something finished to read; the
-/// glance's total life is therefore this plus the eight, by design. The full
-/// countdown value is shown from the first frame (the footer never reads "0s"
-/// during the reveal); only the decrementing starts late.
+/// The reveal is a deliberate two-beat choreography (the confirmation centred
+/// and alone for 1.5s, then a lift, then both cards), so a hold measured from
+/// ENTRY would spend its opening seconds watching the screen assemble itself.
+/// The hold is time to read something finished, so it starts when the last
+/// thing arrives; the glance's total life is therefore this plus the ten, by
+/// design. The full countdown value is shown from the first frame (the footer
+/// never reads "0s" mid-reveal); only the decrementing starts late.
 ///
-/// It must cover the last beat of `KioskRevealTimings` — the streak count-up,
-/// which lands latest — with a little headroom; the glance test asserts that.
-/// Under reduced motion nothing animates and the member simply gets this much
-/// extra dwell, which is the safe direction to err.
-const Duration kKioskGlanceRevealSettle = Duration(milliseconds: 2200);
+/// It must equal the last beat of `KioskRevealTimings` — the glance test
+/// asserts exactly that, and also that the reward cascade inside that beat
+/// finishes early enough to leave most of the hold on a settled screen. Under
+/// reduced motion everything is on screen at once and the member simply gets
+/// this much extra hold, which is the safe direction to err.
+const Duration kKioskGlanceLastBeat = Duration(milliseconds: 2220);
 
 /// The glance's 2x2 tile grid shows at most this many rewards (cheapest-first);
 /// a gym with more rewards surfaces the nearest few, the rest live in the app.
@@ -319,7 +326,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       } else {
         // The retention glance: render the streak + earned points from the
         // response immediately, then fetch the balance + reward catalog. Its
-        // own 8s clock (not the 5-min idle) governs the return home.
+        // own hold clock (not the 5-min idle) governs the return home.
         emit(state.copyWith(
           view: KioskView.checkedIn,
           checkInResult: resp,
@@ -468,21 +475,21 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         rankLadder: _rankLadderCache,
       );
 
-  /// Start the glance's 8-second auto-return — but only once the reveal has
-  /// settled ([kKioskGlanceRevealSettle]). The full countdown value is emitted
-  /// immediately so the footer reads "Back to start in 8s" with a full drain
+  /// Start the glance's 10-second hold — but only once the reveal's LAST beat
+  /// has landed ([kKioskGlanceLastBeat]). The full countdown value is emitted
+  /// immediately so the footer reads "Back to start in 10s" with a full drain
   /// bar from the first frame; what waits is the DECREMENT, so the reveal
-  /// never eats the member's reading time. After the settle one per-second
+  /// never eats the member's reading time. After the last beat one per-second
   /// countdown drives the visible timer and, at zero, returns home (mirrors
   /// the idle countdown).
   ///
   /// Both timers share [_glanceTimer], so every existing cancel site (goHome,
   /// openAppModal, close) still kills the auto-return whichever phase it is
-  /// in — cancelling during the settle simply means the periodic never starts.
+  /// in — cancelling during the reveal simply means the periodic never starts.
   void _startGlanceReturn() {
     _glanceTimer?.cancel();
-    emit(state.copyWith(glanceCountdown: kKioskGlanceAutoReturn.inSeconds));
-    _glanceTimer = Timer(kKioskGlanceRevealSettle, () {
+    emit(state.copyWith(glanceCountdown: kKioskGlanceHold.inSeconds));
+    _glanceTimer = Timer(kKioskGlanceLastBeat, () {
       if (isClosed) return;
       _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (isClosed) return;
@@ -502,9 +509,11 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   /// Open the member-facing "Get the CombatDen App" modal — opened by a tap on
   /// the retention glance (the founder's UX-5 ruling: the glance tap now offers
   /// the app instead of ejecting home) or the home QR panel's "Get it"
-  /// affordance. Opening it PAUSES the glance's 8-second auto-return and any
-  /// flow-idle guard, and starts the modal's OWN 60-second auto-close. It is a
-  /// pure informational overlay — it does NOT begin a member flow (no
+  /// affordance. Opening it PAUSES the glance's auto-return — in EITHER phase,
+  /// the pre-hold reveal window or the running 10-second hold, since both ride
+  /// the one [_glanceTimer] — and any flow-idle guard, and starts the modal's
+  /// OWN 60-second auto-close. It is a pure informational overlay — it does
+  /// NOT begin a member flow (no
   /// [KioskSessionCubit.beginFlow]) — so it never touches the grace-window
   /// bookkeeping. Idempotent while already open.
   void openAppModal() {
@@ -585,7 +594,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   void _syncIdleTimer() {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
-    // The retention glance is governed by its own 8s auto-return, never the
+    // The retention glance is governed by its own hold clock, never the
     // 5-minute flow-idle guard (the flow has already ended by then).
     if (state.view == KioskView.checkedIn) return;
     // The "Get the app" modal runs its own 60s clock — suppress the idle guard

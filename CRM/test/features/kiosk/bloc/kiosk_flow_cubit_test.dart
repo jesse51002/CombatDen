@@ -625,7 +625,7 @@ void main() {
       },
     );
 
-    test('auto-returns home after the 8-second countdown (its own clock, '
+    test('auto-returns home after the 10-second hold (its own clock, '
         'not the 5-minute idle)', () {
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
@@ -637,16 +637,16 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks(); // check-in records + glance starts
         expect(cubit.state.view, KioskView.checkedIn);
-        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
-        async.elapse(kKioskGlanceRevealSettle); // the reveal plays out
+        async.elapse(kKioskGlanceLastBeat); // the reveal plays out
 
         // Halfway the glance is still up (the 5-minute idle never fired).
-        async.elapse(const Duration(seconds: 4));
+        async.elapse(const Duration(seconds: 5));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.idleWarningActive, isFalse);
 
-        async.elapse(const Duration(seconds: 4)); // reaches 8s -> home
+        async.elapse(const Duration(seconds: 5)); // reaches 10s -> home
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.selectedMember, isNull);
         expect(cubit.state.glanceCountdown, 0);
@@ -654,13 +654,13 @@ void main() {
       });
     });
 
-    test('the 8-second dwell starts AFTER the reveal settles, not on entry — '
-        'the member gets the full eight seconds to read', () {
+    test('the 10-second hold starts AFTER the LAST beat, not on entry — the '
+        'member gets the full ten seconds on a finished screen', () {
       // The bug this guards: starting the countdown on screen entry lets the
-      // ~1s reveal choreography eat the dwell, leaving under 7 seconds to
-      // actually read the streak. The full value is on screen from the first
-      // frame (the footer never shows a drained "0s" mid-reveal); only the
-      // DECREMENT waits.
+      // reveal choreography eat the hold — and the choreography is now 6.7s
+      // long, so a member would be left barely three seconds of finished
+      // screen. The full value is on screen from the first frame (the footer
+      // never shows a drained "0s" mid-reveal); only the DECREMENT waits.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -670,33 +670,60 @@ void main() {
         async.flushMicrotasks();
         cubit.selectClass(occ1);
         async.flushMicrotasks();
-        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
         // Through the whole reveal window the countdown has NOT moved.
-        async.elapse(kKioskGlanceRevealSettle);
-        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+        async.elapse(kKioskGlanceLastBeat);
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
-        // The first tick lands one second AFTER the settle, not one second
+        // The first tick lands one second AFTER the last beat, not one second
         // after entry.
         async.elapse(const Duration(seconds: 1));
         expect(
           cubit.state.glanceCountdown,
-          kKioskGlanceAutoReturn.inSeconds - 1,
+          kKioskGlanceHold.inSeconds - 1,
         );
 
-        // A full eight seconds of dwell measured from the settle, no sooner:
-        // at settle + 7s the glance is still up with a second to go.
-        async.elapse(const Duration(seconds: 6));
+        // A full ten seconds of hold measured from the last beat, no sooner:
+        // at lastBeat + 9s the glance is still up with a second to go.
+        async.elapse(const Duration(seconds: 8));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.glanceCountdown, 1);
 
-        async.elapse(const Duration(seconds: 1)); // settle + 8s -> home
+        async.elapse(const Duration(seconds: 1)); // lastBeat + 10s -> home
         expect(cubit.state.view, KioskView.home);
         cubit.close();
       });
     });
 
-    test('leaving the glance during the reveal cancels the pending dwell — no '
+    test('the glance lives for the reveal PLUS the hold, and every second of '
+        'the hold is on a screen that has stopped moving', () {
+      // The founder's shape: ~0s confirmation (centred) -> 3s lift + streak ->
+      // 6.7s rewards -> +10s hold -> home. Nothing may return home early, and
+      // nothing may hold the member past that.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        // One tick short of the whole life: still up.
+        async.elapse(
+          kKioskGlanceLastBeat + kKioskGlanceHold - const Duration(seconds: 1),
+        );
+        expect(cubit.state.view, KioskView.checkedIn);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(cubit.state.view, KioskView.home);
+        cubit.close();
+      });
+    });
+
+    test('leaving the glance during the reveal cancels the pending hold — no '
         'late auto-return over the next member', () {
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
@@ -711,11 +738,60 @@ void main() {
         cubit.goHome(); // Done, tapped mid-reveal
         expect(cubit.state.view, KioskView.home);
 
-        // The settle timer never promotes itself into a periodic countdown.
+        // The pre-hold timer never promotes itself into a periodic countdown.
         async.elapse(const Duration(minutes: 1));
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.glanceCountdown, 0);
         cubit.close();
+      });
+    });
+
+    test('Done during the CENTRED HOLD leaves immediately and cancels the '
+        'pending auto-return', () {
+      // The member must never be held hostage by the choreography: the first
+      // three seconds are the longest stretch where nothing but the
+      // confirmation is on screen, and Done has to work through all of it.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        // One second in — the confirmation is still centred and alone.
+        async.elapse(const Duration(seconds: 1));
+        expect(cubit.state.view, KioskView.checkedIn);
+
+        cubit.goHome();
+        expect(cubit.state.view, KioskView.home);
+        async.elapse(const Duration(minutes: 1));
+        expect(cubit.state.view, KioskView.home);
+        expect(cubit.state.glanceCountdown, 0);
+        cubit.close();
+      });
+    });
+
+    test('closing the cubit mid-reveal kills the pending auto-return', () {
+      // close() cancels _glanceTimer in EITHER phase. A leaked pre-hold timer
+      // would fire goHome() on a closed cubit (an emit-after-close throw) once
+      // the reveal window elapsed.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        cubit.close();
+        // Past the last beat AND the whole hold: nothing fires, nothing throws.
+        async.elapse(kKioskGlanceLastBeat + kKioskGlanceHold);
+        expect(async.pendingTimers, isEmpty);
       });
     });
   });
@@ -780,8 +856,11 @@ void main() {
   });
 
   group('get-the-app modal (UX-5)', () {
-    test('opening the modal PAUSES the glance auto-return; its own 60s clock '
-        'returns home', () {
+    test('opening the modal DURING THE REVEAL pauses the pending auto-return; '
+        'its own 60s clock returns home', () {
+      // The tap lands while the confirmation is still centred — the pre-hold
+      // phase of _glanceTimer. Cancelling there must stop the auto-return
+      // dead, not merely postpone the periodic that phase would have started.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -792,23 +871,50 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks(); // check-in records + glance starts
         expect(cubit.state.view, KioskView.checkedIn);
-        expect(cubit.state.glanceCountdown, kKioskGlanceAutoReturn.inSeconds);
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
         cubit.openAppModal();
         expect(cubit.state.appModalOpen, isTrue);
         expect(cubit.state.appModalCountdown, kKioskAppModalTimeout.inSeconds);
         expect(cubit.state.view, KioskView.checkedIn); // glance still behind it
 
-        // The glance's 8s auto-return is paused — elapsing past it stays put.
-        async.elapse(const Duration(seconds: 8));
+        // Past the point the glance would have gone home on its own — it
+        // stays put behind the modal.
+        async.elapse(const Duration(seconds: 30));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.appModalOpen, isTrue);
 
         // The modal's OWN 60s clock reaches zero and returns to a fresh home.
-        async.elapse(const Duration(seconds: 52)); // total 60s
+        async.elapse(const Duration(seconds: 30)); // total 60s
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.appModalOpen, isFalse);
         expect(cubit.state.selectedMember, isNull);
+        cubit.close();
+      });
+    });
+
+    test('opening the modal DURING THE HOLD pauses the running countdown', () {
+      // The other phase of the same timer: the per-second countdown is already
+      // draining. Cancelling it must freeze the glance behind the modal.
+      fakeAsync((async) {
+        when(() => member.checkInMember(any()))
+            .thenAnswer((_) async => recorded);
+        final cubit = build();
+
+        cubit.selectMember(member1);
+        async.flushMicrotasks();
+        cubit.selectClass(occ1);
+        async.flushMicrotasks();
+
+        // Into the hold: the countdown has started draining.
+        async.elapse(kKioskGlanceLastBeat + const Duration(seconds: 3));
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 3);
+
+        cubit.openAppModal();
+        // The remaining seven seconds never tick down.
+        async.elapse(const Duration(seconds: 20));
+        expect(cubit.state.view, KioskView.checkedIn);
+        expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 3);
         cubit.close();
       });
     });

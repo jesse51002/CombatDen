@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// The "Back to start in Ns" auto-return countdown over a thin draining track —
-/// shared by the retention glance's 8-second footer and the "Get the app"
+/// shared by the retention glance's 10-second footer and the "Get the app"
 /// modal's 60-second footer (mockup `.timer`). [total] is the full duration in
 /// seconds (sets the drain fraction); [secondsLeft] is the live countdown. The
 /// track width matches the label so the bar reads as its underline.

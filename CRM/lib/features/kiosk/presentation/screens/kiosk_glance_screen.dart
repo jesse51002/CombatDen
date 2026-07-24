@@ -7,6 +7,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_greeting.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_glance_lift.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_reveal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_rewards_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_panel.dart';
@@ -20,14 +21,18 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 /// from the check-in response; balance + reward catalog fetched by the cubit)
 /// rides on [KioskFlowState]; it degrades gracefully when a fetch fails.
 ///
-/// **It arrives in beats, and the order is the hierarchy** ([KioskRevealTimings]):
-/// the CONFIRMATION fades in first (the check disc popping in beside the named
-/// class — the answer to "did it work, and into what?"), then the streak with
-/// its numeral rolling up, then the reward tiles cascading in one by one. Each
-/// beat is slow enough to be seen individually, and the footer's 8-second
-/// dwell clock only starts ticking once the whole thing has settled
-/// (`kKioskGlanceRevealSettle`) so the reveal never eats the reading time. A
-/// reduced-motion viewer gets every beat at once.
+/// **It arrives in two beats, and the order is the hierarchy**
+/// ([KioskRevealTimings]): the CONFIRMATION fades in first and does it CENTRED
+/// on the stage, alone (the check disc popping in beside the named class — the
+/// answer to "did it work, and into what?"), holds there, then travels up into
+/// its slot at the top ([KioskGlanceLift]); BOTH cards — the streak with its
+/// numeral rolling up, and the rewards with its tiles cascading in one by one
+/// — then land together under one reveal. Everything arriving at once was
+/// cognitive overload (founder ruling), so the answer gets the screen to
+/// itself first and the payout follows as a pair. The footer's ten-second hold
+/// clock only starts at the LAST beat (`kKioskGlanceLastBeat`) so the reveal
+/// never eats the reading time. A reduced-motion viewer gets every beat at
+/// once, already landed.
 ///
 /// The week strip reads `current_week_days` (Monday-first, index 0 = Monday)
 /// off the check-in response — one badge per weekday attended this week.
@@ -57,60 +62,61 @@ class KioskGlanceScreen extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => context.read<KioskFlowCubit>().openAppModal(),
           child: KioskStage(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              spacing: DesignConstants.spacingMedium,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: DesignConstants.spacingBig,
-                  children: [
-                    // Beat 1 — did it work, and which class.
-                    KioskReveal(
-                      delay: KioskRevealTimings.confirmation,
-                      duration: KioskRevealTimings.confirmationFade,
-                      child: KioskGlanceGreeting(
-                        className: state.selectedClassName,
-                        alreadyCheckedIn: alreadyCheckedIn,
-                      ),
-                    ),
-                    IntrinsicHeight(
+            child: KioskGlanceLift(
+              spacing: DesignConstants.spacingBig,
+              // Beat 1 — did it work, and which class. Centred and alone for
+              // three seconds, then lifted into this slot by KioskGlanceLift.
+              confirmation: KioskReveal(
+                delay: KioskRevealTimings.confirmation,
+                duration: KioskRevealTimings.confirmationFade,
+                child: KioskGlanceGreeting(
+                  className: state.selectedClassName,
+                  alreadyCheckedIn: alreadyCheckedIn,
+                ),
+              ),
+              // Laid out in full from the first frame — invisible, but holding
+              // every pixel it will hold at the end, so the two panels arriving
+              // later reflow nothing and Done never moves.
+              rest: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                spacing: DesignConstants.spacingMedium,
+                children: [
+                  // Beat 2 — the payout. ONE reveal around BOTH cards, so the
+                  // streak and the rewards land together by construction
+                  // rather than by two offsets that happen to agree.
+                  KioskReveal(
+                    delay: KioskRevealTimings.panels,
+                    child: IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         spacing: DesignConstants.spacingLarge,
                         children: [
-                          // Beat 2 — the streak (its numeral counts up).
+                          // The streak — its numeral counts up as it lands.
                           Expanded(
-                            child: KioskReveal(
-                              delay: KioskRevealTimings.streak,
-                              child: KioskStreakPanel(
-                                weeks: result?.classStreakWeeks ?? 0,
-                                daysCompleted:
-                                    result?.currentWeekDays ?? _kEmptyWeek,
-                              ),
+                            child: KioskStreakPanel(
+                              weeks: result?.classStreakWeeks ?? 0,
+                              daysCompleted:
+                                  result?.currentWeekDays ?? _kEmptyWeek,
                             ),
                           ),
-                          // Beat 3 — the payout, its tiles cascading inside.
+                          // The rewards — its tiles cascading inside.
                           Expanded(
-                            child: KioskReveal(
-                              delay: KioskRevealTimings.rewards,
-                              child: KioskRewardsPanel(
-                                pointsBalance: state.pointsBalance,
-                                pointsAwarded: result?.pointsAwarded ?? 0,
-                                rewards: state.rewards,
-                                loading: state.glanceLoading,
-                                alreadyCheckedIn: alreadyCheckedIn,
-                              ),
+                            child: KioskRewardsPanel(
+                              pointsBalance: state.pointsBalance,
+                              pointsAwarded: result?.pointsAwarded ?? 0,
+                              rewards: state.rewards,
+                              loading: state.glanceLoading,
+                              alreadyCheckedIn: alreadyCheckedIn,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                KioskGlanceFoot(secondsLeft: state.glanceCountdown),
-              ],
+                  ),
+                  KioskGlanceFoot(secondsLeft: state.glanceCountdown),
+                ],
+              ),
             ),
           ),
         );
