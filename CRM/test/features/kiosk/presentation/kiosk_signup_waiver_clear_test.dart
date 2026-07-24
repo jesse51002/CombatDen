@@ -12,7 +12,6 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waive
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
-import 'package:crm/features/member_details/data/models/member_payment_method_status.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
@@ -109,9 +108,6 @@ void main() {
         .thenAnswer((_) async => 'mem-${++createSeq}');
     when(() => member.updateMember(any(), any()))
         .thenAnswer((_) async => _MockManagementResponse());
-    when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-      (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: false),
-    );
     when(() => member.getAuthorizedPayerWaiver(any())).thenAnswer(
       (_) async => const AuthorizedPayerWaiver(
         waiverId: 'payer-waiver-1',

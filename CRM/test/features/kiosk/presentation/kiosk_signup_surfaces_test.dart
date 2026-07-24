@@ -6,36 +6,45 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_declined_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_entry_choice_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_identify_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_trial_block.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_status.dart';
-import 'package:crm/features/member_details/data/models/member_payment_method_status.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
@@ -45,6 +54,7 @@ import 'package:crm/features/memberships/data/models/waiver_signature_response.d
 import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -61,11 +71,13 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// The four surfaces the founder called out, rendered at the real fold
-/// (1180x820): the payer picker's pickable rows read as controls, the payer is
-/// deletable and its absence blocks the flow legibly, the plan pick confirms
-/// the choice, and the decline is a popup with no timer that stacks three live
-/// actions (Retry the same card, Try another card, Get help) without overflow.
+/// The surfaces the founder called out, rendered at the real fold: the lane's
+/// front door offers both ways in and the identify search stays avatar-free,
+/// the payer picker's pickable rows read as controls, the payer is deletable
+/// and its absence blocks the flow legibly, the plan pick confirms the choice
+/// and marks a used trial, and the decline is a popup that stacks three live
+/// actions (Retry the same card, Try another card, Get help) over a visible
+/// return countdown, without overflow.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -133,9 +145,6 @@ void main() {
         .thenAnswer((_) async => 'mem-${++createSeq}');
     when(() => member.updateMember(any(), any()))
         .thenAnswer((_) async => _MockManagementResponse());
-    when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-      (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: false),
-    );
     when(() => member.getAuthorizedPayerWaiver(any())).thenAnswer(
       (_) async => const AuthorizedPayerWaiver(
         waiverId: 'payer-waiver-1',
@@ -173,8 +182,12 @@ void main() {
         gymId: 'gym-1',
       );
 
-  Future<void> pump(WidgetTester tester, Widget child) async {
-    await tester.binding.setSurfaceSize(const Size(1180, 820));
+  Future<void> pump(
+    WidgetTester tester,
+    Widget child, {
+    Size size = const Size(1180, 820),
+  }) async {
+    await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
@@ -240,6 +253,71 @@ void main() {
       await cubit.pay();
     }
   }
+
+  group('· the front door offers both ways in', () {
+    testWidgets('the entry fork renders both halves at either fold',
+        (tester) async {
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        cubit = newCubit();
+        await pump(tester, const KioskEntryChoiceStep(), size: size);
+
+        expect(find.text('New to the gym'), findsOneWidget);
+        expect(find.text('Already a member'), findsOneWidget);
+        // Different tiers on purpose: two gradient primaries break the button
+        // ladder, two outlines leave the screen with no primary.
+        expect(
+          find.widgetWithText(KioskPrimaryButton, 'I\'m new here'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(KioskOutlineButton, 'Find my name'),
+          findsOneWidget,
+        );
+        // Step 1: no Back, and the escape is the way out.
+        expect(find.text('Back'), findsNothing);
+        expect(find.text('Start over'), findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the entry fork overflowed at $size',
+        );
+        await cubit.close();
+      }
+    });
+
+    testWidgets('the identify search offers avatar-free FULL-name rows only',
+        (tester) async {
+      when(() => membersList.getMembersList(any())).thenAnswer(
+        (_) async => _page([
+          AllViewRow(
+            memberId: 'mem-old',
+            name: 'Marcus Bell',
+            email: 'marcus.bell@gmail.com',
+            membershipStatus: MembershipStatus.active,
+            membershipText: 'Monthly',
+          ),
+        ]),
+      );
+      cubit = newCubit();
+      cubit.startAsExistingMember();
+      cubit.searchExistingPeople('marcus');
+      await tester.pump(kKioskSearchDebounce);
+      await pump(tester, const KioskIdentifyStep());
+
+      expect(find.text('Find your name'), findsOneWidget);
+      final row = find.widgetWithText(KioskNameRow, 'Marcus Bell');
+      expect(row, findsOneWidget);
+      // **A shared lobby iPad never prints a face or an address here.** The
+      // masked email belongs to the confirm card, one step later.
+      expect(
+        find.descendant(of: row, matching: find.byType(InstructorAvatar)),
+        findsNothing,
+      );
+      expect(find.textContaining('marcus.bell@gmail.com'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+  });
 
   group('A · the payer picker reads as pickable', () {
     testWidgets('rows are contained tappable KioskNameRows over quiet heads',
@@ -343,6 +421,73 @@ void main() {
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
+
+    testWidgets('a trial the member has already had renders USED and explains '
+        'instead of selecting', (tester) async {
+      when(() => memberships.listPlans(any()))
+          .thenAnswer((_) async => [_plan(), _trialPlan()]);
+      when(() => member.getMemberDetail(any()))
+          .thenAnswer((_) async => _detailWithTrial());
+      cubit = newCubit();
+      cubit.startAsExistingMember();
+      await cubit.pickPayerRow(
+        AllViewRow(
+          memberId: 'mem-old',
+          name: 'Marcus Bell',
+          email: 'marcus.bell@gmail.com',
+          membershipStatus: MembershipStatus.active,
+          membershipText: 'Monthly',
+        ),
+      );
+      cubit.confirmPayerMatch();
+      cubit.continueToPlans();
+      await tester.pump();
+      await pump(tester, const KioskPlanPickStep());
+
+      // The card wears its mark before anybody taps it.
+      expect(find.text('Already used'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(KioskPlanCard, 'Two-week trial'));
+      await tester.pump();
+      // The tap EXPLAINS and selects nothing — a blocked plan can never reach
+      // the review and fail at pay, and a greyed-out card with no answer is a
+      // worse dead end than the one it prevents.
+      expect(cubit.state.activePerson.selectedPlanId, isNull);
+      expect(cubit.state.trialBlockActive, isTrue);
+      expect(find.byType(KioskPlanPickedBanner), findsNothing);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+
+    testWidgets('the trial popup carries its countdown and both ways out at '
+        'either fold', (tester) async {
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        cubit = newCubit();
+        await pump(tester, const KioskTrialBlock(), size: size);
+
+        expect(find.text('You\'ve already had a trial'), findsOneWidget);
+        expect(
+          find.textContaining('Trials are one to a member'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(KioskPrimaryButton, 'Pick a membership'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
+          findsOneWidget,
+        );
+        // No blocking overlay may hold a shared iPad forever.
+        expect(find.byType(KioskReturnTimer), findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the trial popup overflowed at $size',
+        );
+        await cubit.close();
+      }
+    });
   });
 
   group('D · the card field and the decline popup', () {
@@ -367,18 +512,26 @@ void main() {
       await cubit.close();
     });
 
-    testWidgets('the decline popup stacks Retry / Try another card / Get help, '
-        'with no timer and no overflow at the fold', (tester) async {
+    testWidgets('the decline popup stacks Retry / Try another card / Get help '
+        'over its countdown, with no overflow at the fold', (tester) async {
       cubit = newCubit();
       await declineTimes(tester, 1);
       await pump(tester, const KioskDeclinedScreen());
 
       expect(find.text('Your bank declined the payment'), findsOneWidget);
-      // No cooldown timer of any kind — a member may retry immediately.
-      expect(find.text('You can try again in'), findsNothing);
+      // **The countdown is a RETURN clock, not a cooldown.** It says how long
+      // a shared iPad may sit here unanswered; it never gates Retry, and
+      // there is no "you can try again in" anywhere.
+      expect(find.byType(KioskReturnTimer), findsOneWidget);
+      expect(
+        find.text('Back to start in ${kKioskSignupPopupHold.inSeconds}s'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('You can try again in'), findsNothing);
 
       // Retry (the primary) re-attempts the SAME card; the two secondaries are
-      // "Try another card" and the desk handoff. All three are live.
+      // "Try another card" and the desk handoff. All three are live from the
+      // first frame — no cooldown, no attempt cap.
       final retry = tester.widget<KioskPrimaryButton>(
         find.widgetWithText(KioskPrimaryButton, 'Retry'),
       );
@@ -391,7 +544,8 @@ void main() {
         find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
       );
       expect(help.onPressed, isNotNull);
-      // Three stacked buttons at the real fold (1180×820) must not overflow.
+      // Three stacked buttons plus the countdown at the real fold (1180x820)
+      // must not overflow.
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
@@ -480,4 +634,60 @@ CrmMembersListResponse _page(List<MemberRow> rows) => CrmMembersListResponse(
       view: MembersListView.all,
       filters: const MembersListFilters(),
       data: rows,
+    );
+
+/// A free trial, beside the recurring plan, so "which card is marked used" is a
+/// real assertion.
+MembershipPlanResponse _trialPlan() => MembershipPlanResponse(
+      planId: 'plan-trial',
+      gymId: 'gym-1',
+      planName: 'Two-week trial',
+      imageUrl: '',
+      planType: PlanType.trial,
+      durationAmount: 2,
+      isPublic: true,
+      createdAt: DateTime.utc(2026),
+      waiverIds: const ['waiver-1'],
+      activePrice: MembershipPlanPriceResponse(
+        priceId: 'price-trial',
+        planId: 'plan-trial',
+        gymId: 'gym-1',
+        stripePriceId: 'price_stripe_trial',
+        price: 0,
+        isActive: true,
+        createdAt: DateTime.utc(2026),
+      ),
+    );
+
+/// A member whose history already holds a trial. The backend applies no
+/// lifecycle filter to this list, so one taken and finished still counts.
+MemberDetailResponse _detailWithTrial() => MemberDetailResponse(
+      memberId: 'mem-old',
+      gymId: 'gym-1',
+      firstName: 'Marcus',
+      lastName: 'Bell',
+      membershipOverview: 'History',
+      totalMonthlyRecurringPrice: 0,
+      totalMembershipCount: 1,
+      personalInfo: const PersonalInfo(),
+      memberships: [
+        MembershipInfo(
+          planId: 'plan-trial',
+          planName: 'Two-week trial',
+          planType: 'trial',
+          status: MembershipStatus.cancelled,
+          itemId: 'item-trial',
+          paidByMemberId: 'mem-old',
+          baseCost: 0,
+          durationAmount: 2,
+          durationUnit: 'week',
+          totalPrice: 0,
+          startDate: DateTime.utc(2025),
+        ),
+      ],
+      retention: const Retention(
+        classStreakWeeks: 0,
+        pointsBalance: 0,
+        videosWatched: 0,
+      ),
     );

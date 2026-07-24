@@ -204,8 +204,8 @@ void main() {
     expect(cubit.state.step, KioskSignupStep.review);
   }
 
-  group('the payer / payee duplicate asymmetry', () {
-    test('a PAYEE 409 offers the match; a PAYER 409 stops the signup dead',
+  group('both duplicates end in an offer, through different screens', () {
+    test('a PAYEE 409 offers the roster match; a PAYER 409 offers "is this you?"',
         () async {
       // ── the payee half ──
       final cubit = await atRoster();
@@ -245,11 +245,14 @@ void main() {
       );
       await payer.submitExtraDetails();
 
-      // TERMINAL: the kiosk may only charge a card belonging to a member it
-      // created in this signup, so "that's me, use my account" cannot exist.
-      expect(payer.state.step, KioskSignupStep.stop);
-      expect(payer.state.stopReason, KioskSignupStopReason.duplicateMember);
-      expect(payer.state.matchCandidate, isNull);
+      // ALSO an offer, through a DIFFERENT screen. A payee's match is the
+      // roster's "is this her?"; the payer's is "is this you?", confirming
+      // their own account back to them. Both routes reuse an existing account
+      // rather than making a second one — the lane is self-serve for existing
+      // members too, and whoever pays types a fresh card either way.
+      expect(payer.state.step, KioskSignupStep.payerMatch);
+      expect(payer.state.stopReason, isNull);
+      expect(payer.state.matchCandidate?.memberId, 'mem-ella-existing');
       await payer.close();
     });
 

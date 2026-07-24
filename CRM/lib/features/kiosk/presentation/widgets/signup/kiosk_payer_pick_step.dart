@@ -5,14 +5,13 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
-import 'package:crm/features/kiosk/presentation/kiosk_payer_refusal_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 
 /// "Who's paying?" — pick the member who pays for this signup.
@@ -33,10 +32,11 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dar
 /// reads unmistakably as pressable, and the section heads are demoted to quiet
 /// labels so the rows dominate.
 ///
-/// **Every pick runs the same no-attached-card gate** — roster or CRM, created
-/// in this signup or not. A refusal is INLINE (pick someone else, or carry on
-/// paying yourself), never a terminal stop, because nothing on this screen has
-/// committed anything.
+/// **Whoever is picked types a fresh card at the end**, and it replaces
+/// whatever is on their profile — so an existing member with a card on file is
+/// a perfectly good payer here. The one thing this screen answers inline is a
+/// CRM hit who is already on the roster: a redirect to the list above, never a
+/// refusal, because nothing on this screen has committed anything.
 class KioskPayerPickStep extends StatelessWidget {
   const KioskPayerPickStep({super.key});
 
@@ -45,11 +45,10 @@ class KioskPayerPickStep extends StatelessWidget {
     final cubit = context.read<KioskSignupCubit>();
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
-          prev.payerRefusal != cur.payerRefusal ||
+          prev.payerAlreadyInSignup != cur.payerAlreadyInSignup ||
           prev.persons != cur.persons ||
           prev.submitting != cur.submitting,
       builder: (context, state) {
-        final refusal = state.payerRefusal;
         final candidates = state.payerCandidateIndexes;
         final payer = state.payerOrNull;
         return KioskSignupStepScaffold(
@@ -76,8 +75,13 @@ class KioskPayerPickStep extends StatelessWidget {
           ),
           child: KioskSignupFormPanel(
             children: [
-              if (refusal != null)
-                KioskWaiverNotice(message: kioskPayerRefusalCopy(refusal)),
+              // A REDIRECT, not a rejection — and the ONE line this screen
+              // has to say, so it lives here rather than in a copy map of one.
+              if (state.payerAlreadyInSignup)
+                const KioskInlineNotice(
+                  message: 'They\'re already on this signup — pick them from '
+                      'the list above.',
+                ),
               if (candidates.isNotEmpty) ...[
                 const KioskSectionHead(
                   title: 'Already here',

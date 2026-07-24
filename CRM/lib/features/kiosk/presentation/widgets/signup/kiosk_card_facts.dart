@@ -3,46 +3,20 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The two ticked facts under the card field: what happens to the card, and
-/// what happens to the screen.
+/// The ticked reassurances under the card field.
 ///
-/// **The card line branches on the cart, and it has to.** A recurring
-/// membership can only bill the payer's saved default, so the card IS kept and
-/// the backend requires `set_default` — writing "only used for this signup"
-/// there would be a lie the member finds out about on their next statement. A
-/// purely one-time purchase is attach → pay → detach, and says so.
-///
-/// **And it names the PROFILE the card lands on.** "Saved" is only half the
-/// promise; the other half is *to whom*, because that is the account a later
-/// front-desk charge reads from. With no name to hand it degrades to the
-/// unattributed sentence rather than to a wrong one.
+/// **Everything here is good news, and that is what the green check means.**
+/// What HAPPENS to the card — it is saved to a named profile and it replaces
+/// whatever was there — is a consequence the member has to register, not a
+/// reassurance, so it rides the warm inline notice above this block instead.
+/// A green tick beside "we are replacing your card" would be actively
+/// misleading.
 class KioskCardFacts extends StatelessWidget {
-  /// Whether anything in the cart bills again after today.
+  /// Whether anything in the cart bills again after today. Only a thing that
+  /// keeps billing can be cancelled, so the line is conditional on it.
   final bool hasRecurring;
 
-  /// The payer's full name — the profile this card attaches to. Empty when it
-  /// is not known.
-  final String payerName;
-
-  const KioskCardFacts({
-    super.key,
-    required this.hasRecurring,
-    this.payerName = '',
-  });
-
-  String get _cardLine {
-    final who = payerName.trim();
-    if (who.isEmpty) {
-      return hasRecurring
-          ? 'Saved so the membership keeps running — cancel any time at the '
-              'front desk.'
-          : 'Charged once. Not kept.';
-    }
-    return hasRecurring
-        ? 'Saved to $who\'s profile so the membership keeps running — cancel '
-            'any time at the front desk.'
-        : 'Charged once, and not saved to $who\'s profile.';
-  }
+  const KioskCardFacts({super.key, required this.hasRecurring});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +25,8 @@ class KioskCardFacts extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        _Fact(text: _cardLine),
+        if (hasRecurring)
+          const _Fact(text: 'Cancel any time at the front desk.'),
         const _Fact(
           text: 'This screen wipes itself if you walk away, so nothing of '
               'yours is left on the iPad.',

@@ -22,7 +22,7 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 ///
 /// The escape CONFIRMS here: the button sits beside a money button at the most
 /// anxious moment in the flow, and it says "Start over", never "Cancel" —
-/// beside `Pay $149.00`, "Cancel" reads as *cancel the payment*.
+/// beside `Sign Membership · $149.00`, "Cancel" reads as *cancel the payment*.
 class KioskReviewStep extends StatelessWidget {
   const KioskReviewStep({super.key});
 
@@ -38,25 +38,23 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
-        // The Pay button carries only the amount. A decline routes to the
-        // decline popup — where the member retries the same card or another —
-        // never back through a gated Pay here; there is no attempt cooldown.
+        // A decline routes to the decline popup — where the member retries the
+        // same card or another — never back through a gated primary here;
+        // there is no attempt cooldown.
         return KioskSignupStepScaffold(
           step: KioskSignupStep.review,
+          // **Button-agnostic.** The label below says what is being signed and
+          // for how much, so naming it here would tie one string to another
+          // and start lying the moment a trial cart changes the verb.
           title: 'Check this over',
           subtitle: state.isGroup
-              ? 'One card covers everyone. Nothing is charged until you tap '
-                  'Pay.'
-              : 'Nothing is charged until you tap Pay.',
+              ? 'One card covers everyone. Nothing is charged until you '
+                  'confirm.'
+              : 'Nothing is charged until you confirm.',
           foot: KioskFlowFoot(
-            primaryLabel: ready
-                ? 'Pay ${formatMinorUnits(
-                    state.dueTodayMinorUnits,
-                    currency: state.currency,
-                  )}'
-                : 'Pay',
+            primaryLabel: _primaryLabel(state, ready: ready),
             // The label carries the amount, so the button is inert until the
-            // amount is real — a member must never be able to tap "Pay" before
+            // amount is real — a member must never be able to commit before
             // the screen can tell them what for.
             onPrimary: ready ? cubit.pay : null,
             onBack: cubit.back,
@@ -66,6 +64,30 @@ class KioskReviewStep extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// The committing button reads by WHAT is being bought, then by how much.
+  ///
+  /// The verb names the cart: "Sign Trial" only when every training person's
+  /// pick is a trial, "Sign Membership" otherwise — a mixed group cart is a
+  /// membership purchase taken as a whole. Both pluralise when more than one
+  /// person is buying.
+  ///
+  /// **The amount stays on the button**, which is the shipped safety property:
+  /// a trial is a plan CATEGORY, not a price — a gym can sell a paid two-week
+  /// trial — so a bare verb on a button that takes money would be a real
+  /// omission on the one screen where money moves. It collapses to the bare
+  /// verb exactly when there is nothing to say, where the old label read the
+  /// nonsensical "Pay $0.00".
+  String _primaryLabel(KioskSignupState state, {required bool ready}) {
+    final plural = state.trainingPersonIndexes.length > 1;
+    final noun = state.cartAllTrial
+        ? (plural ? 'Trials' : 'Trial')
+        : (plural ? 'Memberships' : 'Membership');
+    final verb = 'Sign $noun';
+    final due = state.dueTodayMinorUnits;
+    if (!ready || due <= 0) return verb;
+    return '$verb · ${formatMinorUnits(due, currency: state.currency)}';
   }
 }
 

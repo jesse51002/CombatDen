@@ -62,16 +62,34 @@ class KioskFlowFoot extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         const Hairline(),
-        Row(
+        // **A STACK, not a three-way Row, and that is a robustness property.**
+        // The decision pair is centred on the WHOLE band rather than on
+        // whatever a Row's leftover flex works out to, so its optical centre is
+        // exact on every step regardless of what either gutter carries (a step
+        // with a Skip and a step without land the pair in the identical
+        // place). It also means the longest primary the foot ever carries —
+        // `Sign Memberships · $149.00` beside Back — can never squeeze a
+        // gutter into an overflow on a short fold: the gutters keep their
+        // intrinsic size and the band simply gets tight.
+        Stack(
+          alignment: Alignment.center,
           children: [
-            Expanded(child: _EscapeGutter(confirm: confirmAbandon)),
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _EscapeGutter(confirm: confirmAbandon),
+              ),
+            ),
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _SkipGutter(onSkip: onSkip, label: skipLabel),
+              ),
+            ),
             _Decisions(
               onPrimary: onPrimary,
               primaryLabel: primaryLabel,
               onBack: onBack,
-            ),
-            Expanded(
-              child: _SkipGutter(onSkip: onSkip, label: skipLabel),
             ),
           ],
         ),
@@ -82,9 +100,9 @@ class KioskFlowFoot extends StatelessWidget {
 
 /// The far-left escape. Ghost tier, and the ONLY tier used for leaving a flow.
 ///
-/// The wording answers the SCREEN, not the navigation: beside a `Pay $149.00`
-/// button "Cancel" would read as *cancel the payment*, so the kiosk's signup
-/// escape is always "Start over".
+/// The wording answers the SCREEN, not the navigation: beside a
+/// `Sign Membership · $149.00` button "Cancel" would read as *cancel the
+/// payment*, so the kiosk's signup escape is always "Start over".
 class _EscapeGutter extends StatelessWidget {
   final bool confirm;
 
@@ -92,25 +110,22 @@ class _EscapeGutter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      // Pulled left by exactly the button's own horizontal padding so the
-      // GLYPH lands on the step's content rail rather than a pad-width inside
-      // it — the same optical correction `KioskEscapeFoot` makes. The tap
-      // target keeps its full padded width.
-      child: Transform.translate(
-        offset: Offset(-DesignConstants.kioskButtonGhostPadding.left, 0),
-        child: KioskGhostButton(
-          text: 'Start over',
-          onPressed: () {
-            final cubit = context.read<KioskSignupCubit>();
-            if (confirm) {
-              cubit.askAbandon();
-            } else {
-              cubit.abandon();
-            }
-          },
-        ),
+    // Pulled left by exactly the button's own horizontal padding so the GLYPH
+    // lands on the step's content rail rather than a pad-width inside it — the
+    // same optical correction `KioskEscapeFoot` makes. The tap target keeps
+    // its full padded width.
+    return Transform.translate(
+      offset: Offset(-DesignConstants.kioskButtonGhostPadding.left, 0),
+      child: KioskGhostButton(
+        text: 'Start over',
+        onPressed: () {
+          final cubit = context.read<KioskSignupCubit>();
+          if (confirm) {
+            cubit.askAbandon();
+          } else {
+            cubit.abandon();
+          }
+        },
       ),
     );
   }
@@ -162,9 +177,6 @@ class _SkipGutter extends StatelessWidget {
   Widget build(BuildContext context) {
     final skip = onSkip;
     if (skip == null) return const SizedBox.shrink();
-    return Align(
-      alignment: Alignment.centerRight,
-      child: KioskOutlineButton(text: label, onPressed: skip),
-    );
+    return KioskOutlineButton(text: label, onPressed: skip);
   }
 }

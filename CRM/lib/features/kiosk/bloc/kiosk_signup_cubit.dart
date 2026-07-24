@@ -16,6 +16,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
+import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
@@ -29,6 +30,17 @@ import 'package:crm/features/memberships/data/repositories/memberships_repositor
 /// own, so a member who walks off doesn't leave the kiosk parked on a dead
 /// end. Matches the mockup's `--dur:15s`.
 const Duration kKioskSignupStopHold = Duration(seconds: 15);
+
+/// How long a BLOCKING POPUP (the decline, the trial block) holds before it
+/// returns home on its own.
+///
+/// **Every blocking overlay carries a visible countdown, inside the popup.**
+/// This is a shared community iPad: no screen may hold it forever, and a timer
+/// drawn behind a popup sneaks the surface away without the member seeing it
+/// go. It is deliberately longer than [kKioskSignupStopHold]: that 15 seconds
+/// is for a TERMINAL stop that can be reached with nobody standing there,
+/// while these are read-and-decide screens somebody is looking at.
+const Duration kKioskSignupPopupHold = Duration(seconds: 60);
 
 /// How long the welcome screen holds before returning home on its own, so a
 /// member who walks off with their phone doesn't leave their name up for the
@@ -117,7 +129,14 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   Timer? _countdownTimer;
   Timer? _stopTimer;
   Timer? _welcomeTimer;
+  Timer? _popupTimer;
   Timer? _searchDebounce;
+
+  /// Members whose trial history has already been read, so the plan step never
+  /// asks twice for the same person. A read that FAILED counts as asked: the
+  /// gate fails open, and hammering a flaky endpoint on every roster change
+  /// would buy nothing.
+  final Set<String> _trialChecked = <String>{};
 
   /// Which name-search response is still wanted. Every fetch takes the next
   /// number and a landing response that no longer holds it is DISCARDED, so a
@@ -148,6 +167,28 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   /// Guards the create/update call against a double-tap on Continue.
   bool _committing = false;
+
+  // ── D0 · new here, or already a member ──
+
+  /// "I'm new here" — the ordinary create path, unchanged in every respect.
+  void startAsNewMember() {
+    registerActivity();
+    emit(state.copyWith(step: KioskSignupStep.details));
+    _syncIdleTimer();
+  }
+
+  /// "Find my name" — the existing member identifies themselves instead of
+  /// typing a second account into being.
+  ///
+  /// The search is cleared on the way in so the screen never opens on the
+  /// previous person's query or results — the shared-iPad rule, applied to the
+  /// one screen a stranger's name could survive on.
+  void startAsExistingMember() {
+    registerActivity();
+    _clearSearch();
+    emit(state.copyWith(step: KioskSignupStep.identify));
+    _syncIdleTimer();
+  }
 
   // ── D1 · details ──
 
@@ -269,7 +310,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       log('Kiosk signup: duplicate member on create (${e.matches.length} '
           'match(es))', stackTrace: st);
       if (isClosed) return;
-      await _offerPayerMatch(e);
+      _offerPayerMatch(e);
     } on ServerException catch (e, st) {
       log('Kiosk signup: member write failed', error: e, stackTrace: st);
       if (isClosed) return;
@@ -290,54 +331,27 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// The wire form of a date of birth — a bare `YYYY-MM-DD`, or null.
   String? _wireDob(DateTime? dob) => dob == null ? null : _dobWire.format(dob);
 
-  // ── The payer gate — "the kiosk never charges a pre-existing card" ──
-
-  /// Whether [memberId] may be this signup's payer.
-  ///
-  /// **FAIL CLOSED.** Only a confirmed `has_payment_method == false` returns
-  /// [KioskPayerEligibility.eligible]; a 404, a 5xx, a timeout, a dropped
-  /// connection or an unparsable body all resolve to
-  /// [KioskPayerEligibility.unknown], which every caller refuses exactly like
-  /// a card on file. A `false` inferred from a failure would attach a
-  /// stranger's card to somebody's account.
-  Future<KioskPayerEligibility> _payerEligibility(String memberId) async {
-    try {
-      final status = await _memberRepo.getPaymentMethodStatus(memberId);
-      return status.hasPaymentMethod
-          ? KioskPayerEligibility.hasPaymentMethod
-          : KioskPayerEligibility.eligible;
-    } catch (e, st) {
-      log('Kiosk signup: payment-method status check failed',
-          error: e, stackTrace: st);
-      return KioskPayerEligibility.unknown;
-    }
-  }
+  // ── Adopting an existing account ──
 
   /// A 409 on the PAYER's own create — they already have an account here.
   ///
   /// The person standing at the iPad just typed this name and this email, so
-  /// confirming THEIR OWN account back to them leaks nothing. But the account
-  /// may only be adopted through the gate above: a recurring cart sends
-  /// `set_default: true`, so adopting an account that already has a card
-  /// would put a kiosk-entered card on a profile the front desk later charges.
+  /// confirming THEIR OWN account back to them leaks nothing, and adopting it
+  /// is simply the right answer: the lane is self-serve for existing members
+  /// too, and the card they type always replaces whatever is on that profile.
   ///
-  /// Not eligible, or a check that did not answer → the terminal stop, whose
-  /// copy is unchanged. Matches are never rendered as a LIST either way.
-  Future<void> _offerPayerMatch(DuplicateMemberException e) async {
+  /// A 409 that names nobody is not an offer anybody can answer, so it lands
+  /// on the terminal stop. Matches are never rendered as a LIST either way.
+  void _offerPayerMatch(DuplicateMemberException e) {
     final match = e.matches.isEmpty ? null : e.matches.first;
     if (match == null) {
-      _stop(KioskSignupStopReason.duplicateMember);
-      return;
-    }
-    final verdict = await _payerEligibility(match.memberId);
-    if (isClosed) return;
-    if (verdict != KioskPayerEligibility.eligible) {
       _stop(KioskSignupStopReason.duplicateMember);
       return;
     }
     emit(state.copyWith(
       step: KioskSignupStep.payerMatch,
       submitting: false,
+      payerMatchFromIdentify: false,
       matchCandidate: KioskSignupMatch(
         memberId: match.memberId,
         firstName: match.firstName,
@@ -372,15 +386,31 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     emit(state.copyWith(
       persons: persons,
       matchCandidate: null,
+      payerMatchFromIdentify: false,
       submitting: false,
       step: KioskSignupStep.people,
     ));
     _syncIdleTimer();
   }
 
-  /// "No, that's not me" — the terminal front-desk stop, unchanged.
+  /// "No, that's not me" — and where it goes depends on how the match was
+  /// reached.
+  ///
+  /// From the IDENTIFY search they simply mis-tapped a name and nothing has
+  /// committed, so it returns to the search with their query intact. From a
+  /// duplicate 409 the create has already been refused and there is nothing
+  /// left the kiosk can do, so it is the terminal front-desk stop.
   void declinePayerMatch() {
     registerActivity();
+    if (state.payerMatchFromIdentify) {
+      emit(state.copyWith(
+        step: KioskSignupStep.identify,
+        matchCandidate: null,
+        payerMatchFromIdentify: false,
+      ));
+      _syncIdleTimer();
+      return;
+    }
     _stop(KioskSignupStopReason.duplicateMember);
   }
 
@@ -399,77 +429,91 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _clearSearch();
     emit(state.copyWith(
       step: KioskSignupStep.payerPick,
-      payerRefusal: null,
+      payerAlreadyInSignup: false,
       submitting: false,
     ));
     _syncIdleTimer();
   }
 
-  /// **The ONE path a payer is ever seated by.** Gate first; seat only on
-  /// [KioskPayerEligibility.eligible].
+  /// **The ONE path a payer is ever seated by.**
   ///
   /// The roster and the CRM search both come through here and **nothing is
-  /// special-cased for a person this signup created** — not even on the
-  /// reasoning that they obviously have no card yet. One code path is the
-  /// point: there is exactly one place the invariant lives and no branch a
-  /// future change could route around. The cost is one cheap call.
+  /// special-cased**. One code path is the point: there is exactly one place
+  /// the seat rules live and no branch a future change could route around.
   ///
-  /// A refusal is INLINE (pick someone else, or carry on paying yourself),
-  /// never a stop, and everything that is not `eligible` refuses — so a failed
-  /// check refuses too.
+  /// The precondition is [KioskSignupState.canAssignPayer] — nothing linked,
+  /// nothing signed. It covers BOTH a switch and a first choice after a
+  /// delete, so a payer chosen after the previous one was deleted is seated
+  /// through exactly this path.
   ///
-  /// It runs for BOTH a switch and a first choice after a delete
-  /// ([KioskSignupState.canAssignPayer] covers both), so a payer chosen after
-  /// the previous one was deleted is seated through exactly this fail-closed
-  /// gate — never a shortcut.
-  Future<void> _gateThenSeat(String memberId, void Function() seat) async {
+  /// **There is no card check.** An existing member with a card on file may
+  /// pay here: they still type a fresh card, and it replaces the one on their
+  /// profile (the card step says so in as many words). What the kiosk never
+  /// does is CHARGE a card it did not just take.
+  void _seatPayer(void Function() seat) {
     if (_committing || !state.canAssignPayer) return;
-    _committing = true;
-    emit(state.copyWith(submitting: true, payerRefusal: null));
-    try {
-      final verdict = await _payerEligibility(memberId);
-      if (isClosed) return;
-      if (verdict != KioskPayerEligibility.eligible) {
-        emit(state.copyWith(submitting: false, payerRefusal: verdict));
-        return;
-      }
-      seat();
-    } finally {
-      _committing = false;
-    }
+    seat();
   }
 
   /// A CRM search row becomes the payer — somebody not on the roster yet.
+  ///
+  /// On the IDENTIFY step the same row means something else: the person
+  /// standing there is naming THEMSELVES, so it routes to the confirm card
+  /// rather than inserting a second person at the head of an empty roster.
   ///
   /// A hit that is ALREADY on the roster is a redirect, not a rejection: they
   /// are listed above and directly pickable, and inserting a second entry for
   /// one member would put two cart items on one person.
   Future<void> pickPayerRow(MemberRow row) async {
     registerActivity();
+    if (state.step == KioskSignupStep.identify) {
+      _offerIdentifiedMatch(row);
+      return;
+    }
     final at = state.persons.indexWhere((p) => p.memberId == row.memberId);
     if (at == 0) return;
     if (at > 0) {
-      emit(state.copyWith(
-        payerRefusal: KioskPayerEligibility.alreadyInSignup,
-      ));
+      emit(state.copyWith(payerAlreadyInSignup: true));
       return;
     }
-    await _gateThenSeat(row.memberId, () => _seatNewPayer(row));
+    _seatPayer(() => _seatNewPayer(row));
+  }
+
+  /// A row tapped on the identify step — "that's me".
+  ///
+  /// It still CONFIRMS before adopting: two members can share a name, and a
+  /// mis-tap on a shared iPad would otherwise seat a stranger's account as the
+  /// payer. The confirm card is the shipped one, so both routes into "is this
+  /// you?" end in the same decision.
+  void _offerIdentifiedMatch(MemberRow row) {
+    final name = row.name.trim();
+    final space = name.indexOf(' ');
+    emit(state.copyWith(
+      step: KioskSignupStep.payerMatch,
+      payerMatchFromIdentify: true,
+      submitting: false,
+      matchCandidate: KioskSignupMatch(
+        memberId: row.memberId,
+        firstName: space < 0 ? name : name.substring(0, space),
+        lastName: space < 0 ? '' : name.substring(space + 1).trim(),
+        email: row is AllViewRow ? row.email : null,
+      ),
+    ));
+    _syncIdleTimer();
   }
 
   /// A person ALREADY on the roster becomes the payer.
   ///
-  /// It runs the same gate as a CRM pick. Picking whoever ALREADY pays (index 0
-  /// while a payer exists) is refused as a no-op; but when the payer has been
-  /// deleted, index 0 is a real candidate like any other, so it is refused only
-  /// while there is still a payer sitting there.
+  /// It goes through the same one seat path as a CRM pick. Picking whoever
+  /// ALREADY pays (index 0 while a payer exists) is refused as a no-op; but
+  /// when the payer has been deleted, index 0 is a real candidate like any
+  /// other, so it is refused only while there is still a payer sitting there.
   Future<void> pickPayerFromRoster(int index) async {
     registerActivity();
     if (index < 0 || index >= state.persons.length) return;
     if (state.hasPayer && index == 0) return;
-    final memberId = state.persons[index].memberId;
-    if (memberId == null) return;
-    await _gateThenSeat(memberId, () => _promoteRosterPayer(index));
+    if (state.persons[index].memberId == null) return;
+    _seatPayer(() => _promoteRosterPayer(index));
   }
 
   /// Seat a member who was NOT on the roster, inserting them at its head.
@@ -501,7 +545,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       activePersonIndex: state.activePersonIndex + 1,
       step: KioskSignupStep.people,
       submitting: false,
-      payerRefusal: null,
+      payerAlreadyInSignup: false,
     ));
     _syncIdleTimer();
   }
@@ -524,7 +568,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       persons: persons,
       step: KioskSignupStep.people,
       submitting: false,
-      payerRefusal: null,
+      payerAlreadyInSignup: false,
     ));
     _syncIdleTimer();
   }
@@ -640,7 +684,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
         persons: persons,
         activePersonIndex: active,
         step: KioskSignupStep.payerPick,
-        payerRefusal: null,
+        payerAlreadyInSignup: false,
         submitting: false,
       ));
       _syncIdleTimer();
@@ -963,6 +1007,10 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       return;
     }
     final previous = switch (state.step) {
+      // The first fork is a safe destination — nothing has been typed on
+      // either side of it, so both branches may walk back to it.
+      KioskSignupStep.details => KioskSignupStep.entry,
+      KioskSignupStep.identify => KioskSignupStep.entry,
       KioskSignupStep.extraDetails => KioskSignupStep.details,
       // Back out of the roster lands on the payer's own optional block, which
       // is what makes ruling 11 reachable at all: it is the only route by
@@ -993,15 +1041,24 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       // time either screen opens, so neither un-does anything by leaving.
       KioskSignupStep.personDetails => KioskSignupStep.people,
       KioskSignupStep.match => KioskSignupStep.people,
-      // The payer picker changes nothing until a pick passes the gate, so
-      // leaving it is free.
+      // The payer picker changes nothing until a pick is seated, so leaving it
+      // is free.
       KioskSignupStep.payerPick => KioskSignupStep.people,
       _ => null,
     };
     if (previous == null) return;
     if (state.step == KioskSignupStep.payerPick) {
       _clearSearch();
-      emit(state.copyWith(step: previous, payerRefusal: null));
+      emit(state.copyWith(step: previous, payerAlreadyInSignup: false));
+      _syncIdleTimer();
+      return;
+    }
+    // Backing out of the identify search drops what a stranger typed and any
+    // rows it turned up — the shared-iPad rule, applied to the one screen
+    // whose results are other members' names.
+    if (state.step == KioskSignupStep.identify) {
+      _clearSearch();
+      emit(state.copyWith(step: previous));
       _syncIdleTimer();
       return;
     }
@@ -1091,6 +1148,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       activePersonIndex: order.first,
     ));
     _syncIdleTimer();
+    // Who may still take a trial, read once per person before a card is
+    // tapped, so a blocked card wears its mark on the first frame it can.
+    unawaited(_loadTrialEligibility());
     if (state.plansLoading) return;
     if (state.plansFailed) {
       unawaited(_warmPlans());
@@ -1099,12 +1159,120 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     if (state.plans.isEmpty) _stop(KioskSignupStopReason.noPlansOffered);
   }
 
+  /// Read who on this roster has ALREADY had a trial at this gym.
+  ///
+  /// **Only for a person the kiosk did not create.** Somebody registered
+  /// during this signup has no history by construction, so their answer is
+  /// "no" with no call at all.
+  ///
+  /// **It FAILS OPEN**, which is the exact opposite of the money-path reads
+  /// and is deliberate: this is a convenience gate, not a money-safety one.
+  /// A second trial slipping through costs the gym one free week and the desk
+  /// can undo it; blocking a legitimate first-timer because a read failed
+  /// sends a paying customer away. So a throw leaves [KioskSignupPerson.hadTrial]
+  /// false and the trial stays on offer.
+  ///
+  /// **One field is taken and the rest is dropped on the floor.** The billing
+  /// detail is a heavy staff payload — rank, charges, redemptions, streak, an
+  /// address — and a lobby iPad prints none of it. Nothing here renders, logs
+  /// or persists any part of the response beyond the single boolean below;
+  /// never reuse it to prefill a form.
+  Future<void> _loadTrialEligibility() async {
+    final wanted = <String>{
+      for (final person in state.persons)
+        if (person.training &&
+            person.wasExisting &&
+            person.memberId != null &&
+            !_trialChecked.contains(person.memberId))
+          person.memberId!,
+    };
+    if (wanted.isEmpty) return;
+    _trialChecked.addAll(wanted);
+    for (final memberId in wanted) {
+      bool hadTrial;
+      try {
+        final detail = await _memberRepo.getMemberDetail(memberId);
+        // Every membership row the member has ever held, whatever its
+        // lifecycle state — a trial taken and finished a year ago still
+        // counts, which is the whole question being asked.
+        hadTrial = detail.memberships.any((m) => m.planType == 'trial');
+      } catch (e, st) {
+        log('Kiosk signup: trial history read failed (allowing the trial)',
+            error: e, stackTrace: st);
+        hadTrial = false;
+      }
+      if (isClosed) return;
+      if (!hadTrial) continue;
+      final persons = [
+        for (final person in state.persons)
+          if (person.memberId == memberId)
+            // A trial already picked in the window before this answer landed
+            // is dropped with it — a blocked plan that survives reaches the
+            // review and fails at pay, which is the dead end the block exists
+            // to prevent.
+            person.copyWith(
+              hadTrial: true,
+              selectedPlanId: _isTrial(person.selectedPlanId)
+                  ? null
+                  : person.selectedPlanId,
+            )
+          else
+            person,
+      ];
+      emit(state.copyWith(persons: persons));
+    }
+  }
+
+  bool _isTrial(String? planId) =>
+      state.planById(planId)?.planType == PlanType.trial;
+
   /// Pick a plan for the active person. ONE plan per person, always
   /// `quantity: 1` — a self-serve iPad sells one membership to one person, so
   /// there is no stepper to mis-tap.
+  ///
+  /// **A trial this person has already had is never selected**, only
+  /// explained. The card stays tappable so the answer is one tap away — a
+  /// greyed-out plan with no explanation is a worse dead end than the one it
+  /// is trying to avoid — but the tap opens the popup instead of setting the
+  /// pick, so a blocked plan can never reach the review and fail at pay.
   void selectPlan(String planId) {
     registerActivity();
+    final plan = state.planById(planId);
+    if (plan != null && state.planBlocked(plan)) {
+      _openTrialBlock();
+      return;
+    }
     _updateActivePerson((p) => p.copyWith(selectedPlanId: planId));
+  }
+
+  /// "You've already had a trial" — the explanation behind a blocked card.
+  void _openTrialBlock() {
+    emit(state.copyWith(trialBlockActive: true));
+    _startPopupCountdown();
+  }
+
+  /// "Pick a membership" — dismiss and carry on with the grid behind it.
+  ///
+  /// The blocked plan was never selected, so there is nothing to undo; the
+  /// clear below is the belt-and-braces guard that keeps that true if the tap
+  /// path is ever refactored.
+  void dismissTrialBlock() {
+    _popupTimer?.cancel();
+    emit(state.copyWith(trialBlockActive: false, popupCountdown: 0));
+    final active = state.activePerson;
+    if (active.hadTrial && _isTrial(active.selectedPlanId)) {
+      _updateActivePerson((p) => p.copyWith(selectedPlanId: null));
+    }
+    registerActivity();
+  }
+
+  /// "Get help at the desk" from the trial block — the handoff the member
+  /// CHOOSES. Nothing routes here on their behalf; the popup's primary sends
+  /// them back to the plans they CAN pick.
+  void trialBlockHelp() {
+    _popupTimer?.cancel();
+    emit(state.copyWith(trialBlockActive: false, popupCountdown: 0));
+    _stop(KioskSignupStopReason.trialAlreadyUsed);
   }
 
   /// Continue from the plan pick — to the NEXT training person's plan, or, once
@@ -1600,10 +1768,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idempotencyKey: key,
       payment: MemberMembershipsStartPayment(
         paymentMethodId: paymentMethodId,
-        // A subscription can only bill the payer's saved default, so a
-        // recurring cart MUST keep this card; a purely one-time cart is
-        // attach → pay → detach.
-        setDefault: state.cartHasRecurring,
+        // **Always true, whatever the cart holds.** The kiosk takes a fresh
+        // card every time and that card becomes the payer's default, replacing
+        // whatever was on the profile — which is what makes an existing member
+        // able to self-serve here at all. The card step says so in as many
+        // words, because it is a consequence the member has to register.
+        setDefault: true,
       ),
     );
     if (request == null) return;
@@ -1660,13 +1830,19 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// are already committed and are NEVER re-executed — only the charge is
   /// retried, from the decline popup.
   ///
-  /// **A decline never ends the signup, and there is no wait between attempts.**
-  /// Mistakes are ordinary: the member may retry immediately — the SAME card
-  /// ([retrySameCard], the common insufficient-funds case) or a fresh one
-  /// ([retryCard]) — as many times as they like. Attempt-velocity throttling
-  /// (the card-testing defence on an unattended device) rides entirely on the
-  /// platform Stripe Radar rule, not a client cooldown (founder decision). The
-  /// desk is an option the member chooses, never a destination they are sent to.
+  /// **A decline never ends the signup, and no attempt is ever gated by a
+  /// wait.** Mistakes are ordinary: the member may retry immediately — the
+  /// SAME card ([retrySameCard], the common insufficient-funds case) or a
+  /// fresh one ([retryCard]) — as many times as they like. Attempt-velocity
+  /// throttling (the card-testing defence on an unattended device) rides
+  /// entirely on the platform Stripe Radar rule, not a client cooldown
+  /// (founder decision). The desk is an option the member chooses, never a
+  /// destination they are sent to.
+  ///
+  /// The popup still carries a RETURN countdown, which is a different thing
+  /// from a cooldown: it decides how long a shared iPad may sit on this screen
+  /// with nobody answering it, not how soon Retry may be tapped. Retry is live
+  /// from the first frame.
   void _onDeclined(List<MemberMembershipsStartResultItem> failed) {
     emit(state.copyWith(
       failedItems: failed,
@@ -1674,6 +1850,29 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       submitting: false,
     ));
     _syncIdleTimer();
+    _startPopupCountdown();
+  }
+
+  /// The blocking popups' shared clock — a plain per-second countdown that
+  /// abandons at zero.
+  ///
+  /// Expiry runs the ordinary [abandon], so the session's flow count is
+  /// released by the ONE latch every other exit uses. That matters most on the
+  /// decline, which deliberately does not release on entry (the member is
+  /// still standing there): if nobody answers it, this is what releases it.
+  void _startPopupCountdown() {
+    _popupTimer?.cancel();
+    emit(state.copyWith(popupCountdown: kKioskSignupPopupHold.inSeconds));
+    _popupTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (isClosed) return;
+      final next = state.popupCountdown - 1;
+      if (next <= 0) {
+        _popupTimer?.cancel();
+        abandon();
+      } else {
+        emit(state.copyWith(popupCountdown: next));
+      }
+    });
   }
 
   /// "Retry" — re-attempt the SAME card. The most common decline is
@@ -1693,7 +1892,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void retrySameCard() {
     registerActivity();
     if (state.step != KioskSignupStep.declined) return;
-    emit(state.copyWith(idempotencyKey: newIdempotencyKey()));
+    _popupTimer?.cancel();
+    emit(state.copyWith(
+      idempotencyKey: newIdempotencyKey(),
+      popupCountdown: 0,
+    ));
     unawaited(pay());
   }
 
@@ -1712,6 +1915,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// bump fixes.
   void retryCard() {
     registerActivity();
+    _popupTimer?.cancel();
     emit(state.copyWith(
       step: KioskSignupStep.card,
       cardAttempt: state.cardAttempt + 1,
@@ -1720,6 +1924,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       cardLast4: null,
       idempotencyKey: null,
       preview: null,
+      popupCountdown: 0,
     ));
     _syncIdleTimer();
   }
@@ -1738,6 +1943,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void _enterWelcome() {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
+    _popupTimer?.cancel();
     // The flow is over: release the session's count here, exactly once.
     _endFlowIfStarted();
     emit(state.copyWith(
@@ -1746,6 +1952,8 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idleWarningActive: false,
       idleCountdown: 0,
       failedItems: const [],
+      trialBlockActive: false,
+      popupCountdown: 0,
       welcomeCountdown: kKioskSignupWelcomeHold.inSeconds,
     ));
     _welcomeTimer?.cancel();
@@ -1791,6 +1999,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void _stop(KioskSignupStopReason reason) {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
+    _popupTimer?.cancel();
     if (!reason.isRetryable) _endFlowIfStarted();
     emit(state.copyWith(
       step: KioskSignupStep.stop,
@@ -1800,6 +2009,8 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idleCountdown: 0,
       abandonConfirmActive: false,
       removeConfirmIndex: null,
+      trialBlockActive: false,
+      popupCountdown: 0,
       stopCountdown: kKioskSignupStopHold.inSeconds,
     ));
     _startStopCountdown();
@@ -1882,12 +2093,15 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _countdownTimer?.cancel();
     _stopTimer?.cancel();
     _welcomeTimer?.cancel();
+    _popupTimer?.cancel();
     _searchDebounce?.cancel();
     _endFlowIfStarted();
     emit(state.copyWith(
       abandoned: true,
       abandonConfirmActive: false,
       removeConfirmIndex: null,
+      trialBlockActive: false,
+      popupCountdown: 0,
       idleWarningActive: false,
       idleCountdown: 0,
     ));
@@ -2025,6 +2239,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _countdownTimer?.cancel();
     _stopTimer?.cancel();
     _welcomeTimer?.cancel();
+    _popupTimer?.cancel();
     _searchDebounce?.cancel();
     // Balance a mid-flow teardown: without this the session's flow count stays
     // incremented and the kiosk never signs itself out at its lockout.

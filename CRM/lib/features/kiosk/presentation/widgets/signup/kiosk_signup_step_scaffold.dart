@@ -116,12 +116,19 @@ class _Rail extends StatelessWidget {
 /// "People" of its own, so the roster steps light the rung the member is
 /// heading INTO (Plan) rather than one they have already finished — a rail
 /// must never sit on a completed step.
+///
+/// **The rail templates are fixed at 6 solo / 7 group and no step ever adds a
+/// rung to them.** A step that is still about WHO this person is shares the
+/// rung they are standing on rather than advertising progress they have not
+/// made — the entry fork, the identify search and the payer match are all that
+/// category. Adding an eighth rung for a binary tap would lengthen an already
+/// long rail and inflate progress.
 int kioskFlowRailIndex(KioskSignupStep step, {required bool isGroup}) {
   return switch (step) {
-    KioskSignupStep.details => 0,
-    // The payer match is still about WHO this person is, so it belongs to the
-    // rung they are standing on rather than advertising progress they have
-    // not made.
+    KioskSignupStep.entry ||
+    KioskSignupStep.identify ||
+    KioskSignupStep.details =>
+      0,
     KioskSignupStep.extraDetails || KioskSignupStep.payerMatch => 1,
     KioskSignupStep.people ||
     KioskSignupStep.personDetails ||

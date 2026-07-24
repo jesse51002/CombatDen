@@ -20,22 +20,52 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// Avatar-free is not an oversight: a shared lobby iPad showing member faces
 /// beside searchable names is a directory of everyone who trains here.
 ///
-/// [forPayer] switches only what a picked row MEANS — the payer seat, gated on
-/// the member having no card on file, rather than a payee on the roster — and
-/// the one line of copy that would otherwise offer the wrong way out of an
-/// empty result.
+/// [forPayer] switches only what a picked row MEANS — the payer seat rather
+/// than a payee on the roster — and the one line of copy that would otherwise
+/// offer the wrong way out of an empty result.
+///
+/// [noMatchMessage] overrides that empty line for a screen where neither
+/// shipped variant is true. The identify step is the case: nothing is seated
+/// there yet, so "you can keep paying yourself" names a person who does not
+/// exist.
 class KioskMatchSearch extends StatefulWidget {
-  /// Pick a PAYER (gated) rather than a payee.
+  /// Pick a PAYER rather than a payee.
   final bool forPayer;
 
-  const KioskMatchSearch({super.key, this.forPayer = false});
+  /// What to say when the search answered with nobody. Null keeps the shipped
+  /// per-[forPayer] line.
+  final String? noMatchMessage;
+
+  /// The search box's placeholder. The default addresses somebody looking
+  /// another person up; a screen where the member is looking for THEMSELVES
+  /// passes its own.
+  final String hintText;
+
+  const KioskMatchSearch({
+    super.key,
+    this.forPayer = false,
+    this.noMatchMessage,
+    this.hintText = 'Start typing their name',
+  });
 
   @override
   State<KioskMatchSearch> createState() => _KioskMatchSearchState();
 }
 
 class _KioskMatchSearchState extends State<KioskMatchSearch> {
-  final TextEditingController _controller = TextEditingController();
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seeded FROM state, so a screen re-entered with a query still standing
+    // (the identify step after "no, that's not me") shows the box and the rows
+    // agreeing with each other. Every route that OPENS a search clears the
+    // query first, so this can never carry the previous person's typing.
+    _controller = TextEditingController(
+      text: context.read<KioskSignupCubit>().state.matchQuery,
+    );
+  }
 
   @override
   void dispose() {
@@ -53,13 +83,16 @@ class _KioskMatchSearchState extends State<KioskMatchSearch> {
       children: [
         AppSearchBox(
           controller: _controller,
-          hintText: 'Start typing their name',
+          hintText: widget.hintText,
           textStyle: DesignConstants.kioskFieldText,
           // The kiosk lifts muted WORDS off `text3rd` for contrast at 2m.
           hintColor: DesignConstants.text2nd,
           onChanged: cubit.searchExistingPeople,
         ),
-        _Results(forPayer: widget.forPayer),
+        _Results(
+          forPayer: widget.forPayer,
+          noMatchMessage: widget.noMatchMessage,
+        ),
       ],
     );
   }
@@ -67,8 +100,9 @@ class _KioskMatchSearchState extends State<KioskMatchSearch> {
 
 class _Results extends StatelessWidget {
   final bool forPayer;
+  final String? noMatchMessage;
 
-  const _Results({required this.forPayer});
+  const _Results({required this.forPayer, this.noMatchMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -109,12 +143,13 @@ class _Results extends StatelessWidget {
         if (state.matchQuery.trim().length >= kKioskSearchMinChars) {
           return _Status(
             child: _StatusText(
-              forPayer
-                  // A payer must already be a member here, so "add them as
-                  // someone new" is not an answer on this screen.
-                  ? 'No matches. You can keep paying yourself, or the front '
-                      'desk can set this up.'
-                  : 'No matches. Add them as someone new instead.',
+              noMatchMessage ??
+                  (forPayer
+                      // A payer must already be a member here, so "add them as
+                      // someone new" is not an answer on this screen.
+                      ? 'No matches. You can keep paying yourself, or the '
+                          'front desk can set this up.'
+                      : 'No matches. Add them as someone new instead.'),
             ),
           );
         }

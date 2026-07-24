@@ -8,7 +8,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_optional_fields.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 
 /// D1a **and** E1a — the optional block: date of birth, address, and an
 /// emergency contact, for whoever the roster is currently about.
@@ -130,7 +130,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
             spacing: DesignConstants.spacingLarge,
             children: [
               if (state.personDetailsFailed)
-                KioskWaiverNotice(
+                KioskInlineNotice(
                   message: 'We couldn\'t save those details. Please try '
                       'again, or skip for now.',
                   onRetry: busy ? null : commit,

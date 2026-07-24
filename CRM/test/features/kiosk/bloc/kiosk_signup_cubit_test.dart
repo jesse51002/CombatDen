@@ -232,7 +232,8 @@ void main() {
   });
 
   group('failures become terminal front-desk stops', () {
-    test('a duplicate stops the flow and releases it exactly once', () async {
+    test('a duplicate the member DECLINES stops the flow, exactly once',
+        () async {
       when(() => member.createMember(any())).thenThrow(
         const DuplicateMemberException(<DuplicateMemberMatch>[
           DuplicateMemberMatch(
@@ -246,12 +247,33 @@ void main() {
       final cubit = build();
       await fillAndCommit(cubit);
 
+      // The 409 is an OFFER first — the flow is still live and nothing has
+      // been released.
+      expect(cubit.state.step, KioskSignupStep.payerMatch);
+      verifyNever(() => session.endFlow());
+
+      cubit.declinePayerMatch();
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
-      // The 409's matches are never carried onto the state — rendering them
-      // would confirm an account exists to whoever is at the shared iPad.
+      // The 409's matches are never carried onto the state as a LIST —
+      // rendering them would confirm accounts exist to whoever is at the
+      // shared iPad.
       expect(cubit.state.matches, isEmpty);
       expect(cubit.state.payer.memberId, isNull);
+      verify(() => session.endFlow()).called(1);
+      await cubit.close();
+    });
+
+    test('a duplicate that names NOBODY is terminal on the spot', () async {
+      when(() => member.createMember(any()))
+          .thenThrow(const DuplicateMemberException(<DuplicateMemberMatch>[]));
+      final cubit = build();
+      await fillAndCommit(cubit);
+
+      // There is no offer anybody can answer, so there is nothing to ask.
+      expect(cubit.state.step, KioskSignupStep.stop);
+      expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
+      expect(cubit.state.matchCandidate, isNull);
       verify(() => session.endFlow()).called(1);
       await cubit.close();
     });
@@ -424,7 +446,9 @@ void main() {
       final cubit = build();
       await Future<void>.delayed(Duration.zero);
       expect(cubit.state.plansFailed, isTrue);
-      expect(cubit.state.step, KioskSignupStep.details);
+      // The member is still on the lane's first fork; nothing about a failed
+      // warm moves them off it.
+      expect(cubit.state.step, KioskSignupStep.entry);
       await cubit.close();
     });
   });

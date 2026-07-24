@@ -17,7 +17,6 @@ import 'package:crm/features/member_details/data/models/member_memberships_add_d
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
-import 'package:crm/features/member_details/data/models/member_payment_method_status.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
@@ -178,25 +177,6 @@ class MemberRepository {
       data: req.toJson(),
     );
     return MembersManagementResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
-  }
-
-  /// `GET /api/v1/members/{member_id}/payment-method-status` — whether this
-  /// member already has ANY payment method attached.
-  ///
-  /// The kiosk's payer gate reads it (see the `kiosk-guide` skill): an
-  /// existing member may be a kiosk payer only while this is false, so the
-  /// card the kiosk attaches is the first one that account has ever had.
-  /// It throws exactly like every other read; the kiosk's caller treats any
-  /// throw as "not eligible" rather than as "no card on file".
-  Future<MemberPaymentMethodStatus> getPaymentMethodStatus(
-    String memberId,
-  ) async {
-    final response = await _apiClient.get(
-      '/api/v1/members/$memberId/payment-method-status',
-    );
-    return MemberPaymentMethodStatus.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

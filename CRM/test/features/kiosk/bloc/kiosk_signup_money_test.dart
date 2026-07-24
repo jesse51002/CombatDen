@@ -174,7 +174,7 @@ void main() {
       await cubit.close();
     });
 
-    test('the PAY call sends the fresh card with set_default for a recurring '
+    test('the PAY call sends the fresh card with set_default on a RECURRING '
         'cart', () async {
       final cubit = await atReview();
       await cubit.pay();
@@ -193,6 +193,27 @@ void main() {
       expect(payment.setDefault, isTrue);
       expect(request.paidWithCash, isFalse);
       expect(cubit.state.step, KioskSignupStep.welcome);
+      await cubit.close();
+    });
+
+    test('set_default is true on a ONE-TIME-ONLY cart too', () async {
+      // **It does not branch on the cart, and that is the point.** The kiosk
+      // always saves the entered card as the payer's default, replacing
+      // whatever was on the profile — which is what lets an existing member
+      // self-serve here at all. The card step says so in as many words.
+      when(() => memberships.listPlans(any()))
+          .thenAnswer((_) async => [_oneTimePlan()]);
+      final cubit = await atReview();
+      expect(cubit.state.cartHasRecurring, isFalse);
+      await cubit.pay();
+
+      final request = verify(
+        () => member.startMemberships(
+          captureAny(),
+          receiveTimeout: kKioskSignupStartTimeout,
+        ),
+      ).captured.single as MemberMembershipsStartRequest;
+      expect(request.payment!.setDefault, isTrue);
       await cubit.close();
     });
   });
@@ -822,6 +843,29 @@ void main() {
 
 /// Let the cubit's `unawaited` reads settle.
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
+
+/// The recurring plan's one-time twin — same ids, same price, so only the
+/// plan TYPE differs and `set_default` is the only thing under test.
+MembershipPlanResponse _oneTimePlan() => MembershipPlanResponse(
+      planId: 'plan-1',
+      gymId: 'gym-1',
+      planName: 'Day pass',
+      imageUrl: 'https://cdn/plan.png',
+      planType: PlanType.oneTime,
+      durationAmount: 1,
+      isPublic: true,
+      createdAt: DateTime.utc(2026),
+      waiverIds: const ['waiver-1'],
+      activePrice: MembershipPlanPriceResponse(
+        priceId: 'price-1',
+        planId: 'plan-1',
+        gymId: 'gym-1',
+        stripePriceId: 'price_stripe',
+        price: 14900,
+        isActive: true,
+        createdAt: DateTime.utc(2026),
+      ),
+    );
 
 MembershipPlanResponse _recurringPlan() => MembershipPlanResponse(
       planId: 'plan-1',

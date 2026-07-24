@@ -8,6 +8,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_facts.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_secure_strip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
@@ -29,12 +30,13 @@ import 'package:crm/features/member_details/presentation/dialogs/card_field_box.
 /// failure is an INLINE message — a mistyped number is not a reason to end a
 /// signup.
 ///
-/// **The screen names WHOSE profile the card lands on, pinned.** On a
-/// recurring cart the entered card becomes that member's Stripe default, so a
-/// later front-desk "charge the card on file" bills whoever typed it here.
-/// That makes the payer's name a correctness control rather than decoration —
-/// and it is read off the roster's payer seat, never off the active person,
-/// who in a family is usually a child.
+/// **The screen names WHOSE profile the card lands on, pinned.** The entered
+/// card ALWAYS becomes that member's Stripe default and replaces whatever was
+/// on the profile, so a later front-desk "charge the card on file" bills
+/// whoever typed it here. That makes the payer's name a correctness control
+/// rather than decoration — and it is read off the roster's payer seat, never
+/// off the active person, who in a family is usually a child. The inline
+/// notice under the field says both halves of that out loud.
 ///
 /// This is the first step whose escape CONFIRMS. A stray tap here destroys
 /// sixteen typed digits plus expiry, CVC and postal code — the most tedious
@@ -134,10 +136,15 @@ class _KioskCardStepState extends State<KioskCardStep> {
                 },
               ),
               if (_error != null) _CardError(message: _error!),
-              KioskCardFacts(
-                hasRecurring: state.cartHasRecurring,
-                payerName: payerName,
-              ),
+              // Between the field and the ticked facts, and deliberately
+              // heavier than them: the member has to REGISTER this, not be
+              // reassured by it. See `KioskCardFacts` for why it is not a
+              // green tick, and `KioskSecureStrip` for why it is not up top
+              // (that strip answers "is it safe to type this here", which has
+              // to arrive before the box; this is a what-happens-afterwards
+              // fact).
+              KioskInlineNotice(message: _savedCardNotice(payerName)),
+              KioskCardFacts(hasRecurring: state.cartHasRecurring),
             ],
           ),
         );
@@ -151,6 +158,24 @@ class _KioskCardStepState extends State<KioskCardStep> {
   String _payerName(KioskSignupState state) {
     final payer = state.payer;
     return '${payer.firstName} ${payer.lastName}'.trim();
+  }
+
+  /// What happens to the card, in two plain sentences.
+  ///
+  /// **Naming the profile is not optional**: "saved" is only half the promise
+  /// and the other half is *to whom*, because that is the account a later
+  /// front-desk charge reads from. With no name to hand it degrades to the
+  /// unattributed wording rather than to a wrong one.
+  ///
+  /// **The second sentence is the one that has to be there.** The kiosk always
+  /// makes this card the payer's default, and an existing member may now pay
+  /// here — so a card already on that profile really is displaced. Saying so
+  /// is the whole reason this notice exists.
+  String _savedCardNotice(String payerName) {
+    final who = payerName.trim();
+    final whose = who.isEmpty ? 'your profile' : '$who\'s profile';
+    return 'This card is saved to $whose and used for future payments. It '
+        'replaces any card already on file.';
   }
 }
 

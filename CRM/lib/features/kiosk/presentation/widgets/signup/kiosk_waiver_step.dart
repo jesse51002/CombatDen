@@ -12,6 +12,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.d
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
@@ -220,12 +221,12 @@ class _Body extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.waiverStale)
-          const KioskWaiverNotice(
+          const KioskInlineNotice(
             message: 'The gym updated this waiver — please read and sign the '
                 'new version.',
           ),
         if (state.waiverFailed)
-          KioskWaiverNotice(
+          KioskInlineNotice(
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),

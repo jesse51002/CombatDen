@@ -115,7 +115,12 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
                     pickedPlanName: pickedPlan?.planName,
                     onPick: (planId) {
                       cubit.selectPlan(planId);
-                      _toTop(animate: true);
+                      // Only a pick that LANDED gets the return-to-top: a
+                      // blocked trial opens its explanation instead of
+                      // selecting, and there is no confirmation to scroll to.
+                      if (cubit.state.activePerson.selectedPlanId == planId) {
+                        _toTop(animate: true);
+                      }
                     },
                   ),
           );
@@ -206,6 +211,10 @@ class _PlanGrid extends StatelessWidget {
               KioskPlanCard(
                 plan: plan,
                 selected: plan.planId == picked,
+                // A trial this person has already had renders used and can
+                // never be selected; the cubit turns its tap into the
+                // explanation instead.
+                blocked: state.planBlocked(plan),
                 onTap: () => onPick(plan.planId),
               ),
           ],

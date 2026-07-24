@@ -12,15 +12,20 @@ description: >-
   wording that answers the screen, the single `goHome()` abandon path, and the
   screens that get a handoff INSTEAD because an escape there would orphan
   committed state), the draft-clearing privacy rule and the shared-iPad autofill
-  hazard, the fresh-card law and the structural no-discounts rule, the TWO
+  hazard, the fresh-card law (the entered card is ALWAYS saved as the payer's
+  default and replaces theirs, which is what makes the lane self-serve for
+  existing members too), the kiosk-only ONE-TRIAL rule derived client-side from
+  the member's own history, the structural no-discounts rule, the TWO
   rejection shapes (a 200 with `skip_reason` vs a thrown error carrying a stable
   `code`), the TWO separate class lists (check-in window vs the forward-looking
-  showcase), the four gym-wide catalogues warmed once at entry, the four
-  independent timers, the kiosk type ramp / AA contrast / fixed QR polarity
+  showcase), the four gym-wide catalogues warmed once at entry, the six
+  independent timers (every blocking popup carries a visible 60s return
+  countdown), the kiosk type ramp / AA contrast / fixed QR polarity
   design laws, the PINNED per-step identity band, the real-vs-illustrative
   data rule, and the built SOLO + GROUP self-serve **signup** lane (its own
-  cubit, the double-charge defences, the fail-closed payer gate and its two
-  entry points, the uncapped, no-wait decline model with same-card + new-card
+  cubit, the new-here/already-a-member front door and the identify search, the
+  double-charge defences, the three entry points into a seated payer, the
+  uncapped, no-wait decline model with same-card + new-card
   retry, and the CRM's
   Incomplete tab as the staff-side resolution for an abandoned draft). Load
   this
@@ -31,7 +36,8 @@ description: >-
   check-in", "the glance", "get the app modal", "fresh-card law", "12-hour
   runway", "beginFlow / endFlow", "kiosk escape / start over / cancel",
   "autofill on the kiosk", "skip_reason", "kiosk type ramp", "rotating QR",
-  "kiosk signup", "duplicate payer", "payment-method-status", "someone else is
+  "kiosk signup", "duplicate payer", "already had a trial", "one trial per
+  member", "find my name", "someone else is
   paying", "decline retry", "retry same card", or "Incomplete tab".
 ---
 
@@ -294,8 +300,8 @@ WEIGHT rather than size (it keeps 17px — a member still has to find it from 2m
 {FirstName}, pick your class" — the escape must answer that assertion. A generic
 "Back" makes a flustered member work out what it means. In the signup flow the
 equivalent is **"↺ Start over"**, deliberately **NOT** "Cancel": beside a
-`Pay $149.00` button, "Cancel" reads as *cancel the payment*. Every new escape
-gets its wording from the sentence it is answering.
+`Sign Membership · $149.00` button, "Cancel" reads as *cancel the payment*.
+Every new escape gets its wording from the sentence it is answering.
 
 **3. Wire it to `goHome()` — never write a second abandon path.**
 `KioskFlowCubit.goHome()` already IS the whole abandon contract (timers
@@ -376,65 +382,61 @@ something the kiosk can be trusted to notice later.
 
 ---
 
-## 3. The fresh-card law, and no discounts at all
+## 3. The fresh-card law, the one-trial rule, and no discounts at all
 
-Both rules are about the same thing: a self-serve iPad must not be able to spend
-someone else's money or discount its own membership.
+Three rules, all about the same thing: a self-serve iPad must not be able to
+spend someone else's money, hand itself a second free trial, or discount its own
+membership.
 
 ### The fresh-card law
 
 **The kiosk never charges a PRE-EXISTING card.** Every card it charges is one
-entered during the current signup. That is the whole invariant, and everything
-below is how it is held.
+entered during the current signup, and that card **always** becomes the payer's
+Stripe default — replacing whatever was on their profile. That is the whole
+invariant.
 
-**Why it is the invariant and not "the payer must be new".** A recurring cart
-sends `set_default: true` — a subscription can only bill the saved default —
-so the card typed at the iPad **becomes that member's Stripe default**. If the
-kiosk could seat a payer who already had a card, it would be attaching a
-stranger's card to somebody's account, and the next front-desk "charge the card
-on file" would bill the wrong person.
+**It is about the CARD, never about who the payer is.** Because the kiosk reads
+no stored card and offers no saved-card surface, there is nothing for it to
+reach for: an existing member with a card on file is a perfectly good kiosk
+payer, and typing a fresh card is the price of paying here. The lane is
+**near-fully self-serve** for exactly that reason — an existing member starts
+and pays for a membership at the iPad rather than being sent to the desk.
 
-#### The gate: no attached payment method, or no
+**The card step says the consequence out loud**, because a member has to
+register it: *"This card is saved to {Name}'s profile and used for future
+payments. It replaces any card already on file."* (§ "The card surface" below.)
 
-An **existing** member may be the payer **only if they have no payment method
-attached at all**. They then still type a fresh card, which is the first one
-that account has ever had. Any attached payment method → refuse and hand off to
-the front desk.
+**What that costs, and why it is accepted.** Person A can seat person B as payer
+and type A's card, so B's profile ends up defaulting to A's card and the next
+front-desk "charge the card on file" bills A. The kiosk names the payer in a
+pinned strip on the card step and states the replacement in as many words, so
+the screen cannot do it silently; beyond that it is the same trust model as a
+member handing their card to the desk (founder ruling).
 
-`GET /api/v1/members/{member_id}/payment-method-status` → `{"has_payment_method":
-bool}` is the read (`MemberRepository.getPaymentMethodStatus` →
-`MemberPaymentMethodStatus`, whose `has_payment_method` is REQUIRED so a broken
-body fails to parse rather than defaulting to `false`).
+#### The three entry points, and the one seat path
 
-`KioskSignupCubit._payerEligibility` maps it to `KioskPayerEligibility`, and
-**`eligible` is the only value that permits adoption**:
+**A — the ordinary create.** A brand-new member types their details and
+`POST /members/` makes them. Nothing special.
 
-| verdict | means |
-| --- | --- |
-| `eligible` | the check answered, and there is no payment method |
-| `hasPaymentMethod` | the check answered: there is one. Refuse. |
-| `unknown` | the check did NOT answer — 404, 5xx, timeout, dropped connection, unparsable body. Refuse. |
-| `alreadyInSignup` | decided locally before the check: the CRM search turned up somebody already on this roster. A **redirect**, not a rejection — they are listed above and pickable there — and it still stops the CRM path INSERTING a second entry, which would be two cart items for one person. |
+**B — "Is this you?"**, reached two ways and ending in one screen
+(`KioskSignupStep.payerMatch` over `KioskPayerMatchStep` + the shipped
+`KioskMatchCard` — full name + the masked email `kiosk_name_format.dart`'s
+`kioskMaskedEmail` renders for a payee):
 
-> **FAIL CLOSED.** An indeterminate check is NOT eligible. A `false` inferred
-> from a failure is a billing incident, so `_payerEligibility` catches
-> everything and returns `unknown`, and every caller tests `!= eligible` rather
-> than testing for a specific refusal.
+- the **identify** search (`KioskSignupStep.identify`), where the member says
+  up front that they already train here and taps their own name;
+- a **duplicate 409** on their own create, where the gym's records say so.
 
-#### The two entry points
+A confirm is warranted on BOTH routes: two members can share a name, and a
+mis-tap on a shared iPad would seat a stranger's account behind the card about
+to be typed. "Yes, that's me" adopts the id and writes nothing. **"No, that's
+not me" goes where the match came from** — back to the identify search with the
+query intact (nothing committed, they simply mis-tapped), or to the terminal
+duplicate stop on the 409 route (the create was already refused). A 409 that
+names NOBODY is terminal on the spot. A LIST of matches is never rendered, and
+never a phone, photo or membership status.
 
-**A — "Is this you?" on a payer duplicate.** `POST /members/` 409s because the
-person standing there already has an account. The first match is put through
-the gate: **eligible** → `KioskSignupStep.payerMatch`, a single confirm card
-(`KioskPayerMatchStep` over the shipped `KioskMatchCard`, full name + the same
-masked email `kiosk_name_format.dart`'s `kioskMaskedEmail` renders for a payee)
-— they typed this exact name and email one screen ago, so confirming their own
-account back to them leaks nothing. "Yes, that's me" adopts the id;
-"No" and **every ineligible or unanswered check** land on the unchanged
-terminal stop. A LIST of matches is still never rendered, and never a phone,
-photo or membership status.
-
-**B — the payer picker (`KioskSignupStep.payerPick`).** One screen serves two
+**C — the payer picker (`KioskSignupStep.payerPick`).** One screen serves two
 situations. **Changing** who pays while a payer exists — a secondary-tier
 affordance under the roster ("Change who is paying"), a change-of-ROLE action
 whose label says so ("someone else is paying" announced a fact about a third
@@ -442,6 +444,52 @@ party, which is not what the button does). And **choosing** the first payer
 after the previous one was DELETED — reached straight from the trash, and
 re-openable from the People step's "Choose who's paying" affordance in the
 no-payer state (below).
+
+The picker's ONE inline answer is `KioskSignupState.payerAlreadyInSignup`: a CRM
+search hit who is already on this roster. It is a **redirect**, not a rejection
+— they are listed above and pickable there — and it exists because the CRM path
+must refuse to INSERT a second entry for one member, which would be two cart
+items (and two charges) for one person.
+
+### The one-trial rule — a KIOSK rule, enforced client-side
+
+**A member gets one trial at the kiosk, ever, and any prior trial closes EVERY
+trial plan for them** — not just the one they took.
+
+**Staff can still grant a repeat trial from the CRM, and that asymmetry is
+deliberate** (founder ruling). There is no backend rule, no new endpoint and no
+new column: this is a self-serve product rule, so it lives entirely in
+`KioskSignupCubit`. Do not "fix" it by pushing it into the backend.
+
+- **The signal is derived from the member's own history.** At the plans step
+  `_loadTrialEligibility` reads `MemberRepository.getMemberDetail` and asks
+  `memberships.any((m) => m.planType == 'trial')` (`MembershipInfo.planType` is
+  a plain `String?` there, not the `PlanType` enum). The backend applies **no
+  lifecycle filter** to that list, so a trial cancelled or finished a year ago
+  still counts — which is the question being asked. Never use a
+  currently-active-trial flag instead.
+- **It reads ONE field and drops the rest.** The billing detail is a heavy staff
+  payload (rank, charges, redemptions, streak, an address) and a lobby iPad
+  prints none of it. Nothing renders, logs or persists any part of that response
+  beyond the single boolean; never reuse it to prefill a form.
+- **Only for a person the kiosk did not create.** `wasExisting` + a known
+  `memberId`; somebody registered during this signup has no history by
+  construction, so no call is made at all. Answers are cached per member id for
+  the flow.
+- **It FAILS OPEN** — the exact opposite of the money-path reads, and on
+  purpose. A throw leaves `KioskSignupPerson.hadTrial` false and the trial stays
+  on offer: a second trial slipping through costs one free week the desk can
+  undo, while turning a legitimate first-timer away sends a paying customer out
+  of the door.
+- **A blocked trial can never be SELECTED, and always EXPLAINS.** Its
+  `KioskPlanCard` renders used — dimmed, with an "Already used" tag top-LEFT
+  over the hero (the top-right belongs to the select mark) — and `selectPlan`
+  turns its tap into the `KioskTrialBlock` popup instead of setting
+  `selectedPlanId`. Both halves matter: an unselectable card keeps a blocked
+  plan off the review (where it would fail at pay), and the popup keeps it from
+  being a greyed-out dead end with no answer. The popup's primary returns to the
+  grid; its outline hands off to the desk via
+  `KioskSignupStopReason.trialAlreadyUsed`.
 
 **The picker offers the ROSTER first, then the CRM.** The people already on
 this signup are standing right there, so they are listed and directly pickable;
@@ -459,17 +507,14 @@ the NO-PAYER state there is no one to exclude and no strip: every remaining
 person (index 0 included) is a candidate (`payerCandidateIndexes`), and the
 member must pick one to continue.
 
-**The gate runs on whoever is picked, uniformly.** `_gateThenSeat` is the ONE
-path a payer is ever seated by, and **nothing is special-cased for a person
-this signup created** — not even on the reasoning that they obviously have no
-card yet. It runs for BOTH a switch and a first-choice after a delete (gated on
-`canAssignPayer`, which is true whenever nothing has committed the payer,
-whether or not one currently exists), so **a payer chosen after the previous one
-was deleted is seated through exactly this fail-closed gate — never a shortcut.**
-One code path means one place the invariant lives and no branch a future change
-could route around; the cost is one cheap call.
+**One seat path, uniformly.** `_seatPayer` is the ONE path a payer is ever
+seated by, and **nothing is special-cased**. Its single precondition is
+`canAssignPayer` (nothing linked, nothing signed), which covers BOTH a switch
+and a first choice after a delete — so a payer chosen after the previous one was
+deleted goes through exactly the same code. One path means one place the seat
+rules live and no branch a future change could route around.
 
-Two seatings, one gate:
+Two seatings, one path:
 
 - **CRM pick** (`_seatNewPayer`) — INSERTS them at the head; the person who
   started the signup keeps their seat as a payee and every index shifts by one.
@@ -480,9 +525,8 @@ Two seatings, one gate:
 
 Either way **only the payer role moves**, so the demoted person now needs the
 payer-authorization waiver like any other payee — which `everyPayeeLinked`
-enforces for free (see §11.5). Ineligible, or a failed check, is an **inline**
-refusal (`kiosk_payer_refusal_copy.dart`), never a stop: they pick somebody
-else or carry on paying themselves.
+enforces for free (see §11.5). A hit already on the roster is answered
+**inline** on the picker (a redirect to the list above), never a stop.
 
 **The offer is withdrawn the moment anything commits.**
 `KioskSignupState.canSwitchPayer` is false once any payee is `linked` or
@@ -571,23 +615,21 @@ Continue would PUT the kiosk's typed guess over the gym's own record.
 
 A member who started a signup, typed enough to create their payer row, then
 walked away before paying is a member with no membership. Coming back, they hit
-the duplicate check on their OWN half-finished account — and that account has
-no payment method, so the gate passes and "Is this you?" simply picks the
-thread up. The CRM's **Incomplete** tab on the members list is the staff-side
-counterpart: it lists exactly these no-membership shells (a member who holds no
-membership and pays for nobody else's —
+the duplicate check on their OWN half-finished account and "Is this you?" simply
+picks the thread up. The CRM's **Incomplete** tab on the members list is the
+staff-side counterpart: it lists exactly these no-membership shells (a member
+who holds no membership and pays for nobody else's —
 `src/members/sql/crm_views/_member_incomplete.sql`), and each row's **Finish
 signup** button opens that member's page straight into the CRM's own
 start-membership wizard.
 
-For a **recurring** plan the entered card IS kept (a subscription can only bill
-the saved default, so `set_default` must be true); for **one_time / trial** it is
-attach → pay → detach. The card copy branches on the plan for exactly that
-reason — writing "only used for this signup" on a recurring plan would be a lie.
+The entered card is **always** kept (`set_default: true`, whatever the cart
+holds — §11.4), so the attach → pay → detach path the backend runs for a
+one-time-only cart with `set_default: false` is never taken from here.
 
 This is a **frontend guard** (accepted, given the supervised iPad + Guided
 Access). Which means: it holds only as long as no kiosk screen imports a
-payer/card-selection widget. Treat any such import as a defect.
+saved-card/payer-selection widget. Treat any such import as a defect.
 
 #### The card surface, and naming the profile it lands on
 
@@ -598,8 +640,8 @@ combined Stripe element — the mockup's four separate boxes are superseded),
 tokenizes there with `Stripe.instance.createPaymentMethod`, and hands the cubit
 only `pm.id` / `pm.card.brand` / `pm.card.last4`. It copies the tokenize CALL
 from `one_time_card_dialog.dart` but **may never import it** — that module is on
-the banned list below. `set_default` is decided by `cartHasRecurring`, never by
-a picker.
+the banned list below. `set_default` is unconditionally true, never a picker and
+never a branch.
 
 **The card is tokenized on the gym's CONNECTED account, not the platform.** The
 backend runs direct-charge Connect (customer + card + subscription all live on
@@ -629,13 +671,24 @@ caller) for exactly this.
 child while the payer is the parent, so a name taken from the wrong place would
 be confidently wrong about which profile a card attaches to, which is worse
 than naming nobody. The `KioskWhoFor` strip carries it ("CARD FOR Marcus
-Bell"), and `KioskCardFacts` attaches the same name to the promise — "Saved to
-Marcus Bell's profile so the membership keeps running" / "Charged once, and not
-saved to Marcus Bell's profile" — so *saved* and *to whom* are one sentence.
-With no name to hand both degrade to the unattributed wording rather than to a
-wrong one. The card step's subtitle is dropped in a group for the same reason:
-`selectedPlan` reads the active person's plan, which at that point is whoever
-signed last.
+Bell"), and the notice under the field attaches the same name to the promise, so
+*saved*, *to whom* and *what it displaces* are one sentence. With no name to
+hand it degrades to "your profile" rather than to a wrong one. The card step's
+subtitle is dropped in a group for the same reason: `selectedPlan` reads the
+active person's plan, which at that point is whoever signed last.
+
+**The body order is `[KioskSecureStrip] → [CardFieldBox] → [error?] →
+[KioskInlineNotice] → [KioskCardFacts]`, and each position is an argument.**
+The secure strip sits ABOVE the field because it answers "is it safe to type
+this here", which has to arrive before the box does. The replacement notice sits
+BELOW it because it is a what-happens-afterwards fact — and it rides
+`KioskInlineNotice` (17px `kioskBody` on the warm fill, 24px glyph) rather than
+joining `KioskCardFacts`, whose lines each sit behind a GREEN CHECK meaning
+*good news, don't worry*. Rendering "we are replacing your card" as a green tick
+would be actively misleading. What is left in the facts block is genuinely
+reassurance: "Cancel any time at the front desk." (only when the cart has
+something recurring to cancel) and the always-on "This screen wipes itself if
+you walk away…".
 
 **It is enforced in CI, not by convention.**
 `CRM/test/features/kiosk/kiosk_forbidden_imports_test.dart` walks every file
@@ -650,9 +703,9 @@ modules is legitimately renamed, rename it in both lists in the same change.
 
 Those bans are on the **CRM's own** payer-selection and saved-card surfaces,
 which offer a card the kiosk did not take. The kiosk's own payer picker is not
-one of them: it can only ever seat somebody whose first card is the one about
-to be typed. `bloc/kiosk_signup_payer_test.dart` is the other half of the
-enforcement — the gate, both entry points, and the fail-closed pair.
+one of them: it only ever names WHO pays, and whoever it names still types a
+fresh card at the end. `bloc/kiosk_signup_payer_test.dart` is the behavioural
+half of the enforcement — all three entry points, and the one seat path.
 
 ### NO discounts reach the kiosk — enforced structurally
 
@@ -835,9 +888,9 @@ Rules that hold across all four:
 
 ---
 
-## 7. Four clocks, and which one owns which screen
+## 7. Six clocks, and which one owns which screen
 
-Four independent timers exist. Confusing them is a recurring source of bugs, so
+Six independent timers exist. Confusing them is a recurring source of bugs, so
 name them precisely:
 
 | clock | length | scope | on expiry |
@@ -845,8 +898,30 @@ name them precisely:
 | **Runway** (`KioskSessionCubit`) | 12h absolute, lockout at 11h45 | the whole session | sign out |
 | **Flow-idle** (`kKioskIdleTimeout`) | 5 min, then a 30s visible countdown (`kKioskIdleCountdown`) | any *engaged* flow page | `goHome()` — abandons the draft |
 | **Signup stop** (`kKioskSignupStopHold`) | 15s | a terminal signup stop only | abandon → `goHome()` |
+| **Signup popup** (`kKioskSignupPopupHold`) | 60s | a BLOCKING signup popup — the decline, the trial block | abandon → `goHome()` |
 | **Glance hold** (`kKioskGlanceHold`) | 10s, started at the LAST reveal beat | the glance only | `goHome()` |
 | **App modal** (`kKioskAppModalTimeout`) | 60s | the modal overlay only | `goHome()` |
+
+**Every blocking overlay in the signup lane carries a VISIBLE countdown, drawn
+INSIDE the popup** (the shipped `KioskReturnTimer`, the same component the stop,
+welcome, glance and get-app surfaces use — never a second timer). This is a
+shared community iPad: no screen may hold it forever, and a countdown drawn
+behind a popup sneaks the surface away without the member seeing it go (founder
+ruling).
+
+Two things about that clock are easy to conflate and must not be:
+
+- **It is a RETURN clock, never a cooldown.** It decides how long the iPad may
+  sit unanswered, not how soon an action may be taken. On the decline popup
+  "Retry" is live from the first frame, uncapped and unthrottled (§11.3a).
+- **It is 60s, not the stop screen's 15s.** A terminal stop can be reached with
+  nobody standing there; these are read-and-decide screens somebody is looking
+  at, and 15 seconds is not enough to read three lines and choose.
+
+**Expiry runs the ordinary `abandon()`, never a new exit.** That is what keeps
+the flow count balanced by the one latch — and it matters most on the decline,
+which deliberately does NOT release on entry (§11.3): if nobody answers it, this
+is the thing that finally releases it.
 
 `_syncIdleTimer()` is the arbiter: the idle guard runs only while `_engaged`
 (past home, or typing into home's search) and is **suppressed entirely** on the
@@ -925,7 +1000,16 @@ heading, or if the admin sizes drift.
 
 **Ghost is the ESCAPE tier and nothing else uses it** — `KioskEscapeFoot` and
 `KioskFlowFoot`'s left gutter are its only call sites, which is what makes the
-rule above true rather than aspirational. It renders a back-chevron, so putting
+rule above true rather than aspirational.
+
+`KioskFlowFoot` lays those three slots out as a **Stack, not a three-way Row**,
+and that is a robustness property rather than a style: the decision pair is
+centred on the WHOLE band, so its optical centre is identical on a step with a
+Skip and a step without — and the longest primary the foot ever carries
+(`Sign Memberships · $149.00` beside Back, §11.4) can never squeeze a gutter
+into an overflow on a short fold. The gutters keep their intrinsic size and the
+band simply gets tight. `kiosk_signup_chrome_test.dart` holds it at 1180×820 and
+1024×700. It renders a back-chevron, so putting
 a non-escape action on it read as a way *out* of the flow; every secondary
 action that is a way *in* ("Add someone new", "or find an existing member",
 "Change who is paying") rides `KioskOutlineButton` instead.
@@ -1302,9 +1386,25 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   both, **the plan pick, the waiver run, the card, the review, the pay lock,
   the decline and the welcome**, every front-desk stop, the lane's own 5-min
   idle guard, the abandon path, and the shared chrome under
-  `presentation/widgets/signup/` (flow rail, three-column foot, field box,
+  `presentation/widgets/signup/` (flow rail, three-slot foot, field box,
   consent check, DOB wheel, stop screen, abandon confirm). See §11 for the
   money-path rules that lane encodes.
+
+- **The lane's own front door — new here, or already a member.** The spine
+  opens on `KioskSignupStep.entry` (`kiosk_entry_choice_step.dart`, the home's
+  own `KioskHomeColumns` composition over two `KioskSectionHead` halves,
+  scaffold `fillBody: true` because those bands need a bounded height). "I'm new
+  here" goes to `details`; "Find my name" goes to `KioskSignupStep.identify`
+  (`kiosk_identify_step.dart`, `KioskMatchSearch(forPayer: true)` with its own
+  `noMatchMessage`), where an existing member taps their own name and confirms
+  it on the shipped `payerMatch` card. Neither step carries a `KioskWhoFor`
+  strip (nobody is seated yet) and **neither adds a rung** — both light rung 0,
+  the same precedent `payerMatch` set on rung 1. See §3 for what the identify
+  route seats.
+
+- **The one-trial rule and its popup.** `KioskTrialBlock` over the plan grid,
+  `KioskPlanCard`'s used/`Already used` state, and
+  `KioskSignupStopReason.trialAlreadyUsed`. See §3.
 
 - **Phase E — the GROUP (family) signup.** The roster loop is built on the same
   cubit: `people` (always visited — ruling 8), `personDetails`, `match`, the
@@ -1319,12 +1419,13 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   by the active person; the fields live in `kiosk_optional_fields`). See §11.5
   for the group's own money rules.
 
-- **The payer gate, both entry points.** `KioskSignupStep.payerMatch` +
-  `kiosk_payer_match_step` (the "is this you?" confirm on an eligible payer
-  duplicate) and `KioskSignupStep.payerPick` + `kiosk_payer_pick_step` (the
-  "someone else is paying" picker, over `KioskMatchSearch(forPayer: true)`),
-  behind `KioskPayerEligibility` and its fail-closed check. Copy lives in
-  `presentation/kiosk_payer_refusal_copy.dart`. See §3.
+- **The payer's three entry points.** `KioskSignupStep.payerMatch` +
+  `kiosk_payer_match_step` (the "is this you?" confirm, reached from the
+  identify search OR from a duplicate 409, with a subtitle and a "no" that both
+  branch on which) and `KioskSignupStep.payerPick` + `kiosk_payer_pick_step`
+  (the "someone else is paying" picker, over
+  `KioskMatchSearch(forPayer: true)`), all seating through the one
+  `_seatPayer`. See §3.
 
 - **The pinned step band.** `KioskStage`'s `header` + `fillBody` slots,
   `KioskSignupStepScaffold`'s `identity`, and the one
@@ -1423,7 +1524,7 @@ releases it if the member walks off.
 ### 11.3a A decline is never an ending, and there is no wait between attempts
 
 **No number of declines ends a signup, and no attempt is ever gated by a
-client-side timer.** Mistyped cards and short balances are ordinary, so a member
+client-side wait.** Mistyped cards and short balances are ordinary, so a member
 may retry immediately, as many times as they like. The declined screen's
 reassurance is warm and **uncounted**: a tally next to a bank refusal reads as a
 countdown to being cut off, which is not something that happens here.
@@ -1447,33 +1548,45 @@ the member moves money and tries the exact card again):
   for the staff Incomplete list. **Never the destination** — nothing routes a
   member to the desk on their behalf.
 
-There is no cooldown, no timer, and no `pay()` gate on a decline run — a member
-can retry the same card back-to-back with no wait. Attempt-velocity throttling
-(the card-testing vector on an unattended device) rides **entirely on the
-platform Stripe Radar rule** (a founder decision), not the client. This is the
-industry shape: rate limiting + Radar, not a client-side strike count. **Do not
-model Visa's per-card reattempt limit client-side** — every "Try another card"
-tokenizes a brand-new payment method, and classifying decline codes is the
+There is no cooldown, no attempt cap, and no `pay()` gate on a decline run — a
+member can retry the same card back-to-back with no wait. Attempt-velocity
+throttling (the card-testing vector on an unattended device) rides **entirely on
+the platform Stripe Radar rule** (a founder decision), not the client. This is
+the industry shape: rate limiting + Radar, not a client-side strike count. **Do
+not model Visa's per-card reattempt limit client-side** — every "Try another
+card" tokenizes a brand-new payment method, and classifying decline codes is the
 processor's job.
+
+**The popup's 60-second `KioskReturnTimer` is not a cooldown and must never be
+conflated with one** (§7). It answers a different question — how long a shared
+iPad may sit here with nobody answering — and it gates nothing: Retry is live
+from the first frame. The two were conflated once, and the countdown went out
+with the cooldown; the surfaces test now asserts both halves.
 
 None of it weakens the money-safety properties: **both** retry paths mint a NEW
 idempotency key, re-send **only** `state.failedItems`, and never re-create a
 member, re-sign a waiver or re-link a payer. `pay()`'s synchronous `paying`
 guard + the sent-key latch keep a double-tap (of Retry or of Pay) to exactly one
 charge, and a 500 / transport failure is still the "nothing was charged" stop —
-this is the 207 path only. The 5-minute idle guard remains the backstop for a
-declined screen nobody is standing at.
+this is the 207 path only. The popup's own 60-second return countdown is what
+finally releases a declined screen nobody is standing at, through the ordinary
+`abandon()`.
 
 ### 11.4 The rules the copy and the request encode
 
-- **`set_default` branches on the cart.** A recurring cart MUST keep the card (a
-  subscription can only bill the saved default, and the backend rejects a
-  recurring start without one); a purely one-time cart is attach → pay → detach.
-  The card step's "what happens to my card" line branches on the same predicate,
-  because writing "only used for this signup" on a recurring plan is a lie.
-  **Do not copy `start_memberships_wizard.dart`'s retry card logic** — the CRM
-  deliberately sends NO card for a recurring cart because it reuses the payer's
-  saved default, and the kiosk has none.
+- **`set_default` is unconditionally TRUE, whatever the cart holds.** The kiosk
+  takes a fresh card every time and always makes it the payer's default,
+  replacing whatever was on the profile — which is what lets an existing member
+  self-serve here at all (§3). It does not branch: a recurring cart needs it
+  anyway (a subscription can only bill the saved default, and the backend
+  rejects a recurring start without one), and sending it on a one-time-only cart
+  is legal — the backend only rejects `set_default: false` on a recurring cart —
+  and simply means the attach → pay → **detach** path is not taken, so the card
+  is not ripped back off. The card step's notice states that consequence in as
+  many words (§3, "The card surface"). **Do not copy
+  `start_memberships_wizard.dart`'s retry card logic** — the CRM deliberately
+  sends NO card for a recurring cart because it reuses the payer's saved
+  default, and the kiosk has none.
 - **ONE request builder.** `_buildStartRequest` is the only place a start
   request is assembled, for the preview and the charge alike, so there is a
   single place to audit that nothing price-reducing is ever sent (each item
@@ -1494,16 +1607,27 @@ declined screen nobody is standing at.
 - **`declined` is a POPUP acknowledgement whose primary action retries the SAME
   card.** `KioskDeclinedScreen` is the kiosk's one modal vocabulary (veil +
   centered popup card) carrying the blameless reason ("Your bank declined the
-  payment"), the card chip, and **three stacked buttons, no timer** (§11.3a):
-  "Retry" (primary, → `retrySameCard`, re-charges the same card with a new key),
-  "Try another card" (secondary, → `retryCard`, drops the member back on the card
-  step with a fresh empty field), and "Get help at the desk" (the
-  always-available handoff, → `getHelpAtDesk` → `_stop(cardDeclined)`, holding
-  committed state). All three are always available, there is deliberately no
-  "Start over" (§2), and none is ever forced (§11.3a). Three kiosk-scale labels
-  do not fit side by side in a `dialogMaxWidth` popup, so they stack; removing
-  the timer freed the vertical room, and a test renders all three at 1180×820
-  with no overflow.
+  payment"), the card chip, **three stacked buttons** and the 60-second
+  `KioskReturnTimer` (§7): "Retry" (primary, → `retrySameCard`, re-charges the
+  same card with a new key), "Try another card" (secondary, → `retryCard`, drops
+  the member back on the card step with a fresh empty field), and "Get help at
+  the desk" (the always-available handoff, → `getHelpAtDesk` →
+  `_stop(cardDeclined)`, holding committed state). All three are live from the
+  first frame, there is deliberately no "Start over" (§2), and none is ever
+  forced (§11.3a). Three kiosk-scale labels do not fit side by side in a
+  `dialogMaxWidth` popup, so they stack; a test renders all three plus the
+  countdown at 1180×820 with no overflow.
+- **The review's committing button reads by WHAT is being bought.** `Sign Trial`
+  only when every training person's pick is `PlanType.trial` (a mixed group cart
+  is a membership purchase taken as a whole), `Sign Membership` otherwise, both
+  pluralised past one training person, and `Verb · Amount` whenever anything is
+  due today. **The amount stays on the button** — that is the shipped safety
+  property: the button is inert until the amount is real, so a member can never
+  commit before the screen can tell them what for. A trial is a plan CATEGORY,
+  not a price (a gym may sell a paid two-week trial), so the amount is not
+  optional on a trial either; it collapses to the bare verb exactly when there is
+  nothing to say. The review's subtitle is deliberately **button-agnostic**
+  ("Nothing is charged until you confirm.") so the two strings cannot drift.
 - **A part-period charge SAYS it is one.** The kiosk pins `prorate_to_anchor`,
   so a mid-cycle joiner's due-today and per-cycle figures differ; the review
   explains that in one receipt-shaped line
@@ -1585,13 +1709,13 @@ declined screen nobody is standing at.
   match card shows a full name and a MASKED email (`kioskMaskedEmail`), never a
   phone, photo or membership status. The name search is avatar-free for the
   same reason the home's is.
-- **Both duplicates end in an offer, through DIFFERENT gates.** A PAYEE 409 is
-  offered straight away (a payee pays nothing, so reusing their account is
-  simply correct). A PAYER 409 is offered only once the
-  no-attached-payment-method check passes, and lands on the terminal stop
-  otherwise (§3). `test/features/kiosk/bloc/kiosk_signup_group_test.dart` holds
-  the payee side; `bloc/kiosk_signup_payer_test.dart` holds the payer side and
-  its fail-closed pair.
+- **Both duplicates end in an offer, through DIFFERENT screens.** A PAYEE 409
+  lands on the roster's "is this her?" match; a PAYER 409 lands on "is this
+  you?", confirming their own account back to them. Both reuse the existing
+  account rather than making a second one, and the payer's "no" is what reaches
+  the terminal duplicate stop (§3).
+  `test/features/kiosk/bloc/kiosk_signup_group_test.dart` holds the payee side;
+  `bloc/kiosk_signup_payer_test.dart` holds the payer side.
 - **A swapped payer keeps everyone's seat.** A CRM pick inserts at index 0 and
   shifts every index by one (`activePersonIndex` included); a roster pick swaps
   positions 0 and k and shifts nothing. Either way the person who started the
@@ -1635,24 +1759,36 @@ declined screen nobody is standing at.
 - `bloc/kiosk_signup_cubit.dart` + `kiosk_signup_state.dart` — the SIGNUP lane
   (§10, §11): the `KioskSignupStep` spine, the roster (`KioskSignupPerson`), the
   `committedSteps` marker that turns a second Continue into a PUT instead of a
-  second create, the waiver queue + `signedWaivers`, the payer gate
-  (`KioskPayerEligibility`, `_payerEligibility`, `_offerPayerMatch`,
-  `confirmPayerMatch`, `openPayerPick` / `pickPayerRow` / `_adoptPayer`,
-  `canSwitchPayer`), the money path (`_buildStartRequest` / `pay` /
-  `_onDeclined` / `retrySameCard` (same card, new key) / `retryCard` (new card) /
-  `_enterWelcome`, the `_sentAttempts` latch, `kKioskSignupStartTimeout`), the
+  second create, the waiver queue + `signedWaivers`, the front door
+  (`startAsNewMember` / `startAsExistingMember`) and the three routes to a
+  seated payer (`_offerPayerMatch`, `_offerIdentifiedMatch`,
+  `confirmPayerMatch` / `declinePayerMatch` with its `payerMatchFromIdentify`
+  fork, `openPayerPick` / `pickPayerRow` / `pickPayerFromRoster` over the ONE
+  `_seatPayer`, `canSwitchPayer`), the one-trial rule
+  (`_loadTrialEligibility` → `KioskSignupPerson.hadTrial`,
+  `KioskSignupState.planBlocked`, `selectPlan`'s explain-don't-select branch,
+  `dismissTrialBlock` / `trialBlockHelp`), the money path (`_buildStartRequest`
+  / `pay` / `_onDeclined` / `retrySameCard` (same card, new key) / `retryCard`
+  (new card) / `_enterWelcome`, the `_sentAttempts` latch,
+  `kKioskSignupStartTimeout`), the popups' shared return countdown
+  (`_startPopupCountdown`, `kKioskSignupPopupHold`), the
   `KioskSignupStopReason`s and their `isRetryable` split, and the lane's own
   begin/endFlow latch + idle guard.
 - `presentation/screens/kiosk_signup_screen.dart` — provides that cubit (so its
   lifetime is the flow's), hosts the signup's activity listener, and routes
   `abandoned` → `goHome()`.
-  `presentation/widgets/signup/` — the signup chrome (rail, three-column foot,
+  `presentation/widgets/signup/` — the signup chrome (rail, three-slot foot,
   field box, consent check, DOB wheel, stop screen, abandon confirm) and the
   built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` + `kiosk_plan_labels`
   (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import) +
   `kiosk_plan_picked_banner` (the "YOU'VE PICKED" confirmation, §8.1a),
   `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
   `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
+  `kiosk_inline_notice` (the lane's ONE warm "important, not your fault, not a
+  dead end" strip — the waiver notices, the picker's redirect, and the card
+  step's replacement notice),
+  `kiosk_entry_choice_step` + `kiosk_identify_step` (the front door),
+  `kiosk_trial_block` (the one-trial popup),
   `kiosk_card_step` + `kiosk_secure_strip` + `kiosk_card_facts` (wrapping the
   shared `CardFieldBox`), `kiosk_review_step` + `kiosk_review_side_panel` +
   `kiosk_money_panel` + `kiosk_buy_row` + `kiosk_card_chip`,
@@ -1668,9 +1804,7 @@ declined screen nobody is standing at.
   `kiosk_row_action` (Edit + trash) and `kiosk_remove_confirm`; the pinned
   `kiosk_who_for`; and `kiosk_proration_note` (the part-period line, §11.4).
   `presentation/kiosk_signup_stop_copy.dart` — the ONE map from a stop reason to
-  member copy, mirroring `kiosk_blocked_copy.dart`;
-  `presentation/kiosk_payer_refusal_copy.dart` — the same for the payer
-  picker's inline refusals.
+  member copy, mirroring `kiosk_blocked_copy.dart`.
   `presentation/kiosk_name_format.dart` — `kioskFirstName` + `kioskMaskedEmail`,
   the two display transforms the kiosk shares.
 - `data/kiosk_session_store.dart` (fate-shared persistence),
@@ -1705,9 +1839,10 @@ declined screen nobody is standing at.
 
 **Backend:**
 
-- `GET /api/v1/members/{member_id}/payment-method-status` → `{"has_payment_method":
-  bool}` — the payer gate's read (§3), consumed via
-  `MemberRepository.getPaymentMethodStatus`.
+- `GET /api/v1/members/{member_id}/billing` — the billing detail, consumed via
+  `MemberRepository.getMemberDetail`. The kiosk reads it for exactly ONE
+  boolean, the one-trial rule's `memberships.any((m) => m.planType == 'trial')`
+  (§3), and renders/logs/persists nothing else from it.
 - `FastApiBackend/src/checkin/service/checkin_member_gate.py` — the `is_member`
   split; `schema/checkin_schema.py` — `CheckinWarning`, `CheckinRequest`,
   `CheckinResponse` (incl. `class_streak_weeks` + `current_week_days`).
@@ -1735,18 +1870,27 @@ due-today / two-charges arithmetic),
 offer, adopt-vs-recreate, link-before-start both ways, the per-training-person
 cart, the 207 partial retry, roster removal, the empty-cart guard, the search
 debounce + sequence guard, and the per-member signature keying),
-`bloc/kiosk_signup_payer_test.dart` (the §3 payer gate: both entry points, the
-**fail-closed pair** on each, adoption that never creates a member, the
-link-before-charge invariant after a payer swap, `canSwitchPayer`, and the
-existing-member skip / new-member edit round trip),
+`bloc/kiosk_signup_payer_test.dart` (the §3 seat rules: the entry fork, the
+identify search and its confirm-first tap, the duplicate 409 offer and where
+each "no" goes, the picker's roster-redirect, adoption that never creates a
+member, the link-before-charge invariant after a payer swap, `canSwitchPayer`,
+and the existing-member skip / new-member edit round trip),
+`bloc/kiosk_signup_trial_test.dart` (the §3 one-trial rule: any prior trial
+closes every trial, a cancelled trial still counts, a member created here is
+never asked, the read FAILS OPEN, a blocked card explains without selecting,
+and the popup's countdown returns home releasing the flow exactly once),
 and the
 presentation guards `kiosk_type_ramp_test.dart`, `kiosk_group_steps_test.dart`
 (the roster / match / details screens compose at 1180×820 with the email
 masked, Edit only for people this signup created),
 `kiosk_signup_chrome_test.dart` (§8.1a: the pinned identity survives a scroll,
 a group names every turn, the card step names the PAYER and not the active
-person, the waiver box fills the fold, and the §11.4 proration line renders
-only on a prorated preview), `kiosk_get_app_modal_test.dart`
+person, the waiver box fills the fold, the §11.4 proration line renders only on
+a prorated preview, and the §11.4 committing CTA — trial vs membership, the
+`$0` collapse, and no foot overflow at 1180×820 or 1024×700 with the longest
+label), `kiosk_flow_rail_index_test.dart` (every `KioskSignupStep`'s rung, by
+name — a miscount there is otherwise SILENT),
+`kiosk_get_app_modal_test.dart`
 (no overflow / no vertical scroll at 1180×820 and 1024×700),
 `kiosk_rank_slide_test.dart`, `kiosk_home_columns_test.dart`,
 `kiosk_glance_screen_test.dart`.

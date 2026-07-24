@@ -18,9 +18,20 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels
 /// The check disc is the kiosk's own "selected" idiom — sapphire filled with
 /// the `onAccent` tick, resting as a quiet ring so an unpicked card still
 /// invites the tap.
+///
+/// **A [blocked] card is used up, not missing.** It is dimmed, carries an
+/// "Already used" tag over its hero and drops the select mark entirely — it can
+/// never become the pick. It stays TAPPABLE on purpose: a greyed-out plan with
+/// no explanation is a worse dead end than the one it prevents, so the tap
+/// opens the answer instead of setting the selection.
 class KioskPlanCard extends StatelessWidget {
   final MembershipPlanResponse plan;
   final bool selected;
+
+  /// This plan is closed to the person picking — a trial they have already
+  /// had. Renders used, and its tap explains rather than selects.
+  final bool blocked;
+
   final VoidCallback onTap;
 
   const KioskPlanCard({
@@ -28,6 +39,7 @@ class KioskPlanCard extends StatelessWidget {
     required this.plan,
     required this.selected,
     required this.onTap,
+    this.blocked = false,
   });
 
   @override
@@ -45,32 +57,73 @@ class KioskPlanCard extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingMedium,
-              children: [
-                _Hero(imageUrl: plan.imageUrl),
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: DesignConstants.spacingMedium,
-                    right: DesignConstants.spacingMedium,
-                    bottom: DesignConstants.spacingMedium,
+            Opacity(
+              opacity: blocked ? _blockedOpacity : 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: DesignConstants.spacingMedium,
+                children: [
+                  _Hero(imageUrl: plan.imageUrl),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: DesignConstants.spacingMedium,
+                      right: DesignConstants.spacingMedium,
+                      bottom: DesignConstants.spacingMedium,
+                    ),
+                    child: _Body(plan: plan),
                   ),
-                  child: _Body(plan: plan),
-                ),
-              ],
+                ],
+              ),
             ),
             // Overlaid rather than laid out, so toggling the pick never
             // reflows the card.
             if (selected)
               const Positioned.fill(child: _SelectedBorder()),
-            Positioned(
-              top: DesignConstants.spacingMedium,
-              right: DesignConstants.spacingMedium,
-              child: _SelectMark(selected: selected),
-            ),
+            // Top-LEFT: the top-right corner is the select mark's, and the two
+            // must never argue over the same pixel.
+            if (blocked)
+              const Positioned(
+                top: DesignConstants.spacingMedium,
+                left: DesignConstants.spacingMedium,
+                child: _UsedTag(),
+              )
+            else
+              Positioned(
+                top: DesignConstants.spacingMedium,
+                right: DesignConstants.spacingMedium,
+                child: _SelectMark(selected: selected),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// How far a blocked card is faded. Enough to read as spent at 2m, not so far
+/// that its name and price stop being legible — the member still has to see
+/// WHICH plan is the one they already used.
+const double _blockedOpacity = 0.45;
+
+/// The "Already used" mark, on a scrim so it survives any hero photo. It rides
+/// the ramp's smallest role, which is the one reserved for a tag pinned on
+/// artwork.
+class _UsedTag extends StatelessWidget {
+  const _UsedTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: DesignConstants.spacingMedium,
+          vertical: DesignConstants.spacingSmall,
+        ),
+        decoration: BoxDecoration(
+          color: DesignConstants.backgroundColor.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+        ),
+        child: Text('Already used', style: DesignConstants.kioskTag),
       ),
     );
   }

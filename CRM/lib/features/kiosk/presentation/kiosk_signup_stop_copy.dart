@@ -16,6 +16,8 @@ String kioskSignupStopReasonCopy(KioskSignupStopReason? reason) {
   return switch (reason) {
     KioskSignupStopReason.duplicateMember =>
       'You already have an account here.',
+    KioskSignupStopReason.trialAlreadyUsed =>
+      'Trials are one to a member, and yours is used.',
     KioskSignupStopReason.paymentsUnavailable =>
       'This kiosk can\'t take payments right now.',
     KioskSignupStopReason.noPlansOffered =>
@@ -49,6 +51,9 @@ String kioskSignupStopReassurance(KioskSignupStopReason? reason) {
     KioskSignupStopReason.duplicateMember =>
       'Nothing\'s wrong, and nothing has been charged. The coach at the desk '
           'can pull up your account and add what you need in a minute.',
+    KioskSignupStopReason.trialAlreadyUsed =>
+      'Nothing\'s wrong, and nothing has been charged. The coach at the desk '
+          'can talk you through the memberships and get you training.',
     KioskSignupStopReason.noPlansOffered =>
       'Nothing\'s wrong, and nothing has been charged. The coach at the desk '
           'will get you going — it only takes a minute.',

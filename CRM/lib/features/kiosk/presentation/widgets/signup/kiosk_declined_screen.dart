@@ -6,6 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
+import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 
 /// D8 — the card was refused, as a POPUP acknowledgement over the flow.
@@ -20,12 +21,18 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.d
 /// `cardDeclined`, holding every committed row for the staff incomplete-signups
 /// list.
 ///
-/// **There is no timer and no wait.** A member may retry immediately, as many
-/// times as they like — attempt-velocity throttling rides entirely on the
-/// platform Stripe Radar rule (a founder decision), not a client cooldown. The
-/// member row, Stripe customer and signatures are all committed and never
-/// re-run; the session flow count is deliberately still held, because the member
-/// is standing right there.
+/// **There is no cooldown and no attempt limit.** Retry is live from the first
+/// frame and a member may use it as many times as they like — attempt-velocity
+/// throttling rides entirely on the platform Stripe Radar rule (a founder
+/// decision), never a client-side wait or strike count. The member row, Stripe
+/// customer and signatures are all committed and are never re-run.
+///
+/// **It does carry a 60-second RETURN countdown, inside the popup.** That is a
+/// different thing from a cooldown: it decides how long a shared community
+/// iPad may sit on this screen with nobody answering it, not how soon Retry may
+/// be tapped. Expiry runs the ordinary abandon, which is what finally releases
+/// the session flow count this step deliberately holds while the member is
+/// still standing there.
 ///
 /// **The copy blames the bank, never the member.** "Your bank declined the
 /// payment" is true and blameless; "your card was rejected" reads as a verdict
@@ -41,7 +48,8 @@ class KioskDeclinedScreen extends StatelessWidget {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.cardBrand != cur.cardBrand ||
-          prev.cardLast4 != cur.cardLast4,
+          prev.cardLast4 != cur.cardLast4 ||
+          prev.popupCountdown != cur.popupCountdown,
       builder: (context, state) {
         return SizedBox.expand(
           child: ColoredBox(
@@ -91,6 +99,10 @@ class KioskDeclinedScreen extends StatelessWidget {
                         onRetry: cubit.retrySameCard,
                         onTryAnother: cubit.retryCard,
                         onHelp: cubit.getHelpAtDesk,
+                      ),
+                      KioskReturnTimer(
+                        total: kKioskSignupPopupHold.inSeconds,
+                        secondsLeft: state.popupCountdown,
                       ),
                     ],
                   ),

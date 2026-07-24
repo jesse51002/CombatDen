@@ -1,25 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_status.dart';
-import 'package:crm/features/member_details/data/models/member_payment_method_status.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
@@ -49,18 +50,19 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// **The payer gate — the kiosk never charges a pre-existing card.**
+/// **Who pays, and how they get into the lane.**
 ///
-/// An EXISTING member may be this signup's payer only while they have no
-/// payment method attached at all; they then still type a fresh card, which
-/// becomes the first one that account has ever had. Get the gate wrong and a
-/// recurring cart's `set_default: true` puts a stranger's card on someone's
-/// profile, and the next front-desk "charge the card on file" bills the wrong
-/// person.
+/// The kiosk is self-serve for existing members as well as new ones, so there
+/// are three ways a payer is seated: the ordinary create, the "is this you?"
+/// confirm on a duplicate 409, and the identify search where the member names
+/// themselves. All three end at the SAME confirm-or-seat shape, and none of
+/// them may quietly insert a second row for one member.
 ///
-/// Every test here is that one sentence from a different angle, and the
-/// fail-closed ones are the load-bearing pair: a check that ERRORS must read
-/// as "not eligible", never as "no card on file".
+/// **There is no card check on any of them, deliberately.** An existing member
+/// with a card on file is a perfectly good kiosk payer: they still type a
+/// fresh card, and it replaces the one on their profile. What the kiosk never
+/// does is CHARGE a card it did not just take — that half of the fresh-card law
+/// is structural and lives in `kiosk_forbidden_imports_test.dart`.
 void main() {
   const gymId = 'gym-1';
   const planId = 'plan-1';
@@ -147,10 +149,10 @@ void main() {
     ).thenAnswer((_) async => _startResponse());
     when(() => membersList.getMembersList(any()))
         .thenAnswer((_) async => _page(const []));
-    // The default is the eligible answer; each test that cares overrides it.
-    when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-      (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: false),
-    );
+    // The plan step reads an adopted member's history to decide whether a
+    // trial is still on offer; nobody here has had one.
+    when(() => member.getMemberDetail(any()))
+        .thenAnswer((_) async => _detail());
   });
 
   KioskSignupCubit build() => KioskSignupCubit(
@@ -165,6 +167,7 @@ void main() {
 
   /// Type the payer's own details and press Continue — the create call.
   Future<KioskSignupCubit> submitPayer(KioskSignupCubit cubit) async {
+    cubit.startAsNewMember();
     cubit.submitDetails(
       firstName: 'Marcus',
       lastName: 'Bell',
@@ -188,18 +191,114 @@ void main() {
     );
   }
 
-  group('entry A — "is this you?" on a payer duplicate', () {
-    test('an ELIGIBLE match is offered as a confirm card, not a stop',
+  group('the first fork — new here, or already a member', () {
+    test('the lane opens on the fork, and each side goes where it says',
+        () async {
+      final cubit = build();
+      expect(cubit.state.step, KioskSignupStep.entry);
+
+      cubit.startAsNewMember();
+      expect(cubit.state.step, KioskSignupStep.details);
+      // Back off either branch lands on the fork — nothing was typed on the
+      // way in, so it is a safe destination.
+      cubit.back();
+      expect(cubit.state.step, KioskSignupStep.entry);
+
+      cubit.startAsExistingMember();
+      expect(cubit.state.step, KioskSignupStep.identify);
+      cubit.back();
+      expect(cubit.state.step, KioskSignupStep.entry);
+      // Nothing has been written by either detour.
+      verifyNever(() => member.createMember(any()));
+      await cubit.close();
+    });
+  });
+
+  group('entry A — the identify search', () {
+    /// The existing member on the identify step, having typed a name.
+    Future<KioskSignupCubit> atIdentify() async {
+      final cubit = build();
+      cubit.startAsExistingMember();
+      cubit.searchExistingPeople('marc');
+      return cubit;
+    }
+
+    test('tapping a row CONFIRMS first — nobody is seated by the tap',
+        () async {
+      final cubit = await atIdentify();
+      await cubit.pickPayerRow(_row('mem-marcus-existing', 'Marcus Bell'));
+
+      // Two members can share a name; a mis-tap on a shared iPad must not put
+      // a stranger's account behind the card about to be typed.
+      expect(cubit.state.step, KioskSignupStep.payerMatch);
+      expect(cubit.state.payerMatchFromIdentify, isTrue);
+      expect(cubit.state.matchCandidate?.memberId, 'mem-marcus-existing');
+      expect(cubit.state.payer.memberId, isNull);
+      // No roster row is inserted, and nothing is written.
+      expect(cubit.state.persons, hasLength(1));
+      verifyNever(() => member.createMember(any()));
+      await cubit.close();
+    });
+
+    test('"Yes, that\'s me" adopts them and lands on the roster, no create',
+        () async {
+      final cubit = await atIdentify();
+      await cubit.pickPayerRow(_row('mem-marcus-existing', 'Marcus Bell'));
+      cubit.confirmPayerMatch();
+
+      expect(cubit.state.step, KioskSignupStep.people);
+      expect(cubit.state.payer.memberId, 'mem-marcus-existing');
+      expect(cubit.state.payer.wasExisting, isTrue);
+      expect(cubit.state.payer.isPayer, isTrue);
+      expect(cubit.state.persons, hasLength(1));
+      verifyNever(() => member.createMember(any()));
+      verifyNever(() => member.updateMember(any(), any()));
+      // No screen behind the roster for them: the kiosk never typed their
+      // details and must never PUT its own guess over the gym's record.
+      cubit.back();
+      expect(cubit.state.step, KioskSignupStep.people);
+      await cubit.close();
+    });
+
+    test('"No, that\'s not me" returns to the SEARCH, query intact', () async {
+      final cubit = await atIdentify();
+      await cubit.pickPayerRow(_row('mem-someone-else', 'Marcus Bellamy'));
+      cubit.declinePayerMatch();
+
+      // Nothing committed and they simply mis-tapped, so this is not the
+      // terminal stop the duplicate route takes.
+      expect(cubit.state.step, KioskSignupStep.identify);
+      expect(cubit.state.stopReason, isNull);
+      expect(cubit.state.matchCandidate, isNull);
+      expect(cubit.state.payerMatchFromIdentify, isFalse);
+      expect(cubit.state.matchQuery, 'marc');
+      await cubit.close();
+    });
+
+    test('backing out of the search drops what a stranger typed', () async {
+      final cubit = await atIdentify();
+      cubit.back();
+
+      expect(cubit.state.step, KioskSignupStep.entry);
+      expect(cubit.state.matchQuery, isEmpty);
+      expect(cubit.state.matches, isEmpty);
+      await cubit.close();
+    });
+  });
+
+  group('entry B — "is this you?" on a duplicate create', () {
+    test('a duplicate is ALWAYS offered as a confirm card, never a stop',
         () async {
       final cubit = build();
       payerIsADuplicate();
       await submitPayer(cubit);
 
+      // No card check stands between the 409 and the offer any more: whoever
+      // is adopted types a fresh card, and it replaces theirs.
       expect(cubit.state.step, KioskSignupStep.payerMatch);
       expect(cubit.state.stopReason, isNull);
+      expect(cubit.state.payerMatchFromIdentify, isFalse);
       expect(cubit.state.matchCandidate?.memberId, 'mem-marcus-existing');
-      verify(() => member.getPaymentMethodStatus('mem-marcus-existing'))
-          .called(1);
       await cubit.close();
     });
 
@@ -217,70 +316,40 @@ void main() {
       // The ONE create is the attempt that 409'd. Adoption writes nothing.
       verify(() => member.createMember(any())).called(1);
       verifyNever(() => member.updateMember(any(), any()));
-      // Nothing behind the roster for them: there is no typed record of
-      // theirs to go back to, and no route that could PUT over the gym's.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.people);
       await cubit.close();
     });
 
-    test('"No" is the terminal front-desk stop', () async {
+    test('"No" on the DUPLICATE route is the terminal front-desk stop',
+        () async {
       final cubit = build();
       payerIsADuplicate();
       await submitPayer(cubit);
       cubit.declinePayerMatch();
 
+      // The create has already been refused, so there is nothing left the
+      // kiosk can do with this name.
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
       await cubit.close();
     });
 
-    test('a match with a card ON FILE is never offered — terminal stop',
+    test('a 409 that names NOBODY is the terminal stop, and renders no match',
         () async {
-      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
-      );
+      when(() => member.createMember(any()))
+          .thenThrow(const DuplicateMemberException([]));
       final cubit = build();
-      payerIsADuplicate();
       await submitPayer(cubit);
 
-      expect(cubit.state.step, KioskSignupStep.stop);
-      expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
-      // The match is never rendered when it cannot be acted on.
-      expect(cubit.state.matchCandidate, isNull);
-      await cubit.close();
-    });
-
-    test('FAIL CLOSED — a check that ERRORS is treated as not eligible',
-        () async {
-      when(() => member.getPaymentMethodStatus(any()))
-          .thenThrow(const ServerException('boom', statusCode: 500));
-      final cubit = build();
-      payerIsADuplicate();
-      await submitPayer(cubit);
-
-      // A failure must NEVER read as "no card on file".
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
       expect(cubit.state.matchCandidate, isNull);
-      await cubit.close();
-    });
-
-    test('FAIL CLOSED — a 404 on the check is treated as not eligible',
-        () async {
-      when(() => member.getPaymentMethodStatus(any()))
-          .thenThrow(const ServerException('nope', statusCode: 404));
-      final cubit = build();
-      payerIsADuplicate();
-      await submitPayer(cubit);
-
-      expect(cubit.state.step, KioskSignupStep.stop);
-      expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
       await cubit.close();
     });
   });
 
-  group('entry B — the payer picker', () {
+  group('entry C — the payer picker', () {
     /// The payer created, standing on the roster, picker open.
     Future<KioskSignupCubit> atPicker() async {
       final cubit = await submitPayer(build());
@@ -291,8 +360,7 @@ void main() {
       return cubit;
     }
 
-    test('an ELIGIBLE pick becomes the payer; the signer stays a payee',
-        () async {
+    test('a pick becomes the payer; the signer stays a payee', () async {
       final cubit = await atPicker();
       await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
 
@@ -309,7 +377,9 @@ void main() {
       expect(cubit.state.persons[1].firstName, 'Marcus');
       expect(cubit.state.persons[1].isPayer, isFalse);
       expect(cubit.state.persons[1].training, isTrue);
-      // The adopted payer is never created.
+      // Seated straight away: no card check gates the pick, and the adopted
+      // payer is never created.
+      expect(cubit.state.payerAlreadyInSignup, isFalse);
       verify(() => member.createMember(any())).called(1);
       await cubit.close();
     });
@@ -369,46 +439,7 @@ void main() {
       await cubit.close();
     });
 
-    test('a card ON FILE is refused INLINE — the flow carries on', () async {
-      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
-      );
-      final cubit = await atPicker();
-      await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
-
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.hasPaymentMethod);
-      // Not a stop, and the payer seat is untouched.
-      expect(cubit.state.step, KioskSignupStep.payerPick);
-      expect(cubit.state.stopReason, isNull);
-      expect(cubit.state.payer.memberId, 'mem-1');
-      expect(cubit.state.persons, hasLength(1));
-
-      // They can simply carry on paying themselves.
-      cubit.back();
-      expect(cubit.state.step, KioskSignupStep.people);
-      expect(cubit.state.payerRefusal, isNull);
-      verifyNever(() => member.previewStartMemberships(any()));
-      await cubit.close();
-    });
-
-    test('FAIL CLOSED — a check that ERRORS refuses inline, never adopts',
-        () async {
-      when(() => member.getPaymentMethodStatus(any()))
-          .thenThrow(const ServerException('boom', statusCode: 500));
-      final cubit = await atPicker();
-      await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
-
-      // A failure must NEVER read as "no card on file".
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.unknown);
-      expect(cubit.state.payer.memberId, 'mem-1');
-      expect(cubit.state.payer.wasExisting, isFalse);
-      expect(cubit.state.persons, hasLength(1));
-      expect(cubit.state.step, KioskSignupStep.payerPick);
-      await cubit.close();
-    });
-
-    test('a CRM hit already on the roster REDIRECTS to the list, no check',
-        () async {
+    test('a CRM hit already on the roster REDIRECTS to the list', () async {
       final cubit = await submitPayer(build());
       await cubit.addPerson(
         firstName: 'Ella',
@@ -420,10 +451,11 @@ void main() {
       await cubit.pickPayerRow(_row('mem-2', 'Ella Bell'));
 
       // A redirect, not a rejection: they are pickable from the roster list.
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.alreadyInSignup);
-      // And crucially NOT inserted a second time.
+      expect(cubit.state.payerAlreadyInSignup, isTrue);
+      // And crucially NOT inserted a second time — two cart items for one
+      // member is a double charge waiting to happen.
       expect(cubit.state.persons, hasLength(2));
-      verifyNever(() => member.getPaymentMethodStatus(any()));
+      expect(cubit.state.payer.memberId, 'mem-1');
       await cubit.close();
     });
 
@@ -433,12 +465,12 @@ void main() {
 
       // Not offered by the roster list...
       expect(cubit.state.payerCandidateIndexes, isEmpty);
-      // ...and picking them anyway is a no-op that never reaches the gate.
+      // ...and picking them anyway is a no-op.
       await cubit.pickPayerFromRoster(0);
       await cubit.pickPayerRow(_row('mem-1', 'Marcus Bell'));
       expect(cubit.state.payer.memberId, 'mem-1');
-      expect(cubit.state.payerRefusal, isNull);
-      verifyNever(() => member.getPaymentMethodStatus(any()));
+      expect(cubit.state.persons, hasLength(1));
+      expect(cubit.state.payerAlreadyInSignup, isFalse);
       await cubit.close();
     });
 
@@ -524,7 +556,7 @@ void main() {
     });
   });
 
-  group('entry B — picking somebody already on the roster', () {
+  group('entry C — picking somebody already on the roster', () {
     /// The payer, plus Ella, with the picker open.
     Future<KioskSignupCubit> atPickerWithElla() async {
       final cubit = await submitPayer(build());
@@ -558,35 +590,6 @@ void main() {
       expect(cubit.state.persons[1].training, isTrue);
       // Nobody is created by a promotion.
       verify(() => member.createMember(any())).called(2);
-      await cubit.close();
-    });
-
-    test('the gate runs for a ROSTER pick too — a card on file refuses',
-        () async {
-      final cubit = await atPickerWithElla();
-      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
-      );
-      await cubit.pickPayerFromRoster(1);
-
-      // No shortcut for somebody this signup created: the check runs, and it
-      // refuses exactly as a CRM pick would.
-      verify(() => member.getPaymentMethodStatus('mem-2')).called(1);
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.hasPaymentMethod);
-      expect(cubit.state.payer.memberId, 'mem-1');
-      await cubit.close();
-    });
-
-    test('FAIL CLOSED — a failed check on a roster pick refuses', () async {
-      final cubit = await atPickerWithElla();
-      when(() => member.getPaymentMethodStatus(any()))
-          .thenThrow(const ServerException('boom', statusCode: 500));
-      await cubit.pickPayerFromRoster(1);
-
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.unknown);
-      // The payer seat is untouched.
-      expect(cubit.state.payer.memberId, 'mem-1');
-      expect(cubit.state.persons[1].memberId, 'mem-2');
       await cubit.close();
     });
 
@@ -846,41 +849,7 @@ void main() {
       await cubit.close();
     });
 
-    test('a payer chosen after a delete still runs the fail-closed gate — a '
-        'card on file refuses', () async {
-      final cubit = await withElla();
-      cubit.askRemovePerson(0);
-      cubit.confirmRemovePerson();
-      // Ella (the only one left) has a card on file now.
-      when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-        (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: true),
-      );
-      await cubit.pickPayerFromRoster(0);
-
-      // The gate ran, and refused inline — no shortcut for the no-payer path.
-      verify(() => member.getPaymentMethodStatus('mem-2')).called(1);
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.hasPaymentMethod);
-      expect(cubit.state.hasPayer, isFalse);
-      await cubit.close();
-    });
-
-    test('a payer chosen after a delete still runs the fail-closed gate — a '
-        'failed check refuses', () async {
-      final cubit = await withElla();
-      cubit.askRemovePerson(0);
-      cubit.confirmRemovePerson();
-      when(() => member.getPaymentMethodStatus(any()))
-          .thenThrow(const ServerException('boom', statusCode: 500));
-      await cubit.pickPayerFromRoster(0);
-
-      // A failure NEVER reads as "no card on file".
-      expect(cubit.state.payerRefusal, KioskPayerEligibility.unknown);
-      expect(cubit.state.hasPayer, isFalse);
-      await cubit.close();
-    });
-
-    test('an ELIGIBLE pick after a delete seats them and re-enables Continue',
-        () async {
+    test('a pick after a delete seats them and re-enables Continue', () async {
       final cubit = await withElla();
       cubit.askRemovePerson(0);
       cubit.confirmRemovePerson();
@@ -921,6 +890,24 @@ CrmMembersListResponse _page(List<MemberRow> rows) => CrmMembersListResponse(
       view: MembersListView.all,
       filters: const MembersListFilters(),
       data: rows,
+    );
+
+/// A member with no membership history at all — nobody in this file has had a
+/// trial, so no trial is ever blocked here.
+MemberDetailResponse _detail() => const MemberDetailResponse(
+      memberId: 'mem-any',
+      gymId: 'gym-1',
+      firstName: 'Any',
+      lastName: 'Member',
+      membershipOverview: 'None',
+      totalMonthlyRecurringPrice: 0,
+      totalMembershipCount: 0,
+      personalInfo: PersonalInfo(),
+      retention: Retention(
+        classStreakWeeks: 0,
+        pointsBalance: 0,
+        videosWatched: 0,
+      ),
     );
 
 AuthorizedPayerWaiver _payerAuthWaiver() => const AuthorizedPayerWaiver(

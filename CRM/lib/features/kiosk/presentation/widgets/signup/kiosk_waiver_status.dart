@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
@@ -45,50 +44,6 @@ class KioskWaiverStatus extends StatelessWidget {
                   KioskPrimaryButton(text: 'Try again', onPressed: onRetry),
                 ],
               ),
-      ),
-    );
-  }
-}
-
-/// A one-line notice above the waiver — the republished-version warning, and
-/// the inline "that didn't go through" after a failed sign.
-///
-/// It wears the warm stop palette rather than the red one: neither of these is
-/// the member's mistake, and neither is a dead end.
-class KioskWaiverNotice extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-
-  const KioskWaiverNotice({
-    super.key,
-    required this.message,
-    this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final retry = onRetry;
-    return Container(
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-      decoration: BoxDecoration(
-        color: DesignConstants.yellowDark,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-      ),
-      child: Row(
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Icon(
-            Symbols.info_sharp,
-            size: DesignConstants.iconSizeLarge,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.okYellow,
-          ),
-          Expanded(
-            child: Text(message, style: DesignConstants.kioskBody),
-          ),
-          if (retry != null)
-            KioskOutlineButton(text: 'Try again', onPressed: retry),
-        ],
       ),
     );
   }

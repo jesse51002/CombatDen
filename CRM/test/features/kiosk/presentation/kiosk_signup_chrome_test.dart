@@ -19,7 +19,6 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dar
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
-import 'package:crm/features/member_details/data/models/member_payment_method_status.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
@@ -120,9 +119,6 @@ void main() {
         .thenAnswer((_) async => 'mem-${++createSeq}');
     when(() => member.updateMember(any(), any()))
         .thenAnswer((_) async => _MockManagementResponse());
-    when(() => member.getPaymentMethodStatus(any())).thenAnswer(
-      (_) async => const MemberPaymentMethodStatus(hasPaymentMethod: false),
-    );
     when(() => member.getAuthorizedPayerWaiver(any())).thenAnswer(
       (_) async => const AuthorizedPayerWaiver(
         waiverId: 'payer-waiver-1',
@@ -154,8 +150,12 @@ void main() {
         gymId: 'gym-1',
       );
 
-  Future<void> pump(WidgetTester tester, Widget child) async {
-    await tester.binding.setSurfaceSize(const Size(1180, 820));
+  Future<void> pump(
+    WidgetTester tester,
+    Widget child, {
+    Size size = const Size(1180, 820),
+  }) async {
+    await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
@@ -334,8 +334,16 @@ void main() {
       expect(find.text('CARD FOR'), findsOneWidget);
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(find.text('Ella Bell'), findsNothing);
+      // The card-replacement notice names the same profile, so "saved" and
+      // "to whom" are one sentence.
       expect(
-        find.textContaining('Saved to Marcus Bell\'s profile'),
+        find.textContaining(
+          'This card is saved to Marcus Bell\'s profile',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('It replaces any card already on file.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -429,6 +437,88 @@ void main() {
       await cubit.close();
     });
   });
+
+  group('the committing CTA reads by plan type, and still fits', () {
+    /// Solo, at the review, on a cart of [type] costing [price] today.
+    Future<void> atReviewWith(
+      WidgetTester tester, {
+      required PlanType type,
+      required int price,
+    }) async {
+      when(() => memberships.listPlans(any()))
+          .thenAnswer((_) async => [_plan('plan-1', 'Unlimited', type: type)]);
+      when(() => member.previewStartMemberships(any()))
+          .thenAnswer((_) async => _invoiceOnly(price));
+      await createPayer();
+      cubit.continueToPlans();
+      cubit.selectPlan('plan-1');
+      cubit.continueFromPlans();
+      await tester.pump();
+      await cubit.signWaiver(signerName: 'Marcus Bell');
+      await tester.pump();
+      cubit.submitCard(paymentMethodId: 'pm_1', brand: 'visa', last4: '4242');
+      await tester.pump();
+    }
+
+    testWidgets('a paid membership reads "Sign Membership · amount"',
+        (tester) async {
+      await atReviewWith(tester, type: PlanType.recurring, price: 14900);
+      await pump(tester, const KioskReviewStep());
+
+      expect(find.text('Sign Membership · \$149.00'), findsOneWidget);
+      // The button never says "Pay" any more, so the subtitle cannot name it.
+      expect(find.textContaining('until you tap Pay'), findsNothing);
+      expect(
+        find.text('Nothing is charged until you confirm.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+
+    testWidgets('a PAID trial keeps its amount — a trial is a category, not '
+        'a price', (tester) async {
+      await atReviewWith(tester, type: PlanType.trial, price: 2000);
+      await pump(tester, const KioskReviewStep());
+
+      expect(find.text('Sign Trial · \$20.00'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+
+    testWidgets('a FREE trial collapses to the bare verb, never "\$0.00"',
+        (tester) async {
+      await atReviewWith(tester, type: PlanType.trial, price: 0);
+      await pump(tester, const KioskReviewStep());
+
+      // The BUTTON collapses to the bare verb; the money panel still states
+      // the honest \$0.00, which is a different sentence.
+      expect(find.text('Sign Trial'), findsOneWidget);
+      expect(find.text('Sign Trial · \$0.00'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+
+    testWidgets('the LONGEST label does not overflow the foot at either fold',
+        (tester) async {
+      // "Sign Membership · \$149.00" is the longest primary this foot has ever
+      // carried, and it sits beside Back with both gutters occupied.
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        await atReviewWith(tester, type: PlanType.recurring, price: 14900);
+        await pump(tester, const KioskReviewStep(), size: size);
+
+        expect(find.text('Sign Membership · \$149.00'), findsOneWidget);
+        expect(find.text('Back'), findsOneWidget);
+        expect(find.text('Start over'), findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the signup foot overflowed at $size',
+        );
+        await cubit.close();
+      }
+    });
+  });
 }
 
 const String _longBody = 'A very long agreement. '
@@ -446,12 +536,17 @@ const String _longBody = 'A very long agreement. '
     'follows from it. '
     'I agree, {{signer_name}}.';
 
-MembershipPlanResponse _plan(String id, String name) => MembershipPlanResponse(
+MembershipPlanResponse _plan(
+  String id,
+  String name, {
+  PlanType type = PlanType.recurring,
+}) =>
+    MembershipPlanResponse(
       planId: id,
       gymId: 'gym-1',
       planName: name,
       imageUrl: '',
-      planType: PlanType.recurring,
+      planType: type,
       durationAmount: 1,
       isPublic: true,
       createdAt: DateTime.utc(2026),
@@ -535,3 +630,8 @@ MemberMembershipsStartPreview _proratedPlusOneTime() =>
       dueNow: _invoice(4800, proration: true, nextPaymentDate: _anchorEpoch),
       recurring: _invoice(14900, nextPaymentDate: _anchorEpoch),
     );
+
+/// A preview with one invoice due today and nothing recurring — the shape the
+/// CTA's amount is read off.
+MemberMembershipsStartPreview _invoiceOnly(int total) =>
+    MemberMembershipsStartPreview(dueNow: _invoice(total));

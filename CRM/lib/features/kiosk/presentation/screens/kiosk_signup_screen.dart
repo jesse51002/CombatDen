@@ -11,6 +11,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_idle_warning.dart'
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_abandon_confirm.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_declined_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_entry_choice_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_identify_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_match_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
@@ -23,6 +25,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_step
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_details_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_optional_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_stop_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_trial_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -85,6 +88,7 @@ class _KioskSignupBody extends StatelessWidget {
         child: Stack(
           children: const [
             _StepSwitcher(),
+            _TrialBlockOverlay(),
             _SignupIdleOverlay(),
             _AbandonOverlay(),
             _RemoveOverlay(),
@@ -111,6 +115,8 @@ class _StepSwitcher extends StatelessWidget {
           prev.payerAuthPending != cur.payerAuthPending,
       builder: (context, state) {
         return switch (state.step) {
+          KioskSignupStep.entry => const KioskEntryChoiceStep(),
+          KioskSignupStep.identify => const KioskIdentifyStep(),
           KioskSignupStep.details => const KioskSignupDetailsStep(),
           // ONE widget, parameterized by the active person: the payer's own
           // optional block and every payee's are the same screen.
@@ -131,6 +137,26 @@ class _StepSwitcher extends StatelessWidget {
           KioskSignupStep.declined => const KioskDeclinedScreen(),
           KioskSignupStep.welcome => const KioskWelcomeScreen(),
         };
+      },
+    );
+  }
+}
+
+/// "You've already had a trial", over the plan grid that raised it.
+///
+/// It is an OVERLAY rather than a step: the grid stays live behind it, so the
+/// primary is a dismiss with nothing to re-fetch and no scroll position to
+/// restore, and the rail keeps its honest length.
+class _TrialBlockOverlay extends StatelessWidget {
+  const _TrialBlockOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<KioskSignupCubit, KioskSignupState>(
+      buildWhen: (prev, cur) => prev.trialBlockActive != cur.trialBlockActive,
+      builder: (context, state) {
+        if (!state.trialBlockActive) return const SizedBox.shrink();
+        return const KioskTrialBlock();
       },
     );
   }

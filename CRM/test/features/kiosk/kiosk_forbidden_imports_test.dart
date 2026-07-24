@@ -5,28 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 /// **The fresh-card law, executable.**
 ///
 /// The law is one sentence: **the kiosk never charges a PRE-EXISTING card.**
-/// Every card it charges is one entered during the current signup.
+/// Every card it charges is one entered during the current signup, every time,
+/// and it becomes that payer's default — replacing whatever was on their
+/// profile. That is why an existing member may self-serve here at all: there
+/// is no stored card the kiosk could reach for, because it never reads one.
 ///
-/// What enforces it lives in two places, and this file is one of them:
+/// **This file is the structural half of the law**, and it is what makes
+/// "never" true in CI instead of true by convention. No kiosk file may reach
+/// into the CRM's own payer-selection or saved-card modules, or any module
+/// that reduces a price. Those surfaces offer a card the kiosk did not take
+/// and a price the kiosk may not set, so the kiosk's own screens are the only
+/// ones it may compose. A `showDiscounts: false` parameter is one wrong
+/// default, one flipped boolean, or one new call site away from a member
+/// discounting their own membership — so the rule is an import ban rather than
+/// a flag.
 ///
-/// 1. **The no-attached-payment-method gate** (`KioskPayerEligibility`, in the
-///    signup cubit): an EXISTING member may be the payer only while their
-///    account has no payment method at all, and the check fails CLOSED — an
-///    error, a timeout or a 404 reads as "not eligible", never as "no card on
-///    file". The kiosk therefore HAS a payer picker, and having one is fine:
-///    it can only ever seat somebody whose first card is the one about to be
-///    typed. `kiosk_signup_payer_test.dart` is that half.
-/// 2. **The import ban below**: no kiosk file may reach into the CRM's own
-///    payer-selection or saved-card modules, or any discount module. Those
-///    surfaces offer a card the kiosk did not take (and a price the kiosk may
-///    not set), so the kiosk's own screens are the only ones it may compose.
-///    A `showDiscounts: false` parameter is one wrong default, one flipped
-///    boolean, or one new call site away from a member discounting their own
-///    membership — so the rule is structural rather than a flag, and this test
-///    is what makes "never" true in CI instead of true by convention.
+/// The kiosk HAS a payer picker of its own, and that is fine: it only ever
+/// names WHO pays, and whoever it names still types a fresh card at the end.
+/// `kiosk_signup_payer_test.dart` holds that behavioural half.
 ///
-/// Both halves are FRONTEND guards, accepted given the supervised iPad +
-/// Guided Access.
+/// This is a FRONTEND guard, accepted given the supervised iPad + Guided
+/// Access.
 ///
 /// Each banned name is a real file that exists today (asserted below, so the
 /// test can never quietly pass because a module was renamed and the ban went
