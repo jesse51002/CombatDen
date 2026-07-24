@@ -18,13 +18,16 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.d
 /// **Exactly two buttons, and neither of them is "Start over".** By this point
 /// the member row, the Stripe customer and every signature are committed and
 /// nothing rolls them back, so an abandon here would drop a half-built account
-/// at a clean home screen with nobody told — and the member's own second
-/// attempt would then be hard-stopped by the duplicate gate. Giving up is a
-/// HANDOFF, not an abandon. The session's flow count is deliberately still
-/// held: the member is standing right there.
+/// at a clean home screen with nobody told. Giving up is a HANDOFF, not an
+/// abandon. The session's flow count is deliberately still held: the member is
+/// standing right there.
 ///
-/// The attempt counter is quiet and factual. It exists so the third refusal
-/// isn't a surprise, not to scold anyone.
+/// **Neither button is ever forced.** A refused card is retryable for as long
+/// as the member wants to keep trying — mistakes are ordinary and no count of
+/// them ends a signup — so "Try another card" is always there and "Get help at
+/// the desk" is the option beside it, never the destination. What repetition
+/// buys is a short wait before the next attempt; the review's Pay button shows
+/// it counting down.
 class KioskDeclinedScreen extends StatelessWidget {
   const KioskDeclinedScreen({super.key});
 
@@ -51,9 +54,7 @@ class KioskDeclinedScreen extends StatelessWidget {
               const _WhyBox(),
               KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
               Text(
-                'You haven\'t been charged, and everything else you filled in '
-                'is saved. A different card usually works — or the desk can '
-                'take it from here.',
+                _reassurance(state.declineCount),
                 style: DesignConstants.kioskSubtitle.copyWith(
                   color: DesignConstants.text2nd,
                 ),
@@ -74,18 +75,25 @@ class KioskDeclinedScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                'Attempt ${state.declineCount} of '
-                '$kKioskSignupMaxCardAttempts',
-                style: DesignConstants.kioskCaption.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              ),
             ],
           ),
         );
       },
     );
+  }
+
+  /// The reassurance, warm and UNCOUNTED. A repeat gets a slightly gentler
+  /// line rather than a tally: a member who has tried twice knows they have
+  /// tried twice, and printing the number only ever reads as a countdown to
+  /// being cut off — which is not something that happens here.
+  String _reassurance(int declines) {
+    const base = 'You haven\'t been charged, and everything else you filled '
+        'in is saved. ';
+    return declines > 1
+        ? '${base}Another card usually does it — take your time, or the desk '
+            'can help.'
+        : '${base}A different card usually works — or the desk can take it '
+            'from here.';
   }
 }
 

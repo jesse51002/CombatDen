@@ -7,14 +7,22 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.dart';
 
-/// Every signup step wears the same three bands: the step rail, the screen
-/// head (one title + one answering line), and the step's own content — over
-/// the footer `KioskStage` pins to the fold.
+/// Every signup step wears the same bands: the step rail, the screen head (one
+/// title + one answering line), an optional "who is this for" strip, and the
+/// step's own content — between the header and footer `KioskStage` pins to the
+/// fold.
 ///
 /// It exists so no step re-derives its own chrome. A step that laid out its
 /// own rail would be one refactor away from disagreeing with its neighbours
 /// about which rung is lit, and a member watching the rail jump around loses
 /// the one thing it is for.
+///
+/// **The whole top band is PINNED.** Rail, title and identity stay on the fold
+/// while the content scrolls beneath them, so the answer to "who am I doing
+/// this for" is on screen for the entire step rather than for as long as
+/// nobody scrolls. That is a correctness control on the plan, waiver and card
+/// steps, not decoration — the cost of losing it is the wrong plan bought for
+/// the wrong child, or a card attached to the wrong profile.
 class KioskSignupStepScaffold extends StatelessWidget {
   /// Which step this is — the rail lights the matching rung.
   final KioskSignupStep step;
@@ -26,11 +34,20 @@ class KioskSignupStepScaffold extends StatelessWidget {
   /// sells.
   final String? subtitle;
 
+  /// The pinned `KioskWhoFor` strip, on the steps that are ABOUT one person.
+  /// Null on the steps that are about the signup as a whole.
+  final Widget? identity;
+
   /// The step's body — usually a `KioskSignupFormPanel`.
   final Widget child;
 
   /// The pinned `KioskFlowFoot`.
   final Widget foot;
+
+  /// Hand [child] the height that is LEFT instead of scrolling it — see
+  /// [KioskStage.fillBody]. The waiver steps opt in so their reading box can
+  /// fill the fold and scroll inside itself.
+  final bool fillBody;
 
   const KioskSignupStepScaffold({
     super.key,
@@ -39,22 +56,26 @@ class KioskSignupStepScaffold extends StatelessWidget {
     required this.child,
     required this.foot,
     this.subtitle,
+    this.identity,
+    this.fillBody = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return KioskStage(
       footer: foot,
-      child: Column(
+      fillBody: fillBody,
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        spacing: DesignConstants.spacingBig,
+        spacing: DesignConstants.spacingLarge,
         children: [
           const _Rail(),
           _Head(title: title, subtitle: subtitle),
-          child,
+          ?identity,
         ],
       ),
+      child: child,
     );
   }
 }
@@ -91,10 +112,14 @@ class _Rail extends StatelessWidget {
 int kioskFlowRailIndex(KioskSignupStep step, {required bool isGroup}) {
   return switch (step) {
     KioskSignupStep.details => 0,
-    KioskSignupStep.extraDetails => 1,
+    // The payer match is still about WHO this person is, so it belongs to the
+    // rung they are standing on rather than advertising progress they have
+    // not made.
+    KioskSignupStep.extraDetails || KioskSignupStep.payerMatch => 1,
     KioskSignupStep.people ||
     KioskSignupStep.personDetails ||
-    KioskSignupStep.match =>
+    KioskSignupStep.match ||
+    KioskSignupStep.payerPick =>
       2,
     KioskSignupStep.plans => isGroup ? 3 : 2,
     KioskSignupStep.waivers => isGroup ? 4 : 3,

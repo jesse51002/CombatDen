@@ -9,17 +9,26 @@ import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/shared/widgets/app_search_box.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// The other route into the E2 offer: find the existing member by name.
+/// Find an existing member by name — the other route into the E2 payee offer,
+/// and the whole of the payer picker.
 ///
 /// It is the shipped kiosk-home composition — `AppSearchBox` at kiosk scale
 /// over plain, centred, avatar-free name rows — pointed at the SIGNUP cubit
-/// instead of the check-in one. Picking a row lands on the same confirm card
-/// the 409 route lands on, so both ways in end in the same decision.
+/// instead of the check-in one, and driving the ONE debounced,
+/// sequence-guarded search the cubit owns. There is no second search anywhere.
 ///
 /// Avatar-free is not an oversight: a shared lobby iPad showing member faces
 /// beside searchable names is a directory of everyone who trains here.
+///
+/// [forPayer] switches only what a picked row MEANS — the payer seat, gated on
+/// the member having no card on file, rather than a payee on the roster — and
+/// the one line of copy that would otherwise offer the wrong way out of an
+/// empty result.
 class KioskMatchSearch extends StatefulWidget {
-  const KioskMatchSearch({super.key});
+  /// Pick a PAYER (gated) rather than a payee.
+  final bool forPayer;
+
+  const KioskMatchSearch({super.key, this.forPayer = false});
 
   @override
   State<KioskMatchSearch> createState() => _KioskMatchSearchState();
@@ -50,14 +59,16 @@ class _KioskMatchSearchState extends State<KioskMatchSearch> {
           hintColor: DesignConstants.text2nd,
           onChanged: cubit.searchExistingPeople,
         ),
-        const _Results(),
+        _Results(forPayer: widget.forPayer),
       ],
     );
   }
 }
 
 class _Results extends StatelessWidget {
-  const _Results();
+  final bool forPayer;
+
+  const _Results({required this.forPayer});
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +84,11 @@ class _Results extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < state.matches.length; i++)
-                _NameRow(row: state.matches[i], first: i == 0),
+                _NameRow(
+                  row: state.matches[i],
+                  first: i == 0,
+                  forPayer: forPayer,
+                ),
             ],
           );
         }
@@ -86,9 +101,14 @@ class _Results extends StatelessWidget {
           );
         }
         if (state.matchQuery.trim().length >= kKioskSearchMinChars) {
-          return const _Status(
+          return _Status(
             child: _StatusText(
-              'No matches. Add them as someone new instead.',
+              forPayer
+                  // A payer must already be a member here, so "add them as
+                  // someone new" is not an answer on this screen.
+                  ? 'No matches. You can keep paying yourself, or the front '
+                      'desk can set this up.'
+                  : 'No matches. Add them as someone new instead.',
             ),
           );
         }
@@ -101,13 +121,20 @@ class _Results extends StatelessWidget {
 class _NameRow extends StatelessWidget {
   final MemberRow row;
   final bool first;
+  final bool forPayer;
 
-  const _NameRow({required this.row, required this.first});
+  const _NameRow({
+    required this.row,
+    required this.first,
+    required this.forPayer,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<KioskSignupCubit>();
     return InkWell(
-      onTap: () => context.read<KioskSignupCubit>().pickMatchRow(row),
+      onTap: () =>
+          forPayer ? cubit.pickPayerRow(row) : cubit.pickMatchRow(row),
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       child: Container(
         width: double.infinity,

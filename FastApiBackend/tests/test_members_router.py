@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from fastapi import HTTPException, status
+
 from src.main import app
 from src.members.schema.members_billing_schema import (
     BillingPersonalInfo,
@@ -20,6 +22,7 @@ from src.members.schema.members_crm_members_list_schema import (
     MembersListView,
 )
 from src.memberships.memberships_schema import PayerInvoiceChange
+from src.payments.payments_exceptions import PaymentsStripeError
 from tests.conftest import make_member_row
 
 
@@ -627,3 +630,146 @@ def test_member_detail_pending_redemptions_defaults_empty(
 
     assert response.status_code == 200
     assert response.json()["pending_redemptions"] == []
+
+
+# ── GET /{member_id}/payment-method-status ────────────────────────
+#
+# The gate a caller uses to decide whether a member can safely be asked
+# for a fresh card. Its failure mode is asymmetric: a wrong ``true`` only
+# costs a hand-off to the front desk, but a wrong ``false`` invites a
+# stranger's card onto an existing member's account. So every error path
+# below asserts the response is NOT a false.
+
+
+def _payment_method_status_response(client, auth_headers, member_id, mgmt):
+    """Call the endpoint with ``mgmt`` overriding the management service."""
+    container = client.app.container
+    container.members_management_service.override(mgmt)
+    try:
+        return client.get(
+            f"/api/v1/members/{member_id}/payment-method-status",
+            headers=auth_headers,
+        )
+    finally:
+        container.members_management_service.reset_override()
+
+
+def test_payment_method_status_true(client, auth_headers, fake_member_id):
+    """A member with a payment method attached in Stripe reports true."""
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(return_value=True)
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"has_payment_method": True}
+    mgmt.has_payment_method.assert_awaited_once()
+
+
+def test_payment_method_status_false(client, auth_headers, fake_member_id):
+    """A member with nothing attached reports false."""
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(return_value=False)
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"has_payment_method": False}
+
+
+def test_payment_method_status_404_when_member_missing(
+    client, auth_headers, fake_member_id
+):
+    """An unknown member is a 404, not a false."""
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(
+        side_effect=ValueError(f"Member {fake_member_id} not found"),
+    )
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 404
+    assert "has_payment_method" not in response.json()
+
+
+def test_payment_method_status_rejects_member_at_another_gym(
+    client, auth_mock, auth_headers, fake_member_id
+):
+    """A member outside the caller's gym is refused by the shared gate.
+
+    ``verify_gym_employee_for_member`` resolves the member's OWN gym and
+    then runs ``verify_roles`` against it, so a caller holding no role at
+    that gym is rejected (403) before the service is ever reached — the
+    endpoint can't be used to probe another gym's members.
+    """
+    auth_mock.verify_gym_employee_for_member = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN),
+    )
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(return_value=False)
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 403
+    assert "has_payment_method" not in response.json()
+    mgmt.has_payment_method.assert_not_awaited()
+
+
+def test_payment_method_status_gate_is_staff_scoped(
+    client, auth_mock, auth_headers, fake_member_id
+):
+    """The route uses the same staff gate every sibling /members/{id} uses."""
+    from src.shared.auth import STAFF
+
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(return_value=True)
+
+    _payment_method_status_response(client, auth_headers, fake_member_id, mgmt)
+
+    auth_mock.verify_gym_employee_for_member.assert_awaited_once()
+    call = auth_mock.verify_gym_employee_for_member.await_args
+    assert str(call.args[0]) == fake_member_id
+    assert call.kwargs["staff_roles"] is STAFF
+
+
+def test_payment_method_status_stripe_error_is_500_not_false(
+    client, auth_headers, fake_member_id
+):
+    """A Stripe failure surfaces as an error — never as ``false``.
+
+    500 specifically (not 502/503/504), so no proxy auto-retries it.
+    """
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(
+        side_effect=PaymentsStripeError("Stripe is unreachable"),
+    )
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 500
+    assert "has_payment_method" not in response.json()
+
+
+def test_payment_method_status_unexpected_error_is_500_not_false(
+    client, auth_headers, fake_member_id
+):
+    """Any other failure is a 500 too — the fallback can't leak a false."""
+    mgmt = MagicMock()
+    mgmt.has_payment_method = AsyncMock(side_effect=RuntimeError("boom"))
+
+    response = _payment_method_status_response(
+        client, auth_headers, fake_member_id, mgmt
+    )
+
+    assert response.status_code == 500
+    assert "has_payment_method" not in response.json()

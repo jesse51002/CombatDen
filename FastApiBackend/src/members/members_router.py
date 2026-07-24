@@ -13,6 +13,7 @@ from src.core.dependencies import DependencyInjector
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
     MemberBillingDetailResponse,
+    MemberPaymentMethodStatusResponse,
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
     PointsAdjustRequest,
@@ -572,6 +573,91 @@ async def unlink_member_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to unlink payment",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/payment-method-status",
+    response_model=MemberPaymentMethodStatusResponse,
+    summary="Whether the member has any payment method attached",
+    description=(
+        "Reports whether the member's Stripe customer has ANY payment "
+        "method attached, read LIVE from Stripe rather than from the "
+        "cached ``stripe_payment_method_id`` column (which only records "
+        "the card the CRM last saved as default, so a method attached out "
+        "of band would not appear there). A member with no Stripe "
+        "customer is ``false`` — nothing can be attached. A Stripe "
+        "failure is a 500, NEVER a ``false``: callers gate on this, so "
+        "'unknown' must never read as 'nothing on file'. Gym staff only."
+    ),
+    responses={
+        200: {"description": "Status resolved from Stripe"},
+        400: {"description": "The member's gym has no Stripe account configured"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+        500: {
+            "description": (
+                "Stripe / upstream error (no auto-retry) — never reported "
+                "as has_payment_method=false"
+            )
+        },
+    },
+)
+@inject
+async def get_member_payment_method_status(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> MemberPaymentMethodStatusResponse:
+    """Report whether a member has a payment method attached in Stripe."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
+
+    try:
+        has_payment_method = await management_service.has_payment_method(
+            member_id,
+        )
+        return MemberPaymentMethodStatusResponse(
+            has_payment_method=has_payment_method,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        # A Stripe failure must surface as an ERROR, never as a false. 500
+        # (not 502/503/504) so no proxy auto-retries it.
+        logger.error(
+            "Stripe error reading payment-method status: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to get payment-method status: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get payment-method status",
         ) from None
 
 

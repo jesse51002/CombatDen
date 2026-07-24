@@ -40,6 +40,15 @@ enum KioskSignupStep {
   /// E2 — find an EXISTING member to add to the cart.
   match,
 
+  /// The person who started this signup already has an account here, and that
+  /// account carries no payment method — so it may be adopted. One confirm
+  /// card, their own name and masked email, and two answers.
+  payerMatch,
+
+  /// "Someone else is paying" — pick the EXISTING member who pays for this
+  /// signup. Every pick runs the no-attached-card gate before it is allowed.
+  payerPick,
+
   /// D3 — pick one plan per person.
   plans,
 
@@ -78,6 +87,37 @@ enum KioskSignupDetailsStatus {
   complete,
 }
 
+/// Whether a member may be this signup's payer.
+///
+/// **The kiosk may only ever charge a card entered during the current
+/// signup.** A recurring cart sends `set_default: true`, so the entered card
+/// becomes that member's Stripe default — which means adopting an account
+/// that ALREADY has a payment method would let a later "charge the card on
+/// file" bill whoever typed a card at the iPad. The gate is therefore: no
+/// attached payment method at all, or no.
+///
+/// **[eligible] is the ONLY value that permits adoption.** Every other value
+/// refuses, and that is the fail-closed shape: an errored, timed-out or
+/// unparsable check resolves to [unknown], never to "no card on file". A
+/// `false` inferred from a failure would be a billing incident.
+enum KioskPayerEligibility {
+  /// The check answered, and this member has no payment method attached.
+  eligible,
+
+  /// The check answered: this member already has a card on file. The front
+  /// desk sets this up; the kiosk never touches an existing card.
+  hasPaymentMethod,
+
+  /// The check did not answer — a 404, a 5xx, a dropped connection, an
+  /// unparsable body. Treated exactly like a refusal.
+  unknown,
+
+  /// Decided locally, before the check ever runs: this member is already on
+  /// this signup's roster. A second entry for the same member is a double
+  /// charge waiting to happen.
+  alreadyInSignup,
+}
+
 /// Why the signup stopped dead and handed off to the front desk.
 ///
 /// Every one of these is TERMINAL: the screen's single action returns home.
@@ -95,13 +135,15 @@ enum KioskSignupDetailsStatus {
 /// session's flow count is deliberately NOT released while the member is still
 /// standing there. Every other reason is a true dead end.
 enum KioskSignupStopReason {
-  /// `POST /members/` came back 409 `duplicate_member`.
+  /// `POST /members/` came back 409 `duplicate_member` AND the matched
+  /// account cannot be adopted.
   ///
-  /// A duplicate on the PAYER is terminal by the fresh-card law: the kiosk may
-  /// only charge a card belonging to a member it created in THIS signup, so
-  /// "that's me, use my account" cannot exist here. The 409's `matches` are
-  /// deliberately never rendered — confirming an account exists to whoever is
-  /// standing at a shared iPad is an account-existence leak.
+  /// The kiosk offers "is this you?" only when the match passes the
+  /// no-attached-payment-method gate ([KioskPayerEligibility]). Anything else
+  /// — a card already on file, or a check that did not answer — lands here,
+  /// terminal, and the 409's `matches` are never rendered: confirming to
+  /// whoever is standing at a shared iPad that a given account exists is an
+  /// account-existence leak, and the answer is the same either way.
   duplicateMember,
 
   /// `POST /members/` came back 400 — the gym has no Stripe Connect account,
@@ -137,9 +179,10 @@ enum KioskSignupStopReason {
   /// is the one thing that could double-charge. The desk resolves it.
   paymentUnconfirmed,
 
-  /// The card was refused and the member is out of attempts (or asked for
-  /// help). Everything already committed stays committed — this is a handoff,
-  /// never an abandon.
+  /// The member ASKED for help after a decline. It is never forced on them —
+  /// a refused card is retryable for as long as they want to keep trying.
+  /// Everything already committed stays committed: this is a handoff, never
+  /// an abandon.
   cardDeclined;
 
   /// Whether the stop screen offers a "Try again" that returns to the step.
@@ -181,10 +224,13 @@ class KioskSignedWaiver extends Equatable {
   List<Object?> get props => [memberId, waiverId, name, signerName];
 }
 
-/// One EXISTING member offered as a match for a payee being added (E2).
+/// One EXISTING member offered as a match — for a payee being added (E2), or
+/// for the person who started the signup and turns out to already have an
+/// account here.
 ///
-/// It is the single shape behind both routes into that offer — the 409's
-/// `matches` and a name-search row — so the confirm card renders one thing.
+/// It is the single shape behind every route into that offer — the payee 409's
+/// `matches`, the payer 409's, and a name-search row — so one confirm card
+/// renders all of them.
 ///
 /// **It carries only what a lobby iPad may print**: a full name (a first name
 /// plus an initial collides silently) and an email the card masks before it
@@ -208,8 +254,12 @@ class KioskSignupMatch extends Equatable {
   List<Object?> get props => [memberId, firstName, lastName, email];
 }
 
-/// One person in the signup's roster. The payer is always index 0 and is
-/// always brand new (the fresh-card law); payees may be new or existing.
+/// One person in the signup's roster. The payer is always index 0; both the
+/// payer and every payee may be new or existing.
+///
+/// An EXISTING payer is allowed only through the no-attached-payment-method
+/// gate ([KioskPayerEligibility]), which is what keeps the kiosk from ever
+/// charging a card it did not just take.
 ///
 /// [memberId] is null until `createMember` (or, for an existing payee, a
 /// match) supplies one — that null is the "nothing has been written yet"
@@ -246,7 +296,12 @@ class KioskSignupPerson extends Equatable {
   final bool training;
 
   /// True when this person was matched to an EXISTING member rather than
-  /// created here. Only ever true for a payee.
+  /// created here.
+  ///
+  /// It is the "the kiosk does not own this record" marker: their stored
+  /// details are never shown on a shared screen, so there is nothing here to
+  /// edit — the roster offers them no Edit affordance and they skip the
+  /// per-person details step entirely.
   final bool wasExisting;
 
   /// True once `PUT /members/{id}/link` has authorized the payer to pay for
@@ -414,11 +469,22 @@ class KioskSignupState extends Equatable {
   final bool matchSearching;
   final bool matchSearchFailed;
 
-  /// Name-search matches for the "add someone who's already a member" step.
+  /// Name-search matches for the "add someone who's already a member" step
+  /// AND for the payer picker — ONE search, one debounce, one sequence guard,
+  /// because the two pickers are never open at the same time.
   ///
-  /// Never confused with the 409 duplicate `matches`, which are NEVER
-  /// rendered for a PAYER (see [KioskSignupStopReason.duplicateMember]).
+  /// Never confused with a 409's duplicate `matches`, which are never
+  /// rendered as a LIST anywhere on the kiosk.
   final List<MemberRow> matches;
+
+  // ── The payer picker ──
+  /// Why the last payer pick was refused, or null when nothing was refused.
+  ///
+  /// It is an INLINE refusal on the picker, never a terminal stop: the member
+  /// can pick someone else or carry on paying themselves. Only
+  /// [KioskPayerEligibility.eligible] ever adopts, so an errored check lands
+  /// here exactly like a card-on-file does.
+  final KioskPayerEligibility? payerRefusal;
 
   // ── Plans (D3) ──
   /// The gym's kiosk-eligible plans — `isPublic && activePrice != null` —
@@ -506,8 +572,18 @@ class KioskSignupState extends Equatable {
   /// after a decline mints a NEW key; a double-tap reuses this one.
   final String? idempotencyKey;
 
-  /// How many times the card has been declined. Three strikes is terminal.
+  /// How many times the card has been declined IN A ROW. It is never a strike
+  /// count — no number of declines ends the signup — it only decides when the
+  /// velocity cooldown engages, and a successful charge resets it.
   final int declineCount;
+
+  /// Seconds left before another Pay attempt is allowed. 0 = no wait.
+  ///
+  /// A real person fixing a typo essentially never reaches it; someone
+  /// cycling stolen cards on an unattended iPad hits it immediately, which is
+  /// the whole point. It lives HERE rather than on the card widget so walking
+  /// back to the card step and returning cannot clear it.
+  final int retryCooldown;
 
   /// The failed items from a 207 — a decline arrives as a RESULT in the body,
   /// not as an HTTP error, so this is what "declined" actually means.
@@ -551,6 +627,7 @@ class KioskSignupState extends Equatable {
     this.matchSearching = false,
     this.matchSearchFailed = false,
     this.matches = const [],
+    this.payerRefusal,
     this.plans = const [],
     this.plansLoading = false,
     this.plansFailed = false,
@@ -576,6 +653,7 @@ class KioskSignupState extends Equatable {
     this.previewLoading = false,
     this.idempotencyKey,
     this.declineCount = 0,
+    this.retryCooldown = 0,
     this.failedItems = const [],
     this.welcomeCountdown = 0,
     this.stopReason,
@@ -628,6 +706,23 @@ class KioskSignupState extends Equatable {
   /// nobody else on the roster would send `memberships: []` and take a 400, so
   /// that state must never be able to advance.
   bool get canLeavePeople => persons.any((p) => p.training);
+
+  /// Whether the payer may still be handed to an EXISTING member.
+  ///
+  /// **The moment anything commits, the payer is baked in.** A payer-auth link
+  /// names the payer server-side and there is no unlink call, and a signature
+  /// is committed the instant it is recorded — so swapping the payer after
+  /// either would leave the roster authorized to somebody who is no longer
+  /// paying, and the start call would then be assembled against a payer the
+  /// backend never authorized. The offer therefore disappears rather than
+  /// becoming a control that quietly corrupts the cart.
+  ///
+  /// It also refuses a SECOND swap: the previous adopted payer would be left
+  /// stranded on the roster as a payee they never agreed to be.
+  bool get canSwitchPayer =>
+      !payer.wasExisting &&
+      signedWaivers.isEmpty &&
+      !persons.any((p) => p.linked);
 
   /// Whether every payee has been authorized. The start call NEVER links, so
   /// this has to be true before a request is even assembled.
@@ -710,6 +805,30 @@ class KioskSignupState extends Equatable {
   bool get chargedTwiceToday =>
       (preview?.oneTime?.total ?? 0) > 0 && (preview?.dueNow?.total ?? 0) > 0;
 
+  /// True when today's charge is a PART period — the kiosk pins
+  /// `prorate_to_anchor`, so a member joining mid-cycle pays only the rest of
+  /// it and then the full amount from the anchor.
+  ///
+  /// It is read off the preview lines' own `is_proration`, **never inferred
+  /// from "the two figures differ"**: they can differ for other reasons, and
+  /// telling a member their charge is prorated when it is not is a false
+  /// statement about their money.
+  bool get chargedProrated {
+    for (final line in [
+      ...?preview?.oneTime?.lines,
+      ...?preview?.dueNow?.lines,
+    ]) {
+      if (line.isProration) return true;
+    }
+    return false;
+  }
+
+  /// The billing-period end a part-period charge runs up to, and the day the
+  /// full amount first bills — the preview's own `next_payment_date`, never a
+  /// date this client works out.
+  DateTime? get prorationUntil =>
+      preview?.dueNow?.nextPaymentAt ?? preview?.recurring?.nextPaymentAt;
+
   /// The currency every figure on the review is rendered in — whichever half
   /// of the preview exists, in the CRM's own order of preference.
   String get currency =>
@@ -734,6 +853,7 @@ class KioskSignupState extends Equatable {
     bool? matchSearching,
     bool? matchSearchFailed,
     List<MemberRow>? matches,
+    Object? payerRefusal = _keep,
     List<MembershipPlanResponse>? plans,
     bool? plansLoading,
     bool? plansFailed,
@@ -759,6 +879,7 @@ class KioskSignupState extends Equatable {
     bool? previewLoading,
     Object? idempotencyKey = _keep,
     int? declineCount,
+    int? retryCooldown,
     List<MemberMembershipsStartResultItem>? failedItems,
     int? welcomeCountdown,
     Object? stopReason = _keep,
@@ -786,6 +907,9 @@ class KioskSignupState extends Equatable {
       matchSearching: matchSearching ?? this.matchSearching,
       matchSearchFailed: matchSearchFailed ?? this.matchSearchFailed,
       matches: matches ?? this.matches,
+      payerRefusal: identical(payerRefusal, _keep)
+          ? this.payerRefusal
+          : payerRefusal as KioskPayerEligibility?,
       plans: plans ?? this.plans,
       plansLoading: plansLoading ?? this.plansLoading,
       plansFailed: plansFailed ?? this.plansFailed,
@@ -823,6 +947,7 @@ class KioskSignupState extends Equatable {
           ? this.idempotencyKey
           : idempotencyKey as String?,
       declineCount: declineCount ?? this.declineCount,
+      retryCooldown: retryCooldown ?? this.retryCooldown,
       failedItems: failedItems ?? this.failedItems,
       welcomeCountdown: welcomeCountdown ?? this.welcomeCountdown,
       stopReason: identical(stopReason, _keep)
@@ -851,6 +976,7 @@ class KioskSignupState extends Equatable {
         matchSearching,
         matchSearchFailed,
         matches,
+        payerRefusal,
         plans,
         plansLoading,
         plansFailed,
@@ -876,6 +1002,7 @@ class KioskSignupState extends Equatable {
         previewLoading,
         idempotencyKey,
         declineCount,
+        retryCooldown,
         failedItems,
         welcomeCountdown,
         stopReason,

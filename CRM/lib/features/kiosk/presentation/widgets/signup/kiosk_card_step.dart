@@ -11,6 +11,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.d
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_secure_strip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
 
 /// D5 — the card, and the trust screen around it.
@@ -27,6 +28,13 @@ import 'package:crm/features/member_details/presentation/dialogs/card_field_box.
 /// cubit; the card number never reaches CombatDen at all. A tokenization
 /// failure is an INLINE message — a mistyped number is not a reason to end a
 /// signup.
+///
+/// **The screen names WHOSE profile the card lands on, pinned.** On a
+/// recurring cart the entered card becomes that member's Stripe default, so a
+/// later front-desk "charge the card on file" bills whoever typed it here.
+/// That makes the payer's name a correctness control rather than decoration —
+/// and it is read off the roster's payer seat, never off the active person,
+/// who in a family is usually a child.
 ///
 /// This is the first step whose escape CONFIRMS. A stray tap here destroys
 /// sixteen typed digits plus expiry, CVC and postal code — the most tedious
@@ -82,12 +90,25 @@ class _KioskCardStepState extends State<KioskCardStep> {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.cartHasRecurring != cur.cartHasRecurring ||
+          prev.persons != cur.persons ||
           prev.selectedPlan != cur.selectedPlan,
       builder: (context, state) {
+        final payerName = _payerName(state);
         return KioskSignupStepScaffold(
           step: KioskSignupStep.card,
           title: 'Your card',
-          subtitle: state.selectedPlan?.planName,
+          // In a group the "active person" is whoever signed last, so a plan
+          // name here would be a fact about somebody who may not even be
+          // paying. The panel's own lines carry the group's terms instead.
+          subtitle: state.isGroup ? null : state.selectedPlan?.planName,
+          // **The PAYER, never the active person.** This card attaches to
+          // their Stripe customer and, on a recurring cart, becomes their
+          // default — so the account it lands on has to be named and pinned.
+          // In a family the active person is often a child; naming them here
+          // would be confidently wrong, which is worse than naming nobody.
+          identity: payerName.isEmpty
+              ? null
+              : KioskWhoFor(eyebrow: 'CARD FOR', name: payerName),
           foot: KioskFlowFoot(
             primaryLabel: 'Review',
             onPrimary: _complete && !_tokenizing ? _review : null,
@@ -105,12 +126,23 @@ class _KioskCardStepState extends State<KioskCardStep> {
                 },
               ),
               if (_error != null) _CardError(message: _error!),
-              KioskCardFacts(hasRecurring: state.cartHasRecurring),
+              KioskCardFacts(
+                hasRecurring: state.cartHasRecurring,
+                payerName: payerName,
+              ),
             ],
           ),
         );
       },
     );
+  }
+
+  /// The person this card attaches to — read off the roster's payer seat, so
+  /// it is right whether the payer is the person standing there or an existing
+  /// member who was picked to pay.
+  String _payerName(KioskSignupState state) {
+    final payer = state.payer;
+    return '${payer.firstName} ${payer.lastName}'.trim();
   }
 }
 

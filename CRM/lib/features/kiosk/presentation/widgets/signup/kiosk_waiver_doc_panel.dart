@@ -4,8 +4,8 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
-/// The waiver's own text, in a fixed-height reading box with a fade off its
-/// bottom edge.
+/// The waiver's own text, in a reading box that FILLS the height it is given,
+/// with a fade off its bottom edge.
 ///
 /// The body renders through the SHIPPED [WaiverMarkdownEditor] — the same
 /// read-only Markdown surface `SignWaiverPanel` uses at the desk — so the
@@ -14,9 +14,13 @@ import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_ed
 /// the fade, which is the one honest signal that there is more below the fold
 /// on a screen nobody scrolls by instinct.
 ///
-/// The height is [DesignConstants.dialogWaiverEditorHeight] — the shipped
-/// waiver-reading height, reused rather than re-tuned so the box a member
-/// reads and the box staff read are the same size.
+/// **The panel REQUIRES a bounded height and takes all of it.** The kiosk
+/// stage is a full screen, not an admin dialog: a legal document a member is
+/// being asked to sign gets the whole fold rather than a letterbox borrowed
+/// from a dialog token, and more of the agreement visible at once is the
+/// better outcome legally as well as visually. A long body scrolls INSIDE the
+/// editor; a short one simply fills. The waiver steps give it that bound by
+/// asking `KioskSignupStepScaffold` for a filled body.
 class KioskWaiverDocPanel extends StatelessWidget {
   /// The waiver's name — the panel's title.
   final String title;
@@ -46,12 +50,10 @@ class KioskWaiverDocPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingLarge,
         children: [
           _Head(title: title, versionLabel: versionLabel),
-          SizedBox(
-            height: DesignConstants.dialogWaiverEditorHeight,
+          Expanded(
             child: Stack(
               children: [
                 WaiverMarkdownEditor(controller: controller),

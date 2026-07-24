@@ -149,6 +149,15 @@ created but the CRM writeback failed — surfaced loudly for operator cleanup).
   no-op when the method is already attached (so a retry is safe); a detached
   method can **never** be re-attached, so the charge path detaches only AFTER a
   successful pay.
+- `has_attached_payment_method` — the read-only existence probe: lists the
+  customer's attached PaymentMethods (**all types**, no `type` filter, `limit=1`
+  since only existence is asked) and returns whether that list is non-empty. It
+  is the LIVE Stripe answer, deliberately not `members.stripe_payment_method_id`
+  (which records only the CRM's last saved default, so a method attached out of
+  band would leave it NULL). **A Stripe failure propagates — callers gate on
+  this, so an error must never degrade to "no card".** Called by
+  `MembersManagementPaymentMethods` behind
+  `GET /api/v1/members/{member_id}/payment-method-status`.
 - `unlink_customer_card` — clears the default PaymentMethod and detaches it
   (no-op if the customer is gone).
 - `retrieve_customer` — raises `PaymentsResourceNotFoundError` if missing/deleted.
@@ -732,6 +741,7 @@ endpoints and the member_memberships refund endpoint that call the §3 primitive
 | `POST /api/v1/stripe/webhooks` | the webhook ingestion (§5–§6) |
 | `PUT /api/v1/members/{member_id}/card` | `update_card` → `PaymentsStripeMembersService.update_customer` (card swap only; raises if the member has no Stripe customer — `create_customer` runs once at member creation, never here) |
 | `DELETE /api/v1/members/{member_id}/payment` | `unlink_payment` → `unlink_customer_card` + cancel recurring subs (Stripe customer link preserved) |
+| `GET /api/v1/members/{member_id}/payment-method-status` | `has_payment_method` → `MembersManagementPaymentMethods` → `has_attached_payment_method` (live Stripe read; no Stripe customer ⇒ `false`; any Stripe failure ⇒ **500, never `false`**) |
 | `POST /api/v1/member_memberships/refund` | `MemberMembershipsRefund.refund_charge` (sibling of charge-card; standalone, not on the `MemberMembershipsService` facade) → loads the charge by PK (gym-scoped, `memberships/sql/member_charge_by_id.sql`), validates the refundable balance, then for a card charge calls `refund_payment` and records the succeeded negative row (`memberships/sql/member_refund_insert.sql`); a cash charge records a negative cash row with no Stripe call (§6) |
 
 > **⚠️ Refund assumes ONE succeeded charge per invoice — it would break down with

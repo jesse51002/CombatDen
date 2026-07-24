@@ -13,6 +13,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
 /// D4 — read the waiver, type your name, sign.
@@ -113,6 +114,19 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
           step: KioskSignupStep.waivers,
           title: _title(state),
           subtitle: _subtitle(state),
+          // Pinned: a parent signing four documents in a row must never lose
+          // track of which child they are binding, and the document scrolls.
+          // "WAIVER FOR", not "SIGNING FOR": the panel beside the document
+          // already carries the latter for the person being bound, and one
+          // screen saying the same two words twice teaches neither.
+          identity: state.isGroup
+              ? KioskWhoFor(
+                  eyebrow: 'WAIVER FOR',
+                  name: _memberName(state),
+                )
+              : null,
+          // The document takes the fold; it scrolls inside its own panel.
+          fillBody: true,
           foot: KioskFlowFoot(
             primaryLabel: 'Sign and continue',
             onPrimary: _canSign(state)
@@ -143,14 +157,14 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
   }
 
   /// Whose signature this screen is collecting. In a group the run is grouped
-  /// by PERSON, so the title has to name them — the payer holding the iPad is
-  /// signing on behalf of a child half the time.
+  /// by PERSON, so the title names them on EVERY turn — the payer's own
+  /// included. The payer holding the iPad is signing on behalf of a child half
+  /// the time, and one unnamed screen in a run of named ones is exactly where
+  /// the wrong person gets bound.
   String _title(KioskSignupState state) {
     if (!state.isGroup) return 'One signature and you\'re in';
     final first = state.activePerson.firstName.trim();
-    if (state.activePersonIndex == 0 || first.isEmpty) {
-      return 'One signature and you\'re in';
-    }
+    if (first.isEmpty) return 'One signature and you\'re in';
     return '$first\'s waiver';
   }
 
@@ -194,7 +208,6 @@ class _Body extends StatelessWidget {
     final version = waiver.currentVersionNumber;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.waiverStale)
@@ -207,29 +220,36 @@ class _Body extends StatelessWidget {
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: DesignConstants.spacingLarge,
-          children: [
-            Expanded(
-              flex: 3,
-              child: KioskWaiverDocPanel(
-                title: waiver.name,
-                versionLabel: version == null ? null : 'Version $version',
-                controller: controller,
+        Expanded(
+          // Stretch, so both cards take the fold's full height: the document
+          // fills its reading box, and the signing column can scroll inside
+          // itself on a short fold rather than pushing the footer away.
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingLarge,
+            children: [
+              Expanded(
+                flex: 3,
+                child: KioskWaiverDocPanel(
+                  title: waiver.name,
+                  versionLabel: version == null ? null : 'Version $version',
+                  controller: controller,
+                ),
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: KioskSignPanel(
-                memberName: memberName,
-                signerName: signerName,
-                onSignerNameChanged: onSignerNameChanged,
-                consent: consent,
-                onConsentChanged: onConsentChanged,
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  child: KioskSignPanel(
+                    memberName: memberName,
+                    signerName: signerName,
+                    onSignerNameChanged: onSignerNameChanged,
+                    consent: consent,
+                    onConsentChanged: onConsentChanged,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

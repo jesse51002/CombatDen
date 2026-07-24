@@ -3,12 +3,12 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_det_chip.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_row_action.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_training_toggle.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
-/// One person on the signup roster: who they are, what is on file for them,
-/// and — for the payer — whether they are training too.
+/// One person on the signup roster: who they are, how to correct them, and —
+/// for the payer — whether they are training too.
 ///
 /// It is `add_member/group_roster_row.dart`'s composition at kiosk scale
 /// (avatar + name pair + a trailing control run), with the one thing the desk
@@ -16,6 +16,11 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// free.** There is no unlink call, so the moment this person's link or a
 /// signature of theirs commits the ✕ goes away rather than becoming a button
 /// that cannot do what it says.
+///
+/// **Edit appears only for a person this signup CREATED.** An existing member
+/// is here by id alone: the kiosk deliberately never prints their stored
+/// details on a shared screen, so offering to "edit" fields it refuses to show
+/// would be an affordance that lies about what it opens.
 class KioskRosterRow extends StatelessWidget {
   final KioskSignupPerson person;
 
@@ -47,18 +52,28 @@ class KioskRosterRow extends StatelessWidget {
       children: [
         InstructorAvatar(name: name, diameter: DesignConstants.iconSizeBig),
         Expanded(child: _Identity(name: name, person: person)),
-        KioskDetChip(
-          status: person.detailsStatus,
-          onFile: person.wasExisting,
-          onTap: onDetails,
-        ),
+        // A plain verb, not a status readout: what is or isn't on file is
+        // nobody's business at a glance on a shared iPad, and "None yet"
+        // beside a name only ever read as a nag.
+        if (!person.wasExisting)
+          KioskRowAction(
+            semanticLabel: 'Edit $name',
+            icon: Symbols.edit_sharp,
+            label: 'Edit',
+            onTap: onDetails,
+          ),
         if (person.isPayer)
           KioskTrainingToggle(
             value: person.training,
             onChanged: onTrainingChanged,
           ),
         _Pill(person: person),
-        if (removable) _RemoveButton(name: name, onRemove: onRemove),
+        if (removable)
+          KioskRowAction(
+            semanticLabel: 'Remove $name',
+            icon: Symbols.close_sharp,
+            onTap: onRemove,
+          ),
       ],
     );
   }
@@ -128,35 +143,6 @@ class _Pill extends StatelessWidget {
                 : 'New',
         style: DesignConstants.kioskTag.copyWith(
           color: loud ? DesignConstants.onAccent : DesignConstants.text2nd,
-        ),
-      ),
-    );
-  }
-}
-
-class _RemoveButton extends StatelessWidget {
-  final String name;
-  final VoidCallback onRemove;
-
-  const _RemoveButton({required this.name, required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Remove $name',
-      button: true,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onRemove,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-        child: Padding(
-          padding: const EdgeInsets.all(DesignConstants.spacingMedium),
-          child: Icon(
-            Symbols.close_sharp,
-            size: DesignConstants.iconSizeMedium,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.text2nd,
-          ),
         ),
       ),
     );

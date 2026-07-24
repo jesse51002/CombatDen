@@ -253,7 +253,7 @@ void main() {
       await payer.close();
     });
 
-    test('"Yes, that\'s her" adopts the existing member and blanks their '
+    test('"Yes, that\'s her" adopts the existing member and skips their '
         'details', () async {
       final cubit = await atRoster();
       when(() => member.createMember(any())).thenThrow(
@@ -280,16 +280,18 @@ void main() {
       // The gym's record wins over the typo that produced the match.
       expect(ella.firstName, 'Ella');
       expect(ella.lastName, 'Bell');
-      // NOTHING of theirs is carried into this signup's state, which is what
-      // the details screen renders from — a lobby iPad never prints a stored
-      // address, and a partial update cannot wipe what it never showed.
+      // NOTHING of theirs is carried into this signup's state — a lobby iPad
+      // never holds, prints or overwrites a record the kiosk does not own.
       expect(ella.dob, isNull);
       expect(ella.address, isNull);
       expect(ella.ecName, isNull);
       expect(ella.detailsStatus, KioskSignupDetailsStatus.none);
       // Adopting creates nothing.
       verifyNever(() => member.createMember(any()));
-      expect(cubit.state.step, KioskSignupStep.personDetails);
+      // And there is no details pass for them at all: a form that can only
+      // ever ask for what the gym already has is not worth a screen.
+      expect(cubit.state.step, KioskSignupStep.people);
+      verifyNever(() => member.updateMember(any(), any()));
       await cubit.close();
     });
 

@@ -7,7 +7,6 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_det_chip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_roster_row.dart';
@@ -130,11 +129,45 @@ void main() {
     expect(find.byType(KioskTrainingToggle), findsOneWidget);
     expect(find.text('Paying'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
-    expect(find.byType(KioskDetChip), findsNWidgets(2));
-    // The payer filled something in; the payee skipped. Neither is a problem.
-    expect(find.text('Details added'), findsOneWidget);
-    expect(find.text('None yet'), findsOneWidget);
+    // Both were created here, so both may be corrected.
+    expect(find.text('Edit'), findsNWidgets(2));
     expect(find.text('Continue with 2 people'), findsOneWidget);
+    await cubit.close();
+  });
+
+  testWidgets('an EXISTING member gets no Edit — the kiosk owns no record '
+      'of theirs', (tester) async {
+    await createPayer();
+    when(() => member.createMember(any())).thenThrow(
+      const DuplicateMemberException([
+        DuplicateMemberMatch(
+          memberId: 'mem-ella',
+          firstName: 'Ella',
+          lastName: 'Bell',
+          email: 'ella.bell@gmail.com',
+        ),
+      ]),
+    );
+    await cubit.addPerson(
+      firstName: 'Ella',
+      lastName: 'Bell',
+      email: 'ella.bell@gmail.com',
+    );
+    cubit.confirmMatch();
+    await pump(tester, const KioskPeopleStep());
+
+    expect(find.byType(KioskRosterRow), findsNWidgets(2));
+    expect(find.text('Member'), findsOneWidget);
+    // Only the payer, who this signup created, may be edited.
+    expect(find.text('Edit'), findsOneWidget);
+    await cubit.close();
+  });
+
+  testWidgets('the roster offers to hand the paying over', (tester) async {
+    await createPayer();
+    await pump(tester, const KioskPeopleStep());
+
+    expect(find.text('Someone else is paying'), findsOneWidget);
     await cubit.close();
   });
 
@@ -177,37 +210,19 @@ void main() {
     await cubit.close();
   });
 
-  testWidgets('a matched existing member gets a BLANK details form',
+  testWidgets('a NEW payee\'s details form opens empty of the payer\'s values',
       (tester) async {
     await createPayer();
-    when(() => member.createMember(any())).thenThrow(
-      const DuplicateMemberException([
-        DuplicateMemberMatch(
-          memberId: 'mem-ella',
-          firstName: 'Ella',
-          lastName: 'Bell',
-          email: 'ella.bell@gmail.com',
-        ),
-      ]),
-    );
     await cubit.addPerson(
       firstName: 'Ella',
       lastName: 'Bell',
       email: 'ella.bell@gmail.com',
     );
-    cubit.confirmMatch();
     await pump(tester, const KioskSignupOptionalStep());
 
     expect(find.text('A bit more about Ella'), findsOneWidget);
-    expect(
-      find.text(
-        'Ella already has details with us — we don\'t show them on a shared '
-        'screen.',
-      ),
-      findsOneWidget,
-    );
     expect(find.text('Add Ella'), findsOneWidget);
-    // The payer's own values never bleed into someone else's form either.
+    // The payer's own values never bleed into someone else's form.
     expect(find.text('4 Anvil Row'), findsNothing);
     await cubit.close();
   });

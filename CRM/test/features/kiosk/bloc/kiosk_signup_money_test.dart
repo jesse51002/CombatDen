@@ -112,7 +112,10 @@ void main() {
     ).thenAnswer((_) async => _startResponse());
   });
 
-  KioskSignupCubit build() => KioskSignupCubit(
+  KioskSignupCubit build({
+    Duration declineCooldown = kKioskSignupDeclineCooldown,
+  }) =>
+      KioskSignupCubit(
         memberRepository: member,
         membershipsRepository: memberships,
         membersListRepository: membersList,
@@ -122,11 +125,14 @@ void main() {
         // Every key is distinct, so "a NEW key" is a real assertion rather
         // than an artefact of a constant stub.
         uuid: () => 'key-${++uuidSeq}',
+        declineCooldown: declineCooldown,
       );
 
   /// Walk a solo signup from the first field to the review, ready to pay.
-  Future<KioskSignupCubit> atReview() async {
-    final cubit = build();
+  Future<KioskSignupCubit> atReview({
+    Duration declineCooldown = kKioskSignupDeclineCooldown,
+  }) async {
+    final cubit = build(declineCooldown: declineCooldown);
     cubit.submitDetails(
       firstName: 'Marcus',
       lastName: 'Bell',
@@ -409,7 +415,53 @@ void main() {
       await cubit.close();
     });
 
-    test('three strikes ends terminal, and the handoff releases the flow once',
+    test('a decline is NEVER terminal — the member keeps trying, uncapped',
+        () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      // The cooldown is a separate control with its own test; this one is
+      // about the ABSENCE of a cap, so it runs with the wait disabled.
+      final cubit = await atReview(declineCooldown: Duration.zero);
+
+      await cubit.pay();
+      // From here on, nothing already committed may be touched again.
+      clearInteractions(member);
+      clearInteractions(memberships);
+      final keys = <String>[cubit.state.idempotencyKey!];
+      for (var i = 2; i <= 7; i++) {
+        expect(cubit.state.step, KioskSignupStep.declined);
+        await _retryAndPay(cubit, 'pm_$i');
+        keys.add(cubit.state.idempotencyKey!);
+      }
+
+      // Well past the old three-strike ending: still retryable, never a stop.
+      expect(cubit.state.step, KioskSignupStep.declined);
+      expect(cubit.state.declineCount, 7);
+      expect(cubit.state.stopReason, isNull);
+      // Every retry is a genuinely new attempt.
+      expect(keys.toSet().length, keys.length);
+      // Nothing already committed is ever re-executed.
+      verifyNever(() => member.createMember(any()));
+      verifyNever(
+        () => memberships.recordWaiverSignature(
+          waiverId: any(named: 'waiverId'),
+          gymId: any(named: 'gymId'),
+          memberId: any(named: 'memberId'),
+          waiverVersionId: any(named: 'waiverVersionId'),
+          signerName: any(named: 'signerName'),
+        ),
+      );
+      // The flow count is NOT released on `declined` — the member is standing
+      // right there and is not finished.
+      verifyNever(() => session.endFlow());
+      await cubit.close();
+    });
+
+    test('a run of declines engages the 30s cooldown, and it gates PAY',
         () async {
       when(
         () => member.startMemberships(
@@ -420,18 +472,83 @@ void main() {
       final cubit = await atReview();
 
       await cubit.pay();
-      expect(cubit.state.step, KioskSignupStep.declined);
+      expect(cubit.state.retryCooldown, 0);
       await _retryAndPay(cubit, 'pm_2');
-      expect(cubit.state.step, KioskSignupStep.declined);
-      expect(cubit.state.declineCount, 2);
+      expect(cubit.state.retryCooldown, 0);
       await _retryAndPay(cubit, 'pm_3');
 
-      // The third refusal removes "Try another card": the screen IS the
-      // front-desk stop now.
-      expect(cubit.state.declineCount, kKioskSignupMaxCardAttempts);
-      expect(cubit.state.step, KioskSignupStep.stop);
-      expect(cubit.state.stopReason, KioskSignupStopReason.cardDeclined);
-      verify(() => session.endFlow()).called(1);
+      // The third consecutive decline starts the wait.
+      expect(
+        cubit.state.retryCooldown,
+        kKioskSignupDeclineCooldown.inSeconds,
+      );
+      expect(cubit.state.step, KioskSignupStep.declined);
+      // Walking back to the card step and returning does NOT clear it: the
+      // countdown lives on the cubit, not on the widget.
+      cubit.retryCard();
+      cubit.submitCard(paymentMethodId: 'pm_4', brand: 'visa', last4: '4242');
+      await _settle();
+      expect(cubit.state.retryCooldown, greaterThan(0));
+
+      // Three attempts have left the device; Pay is inert while the wait
+      // runs, so a fourth does not.
+      await cubit.pay();
+      verify(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).called(3);
+      expect(cubit.state.step, KioskSignupStep.review);
+      await cubit.close();
+    });
+
+    test('the cooldown elapses on its own and Pay comes back', () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      final cubit = await atReview(
+        declineCooldown: const Duration(seconds: 1),
+      );
+      await cubit.pay();
+      await _retryAndPay(cubit, 'pm_2');
+      await _retryAndPay(cubit, 'pm_3');
+      expect(cubit.state.retryCooldown, 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      expect(cubit.state.retryCooldown, 0);
+
+      await _retryAndPay(cubit, 'pm_4');
+      expect(cubit.state.step, KioskSignupStep.declined);
+      expect(cubit.state.declineCount, 4);
+      await cubit.close();
+    });
+
+    test('a successful charge resets the consecutive-decline run', () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      final cubit = await atReview();
+      await cubit.pay();
+      expect(cubit.state.declineCount, 1);
+
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse());
+      await _retryAndPay(cubit, 'pm_2');
+
+      expect(cubit.state.step, KioskSignupStep.welcome);
+      expect(cubit.state.declineCount, 0);
+      expect(cubit.state.retryCooldown, 0);
       await cubit.close();
     });
 

@@ -6,6 +6,7 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_labels.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_proration_note.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
@@ -53,6 +54,8 @@ class KioskMoneyPanel extends StatelessWidget {
             style: DesignConstants.kioskDisplay,
           ),
           _Lines(state: state),
+          if (state.chargedProrated)
+            KioskProrationNote(until: state.prorationUntil),
           if (state.chargedTwiceToday) const _TwoChargesNote(),
           KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
           Text(

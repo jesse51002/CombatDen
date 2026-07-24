@@ -13,6 +13,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
 /// E3 — the authorized-payer agreement, one per payee.
@@ -107,6 +108,14 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
           step: KioskSignupStep.waivers,
           title: 'You\'re paying for ${state.activePerson.firstName}',
           subtitle: _subtitle(state),
+          // The same pinned element the liability step wears, naming the
+          // payee this agreement is about — this run is always per person, so
+          // it is never omitted here.
+          identity: KioskWhoFor(
+            eyebrow: 'PAYING FOR',
+            name: _name(state.activePerson),
+          ),
+          fillBody: true,
           foot: KioskFlowFoot(
             primaryLabel: 'Sign and continue',
             onPrimary: _canSign(state)
@@ -182,7 +191,6 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.payerAuthStale)
@@ -195,35 +203,39 @@ class _Body extends StatelessWidget {
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: DesignConstants.spacingLarge,
-          children: [
-            Expanded(
-              flex: 3,
-              child: KioskWaiverDocPanel(
-                title: state.payerAuthWaiver?.name ??
-                    'Authorized Payer Agreement',
-                controller: controller,
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingLarge,
+            children: [
+              Expanded(
+                flex: 3,
+                child: KioskWaiverDocPanel(
+                  title: state.payerAuthWaiver?.name ??
+                      'Authorized Payer Agreement',
+                  controller: controller,
+                ),
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: KioskSignPanel(
-                memberName: payerName,
-                eyebrow: 'YOU ARE SIGNING',
-                bannerNote: 'Authorising yourself to pay for $payeeName.',
-                consentLabel: 'I have read this and agree to pay for '
-                    '$payeeName. Typing my name counts as my signature.',
-                consentNote: '$payeeName still signs their own liability '
-                    'waiver — that\'s the next step.',
-                signerName: signerName,
-                onSignerNameChanged: onSignerNameChanged,
-                consent: consent,
-                onConsentChanged: onConsentChanged,
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  child: KioskSignPanel(
+                    memberName: payerName,
+                    eyebrow: 'YOU ARE SIGNING',
+                    bannerNote: 'Authorising yourself to pay for $payeeName.',
+                    consentLabel: 'I have read this and agree to pay for '
+                        '$payeeName. Typing my name counts as my signature.',
+                    consentNote: '$payeeName still signs their own liability '
+                        'waiver — that\'s the next step.',
+                    signerName: signerName,
+                    onSignerNameChanged: onSignerNameChanged,
+                    consent: consent,
+                    onConsentChanged: onConsentChanged,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

@@ -13,6 +13,9 @@ from stripe.params._invoice_list_params import InvoiceListParams
 from stripe.params._payment_method_attach_params import (
     PaymentMethodAttachParams,
 )
+from stripe.params._payment_method_list_params import (
+    PaymentMethodListParams,
+)
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_enums import StripeResourceType
@@ -193,6 +196,44 @@ class PaymentsStripeMembersService:
                 idempotency_key=idempotency_key,
             ),
         )
+
+    async def has_attached_payment_method(
+        self,
+        stripe_customer_id: str,
+        stripe_account_id: str,
+    ) -> bool:
+        """Whether the customer has ANY payment method attached.
+
+        Lists the customer's attached payment methods (every type — no
+        ``type`` filter, so a non-card method still counts) and reports
+        whether that list is non-empty. ``limit=1`` because only
+        existence is being asked; one attached method is enough.
+
+        This is the LIVE Stripe answer, not a cached CRM column: a card
+        attached out of band (the Stripe Dashboard, another surface)
+        counts, and a stale local column can never make an attached
+        method read as "none". The caller is expected to treat a raised
+        error as unknown — never as ``False``.
+
+        Args:
+            stripe_customer_id: The customer to inspect.
+            stripe_account_id: The gym's Stripe Connect account.
+
+        Returns:
+            True when at least one payment method is attached.
+
+        Raises:
+            stripe.StripeError: Any Stripe failure propagates — an
+                unreachable/erroring Stripe must never read as "no card".
+        """
+        result = await self._stripe.v1.payment_methods.list_async(
+            params=PaymentMethodListParams(
+                customer=stripe_customer_id,
+                limit=1,
+            ),
+            options=self._client.connect_opts_readonly(stripe_account_id),
+        )
+        return bool(result.data)
 
     async def detach_payment_method(
         self,

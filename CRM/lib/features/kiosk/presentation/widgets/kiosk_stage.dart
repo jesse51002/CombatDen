@@ -10,9 +10,11 @@ import 'package:crm/core/constants/design_constants.dart';
 ///
 /// A [footer] is PINNED to the bottom of the fold while the content scrolls
 /// beneath it. That is the whole point for the escape hatch: a way out that a
-/// tall class grid can push below the fold is not a way out. Without a
-/// footer the stage keeps its plain scroll-the-whole-thing behaviour, so no
-/// existing screen changes.
+/// tall class grid can push below the fold is not a way out. A [header] is the
+/// mirror of it, pinned to the TOP for the same reason: whose plan / whose
+/// waiver / whose card this is must not scroll away mid-step. Without either
+/// the stage keeps its plain scroll-the-whole-thing behaviour, so no existing
+/// screen changes.
 class KioskStage extends StatelessWidget {
   final Widget child;
   final bool center;
@@ -22,17 +24,42 @@ class KioskStage extends StatelessWidget {
   /// nothing to center against).
   final Widget? footer;
 
+  /// Pinned to the TOP of the stage, inside the same content rail — the step
+  /// rail, the screen head, and the "who is this for" strip.
+  final Widget? header;
+
+  /// Lay [child] out at the height that is LEFT rather than scrolling it.
+  ///
+  /// A step that opts in gets a BOUNDED box, so it may use `Expanded`
+  /// internally and let its own panels scroll — which is how the waiver's
+  /// reading box fills the fold instead of sitting at a borrowed height. The
+  /// step is then responsible for its own overflow, so only steps that
+  /// genuinely scroll something inside themselves should ask for it.
+  final bool fillBody;
+
   const KioskStage({
     super.key,
     required this.child,
     this.center = false,
     this.footer,
+    this.header,
+    this.fillBody = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final foot = footer;
-    if (foot != null) return _Railed(child: _Pinned(footer: foot, body: child));
+    final head = header;
+    if (foot != null || head != null) {
+      return _Railed(
+        child: _Pinned(
+          header: head,
+          footer: foot,
+          body: child,
+          fill: fillBody,
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -76,21 +103,46 @@ class _Railed extends StatelessWidget {
   }
 }
 
-/// A scrolling body under a footer held on the fold.
+/// The body, between whichever bands are held on the fold.
+///
+/// The two gaps are deliberately different sizes: the header and the content
+/// it heads are a title/content pair and take the section gap, while the
+/// footer rides the tighter one it already carries its own hairline above.
 class _Pinned extends StatelessWidget {
   final Widget body;
-  final Widget footer;
+  final Widget? header;
+  final Widget? footer;
+  final bool fill;
 
-  const _Pinned({required this.body, required this.footer});
+  const _Pinned({
+    required this.body,
+    this.header,
+    this.footer,
+    this.fill = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final head = header;
+    final foot = footer;
+    final content = Expanded(
+      child: fill ? body : SingleChildScrollView(child: body),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Expanded(child: SingleChildScrollView(child: body)),
-        footer,
+        if (head == null)
+          content
+        else
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingBig,
+              children: [head, content],
+            ),
+          ),
+        ?foot,
       ],
     );
   }

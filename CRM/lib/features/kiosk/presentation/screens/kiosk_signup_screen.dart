@@ -12,6 +12,8 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_abandon_con
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_declined_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_match_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_paying_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
@@ -115,6 +117,8 @@ class _StepSwitcher extends StatelessWidget {
           KioskSignupStep.stop => const KioskSignupStopScreen(),
           KioskSignupStep.people => const KioskPeopleStep(),
           KioskSignupStep.match => const KioskMatchStep(),
+          KioskSignupStep.payerMatch => const KioskPayerMatchStep(),
+          KioskSignupStep.payerPick => const KioskPayerPickStep(),
           KioskSignupStep.plans => const KioskPlanPickStep(),
           KioskSignupStep.waivers => state.payerAuthPending
               ? const KioskPayerWaiverStep()

@@ -56,7 +56,10 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
             primaryLabel:
                 count == 1 ? 'It\'s just me' : 'Continue with $count people',
             onPrimary: canGo ? cubit.continueToPlans : null,
-            onBack: busy ? null : cubit.back,
+            // An ADOPTED existing payer has nothing behind this screen: the
+            // kiosk never typed their details and must not offer a route back
+            // into a form that would PUT over the gym's own record.
+            onBack: busy || state.payer.wasExisting ? null : cubit.back,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,6 +85,7 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
                     _AddRow(onAdd: () => setState(() => _adderOpen = true)),
                 ],
               ),
+              if (state.canSwitchPayer) const _PayerSwitchRow(),
               if (!state.canLeavePeople) const _EmptyCartNote(),
             ],
           ),
@@ -116,6 +120,28 @@ class _AddRow extends StatelessWidget {
           onPressed: cubit.openMatchSearch,
         ),
       ],
+    );
+  }
+}
+
+/// Hand the paying over to somebody who already trains here — a partner, a
+/// parent — without giving up your own seat on the roster.
+///
+/// It sits BELOW the panel and outside the add row on purpose: adding a
+/// trainee and changing who pays are different acts, and a member reaching for
+/// one must never land on the other. It withdraws the moment anything commits
+/// (see [KioskSignupState.canSwitchPayer]) rather than becoming a control that
+/// would silently leave the roster authorized to the wrong person.
+class _PayerSwitchRow extends StatelessWidget {
+  const _PayerSwitchRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: KioskGhostButton(
+        text: 'Someone else is paying',
+        onPressed: context.read<KioskSignupCubit>().openPayerPick,
+      ),
     );
   }
 }

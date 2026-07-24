@@ -35,9 +35,15 @@ class KioskReviewStep extends StatelessWidget {
           prev.previewLoading != cur.previewLoading ||
           prev.signedWaivers != cur.signedWaivers ||
           prev.persons != cur.persons ||
+          prev.retryCooldown != cur.retryCooldown ||
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
+        // The velocity cooldown after a run of declines. It reads as a calm
+        // wait on the button itself rather than an error somewhere else: the
+        // member did nothing wrong, they just cannot fire attempts back to
+        // back on an unattended device.
+        final waiting = state.retryCooldown > 0;
         return KioskSignupStepScaffold(
           step: KioskSignupStep.review,
           title: 'Check this over',
@@ -46,16 +52,18 @@ class KioskReviewStep extends StatelessWidget {
                   'Pay.'
               : 'Nothing is charged until you tap Pay.',
           foot: KioskFlowFoot(
-            primaryLabel: ready
-                ? 'Pay ${formatMinorUnits(
-                    state.dueTodayMinorUnits,
-                    currency: state.currency,
-                  )}'
-                : 'Pay',
+            primaryLabel: waiting
+                ? 'You can try again in ${state.retryCooldown}s'
+                : ready
+                    ? 'Pay ${formatMinorUnits(
+                        state.dueTodayMinorUnits,
+                        currency: state.currency,
+                      )}'
+                    : 'Pay',
             // The label carries the amount, so the button is inert until the
             // amount is real — a member must never be able to tap "Pay" before
             // the screen can tell them what for.
-            onPrimary: ready ? cubit.pay : null,
+            onPrimary: ready && !waiting ? cubit.pay : null,
             onBack: cubit.back,
             confirmAbandon: true,
           ),

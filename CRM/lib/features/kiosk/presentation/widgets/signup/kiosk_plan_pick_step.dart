@@ -7,6 +7,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/fill_grid.dart';
 
@@ -34,6 +35,7 @@ class KioskPlanPickStep extends StatelessWidget {
       buildWhen: (prev, cur) =>
           prev.plans != cur.plans ||
           prev.plansLoading != cur.plansLoading ||
+          prev.persons != cur.persons ||
           prev.activePersonIndex != cur.activePersonIndex ||
           prev.activePerson.selectedPlanId != cur.activePerson.selectedPlanId,
       builder: (context, state) {
@@ -42,6 +44,17 @@ class KioskPlanPickStep extends StatelessWidget {
           step: KioskSignupStep.plans,
           title: _title(state),
           subtitle: _subtitle(state),
+          // Pinned, so it cannot scroll away behind the grid. In a group it
+          // is the whole point of the screen: a parent picking three
+          // memberships in a row must never buy the wrong one for the wrong
+          // child. Solo there is only one person, and naming them would be an
+          // odd thing to tell someone about themselves.
+          identity: state.isGroup
+              ? KioskWhoFor(
+                  eyebrow: 'PICKING FOR',
+                  name: _fullName(state),
+                )
+              : null,
           foot: KioskFlowFoot(
             onPrimary: picked == null ? null : cubit.continueFromPlans,
             onBack: cubit.back,
@@ -54,15 +67,26 @@ class KioskPlanPickStep extends StatelessWidget {
     );
   }
 
-  /// The step is walked once per TRAINING person, so it names whose choice is
-  /// on screen — a parent picking three memberships in a row must never be
-  /// able to buy the wrong one for the wrong child.
+  /// The step is walked once per TRAINING person, so in a GROUP it names whose
+  /// choice is on screen — **every turn, the payer's included.** An unnamed
+  /// screen in the middle of a run of named ones is ambiguous exactly when it
+  /// matters most, and the ambiguity is paid for with the wrong membership on
+  /// the wrong person.
+  ///
+  /// Solo keeps the warm second person: there is only one person it could
+  /// mean, and telling somebody their own name is a strange way to address
+  /// them.
   String _title(KioskSignupState state) {
-    if (state.activePersonIndex == 0) return 'Pick your membership';
+    if (!state.isGroup) return 'Pick your membership';
     final first = state.activePerson.firstName.trim();
     return first.isEmpty
         ? 'Pick their membership'
         : 'Pick $first\'s membership';
+  }
+
+  String _fullName(KioskSignupState state) {
+    final person = state.activePerson;
+    return '${person.firstName} ${person.lastName}'.trim();
   }
 
   String _subtitle(KioskSignupState state) {
