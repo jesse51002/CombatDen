@@ -216,6 +216,7 @@ async def checkin(
             "model": CheckinErrorResponse,
             "description": "Class not found (``code`` = class_not_found)",
         },
+        500: {"description": "Failed to remove the check-in"},
     },
 )
 @inject
