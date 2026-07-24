@@ -487,9 +487,12 @@ else or carry on paying themselves.
 `KioskSignupState.canSwitchPayer` is false once any payee is `linked` or
 anything is signed — there is no unlink call, so a later swap would leave the
 roster authorized to somebody who is no longer paying and assemble a start
-request against a payer the backend never authorized. It also refuses a
-**second** swap, which would strand the first adopted payer on the roster as a
-payee they never agreed to be.
+request against a payer the backend never authorized. **Until then, switching
+is freely REPEATABLE** — changing who pays is not capped at one swap, and the
+demoted former payer (an adopted `wasExisting` outsider included) simply becomes
+an ordinary unlinked roster payee, keeping their membership/training choice and
+removable via the trash. Nothing is stranded, so nothing is refused on "who was
+paying before"; a link or a signature is the ONE thing that pins the payer.
 
 #### Everyone on the roster chooses, and at least one must say yes
 
@@ -1515,6 +1518,17 @@ backstop for a declined screen nobody is standing at.
   and are keyed on the MEMBER (`signedWaiverIdsFor(memberId)`); walking Back
   skips what that person already signed and nothing un-signs it. Back out of
   the card lands on the PLAN, not the waiver behind it, for exactly that reason.
+- **Every new waiver body CLEARS the signature inputs — a legal invariant.** The
+  signer-name field and the consent tick are wiped the moment a new waiver body
+  loads (`KioskWaiverStep` / `KioskPayerWaiverStep`'s `BlocConsumer.listener`, on
+  every `waiver` / `payerAuthWaiver` change; every load path emits `null` first,
+  so it fires on each new document). A signature must be a fresh, deliberate act:
+  a name carried over from a previous waiver would let someone "sign" a document
+  they never actually typed their name on — the SAME person's next waiver, a
+  republished version, or (worst, on a shared iPad) a DIFFERENT person's. It
+  clears **every time, no exceptions** — the earlier "the typed name persists for
+  the same person" behaviour is overruled (founder ruling). Guarded by
+  `test/features/kiosk/presentation/kiosk_signup_waiver_clear_test.dart`.
 
 ### 11.5 The GROUP's own money rules
 
@@ -1576,17 +1590,18 @@ backstop for a declined screen nobody is standing at.
   defaults to getting a membership like everybody else. `everyPayeeLinked` then
   covers the demoted signer, so the new payer must authorize them before a
   request can assemble.
-- **`canSwitchPayer` refuses a swap that would strand somebody who is not in
-  the room.** It goes false once anything is `linked` or signed (there is no
-  unlink call, so a later swap would leave the roster authorized to a payer who
-  no longer pays), and once the payer `wasExisting` — swapping away from an
-  ADOPTED outsider would leave them on the roster as a payee they never agreed
-  to be. Re-arranging among people who are actually present stays allowed,
-  which is the property that distinction buys. `canSwitchPayer` is
-  `hasPayer && canAssignPayer`; `canAssignPayer` is the shared seat gate (nothing
-  linked, nothing signed, and not moving away from an adopted outsider) that also
-  permits CHOOSING the first payer in the no-payer state, where there is no
-  outsider to strand.
+- **`canSwitchPayer` closes only when a link or a signature pins the payer.**
+  It goes false once anything is `linked` or signed (there is no unlink call, so
+  a later swap would leave the roster authorized to a payer who no longer pays).
+  Before that, switching is **freely repeatable** — the payer can be reassigned
+  as many times as needed, because seating a payer writes nothing a later change
+  could strand: whoever it displaces is left as an ordinary unlinked roster
+  payee (an adopted `wasExisting` outsider included — demotion doesn't remove
+  them, it just makes them a payee like any other). `canSwitchPayer` is
+  `hasPayer && canAssignPayer`; `canAssignPayer` is the shared seat gate
+  (nothing linked, nothing signed) that also permits CHOOSING the first payer in
+  the no-payer state. `bloc/kiosk_signup_payer_test.dart` holds the "repeated
+  swaps stay open until a payee is linked" guard.
 - **The roster row's trailing controls are EDIT and a TRASH that asks.** What
   is or is not on file is nobody's business at a glance on a shared iPad, and
   "None yet" beside a name only ever read as a nag; Edit reuses

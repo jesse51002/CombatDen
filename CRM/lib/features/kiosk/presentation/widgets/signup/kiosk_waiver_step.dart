@@ -99,13 +99,22 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
       listenWhen: (prev, cur) => prev.waiver != cur.waiver,
       listener: (context, state) {
         setState(() {
+          // **Every time a new waiver body lands, BOTH the typed legal name and
+          // the consent tick are cleared — no exceptions.** A signature is a
+          // fresh, deliberate act, and a name (or tick) carried over would let
+          // someone "sign" a document they never actually typed their name on:
+          // the SAME person's next waiver, a republished version, or — worst, on
+          // a shared iPad — the NEXT person's. Cleared BEFORE the body is
+          // rebuilt so the document re-renders with the blank signer
+          // placeholder rather than the previous name. Legal invariant, guarded
+          // by kiosk_signup_waiver_clear_test.dart. (Every load path emits
+          // `waiver: null` before the new value, so this listener fires on each
+          // new body.)
+          if (state.waiver != null) {
+            _signerName.clear();
+            _consent = false;
+          }
           _rebuildBody(state);
-          // **Every time a body lands, the tick is cleared.** Consent is given
-          // to a DOCUMENT, so it can never carry from the waiver just signed
-          // to the next one in the queue, nor survive a republished version.
-          // The typed legal name does carry — it is the same person's name,
-          // and re-typing it per document is friction with no legal meaning.
-          if (state.waiver != null) _consent = false;
         });
       },
       builder: (context, state) {

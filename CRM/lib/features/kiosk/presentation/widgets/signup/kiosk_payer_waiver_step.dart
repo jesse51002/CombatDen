@@ -95,11 +95,18 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
       listenWhen: (prev, cur) => prev.payerAuthWaiver != cur.payerAuthWaiver,
       listener: (context, state) {
         setState(() {
+          // Every time a new agreement body lands, BOTH the typed legal name
+          // and the consent tick are cleared — no exceptions. A signature must
+          // be a fresh, deliberate act, so nothing carries from the payee just
+          // authorized to the next one, nor survives a republished version.
+          // Cleared BEFORE the body is rebuilt so the document re-renders with
+          // the blank signer placeholder. Legal invariant, guarded by
+          // kiosk_signup_waiver_clear_test.dart.
+          if (state.payerAuthWaiver != null) {
+            _signerName.clear();
+            _consent = false;
+          }
           _rebuildBody(state);
-          // Consent is given to a DOCUMENT: it can never carry from the payee
-          // just authorized to the next one, nor survive a republished
-          // version. The typed legal name does carry — it is the same payer.
-          if (state.payerAuthWaiver != null) _consent = false;
         });
       },
       builder: (context, state) {

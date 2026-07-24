@@ -466,15 +466,60 @@ void main() {
       await cubit.close();
     });
 
-    test('a SECOND swap is refused — the first adopted payer is not strandable',
+    test('a SECOND swap is ALLOWED while nothing is linked or signed',
         () async {
       final cubit = await submitPayer(build());
       cubit.openPayerPick();
       await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
 
+      // The first swap adopted an outsider (wasExisting). Changing who pays is
+      // freely repeatable while nothing has committed, so the swap is still on
+      // offer — the demoted former payer is just an unlinked roster payee, and
+      // nobody is stranded.
+      expect(cubit.state.payer.memberId, 'mem-dad');
+      expect(cubit.state.payer.wasExisting, isTrue);
+      expect(cubit.state.canSwitchPayer, isTrue);
+      cubit.openPayerPick();
+      expect(cubit.state.step, KioskSignupStep.payerPick);
+      await cubit.close();
+    });
+
+    test('repeated roster swaps stay open until a payee is linked', () async {
+      final cubit = await submitPayer(build()); // Marcus, mem-1
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.skipPersonDetails(); // Ella, mem-2, a payee
+
+      // Swap 1: promote Ella to payer; Marcus becomes a payee.
+      cubit.openPayerPick();
+      await cubit.pickPayerFromRoster(1);
+      expect(cubit.state.payer.memberId, 'mem-2');
+      expect(cubit.state.canSwitchPayer, isTrue);
+
+      // Swap 2: promote Marcus back. Still free — nothing is linked or signed.
+      cubit.openPayerPick();
+      await cubit.pickPayerFromRoster(1);
+      expect(cubit.state.payer.memberId, 'mem-1');
+      expect(cubit.state.canSwitchPayer, isTrue);
+
+      // Authorize the payee — a link pins the payer, and ONLY then does the
+      // swap offer close.
+      cubit.continueToPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      await _settle();
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+
+      expect(cubit.state.persons.any((p) => p.linked), isTrue);
       expect(cubit.state.canSwitchPayer, isFalse);
       cubit.openPayerPick();
-      expect(cubit.state.step, KioskSignupStep.people);
+      expect(cubit.state.step, isNot(KioskSignupStep.payerPick));
       await cubit.close();
     });
   });

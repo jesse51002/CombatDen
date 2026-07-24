@@ -761,24 +761,27 @@ class KioskSignupState extends Equatable {
   /// backend never authorized. The offer therefore disappears rather than
   /// becoming a control that quietly corrupts the cart.
   ///
-  /// It also refuses a SECOND swap: the previous adopted payer would be left
-  /// stranded on the roster as a payee they never agreed to be.
+  /// While nothing has committed, changing who pays is **freely repeatable** —
+  /// there is no cap on the number of swaps. The demoted former payer (an
+  /// adopted outsider included) simply becomes a normal roster payee who keeps
+  /// their membership/training choice and is removable via the trash while
+  /// unlinked, so no swap strands anyone. A signature or a link is the ONE
+  /// thing that pins the payer.
   bool get canSwitchPayer => hasPayer && canAssignPayer;
 
   /// Whether a payer may be seated right now — either switching an existing one
   /// ([canSwitchPayer]) or choosing a first one after the payer was deleted.
   ///
-  /// Both require that nothing has committed the payer: no payee linked, no
-  /// signature recorded (there is no unlink call, and a signature pins the
-  /// payer server-side, so a later change would corrupt the cart). Switching
-  /// additionally cannot move away from an ADOPTED outsider, who would be
-  /// stranded on the roster as a payee they never agreed to be — but there is
-  /// no such person to strand when there is no payer, so choosing the first
-  /// one stays allowed then.
+  /// The single gate is that nothing has committed the payer: no payee linked,
+  /// no signature recorded. There is no unlink call, and a signature pins the
+  /// payer server-side, so a change after either would corrupt the cart. Before
+  /// either, seating a payer writes nothing a later change could strand — the
+  /// person it displaces is left as an ordinary unlinked roster payee — so the
+  /// seat stays freely re-assignable, whether or not a payer already exists and
+  /// whether or not that payer was an adopted outsider.
   bool get canAssignPayer =>
       signedWaivers.isEmpty &&
-      !persons.any((p) => p.linked) &&
-      !(hasPayer && payer.wasExisting);
+      !persons.any((p) => p.linked);
 
   /// The roster indexes the payer picker offers, in roster order.
   ///
