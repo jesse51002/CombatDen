@@ -47,24 +47,22 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
     super.dispose();
   }
 
-  /// Return the body to the top. A pick animates (the member watches the
-  /// confirmation slide up into view); a new person JUMPS (a fresh turn should
-  /// simply start at the top, not appear to scroll).
-  void _toTop({required bool animate}) {
-    // Post-frame, so the scroll runs after the rebuild that added the banner /
-    // swapped the person — a scroll issued against the old extent would be
-    // clamped short.
+  /// Return the body to the top **when the person changes** — a group walks
+  /// person-by-person through this one step, and each new turn should START at
+  /// the top rather than inherit the previous person's scroll position. It
+  /// JUMPS rather than animating: nothing moved for the member, the screen is
+  /// simply new.
+  ///
+  /// **A pick deliberately does NOT scroll** (founder). Returning to the top on
+  /// selection yanks the grid out from under someone who is still comparing
+  /// cards — the tap they just made is confirmed in place, so there is nothing
+  /// up there they need to be shown.
+  void _toTop() {
+    // Post-frame, so the scroll runs after the rebuild that swapped the
+    // person — a scroll issued against the old extent would be clamped short.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
-      if (animate) {
-        _scroll.animateTo(
-          0,
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOutQuart,
-        );
-      } else {
-        _scroll.jumpTo(0);
-      }
+      _scroll.jumpTo(0);
     });
   }
 
@@ -76,7 +74,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
       // starts at the top.
       listenWhen: (prev, cur) =>
           prev.activePersonIndex != cur.activePersonIndex,
-      listener: (_, _) => _toTop(animate: false),
+      listener: (_, _) => _toTop(),
       child: BlocBuilder<KioskSignupCubit, KioskSignupState>(
         buildWhen: (prev, cur) =>
             prev.plans != cur.plans ||
@@ -113,15 +111,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
                     state: state,
                     picked: picked,
                     pickedPlanName: pickedPlan?.planName,
-                    onPick: (planId) {
-                      cubit.selectPlan(planId);
-                      // Only a pick that LANDED gets the return-to-top: a
-                      // blocked trial opens its explanation instead of
-                      // selecting, and there is no confirmation to scroll to.
-                      if (cubit.state.activePerson.selectedPlanId == planId) {
-                        _toTop(animate: true);
-                      }
-                    },
+                    onPick: cubit.selectPlan,
                   ),
           );
         },
