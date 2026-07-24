@@ -683,6 +683,163 @@ body{
 .name-row .em{ font-family:var(--mono); font-size:13.5px; font-weight:500; color:var(--ink-3); }
 
 /* ============================================================
+   EXTRA DETAILS — one composition, two placements, always shown.
+
+   FOUNDER-LOCKED: this is a REAL STEP, not a sheet behind a button.
+   "It should just be a next button to input it and then if they want
+   to skip it they can, but it should always show or no one will do
+   it." Anything behind an opt-in affordance gets close to zero
+   completion, so there is NO "Add details" button anywhere: the
+   member arrives here by pressing Continue from step 1, exactly as
+   they arrive at Plan or Card. The design consequence that follows
+   from that, and shapes everything below: the step must look like a
+   normal part of signing up, so it is composed from the SAME parts as
+   step 1 (.form-panel, .field-grid, .field-box, .flow-rail,
+   .flow-foot) and it never apologises for itself in copy.
+
+   THE RAIL GREW, and it had to. The rail is the flow's honest length —
+   a member must see the true number of screens up front, not discover
+   one. Solo 5 -> 6 steps (You · Details · Plan · Waiver · Card · Pay);
+   group 6 -> 7 (You · Details · People · Plans · Waivers · Card · Pay).
+   Every rail in the file is regenerated for the new count; nothing
+   else on the approved screens moved.
+
+   THE GROUP VOLUME PROBLEM, and how it is solved. A family of three
+   must not become nine screens. Two rules do it:
+   ·  A payee's details are NOT a rail step. They are the second
+      screen of "add a person", inside the existing People step:
+      adder (name / email) -> Continue -> that person's details ->
+      Continue or Skip -> back to the roster. The rail stays at 7 no
+      matter how many people are added, which is the only way the
+      flow's advertised length can stay true for a family of five.
+   ·  A payee's details screen is the SAME screen as the payer's, down
+      to the field order and the button row. The second time a payer
+      sees it they already know it, and know the skip is one tap.
+   What did NOT happen: the per-person details never revert to an
+   opt-in button. The roster chip below is a STATE READOUT of a step
+   already shown, not an invitation to opt in.
+
+   COMPOSED FROM, nothing new invented:
+     panel     .panel .form-panel   (step 1's own form panel)
+     fields    .field / .field-box  (the .search-field recipe) at the
+                                     CARD STEP's 64px height — the same
+                                     precedent for the same reason:
+                                     this is the other screen that
+                                     carries five rows of input.
+     grouping  hairline + .eyebrow  (the De-Card Rule: a group inside a
+                                     panel is a hairline, never a
+                                     nested card. Nested cards are
+                                     always wrong.)
+     roster    .det-chip from .pill geometry at .icon-btn's 40px
+     footer    .flow-foot's existing empty third column
+
+   MUTED TEXT IS ink-2, NEVER ink-3. DESIGN.md: "Muted words on a kiosk
+   surface use text2nd, never text3rd (3.05:1 on the ground, under the
+   4.5:1 AA floor and unreadable at 2m)." Several EXISTING rules in
+   this file (.foot-note, .field-hint, .roster-row .sub) are ink-3 and
+   fail that floor — pre-existing, reported, deliberately not restyled
+   here. Nothing NEW added below repeats it.
+
+   ── ABANDON CONTRACT (the master contract is the block on D5) ──
+   ·  Everything typed here is PART OF THE DRAFT. "Start over", the
+      5-minute idle expiry and the staff-exit lock clear address, date
+      of birth and all three emergency-contact values exactly as they
+      clear the name, email and card. Optional PII is still PII on a
+      shared lobby iPad, and after the card it is the most sensitive
+      text in the flow.
+   ·  The step does NOT suspend the 5-minute flow-idle clock. It is an
+      ordinary interactive step and the guard runs on it unchanged.
+   ·  It carries the SAME escape as every other step: one "Start over"
+      in the left gutter, no confirm (this step precedes the card, and
+      the most that is lost is a minute of typing). Skip is a
+      step-scoped verb and lives in the opposite gutter; the two are
+      never the same button and never adjacent.
+   ·  NOTHING IS WRITTEN HERE. On the payer (step 2) the values ride
+      out in step 1's existing create call — address /
+      emergency_contact_name / _phone / _email are already optional
+      fields of MemberCreateRequest — so an abandon before Plan writes
+      nothing at all. A payee's screen is the asymmetric case: that
+      person was created when they were added, so their Continue is a
+      PUT /api/v1/members/{member_id} and an abandon does NOT roll it
+      back. Same family as OQ-2; raised as an open question, not
+      solved here.
+
+   ── REUSE AT ADMIN DENSITY (CRM MemberCreateForm) ──
+   The CRM's add-member dialog already carries these exact fields
+   inline (CRM/lib/features/member_details/presentation/dialogs/
+   add_member/member_create_form.dart — phone + address on one row,
+   ec name + phone + email on the next). What ports is the STRUCTURE:
+   .detail-group's hairline-and-eyebrow grouping, the .field-grid, and
+   the same field order. What does NOT port is listed on the markup.
+   ============================================================ */
+
+/* --- FIELD GROUP · the module's only structural class ---
+   A group is a hairline and an eyebrow, never a nested card. The FIRST
+   group carries no eyebrow: the screen title already names it, and
+   only the change of subject to SOMEONE ELSE's details needs a label.
+   Nothing here is sized, so the same class holds at admin density —
+   only the .field-box height and the grid column count change. */
+.detail-group{ display:flex; flex-direction:column; gap:11px; }
+.detail-group + .detail-group{ margin-top:15px; padding-top:15px; border-top:1px solid var(--line-soft); }
+/* five rows of input on one step, so the fields run at the CARD step's
+   height rather than step 1's 78px — the precedent and the reason are
+   the card step's, verbatim. Still a 64px touch target, comfortably
+   above the 44pt minimum. */
+.detail-panel .field-box{ height:64px; }
+.detail-panel .field{ gap:7px; }
+
+/* --- SKIP · the third column of .flow-foot, empty until now ---
+   The middle pair is the flow's rhythm and must keep its exact shape
+   on every step, so the skip cannot join it. It takes the mirror
+   gutter instead: escape far left (leave the FLOW), skip far right
+   (skip this STEP), decisions in the middle. It is .btn-outline.soft —
+   quieter than the gradient primary by a full tier, per the founder's
+   "skipping is the quieter option", but never the .btn-ghost escape
+   tier, which this file reserves for leaving a flow and nothing else.
+   BUILD NOTE: Skip carries forward anything already typed, exactly as
+   Continue does. It is a permission label for the member who has typed
+   nothing, never a discard — a destructive control one gutter from the
+   primary is precisely the mis-tap this file spends the whole abandon
+   contract avoiding. */
+.flow-foot .foot-skip{ justify-self:end; }
+
+/* --- PER-PERSON STATE · one chip per roster row ---
+   NOT an entry point in the opt-in sense the founder ruled out: every
+   person's details screen has ALREADY been shown to the payer when
+   that person was added. This is the readout of what came of it, and
+   tapping it returns to the same screen to correct or complete.
+   ONE control, not a block: the row already carries an avatar, a name
+   pair, a toggle or a tag and a remove button, and a second stacked
+   element per person turns a four-person roster into a scroll.
+   Same slot on every row so a long roster stays scannable.
+   16px label = the kiosk LABEL tier (a row-level control, one step
+   below the flow's 17/19px decision buttons); ink-2 is 6.2:1, above
+   the AA floor. */
+.det-chip{
+  display:inline-flex; align-items:center; gap:8px; flex:0 0 auto;
+  height:40px; padding:0 16px; border-radius:var(--r-chip);
+  border:1px solid var(--line); background:var(--surface); box-shadow:var(--control-shadow);
+  font-family:var(--sans); font-size:16px; font-weight:600; letter-spacing:-0.01em;
+  color:var(--ink-2); cursor:pointer; white-space:nowrap;
+  transition: color .16s ease, border-color .16s ease;
+}
+.det-chip svg{ width:17px; height:17px; flex:0 0 auto; }
+.det-chip:hover{ color:var(--ink); border-color:rgba(20,22,30,0.18); }
+/* FILLED · the good hue, not sapphire. "On file" is a status, and this
+   file already says status in green (the signed-waiver row on D6). The
+   One Light Rule keeps sapphire for the single most important thing on
+   a screen — on the roster that is "Paying", never this.
+   Two labels ride this one style and the SCREEN is what differs:
+     "Details added"   — typed in THIS signup, so re-opening shows them
+     "Details on file" — an existing member matched at E2. Their screen
+                         opens BLANK and says so; a shared lobby iPad
+                         must never print another member's stored
+                         address, and a PUT of only the typed fields
+                         cannot wipe what it never showed. See OQ-11. */
+.det-chip.done{ background:var(--good-soft); border-color:rgba(29,125,62,0.26); color:var(--good); }
+.det-chip.done:hover{ color:var(--good); border-color:rgba(29,125,62,0.45); }
+
+/* ============================================================
    IDLE WARNING — a 1:1 port of the SHIPPED Flutter widget
    CRM/lib/features/kiosk/presentation/widgets/kiosk_idle_warning.dart:
    ground @ 92% veil, popup card at --r-card with --line + --card-shadow,
@@ -747,6 +904,8 @@ body{
   <div class="review-tabs">
     <span class="review-group">D · Solo</span>
     <button class="review-tab active" data-tab="details">Details</button>
+    <button class="review-tab" data-tab="optional">Extra details</button>
+    <button class="review-tab" data-tab="optionalfilled">Extra details · filled</button>
     <button class="review-tab" data-tab="dup">Duplicate stop</button>
     <button class="review-tab" data-tab="plan">Plan</button>
     <button class="review-tab" data-tab="waiver">Waiver</button>
@@ -758,6 +917,7 @@ body{
   <div class="review-tabs">
     <span class="review-group">E · Group</span>
     <button class="review-tab" data-tab="people">Add people</button>
+    <button class="review-tab" data-tab="peopledetails">Person details</button>
     <button class="review-tab" data-tab="match">Existing match</button>
     <button class="review-tab" data-tab="payerwaiver">Payer waiver</button>
     <button class="review-tab" data-tab="groupreview">Group review</button>
@@ -813,8 +973,14 @@ body{
 
          FIELDS come from MemberCreateRequest: first_name / last_name are
          the only two the schema requires; email is optional there but is
-         REQUIRED here (see OQ-1). phone is the one optional extra;
-         address / emergency contact / photo stay a front-desk job.
+         REQUIRED here (see OQ-1). phone is the one optional extra on
+         THIS step. Address, emergency contact and date of birth are the
+         next step (D1a) and ride out in this same create call; only a
+         member PHOTO stays a front-desk job.
+
+         THIS SCREEN IS UNCHANGED from the approved round-2 file apart
+         from its rail, which now counts six steps instead of five
+         because D1a joined the flow. Nothing else moved.
          ======================================================== -->
     <section class="screen step active" data-screen="details">
       <div class="stage">
@@ -822,13 +988,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step now"><span class="rail-n">1</span><span class="rail-label">You</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">2</span><span class="rail-label">Plan</span></div>
+          <div class="rail-step"><span class="rail-n">2</span><span class="rail-label">Details</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Waiver</span></div>
+          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plan</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -884,6 +1052,275 @@ body{
           <span class="foot-main">
             <button class="btn btn-primary">Continue</button>
           </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         D1a · EXTRA DETAILS  — STEP 2 OF 6, ALWAYS SHOWN
+
+         FOUNDER-LOCKED: a real step, reached by pressing Continue on
+         D1, never hidden behind an "add details" button. See the
+         EXTRA DETAILS CSS block for the reasoning and the abandon
+         contract.
+
+         BACKEND — this step calls nothing. The values sit in the draft
+         and ride out in D1's existing create call, one request:
+           POST /api/v1/members/
+             { gym_id, first_name, last_name, email, phone,
+               address, emergency_contact_name,
+               emergency_contact_phone, emergency_contact_email,
+               allow_duplicate: false }
+         All four are ALREADY optional fields of MemberCreateRequest
+         (FastApiBackend/src/members/schema/members_schema.py) and
+         already nullable columns on `members`
+         (Database/supabase/schemas/members.sql). No new endpoint, no
+         second call, no extra latency, and nothing written until the
+         member reaches D3 — so an abandon here writes nothing at all.
+
+         CREATING THE MEMBER MOVES TO THE END OF THIS STEP, not the end
+         of D1. That is the only sequencing change this step forces,
+         and it is an improvement: the D2 duplicate stop now fires
+         after two screens instead of one, but a single create call
+         carries every field the member gave. The alternative — create
+         on D1, then PUT here — costs a second round trip and leaves a
+         written-then-abandoned member with PII on it.
+
+         DATE OF BIRTH IS THE ONE EXCEPTION — MIGRATION REQUIRED.
+         There is no date_of_birth column on `members` and no field on
+         MemberCreateRequest / MemberUpdateRequest / MemberResponse.
+         Shipping this step needs, FOR THAT FIELD ONLY:
+           1 · Database/supabase/schemas/members.sql — add
+               `date_of_birth DATE` to the contact block (nullable,
+               service_role-written like its neighbours) + a migration.
+           2 · access_rules/members.sql — the same column-level grant
+               its neighbours carry.
+           3 · members_schema.py — date_of_birth on MemberCreateRequest,
+               MemberUpdateRequest and MemberResponse.
+           4 · insert_member.sql / update_member.sql / the member read
+               queries (member_details.sql, export_members.sql).
+           5 · CRM MemberCreateForm + EditMemberDialog, so the admin
+               dialog and the kiosk stay one form.
+         If the founder would rather not carry a migration this round,
+         DROP THE DOB FIELD and ship the other four unchanged — they
+         need no schema work at all. The layout is built so removing
+         that one field leaves a full-width Address and costs nothing
+         else.
+
+         THE CONTROL, honestly: this mock draws date of birth as a text
+         field because that is what a static mock can draw. The real
+         kiosk control should be the iPadOS date wheel, not free text —
+         typing eight digits behind a keyboard that eats half the
+         screen is the worst input in the flow, and free text needs
+         strict parsing and a sane year range anyway.
+         ======================================================== -->
+    <section class="screen step" data-screen="optional">
+      <div class="stage">
+
+        <div class="flow-rail">
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">2</span><span class="rail-label">Details</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plan</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+        </div>
+
+        <div class="flow-body">
+          <!-- COPY. It does not apologise and it does not sell. The
+               subtitle answers the only question a member actually has
+               in front of these fields — who sees this — and states the
+               optionality ONCE.
+               NO PER-FIELD "optional" TAG, and that is deliberate. Five
+               of them down one panel is the visual equivalent of
+               apologising five times, and a form that keeps telling you
+               it does not matter gets treated as a form that does not
+               matter. Step 1 marks Phone "optional" because there it is
+               the exception among required fields; here optional is the
+               rule, so it is said once at the top where it is read, and
+               the Skip button in the gutter says it again in the only
+               other place it counts. -->
+          <div class="screen-head" style="margin-bottom:14px">
+            <h1>A bit more about you</h1>
+            <div class="sub">Only Iron Den staff sees this<span class="dotsep"></span>all of it is optional</div>
+          </div>
+
+          <div class="panel form-panel detail-panel">
+            <div class="detail-group">
+              <div class="field-grid">
+                <div class="field">
+                  <!-- MIGRATION REQUIRED for this field only — see above.
+                       Every other field on this step already exists as a
+                       nullable column and a MemberCreateRequest field. -->
+                  <span class="field-label">Date of birth</span>
+                  <div class="field-box focus">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 9.6h17M8.5 3.2v3.6M15.5 3.2v3.6"/></svg>
+                    <span class="field-ph">MM / DD / YYYY</span><span class="caret"></span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Address</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.2-5.1-7.2-10.4a7.2 7.2 0 0 1 14.4 0C19.2 15.9 12 21 12 21Z"/><circle cx="12" cy="10.4" r="2.5"/></svg>
+                    <span class="field-ph">Street, city, ZIP</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-group">
+              <span class="eyebrow">Emergency contact</span>
+              <div class="field-grid">
+                <div class="field full">
+                  <span class="field-label">Name</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/><circle cx="12" cy="8" r="3.8"/></svg>
+                    <span class="field-ph">Who we should call</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Phone</span>
+                  <div class="field-box"><span class="field-ph">(555) 000-0000</span></div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Email</span>
+                  <div class="field-box"><span class="field-ph">dana@gmail.com</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER · three real columns for the first time in this file.
+             ESCAPE far left (leave the FLOW), decisions in the middle
+             exactly where they sit on every other step, SKIP far right
+             (skip this STEP). The two gutters are different verbs at
+             different scales and they are a full stage apart, so neither
+             can be mis-tapped for the other or for the primary.
+             NO CONFIRM on the escape here: this step precedes the card,
+             so the most an abandon destroys is a minute of typing — the
+             same reasoning as steps 1 and 3 in the D5 contract.
+             SKIP IS NOT A DISCARD (see the CSS block): it carries
+             forward whatever was typed, exactly as Continue does. It
+             exists to tell the member who typed nothing that they may
+             move on, which is the one thing a form full of empty
+             optional fields does not say by itself. -->
+        <div class="flow-foot">
+          <button class="btn btn-ghost foot-esc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Start over
+          </button>
+          <span class="foot-main">
+            <button class="btn btn-outline soft">Back</button>
+            <button class="btn btn-primary">Continue</button>
+          </span>
+          <button class="btn btn-outline soft foot-skip">Skip for now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         D1b · EXTRA DETAILS, FILLED  (the same step, completed)
+         The state the founder's rule is designed to produce: a member
+         who was never asked to opt in fills most of it in.
+         WHAT CHANGES BETWEEN THE TWO STATES: the field values, and
+         nothing else. Same panel height, same rail, same footer, same
+         button positions — a form that reflows under a member's hands
+         as they fill it is a form they lose their place in. The skip
+         stays put for the same reason, and stays harmless because it
+         carries typed values forward rather than dropping them.
+         PARTIAL IS THE NORMAL CASE, and it is drawn that way: address
+         and emergency email are still empty here. Nothing on the screen
+         marks an empty optional field as a problem — no red, no badge,
+         no count of what is missing. The only thing the member is told
+         about what they left blank is nothing at all.
+         WHERE "IT'S ON FILE" SHOWS UP LATER: in the group flow, on the
+         roster chip (see E1). In the solo flow the member goes straight
+         on to Plan and never sees this screen again, so there is
+         nothing to reflect it back to — the review screen listing what
+         is on file is an option, raised as OQ-13.
+         ======================================================== -->
+    <section class="screen step" data-screen="optionalfilled">
+      <div class="stage">
+
+        <div class="flow-rail">
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">2</span><span class="rail-label">Details</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plan</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+        </div>
+
+        <div class="flow-body">
+          <div class="screen-head" style="margin-bottom:14px">
+            <h1>A bit more about you</h1>
+            <div class="sub">Only Iron Den staff sees this<span class="dotsep"></span>all of it is optional</div>
+          </div>
+
+          <div class="panel form-panel detail-panel">
+            <div class="detail-group">
+              <div class="field-grid">
+                <div class="field">
+                  <span class="field-label">Date of birth</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 9.6h17M8.5 3.2v3.6M15.5 3.2v3.6"/></svg>
+                    <span class="field-val">04 / 12 / 1994</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Address</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.2-5.1-7.2-10.4a7.2 7.2 0 0 1 14.4 0C19.2 15.9 12 21 12 21Z"/><circle cx="12" cy="10.4" r="2.5"/></svg>
+                    <span class="field-ph">Street, city, ZIP</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-group">
+              <span class="eyebrow">Emergency contact</span>
+              <div class="field-grid">
+                <div class="field full">
+                  <span class="field-label">Name</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/><circle cx="12" cy="8" r="3.8"/></svg>
+                    <span class="field-val">Dana Bell</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Phone</span>
+                  <div class="field-box focus"><span class="field-val">(512) 555-0114</span><span class="caret"></span></div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Email</span>
+                  <div class="field-box"><span class="field-ph">dana@gmail.com</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-foot">
+          <button class="btn btn-ghost foot-esc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Start over
+          </button>
+          <span class="foot-main">
+            <button class="btn btn-outline soft">Back</button>
+            <button class="btn btn-primary">Continue</button>
+          </span>
+          <button class="btn btn-outline soft foot-skip">Skip for now</button>
         </div>
       </div>
     </section>
@@ -970,13 +1407,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">2</span><span class="rail-label">Plan</span></div>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">3</span><span class="rail-label">Plan</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Waiver</span></div>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -1077,13 +1516,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plan</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">3</span><span class="rail-label">Waiver</span></div>
+          <div class="rail-step now"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="justify-content:flex-start">
@@ -1191,13 +1632,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plan</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Waiver</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step now"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -1356,13 +1799,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plan</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Waiver</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Card</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step now"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="justify-content:flex-start">
@@ -1576,10 +2021,20 @@ body{
          Reached from D1 once the payer exists. The payer is ALWAYS the
          person who started this signup and always the card holder.
 
+         ADDING A PERSON IS TWO SCREENS NOW: the adder below (first /
+         last / email, "Next"), then that person's own always-shown
+         details screen (review tab "Person details", E1a). It is NOT a
+         rail step — the rail stays at seven however many people are
+         added. That is what keeps a family of three from reading as
+         eleven steps, and it is why the payee details screen lives
+         inside this step rather than beside it.
+
          BACKEND, per person added:
            new person      POST /api/v1/members/  (409 -> E2 match offer)
            existing person POST /api/v1/members/list
                              { filters:{ name:"..." } }  -> pick a row
+           then E1a's Continue writes that person's optional details
+                           PUT  /api/v1/members/{payee_id}
            then, for BOTH  PUT  /api/v1/members/{payee_id}/link
                              { payer_member_id, waiver_version_id,
                                signer_name, consent_acknowledged }
@@ -1602,15 +2057,17 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">2</span><span class="rail-label">People</span></div>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">3</span><span class="rail-label">People</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plans</span></div>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Plans</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waivers</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Waivers</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">7</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="justify-content:flex-start">
@@ -1619,6 +2076,26 @@ body{
             <div class="sub">Add the people you&rsquo;re paying for &mdash; family, a partner, a friend. You pay for everyone on one card.</div>
           </div>
 
+          <!-- PER-PERSON DETAILS · the STATE READOUT, not an entry point.
+               Every person on this roster has already been shown their
+               own details screen — the payer at step 2, each payee as
+               the second screen of adding them (review tab "Person
+               details"). So this chip is not the opt-in affordance the
+               founder ruled out; it is the answer to "did anything come
+               of it", and tapping it returns to that same screen to
+               finish or correct.
+               ONE chip per row, in the SAME slot on every row (first
+               control after the name column), so a four-person roster
+               stays scannable. A chip and not a block because the row
+               already carries an avatar, a name pair, a toggle or a tag
+               and a remove button.
+               THE TWO STATES: the good-hue check + "Details added" when
+               something is on file, a neutral hairline + "None yet" when
+               the screen was skipped. "None yet" is a fact, not a nag —
+               there is no red, no count of what is missing, and no
+               second ask. Marcus filled his in at step 2; Ella's was
+               skipped. An existing member matched at E2 reads "Details
+               on file" in the same good treatment (see E1a). -->
           <div class="panel roster-panel">
             <div class="roster">
               <div class="roster-row">
@@ -1627,6 +2104,10 @@ body{
                   <span class="nm">Marcus Bell</span>
                   <span class="sub">marcus.bell@gmail.com</span>
                 </span>
+                <button class="det-chip done">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  Details added
+                </button>
                 <label class="consent on" style="gap:11px">
                   <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
                   <span class="t" style="font-size:15px">Training too</span>
@@ -1640,6 +2121,10 @@ body{
                   <span class="nm">Ella Bell</span>
                   <span class="sub">Added just now</span>
                 </span>
+                <button class="det-chip">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 15.6 8.6M4 20.2l1-4 10.6-10.6a2.1 2.1 0 0 1 3 3L8 19.2l-4 1Z"/></svg>
+                  None yet
+                </button>
                 <span class="pill pill-quiet">New</span>
                 <button class="icon-btn" title="Remove">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -1668,11 +2153,18 @@ body{
                   <div class="field-box"><span class="field-ph">theo.bell@gmail.com</span></div>
                 </div>
               </div>
+              <!-- "Next", not "Add Theo": adding a person is now TWO
+                   screens, and this is the first. Next creates the
+                   person (409 -> E2 match, unchanged) and goes to their
+                   own details screen — review tab "Person details" —
+                   which is where the add actually finishes. The adder
+                   stays three fields on one row precisely because the
+                   optional five moved off it. -->
               <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:10px">
                 <span class="foot-note" style="text-align:left">Their email is only needed if they want the app. Receipts still come to you.</span>
                 <span style="display:flex;gap:12px;flex:0 0 auto">
                   <button class="btn btn-outline soft" style="font-size:15px;padding:11px 20px">Cancel</button>
-                  <button class="btn btn-primary" style="font-size:16px;padding:12px 22px">Add Theo</button>
+                  <button class="btn btn-primary" style="font-size:16px;padding:12px 22px">Next</button>
                 </span>
               </div>
             </div>
@@ -1698,6 +2190,166 @@ body{
                  straight to the plan step. -->
             <button class="btn btn-primary">Continue with 3 people</button>
           </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         E1a · EXTRA DETAILS, PER PERSON
+         The SECOND screen of "add a person", inside the People step.
+
+         THE SEQUENCE, and it is the answer to the volume problem:
+           roster -> adder (first / last / email) -> Continue
+                  -> THIS SCREEN, for that person
+                  -> Continue or Skip -> back to the roster
+         It is NOT a rail step. The rail stays at seven however many
+         people are added, which is the only way its advertised length
+         can stay true for a family of five. A payee's details as a
+         numbered step would make a three-person signup read as eleven
+         steps before the payer has picked a single plan.
+
+         IT IS THE SAME SCREEN AS D1a — same panel, same two groups,
+         same field order, same footer, same button positions. Only the
+         title line names someone else. The payer fills it once for
+         themselves at step 2 and already knows it by the time they add
+         their first kid; the second and third time it costs a glance
+         and one tap on Skip. That sameness is doing the real work of
+         keeping a family signup short.
+
+         BACKEND, and the honest asymmetry with the payer:
+           payer (D1a)  — draft only. The values ride out in step 1's
+                          POST /api/v1/members/ create body. An abandon
+                          before Plan writes nothing at all.
+           payee (here) — this person was created when the adder's
+                          Continue fired (that is where the E2 duplicate
+                          match still happens, unchanged), so this
+                          screen's Continue is
+                            PUT /api/v1/members/{member_id}
+                            { address, emergency_contact_name,
+                              emergency_contact_phone,
+                              emergency_contact_email }
+                          update_member.sql builds its SET clause from
+                          the fields actually sent, so a blank field is
+                          left alone, never nulled.
+                          THAT WRITE IS NOT ROLLED BACK BY AN ABANDON —
+                          same family as OQ-2 (the abandoned member
+                          shell). Holding every payee's PUT until the
+                          group's own Continue would make abandon clean
+                          at the cost of carrying per-person state; it
+                          is a founder call, raised as OQ-10.
+
+         AN EXISTING MEMBER (a payee matched at E2) gets this screen
+         too — the founder's rule is that every person on the roster
+         gets it. Two things differ and both are deliberate:
+           · the subtitle reads "Ella already has details with us — we
+             don't show them on a shared screen", and every field opens
+             BLANK. A lobby iPad must never print another member's
+             stored address to whoever is standing at it.
+           · the PUT sends only what was typed, so a form that never
+             showed a value cannot be used to wipe it.
+         Their roster chip then reads "Details on file" rather than
+         "Details added". See OQ-11.
+         ======================================================== -->
+    <section class="screen step" data-screen="peopledetails">
+      <div class="stage">
+
+        <div class="flow-rail">
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">3</span><span class="rail-label">People</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Plans</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Waivers</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Card</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">7</span><span class="rail-label">Pay</span></div>
+        </div>
+
+        <div class="flow-body">
+          <!-- The person is named in the h1 and carried by an avatar, so
+               a payer filling three people in a row can never type into
+               the wrong record. The subtitle gives the one reason that
+               is actually true for a child: age group. -->
+          <div class="screen-head" style="margin-bottom:14px">
+            <h1>A bit more about Theo</h1>
+            <div class="sub">Person 2 of 2<span class="dotsep"></span>all optional<span class="dotsep"></span>a date of birth sets his age group</div>
+          </div>
+
+          <div class="panel form-panel detail-panel">
+            <div class="detail-group">
+              <div class="field-grid">
+                <div class="field">
+                  <!-- MIGRATION REQUIRED for this field only — see D1a. -->
+                  <span class="field-label">Date of birth</span>
+                  <div class="field-box focus">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.4"/><path d="M3.5 9.6h17M8.5 3.2v3.6M15.5 3.2v3.6"/></svg>
+                    <span class="field-val">09 / 03 / 2014</span><span class="caret"></span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Address</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.2-5.1-7.2-10.4a7.2 7.2 0 0 1 14.4 0C19.2 15.9 12 21 12 21Z"/><circle cx="12" cy="10.4" r="2.5"/></svg>
+                    <span class="field-ph">Street, city, ZIP</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-group">
+              <!-- PRE-FILLING a payee's emergency contact with the payer
+                   (for a child, the parent holding the iPad usually IS
+                   the emergency contact) would save most of this group
+                   and is deliberately NOT assumed here — OQ-12. -->
+              <span class="eyebrow">Emergency contact</span>
+              <div class="field-grid">
+                <div class="field full">
+                  <span class="field-label">Name</span>
+                  <div class="field-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/><circle cx="12" cy="8" r="3.8"/></svg>
+                    <span class="field-ph">Who we should call</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Phone</span>
+                  <div class="field-box"><span class="field-ph">(555) 000-0000</span></div>
+                </div>
+                <div class="field">
+                  <span class="field-label">Email</span>
+                  <div class="field-box"><span class="field-ph">dana@gmail.com</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER · identical to D1a's, with one word changed. "Back"
+             returns to the adder, not to the roster: a payer who
+             mistyped a name must be able to reach it without removing
+             the person and starting again.
+             The middle primary reads "Add Theo" rather than "Continue"
+             because this screen ends an add, and the roster is what
+             comes back — the same reason the adder's own button on E1
+             names the person. Skip does the identical thing without the
+             fields, and keeps whatever was typed.
+             ESCAPE unchanged: one flow-level "Start over" in the left
+             gutter, no confirm (this step precedes the card). Abandoning
+             here drops the whole draft including every person added so
+             far — see the D5 contract. -->
+        <div class="flow-foot">
+          <button class="btn btn-ghost foot-esc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Start over
+          </button>
+          <span class="foot-main">
+            <button class="btn btn-outline soft">Back</button>
+            <button class="btn btn-primary">Add Theo</button>
+          </span>
+          <button class="btn btn-outline soft foot-skip">Skip for now</button>
         </div>
       </div>
     </section>
@@ -1731,15 +2383,17 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">2</span><span class="rail-label">People</span></div>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
+          <div class="rail-step now"><span class="rail-n">3</span><span class="rail-label">People</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plans</span></div>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Plans</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waivers</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Waivers</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">7</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -1826,15 +2480,17 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">People</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plans</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">4</span><span class="rail-label">Waivers</span></div>
+          <div class="rail-step now"><span class="rail-n">5</span><span class="rail-label">Waivers</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">7</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="justify-content:flex-start">
@@ -1946,6 +2602,8 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">People</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plans</span></div>
@@ -1954,7 +2612,7 @@ body{
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Card</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step now"><span class="rail-n">7</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="justify-content:flex-start">
@@ -2070,13 +2728,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plan</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Waiver</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step now"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -2186,13 +2846,15 @@ body{
         <div class="flow-rail">
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">You</span></div>
           <span class="rail-link done"></span>
+          <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Details</span></div>
+          <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Plan</span></div>
           <span class="rail-link done"></span>
           <div class="rail-step done"><span class="rail-n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="rail-label">Waiver</span></div>
           <span class="rail-link done"></span>
-          <div class="rail-step now"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step now"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body">
@@ -2276,13 +2938,15 @@ body{
         <div class="flow-rail" style="transform:scale(0.8);transform-origin:top center">
           <div class="rail-step now"><span class="rail-n">1</span><span class="rail-label">You</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">2</span><span class="rail-label">Plan</span></div>
+          <div class="rail-step"><span class="rail-n">2</span><span class="rail-label">Details</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Waiver</span></div>
+          <div class="rail-step"><span class="rail-n">3</span><span class="rail-label">Plan</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Card</span></div>
+          <div class="rail-step"><span class="rail-n">4</span><span class="rail-label">Waiver</span></div>
           <span class="rail-link"></span>
-          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Pay</span></div>
+          <div class="rail-step"><span class="rail-n">5</span><span class="rail-label">Card</span></div>
+          <span class="rail-link"></span>
+          <div class="rail-step"><span class="rail-n">6</span><span class="rail-label">Pay</span></div>
         </div>
 
         <div class="flow-body" style="padding:4px 0 0">
