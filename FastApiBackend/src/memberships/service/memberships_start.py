@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
 
+import stripe
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 
@@ -115,10 +116,21 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         # Promote card to default first — both charges bill the saved default.
         if payment is not None and payment.set_default:
-            await self._set_default_card(
-                request.payer_member_id,
-                payment.payment_method_id,
-            )
+            try:
+                await self._set_default_card(
+                    request.payer_member_id,
+                    payment.payment_method_id,
+                )
+            except stripe.CardError as exc:
+                # A GENUINE bank decline while saving the entered card as the
+                # payer's default. This runs BEFORE `_insert_all`, so no rows,
+                # discounts or charges exist yet — nothing was billed and there
+                # is nothing to clean up. Surface it as the per-item `failed`
+                # breakdown the client already consumes (the router maps any
+                # failed item -> 207), NOT a 500. A NON-card Stripe / system
+                # failure is deliberately NOT caught here — it stays a
+                # non-retryable 500, because a system failure is not a decline.
+                return self._declined_before_charge(states, str(exc))
 
         # Pre-sync before inserting to establish a clean DB↔Stripe baseline.
         if recurring:
@@ -132,6 +144,16 @@ class MemberMembershipsStart(MemberMembershipsBase):
             await self._converge_recurring_group(request, recurring)
 
         charge_count = (1 if one_time else 0) + (1 if recurring else 0)
+        return self._build_response(states, charge_count)
+
+    # ── Response ───────────────────────────────────────────────
+
+    def _build_response(
+        self,
+        states: list[MemberMembershipsStartItemState],
+        charge_count: int,
+    ) -> MemberMembershipsStartResponse:
+        """Fold the working states into the per-membership start breakdown."""
         return MemberMembershipsStartResponse(
             results=[
                 MemberMembershipsStartResultItem(
@@ -151,6 +173,25 @@ class MemberMembershipsStart(MemberMembershipsBase):
             charge_count=charge_count,
             multiple_charges=charge_count > 1,
         )
+
+    def _declined_before_charge(
+        self,
+        states: list[MemberMembershipsStartItemState],
+        error: str,
+    ) -> MemberMembershipsStartResponse:
+        """Build an all-``failed`` breakdown for a decline BEFORE any insert.
+
+        The card was declined while being promoted to the payer's default
+        (``_set_default_card``), which runs before ``_insert_all`` — so no rows,
+        discounts or charges exist and there is nothing to clean up. Every
+        requested membership is marked ``failed`` with the decline reason and
+        ``charge_count`` is 0 (nothing was ever charged). The router maps the
+        failed items to a 207, the decline contract the client already consumes.
+        """
+        for state in states:
+            state.status = MemberMembershipsStartStatus.failed
+            state.error = f"card declined: {error}"
+        return self._build_response(states, charge_count=0)
 
     # ── Private — the phases ───────────────────────────────────
 
@@ -213,11 +254,23 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 paid_with_cash=request.paid_with_cash,
                 payment_method_id=one_off_pm,
             )
-        except Exception as exc:
+        except stripe.CardError as exc:
+            # A GENUINE bank decline on the one-time invoice — a definitive
+            # result, not a server failure. Fail the group (its un-billed
+            # pending rows are cleaned up) so the response carries a `failed`
+            # item -> the router's 207 decline contract, never a 500.
             await self._fail_group(
-                group, f"one-time invoice failed: {exc}", cleanup=True,
+                group, f"card declined: {exc}", cleanup=True,
             )
             return
+        except Exception:
+            # Any NON-card failure (a Stripe system/gateway error, a network
+            # timeout, a rate limit) is NOT a decline. Clean up the un-billed
+            # pending rows (nothing half-committed) and propagate so the router
+            # returns a non-retryable 500 — a system failure must never
+            # masquerade as "your card was declined".
+            await self._cleanup_states(group)
+            raise
         await self._verify_group(group, keep_unverified=True)
 
     async def _set_default_card(
@@ -248,11 +301,25 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 pay_first_invoice_out_of_band=request.paid_with_cash,
                 proration_behavior=request.proration_behavior,
             )
-        except Exception as exc:
+        except stripe.CardError as exc:
+            # A GENUINE bank decline on the recurring first invoice (the card
+            # path's `error_if_incomplete` 402s the create/update and leaves no
+            # subscription / rolls the item change back). A definitive result,
+            # not a server failure: fail the group (its un-billed pending rows
+            # are cleaned up) so the response carries a `failed` item -> the
+            # router's 207 decline contract, never a 500.
             await self._fail_group(
-                group, f"recurring sync failed: {exc}", cleanup=True,
+                group, f"card declined: {exc}", cleanup=True,
             )
             return
+        except Exception:
+            # Any NON-card failure (a Stripe system/gateway error, a lost
+            # subscription, a network timeout) is NOT a decline. Clean up the
+            # un-billed pending rows (nothing half-committed) and propagate so
+            # the router returns a non-retryable 500 — a system failure must
+            # never masquerade as a card decline.
+            await self._cleanup_states(group)
+            raise
         await self._verify_group(group, keep_unverified=False)
 
     async def _verify_group(
