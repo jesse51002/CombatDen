@@ -44,6 +44,12 @@ class ClassCard extends StatelessWidget {
   /// Marks a cancelled occurrence — shows a red "Cancelled" badge.
   final bool isCancelled;
 
+  /// Marks an occurrence of a PAUSED class — shows an amber "Paused" badge.
+  /// Only the CRM schedule board ever passes this: it is the one surface
+  /// that asks for paused occurrences, and the badge is what tells staff the
+  /// card is management-only (its tap opens the class editor, not check-in).
+  final bool isPaused;
+
   /// Roomy type scale (name 16, caption 13) for spacious surfaces like the
   /// member check-in/reserve picker; the default keeps the schedule board's
   /// dense day-column sizes.
@@ -81,6 +87,7 @@ class ClassCard extends StatelessWidget {
     this.signupCount,
     this.occurrenceInPast = false,
     this.isCancelled = false,
+    this.isPaused = false,
     this.large = false,
     this.kiosk = false,
     this.selected = false,
@@ -265,6 +272,13 @@ class _CardDetails extends StatelessWidget {
             icon: Symbols.cancel_sharp,
             text: 'Cancelled',
             color: DesignConstants.badRed,
+            textStyle: card.metaStyle,
+          ),
+        if (card.isPaused)
+          ClassMetaChip(
+            icon: Symbols.pause_circle_sharp,
+            text: 'Paused',
+            color: DesignConstants.okYellow,
             textStyle: card.metaStyle,
           ),
         if (card.instructorName != null) _InstructorLine(card: card),

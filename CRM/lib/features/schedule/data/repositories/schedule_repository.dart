@@ -38,17 +38,38 @@ class ScheduleRepository {
   /// `GET /api/v1/classes/instances?gym_id=&start_date=&end_date=` — the
   /// schedule board: every effective dated occurrence in `[startDate, endDate]`
   /// (cancelled days included, flagged).
+  ///
+  /// PAUSED classes (`is_active = false`) are OPT-IN, and the opt-in belongs
+  /// to exactly one caller.
+  ///
+  /// [includeInactive] maps to the endpoint's `include_inactive` query param
+  /// and defaults to **false**, matching the server's own default: a paused
+  /// class then contributes no occurrences at all. That default is the
+  /// fail-closed guarantee — check-in and sign-up both reject a paused class
+  /// with a bare `400 class_inactive`, so the dashboard, the kiosk, and the
+  /// member-detail check-in/reserve dialog must never be offered one, and
+  /// they get that by simply not passing the flag.
+  ///
+  /// **Only the SCHEDULE BOARD (the classes page) passes `true`** — the one
+  /// surface a paused class must stay visible on, because it is the only
+  /// route to the class editor. Those rows come back flagged
+  /// `isActive: false`, and the board marks them "Paused" and sends their tap
+  /// straight to the class form rather than the check-in chooser. Do not add
+  /// a second caller without a founder decision, and never filter
+  /// `isActive` client-side — the server default is the mechanism.
   Future<List<EffectiveClassInstance>> listEffectiveInstances(
     String gymId,
     DateTime startDate,
-    DateTime endDate,
-  ) async {
+    DateTime endDate, {
+    bool includeInactive = false,
+  }) async {
     final response = await _apiClient.get(
       '/api/v1/classes/instances',
       queryParameters: {
         'gym_id': gymId,
         'start_date': _dateParam.format(startDate),
         'end_date': _dateParam.format(endDate),
+        'include_inactive': includeInactive,
       },
     );
     final items = (response.data as Map<String, dynamic>)['items'] as List;
@@ -58,11 +79,26 @@ class ScheduleRepository {
         .toList();
   }
 
-  /// `GET /api/v1/classes?gym_id=…` — the gym's (non-deleted) classes.
-  Future<List<GymClassResponse>> listClasses(String gymId) async {
+  /// `GET /api/v1/classes?gym_id=&include_inactive=` — the gym's (non-deleted)
+  /// classes.
+  ///
+  /// [includeInactive] maps to the backend's `include_inactive` query param
+  /// and defaults to **false**, matching the endpoint's own default: a
+  /// consumer that just needs the live catalog (e.g. the Employees tab's
+  /// taught-classes derivation) gets active classes only. The SCHEDULE
+  /// board's catalog load passes `true`, because class management is the one
+  /// surface where a PAUSED class must stay visible — it is the only place
+  /// it can be un-paused from.
+  Future<List<GymClassResponse>> listClasses(
+    String gymId, {
+    bool includeInactive = false,
+  }) async {
     final response = await _apiClient.get(
       '/api/v1/classes',
-      queryParameters: {'gym_id': gymId},
+      queryParameters: {
+        'gym_id': gymId,
+        'include_inactive': includeInactive,
+      },
     );
     final items = (response.data as Map<String, dynamic>)['items'] as List;
     return items

@@ -13,14 +13,27 @@ flags, and the attendance / sign-up counts (all keyed by the occurrence's
 full identity, ``(class_id, original_date, original_time)`` — two same-day
 slots enrich independently).
 
-The one time-dependent rule: a soft-DELETED OR PAUSED class emits only
-occurrences that have already ENDED (``occurred_at`` + duration at/before
-now) — its past is a permanent record, but a dead or paused class produces no
-in-session or future occurrences. A paused class (``gym_classes.is_active =
-false``) is un-checkin-able (``CheckinClassResolver``) and un-sign-up-able
-(``SignupService``), so the board never offers a live/future occurrence of
-one; it stays visible (unpaused) only through the class-management endpoints
-(``GET /api/v1/classes``, ``GET /api/v1/classes/{class_id}``).
+Two INDEPENDENT visibility rules sit on top of that, one per flag — never
+entangle them:
+
+* **``is_deleted`` (soft-DELETED) — past-only, always.** A deleted class
+  emits only occurrences that have already ENDED (``occurred_at`` + duration
+  at/before now): its past is a permanent record, but a dead class produces
+  no in-session or future occurrences. ``include_inactive`` does not affect
+  this.
+* **``is_active = false`` (PAUSED) — excluded ENTIRELY unless asked for.**
+  With ``include_inactive=False`` (THE DEFAULT) a paused class contributes
+  no occurrences at all — not past, not future. Passing
+  ``include_inactive=True`` opts in and its occurrences expand normally.
+
+The default is deliberately fail-CLOSED: check-in (``CheckinClassResolver``)
+and sign-up (``SignupService``) both REJECT a paused class with
+``400 {"code": "class_inactive"}``, so no occurrence view may hand out an
+occurrence either would refuse — and a caller cannot forget to filter,
+because the safe answer is what it gets by default. Only the CRM's class
+MANAGEMENT surface (its classes page) opts in, which is where a paused class
+is seen and un-paused; every row carries ``is_active`` so that ONE mixed
+response can mark the paused cards apart.
 """
 
 import asyncio
@@ -70,6 +83,7 @@ class ClassesScheduleReaderService:
         gym_id: UUID,
         start_date: date,
         end_date: date,
+        include_inactive: bool = False,
     ) -> EffectiveClassInstanceListResponse:
         """Return every effective occurrence in the window, board-shaped.
 
@@ -82,6 +96,15 @@ class ClassesScheduleReaderService:
         moved into this window renders here (and only here), while its
         counts (keyed by the out-of-window original date) still load via the
         same widened bounds.
+
+        Args:
+            include_inactive: When False (the default) a PAUSED class
+                (``gym_classes.is_active = false``) contributes NO
+                occurrences at all — it is dropped before expansion, so no
+                work is done for it. True opts its occurrences in; the CRM's
+                class-management surface is the only caller that does.
+                Orthogonal to ``is_deleted``, whose past-only rule applies
+                either way.
 
         Raises:
             ValueError: if ``end_date`` is before ``start_date``, or the window
@@ -135,7 +158,9 @@ class ClassesScheduleReaderService:
 
         now = datetime.now(UTC)
         items: list[EffectiveClassInstanceResponse] = []
-        for class_row in classes:
+        # Drop paused classes BEFORE expanding: a class the caller didn't ask
+        # for should cost no expansion work, not be expanded then discarded.
+        for class_row in self._visible_classes(classes, include_inactive):
             items.extend(
                 self._board_rows_for_class(
                     class_row,
@@ -152,6 +177,24 @@ class ClassesScheduleReaderService:
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
+
+    @staticmethod
+    def _visible_classes(
+        classes: list[dict],
+        include_inactive: bool,
+    ) -> list[dict]:
+        """The class rows this read may expand.
+
+        A PAUSED class (``is_active = false``) is dropped entirely unless
+        ``include_inactive`` — check-in and sign-up both reject one, so no
+        occurrence view may offer it, and the default keeps every caller
+        safe without having to filter. Soft-DELETED classes stay in: their
+        past-only rule is applied per-occurrence, independently of this
+        flag.
+        """
+        if include_inactive:
+            return classes
+        return [row for row in classes if row["is_active"]]
 
     @staticmethod
     def _validate_window(start_date: date, end_date: date) -> None:
@@ -192,12 +235,11 @@ class ClassesScheduleReaderService:
         original/target dates (so a cross-window reschedule's identity date
         is enumerated), then filters back to the view window by EFFECTIVE
         date — a moved-out occurrence renders in its target window only. A
-        soft-deleted OR paused class keeps only occurrences that already
-        ENDED (its past is a record; a dead class has no live/future slots —
-        the delete path wiped their sign-ups and check-ins; a paused class is
-        un-checkin-able and un-sign-up-able, so the board must not offer a
-        live/future occurrence of one — it stays editable/unpausable only on
-        the class-management endpoints).
+        soft-deleted class keeps only occurrences that already ENDED (its
+        past is a record; a dead class has no live/future slots — the delete
+        path wiped their sign-ups and check-ins); that rule is independent
+        of ``include_inactive``, which already dropped any paused class
+        upstream in ``_visible_classes``.
         """
         expand_start, expand_end = self._widened_bounds(
             start_date, end_date, instance_rows
@@ -215,7 +257,7 @@ class ClassesScheduleReaderService:
             for occ in occurrences
             if start_date <= occ.effective_date <= end_date
         ]
-        if class_row["is_deleted"] or not class_row["is_active"]:
+        if class_row["is_deleted"]:
             occurrences = [
                 occ for occ in occurrences if self._has_ended(occ, now)
             ]
@@ -295,6 +337,7 @@ class ClassesScheduleReaderService:
             resolved_instructor_name=instructor_name,
             image_url=class_row["image_url"],
             points_worth=class_row["points_worth"],
+            is_active=class_row["is_active"],
             max_capacity=capacity_overrides.get(
                 slot_key, class_row["max_capacity"]
             ),
@@ -309,7 +352,7 @@ class ClassesScheduleReaderService:
     @staticmethod
     def _has_ended(occ: EffectiveOccurrence, now: datetime) -> bool:
         """Whether the occurrence is over — its start + duration is at/before
-        now (the deleted-or-paused-class past-only filter)."""
+        now (the deleted-class past-only filter)."""
         end = occ.occurred_at + timedelta(minutes=occ.duration_minutes)
         return end <= now
 

@@ -58,6 +58,15 @@ class ScheduleClassEntry {
   /// True when this occurrence is cancelled — the card shows a badge.
   final bool isCancelled;
 
+  /// False when the owning class is PAUSED (`gym_classes.is_active = false`).
+  ///
+  /// Only the schedule board ever sees a paused occurrence (it is the one
+  /// read passing `includeInactive: true`); everywhere else the backend
+  /// omits them, so this stays true. On the board it shows a "Paused" badge
+  /// and diverts the card's tap to the class editor — check-in and sign-up
+  /// would both reject the occurrence, so no check-in path may be offered.
+  final bool isActive;
+
   /// The range exception that cancelled this occurrence — set ONLY when a
   /// RANGE exception (not an instance exception) is what cancelled it; null
   /// for an instance-cancel and for a non-cancelled occurrence. Drives the
@@ -111,6 +120,7 @@ class ScheduleClassEntry {
     this.signupCount = 0,
     this.occurrenceInPast = false,
     this.isCancelled = false,
+    this.isActive = true,
     this.cancellingRangeId,
     this.maxCapacity,
   });
@@ -138,6 +148,7 @@ class ScheduleClassEntry {
         occurredAt: i.occurredAt,
         occurrenceInPast: i.occurredAt.isBefore(DateTime.now()),
         isCancelled: i.isCancelled,
+        isActive: i.isActive,
         cancellingRangeId: i.cancellingRangeId,
         resolvedClassTime: i.resolvedClassTime,
         resolvedInstructorId: i.resolvedInstructorId,

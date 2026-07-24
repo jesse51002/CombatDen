@@ -226,36 +226,62 @@ bounds stretched to its exceptions' original/target dates; the result is
 filtered back to the view window by EFFECTIVE date — a moved-in occurrence
 renders here (counts still load, keyed by its out-of-window original date),
 a moved-out one renders only in its target window. The one time-dependent
-rule: a soft-deleted OR PAUSED class emits only occurrences whose END
-(`occurred_at` + duration) is at/before now. Board rows carry `original_date`
-+ `original_time` (addressing) alongside `class_date` / `resolved_class_time`
+rule: a soft-deleted class emits only occurrences whose END (`occurred_at`
++ duration) is at/before now. Board rows carry `original_date` +
+`original_time` (addressing) alongside `class_date` / `resolved_class_time`
 (display).
 
-**Paused = same past-only treatment as deleted, on this endpoint.**
-`gym_classes.is_active=false` (PAUSED — the CRM's class-active toggle,
-distinct from soft-delete) is suppressed to past-only exactly like a
-soft-DELETED class: `ClassesScheduleReaderService` filters a paused class's
-occurrences down to already-ENDED ones, so `GET /api/v1/classes/instances`
-(the ONE feed behind the CRM schedule board, the CRM dashboard, the kiosk
-check-in grid, and the member portal) never offers a live/future occurrence
-of a paused class. Its already-run past keeps rendering (a paused class's
-real attendance history must stay visible on the dashboard). This is why:
-**check-in and sign-up both REJECT a paused occurrence** —
-`CheckinClassResolver.resolve` raises
+**Paused is a QUERY PARAM, and its default is fail-CLOSED.** `is_active` and
+`is_deleted` are two INDEPENDENT rules — never entangle them:
+
+| flag | rule |
+| --- | --- |
+| `is_deleted = true` (soft-DELETED) | past-only, **always** — unaffected by `include_inactive` |
+| `is_active = false` (PAUSED) | **no occurrences at all** — not past, not future — unless `include_inactive=true` |
+
+`GET /api/v1/classes/instances?…&include_inactive=` (default **false**) is the
+switch, mirroring the identical param on `GET /api/v1/classes`
+(`classes_list.sql`). The reader drops paused rows in
+`ClassesScheduleReaderService._visible_classes` **before expansion**, so a
+class nobody asked for costs no expansion work.
+
+The default is the point. **Check-in and sign-up REJECT a paused
+occurrence** — `CheckinClassResolver.resolve` raises
 `CheckinClassInactiveError("Class is not active")`
-(`checkin_class_resolver.py`) and `SignupService.create` does the
-same (`signup_service.py`) — a `ValueError` subclass from
+(`checkin_class_resolver.py`) and `SignupService.create` does the same
+(`signup_service.py`) — a `ValueError` subclass from
 `src/checkin/checkin_exceptions.py` that the API surfaces as
-`400 {"detail": "Class is not active", "code": "class_inactive"}` — so no
-occurrence view may ever hand out an occurrence either of those would
-refuse. Filtering server-side, once, fixes
-every client at once with zero client-side pause-awareness needed. A paused
-class stays visible (and un-pausable) only through the **class-management
-endpoints** — `GET /api/v1/classes` and `GET /api/v1/classes/{class_id}` —
-which are a DIFFERENT read (`ClassesCrudService`, not the reader/expander)
-and need no change: that is where an owner sees and un-pauses one. This
-asymmetry with the identity/management endpoints (board hides, management
-shows) is deliberate — do not "fix" it into matching the other's filter.
+`400 {"detail": "Class is not active", "code": "class_inactive"}`. So the CRM
+dashboard, the kiosk (check-in grid + Get-the-App showcase), the member-detail
+check-in/reserve dialog, and the member portal get the safe answer **without
+asking for it and without being able to forget**, and the typed rejection
+stays as the backstop underneath. **Never re-add a client-side `is_active`
+filter** — a client-side rule is one every future surface has to remember;
+this one they inherit.
+
+`include_inactive=true` belongs to class MANAGEMENT only — the surface where a
+paused class must stay visible because it is the only route to un-pausing it.
+In the CRM that is the **schedule board / classes page**, and it opts in on
+**two** reads:
+- `ScheduleRepository.listClasses(gymId, includeInactive: true)` — the class
+  CATALOG read served by `ClassesCrudService` (a DIFFERENT read from the
+  reader/expander), which populates the instructor picker and the
+  edit-a-definition path.
+- `ScheduleRepository.listEffectiveInstances(..., includeInactive: true)` —
+  the OCCURRENCE feed, so a paused class's cards actually appear on the week
+  board. This is the ONE occurrence-feed caller that passes the flag; every
+  other call site (dashboard, kiosk, member check-in dialog, member portal)
+  uses the paused-free default.
+
+Because that board read is the one response that MIXES paused and live rows,
+**`EffectiveClassInstanceResponse.is_active` is on the wire** — populated from
+`gym_classes.is_active`, always true on every other surface's read. The board
+marks an `is_active = false` card "Paused"
+(`ClassCard(isPaused: !entry.isActive)` → an amber `ClassMetaChip`) and
+`schedule_screen.dart`'s `_onInstanceTap` routes a paused card's tap straight
+to `ClassFormScreen` — no occurrence chooser, no check-in/reserve/cancel, all
+of which the backend would reject anyway. Front desk / trainer (no
+`canEditSchedule`) get an inert tap on a paused card rather than a dead end.
 
 ## 4. Cancel / reschedule — any date, keys never change
 

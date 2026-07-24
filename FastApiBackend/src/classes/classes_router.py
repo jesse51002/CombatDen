@@ -307,6 +307,16 @@ async def create_class(
         "``[start_date, end_date]`` (cancelled days included, flagged) and "
         "enriches each occurrence with the resolved instructor name, the "
         "instance/range-exception flags, and the recorded attendance count."
+        "\n\n"
+        "``include_inactive`` (default **false**) controls PAUSED classes "
+        "(``gym_classes.is_active = false``), mirroring ``GET "
+        "/api/v1/classes``: by default a paused class contributes NO "
+        "occurrences at all — not past, not future — so no client can offer "
+        "an occurrence that check-in and sign-up would reject with "
+        "``400 class_inactive``. Pass true only on the class-MANAGEMENT "
+        "surface, where a paused class must stay visible to be un-paused. "
+        "Soft-DELETED classes are unaffected by this flag: they always "
+        "render past-only."
     ),
     responses={
         200: {"description": "Schedule board returned"},
@@ -324,6 +334,7 @@ async def list_effective_instances(
     reader_service: ClassesScheduleReaderService = Depends(
         Provide[DependencyInjector.classes_schedule_reader_service]
     ),
+    include_inactive: bool = False,
 ) -> EffectiveClassInstanceListResponse:
     """The schedule board for a gym across a date window."""
     user_payload = auth.get_current_user(credentials)
@@ -331,7 +342,7 @@ async def list_effective_instances(
 
     try:
         return await reader_service.list_effective_instances(
-            gym_id, start_date, end_date
+            gym_id, start_date, end_date, include_inactive=include_inactive
         )
     except ValueError as exc:
         # An inverted or over-wide date window — a bad request, not a 5xx.

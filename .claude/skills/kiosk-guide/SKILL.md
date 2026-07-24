@@ -467,6 +467,15 @@ occurrenceEnd(i.occurredAt, i.resolvedDurationMinutes).isAfter(now)
 ordered current-then-soonest (ascending start instant, so an in-session class
 precedes an upcoming one). This is what the class-pick grid renders.
 
+**PAUSED classes never reach the kiosk at all.** `GET
+/api/v1/classes/instances` takes `include_inactive` and defaults it to
+**false**, so a paused class (`gym_classes.is_active = false`) contributes no
+occurrences to either list here — server-side, for free, with nothing to
+remember. Do NOT add an `isActive` filter in the cubit and do NOT pass the
+flag from any kiosk read. (Check-in would reject a paused class with
+`code: class_inactive` anyway — see §4 — which is exactly the bare-400 the
+default exists to prevent.) Full contract: the `class-system-guide` skill §3.
+
 That filter is a **deliberate safety fix, not tidying.** Before it the kiosk
 offered classes that had already ended — and the backend silently accepts a
 check-in against a past occurrence — so a member tapping the morning's class at

@@ -106,36 +106,63 @@ void _openOccurrenceScreen(BuildContext context, ScheduleClassEntry entry) {
   );
 }
 
-/// Tapping a board card. For **owner/admin** (`canEditSchedule`) it opens the
-/// small **chooser dialog** first: "This occurrence" (the occurrence-edit
-/// screen) or "All future occurrences" (the class definition editor) — resolving
-/// the card's class id to its real [GymClassResponse] from the loaded catalog
-/// (needed for the definition-editor path); a miss (the class vanished from a
-/// concurrent reload) is ignored. For **front desk + trainer** (who can't edit
-/// the recurring definition) it skips the chooser and goes straight to the
-/// occurrence screen — the only destination they have access to.
+/// Tapping a board card.
+///
+/// A **PAUSED** class's card (this board is the only surface that asks for
+/// them) skips every occurrence path and opens the class editor directly —
+/// the occurrence screen's actions are check-in / reserve / cancel, and the
+/// backend rejects all of them on a paused class (`class_inactive`). Reaching
+/// the editor is the whole reason those cards render, so there is nothing to
+/// choose between. Front desk and trainer can't open the editor, so their tap
+/// on a paused card is inert rather than leading somewhere useless.
+///
+/// Otherwise: for **owner/admin** (`canEditSchedule`) it opens the small
+/// **chooser dialog** first: "This occurrence" (the occurrence-edit screen) or
+/// "All future occurrences" (the class definition editor). For **front desk +
+/// trainer** (who can't edit the recurring definition) it skips the chooser
+/// and goes straight to the occurrence screen — the only destination they have
+/// access to.
+///
+/// Both editor paths resolve the card's class id to its real
+/// [GymClassResponse] from the loaded catalog; a miss (the class vanished from
+/// a concurrent reload) is ignored.
 void _onInstanceTap(
   BuildContext context,
   List<GymClassResponse> classes,
   ScheduleClassEntry entry,
 ) {
   final canEditSchedule = selectedGym.role?.canEditSchedule ?? false;
-  if (!canEditSchedule) {
+  if (entry.isActive && !canEditSchedule) {
     _openOccurrenceScreen(context, entry);
     return;
   }
-  for (final c in classes) {
-    if (c.classId == entry.classId) {
-      ClassOccurrenceChooserDialog.show(
-        context: context,
-        className: entry.name,
-        occurrenceDate: entry.classDate,
-        onThisOccurrence: () => _openOccurrenceScreen(context, entry),
-        onAllFuture: () => _openClassForm(context, existing: c),
-      );
-      return;
-    }
+  // Both remaining paths need the real class row, so resolve it first and
+  // ignore a miss — never open a chooser whose editor option would no-op.
+  final owning = _classById(classes, entry.classId);
+  if (owning == null) return;
+  if (!entry.isActive) {
+    if (canEditSchedule) _openClassForm(context, existing: owning);
+    return;
   }
+  ClassOccurrenceChooserDialog.show(
+    context: context,
+    className: entry.name,
+    occurrenceDate: entry.classDate,
+    onThisOccurrence: () => _openOccurrenceScreen(context, entry),
+    onAllFuture: () => _openClassForm(context, existing: owning),
+  );
+}
+
+/// The loaded catalog row for [classId], or null when it isn't loaded (the
+/// class vanished from a concurrent reload).
+GymClassResponse? _classById(
+  List<GymClassResponse> classes,
+  String classId,
+) {
+  for (final c in classes) {
+    if (c.classId == classId) return c;
+  }
+  return null;
 }
 
 class _ScheduleBody extends StatefulWidget {

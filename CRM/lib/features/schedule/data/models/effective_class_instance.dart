@@ -49,6 +49,22 @@ class EffectiveClassInstance extends Equatable {
   final String? resolvedInstructorName;
   final String? imageUrl;
   final int pointsWorth;
+
+  /// The owning class's live/PAUSED flag (`gym_classes.is_active`): false =
+  /// paused, which the backend's check-in and sign-up gates both REJECT.
+  ///
+  /// Only ever false on the SCHEDULE BOARD's read, the one caller that passes
+  /// `includeInactive: true`; every other surface gets the endpoint's
+  /// paused-free default, so this is always true there. On the board it marks
+  /// the card "Paused" and sends its tap to the class editor instead of the
+  /// check-in chooser.
+  ///
+  /// Defaults to `true` when the field is absent so a CRM build newer than
+  /// its backend renders the board instead of failing it — the same
+  /// fail-open resilience as [attendanceCount] / [signupCount].
+  @JsonKey(defaultValue: true)
+  final bool isActive;
+
   final int? maxCapacity;
 
   /// True when this occurrence is cancelled (still shown, flagged).
@@ -87,6 +103,7 @@ class EffectiveClassInstance extends Equatable {
     this.resolvedInstructorName,
     this.imageUrl,
     required this.pointsWorth,
+    this.isActive = true,
     this.maxCapacity,
     required this.isCancelled,
     required this.hasInstanceException,
@@ -114,6 +131,7 @@ class EffectiveClassInstance extends Equatable {
         resolvedInstructorName,
         imageUrl,
         pointsWorth,
+        isActive,
         maxCapacity,
         isCancelled,
         hasInstanceException,

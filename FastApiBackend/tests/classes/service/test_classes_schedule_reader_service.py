@@ -10,8 +10,13 @@ date-only key would conflate two same-day occurrences. These tests cover:
 
 * a multi-version class renders its pre-mint days from the OLD version and
   its post-mint days from the NEW version, in the same window;
-* a soft-deleted OR PAUSED class renders only occurrences that have already
-  ENDED (no in-session/future rows);
+* a soft-deleted class renders only occurrences that have already ENDED (no
+  in-session/future rows) — and stays past-only even under
+  ``include_inactive``, because the two flags are independent;
+* a PAUSED class (``is_active = false``) contributes NOTHING by default
+  (fail-closed) and expands its FULL window — past and future — only when
+  ``include_inactive=True`` is passed; an active class renders identically
+  either way;
 * attendance / sign-up counts are keyed by the occurrence's IDENTITY
   ``(class_id, original_date, original_time)`` — a rescheduled occurrence's
   counts follow its ORIGINAL slot, not its displayed ``class_date``;
@@ -255,6 +260,34 @@ async def test_multi_version_class_renders_old_past_new_future(
     assert by_date[date(2026, 6, 12)].resolved_class_time == time(18, 0)
 
 
+def _daily_service(
+    *,
+    class_id: UUID,
+    gym_id: UUID,
+    is_active: bool = True,
+    is_deleted: bool = False,
+) -> reader_module.ClassesScheduleReaderService:
+    """One 09:00-10:00 daily class, expandable over 2026-06-01..05."""
+    return _service(
+        classes=[
+            _class_row(
+                class_id=class_id,
+                gym_id=gym_id,
+                is_active=is_active,
+                is_deleted=is_deleted,
+            )
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=class_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            )
+        ],
+    )
+
+
 async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     """A soft-deleted class's already-ENDED occurrences render; in-session /
     future occurrences do not (the delete wipe already cleared their
@@ -265,17 +298,8 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
-    version = _daily_version_row(
-        class_id=class_id,
-        gym_id=gym_id,
-        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
-        class_time=time(9, 0),
-    )
-    service = _service(
-        classes=[
-            _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
-        ],
-        versions=[version],
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_deleted=True
     )
 
     resp = await service.list_effective_instances(gym_id, day1, day5)
@@ -286,41 +310,150 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     assert day5 not in rendered
 
 
-async def test_paused_class_renders_past_only(monkeypatch) -> None:
-    """Same treatment as a soft-deleted class: a PAUSED class
-    (``gym_classes.is_active = false``) also renders only occurrences that
-    have already ENDED — in-session/future occurrences do not. A paused
-    class is un-checkin-able (``CheckinClassResolver``) and un-sign-up-able
-    (``SignupService``), so the board must never offer one of its live/future
-    occurrences; it stays visible (and un-pausable) only on the
-    class-management endpoints (``GET /api/v1/classes``,
-    ``GET /api/v1/classes/{class_id}``). See the ``class-system-guide``
-    skill."""
+async def test_deleted_class_stays_past_only_with_include_inactive(
+    monkeypatch,
+) -> None:
+    """``include_inactive`` governs PAUSED only — the two flags are
+    independent. Asking for inactive classes must NOT resurrect a
+    soft-deleted class's future occurrences: a deleted class's future slots
+    had their sign-ups and check-ins wiped, so offering them would hand out
+    occurrences with no rows behind them."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
-    # 09:00-10:00 daily; "now" is day3 10:00 -> day3 has JUST ended.
     now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
-    version = _daily_version_row(
-        class_id=class_id,
-        gym_id=gym_id,
-        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
-        class_time=time(9, 0),
-    )
-    service = _service(
-        classes=[
-            _class_row(class_id=class_id, gym_id=gym_id, is_active=False)
-        ],
-        versions=[version],
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_deleted=True
     )
 
-    resp = await service.list_effective_instances(gym_id, day1, day5)
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
 
     rendered = {row.original_date for row in resp.items}
     assert rendered == {day1, day2, day3}
     assert day4 not in rendered
     assert day5 not in rendered
+
+
+async def test_paused_class_excluded_by_default(monkeypatch) -> None:
+    """THE DEFAULT IS FAIL-CLOSED. A PAUSED class
+    (``gym_classes.is_active = false``) contributes NO occurrences at all —
+    not past, not future — because check-in (``CheckinClassResolver``) and
+    sign-up (``SignupService``) both reject one with
+    ``400 {"code": "class_inactive"}``. Every client gets that safe answer
+    without filtering, so a new occurrence surface cannot forget. See the
+    ``class-system-guide`` skill."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day5)
+
+    assert resp.items == []
+
+
+async def test_paused_class_included_when_asked(monkeypatch) -> None:
+    """``include_inactive=True`` opts a paused class back in, and it then
+    expands NORMALLY — its whole window, past AND future (no past-only
+    treatment; that rule belongs to ``is_deleted``). This is the class
+    MANAGEMENT view, the one surface a paused class must stay visible on so
+    it can be un-paused. Every row is flagged ``is_active=False`` so the CRM
+    can mark those cards "Paused" and route their tap to the class editor
+    instead of check-in."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
+
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day2, day3, day4, day5}
+    assert all(row.is_active is False for row in resp.items)
+
+
+async def test_mixed_response_flags_each_class_correctly(
+    monkeypatch,
+) -> None:
+    """The whole reason ``is_active`` is on the wire: an
+    ``include_inactive=True`` read is the ONE response that MIXES paused and
+    live rows, and each row must carry its own class's flag so the CRM marks
+    only the paused cards."""
+    live_id, paused_id, gym_id = uuid4(), uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _service(
+        classes=[
+            _class_row(class_id=live_id, gym_id=gym_id, class_name="Boxing"),
+            _class_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                class_name="Competition Team",
+                is_active=False,
+            ),
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=live_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            ),
+            _daily_version_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(18, 0),
+            ),
+        ],
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
+
+    by_class = {row.class_id: row.is_active for row in resp.items}
+    assert by_class == {live_id: True, paused_id: False}
+
+
+async def test_active_class_unaffected_by_include_inactive(
+    monkeypatch,
+) -> None:
+    """A live class renders identically either way — the flag only ever
+    ADDS paused classes, it never changes what an active one emits — and its
+    rows always carry ``is_active=True``."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    default = await _daily_service(
+        class_id=class_id, gym_id=gym_id
+    ).list_effective_instances(gym_id, day1, day5)
+    included = await _daily_service(
+        class_id=class_id, gym_id=gym_id
+    ).list_effective_instances(gym_id, day1, day5, include_inactive=True)
+
+    assert default.items
+    assert [row.original_date for row in default.items] == [
+        row.original_date for row in included.items
+    ]
+    assert all(row.is_active is True for row in default.items)
 
 
 async def test_counts_keyed_by_original_date_and_cancelled_included(
