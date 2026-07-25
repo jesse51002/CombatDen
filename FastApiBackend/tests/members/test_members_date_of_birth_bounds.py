@@ -1,25 +1,15 @@
-"""``members.date_of_birth`` is bounded at BOTH layers.
+"""``members.date_of_birth`` is bounded at BOTH layers, on purpose.
 
-The column arrived bare — ``date_of_birth DATE`` with no CHECK, typed
-``date | None`` with no validator — and the kiosk self-serve signup posts a
-free-form date. So ``2035-06-01`` (a slipped year) and ``0202-06-01`` (a
-mistyped one) both got a 201, and every age-derived read downstream inherited
-the nonsense with nothing in the stack ever saying no.
-
-Two layers, on purpose, and this file covers both:
-
-* **The API layer** — a ``field_validator`` on every schema that accepts a DOB,
-  so a bad value is a 422 before it reaches the database. Asserted here as real
-  behaviour, on the CREATE and the UPDATE model, because staff correcting a DOB
-  on the member page post to the update model and that is the other way a value
-  reaches the column.
-* **The DB layer** — the ``date_of_birth_plausible`` CHECK, which is the
-  backstop for every writer that does NOT pass through those models (the seed,
-  a future importer, a hand-run UPDATE). A hermetic drift guard reads the schema
-  file and the migration off disk and fails if either loses the constraint or
-  the two disagree about the floor: a validator-only bound would look correct in
-  every API test while leaving the column open to every other writer, which is
-  the failure mode this guard exists to catch.
+* **The API layer** — a ``field_validator`` on every schema accepting a DOB, so
+  a bad value is a 422 before it reaches the database. Covered on the CREATE
+  *and* the UPDATE model: staff correcting a DOB post to the update model, the
+  other way a value reaches the column.
+* **The DB layer** — the ``date_of_birth_plausible`` CHECK, the backstop for
+  every writer that does NOT pass through those models (the seed, an importer,
+  a hand-run UPDATE). A validator-only bound looks correct in every API test
+  while leaving the column open to all of them, so a hermetic drift guard reads
+  the schema file and the migration off disk and fails if either loses the
+  constraint or disagrees with the model about the floor.
 """
 
 from __future__ import annotations
@@ -71,9 +61,9 @@ def _create(**overrides) -> MemberCreateRequest:
 def test_create_rejects_an_implausible_date_of_birth(label, bad_dob) -> None:
     """Every implausible DOB is refused at deserialization (-> 422).
 
-    ``date(202, 6, 1)`` is the real kiosk typo the founder hit: a year typed
-    with a digit missing. It is a perfectly valid ``date`` object, which is why
-    nothing before this validator objected to it.
+    ``date(202, 6, 1)`` — a year typed with a digit missing — is the real kiosk
+    typo, and a perfectly valid ``date`` object, which is why only a validator
+    can reject it.
     """
     with pytest.raises(ValidationError) as excinfo:
         _create(date_of_birth=bad_dob)
@@ -89,11 +79,8 @@ def test_create_rejects_an_implausible_date_of_birth(label, bad_dob) -> None:
     ],
 )
 def test_update_rejects_an_implausible_date_of_birth(label, bad_dob) -> None:
-    """The UPDATE model carries the same guard, not just create.
-
-    Without this the bound would be trivially bypassable: create with no DOB,
-    then PUT the bad one.
-    """
+    """The UPDATE model carries the same guard: without it the bound is
+    trivially bypassable — create with no DOB, then PUT the bad one."""
     with pytest.raises(ValidationError) as excinfo:
         MemberUpdateData(date_of_birth=bad_dob)
     assert "date_of_birth" in str(excinfo.value), label
@@ -112,26 +99,23 @@ def test_update_rejects_an_implausible_date_of_birth(label, bad_dob) -> None:
 def test_a_plausible_date_of_birth_is_accepted(label, good_dob) -> None:
     """Both bounds are INCLUSIVE, and NULL stays legal.
 
-    The boundary cases are named explicitly because an off-by-one here is a
-    silent rejection of real members: someone born today (a gym registering a
-    newborn family member) and the oldest plausible member must both pass.
+    An off-by-one here silently rejects real members, so the boundaries are
+    named: a newborn registered today and the oldest plausible member both pass.
     """
     assert _create(date_of_birth=good_dob).date_of_birth == good_dob
     assert MemberUpdateData(date_of_birth=good_dob).date_of_birth == good_dob
 
 
 # The oldest verified human lifespan (Jeanne Calment, 122y164d). A floor
-# further back than this cannot reject a living person, which is the property
-# that makes it safe to enforce.
+# further back than this cannot reject a living person.
 _MAX_VERIFIED_HUMAN_AGE_YEARS = 122
 
 
 def test_the_floor_is_defensible() -> None:
     """The floor can never reject a living person.
 
-    Asserted rather than commented so raising the floor toward the present —
-    the change that WOULD start rejecting real members — fails here. The
-    inequality only gets safer as time passes, never tighter.
+    Asserted rather than commented so that raising the floor toward the present
+    — the change that WOULD start rejecting real members — fails here.
     """
     assert date(1900, 1, 1) == EARLIEST_DATE_OF_BIRTH
     years_of_headroom = (date.today() - EARLIEST_DATE_OF_BIRTH).days / 365.25
@@ -144,12 +128,10 @@ def test_the_floor_is_defensible() -> None:
 def _constraint_text(sql: str) -> str | None:
     """The ``date_of_birth_plausible`` CHECK body, whitespace-collapsed.
 
-    Extracted by BALANCING parentheses from the ``CHECK (`` that follows the
-    constraint name, not by a lazy regex: the predicate itself contains nested
-    parens, so a ``(.*?)`` stops at the inner close and a greedy one swallows
-    the rest of the file. Either way the substring assertions below would pass
-    on text that is not the constraint at all — a guard that cannot fail is
-    worse than no guard.
+    Parens are BALANCED rather than regex-matched: the predicate nests them, so
+    a lazy ``(.*?)`` stops at the inner close and a greedy one swallows the file
+    — either way the assertions below would pass on text that is not the
+    constraint at all, and a guard that cannot fail is worse than no guard.
     """
     match = re.search(rf"{_CONSTRAINT_NAME}\s+CHECK\s*\(", sql)
     if match is None:
@@ -167,12 +149,8 @@ def _constraint_text(sql: str) -> str | None:
 
 
 def test_the_schema_file_declares_the_check() -> None:
-    """``schemas/members.sql`` is the source of truth for the end state.
-
-    A validator-only bound passes every API test while leaving the column open
-    to the seed, an importer, and any hand-run UPDATE — so losing this
-    constraint has to fail somewhere, and this is where.
-    """
+    """``schemas/members.sql`` is the source of truth for the end state, so
+    losing the constraint has to fail somewhere — this is where."""
     sql = _SCHEMA_FILE.read_text(encoding="utf-8")
     body = _constraint_text(sql)
     assert body is not None, f"{_CONSTRAINT_NAME} missing from schemas/members.sql"
@@ -186,11 +164,9 @@ def test_the_schema_file_declares_the_check() -> None:
 def test_a_migration_applies_the_check() -> None:
     """Some migration adds it, so an already-migrated database gets it too.
 
-    The schema files are only replayed by a full ``supabase db reset``; a live
-    database reaches the same end state through the migration. If only the
-    schema file carried the constraint, a reset-from-scratch database and a
-    migrated one would disagree — exactly the divergence that made the
-    column-add migration recreate ``member_billing_profile``.
+    Schema files are only replayed by a full ``supabase db reset``; if only they
+    carried the constraint, a reset-from-scratch database and a migrated one
+    would disagree.
     """
     adders = [
         path

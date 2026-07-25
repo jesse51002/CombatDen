@@ -26,13 +26,9 @@ INCOMPLETE_SQL = load_member_incomplete_sql("p.member_id", "p.gym_id")
 class CrmIncompleteViewService(CrmBaseViewService):
     """Fetches and formats rows for the Incomplete view.
 
-    Lists signups that stalled: a VALID member row (one with a
-    ``stripe_customer_id``) holding no membership of their own, who is
-    also not the payer on anyone else's, and who holds no
-    billed-but-unconfirmed non-recurring row. Newest first — the freshest
-    unfinished signup is the one staff can still convert.
-    ``sql/crm_views/_member_incomplete.sql`` owns the rule and the
-    reasoning behind each exclusion.
+    Lists signups that stalled, newest first — the freshest one is the one
+    staff can still convert. ``sql/crm_views/_member_incomplete.sql`` owns
+    the rule and the reasoning behind each exclusion.
     """
 
     async def fetch(
@@ -72,10 +68,9 @@ class CrmIncompleteViewService(CrmBaseViewService):
     def _map_row(self, row: dict) -> IncompleteViewRow:
         """Map a database row to an IncompleteViewRow.
 
-        ``days_waiting`` is computed gym-locally in SQL (see
-        incomplete_view.sql) and never re-derived here, for the same
-        reason ``days_since_last_class`` is not: a bare UTC instant diff
-        goes negative for an evening signup at a gym west of UTC.
+        ``days_waiting`` is computed gym-locally in SQL and never re-derived
+        here: a bare UTC instant diff goes negative for an evening signup at
+        a gym west of UTC.
 
         Args:
             row: Database result row as a mapping.

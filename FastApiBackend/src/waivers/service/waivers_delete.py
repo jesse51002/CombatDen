@@ -48,10 +48,9 @@ class WaiversDelete(WaiversBase):
             WaiverNotFoundError: If the waiver is missing or already
                 archived (-> 404).
             WaiverPayerAuthNotArchivableError: If it is the gym's payer-auth
-                waiver, which is never archivable (-> 400). The two are
-                separate TYPES, not one message the router greps: "refused"
-                and "missing" are different answers and must not be able to
-                swap places when either message is reworded.
+                waiver, which is never archivable (-> 400). Separate TYPES on
+                purpose — "refused" and "missing" are different answers and
+                must not be able to swap places.
         """
         waiver = await self._get_waiver(waiver_id, gym_id)
         if waiver["waiver_type"] == WaiverType.payer_auth:

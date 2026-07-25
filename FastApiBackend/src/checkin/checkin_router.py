@@ -3,25 +3,11 @@
 Single + batch check-in, sign-ups (reservations), the per-occurrence combined
 roster, and the attendance streak.
 
-**Error status AND the machine-readable ``code`` are decided BY EXCEPTION
-TYPE, never by the message text.** The domain raises the typed errors in
-``checkin_exceptions``, each of which carries its own ``status_code`` +
-``code``; ``CheckinClassNotFoundError`` is the only one that 404s, every
-other ``CheckinError`` is a 400 (including "not an occurrence of this class",
-which these endpoints have documented as a 400 since they shipped —
-occurrences are computed, so a bad slot is a bad address, not a missing
-resource). Rewording a message can no longer move a status code.
-
-Every handler below re-raises a ``CheckinError`` untouched so the ONE global
-formatter (``_handle_checkin_error`` in ``src/main.py``) writes the body:
-``{"detail": "<prose>", "code": "<stable_code>"}`` — ``code`` a SIBLING key,
-``detail`` always a plain string. A ``raise`` inside an ``except`` clause
-propagates out of the whole ``try``, so the sibling ``except Exception ->
-500`` arm below it never re-catches the re-raised error.
-
-Because every one of them subclasses ``ValueError``, the trailing generic
-``except ValueError`` still catches an unmapped FOREIGN domain error as a 400
-(bad input) instead of letting it fall to a 500 — that arm emits no ``code``.
+Status and ``code`` are decided by exception TYPE, never message text (see
+``checkin_exceptions``). Every handler re-raises a ``CheckinError`` untouched
+so the ONE global formatter (``_handle_checkin_error`` in ``src/main.py``)
+writes the body; the trailing generic ``except ValueError`` catches an
+unmapped FOREIGN error as a 400 and emits no ``code``.
 """
 
 import logging
@@ -158,18 +144,12 @@ async def checkin(
             request.is_member,
             request.ignore_warnings,
         )
-        # Fold in the member's streak + current-week strip (after this
-        # check-in) so the caller needn't make a second GET /streak call.
-        #
-        # DECORATIVE, and it runs AFTER the gate has already COMMITTED the
-        # attendance row + the points -- so it gets its OWN try/except. Inside
-        # the outer try a failure here would land on the `except Exception ->
-        # 500 "Failed to record check-in"` arm and tell the member they were
-        # NOT checked in while the row exists: their re-scan would come back
-        # `already_checked_in` and the kiosk would look broken. A read that
-        # only decorates a committed write must never be able to fail it, so
-        # the failure is logged and the schema defaults stand (0 weeks, an
-        # all-False strip).
+        # Fold in the streak + week strip so the caller needn't call
+        # GET /streak. DECORATIVE, and it runs AFTER the gate COMMITTED the
+        # attendance row + points — hence its OWN try/except. A failure caught
+        # by the outer arm would 500 "Failed to record check-in" over a row
+        # that exists, and the member's re-scan would come back
+        # already_checked_in. Log it; let the schema defaults stand.
         if result.log_id is not None:
             try:
                 streak = await streak_service.get_streak_details(
@@ -189,8 +169,7 @@ async def checkin(
                 )
         return result
     except CheckinError:
-        # Re-raised untouched: the global handler reads the status + the
-        # stable ``code`` off the type. This arm exists ONLY so the
+        # Re-raised for the global formatter. This arm exists ONLY so the
         # `except Exception` below can't swallow it — a `raise` inside an
         # `except` clause propagates out of the whole `try`.
         raise
@@ -261,12 +240,10 @@ async def remove_checkin(
             class_id, gym_id, occurrence_date, occurrence_time, member_id
         )
     except CheckinError:
-        # Re-raised for the global formatter (404 / class_not_found is the
-        # only rejection the remover raises). No blanket `except ValueError`
-        # here on purpose: this handler used to 404 on ANY ValueError, and
-        # pydantic's ValidationError IS a ValueError — a malformed
-        # CheckinRemoveResponse would have surfaced as a 404 carrying a raw
-        # validation dump instead of a logged 500.
+        # Re-raised for the global formatter (class_not_found is the remover's
+        # only rejection). Do NOT add a blanket `except ValueError` -> 404:
+        # pydantic's ValidationError is a ValueError, so it would report a
+        # malformed response as a missing class instead of a logged 500.
         raise
     except Exception:
         logger.error(
@@ -355,9 +332,7 @@ async def signup(
         profile_refresh_runner.start(request.member_id, request.gym_id)
         return result
     except CheckinError:
-        # Re-raised for the global formatter (status + code off the type):
-        # class not found -> 404, every other sign-up rejection (deleted /
-        # inactive class, not an occurrence, cancelled day, class full) -> 400.
+        # Re-raised for the global formatter (status + code off the type).
         raise
     except ValueError as exc:
         # An unmapped/foreign ValueError is bad input, not a 5xx.
@@ -498,10 +473,8 @@ async def checkin_batch(
             request.ignore_warnings,
         )
     except CheckinError:
-        # The batch resolves the occurrence ONCE before any per-member work, so
-        # these are whole-request failures. Re-raised for the global formatter:
-        # class not found -> 404; deleted / inactive class, not an occurrence
-        # of this class, check-in not open yet -> 400.
+        # The batch resolves the occurrence ONCE before any per-member work,
+        # so these are whole-request failures. Re-raised for the formatter.
         raise
     except ValueError as exc:
         # An unmapped/foreign ValueError is bad input, not a 5xx.
@@ -584,12 +557,10 @@ async def list_attendees(
         return await attendees_service.list_attendees(
             gym_id, class_id, occurrence_date, occurrence_time
         )
-    # No `except ValueError` arm: this is a pure read that raises no domain
-    # error at all (an unknown gym / class / slot is an EMPTY roster, not a
-    # rejection), so the blanket ValueError -> 404 that used to sit here could
-    # only ever fire on an INTERNAL failure — and pydantic's ValidationError
-    # subclasses ValueError, so a malformed roster row surfaced as a 404
-    # carrying a raw validation dump. It is a 500 now, logged with the trace.
+    # Deliberately no `except ValueError` arm: this read raises no domain
+    # error (an unknown gym / class / slot is an EMPTY roster), so one could
+    # only ever fire on OUR failure — and pydantic's ValidationError is a
+    # ValueError, which a 404 arm would report as a missing resource.
     except Exception:
         logger.error(
             "Attendee list failed: gym_id=%s, class_id=%s, occurrence_date=%s",

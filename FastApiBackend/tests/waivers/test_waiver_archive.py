@@ -68,9 +68,8 @@ async def _delete_plan_row(db_pool, plan_id) -> None:
 async def test_archive_payer_auth_waiver_rejected(db_pool, gym_id):
     """The payer-auth waiver cannot be archived via the service.
 
-    Asserts the TYPE, not ``match="cannot be archived"``: "refused" and
-    "missing" are different answers (400 vs 404) and used to be told apart by
-    whether the message contained "not found", so a copy edit could swap them.
+    Asserts the TYPE, not ``match="cannot be archived"``: "refused" (400) and
+    "missing" (404) are different answers, and a copy edit must not swap them.
     """
     svc = WaiversService(db_pool)
     payer_auth_id = await _payer_auth_waiver_id(db_pool, gym_id)

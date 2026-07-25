@@ -1,14 +1,9 @@
 """Smoke + edge tests for the checkin router.
 
-The gated check-in flow runs many DB queries plus the cycle-counts service, so
-these router tests override the resolver + member-gate providers with doubles
-and assert the router's wiring (auth -> resolve -> gate -> serialization). The
-gating *logic* is unit-tested directly in
-``checkin/test_checkin_plan_selector.py``.
-
-The error-status contract — which typed ``CheckinError`` maps to which HTTP
-status — lives in ``checkin/test_checkin_error_mapping.py``; the few status
-cases here are smoke coverage of the same table.
+Doubles the resolver + member-gate providers and asserts the router's wiring
+(auth -> resolve -> gate -> serialization). The gating LOGIC is unit-tested in
+``test_checkin_plan_selector.py``, the type -> status contract in
+``test_checkin_error_mapping.py``; the status cases here are smoke coverage.
 """
 
 from datetime import date
@@ -46,12 +41,9 @@ _STUB_WEEK_DAYS = [True, False, True, False, True, False, False]
 def _override_checkin(
     response: CheckinResponse, *, streak_error: Exception | None = None
 ) -> None:
-    """Double the resolver + member gate + streak service so the single-checkin
-    handler returns ``response`` (enriched with a stub streak) without touching
-    the DB. Caller resets via ``_reset_checkin``.
-
-    ``streak_error`` makes the streak read RAISE instead — the check-in is
-    already committed by then, so the handler must still answer 200.
+    """Double the resolver + member gate + streak service so the handler
+    returns ``response`` without touching the DB; reset via ``_reset_checkin``.
+    ``streak_error`` makes the streak read RAISE instead.
     """
     resolver = MagicMock()
     resolver.resolve = AsyncMock(return_value=MagicMock())
@@ -141,13 +133,10 @@ def test_checkin_records_when_a_plan_covers_the_class(
 def test_checkin_idempotent_repeat_also_folds_in_the_streak(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """An already-checked-in repeat is a real attendance too: the gate's
-    repeat builder leaves ``class_streak_weeks`` at 0, and it is the ROUTER
-    that folds the streak into the response — for repeats exactly like fresh
-    check-ins. The fold condition is ``log_id is not None``, which covers a
-    repeat because the repeat echoes the EXISTING attendance row's id; only a
-    rejection / needs-confirmation (nothing written, ``log_id`` null) is left
-    at the defaults."""
+    """A repeat is a real attendance too, so the router folds the streak in for
+    it exactly like a fresh check-in. The fold condition is
+    ``log_id is not None`` — a repeat echoes the existing row's id, while only a
+    rejection / needs-confirmation (nothing written) stays at the defaults."""
     class_id = str(uuid4())
     response = CheckinResponse(
         log_id=str(uuid4()),
@@ -186,12 +175,11 @@ def test_streak_failure_cannot_fail_a_recorded_checkin(
 ):
     """A DECORATIVE read must never undo a COMMITTED write.
 
-    The streak fold runs after the gate has written the attendance row and
-    awarded the points. If its failure reached the handler's
-    ``except Exception -> 500 "Failed to record check-in"`` arm, the kiosk
-    would tell the member they were not checked in while the row exists —
-    and their re-scan would answer ``already_checked_in``. So the check-in
-    still reports success and the strip stays at its schema defaults."""
+    The streak fold runs after the attendance row and points are committed, so
+    letting its failure reach the handler's 500 arm would tell the member they
+    were not checked in while the row exists. The check-in still reports
+    success; the strip stays at its schema defaults.
+    """
     log_id = str(uuid4())
     class_id = str(uuid4())
     response = CheckinResponse(
@@ -275,9 +263,8 @@ def test_checkin_rejected_when_no_plan_covers(
 def test_checkin_staff_needs_confirmation(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A staff (is_member=False) check-in the gate warns on, without an override,
-    is held for confirmation: 200, log_id null, requires_confirmation true, the
-    warning, nothing written."""
+    """A warned staff (is_member=False) check-in without an override is held
+    for confirmation: 200, null log_id, requires_confirmation, nothing written."""
     class_id = str(uuid4())
     response = CheckinResponse(
         log_id=None,
@@ -364,15 +351,10 @@ def test_checkin_idempotent_returns_already_checked_in(
     assert body["points_awarded"] == 0
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/checkin/batch
+# ── POST /api/v1/checkin/batch ─────────────────────────────────────────
 #
-# class_id + occurrence_date now ride in the body (not the path). The batch
-# service is overridden with a double; these assert the router's status-code
-# mapping (207 on any processed mix, 500 on total failure, 404/400 on an
-# unresolved occurrence, 422 on an empty member list) + serialization. The batch
-# FLOW is unit-tested in checkin/test_batch_checkin_service.py.
-# ---------------------------------------------------------------------------
+# Status-code mapping + serialization only, over a doubled batch service. The
+# batch FLOW is unit-tested in test_batch_checkin_service.py.
 
 _BATCH_CLASS_ID = uuid4()
 _BATCH_OCCURRENCE_DATE = "2026-06-01"
@@ -381,7 +363,7 @@ _BATCH_URL = "/api/v1/checkin/batch"
 
 
 def _batch_body(gym_id, member_ids: list[str]) -> dict:
-    """A batch request body with class_id + occurrence_date/time in the body."""
+    """A batch request body."""
     return {
         "gym_id": gym_id,
         "class_id": str(_BATCH_CLASS_ID),
@@ -486,9 +468,8 @@ def test_batch_checkin_total_failure_returns_500(
 def test_batch_checkin_class_not_found_returns_404(
     client, auth_headers, fake_gym_id
 ):
-    """A CheckinClassNotFoundError maps to 404 before any member work — by
-    TYPE, not by the message's wording (test_checkin_error_mapping.py owns
-    the full type -> status table)."""
+    """404 before any member work, by TYPE — the full table lives in
+    test_checkin_error_mapping.py."""
     _override_batch(side_effect=CheckinClassNotFoundError("Class not found"))
     try:
         resp = client.post(
@@ -505,9 +486,8 @@ def test_batch_checkin_class_not_found_returns_404(
 def test_batch_checkin_invalid_occurrence_returns_400(
     client, auth_headers, fake_gym_id
 ):
-    """A CheckinOccurrenceNotFoundError (not a real occurrence of this class)
-    maps to 400 — occurrences are computed, so a bad slot is a bad address,
-    not a missing resource."""
+    """400, not 404: occurrences are computed, so a bad slot is a bad address
+    rather than a missing resource."""
     _override_batch(
         side_effect=CheckinOccurrenceNotFoundError(
             "No class occurrence on 2026-06-01 for this class"
@@ -537,9 +517,7 @@ def test_batch_checkin_empty_member_ids_returns_422(
     assert resp.status_code == 422
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/signup, DELETE /api/v1/signup
-# ---------------------------------------------------------------------------
+# ── POST /api/v1/signup, DELETE /api/v1/signup ─────────────────────────
 
 
 def _signup_body(gym_id: str, member_id: str, class_id: str) -> dict:
@@ -672,9 +650,8 @@ def test_remove_signup_missing_params_returns_422(client, auth_headers) -> None:
 
 
 def test_attendees_returns_list(client, auth_headers, fake_gym_id):
-    """GET /api/v1/checkin/attendees returns the combined roster: an attended
-    member (with billing attribution) and a signed-up-only member (attendance
-    fields null)."""
+    """The combined roster: an attended member (with billing attribution) plus a
+    signed-up-only member (attendance fields null)."""
     class_id = uuid4()
     member_a, member_b = uuid4(), uuid4()
     plan_id, item_id = uuid4(), uuid4()
@@ -748,8 +725,7 @@ def test_streak_returns_zero_when_no_attendance(
     """GET /api/v1/streak returns 0 weeks for a never-attended member."""
     streak_result = MagicMock()
     streak_result.all.return_value = []
-    # Same mocked result serves both the gym-timezone lookup
-    # (``scalar_one``) and the week-bucket query (``all``).
+    # One mocked result serves both the gym-timezone lookup and the buckets.
     streak_result.scalar_one.return_value = "America/Chicago"
 
     session = db_pool_mock.session.return_value

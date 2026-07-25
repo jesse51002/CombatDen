@@ -1,12 +1,11 @@
 """Integration tests for the member payment-method-status read.
 
 ``MembersManagementService.has_payment_method`` backs
-``GET /api/v1/members/{member_id}/payment-method-status``. Its failure
-mode is asymmetric — a wrong ``True`` costs a hand-off, a wrong ``False``
-invites a stranger's card onto an existing member's account — so these
-tests are written against the false-negative direction: Stripe (not the
-cached ``members.stripe_payment_method_id`` column) is the answer, and a
-Stripe failure raises instead of reporting ``False``.
+``GET /api/v1/members/{member_id}/payment-method-status``. Its failure mode is
+asymmetric — a wrong ``True`` costs a hand-off, a wrong ``False`` invites a
+stranger's card onto an existing member's account — so Stripe, never the cached
+``members.stripe_payment_method_id`` column, is the answer, and a Stripe failure
+raises rather than degrading to ``False``.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -116,12 +115,9 @@ async def test_has_payment_method_reads_stripe_not_the_cached_column(
 ):
     """The load-bearing case: Stripe is the source of truth.
 
-    A card attached WITHOUT going through the CRM's save-the-default path
-    (out of band, or a writeback that never landed) leaves
-    ``members.stripe_payment_method_id`` NULL while the Stripe customer
-    really does have a chargeable method. Answering from that column
-    would report "no payment method" for a member who has one — the exact
-    false negative this read exists to prevent.
+    A card attached out of band (or a writeback that never landed) leaves the
+    cached column NULL while the customer really does have a chargeable method.
+    Answering from the column is the false negative this read exists to prevent.
     """
     member = await created.member(gym_id)
     pm_id = await created.payment_method()
@@ -147,9 +143,8 @@ async def test_has_payment_method_false_despite_stale_cached_column(
 ):
     """The other direction: a stale non-null column can't fake a True.
 
-    ``stripe_payment_method_id`` left pointing at a method that is no
-    longer attached (a detach whose writeback lost the race) must not
-    report a card the gym cannot charge.
+    A column left pointing at a detached method must not report a card the gym
+    cannot charge.
     """
     member = await created.member(gym_id)
 
@@ -173,8 +168,8 @@ async def test_has_payment_method_raises_when_stripe_fails(
 ):
     """A Stripe failure raises — it must never degrade to ``False``.
 
-    The payments boundary is mocked here (a real outage can't be summoned
-    on demand); everything above it is the production wiring.
+    The payments boundary is mocked (an outage can't be summoned on demand);
+    everything above it is the production wiring.
     """
     member = await created.member(gym_id)
 
@@ -197,9 +192,9 @@ async def test_has_payment_method_raises_for_unknown_member(
 ):
     """An unknown member is an error (→ 404 at the route), not a False.
 
-    Asserted on the TYPE, not on the message: the route reads the 404 off
-    ``MemberNotFoundError.status_code``, so matching prose here would lock the
-    wrong half of the contract (see tests/members/test_members_error_mapping).
+    On the TYPE, not the message: the route reads the 404 off
+    ``MemberNotFoundError.status_code``, so prose would lock the wrong half of
+    the contract.
     """
     with pytest.raises(MemberNotFoundError):
         await management_service.has_payment_method(

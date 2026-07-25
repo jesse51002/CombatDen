@@ -35,11 +35,8 @@ class StreakService:
     async def get_streak(self, member_id: UUID, gym_id: UUID) -> int:
         """Calculate the current weekly attendance streak (week count only).
 
-        The single-query path: runs ONLY ``streak_weeks.sql`` -- callers that
-        don't need the per-day strip (e.g. the member billing-detail read)
-        don't pay for it. Callers that also need the strip call
-        ``get_streak_details``. Both share ``_count_weeks``, so the week count
-        can't drift between the two entry points.
+        The single-query path — a caller that doesn't need the per-day strip
+        doesn't pay for it. Use ``get_streak_details`` when it does.
         """
         params = {"member_id": str(member_id), "gym_id": str(gym_id)}
         async with self._db_pool.session() as session:
@@ -52,10 +49,8 @@ class StreakService:
     ) -> StreakResult:
         """Compute the streak week count AND the current-week per-day strip.
 
-        The two-query path (only the check-in routes need it): one session,
-        one gym-local Monday anchor shared by the weeks query and the per-day
-        query, so the strip and the count agree by construction. Reuses the
-        same ``_count_weeks`` as ``get_streak``.
+        One session and ONE gym-local Monday anchor shared by both queries, so
+        the strip and the count agree by construction.
         """
         params = {"member_id": str(member_id), "gym_id": str(gym_id)}
         days_sql = load_sql(SQL_DIR / "current_week_days.sql")
@@ -84,11 +79,10 @@ class StreakService:
         params: dict[str, str],
         current_monday: date,
     ) -> int:
-        """Run the weeks query and count the streak (single-sourced).
+        """Run the weeks query and count the streak.
 
-        The one streak query both entry points share: ``get_streak`` runs
-        ONLY this, ``get_streak_details`` runs this plus the per-day query --
-        both against the caller's open session and shared ``current_monday``.
+        Shared by both entry points so the week count cannot drift between
+        them. Runs against the caller's open session.
         """
         weeks_sql = load_sql(SQL_DIR / "streak_weeks.sql")
         week_rows = (await session.execute(text(weeks_sql), params)).all()
@@ -115,11 +109,9 @@ class StreakService:
 
     @staticmethod
     def _build_week_days(iso_dows: Iterable[int]) -> list[bool]:
-        """Build the Monday-first 7-bool strip from ISO weekday numbers.
+        """Build the strip from Postgres ``ISODOW`` values (1=Mon .. 7=Sun).
 
-        Each input is a Postgres ``ISODOW`` (1 = Monday .. 7 = Sunday); the
-        result is indexed 0 = Monday .. 6 = Sunday, ``True`` where the member
-        attended.
+        Result is indexed 0 = Monday .. 6 = Sunday.
         """
         days = [False] * 7
         for iso_dow in iso_dows:

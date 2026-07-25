@@ -64,11 +64,7 @@ class CheckinClassResolver:
                 lands on the exact ``(occurrence_date, occurrence_time)`` slot
                 (its ORIGINAL slot).
             CheckinNotOpenYetError: The occurrence starts further than
-                ``settings.checkin_opens_hours_before_start`` in the future
-                (check-in isn't open yet).
-
-            All of them subclass ``ValueError``; every one but
-            ``CheckinClassNotFoundError`` maps to 400.
+                ``settings.checkin_opens_hours_before_start`` in the future.
         """
         class_row = await self._queries.get_class_for_checkin(
             class_id, gym_id, occurrence_date, occurrence_time

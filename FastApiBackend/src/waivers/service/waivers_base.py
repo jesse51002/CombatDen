@@ -59,9 +59,7 @@ class WaiversBase:
         """Fetch a non-deleted waiver summary row.
 
         Raises:
-            WaiverNotFoundError: If the waiver is missing or archived
-                (-> 404). Typed, so the status comes off the class rather
-                than off whether this message contains "not found".
+            WaiverNotFoundError: If the waiver is missing or archived (404).
         """
         sql = load_sql(SQL_DIR / "waivers_get_by_id.sql")
         async with self._db_pool.session() as session:
@@ -100,8 +98,7 @@ class WaiversBase:
         """Load a waiver summary and embed its current version (with body).
 
         Raises:
-            WaiverNotFoundError: If the waiver is missing or archived
-                (-> 404).
+            WaiverNotFoundError: If the waiver is missing or archived (404).
         """
         response = self._build_summary_response(
             await self._get_waiver(waiver_id, gym_id),

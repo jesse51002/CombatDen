@@ -83,14 +83,9 @@ class BatchCheckinService:
             every processed member failed (the router maps that to 500).
 
         Raises:
-            CheckinError: If the occurrence cannot be resolved (class missing /
-                deleted / inactive, gym missing, or not a real, non-cancelled
-                occurrence on that exact slot). Raised before any per-member
-                work, so the whole request fails — the router maps the type to
-                404 (``CheckinClassNotFoundError``) or 400 (everything else).
-                A ``ValueError`` subclass, so the per-member
-                ``except Exception`` isolation below is unaffected: this is
-                raised OUTSIDE that loop.
+            CheckinError: The occurrence cannot be resolved. Raised OUTSIDE
+                the per-member loop, before any work, so the whole request
+                fails and the isolation below is unaffected.
         """
         resolved_class = await self._resolver.resolve(
             class_id, gym_id, occurrence_date, occurrence_time

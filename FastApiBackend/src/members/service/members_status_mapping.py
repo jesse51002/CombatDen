@@ -16,15 +16,12 @@ gate also needs cannot live here without creating a package cycle).
   :func:`load_member_dormant_sql`) and Python only decides where the
   resulting flag sits in the badge precedence
   (:func:`is_member_dormant`).
-- **Incomplete**: a VALID member row (it has a ``stripe_customer_id``)
-  that holds no membership of its own, pays for nobody else's, and holds
-  no billed-but-unconfirmed non-recurring row — an unfinished signup.
-  Also an aggregate over the member's whole membership set (as subject
-  and as payer), so it too lives in SQL
-  (``sql/crm_views/_member_incomplete.sql``, loaded by
-  :func:`load_member_incomplete_sql`); that file is the source of truth
-  for each clause and why it is there. It has no badge precedence to
-  apply: it is a list view + a tally, never a row badge.
+- **Incomplete**: an unfinished signup. Also an aggregate over the
+  member's whole membership set (as subject AND as payer), so it too
+  lives in SQL (``sql/crm_views/_member_incomplete.sql``, loaded by
+  :func:`load_member_incomplete_sql` — the source of truth for each
+  clause). No badge precedence: it is a list view + a tally, never a
+  row badge.
 - **Overdue**: an ACTIVE membership whose ``next_due_date`` has passed
   the gym's local date — ``src.shared.membership_status``.
 

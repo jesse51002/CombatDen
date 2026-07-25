@@ -105,19 +105,15 @@ class MemberPlan:
     email: str
     phone: str
     address: str
-    # Always populated: the column is nullable, but a blank date of birth on
-    # every seeded CRM member page reads as a broken field rather than an
-    # omitted optional one. Drawn from the adult band
-    # (MEMBER_MIN/MAX_AGE_YEARS), except a linked child, which
-    # _form_linked_families re-draws from LINKED_CHILD_MIN/MAX_AGE_YEARS.
+    # Always populated (nullable in the DB, but blank reads as broken on the
+    # CRM member page). Adult band, except a linked child, which
+    # _form_linked_families re-draws into the minor band.
     date_of_birth: date
     emergency_contact_name: str
     emergency_contact_phone: str
     emergency_contact_email: str
-    # Starts at 0 and is EARNED, never drawn: generators/classes.
-    # award_attendance_points sets it from the member's seeded attendance once
-    # that exists (points per class, exactly as the check-in path awards), and
-    # their seeded redemptions debit it from there.
+    # Starts at 0 and is EARNED, never drawn: award_attendance_points sets it
+    # from the member's seeded attendance, and redemptions debit it.
     points_balance: int
     current_rank_id: uuid.UUID | None
     # Leaf position within current_rank_id's main rank: an index in
@@ -164,16 +160,11 @@ def _random_phone() -> str:
 
 
 def _random_birth_date(min_age: int, max_age: int) -> date:
-    """A plausible birth date inside the given age band.
+    """A plausible birth date inside the given age band (adult or minor).
 
-    One implementation serves both bands — the adult one every member starts
-    on (MEMBER_MIN/MAX_AGE_YEARS) and the minor one a linked child is
-    re-drawn into (LINKED_CHILD_MIN/MAX_AGE_YEARS).
-
-    Faker walks the band uniformly, so the roster spreads across ages instead
-    of clustering — and it draws from the same PRNG `Faker.seed(SEED)` fixes,
-    so a re-run reproduces the same dates and the idempotency layer's
-    email-keyed lookups still match.
+    Faker draws from the same PRNG `Faker.seed(SEED)` fixes, so a re-run
+    reproduces the same dates and the idempotency layer's email-keyed lookups
+    still match.
     """
     return fake.date_of_birth(minimum_age=min_age, maximum_age=max_age)
 
@@ -446,12 +437,9 @@ def _form_linked_families(
     layer, not the billing key). Regular discounts are drawn per membership in
     ``_assign_discounts`` (family members included, like any other membership).
 
-    Who is a child is only decided HERE, after ``_demographics`` has already
-    given every member an adult date of birth, so each child is re-drawn into
-    the minor band as it is picked. Re-drawing in place is the smaller change:
-    the family partition needs the built MemberPlan list (it reads
-    ``local_handle`` and writes memberships), so it cannot run before
-    demographics without splitting the partition in two.
+    Who is a child is only decided HERE — the partition needs the built
+    MemberPlan list — so each child's adult date of birth is re-drawn into the
+    minor band as it is picked.
 
     Operates on member *indices* (never reorders `members`, since create_all
     keys the first AUTH_MEMBERS_PER_GYM members to real auth logins by position).
@@ -473,9 +461,7 @@ def _form_linked_families(
         for _ in range(num_children):
             child = linkable.pop()
             members[child].linked_primary_handle = members[root].local_handle
-            # A linked child is a minor: replace the adult date of birth
-            # _demographics drew with one from the child band, so the
-            # family/payer surfaces show a child's age.
+            # A linked child is a minor: re-draw into the child band.
             members[child].date_of_birth = _random_birth_date(
                 LINKED_CHILD_MIN_AGE_YEARS, LINKED_CHILD_MAX_AGE_YEARS
             )

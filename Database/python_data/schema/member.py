@@ -42,10 +42,8 @@ class MemberCreate(SeedModel):
     photo_url: str | None = None
     phone: str | None = None
     address: str | None = None
-    # Nullable in the DB; the kiosk self-serve signup captures it as an
-    # optional detail and staff can edit it. Every seeded member DOES get one
-    # (generators/members._random_birth_date), so the CRM's date-of-birth
-    # field is populated across the demoed roster.
+    # Nullable in the DB (the kiosk signup captures it as an optional
+    # detail), but every seeded member gets one.
     date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None

@@ -1,17 +1,14 @@
-"""Unit tests for the current-week per-day strip building.
+"""Unit tests for ``StreakService._build_week_days`` (pure static, no DB).
 
-``StreakService._build_week_days`` turns the set of Postgres ISO weekday
-numbers (1 = Monday .. 7 = Sunday) a member attended on this week into the
-length-7, Monday-first ``list[bool]`` the kiosk glance draws its S/M/T/W/T/F/S
-strip from (index 0 = Monday .. 6 = Sunday). It is a pure static method, so
-these tests exercise it directly -- no DB, no session.
+Turns the week's Postgres ISODOW numbers (1 = Monday .. 7 = Sunday) into the
+length-7, MONDAY-FIRST ``list[bool]`` the kiosk strip draws (index 0 = Monday
+.. 6 = Sunday).
 """
 
 from src.checkin.service.streak_service import StreakService
 
 
 def test_no_attendance_is_all_false() -> None:
-    """An empty week -> seven Falses."""
     assert StreakService._build_week_days([]) == [False] * 7
 
 
@@ -55,13 +52,11 @@ def test_mon_wed_fri() -> None:
 
 
 def test_full_week_is_all_true() -> None:
-    """Every weekday attended -> seven Trues."""
     assert StreakService._build_week_days([1, 2, 3, 4, 5, 6, 7]) == [True] * 7
 
 
 def test_duplicates_and_unordered_input_are_idempotent() -> None:
-    """Order and repeats don't matter (the SQL is DISTINCT, but the builder
-    tolerates duplicates and any order regardless)."""
+    """The SQL is DISTINCT, but the builder tolerates repeats and any order."""
     assert StreakService._build_week_days([5, 1, 3, 1, 5]) == (
         StreakService._build_week_days([1, 3, 5])
     )

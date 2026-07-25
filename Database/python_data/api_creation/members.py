@@ -67,12 +67,10 @@ class CreateAllResult:
 def _contact_fields(member: MemberPlan) -> dict:
     """Contact / profile columns the create + update endpoints accept.
 
-    Every value is JSON-native. ``date_of_birth`` is stringified here rather
-    than passed as a `date`: this dict is both the POST body (httpx's `json=`
-    cannot encode a `date`) AND the expected-vs-actual side of the re-run
-    drift diff, whose actual comes back from PostgREST as an ISO string — so a
-    `date` object would look drifted on every single re-run and re-PUT the
-    whole roster.
+    Every value must be JSON-native: this dict is both the POST body and the
+    expected side of the re-run drift diff, whose actual comes back from
+    PostgREST as an ISO string — so a `date` object would read as drifted on
+    every re-run and re-PUT the whole roster.
     """
     return {
         "phone": member.phone,

@@ -102,9 +102,6 @@ class SignupService:
             CheckinClassFullError: The occurrence is at its effective
                 ``max_capacity`` and this member isn't already counted (signed
                 up or attended).
-
-            All of them subclass ``ValueError``; every one but
-            ``CheckinClassNotFoundError`` maps to 400.
         """
         class_row, occurrence = await self._validate_occurrence(
             class_id, gym_id, occurrence_date, occurrence_time

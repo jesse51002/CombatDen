@@ -871,9 +871,7 @@ def generate_attendance(
     original_time) with `occurred_at` as the denormalized effective UTC
     instant.
 
-    A member's subset is capped at MAX_CLASSES_ATTENDED_PER_MEMBER -- how much
-    training history a seeded member has, and therefore (points being earned
-    per class in `award_attendance_points`) what rewards they can afford.
+    A member's subset is capped at MAX_CLASSES_ATTENDED_PER_MEMBER.
     """
     today = date.today()
     window_end = today + timedelta(days=FUTURE_SIGNUP_HORIZON_DAYS)
@@ -958,27 +956,17 @@ def award_attendance_points(
 ) -> dict[UUID, int]:
     """Give each member the points their seeded attendance earned them.
 
-    This is the seed's mirror of the live check-in's points side-effect: every
-    new attendance row adds its class's `points_worth` to
-    `members.points_balance`, in the same transaction as the INSERT
-    (FastApiBackend/src/checkin/sql/classes_award_points.sql, bound from
-    `resolved_class.points_worth` in checkin_writer._award_points). So a
-    seeded balance is the SUM of `points_worth` over the rows this seed just
-    wrote -- a figure a CRM reader can add up from the member's own attendance
-    list, and the reason the reward ladder is honest: a redemption costs a real
-    number of classes rather than clearing an invented number.
+    The seed's mirror of the live check-in side-effect (each attendance adds
+    its class's `points_worth`), so a balance is a figure a CRM reader can add
+    up from the member's own attendance list.
 
-    Mutates each affected `MemberCreate.points_balance` in place and returns
-    the {member_id: balance} write-back map (the same contract
-    `redemptions.generate` uses) so the caller can push the earned figures onto
-    the already-inserted member rows. A member with no attendance is absent
-    from the map -- their row already holds 0.
+    Mutates `MemberCreate.points_balance` in place and returns the
+    {member_id: balance} write-back map -- a member with no attendance is
+    absent, their row already holding 0.
 
-    Assignment, not accumulation: the balance IS the earned total, so calling
-    this twice over the same attendance is a no-op rather than a double award.
-    Runs BEFORE redemptions are generated -- `redemptions.generate` debits this
-    earned total and refuses a reward a member cannot afford, so a final
-    balance is exactly (earned - spent) and can never go negative.
+    Assignment, not accumulation, so a second call over the same attendance is
+    a no-op rather than a double award. Must run BEFORE redemptions, which
+    debit this earned total.
     """
     points_worth = {cls.class_id: cls.points_worth for cls in classes}
     earned: dict[UUID, int] = defaultdict(int)

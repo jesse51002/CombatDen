@@ -12,11 +12,8 @@ class MembersListView(StrEnum):
     """Available views for the members list screen.
 
     ``incomplete`` is the staff follow-up list for signups that never
-    finished: a VALID member row (one with a ``stripe_customer_id``) with
-    no membership of its own, that is also not the payer on anyone
-    else's and holds no billed-but-unconfirmed membership. Its rule — and
-    the reasoning for each exclusion — lives in SQL
-    (``sql/crm_views/_member_incomplete.sql``).
+    finished; ``sql/crm_views/_member_incomplete.sql`` owns its rule and the
+    reasoning for each exclusion.
     """
 
     all = "all"
@@ -172,11 +169,8 @@ class OverdueViewRow(BaseRow):
 
 
 class IncompleteViewRow(BaseRow):
-    """Row for the Incomplete view.
-
-    A signup that stalled before any membership was bought. Carries the
-    contact details staff need to chase it (same pair as the Overdue
-    view) plus how long the shell row has been sitting there.
+    """Row for the Incomplete view — a signup that stalled before any
+    membership was bought, with the contact details staff need to chase it.
     """
 
     view: Literal[MembersListView.incomplete] = MembersListView.incomplete
@@ -211,9 +205,8 @@ class MembersListTotalCounts(BaseModel):
     frozen or past due is counted here even though a higher-precedence
     badge claims their row in the list.
 
-    ``incomplete`` is the one tally that cannot overlap the others: it
-    counts valid member rows with no VISIBLE membership at all (and who
-    pay for nobody), while every other tally requires one.
+    ``incomplete`` is the one tally that cannot overlap the others — every
+    other one requires a visible membership, and it requires none.
     """
 
     active: int

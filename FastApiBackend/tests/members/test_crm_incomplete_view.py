@@ -1,32 +1,17 @@
 """Integration: the Incomplete tab lists stalled signups — and only those.
 
-The rule (``sql/crm_views/_member_incomplete.sql``) has four clauses, and every
-one of them exists to keep a specific wrong person OFF a staff follow-up list.
-A member is incomplete when their row is VALID (it has a
-``stripe_customer_id``), they hold no membership of their own, they are not the
-payer on anyone else's, and they hold no billed-but-unconfirmed non-recurring
-membership.
+A member is incomplete when their row is VALID (has a ``stripe_customer_id``),
+they hold no membership of their own, they are not the payer on anyone else's,
+and they hold no billed-but-unconfirmed non-recurring membership. Each of those
+four clauses of ``sql/crm_views/_member_incomplete.sql`` keeps a specific wrong
+person OFF a staff follow-up list — most sharply the last, where the card was
+already charged and "finish signing up" is the worst possible advice.
 
-Each exclusion is covered below by building the real production row state:
-
-* **the payer** — a non-training parent who pays for their kid owns no
-  membership, so without the payer half they would sit in the follow-up list
-  forever with nothing left to finish;
-* **the invalid row** — no ``stripe_customer_id`` means the create never
-  finished, so the row has no billing identity and every next step staff could
-  take against it would be rejected;
-* **the billed-but-unconfirmed row** — the start op charged the card and then
-  failed to stamp the writeback, and deliberately KEEPS the row ("billed lines
-  are never un-billed"); the filtered view hides it, so the member reads as
-  owning nothing when in fact their money has been taken. Chasing them to
-  "finish signing up" is the worst possible follow-up.
-
-Runs against the real shared local Supabase DB with the real
-``incomplete_view.sql`` / ``total_counts.sql``. Every assertion is scoped by a
-per-run random surname passed through the list's own ``name`` filter, so the
-seeded gym's own members can never make it pass or fail — and every test also
-checks the TALLY delta, because the tab and its count share one predicate text
-and a change that broke only one of them would be invisible otherwise.
+Runs the real ``incomplete_view.sql`` / ``total_counts.sql`` against the shared
+local Supabase DB, whose population moves under other suites — so every
+assertion is scoped by a per-run random surname through the list's own ``name``
+filter, and every test also checks the tally, because tab and count share one
+predicate text.
 """
 
 from __future__ import annotations
@@ -51,11 +36,9 @@ _UNPAGINATED = 500
 async def _listed_ids(service, gym_id: UUID, surname: str | None) -> set[UUID]:
     """The Incomplete tab's member ids, optionally scoped by surname.
 
-    Passing a surname goes through the list's own ``name`` filter, which is how
-    every behavioural assertion here stays immune to the shared local DB: other
-    agents' test suites create and delete members in it continuously (observed
-    live), so any assertion on an absolute COUNT is a coin flip. Set membership
-    of a specific id is not.
+    The surname goes through the list's own ``name`` filter — other suites add
+    and remove members in this shared DB continuously, so an absolute COUNT is a
+    coin flip while set membership of a specific id is not.
     """
     response = await service.get_crm_members_list(
         CrmMembersListRequest(
@@ -77,14 +60,10 @@ async def _assert_tally_matches_list(
 ) -> int:
     """Assert the subtitle tally equals the Incomplete tab's row count.
 
-    This is the invariant the shared fragment exists for: the tab
-    (``incomplete_view.sql``) and the tally (``total_counts.sql``) inject ONE
-    predicate text, so they cannot disagree about who is incomplete. Asserted
-    as an equality at a single moment rather than as a before/after delta —
-    a delta needs the gym-wide population to hold still across the whole test
-    body, which on this shared DB it does not.
-
-    Returns the agreed count so a caller can assert on it.
+    The invariant the shared fragment exists for: tab and tally inject ONE
+    predicate text, so they cannot disagree. An equality at a single moment, not
+    a before/after delta — a delta needs the gym-wide population to hold still,
+    which on this shared DB it does not. Returns the agreed count.
     """
     tally = (await counts_service.get_total_counts(gym_id)).incomplete
     listed = await _listed_ids(list_service, gym_id, None)
@@ -107,10 +86,9 @@ async def _attach_membership(
 ) -> None:
     """Insert a Stripe-synced membership row directly.
 
-    The view reads ``member_memberships_status`` (the FILTERED view), so the row
-    needs a ``stripe_item_id`` and an ``applied`` sync status to be visible.
-    Going through the real start op would mean a live Stripe subscription for a
-    test that is purely about a SQL predicate.
+    The view reads the FILTERED ``member_memberships_status``, so the row needs
+    a ``stripe_item_id`` and an ``applied`` sync status to be visible. The real
+    start op would mean a live Stripe subscription for a pure SQL-predicate test.
     """
     async with db_pool.session() as session:
         await session.execute(
@@ -154,22 +132,14 @@ async def _attach_unconfirmed_membership(
     plan_id: UUID,
     price_id: UUID,
 ) -> None:
-    """Insert a BILLED-BUT-UNCONFIRMED membership row, exactly as production
-    leaves one.
+    """Insert a BILLED-BUT-UNCONFIRMED membership row, as production leaves one.
 
-    This is the state ``MemberMembershipsStart._charge_one_time_group`` produces
-    when the consolidated invoice is PAID but
-    ``PaymentSyncOneTime._writeback_membership_rows`` fails to stamp the row:
-    ``_verify_group(keep_unverified=True)`` marks the item failed and KEEPS the
-    row untouched, because a billed line is never un-billed. The single UPDATE
-    that would have written ``stripe_item_id`` / ``stripe_one_time_invoice_id`` /
-    ``stripe_sync_status = 'applied'`` is the one that failed, so the row is
-    still exactly as inserted: NULL ids, ``'not_added'``.
-
-    That is why the fixture writes no ``stripe_item_id`` — a "charged" marker
-    on the row is precisely what is missing, which is what makes the member
-    look like an unfinished signup to every read that goes through the filtered
-    view.
+    The consolidated invoice is PAID but the writeback that would stamp
+    ``stripe_item_id`` / ``'applied'`` failed, and ``_verify_group
+    (keep_unverified=True)`` KEEPS the row untouched — a billed line is never
+    un-billed. So the row stays as inserted (NULL ids, ``'not_added'``): the
+    "charged" marker is exactly what is missing, which is what makes the member
+    look like an unfinished signup to every read through the filtered view.
     """
     async with db_pool.session() as session:
         await session.execute(
@@ -213,11 +183,10 @@ async def _insert_member_without_stripe_customer(
 ) -> UUID:
     """Insert a members row with NO ``stripe_customer_id`` — a failed create.
 
-    Cannot go through ``created.member``: that helper always provisions the
-    Stripe customer, which is the whole point of the production invariant. The
-    row this writes is what survives when the create's Stripe step failed after
-    the DB insert — no billing identity, invisible to
-    ``member_billing_profile``, and unusable for every next step.
+    ``created.member`` always provisions the Stripe customer (that is the
+    invariant), so the invalid row has to be written directly: no billing
+    identity, invisible to ``member_billing_profile``, unusable for every next
+    step.
     """
     async with db_pool.session() as session:
         result = await session.execute(
@@ -246,12 +215,11 @@ async def test_incomplete_view_lists_only_unfinished_signups(
     gym_id,
     created,
 ) -> None:
-    """Three members, one rule: only the member with nothing at all is listed.
+    """Only the member with nothing at all is listed.
 
-    * ``stalled`` — a shell row, no membership, pays for nobody. LISTED.
-    * ``buyer`` — holds their own membership. NOT listed.
-    * ``payer`` — holds no membership but funds ``child``'s. NOT listed; this
-      is the exclusion the whole predicate exists for.
+    ``stalled`` (a shell row) is LISTED; ``buyer`` (own membership) is not; and
+    ``payer`` — no membership, but funds ``child``'s — is not, the exclusion the
+    payer half of the predicate exists for.
     """
     surname = f"Incmpl{uuid4().hex[:8]}"
     plan = await created.plan(gym_id, plan_type="recurring")
@@ -317,13 +285,9 @@ async def test_incomplete_view_lists_only_unfinished_signups(
         assert row.name == f"Stalled {surname}"
         assert row.days_waiting == 0  # created moments ago, gym-local
 
-        # The tally agrees with the tab, and the same four members land on the
-        # same side of both. This replaces a before/after DELTA assertion: the
-        # tally is gym-wide, and other agents' suites add and remove members in
-        # this shared DB continuously (observed live), so a delta measured
-        # across a whole test body is a coin flip. The equality below is the
-        # real invariant — one predicate text, two surfaces — and set
-        # membership carries the per-member behaviour.
+        # Tally == tab (one predicate text, two surfaces) plus set membership
+        # for the per-member behaviour. Never a gym-wide count delta: this DB is
+        # shared and its population moves mid-test.
         unfiltered = await _listed_ids(crm_members_list_service, gym_id, None)
         assert stalled.member_id in unfiltered
         for excluded in (buyer, payer, child):
@@ -344,11 +308,8 @@ async def test_incomplete_view_excludes_lapsed_members(
     gym_id,
     created,
 ) -> None:
-    """A member whose only membership is CANCELLED is lapsed, not unfinished.
-
-    Deliberate: the tab is for signups that never completed. Re-listing every
-    churned member here would bury the real ones.
-    """
+    """A member whose only membership is CANCELLED is lapsed, not unfinished —
+    re-listing every churned member here would bury the real ones."""
     surname = f"Lapsed{uuid4().hex[:8]}"
     plan = await created.plan(gym_id, plan_type="recurring")
     lapsed = await created.member(
@@ -401,19 +362,12 @@ async def test_incomplete_view_excludes_billed_but_unconfirmed_memberships(
 ) -> None:
     """Someone who already PAID is never an unfinished signup.
 
-    The start op charges a one-time group on one consolidated invoice, then
-    stamps each row ``applied``. When the charge lands but that writeback does
-    not, the row is deliberately KEPT in its pre-sync ``'not_added'`` state
-    (``memberships_start.py``, ``_verify_group(keep_unverified=True)``) because
-    a billed line is never un-billed. The ``member_memberships`` view hides
-    exactly that status, so before this exclusion the member read to the entire
-    CRM as owning nothing and landed in the staff follow-up list — staff then
-    chased a person whose card had already been charged, and the reconciliation
-    the row actually needs went unnoticed.
-
-    Both directions are covered, because the shared predicate disqualifies a
-    member as SUBJECT or as PAYER and a payer who paid for someone else has
-    equally already paid.
+    A charged one-time row whose writeback failed is deliberately kept
+    ``'not_added'`` (a billed line is never un-billed) and the
+    ``member_memberships`` view hides exactly that status — so without this
+    exclusion the member reads as owning nothing and staff chase someone whose
+    card was already charged. Both directions covered: the predicate
+    disqualifies a member as SUBJECT or as PAYER.
     """
     surname = f"Unconf{uuid4().hex[:8]}"
     pack = await created.plan(gym_id, plan_type="one_time")
@@ -461,11 +415,8 @@ async def test_incomplete_view_excludes_billed_but_unconfirmed_memberships(
             "only the member with genuinely nothing on file is listed"
         )
 
-        # The TALLY excludes them too, not just the tab — a change that fixed
-        # only one surface would leave staff a count that disagrees with the
-        # list they can see. Asserted as tally == tab (one shared predicate
-        # text) plus set membership, never as a gym-wide count delta: this DB
-        # is shared with other agents' suites and its population moves.
+        # The TALLY excludes them too, not just the tab — a fix to one surface
+        # alone would leave staff a count that disagrees with the list.
         unfiltered = await _listed_ids(crm_members_list_service, gym_id, None)
         assert control.member_id in unfiltered
         for excluded in (buyer, payer, child):
@@ -489,16 +440,12 @@ async def test_incomplete_view_excludes_members_with_no_stripe_customer(
 ) -> None:
     """A row with no ``stripe_customer_id`` is INVALID and shown nowhere.
 
-    Every member is provisioned a Stripe customer at creation and the id is
-    immutable afterwards (``trg_prevent_stripe_customer_id_overwrite``), so a
-    NULL means the create never completed. The row has no billing identity:
-    ``member_billing_profile`` — which the whole billing read path goes through
-    — filters on exactly this column, so nothing can be sold to it and every
-    next step staff could take against it is rejected. Listing it as a signup to
-    chase is sending someone after a dead row.
-
-    The valid member created alongside it proves the exclusion is about the
-    missing customer id and not about the fixture's insert path.
+    The id is provisioned at creation and immutable after
+    (``trg_prevent_stripe_customer_id_overwrite``), so NULL means the create
+    never completed: ``member_billing_profile`` filters on exactly this column,
+    so nothing can be sold to the row and every next step is rejected. The valid
+    member alongside proves the exclusion is about the missing id, not the
+    fixture's insert path.
     """
     surname = f"NoCust{uuid4().hex[:8]}"
     valid = await created.member(gym_id, first_name="Valid", last_name=surname)
@@ -519,8 +466,7 @@ async def test_incomplete_view_excludes_members_with_no_stripe_customer(
         )
         assert listed == {valid.member_id}
 
-        # The tally excludes it too, and agrees with the tab (see the sibling
-        # test for why this is an equality rather than a count delta).
+        # The tally excludes it too, and agrees with the tab.
         unfiltered = await _listed_ids(crm_members_list_service, gym_id, None)
         assert valid.member_id in unfiltered
         assert broken_id not in unfiltered

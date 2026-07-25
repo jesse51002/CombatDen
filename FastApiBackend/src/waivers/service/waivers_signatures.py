@@ -92,12 +92,9 @@ class WaiversSignatures(WaiversBase):
         """Resolve a member's gym payer-auth waiver + version.
 
         Raises:
-            WaiverPayerAuthMissingError: If the member's gym has no
-                payer-auth waiver (the authorized-payer gate cannot
-                proceed) -> 404 on EVERY caller. It used to be 404 on the
-                read route and 400 on the link route from one raise,
-                because this message happens not to contain "not found"
-                — see ``waivers_exceptions``.
+            WaiverPayerAuthMissingError: The member's gym has no payer-auth
+                waiver, so the authorized-payer gate cannot proceed. 404 on
+                EVERY caller — see ``waivers_exceptions``.
         """
         sql = load_sql(SQL_DIR / "waiver_payer_auth_for_member.sql")
         async with self._db_pool.session() as session:
@@ -220,10 +217,8 @@ class WaiversSignatures(WaiversBase):
             WaiverNotFoundError: The waiver is missing or archived (→ 404).
             WaiverVersionNotFoundError: The waiver has no current version to
                 sign (→ 404).
-            WaiverVersionStaleError: The echoed version is not the current one
-                (→ 409). The 409 used to hang off the word "reload" appearing
-                in the message — nothing about that word says "conflict", so
-                dropping it from the copy would silently have made this a 400.
+            WaiverVersionStaleError: The echoed version is not the current
+                one (→ 409).
             WaiverSignerNotInGymError: The member is not in this gym (→ 404).
         """
         sql = load_sql(SQL_DIR / "waiver_current_version_for_sign.sql")
@@ -244,9 +239,6 @@ class WaiversSignatures(WaiversBase):
                 )
             current_version_id = waiver["current_version_id"]
             if current_version_id is None:
-                # The message no longer has to smuggle "not found" into itself
-                # to earn a 404 — the type carries it — so it says what is
-                # actually wrong.
                 raise WaiverVersionNotFoundError(
                     f"Waiver {waiver_id} has no current version to sign",
                 )

@@ -62,10 +62,10 @@ class WaiversUpdate(WaiversBase):
                 row (-> 404).
             WaiverNoCurrentVersionError: If a flag-only update targets a
                 waiver with no current version (-> 400).
-            ValueError: From the shared ``validate_mutable_columns`` guard
-                when a rename touches an immutable column (-> 400). Untyped
-                on purpose — the guard is domain-agnostic — which is why the
-                router keeps a generic bad-input arm below its typed one.
+            ValueError: From the shared ``validate_mutable_columns`` guard on
+                an immutable column. Untyped on purpose (the guard is
+                domain-agnostic), which is why the router keeps a generic
+                bad-input arm below its typed one.
         """
         existing = await self._get_waiver(request.waiver_id, request.gym_id)
 
@@ -210,11 +210,9 @@ class WaiversUpdate(WaiversBase):
         Moving the flag moves the re-sign floor: raising it re-blocks prior
         signers; lowering it makes their signatures count again.
 
-        The two failure modes are deliberately DIFFERENT types with different
-        statuses: no current-version pointer at all is a 400 (the operation has
-        no target), a pointer whose row is gone is a 404 (the version was
-        addressed and is missing). The 400 is inherited from the prose
-        dispatch, not chosen — see ``waivers_exceptions``.
+        The two failure modes are deliberately DIFFERENT types: no
+        current-version pointer at all is a 400 (nothing to target), a pointer
+        whose row is gone is a 404 (addressed and missing).
         """
         if current_version_id is None:
             raise WaiverNoCurrentVersionError("Waiver has no current version")

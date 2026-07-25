@@ -279,13 +279,9 @@ class CheckinResponse(BaseModel):
             this check-in — the same value ``GET /api/v1/streak`` returns, folded
             into the check-in response so the caller needn't make a second call.
             0 when the check-in was not recorded (a rejection / needs-confirmation).
-        current_week_days: The member's current gym-local week attendance strip
-            AFTER this check-in — a length-7 list, index 0 = Monday .. 6 = Sunday
-            (Monday-first), each ``True`` when the member attended a class on that
-            weekday of the CURRENT gym-local week. The same value the strip on
-            ``GET /api/v1/streak`` carries, folded in alongside
-            ``class_streak_weeks``. All ``False`` when the check-in was not
-            recorded (a rejection / needs-confirmation).
+        current_week_days: The week strip AFTER this check-in (see
+            ``StreakResult``), folded in alongside ``class_streak_weeks``.
+            All ``False`` when the check-in was not recorded.
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -374,21 +370,17 @@ class AttendeeListResponse(BaseModel):
 class StreakResult(BaseModel):
     """A member's attendance streak metrics for one gym, computed together.
 
-    ``StreakService.get_streak_details``' return — an INTERNAL type (like
-    ``GateEvaluation`` / ``ResolvedClass``), never itself serialized: the
-    routes map it onto ``StreakResponse`` / ``CheckinResponse``.
-
-    Both fields derive from the SAME single session and the SAME gym-local
-    current-week Monday anchor, so the per-day strip and the week count can
-    never disagree about which week is "current".
+    ``StreakService.get_streak_details``' return — an INTERNAL type, never
+    serialized; the routes map it onto ``StreakResponse`` / ``CheckinResponse``.
+    Both fields derive from the SAME session and the SAME gym-local Monday
+    anchor, so the strip and the week count can never disagree about which
+    week is "current".
 
     Attributes:
-        weeks: Consecutive weeks (gym-local) with at least one class
-            attendance -- what ``GET /api/v1/streak`` has always returned.
-        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday
-            (Monday-first), each ``True`` when the member attended a class on
-            that weekday of the CURRENT gym-local week. All ``False`` when the
-            member has not attended this week.
+        weeks: Consecutive gym-local weeks with at least one class attendance.
+        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday, each
+            ``True`` when the member attended on that weekday of the CURRENT
+            gym-local week.
     """
 
     weeks: int
@@ -396,18 +388,7 @@ class StreakResult(BaseModel):
 
 
 class StreakResponse(BaseModel):
-    """Response for GET /api/v1/streak.
-
-    Attributes:
-        member_id: The member the streak belongs to.
-        class_streak_weeks: Consecutive gym-local weeks with at least one
-            class attendance.
-        current_week_days: The current gym-local week attendance strip — a
-            length-7 list, index 0 = Monday .. 6 = Sunday (Monday-first), each
-            ``True`` when the member attended a class on that weekday of the
-            CURRENT gym-local week. All ``False`` when they have not attended
-            this week.
-    """
+    """Response for GET /api/v1/streak — ``StreakResult`` on the wire."""
 
     member_id: UUID
     class_streak_weeks: int

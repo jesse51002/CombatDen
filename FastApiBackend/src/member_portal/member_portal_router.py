@@ -237,13 +237,10 @@ async def get_my_streak(
     await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
 
     try:
-        # ``get_streak_details``, not ``get_streak``: the response carries
-        # ``current_week_days``, whose default is seven Falses — and an
-        # all-False strip MEANS "has not attended this week". The one-query
-        # path would leave that default in place, so a member who trained
-        # Mon/Wed/Fri would read their own week as blank while the staff
-        # ``GET /api/v1/streak`` (same schema, same service call) showed it
-        # filled. The strip has to be computed to be reported.
+        # ``get_streak_details``, not ``get_streak``: an all-False
+        # ``current_week_days`` MEANS "has not attended this week", so the
+        # cheaper one-query path would render a member who trained Mon/Wed/Fri
+        # a blank week while the staff route showed it filled.
         streak = await streak_service.get_streak_details(member_id, gym_id)
     except Exception:
         logger.error(
@@ -444,17 +441,12 @@ async def create_my_signup(
         profile_refresh_runner.start(member_id, gym_id)
         return result
     except CheckinError:
-        # Typed dispatch, exactly like the staff sign-up route: re-raised for
-        # the global formatter, which reads the status AND the stable ``code``
-        # off the exception type (class not found -> 404, every other sign-up
-        # rejection -> 400). This route used to pick the status by looking for
-        # "not found" in the message, so it agreed with the staff route only
-        # by coincidence — a reworded message would have silently moved this
-        # member-facing status while the staff one stayed put.
+        # Re-raised for the global formatter, exactly like the staff sign-up
+        # route — status and ``code`` come off the type, so the two surfaces
+        # agree structurally rather than by coincidence.
         raise
     except ValueError as exc:
-        # A foreign/unmapped ValueError is bad input, not a 5xx — same
-        # fallback the staff route keeps. No ``code`` on this one.
+        # A foreign/unmapped ValueError is bad input, not a 5xx (no ``code``).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

@@ -288,13 +288,10 @@ class EffectiveClassInstanceResponse(BaseModel):
             instructor (None when unassigned or not found).
         image_url: The class image, if any.
         points_worth: Points awarded for attending.
-        is_active: The owning class's live/PAUSED flag
-            (``gym_classes.is_active``). Only ever False on a response the
-            caller asked for with ``include_inactive=true`` — the default
-            emits no paused occurrences at all. That opt-in read DOES mix
-            paused and live rows, which is why the flag is on the wire: the
-            CRM's classes page marks a paused card "Paused" and routes its
-            tap to the class editor instead of check-in.
+        is_active: The owning class's live/PAUSED flag. Only ever False on
+            an ``include_inactive=true`` read, which mixes paused and live
+            rows — which is why it is on the wire: the CRM's classes page
+            marks a paused card and routes its tap to the editor.
         max_capacity: Class capacity (None = unlimited).
         is_cancelled: True when this occurrence is cancelled (still shown).
         has_instance_exception: True when an instance exception exists on this

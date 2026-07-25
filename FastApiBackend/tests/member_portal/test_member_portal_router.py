@@ -1,20 +1,12 @@
 """Unit tests for the member portal router (/api/v1/member/...).
 
-Mocks at the same seam as the other router tests: the ``client`` fixture
-(auth + db_pool overridden) plus a per-service container override, so no DB is
-touched. What these assert:
-
-* the right GATE runs on every route — ``verify_member_self`` with the PATH
-  ``gym_id`` on every gym-scoped route, ``verify_verified_account`` on the
-  identity entry point (which has no member to scope yet);
-* the hardwired gate semantics actually reach the services (the redemption is
-  always ``auto_approve=False``, the feed is always ``rejected=False``, the
-  reward catalog is always ``include_inactive=False``) and are not
-  client-selectable;
-* a member reads the SAME payload the staff surface does where the two share a
-  schema — the streak route reports the computed ``current_week_days`` strip,
-  not the all-False default (which means "hasn't attended this week");
-* the router's status-code mapping (service errors → HTTP codes).
+Same seam as the other router tests: the ``client`` fixture plus a per-service
+container override, so no DB is touched. Three things are locked here — the
+right GATE on every route (``verify_member_self`` carrying the PATH ``gym_id``;
+``verify_verified_account`` on the identity entry point, which has no member to
+scope yet); that the hardwired semantics reach the services and are NOT
+client-selectable (``auto_approve=False``, ``rejected=False``,
+``include_inactive=False``); and the status-code mapping.
 """
 
 from datetime import UTC, date, datetime, time
@@ -246,8 +238,8 @@ def test_list_my_members_uses_verified_account_gate(
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["members"]) == 1
     auth_mock.verify_verified_account.assert_awaited()
-    # The email + caller_id (the JWT sub) both come from the gate, never from
-    # the client — the identity query pins the caller's own confirmed account.
+    # Email + caller_id both come from the gate, never the client: the identity
+    # query pins the caller's OWN confirmed account.
     portal_service_mock.list_members_for_email.assert_awaited_once_with(
         "test@example.com", fake_user_id
     )
@@ -302,11 +294,9 @@ def test_get_streak_gates_and_returns_weeks_and_week_strip(
 ):
     """The member's own strip must be FILLED, not the schema default.
 
-    ``StreakResponse.current_week_days`` defaults to seven Falses, and
-    all-False MEANS "has not attended this week" — so the route has to run the
-    details path (``get_streak_details``) and report the computed strip.
-    Reading only the week count would leave a Mon/Wed/Fri member looking at a
-    blank week in their own app while the staff route showed it filled."""
+    All-False is not "unknown", it MEANS "has not attended this week" — so the
+    route must run ``get_streak_details`` and report the computed strip, or a
+    Mon/Wed/Fri member sees a blank week the staff route shows filled."""
     week_days = [True, False, True, False, True, False, False]
     streak_service_mock.get_streak_details = AsyncMock(
         return_value=StreakResult(weeks=4, current_week_days=list(week_days))
@@ -457,14 +447,11 @@ def test_create_signup_maps_error_type_to_status_and_code(
     expected_code,
 ):
     """The member-facing route dispatches on the exception TYPE, exactly like
-    the staff ``POST /api/v1/signup`` — same ``SignupService``, same statuses,
-    same sibling ``code``.
+    the staff ``POST /api/v1/signup`` — same service, statuses and ``code``.
 
-    It used to pick the status by looking for "not found" in the message, so
-    it agreed with the staff route only by coincidence: rewording one message
-    would have moved the member-facing status while the staff one stayed put.
-    Each message here is deliberately hostile to that old dispatch (the 404
-    type's lacks "not found"; the 400 types' contain it).
+    Only a type dispatch keeps the two routes in agreement: under prose
+    matching, rewording one message moves the member status while the staff one
+    stays put. The messages here are hostile to that on purpose.
     """
     message = (
         "no such class at this gym"

@@ -1,20 +1,16 @@
--- Incomplete signups: valid member rows that never finished buying anything,
--- are not paying for anybody either, and are not sitting on a billed-but-
--- unconfirmed membership. The rule itself is the shared predicate injected below
--- from _member_incomplete.sql -- which owns the reasoning for each clause -- so
+-- Incomplete signups. The rule is the shared predicate injected below from
+-- _member_incomplete.sql -- which owns the reasoning for each clause -- so
 -- this list and the total_counts tally can never disagree.
 --
--- NOTE: never name a template variable in braces inside these comments --
--- load_sql runs str.format_map over the WHOLE file, comments included, so the
--- brace form would splice the whole injected predicate into the comment block
--- (its later lines then land as bare SQL and the file stops parsing).
+-- NEVER name a template variable in braces inside these comments: load_sql
+-- runs str.format_map over the WHOLE file, comments included, so the brace
+-- form splices the injected predicate into the comment and the file stops
+-- parsing.
 --
 -- The latest_memberships / membership_plans LEFT JOINs are NOT dead weight:
--- the where-clause is built by the shared CrmBaseViewService and may reference
--- the `m` (membership) and `mp` (plan) aliases, so both must resolve here as
--- they do in every sibling view. By construction every matched row has NULL on
--- both sides, so a membership-shaped filter correctly matches nothing while the
--- no_membership filter still matches everything.
+-- the shared CrmBaseViewService builds the where-clause and may reference the
+-- `m` and `mp` aliases, so both must resolve here as in every sibling view.
+-- Every matched row is NULL on both sides by construction.
 WITH latest_memberships AS (
     SELECT DISTINCT ON (member_id, gym_id, plan_id) *
     FROM member_memberships_status
@@ -29,11 +25,9 @@ SELECT
     p.email,
     p.phone,
     (now() AT TIME ZONE g.timezone)::date AS gym_today,
-    -- Gym-LOCAL date diff, never a bare UTC one (same reasoning as
-    -- all_view.sql's days_since_last_class): a member created in the evening
-    -- is already "tomorrow" in UTC for a gym west of it, so a raw timestamptz
-    -- diff would report a day that has not happened yet. Both sides are read
-    -- through the gym's own timezone first, then floored at 0.
+    -- Gym-LOCAL date diff, never a bare UTC one (same as all_view.sql's
+    -- days_since_last_class): an evening signup is already "tomorrow" in UTC
+    -- for a gym west of it, so a raw diff reports a day that hasn't happened.
     GREATEST(
         0,
         (now() AT TIME ZONE g.timezone)::date
@@ -50,6 +44,6 @@ JOIN gyms g ON p.gym_id = g.gym_id
 {where_clause}
     AND {is_incomplete}
 -- Newest first: an unfinished signup is most convertible while the person is
--- still in the building, so the freshest one is the one staff should act on.
+-- still in the building.
 ORDER BY p.created_at DESC, p.member_id
 LIMIT :limit OFFSET :offset

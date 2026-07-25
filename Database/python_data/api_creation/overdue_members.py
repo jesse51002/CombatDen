@@ -52,12 +52,10 @@ def _random_phone() -> str:
 
 
 def _random_birth_date() -> str:
-    """An ISO adult birth date, drawn from the same band as every other member.
+    """An ISO adult birth date, from the same band as every other member.
 
-    Stringified because this row is INSERTed through PostgREST (which takes
-    JSON), unlike the normal path's backend POST. Overdue members land on the
-    CRM's Overdue tab, so leaving their date of birth blank would show the gap
-    on exactly the surface the tab exists to demo.
+    Stringified because this row goes in through PostgREST, not the backend
+    POST the normal path uses.
     """
     return fake.date_of_birth(
         minimum_age=MEMBER_MIN_AGE_YEARS,

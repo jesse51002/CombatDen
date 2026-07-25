@@ -22,8 +22,7 @@ DORMANT_COUNT_SQL = load_member_dormant_sql(
     "dormant_m.member_id",
     "dormant_m.gym_id",
 )
-# Same for the incomplete tally — its own scan alias, the same shared text
-# the Incomplete tab lists with.
+# Its own scan alias, the same shared text the Incomplete tab lists with.
 INCOMPLETE_COUNT_SQL = load_member_incomplete_sql(
     "incomplete_m.member_id",
     "incomplete_m.gym_id",

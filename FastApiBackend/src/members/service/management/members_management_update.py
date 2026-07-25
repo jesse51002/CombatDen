@@ -99,11 +99,8 @@ class MembersManagementUpdate(MembersManagementBase):
         either the member does not exist or the adjustment would underflow —
         the two are indistinguishable from one empty result set, so this
         deliberately raises a PLAIN ``ValueError`` (-> the router's generic
-        400 arm) rather than ``MemberNotFoundError``. A typed 404 here would
-        be a guess half the time, and the endpoint's documented contract is
-        ``400 Member not found, or adjustment would go negative``. Note the
-        message contains the words "not found": under the old substring
-        dispatch that was harmless only because this handler never did it.
+        400) rather than ``MemberNotFoundError`` — a typed 404 would be a
+        guess half the time, and 400 is this endpoint's documented contract.
 
         Args:
             member_id: The member whose balance to adjust.

@@ -87,11 +87,10 @@ class MembersBillingDetailService:
 
         Raises:
             MemberNotFoundError: If the member has no row to read (-> 404).
-                TYPED, not a bare ``ValueError``: the two routes serving this
-                read used to catch any ``ValueError`` and answer 404 "Member
-                not found", so a pydantic ``ValidationError`` anywhere in this
-                large payload — which IS a ``ValueError`` — masqueraded as a
-                missing member instead of surfacing as a 500.
+                TYPED so the routes can catch it narrowly: a blanket
+                ``except ValueError`` would also swallow a pydantic
+                ``ValidationError`` from this large payload and report a
+                member who exists as missing.
         """
         rows = await self._fetch_family_rows(member_id)
 
@@ -248,8 +247,8 @@ class MembersBillingDetailService:
 
         Raises:
             MemberNotFoundError: If no matching row is found (-> 404). The
-                query is keyed on this member, so a result set that contains
-                none of their rows means the member row itself is gone.
+                query is keyed on this member, so a result set without their
+                row means the member row itself is gone.
         """
         for row in rows:
             if row["member_id"] == member_id:

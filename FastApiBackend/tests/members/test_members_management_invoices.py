@@ -24,14 +24,12 @@ async def test_list_invoices_returns_real_invoice(
     connect_opts,
     created,
 ):
-    """Regression guard: ``list_invoices`` must return real Stripe
-    invoices with the correct totals. Previously crashed with
-    ``AttributeError: subscription`` because newer Stripe API
-    versions dropped the top-level ``Invoice.subscription``
-    attribute — the id now lives at
-    ``parent.subscription_details.subscription``. The service now
-    reads it via ``_extract_subscription_id`` and this test locks
-    that behavior in.
+    """Regression guard: ``list_invoices`` returns real Stripe invoices with
+    the correct totals.
+
+    Stripe moved the subscription id off the top-level ``Invoice.subscription``
+    to ``parent.subscription_details.subscription``; the service reads it via
+    ``_extract_subscription_id``, and this locks that in.
     """
     pm_id = await created.payment_method()
     member = await management_service.create_member(
@@ -86,12 +84,11 @@ async def test_list_invoices_no_stripe_customer_raises(
     db_pool,
     gym_id,
 ):
-    """A member without a Stripe customer should raise an error.
+    """A member without a Stripe customer raises.
 
-    Asserted on the TYPE: the route reads its 400 off
-    ``MemberStripeCustomerMissingError.status_code``, and a bare
-    ``pytest.raises(ValueError)`` would also pass for the 404-shaped
-    ``MemberNotFoundError`` — so it could not tell the two statuses apart.
+    On the TYPE: the route reads its 400 off the exception's ``status_code``,
+    and a bare ``pytest.raises(ValueError)`` would also pass for the 404-shaped
+    ``MemberNotFoundError`` — it could not tell the two statuses apart.
     """
     # Insert a member directly without going through the service
     # (so stripe_customer_id stays NULL — not visible via filtered view)
@@ -133,10 +130,8 @@ async def test_list_invoices_drops_canceled_sub_open_invoice(
 ):
     """An OPEN invoice on a dead (canceled) subscription must not surface.
 
-    Canceling a recurring membership nulls the payer's
-    ``stripe_sub_id_month`` (cancel-sync). The dead sub's lingering open
-    invoice is uncollectible and must never appear as overdue — only the
-    live sub's invoices (or standalone one-off invoices) surface.
+    Cancel-sync nulls the payer's ``stripe_sub_id_month``; the dead sub's
+    lingering open invoice is uncollectible and must never read as overdue.
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)

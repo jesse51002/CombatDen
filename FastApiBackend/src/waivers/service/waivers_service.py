@@ -145,12 +145,10 @@ class WaiversService:
         with the body read (``get_waiver``).
 
         Raises:
-            WaiverPayerAuthMissingError: The gym has no payer-auth waiver
-                (-> 404).
-            WaiverNotFoundError: The resolved waiver row is gone (-> 404).
-            WaiverVersionNotFoundError: The waiver points at a current
-                version whose row cannot be read, so there is no body to
-                display (-> 404, the status this read already returned).
+            WaiverPayerAuthMissingError: The gym has no payer-auth waiver.
+            WaiverNotFoundError: The resolved waiver row is gone.
+            WaiverVersionNotFoundError: No readable current version, so there
+                is no body to display. All three are 404.
         """
         info = await self._signatures.get_payer_auth_waiver_for_member(
             member_id

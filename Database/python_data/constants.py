@@ -19,22 +19,16 @@ MEMBERS_PER_GYM = 100
 # Members (per gym) that get a real Supabase auth login (the rest are
 # staff-managed CRM rows with no auth account).
 AUTH_MEMBERS_PER_GYM = 5
-# Age band a seeded ADULT member's date_of_birth is drawn from (every member
-# who is not a linked child — see LINKED_CHILD_* below). The column is
-# nullable (the kiosk signup captures it as an optional detail), but a seeded
-# roster with it blank leaves "Date of birth" empty on every CRM member page —
-# a surface that gets demoed — so the seed always fills it. Spread wide enough
-# that a combat-sports roster looks like one rather than a single cohort. Not a
-# validation rule: the backend imposes no bounds on date_of_birth, these only
-# shape the generated data.
+# Age band a seeded ADULT member's date_of_birth is drawn from. The column is
+# nullable, but a blank one reads as a broken field on the CRM member page, so
+# the seed always fills it. Shapes generated data only — not a validation
+# rule.
 MEMBER_MIN_AGE_YEARS = 18
 MEMBER_MAX_AGE_YEARS = 65
-# Age band a seeded LINKED CHILD's date_of_birth is drawn from. A parent-paid
-# child is a minor, and the family/payer surfaces are exactly where an age gets
-# read, so a child must never carry an adult date of birth. The ceiling sits one
-# year under MEMBER_MIN_AGE_YEARS so the two bands never overlap; the floor is
-# the youngest age the seeded class roster actually teaches (the "Kids Martial
-# Arts" template in generators/classes.py is ages 6-12).
+# Age band a seeded LINKED CHILD's date_of_birth is drawn from — a parent-paid
+# child is a minor and must never carry an adult one. The ceiling sits one year
+# under MEMBER_MIN_AGE_YEARS so the bands never overlap; the floor is the
+# youngest age the seeded class roster teaches (Kids Martial Arts, 6-12).
 LINKED_CHILD_MIN_AGE_YEARS = 6
 LINKED_CHILD_MAX_AGE_YEARS = 17
 # Linked-account families (mirrors the original CRM seed). ~LINKED_FAMILY_FRACTION
@@ -73,17 +67,12 @@ REWARDS_PER_GYM = 4
 # bootstrap/gyms.create_all.
 EXTRA_EMPLOYEES_PER_GYM = 4
 CLASSES_PER_GYM = 7
-# Most attendance rows one member can be given across all of their gym's
-# already-occurred class occurrences. This is the knob that decides how much
-# training history a seeded member has, and with it what they can afford:
-# points are EARNED per class attended (see generators/classes.
-# award_attendance_points), and the preset reward ladder is priced in classes —
-# 1000 / 1500 / 2000 / 2500 points at the platform's 50 points per class is
-# 20 / 30 / 40 / 50 classes. At 40, a member averages ~20 classes, about 1.2 a
-# week across the 60-200 days of class history the seed lays down, which puts
-# the lower rungs of the ladder in reach for a good share of the roster and the
-# top rung in reach for the most active members. Raise it for a busier reward
-# queue and denser attendance; lower it for a thinner roster.
+# Most attendance rows one member can be given. The knob that decides how much
+# training history a seeded member has and therefore what they can afford:
+# points are EARNED per class, and the preset reward ladder costs 20-50 classes
+# at 50 points each. At 40 a member averages ~20 classes (~1.2/week over the
+# seeded history), putting the lower rungs in reach for much of the roster and
+# the top rung only for the most active.
 MAX_CLASSES_ATTENDED_PER_MEMBER = 40
 ACTIVITIES_PER_MEMBER = 5
 HISTORY_DAYS = 30

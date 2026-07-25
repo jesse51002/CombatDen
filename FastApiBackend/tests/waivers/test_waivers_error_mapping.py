@@ -1,51 +1,24 @@
 """The waivers domain's exception TYPE -> HTTP status contract.
 
-This is the regression the routers could not previously catch. Every waiver
-handler picked its status by grepping the message — ``if "not found" in
-str(exc).lower()`` for the 404 and, on the two signing paths, ``if "reload" in
-str(exc).lower()`` for the 409 — so the *prose* of a message was part of the
-public API.
+The TYPE decides the status, never the message text. Every test drives the
+mapping through a type whose message points the OPPOSITE way — the 404 types'
+lacks "not found", the 400 types' contains it, the 409 type's contains neither
+"reload" nor "not found" — so rewording a message passes and remapping a type
+fails. Don't "fix" those fixtures to read naturally. The 409 is the sharpest
+case: nothing about the word "reload" says "conflict", so a copy edit that
+demoted a version-lock conflict to a 400 would invite a client to re-submit the
+same stale version forever.
 
-The ``"reload"`` coupling was the worse of the two, because nothing about that
-word says "conflict". Rewording ``"Waiver was updated since it was displayed —
-reload and sign the current version"`` to drop it — a pure copy edit, and a
-plausible one — silently demoted the version-lock conflict from a 409 to a
-400, which is the difference between "reload, the text changed" and "your
-request was malformed". A client told the latter can reasonably retry the same
-stale version forever.
+**The wire shape is a plain-string ``detail`` and nothing else, by decision.**
+A sibling ``code`` is opt-in per domain and earns its keep only where a client
+branches on a specific rejection (``checkin``); the CRM's sign surfaces branch
+on 409-vs-404-vs-400 and render ``detail`` as prose. A code declared here could
+not even reach the wire without the global formatter in ``src/main.py``.
 
-Every test here drives the mapping through an exception TYPE with a message
-chosen to prove the message is irrelevant:
-
-* the 404 types carry a message with NO "not found" in it — under the old
-  substring dispatch they would have been 400s;
-* the 400 types carry a message that DOES contain "not found" — under the old
-  dispatch each would have been a 404;
-* the 409 type carries a message with NEITHER "reload" NOR "not found" — under
-  the old dispatch it would have been a 400.
-
-So these tests still pass when somebody rewords a message, and fail the moment
-somebody remaps a type. ``test_every_waivers_error_type_is_mapped`` closes the
-loop: a new ``WaiversError`` subclass that nobody assigned a status to fails
-here rather than silently inheriting the base's fallback.
-
-**The wire shape is a plain-string ``detail`` and nothing else, by decision** —
-the same call as ``members``. A sibling machine-readable ``code`` is opt-in per
-domain and earns its keep only where a client branches on a specific rejection
-(``checkin``, whose kiosk picks its blocked-screen copy from it). The CRM's sign
-surfaces branch on 409-vs-404-vs-400 and render ``detail`` as prose, so a code
-here would be declared, test-locked and invisible — it cannot even reach the
-wire without the one global ``app.add_exception_handler`` formatter in
-``src/main.py``.
-
-**The blanket-``except ValueError`` traps are locked here too.** pydantic's
-``ValidationError`` subclasses ``ValueError``, so a blanket arm on a handler
-whose service raises no bad-input ``ValueError`` can only ever fire on an
-internal failure. ``GET /waivers/{id}`` mapped ANY ``ValueError`` to 404, so a
-waiver whose stored body no longer fit ``WaiverResponse`` reported itself as
-missing. ``PUT /waivers/`` KEEPS a generic arm, because the shared
-``validate_mutable_columns`` guard really does raise a plain ``ValueError`` for
-an immutable column on a rename.
+**The blanket-``except ValueError`` trap is locked too.** ``ValidationError``
+subclasses ``ValueError``, so a blanket arm on a handler whose service raises no
+bad-input ``ValueError`` can only ever fire on our own bug. ``PUT /waivers/``
+KEEPS its generic arm — ``validate_mutable_columns`` really does raise one.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -67,16 +40,13 @@ from src.waivers.waivers_exceptions import (
     WaiverVersionStaleError,
 )
 
-# Deliberately message-hostile fixtures. The 404 message avoids the words the
-# old dispatch keyed on; the 400 message contains them; the 409 message
-# contains NEITHER "reload" nor "not found", so under the old dispatch it fell
-# all the way through to the bad-request arm.
+# Message-hostile on purpose: the 404 message avoids "not found", the 400 one
+# contains it, and the 409 one carries neither it nor "reload".
 _MSG_WITHOUT_THE_MAGIC_WORDS = "no such document at this gym"
 _MSG_WITH_THE_MAGIC_WORDS = "the thing was not found, and yet this is a 400"
 _MSG_WITHOUT_RELOAD = "the text moved on while you were reading it"
 
-# The whole public contract, in one table: this type, that status. There is no
-# machine-readable ``code`` column — see the module docstring.
+# The public contract, in one table. No ``code`` column — see the docstring.
 _TYPE_TO_STATUS: tuple[tuple[type[WaiversError], int], ...] = (
     (WaiverNotFoundError, 404),
     (WaiverVersionNotFoundError, 404),
@@ -101,11 +71,8 @@ def _message_for(status_code: int) -> str:
 
 
 def _a_real_validation_error() -> ValidationError:
-    """A genuine pydantic ``ValidationError`` — which IS a ``ValueError``.
-
-    Used to prove a blanket ``except ValueError`` arm would misclassify an
-    internal serialization failure as a 4xx.
-    """
+    """A genuine pydantic ``ValidationError`` — which IS a ``ValueError``, so a
+    blanket ``except ValueError`` arm misclassifies an internal failure as 4xx."""
     try:
         WaiverResponse.model_validate({})
     except ValidationError as exc:
@@ -116,8 +83,7 @@ def _a_real_validation_error() -> ValidationError:
 # ── the endpoints whose status is decided by the exception type ─────────
 #
 # Each entry: (label, the WaiversService method the handler awaits, a callable
-# issuing the request). Every one of these used to pick its status by matching
-# words in the message.
+# issuing the request).
 
 
 def _post_waiver(client, headers, waiver_id, gym_id):
@@ -197,11 +163,10 @@ def _call_with_service_error(
 def test_every_waivers_error_subclasses_value_error() -> None:
     """The base is a ``ValueError`` subclass on purpose.
 
-    Waivers is an INPUT-VALIDATION domain, not a money / external-system one:
-    an unmapped waiver rejection must land as a 400 bad-request, not a 500. It
-    also keeps the hierarchy additive — every pre-existing
-    ``except ValueError`` arm (this router's own, and the members router's
-    linked-account arms) behaves exactly as it did before.
+    Waivers is an INPUT-VALIDATION domain, not a money one: an unmapped
+    rejection must land as a 400, not a 500. It also keeps the hierarchy
+    additive for the existing ``except ValueError`` arms (this router's, and
+    the members router's linked-account ones).
     """
     assert issubclass(WaiversError, ValueError)
     for exc_type, _ in _TYPE_TO_STATUS:
@@ -221,20 +186,18 @@ def _concrete_error_types() -> set[type[WaiversError]]:
 
 
 def test_every_waivers_error_type_is_mapped() -> None:
-    """Every concrete ``WaiversError`` in the module carries an explicit
-    status in the table above. Adding a new one without deciding it fails
-    HERE, instead of silently defaulting in production."""
+    """Adding a subclass without deciding its status fails HERE, rather than
+    silently defaulting in production."""
     assert _concrete_error_types() == {
         exc_type for exc_type, _ in _TYPE_TO_STATUS
     }
 
 
 def test_every_type_declares_its_own_status_code() -> None:
-    """A new subclass must DECLARE ``status_code``, never inherit it.
+    """A subclass must DECLARE ``status_code``, never inherit it.
 
-    The base carries a safe 400 fallback so a not-yet-classified subclass
-    can't 500 a live request — this test is what makes forgetting it loud. It
-    reads each class's OWN ``vars()``, so an inherited value fails.
+    The base's 400 fallback keeps an unclassified subclass from 500-ing a live
+    request; this reads each class's OWN ``vars()`` so forgetting is loud.
     """
     for exc_type in _concrete_error_types():
         own = vars(exc_type)
@@ -244,11 +207,10 @@ def test_every_type_declares_its_own_status_code() -> None:
 def test_no_type_declares_a_machine_readable_code() -> None:
     """``waivers`` deliberately has no ``code`` machinery.
 
-    Same call as ``members``: a code cannot reach the wire without the global
-    formatter in ``src/main.py``, and no client branches on one, so declaring
-    values would test-lock strings into the public contract while staying
-    invisible. If a code is ever needed, the enum and the formatter land in
-    the same change — and this test is where that decision surfaces.
+    A code cannot reach the wire without the global formatter in
+    ``src/main.py``, and no client branches on one — so declaring values would
+    test-lock invisible strings into the public contract. If a code is ever
+    needed, the enum and the formatter land in the SAME change as this test.
     """
     assert not hasattr(waivers_exceptions, "WaiversErrorCode")
     for exc_type in _concrete_error_types() | {WaiversError}:
@@ -260,18 +222,17 @@ def test_no_type_declares_a_machine_readable_code() -> None:
 
 
 def test_type_attributes_match_the_contract_table() -> None:
-    """The type itself is the single source of truth the routers read, so the
-    class attributes and the table must agree exactly."""
+    """The type is what the routers read, so the class attributes and the table
+    must agree exactly."""
     for exc_type, expected_status in _TYPE_TO_STATUS:
         assert exc_type.status_code == expected_status, exc_type.__name__
 
 
 def test_pydantic_validation_error_is_a_value_error() -> None:
-    """The hazard every blanket ``except ValueError`` arm carries.
-
-    Documented here because it is the whole reason the typed-only handlers no
-    longer catch bare ``ValueError``: an internal serialization failure must
-    be a logged 500, not a 4xx claiming the waiver is missing.
+    """The hazard every blanket ``except ValueError`` arm carries — and the
+    reason the typed-only handlers catch no bare ``ValueError``: an internal
+    serialization failure must be a logged 500, not a 4xx claiming the waiver
+    is missing.
     """
     assert issubclass(ValidationError, ValueError)
 
@@ -291,15 +252,12 @@ def test_endpoint_maps_error_type_to_status(
     exc_type,
     expected,
 ) -> None:
-    """Every converted handler maps the service's exception TYPE to its
-    status — with a message that would have pushed the OPPOSITE way under the
-    old substring dispatch.
+    """Every handler maps the service's exception TYPE to its status.
 
     Parametrized over the WHOLE table on every endpoint, not just the types a
-    given handler can raise today: the status must come off the type
-    regardless of which route the raise travels through. That symmetry is the
-    property that broke before — one raise
-    (``get_payer_auth_waiver_for_member``) answered 404 on the read route and
+    handler can raise today: the status must come off the type regardless of
+    which route the raise travels through. Without that symmetry one raise
+    (``get_payer_auth_waiver_for_member``) answers 404 on the read route and
     400 on the link route.
     """
     waiver_id = str(uuid4())
@@ -314,8 +272,7 @@ def test_endpoint_maps_error_type_to_status(
     )
 
     assert resp.status_code == expected, f"{label}: {resp.text}"
-    # The detail is passed through verbatim — the refactor changes the
-    # DISPATCH, never the detail's type or text.
+    # ``detail`` is passed through verbatim; only the dispatch is by type.
     assert resp.json()["detail"] == _message_for(expected), label
     assert isinstance(resp.json()["detail"], str), label
 
@@ -325,10 +282,9 @@ def test_the_wire_shape_is_status_plus_detail_only(
 ) -> None:
     """The whole wire shape: a status and a plain-string ``detail``.
 
-    Asserted as an EQUALITY on the body, not a subset, so nothing can quietly
-    grow a second key. See the module docstring for why there is no sibling
-    ``code``; if one is ever added, THIS is the test that has to change, in
-    the same commit as the enum and the global formatter.
+    An EQUALITY on the body, not a subset, so nothing can quietly grow a second
+    key. If a sibling ``code`` is ever added, THIS test changes in the same
+    commit as the enum and the global formatter.
     """
     resp = _call_with_service_error(
         client,
@@ -344,7 +300,7 @@ def test_the_wire_shape_is_status_plus_detail_only(
     assert resp.json() == {"detail": _MSG_WITHOUT_THE_MAGIC_WORDS}
 
 
-# ── the 409 that used to hang off the word "reload" ─────────────────────
+# ── the 409, independent of the word "reload" ──────────────────────────
 
 
 def test_stale_version_is_a_409_without_the_word_reload(
@@ -352,11 +308,10 @@ def test_stale_version_is_a_409_without_the_word_reload(
 ) -> None:
     """The version-lock conflict is a 409 because of its TYPE.
 
-    Stated on its own because it is the sharpest edge this change removes: the
-    message here contains neither "reload" nor "not found", so under the old
-    dispatch it fell through to 400 — telling the client its request was
-    malformed when in fact the document had moved. 409 is what makes "fetch
-    the new version and sign that" the obvious next step.
+    Stated on its own because it is the sharpest edge: this message contains
+    neither "reload" nor "not found", and a 400 here would tell the client its
+    request was malformed when the document had simply moved. Only the 409
+    makes "fetch the new version and sign that" the obvious next step.
     """
     resp = _call_with_service_error(
         client,
@@ -375,13 +330,10 @@ def test_stale_version_is_a_409_without_the_word_reload(
 def test_prose_no_longer_decides_the_status(
     client, auth_headers, fake_gym_id
 ) -> None:
-    """Every direction of the old bug, in one place.
-
-    A 404 type whose message lacks "not found" must still 404; a 400 type
-    whose message CONTAINS "not found" must still 400; the 409 type must stay
-    a 409 even when its message contains "not found" (which the old dispatch
-    checked SECOND, after "reload" — so dropping "reload" from a message that
-    happened to say "not found" produced a 404, a third wrong answer).
+    """Every direction, in one place: a 404 type whose message lacks "not
+    found" still 404s; a 400 type whose message CONTAINS it still 400s; and the
+    409 type stays a 409 even when its message says "not found" — the third
+    wrong answer prose dispatch produces.
     """
 
     def _status(exc: WaiversError) -> int:
@@ -402,7 +354,7 @@ def test_prose_no_longer_decides_the_status(
     assert _status(WaiverVersionStaleError("waiver not found? no: stale")) == 409
 
 
-# ── the blanket-except-ValueError traps, both directions ────────────────
+# ── the blanket-except-ValueError trap, both directions ─────────────────
 
 
 def test_update_waiver_immutable_column_value_error_is_still_400(
@@ -410,11 +362,9 @@ def test_update_waiver_immutable_column_value_error_is_still_400(
 ) -> None:
     """``PUT /waivers/`` KEEPS its generic bad-input arm.
 
-    Its service really does raise a plain ``ValueError``: the shared,
-    domain-agnostic ``validate_mutable_columns`` guard rejects an immutable
-    column that way on a rename, and that is a caller error (400), not an
-    internal failure. Note the message contains "not found" and it is still a
-    400 — the prose no longer decides anything.
+    Its service really does raise a plain ``ValueError`` — the shared
+    ``validate_mutable_columns`` guard rejects an immutable column that way on
+    a rename, and that is a caller error (400), not an internal failure.
     """
     resp = _call_with_service_error(
         client,
@@ -439,13 +389,10 @@ def test_typed_only_handler_turns_a_validation_error_into_a_500(
 ) -> None:
     """A pydantic ``ValidationError`` is an INTERNAL failure -> 500.
 
-    These handlers' services raise only typed ``WaiversError``s, so a blanket
-    ``except ValueError`` arm could ONLY ever fire on an internal failure —
-    and ``ValidationError`` subclasses ``ValueError``. ``GET /waivers/{id}``
-    is the one that bit hardest: it mapped any ``ValueError`` to 404, so a
-    waiver whose stored row no longer fits ``WaiverResponse`` reported itself
-    as MISSING, and staff were told a document they can see in the list does
-    not exist.
+    These services raise only typed ``WaiversError``s, so a blanket
+    ``except ValueError`` arm could ONLY fire on our own bug. ``GET
+    /waivers/{id}`` bites hardest: a 404 there reports a waiver staff can see
+    in the list as missing, whenever its stored row stops fitting the schema.
     """
     resp = _call_with_service_error(
         client,

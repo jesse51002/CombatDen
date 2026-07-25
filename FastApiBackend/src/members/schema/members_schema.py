@@ -10,33 +10,20 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-# Floor for a plausible date of birth. Nobody training at a gym was born
-# before 1900: the oldest verified human ever lived to 122, so 1900 leaves
-# ~126 years of headroom and can never reject a real member — while it does
-# reject the realistic typo class, a mistyped or truncated year (``0202-06-01``,
-# ``0000-01-01``, a stray ``1066``), which is what the kiosk's free-form date
-# entry actually produces. Chosen as a fixed calendar floor rather than a
-# maximum age so it needs no per-gym policy and never becomes wrong as time
-# passes.
+# Floor for a plausible date of birth. Wide enough that it can never reject a
+# real member, tight enough to catch the realistic typo class from the kiosk's
+# free-form date entry (a truncated or mistyped year: 0202-06-01, 1066). A
+# fixed calendar floor, not a max age, so it needs no policy and never ages.
 EARLIEST_DATE_OF_BIRTH: Final[date] = date(1900, 1, 1)
 
 
 def _validate_date_of_birth(value: date | None) -> date | None:
-    """Reject an implausible date of birth (-> 422).
+    """Reject a future or pre-1900 date of birth (-> 422).
 
-    Two bounds, both of which the kiosk signup could otherwise post straight
-    through to a 201:
-
-    * **No future date.** A date of birth that has not happened yet is never
-      valid data; ``2035-06-01`` is a slipped year, not a member.
-    * **Not before 1900** (:data:`EARLIEST_DATE_OF_BIRTH`) — see its comment.
-
-    Shared by every schema that accepts a DOB so the create and the update
-    paths cannot drift: one rule text, two validators. The DB carries the
-    matching CHECK (``date_of_birth_plausible`` in
-    ``Database/supabase/schemas/members.sql``) so a writer that never passes
-    through this model — the seed, a future importer, a hand-run UPDATE —
-    cannot store what the API refuses.
+    Shared by every schema that accepts a DOB so create and update cannot
+    drift. The DB carries the matching CHECK (``date_of_birth_plausible``),
+    so a writer that bypasses this model — the seed, an importer, a hand-run
+    UPDATE — still cannot store what the API refuses.
     """
     if value is None:
         return value
@@ -140,9 +127,8 @@ class MemberUpdateData(BaseModel):
     def _plausible_date_of_birth(cls, v: date | None) -> date | None:
         """Reject a future or pre-1900 date of birth (see the module helper).
 
-        The update path needs the same guard as create, not just create: staff
-        correcting a DOB on the member page post to THIS model, and it is the
-        only other way a value reaches the column through the API.
+        This model is the only other way a DOB reaches the column through the
+        API, so it needs the same guard as create.
         """
         return _validate_date_of_birth(v)
 

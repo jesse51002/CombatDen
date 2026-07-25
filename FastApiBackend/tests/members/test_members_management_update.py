@@ -69,11 +69,9 @@ async def test_update_personal_info(
         assert resp.email == "updated@test.com"
         assert resp.last_name == "Name"  # unchanged
 
-        # NOTE: update_member deliberately does NOT sync name/email
-        # changes to the Stripe customer object — see
-        # ``members_management_update.py`` where the write path only
-        # touches ``member_billing_profile``. We still verify the customer
-        # is reachable and that the edit did not generate any charges.
+        # update_member deliberately does NOT sync name/email to the Stripe
+        # customer — the write path only touches ``member_billing_profile``.
+        # The customer is still checked reachable, and unbilled.
         customer = await stripe_client.client.v1.customers.retrieve_async(
             member.stripe_customer_id,
             options=connect_opts,
@@ -97,13 +95,10 @@ async def test_date_of_birth_round_trips_and_survives_partial_update(
 ):
     """``date_of_birth`` round-trips through create + update.
 
-    The kiosk signup's optional-details step writes it at create time, and
-    staff can edit it afterwards — so it has to survive the partial-update
-    path unchanged. ``MemberUpdateData`` is dumped with
-    ``exclude_unset=True``, so an OMITTED field never reaches the SET clause
-    and cannot null a stored value; passing ``None`` EXPLICITLY is a real
-    clear, and both directions are asserted here because a regression in
-    either one silently loses or silently keeps a member's data.
+    ``MemberUpdateData`` is dumped ``exclude_unset=True``, so an OMITTED field
+    never reaches the SET clause while an EXPLICIT ``None`` is a real clear.
+    Both directions are asserted: a regression in either silently loses or
+    silently keeps a member's data.
     """
     dob = date(1990, 5, 17)
     member = await management_service.create_member(

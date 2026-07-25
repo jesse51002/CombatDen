@@ -56,15 +56,10 @@ class MembersBillingProfileResponse(BaseModel):
 class MemberPaymentMethodStatusResponse(BaseModel):
     """Whether a member has any payment method attached in Stripe.
 
-    Returned by ``GET /{member_id}/payment-method-status``. A property of
-    the member's billing profile — deliberately named for what it reports,
-    not for any one caller's policy.
-
-    ``has_payment_method`` is resolved LIVE from Stripe, never from
-    ``members.stripe_payment_method_id`` (which only records the card the
-    CRM last saved as default). ``False`` therefore means "verified: the
-    Stripe customer has nothing attached" — a Stripe failure surfaces as a
-    500, never as ``False``.
+    Resolved LIVE from Stripe, never from
+    ``members.stripe_payment_method_id`` (which only records the card the CRM
+    last saved as default). ``False`` means "verified: nothing attached" — a
+    Stripe failure surfaces as a 500, never as ``False``.
     """
 
     has_payment_method: bool

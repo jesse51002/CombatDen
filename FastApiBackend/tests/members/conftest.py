@@ -28,11 +28,8 @@ def memberships_service(db_pool, stripe_client):
 
 @pytest.fixture(scope="module")
 def crm_members_list_service(db_pool):
-    """The real members-list orchestrator (no Stripe dependency).
-
-    Wired exactly as ``core/dependencies.py`` wires it, so a view test runs
-    the same SQL the endpoint does.
-    """
+    """The real members-list orchestrator, wired as ``dependencies.py`` wires
+    it, so a view test runs the same SQL the endpoint does."""
     return CrmMembersListService(db_pool, settings.member_dormancy_days)
 
 
