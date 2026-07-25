@@ -479,25 +479,35 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
   Widget _versionsPanel() {
     return Padding(
       padding: const EdgeInsets.only(left: DesignConstants.spacingLarge),
-      child: ListView(
-        children: [
-          Text('Versions', style: DesignConstants.h2),
-          _versionTile(
-            label: 'Current (editing)',
-            subtitle: '$_currentSigned signed',
-            selected: _selectedVersionId == null,
-            onTap: () => _selectVersion(null),
-            extra: _requiresResignRow(),
-          ),
-          for (final v in _versions)
-            if (v.versionId != _waiver!.currentVersionId)
-              _versionTile(
-                label: 'v${v.versionNumber}',
-                subtitle: '${v.signatureCount} signed',
-                selected: _selectedVersionId == v.versionId,
-                onTap: () => _selectVersion(v),
-              ),
-        ],
+      // A scrolling Column rather than a ListView so the gap between the
+      // heading and the tiles is the PARENT's `spacing:`. `_versionTile` is
+      // rendered both once above and once per older version below, so a margin
+      // on the tile itself would be a sibling gap owned by the wrong widget —
+      // the case CRM/CLAUDE.md forbids outright. The version list is a handful
+      // of rows, so laziness buys nothing here.
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            Text('Versions', style: DesignConstants.h2),
+            _versionTile(
+              label: 'Current (editing)',
+              subtitle: '$_currentSigned signed',
+              selected: _selectedVersionId == null,
+              onTap: () => _selectVersion(null),
+              extra: _requiresResignRow(),
+            ),
+            for (final v in _versions)
+              if (v.versionId != _waiver!.currentVersionId)
+                _versionTile(
+                  label: 'v${v.versionNumber}',
+                  subtitle: '${v.signatureCount} signed',
+                  selected: _selectedVersionId == v.versionId,
+                  onTap: () => _selectVersion(v),
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -534,8 +544,10 @@ class _WaiverEditorBodyState extends State<_WaiverEditorBody> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      // The tile carries no outer gap of its own on purpose — the space to the
+      // previous tile (or to the "Versions" heading) belongs to
+      // `_versionsPanel`'s `spacing:`.
       child: Container(
-        margin: const EdgeInsets.only(top: DesignConstants.spacingMedium),
         padding: const EdgeInsets.all(DesignConstants.paddingSmall),
         decoration: BoxDecoration(
           border: Border.all(

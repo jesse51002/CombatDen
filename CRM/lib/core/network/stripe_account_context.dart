@@ -22,6 +22,14 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 /// `CardFieldBox` gates its field on [isReady] / [paymentsAvailable], so the
 /// await-before-mount ordering is guaranteed rather than hoped for.
 ///
+/// **Both gates CLOSE for the duration of an apply**, which is what makes that
+/// guarantee real. Nobody awaits [apply] — [SelectedGym.setActiveGym] is
+/// synchronous and fires it — so if the flags kept the previous gym's `true`
+/// while the new account was still being applied, a card field mounting in that
+/// window would bind to the OUTGOING gym's JS Stripe object and tokenize the
+/// card on the wrong connected account. [apply] therefore drops [isReady] and
+/// [paymentsAvailable] to false synchronously, before its first await.
+///
 /// **Fail closed.** A null/empty account — a gym that has not finished Stripe
 /// onboarding — leaves payments UNAVAILABLE: no card field is mounted, so the
 /// client can never tokenize onto the platform account. An `applySettings()`
@@ -50,12 +58,15 @@ class StripeAccountContext extends ChangeNotifier {
   /// The connected account currently applied (null = none / cleared).
   String? get appliedAccountId => _appliedAccountId;
 
-  /// Whether the context has resolved at least once for the current account —
-  /// the readiness the shared card field waits on before mounting.
+  /// Whether the context has resolved for the account currently being applied —
+  /// the readiness the shared card field waits on before mounting. Goes back to
+  /// false for the duration of every [apply] (including a gym switch), so it is
+  /// never `true` while the applied account is the previous gym's.
   bool get isReady => _hasResolved;
 
   /// Whether a connected account is applied and card entry may proceed. False
-  /// for a null account (gym not onboarded) or a failed apply — **fail closed**.
+  /// for a null account (gym not onboarded), a failed apply, and for the
+  /// duration of an in-flight [apply] — **fail closed**.
   bool get paymentsAvailable => _paymentsAvailable;
 
   /// The last apply error, or null. Kept so a retry with the same account is
@@ -70,16 +81,33 @@ class StripeAccountContext extends ChangeNotifier {
   /// A DIFFERENT account (a gym switch) re-applies. **Never throws** — a Stripe
   /// failure fails closed (payments unavailable), so a card field is refused
   /// rather than mounted against the wrong (platform) account.
+  ///
+  /// **Closes both gates first.** Until `applyToStripe` returns, Stripe.js still
+  /// carries the PREVIOUS account, so [isReady] / [paymentsAvailable] drop to
+  /// false synchronously (before the first await) and listeners are notified —
+  /// no consumer can read a stale `true` and mount a card field against the
+  /// outgoing gym's connected account. See the class doc's ordering hazard.
   Future<void> apply(String? accountId) async {
     final normalized =
         (accountId != null && accountId.isNotEmpty) ? accountId : null;
 
     // Nothing changed and the last apply succeeded: skip. Re-creating the JS
     // Stripe object under a live CardField would throw the "different instance"
-    // error, so an unchanged account must not re-apply.
+    // error, so an unchanged account must not re-apply. This check stays ABOVE
+    // the gate close below for the same reason: closing the gates tears a
+    // mounted field down, so a redundant re-apply must not even flicker it.
     if (_hasResolved && _error == null && normalized == _appliedAccountId) {
       return;
     }
+
+    // Close the gates for the DURATION of the apply. A field already mounted
+    // against the previous account is torn down to CardFieldBox's "Preparing
+    // secure card entry…" box and remounts once the new account is live, which
+    // also sidesteps Stripe's "Element belongs to a different instance of
+    // Stripe" throw.
+    _hasResolved = false;
+    _paymentsAvailable = false;
+    notifyListeners();
 
     try {
       await applyToStripe(normalized);

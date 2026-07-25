@@ -139,7 +139,10 @@ class SelectedGym extends ChangeNotifier {
   /// customer. This runs on EVERY activation, including a gym switch, so the
   /// context re-applies for the newly active gym; the shared `CardFieldBox`
   /// waits on [stripeAccountContext] so the account is applied before any card
-  /// field mounts. A null account leaves payments unavailable (fail closed).
+  /// field mounts — and because the apply closes its readiness gates for its own
+  /// duration, a switch can never leave a field mountable against the gym being
+  /// switched AWAY from. A null account leaves payments unavailable (fail
+  /// closed).
   void setActiveGym({
     required String gymId,
     required String displayName,
@@ -159,8 +162,11 @@ class SelectedGym extends ChangeNotifier {
     _stripeAccountId = stripeAccountId;
     _createdAt = createdAt;
     // Apply the connected account to Stripe.js. Not awaited here (setActiveGym
-    // is synchronous and drives listeners immediately); the await-before-mount
-    // guarantee lives in CardFieldBox, which gates on stripeAccountContext.
+    // is synchronous and drives listeners immediately) — and it does not need to
+    // be: `apply` closes its own isReady / paymentsAvailable gates
+    // SYNCHRONOUSLY, before its first await, so by the time this returns no
+    // consumer can read the outgoing gym's readiness. CardFieldBox gates on
+    // those two flags, which is where the await-before-mount guarantee lands.
     stripeAccountContext.apply(stripeAccountId);
     notifyListeners();
   }

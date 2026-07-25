@@ -129,6 +129,72 @@ void main() {
     expect(controller.text, 'Post-workout rec');
   });
 
+  group('an EXISTING over-length badge is never silently trimmed', () {
+    // A price_label written before the 16-char cap existed. The field is handed
+    // it through its controller, and a formatter never sees an initial value —
+    // only edits — which is why a plain LengthLimitingTextInputFormatter
+    // destroyed it invisibly on the first keystroke and the next Save persisted
+    // the loss.
+    const legacy = 'Post-workout recovery'; // 21 characters
+
+    testWidgets('it renders intact', (tester) async {
+      final controller = TextEditingController(text: legacy);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(host(controller));
+
+      expect(controller.text, legacy);
+      expect(find.text(legacy), findsOneWidget);
+    });
+
+    testWidgets('deleting one character keeps the other twenty', (tester) async {
+      final controller = TextEditingController(text: legacy);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(host(controller));
+      await tester.enterText(find.byType(TextFormField), 'Post-workout recover');
+      await tester.pump();
+
+      // The old formatter answered this edit with 'Post-workout rec' — four
+      // characters gone that the gym never deleted.
+      expect(controller.text, 'Post-workout recover');
+    });
+
+    testWidgets('an edit that would GROW it is refused whole, not truncated',
+        (tester) async {
+      final controller = TextEditingController(text: legacy);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(host(controller));
+      await tester.enterText(find.byType(TextFormField), '$legacy!');
+      await tester.pump();
+
+      // Refusing keeps every character on screen; truncating to 16 would drop
+      // five nobody removed, and the form would submit a value never seen.
+      expect(controller.text, legacy);
+    });
+
+    testWidgets('shortening it under the cap re-arms the 16-char cap',
+        (tester) async {
+      final controller = TextEditingController(text: legacy);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(host(controller));
+      await tester.enterText(find.byType(TextFormField), 'Free');
+      await tester.pump();
+      expect(controller.text, 'Free');
+
+      // Back inside the cap, typing past it truncates as normal — visibly, in
+      // front of the person typing.
+      await tester.enterText(
+        find.byType(TextFormField),
+        'Post-workout recovery drink',
+      );
+      await tester.pump();
+      expect(controller.text, 'Post-workout rec');
+    });
+  });
+
   testWidgets('the active chip reflects the current text', (tester) async {
     final controller = TextEditingController(text: '25% off');
     addTearDown(controller.dispose);

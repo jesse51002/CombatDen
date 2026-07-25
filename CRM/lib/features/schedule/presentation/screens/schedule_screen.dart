@@ -106,22 +106,51 @@ void _openOccurrenceScreen(BuildContext context, ScheduleClassEntry entry) {
   );
 }
 
+/// Where a tap on a board card leads. The rule itself lives in
+/// [scheduleTapTarget]; this is just the vocabulary.
+enum ScheduleTapTarget {
+  /// The occurrence screen — that one day's roster, attendance and sign-ups.
+  occurrence,
+
+  /// The class-definition editor — the recurring rules for every future day.
+  classEditor,
+
+  /// The "This occurrence / All future occurrences" chooser dialog.
+  chooser,
+}
+
+/// The board's whole tap rule, as a pure function of the caller's
+/// schedule-edit capability and whether the tapped class is paused. Extracted
+/// so the rule is testable on its own — `_onInstanceTap` only dispatches it.
+///
+/// See [_onInstanceTap] for why each arm is what it is; the load-bearing one is
+/// that a non-editor reaches the occurrence screen for a PAUSED class too.
+ScheduleTapTarget scheduleTapTarget({
+  required bool canEditSchedule,
+  required bool isActive,
+}) {
+  if (!canEditSchedule) return ScheduleTapTarget.occurrence;
+  return isActive ? ScheduleTapTarget.chooser : ScheduleTapTarget.classEditor;
+}
+
 /// Tapping a board card.
 ///
-/// A **PAUSED** class's card (this board is the only surface that asks for
-/// them) skips every occurrence path and opens the class editor directly —
-/// the occurrence screen's actions are check-in / reserve / cancel, and the
-/// backend rejects all of them on a paused class (`class_inactive`). Reaching
-/// the editor is the whole reason those cards render, so there is nothing to
-/// choose between. Front desk and trainer can't open the editor, so their tap
-/// on a paused card is inert rather than leading somewhere useless.
+/// **Front desk + trainer** (who can't edit the recurring definition) always go
+/// straight to the occurrence screen — the only destination they have access to
+/// — **whether the class is active or PAUSED**. A paused class still carries the
+/// attendance and sign-up history of every day it ran, and the roster is the
+/// only place staff can read it, so the tap must lead there. Its check-in /
+/// reserve / cancel actions are the ones the backend refuses on a paused class
+/// (`class_inactive`), which surfaces as an error on the attempt; that is the
+/// accepted cost of keeping the history reachable, and it beats a card that
+/// silently does nothing at all when tapped.
 ///
-/// Otherwise: for **owner/admin** (`canEditSchedule`) it opens the small
-/// **chooser dialog** first: "This occurrence" (the occurrence-edit screen) or
-/// "All future occurrences" (the class definition editor). For **front desk +
-/// trainer** (who can't edit the recurring definition) it skips the chooser
-/// and goes straight to the occurrence screen — the only destination they have
-/// access to.
+/// For **owner/admin** (`canEditSchedule`): a PAUSED card (this board is the
+/// only surface that offers them) opens the class editor directly, because
+/// un-pausing is the reason those cards render for an editor and there is
+/// nothing to choose between. An ACTIVE card opens the small **chooser dialog**
+/// first: "This occurrence" (the occurrence-edit screen) or "All future
+/// occurrences" (the class definition editor).
 ///
 /// Both editor paths resolve the card's class id to its real
 /// [GymClassResponse] from the loaded catalog; a miss (the class vanished from
@@ -131,17 +160,20 @@ void _onInstanceTap(
   List<GymClassResponse> classes,
   ScheduleClassEntry entry,
 ) {
-  final canEditSchedule = selectedGym.role?.canEditSchedule ?? false;
-  if (entry.isActive && !canEditSchedule) {
+  final target = scheduleTapTarget(
+    canEditSchedule: selectedGym.role?.canEditSchedule ?? false,
+    isActive: entry.isActive,
+  );
+  if (target == ScheduleTapTarget.occurrence) {
     _openOccurrenceScreen(context, entry);
     return;
   }
-  // Both remaining paths need the real class row, so resolve it first and
-  // ignore a miss — never open a chooser whose editor option would no-op.
+  // Both remaining (editor) targets need the real class row, so resolve it
+  // first and ignore a miss — never open a chooser whose editor option no-ops.
   final owning = _classById(classes, entry.classId);
   if (owning == null) return;
-  if (!entry.isActive) {
-    if (canEditSchedule) _openClassForm(context, existing: owning);
+  if (target == ScheduleTapTarget.classEditor) {
+    _openClassForm(context, existing: owning);
     return;
   }
   ClassOccurrenceChooserDialog.show(

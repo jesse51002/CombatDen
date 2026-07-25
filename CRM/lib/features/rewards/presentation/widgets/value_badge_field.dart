@@ -38,9 +38,10 @@ int valueBadgePresetIndex(String text) {
 ///
 /// Quick-pick chips fill the field in one tap. The field stays freely
 /// editable for the values a chip can't cover (`1 week`, `BOGO`), capped at
-/// [kValueBadgeMaxLength] characters. The chips only ever *reflect* the
-/// field — whichever preset the current text matches is lit, and nothing is
-/// lit while the text is custom or empty.
+/// [kValueBadgeMaxLength] characters by [_BadgeLengthFormatter] — which caps
+/// what is TYPED without ever trimming a longer badge the gym already saved.
+/// The chips only ever *reflect* the field — whichever preset the current text
+/// matches is lit, and nothing is lit while the text is custom or empty.
 class ValueBadgeField extends StatelessWidget {
   final TextEditingController controller;
 
@@ -75,8 +76,8 @@ class ValueBadgeField extends StatelessWidget {
             hintText: 'e.g. Free',
             helperText: 'e.g. Free, 25% off. '
                 'Max $kValueBadgeMaxLength characters.',
-            inputFormatters: [
-              LengthLimitingTextInputFormatter(kValueBadgeMaxLength),
+            inputFormatters: const [
+              _BadgeLengthFormatter(kValueBadgeMaxLength),
             ],
             validator: (v) => (v == null || v.trim().isEmpty)
                 ? 'A value badge is required.'
@@ -85,5 +86,46 @@ class ValueBadgeField extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Caps typing at [maxLength] **without ever silently trimming the value the
+/// field was handed.**
+///
+/// A plain [LengthLimitingTextInputFormatter] truncates on the first edit
+/// event, so a `price_label` written before this cap existed was destroyed the
+/// moment staff put a caret in the field: characters vanished with no keystroke
+/// that removed them, and the next tap on Save persisted the shortened badge.
+/// Formatters never see the INITIAL value, only edits — which is exactly why
+/// that damage was invisible.
+///
+/// So the cap governs GROWTH rather than length:
+/// * **within the cap** — the standard limiter, unchanged (a long paste
+///   truncates, but visibly, in front of the person who pasted it);
+/// * **already over the cap** — an edit that does not make the text longer
+///   passes through verbatim, so a legacy badge is shortened one character at a
+///   time with every step on screen; an edit that would grow it is refused
+///   whole (the old value stands) rather than truncated to [maxLength], which
+///   would again drop characters nobody deleted.
+///
+/// Lengths are compared in code units while the truncation itself delegates to
+/// [LengthLimitingTextInputFormatter] (grapheme-correct). The two diverge only
+/// on a badge holding astral characters, and there the worst case is one
+/// refused keystroke — never a lost character.
+class _BadgeLengthFormatter extends TextInputFormatter {
+  const _BadgeLengthFormatter(this.maxLength);
+
+  final int maxLength;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (oldValue.text.length <= maxLength) {
+      return LengthLimitingTextInputFormatter(maxLength)
+          .formatEditUpdate(oldValue, newValue);
+    }
+    return newValue.text.length <= oldValue.text.length ? newValue : oldValue;
   }
 }
