@@ -11,17 +11,23 @@ from src.checkin.schema.cycle_counts_schema import MembershipUsage
 
 
 class CheckinWarning(StrEnum):
-    """A gate condition that would block a kiosk check-in.
+    """A gate condition raised on a check-in.
 
     The gate evaluates these once per (member, occurrence). ``is_member``
     decides what they mean:
 
-    * ``is_member=True`` (kiosk mode) — a blocking condition *rejects* the
+    * ``is_member=True`` (kiosk mode) — a *blocking* condition rejects the
       check-in (returned as the response ``skip_reason``, nothing written).
-    * ``is_member=False`` (staff / admin) — the same conditions come back as
-      ``warnings`` that hold the check-in for confirmation
+      Which conditions block is decided by ``GateEvaluation.blocked``, NOT by
+      membership of this enum.
+    * ``is_member=False`` (staff / admin) — EVERY condition here comes back as
+      a ``warning`` that holds the check-in for confirmation
       (``requires_confirmation``, nothing written) unless ``ignore_warnings``
       overrides, which records through them.
+
+    Every member currently blocks a kiosk, but that is a property of
+    ``GateEvaluation.blocked``, not of this enum — the two are kept separate so
+    a future warning can warn staff without rejecting a self-serve scan.
 
     Attributes:
         no_membership: The member has no active membership; an overridden staff
@@ -37,6 +43,24 @@ class CheckinWarning(StrEnum):
             they have not signed at a version >= its re-sign floor (the same
             set the member-detail Waivers section shows). Reservations are
             deliberately NOT gated — only the check-in.
+        overdue: The MEMBER is past due — ANY covering membership is active
+            with a ``next_due_date`` behind the gym's CURRENT local date
+            (``gym_today``, not the occurrence's date: "do they owe money" is a
+            question about now). The ONE shared rule in
+            ``src/shared/membership_status.py`` — the same text the members-list
+            Overdue tab, its tally and the revenue tiles use.
+            It is MEMBER-level, not attribution-level: an overdue recurring
+            plan sitting behind a higher-priority trial pack still raises it.
+            **Blocks a kiosk**, like the other conditions (it IS in
+            ``GateEvaluation.blocked``) — an unpaid member is sent to the front
+            desk instead of self-admitting, which is the point of surfacing it
+            at the door. Staff keep the override: the CRM holds the check-in
+            with this warning and records it on "Check in anyway".
+            Known caveat: ``next_due_date`` can read past-due while Stripe
+            shows everything paid (a missed webhook the reconciler has not yet
+            swept), so a kiosk rejection here is occasionally a false alarm the
+            front desk has to clear.
+            Reservations are NOT gated, matching the waiver precedent.
     """
 
     no_membership = "no_membership"
@@ -44,6 +68,7 @@ class CheckinWarning(StrEnum):
     ineligible_plan = "ineligible_plan"
     over_capacity = "over_capacity"
     unsigned_waiver = "unsigned_waiver"
+    overdue = "overdue"
 
 
 class GateEvaluation(BaseModel):
@@ -71,12 +96,13 @@ class GateEvaluation(BaseModel):
         """Whether the strict kiosk gate rejects this member.
 
         Blocked iff the room is full, a required waiver is unsigned, the
-        member has no membership, or no eligible covering membership has
-        remaining capacity (``strict`` None).
+        member is past due, the member has no membership, or no eligible
+        covering membership has remaining capacity (``strict`` None).
         """
         return (
             CheckinWarning.over_capacity in self.reasons
             or CheckinWarning.unsigned_waiver in self.reasons
+            or CheckinWarning.overdue in self.reasons
             or self.forced is None
             or self.strict is None
         )
@@ -99,13 +125,15 @@ class CheckinRequest(BaseModel):
     who the caller is:
 
     * ``True`` — kiosk mode (a terminal staff put in front of members). The
-      strict gate applies: if
-      no eligible covering membership has remaining capacity, the member is out
-      of classes, the room is full, or the plan is ineligible, the check-in is
-      rejected (``log_id = null`` + a ``skip_reason``, nothing written).
+      strict gate applies: if no eligible covering membership has remaining
+      capacity, the member is out of classes, the room is full, the plan is
+      ineligible, a required waiver is unsigned, or the member is past due, the
+      check-in is rejected (``log_id = null`` + a ``skip_reason``, nothing
+      written).
     * ``False`` (default — staff / admin) — a clean check-in is recorded. But if
       the gate raises any warning (no membership / out of classes / ineligible /
-      over capacity), the check-in is NOT recorded: the response comes back with
+      over capacity / unsigned waiver / overdue), the check-in is NOT recorded:
+      the response comes back with
       ``requires_confirmation = true`` and the ``warnings``, so staff can decide.
       To go ahead anyway, resend with ``ignore_warnings = true`` — then it is
       recorded (attributed to the best available membership, NULL plan/item when
@@ -251,6 +279,9 @@ class CheckinResponse(BaseModel):
             this check-in — the same value ``GET /api/v1/streak`` returns, folded
             into the check-in response so the caller needn't make a second call.
             0 when the check-in was not recorded (a rejection / needs-confirmation).
+        current_week_days: The week strip AFTER this check-in (see
+            ``StreakResult``), folded in alongside ``class_streak_weeks``.
+            All ``False`` when the check-in was not recorded.
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -265,6 +296,7 @@ class CheckinResponse(BaseModel):
     warnings: list[CheckinWarning] = []
     requires_confirmation: bool = False
     class_streak_weeks: int = 0
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)
     memberships: list[CheckinMembershipBreakdown] = []
 
 
@@ -335,8 +367,29 @@ class AttendeeListResponse(BaseModel):
     attendees: list[Attendee]
 
 
+class StreakResult(BaseModel):
+    """A member's attendance streak metrics for one gym, computed together.
+
+    ``StreakService.get_streak_details``' return — an INTERNAL type, never
+    serialized; the routes map it onto ``StreakResponse`` / ``CheckinResponse``.
+    Both fields derive from the SAME session and the SAME gym-local Monday
+    anchor, so the strip and the week count can never disagree about which
+    week is "current".
+
+    Attributes:
+        weeks: Consecutive gym-local weeks with at least one class attendance.
+        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday, each
+            ``True`` when the member attended on that weekday of the CURRENT
+            gym-local week.
+    """
+
+    weeks: int
+    current_week_days: list[bool]
+
+
 class StreakResponse(BaseModel):
-    """Response for GET /api/v1/streak."""
+    """Response for GET /api/v1/streak — ``StreakResult`` on the wire."""
 
     member_id: UUID
     class_streak_weeks: int
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)

@@ -653,7 +653,7 @@ rewards:
   price_label: Free
   points_cost: 1500
 - title: Karate gi
-  image_url: https://upload.wikimedia.org/wikipedia/commons/3/32/Judo_orange_belt_%28Brusselsshrek%29.JPG
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/45/Keikogi.jpg
   price_label: 25% off
   points_cost: 2000
 - title: 1-on-1 PT session

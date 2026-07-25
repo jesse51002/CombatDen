@@ -13,6 +13,10 @@ import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/gym_setup/data/models/gym_with_role.dart';
 import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
 import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_locked_screen.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/presentation/screens/gym_picker_screen.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
@@ -159,6 +163,10 @@ class _AuthenticatedGateState
       timezone: gym.timezone,
       logoUrl: gym.logoUrl,
       savedThemeDesignId: gym.themeDesignId,
+      // Applies the gym's connected account to Stripe.js so browser-tokenized
+      // cards are minted on it (direct-charge Connect); re-applied on a gym
+      // switch, null-safe (payments unavailable until onboarded).
+      stripeAccountId: gym.stripeAccountId,
       createdAt: gym.createdAt,
     );
     // Seed the content gym (drives the read-only member-app content surfaces);
@@ -187,10 +195,30 @@ class _AuthenticatedGateState
         }
         // One gym was auto-activated in _resolveGyms; a picked gym
         // sets it via onSelected. Either way, an active gym → mount
-        // the workspace.
+        // the workspace — UNLESS Kiosk Mode is engaged, in which case
+        // the member self-serve surface intercepts it. The kiosk branch
+        // lives INSIDE the authenticated branch on purpose: a persisted
+        // kiosk flag is only ever honored while a session exists, so a
+        // flag without a session is inert (it fails closed to the login
+        // screen above). The admin session + selectedGym stay live
+        // underneath; leaving kiosk is what signs out.
         if (selectedGym.gymId != null) {
-          return _MembersWorkspace(
-            onGenerateRoute: widget.onGenerateRoute,
+          return BlocBuilder<KioskSessionCubit, KioskSessionState>(
+            builder: (context, kiosk) {
+              // Until the persisted kiosk flag has been read, show a neutral
+              // loader — NEVER _MembersWorkspace. This closes the boot/reload
+              // window where the old `inactive` initial state mounted the admin
+              // workspace (whose nested navigator boots at the URL fragment and
+              // fires its backend fetch) before `_restore` could swap in the
+              // kiosk. A member on a kiosk iPad can no longer point the address
+              // bar at an admin route and have it render on a reload.
+              if (kiosk.isRestoring) return const LoadingScreen();
+              if (kiosk.isEnded) return const KioskLockedScreen();
+              if (kiosk.isKioskVisible) return const KioskScreen();
+              return _MembersWorkspace(
+                onGenerateRoute: widget.onGenerateRoute,
+              );
+            },
           );
         }
         return GymPickerScreen(

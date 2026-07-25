@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.checkin.checkin_exceptions import CheckinError
 from src.checkin.checkin_router import checkin_router
 from src.classes.classes_router import classes_router
 from src.core.config import settings
@@ -91,6 +92,32 @@ async def _handle_lock_busy_error(
     )
 
 
+async def _handle_checkin_error(
+    request: Request,
+    exc: CheckinError,
+) -> JSONResponse:
+    """Format every typed check-in rejection: prose ``detail`` + stable ``code``.
+
+    The exception TYPE is the single source of truth for both halves — the
+    status and the machine-readable ``code`` are read off the raised instance
+    (``src/checkin/checkin_exceptions.py``), so no router re-decides either
+    and a new subclass is wired the moment it declares its two attributes.
+
+    ``code`` is a **sibling** key, never nested inside ``detail``: the CRM's
+    ``_extractDetail`` reads ``data['detail']`` only when it is a String, so
+    an object there would degrade every real message to "Server error 400".
+
+    The check-in routers reach this handler by RE-RAISING the typed error
+    (``except CheckinError: raise``) — a ``raise`` inside an ``except`` clause
+    propagates out of the whole ``try``, so their sibling
+    ``except Exception -> 500`` arm never sees it.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc), "code": exc.code.value},
+    )
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     container = DependencyInjector()
@@ -111,13 +138,27 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        # The reports/exports downloads carry the filename in Content-Disposition;
-        # the browser can only read it cross-origin when it's explicitly exposed.
-        expose_headers=["Content-Disposition"],
+        # Expose the HTTP Date header so the browser (CRM kiosk) can read the
+        # server's clock off any response. A CORS-guarded browser only sees
+        # Date on a cross-origin response when it is named here (a literal "*"
+        # would not, since allow_credentials=True forbids the wildcard). The
+        # kiosk anchors its absolute 12h runway to this server time so a
+        # rolled-back device clock can't extend the member surface past T+12h.
+        # Also expose Content-Disposition: the reports/exports downloads carry
+        # the filename there, and the browser can only read it cross-origin
+        # when it's explicitly exposed.
+        expose_headers=["Date", "Content-Disposition"],
     )
 
     application.add_exception_handler(
         LockBusyError, _handle_lock_busy_error
+    )
+    # One formatter for the whole typed check-in hierarchy (staff routes AND
+    # the member portal), so the status + code contract lives in exactly one
+    # place. Registered on the BASE class — Starlette resolves a handler by
+    # walking the raised type's MRO, so every subclass lands here.
+    application.add_exception_handler(
+        CheckinError, _handle_checkin_error
     )
 
     application.include_router(checkin_router)

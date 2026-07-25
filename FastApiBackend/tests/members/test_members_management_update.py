@@ -5,6 +5,8 @@ Each update is paired with a billing-state guard: member edits
 move the customer balance on Stripe.
 """
 
+from datetime import date
+
 from src.members.schema.members_billing_schema import (
     MembersBillingUpdateCardRequest,
 )
@@ -67,11 +69,9 @@ async def test_update_personal_info(
         assert resp.email == "updated@test.com"
         assert resp.last_name == "Name"  # unchanged
 
-        # NOTE: update_member deliberately does NOT sync name/email
-        # changes to the Stripe customer object — see
-        # ``members_management_update.py`` where the write path only
-        # touches ``member_billing_profile``. We still verify the customer
-        # is reachable and that the edit did not generate any charges.
+        # update_member deliberately does NOT sync name/email to the Stripe
+        # customer — the write path only touches ``member_billing_profile``.
+        # The customer is still checked reachable, and unbilled.
         customer = await stripe_client.client.v1.customers.retrieve_async(
             member.stripe_customer_id,
             options=connect_opts,
@@ -83,6 +83,61 @@ async def test_update_personal_info(
             before,
             connect_opts,
         )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_date_of_birth_round_trips_and_survives_partial_update(
+    management_service,
+    db_pool,
+    gym_id,
+    created,
+):
+    """``date_of_birth`` round-trips through create + update.
+
+    ``MemberUpdateData`` is dumped ``exclude_unset=True``, so an OMITTED field
+    never reaches the SET clause while an EXPLICIT ``None`` is a real clear.
+    Both directions are asserted: a regression in either silently loses or
+    silently keeps a member's data.
+    """
+    dob = date(1990, 5, 17)
+    member = await management_service.create_member(
+        MemberCreateRequest(
+            gym_id=gym_id,
+            first_name="Dob",
+            last_name="RoundTrip",
+            date_of_birth=dob,
+        ),
+    )
+    created.track_customer(member.stripe_customer_id)
+
+    try:
+        # 1. The create response echoes what was stored.
+        assert member.date_of_birth == dob
+
+        # 2. A partial update that does NOT mention date_of_birth leaves it
+        #    alone — the blank-field-must-not-wipe-stored-data case.
+        resp = await management_service.update_member(
+            member.member_id,
+            MemberUpdateData(phone="555-0100"),
+        )
+        assert resp.phone == "555-0100"
+        assert resp.date_of_birth == dob
+
+        # 3. A real edit changes it.
+        corrected = date(1991, 1, 2)
+        resp = await management_service.update_member(
+            member.member_id,
+            MemberUpdateData(date_of_birth=corrected),
+        )
+        assert resp.date_of_birth == corrected
+
+        # 4. An EXPLICIT None clears it (distinct from omitting the field).
+        resp = await management_service.update_member(
+            member.member_id,
+            MemberUpdateData(date_of_birth=None),
+        )
+        assert resp.date_of_birth is None
     finally:
         await delete_member_data(db_pool, member.member_id)
 

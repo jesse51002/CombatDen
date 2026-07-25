@@ -10,8 +10,9 @@ One bad member never sinks the batch: each member is checked in inside its own
 ``try``, and any exception becomes a ``failed`` item carrying the error message
 instead of aborting the loop. ``resolve`` raising (class missing /
 deleted / inactive, or not a real occurrence) is the one case that fails the
-whole request — it propagates before any per-member work, and the router maps
-it to 404 / 400.
+whole request — it propagates before any per-member work as a typed
+``CheckinError`` (see ``checkin_exceptions``), and the router maps it BY TYPE
+to 404 / 400.
 """
 
 from datetime import date, time
@@ -82,10 +83,9 @@ class BatchCheckinService:
             every processed member failed (the router maps that to 500).
 
         Raises:
-            ValueError: If the occurrence cannot be resolved (class missing /
-                deleted / inactive, gym missing, or not a real, non-cancelled
-                occurrence on that exact slot). Raised before any per-member
-                work, so the whole request fails (router -> 404 / 400).
+            CheckinError: The occurrence cannot be resolved. Raised OUTSIDE
+                the per-member loop, before any work, so the whole request
+                fails and the isolation below is unaffected.
         """
         resolved_class = await self._resolver.resolve(
             class_id, gym_id, occurrence_date, occurrence_time

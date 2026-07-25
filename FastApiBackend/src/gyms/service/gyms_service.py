@@ -19,6 +19,7 @@ from src.classes.service.classes_versions_service import (
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
     EmployeeThemeResponse,
+    GymAppLinksResponse,
     GymCreateRequest,
     GymCreateResponse,
     GymOnboardingLinkResponse,
@@ -65,6 +66,11 @@ class GymsService:
             valid (→ ``'none'`` clears all sub-indices; → stripes/div fills
             the base leaf where a rank has sub-ranks), never touching the
             persisted per-rank counts / image overrides.
+        combatden_app_store_url: CombatDen's default iOS App Store listing —
+            the fallback ``get_app_links`` returns when a gym has not set its
+            own ``gyms.app_store_url`` (placeholder until the app ships).
+        combatden_play_store_url: CombatDen's default Google Play listing —
+            the fallback for a gym with no ``gyms.play_store_url``.
     """
 
     def __init__(
@@ -74,10 +80,14 @@ class GymsService:
         waivers_service: WaiversService,
         classes_versions_service: ClassesVersionsService,
         ranks_members: RanksMembers,
+        combatden_app_store_url: str,
+        combatden_play_store_url: str,
     ) -> None:
         self._db_pool = db_pool
         self._classes_versions_service = classes_versions_service
         self._ranks_members = ranks_members
+        self._combatden_app_store_url = combatden_app_store_url
+        self._combatden_play_store_url = combatden_play_store_url
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
@@ -171,6 +181,41 @@ class GymsService:
             )
 
         return [GymWithRoleResponse(**row) for row in rows]
+
+    async def get_app_links(
+        self,
+        gym_id: UUID,
+    ) -> GymAppLinksResponse:
+        """Resolve a gym's member-app store links (public read).
+
+        Each link is the gym's own white-label listing when set, else the
+        CombatDen default (injected placeholder until the app ships). The
+        resolution is a NULL fallback on the COLUMN, not on the gym itself:
+        an unknown ``gym_id`` is a 404, never a default-filled response, so
+        the public download page can't silently succeed for a bad QR code.
+
+        Raises:
+            ValueError: If no gym has ``gym_id`` (mapped to 404 at the router).
+        """
+        async with self._db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(load_sql(SQL_DIR / "gyms_get_app_links.sql")),
+                        {"gym_id": str(gym_id)},
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+
+        if row is None:
+            raise ValueError("Gym not found")
+
+        return GymAppLinksResponse(
+            ios_url=row["app_store_url"] or self._combatden_app_store_url,
+            android_url=row["play_store_url"] or self._combatden_play_store_url,
+        )
 
     async def update_gym(
         self,

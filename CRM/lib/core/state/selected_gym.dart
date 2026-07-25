@@ -4,6 +4,7 @@ import 'package:theme_flutter/data/models/customization_style.dart';
 
 import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/core/network/stripe_account_context.dart';
 import 'package:crm/features/members/data/gym_content_repository.dart';
 import 'package:crm/features/members/data/gym_detail.dart';
 
@@ -43,6 +44,7 @@ class SelectedGym extends ChangeNotifier {
   String? _gymName;
   String? _logoUrl;
   DateTime? _createdAt;
+  String? _stripeAccountId;
 
   /// The gym's persisted ThemeService design id (`gyms.theme_design_id`),
   /// hydrated at login. The "Set as app theme" action compares the previewed
@@ -87,6 +89,12 @@ class SelectedGym extends ChangeNotifier {
   /// timezone save commits.
   String? get timezone => _timezone;
 
+  /// The active gym's Stripe Connect connected-account id (`acct_…`); null
+  /// until [setActiveGym], or when the gym hasn't finished Stripe onboarding.
+  /// [setActiveGym] hands it to [stripeAccountContext] so browser-tokenized
+  /// cards are minted on the gym's connected account.
+  String? get stripeAccountId => _stripeAccountId;
+
   /// When the active gym was created (`gyms.created_at`); null until
   /// [setActiveGym], or when an older backend doesn't return the field. The
   /// Settings → Reports & exports month picker floors its year list at this
@@ -117,11 +125,24 @@ class SelectedGym extends ChangeNotifier {
 
   /// Record the active admin gym: the real gym UUID, its [displayName] (the
   /// real gym name — becomes [gymName]), the caller's [role], the gym's IANA
-  /// [timezone], its uploaded [logoUrl] (null = no logo), and the gym's
-  /// persisted ThemeService design id ([savedThemeDesignId]). Set once at
-  /// sign-in / via the gym picker. Independent of the VideoService content
-  /// selection and the live theme — it does not touch [videoGymId] or apply a
-  /// theme (the theme runtime isn't initialized yet at login).
+  /// [timezone], its uploaded [logoUrl] (null = no logo), the gym's
+  /// persisted ThemeService design id ([savedThemeDesignId]), and its Stripe
+  /// Connect connected-account id ([stripeAccountId], null until onboarded).
+  /// Set once at sign-in / via the gym picker. Independent of the VideoService
+  /// content selection and the live theme — it does not touch [videoGymId] or
+  /// apply a theme (the theme runtime isn't initialized yet at login).
+  ///
+  /// **It also applies the gym's connected account to Stripe.js** (via
+  /// [stripeAccountContext]) so a browser-tokenized card is minted on the gym's
+  /// connected account rather than the platform — the backend runs direct-charge
+  /// Connect, and a platform-owned card cannot attach to a connected-account
+  /// customer. This runs on EVERY activation, including a gym switch, so the
+  /// context re-applies for the newly active gym; the shared `CardFieldBox`
+  /// waits on [stripeAccountContext] so the account is applied before any card
+  /// field mounts — and because the apply closes its readiness gates for its own
+  /// duration, a switch can never leave a field mountable against the gym being
+  /// switched AWAY from. A null account leaves payments unavailable (fail
+  /// closed).
   void setActiveGym({
     required String gymId,
     required String displayName,
@@ -129,6 +150,7 @@ class SelectedGym extends ChangeNotifier {
     required String timezone,
     required String? logoUrl,
     String? savedThemeDesignId,
+    String? stripeAccountId,
     DateTime? createdAt,
   }) {
     _gymId = gymId;
@@ -137,7 +159,15 @@ class SelectedGym extends ChangeNotifier {
     _timezone = timezone;
     _logoUrl = logoUrl;
     _savedThemeDesignId = savedThemeDesignId;
+    _stripeAccountId = stripeAccountId;
     _createdAt = createdAt;
+    // Apply the connected account to Stripe.js. Not awaited here (setActiveGym
+    // is synchronous and drives listeners immediately) — and it does not need to
+    // be: `apply` closes its own isReady / paymentsAvailable gates
+    // SYNCHRONOUSLY, before its first await, so by the time this returns no
+    // consumer can read the outgoing gym's readiness. CardFieldBox gates on
+    // those two flags, which is where the await-before-mount guarantee lands.
+    stripeAccountContext.apply(stripeAccountId);
     notifyListeners();
   }
 
@@ -209,6 +239,7 @@ class SelectedGym extends ChangeNotifier {
     _logoUrl = null;
     _createdAt = null;
     _savedThemeDesignId = null;
+    _stripeAccountId = null;
     _videoGymId = null;
     _designId = null;
     _themeCategory = null;

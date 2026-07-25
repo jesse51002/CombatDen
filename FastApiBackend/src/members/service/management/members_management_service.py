@@ -23,6 +23,9 @@ from src.members.service.management.members_management_create import (
 from src.members.service.management.members_management_invoices import (
     MembersManagementInvoices,
 )
+from src.members.service.management.members_management_payment_methods import (
+    MembersManagementPaymentMethods,
+)
 from src.members.service.management.members_management_update import (
     MembersManagementUpdate,
 )
@@ -59,6 +62,7 @@ class MembersManagementService:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)
         self._update = MembersManagementUpdate(*deps)
+        self._payment_methods = MembersManagementPaymentMethods(*deps)
         self._invoices = MembersManagementInvoices(
             db_pool,
             payments_members_service,
@@ -113,6 +117,17 @@ class MembersManagementService:
     ) -> MembersBillingProfileResponse:
         """Remove a member's payment card."""
         return await self._update.unlink_payment(member_id)
+
+    async def has_payment_method(
+        self,
+        member_id: UUID,
+    ) -> bool:
+        """Whether the member has ANY payment method attached in Stripe.
+
+        Read live from Stripe (never a cached CRM column). ``False`` means
+        "verified: nothing attached" — a failure raises instead.
+        """
+        return await self._payment_methods.has_payment_method(member_id)
 
     # ── Invoices ───────────────────────────────────────────────
 

@@ -31,6 +31,11 @@ from src.waivers.schema.waivers_schema import (
     WaiverUpdateRequest,
 )
 from src.waivers.service.waivers_base import WaiversBase
+from src.waivers.waivers_exceptions import (
+    WaiverNoCurrentVersionError,
+    WaiverNotFoundError,
+    WaiverVersionNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +56,16 @@ class WaiversUpdate(WaiversBase):
             The updated waiver with its current version embedded.
 
         Raises:
-            ValueError: If the waiver is not found.
+            WaiverNotFoundError: If the waiver is missing or archived
+                (-> 404).
+            WaiverVersionNotFoundError: If a version-scoped write matches no
+                row (-> 404).
+            WaiverNoCurrentVersionError: If a flag-only update targets a
+                waiver with no current version (-> 400).
+            ValueError: From the shared ``validate_mutable_columns`` guard on
+                an immutable column. Untyped on purpose (the guard is
+                domain-agnostic), which is why the router keeps a generic
+                bad-input arm below its typed one.
         """
         existing = await self._get_waiver(request.waiver_id, request.gym_id)
 
@@ -100,7 +114,7 @@ class WaiversUpdate(WaiversBase):
                 },
             )
             if not result.mappings().fetchone():
-                raise ValueError(f"Waiver {waiver_id} not found")
+                raise WaiverNotFoundError(f"Waiver {waiver_id} not found")
             await session.commit()
 
     async def _maybe_publish_version(
@@ -180,7 +194,9 @@ class WaiversUpdate(WaiversBase):
                 },
             )
             if not result.mappings().fetchone():
-                raise ValueError(f"Waiver version {version_id} not found")
+                raise WaiverVersionNotFoundError(
+                    f"Waiver version {version_id} not found",
+                )
             await session.commit()
 
     async def _set_requires_resign(
@@ -193,9 +209,13 @@ class WaiversUpdate(WaiversBase):
 
         Moving the flag moves the re-sign floor: raising it re-blocks prior
         signers; lowering it makes their signatures count again.
+
+        The two failure modes are deliberately DIFFERENT types: no
+        current-version pointer at all is a 400 (nothing to target), a pointer
+        whose row is gone is a 404 (addressed and missing).
         """
         if current_version_id is None:
-            raise ValueError("Waiver has no current version")
+            raise WaiverNoCurrentVersionError("Waiver has no current version")
         sql = load_sql(SQL_DIR / "waiver_versions_update_requires_resign.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
@@ -207,7 +227,7 @@ class WaiversUpdate(WaiversBase):
                 },
             )
             if not result.mappings().fetchone():
-                raise ValueError(
+                raise WaiverVersionNotFoundError(
                     f"Waiver version {current_version_id} not found",
                 )
             await session.commit()

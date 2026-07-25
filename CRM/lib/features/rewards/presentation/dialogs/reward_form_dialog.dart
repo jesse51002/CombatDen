@@ -9,6 +9,7 @@ import 'package:crm/features/rewards/bloc/rewards_bloc.dart';
 import 'package:crm/features/rewards/bloc/rewards_event.dart';
 import 'package:crm/features/rewards/bloc/rewards_state.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
+import 'package:crm/features/rewards/presentation/widgets/value_badge_field.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -245,14 +246,7 @@ class _FormBody extends StatelessWidget {
               return null;
             },
           ),
-          CustomTextField(
-            controller: priceLabelCtrl,
-            label: 'Price Badge',
-            hintText: 'e.g. Free or 30% off',
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'A price badge is required.'
-                : null,
-          ),
+          ValueBadgeField(controller: priceLabelCtrl),
           AppPrimaryButton(
             text: isEdit ? 'Save Changes' : 'Add Reward',
             fullWidth: true,

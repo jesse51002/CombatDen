@@ -1,30 +1,15 @@
-"""Live-DB regression guard for the unified feed-page query's parameter typing.
+"""Live-DB regression guard for the feed queries' parameter typing.
 
-The pure-logic tests in ``test_videos_logic.py`` mock the DB session, so they
-never let Postgres PREPARE ``videos_load_feed_page.sql``. That blind spot let a
-real bug ship: with ``video_type``/``big_group`` both NULL the nullable params
-were only ever used in ``$N IS NULL`` / bare ``= 'literal'`` positions, so
-Postgres could not infer their type at PREPARE and raised
-``asyncpg.exceptions.AmbiguousParameterError: could not determine data type of
-parameter $4`` — a 500 regardless of table data.
+The logic tests mock the DB session, so they never let Postgres PREPARE the
+SQL — and every nullable bind here (``video_type`` / ``big_group`` /
+``member_embedding`` / ``member_id`` / the rank knobs) needs an explicit
+``CAST(...)``. Without one, a param used only in ``$N IS NULL`` or
+``= 'literal'`` positions has no inferable type and the query dies at PREPARE
+with ``AmbiguousParameterError`` — a 500 regardless of table data.
 
-The fix wraps those binds in an explicit ``CAST(...)``. The unified query adds
-more nullable binds — ``:member_embedding`` (used both ``CAST(... AS text)`` and
-``CAST(... AS vector)``), ``:member_id``, and the ``:bump_fraction`` /
-``:half_life_seconds`` rank knobs — all cast, so this test now also guards those.
-It executes the real query against the live DB across every nullable-param combo
-(with NO member_id, so no ``members.video_profile_*`` read); it fails loudly
-(prepare error) if the casts are ever dropped. It does NOT assert on row content
-— the seeded gym may have no enriched feed rows — only that the query prepares
-and executes and returns a ``(list, int)``.
-
-The unified feed INNER JOINs ``video_rag``, so this test needs the video-worker
-RAG migration's ``video_rag`` + ``member_video_recs`` tables applied on the
-shared local DB; until then it fails at the query (relation missing) — the
-expected "pending migration apply" state, not a code fault.
-
-Live-DB test (uses the session-scoped ``db_pool`` + seeded ``gym_id``
-fixtures), so it runs in the integration pass, not the hermetic unit pass.
+So these execute the real queries across every param combo and assert only the
+SHAPE, never row content: parameter typing is a property of the query, so the
+guard has to stay honest whatever the seeded gym's feed happens to hold.
 """
 
 from __future__ import annotations
@@ -41,8 +26,8 @@ from src.videos.schema.videos_big_group import BigGroup
 from src.videos.schema.videos_schema import GymFeedSection, GymVideoCard
 from src.videos.service.video_feed_service import VideoFeedService
 
-# (video_type, big_group) — every nullable/branch combination the router can
-# produce. The NULL/NULL case is the original AmbiguousParameterError repro.
+# Every nullable/branch combination the router can produce; NULL/NULL is the
+# AmbiguousParameterError repro.
 _PARAM_CASES = [
     pytest.param(None, None, id="no-filter (the original 500)"),
     pytest.param(VideoGenre.educational, None, id="genre-filter"),
@@ -58,12 +43,8 @@ async def test_load_feed_page_prepares_against_live_db(
     video_type: VideoGenre | None,
     big_group: BigGroup | None,
 ) -> None:
-    """The real unified feed-page query prepares + executes for every param combo.
-
-    Guards against ``AmbiguousParameterError`` returning if the explicit
-    ``CAST(...)`` on any nullable param (genre/group/embedding/member_id/rank
-    knobs) is ever removed.
-    """
+    """``videos_load_feed_page.sql`` prepares + executes for every param combo —
+    it fails loudly if any nullable param's ``CAST(...)`` is ever dropped."""
     service = VideoFeedService(
         db_pool=db_pool,
         youtube_client=MagicMock(),
@@ -93,14 +74,9 @@ async def test_load_feed_preview_prepares_against_live_db(
     gym_id: UUID,
     rejected: bool,
 ) -> None:
-    """The windowed per-genre preview query prepares + executes on the live DB.
-
-    The mocked logic tests never let Postgres PREPARE
-    ``videos_load_feed_preview.sql`` (the ROW_NUMBER / FIRST_VALUE window + the
-    injected shared ``{candidate_source}`` core), so this executes it for real to
-    catch a broken CTE/window or a param-typing regression. It asserts only the
-    shape (list of ``GymFeedSection``), not row content — the seeded gym may have
-    no enriched feed rows."""
+    """``videos_load_feed_preview.sql`` prepares + executes on the live DB —
+    catching a broken window/CTE or a param-typing regression in the
+    ROW_NUMBER query and its injected shared ``{candidate_source}`` core."""
     service = VideoFeedService(
         db_pool=db_pool,
         youtube_client=MagicMock(),

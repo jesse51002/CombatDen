@@ -22,6 +22,7 @@ EffectiveClassInstance _$EffectiveClassInstanceFromJson(
   resolvedInstructorName: json['resolved_instructor_name'] as String?,
   imageUrl: json['image_url'] as String?,
   pointsWorth: (json['points_worth'] as num).toInt(),
+  isActive: json['is_active'] as bool? ?? true,
   maxCapacity: (json['max_capacity'] as num?)?.toInt(),
   isCancelled: json['is_cancelled'] as bool,
   hasInstanceException: json['has_instance_exception'] as bool,

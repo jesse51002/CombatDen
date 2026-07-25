@@ -10,8 +10,9 @@
   punch-card capacity + the room's ``max_capacity``, and check in against the
   best covering plan (trial -> one_time -> recurring, then lowest class_count,
   then oldest pack). If no eligible covering membership has capacity, the room
-  is full, or the member has no membership, the check-in is *rejected* (skipped,
-  ``log_id`` None, with a ``skip_reason``); nothing is written.
+  is full, the member has no membership, a required waiver is unsigned, or the
+  member is PAST DUE, the check-in is *rejected* (skipped, ``log_id`` None,
+  with a ``skip_reason``); nothing is written.
 * ``is_member=False`` (staff / admin — the default) — the check-in is ALWAYS
   recorded. It is attributed to the member's best available membership via
   ``select_best_membership_forced`` (eligibility + remaining count ignored, an
@@ -64,17 +65,28 @@ from src.checkin.service.checkin_queries import CheckinQueries
 from src.checkin.service.checkin_writer import CheckinWriter
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import is_membership_overdue
 
 # Order a set of blocking reasons into a single primary ``skip_reason`` for a
 # rejected kiosk check-in: the room being full and a missing membership are the
 # hardest stops, then the unsigned-waiver legal gate, then punch-card
-# depletion, then plan ineligibility.
+# depletion, then plan ineligibility, and finally the billing heads-up.
+#
+# EVERY CheckinWarning member must appear here. Both ``_primary_reason`` and
+# ``_checkin_staff`` order by ``.index``, which raises ValueError on a member
+# that is missing — an omission would 500 every staff check-in that raises it.
+#
+# ``overdue`` sorts LAST on purpose: a coverage problem (no membership, out of
+# classes, ineligible plan) is always the more actionable thing to put in front
+# of a staff member than a billing heads-up. It DOES block a kiosk like the
+# rest — the ordering is about which reason is shown first, not severity.
 _REASON_PRIORITY: tuple[CheckinWarning, ...] = (
     CheckinWarning.over_capacity,
     CheckinWarning.no_membership,
     CheckinWarning.unsigned_waiver,
     CheckinWarning.out_of_classes,
     CheckinWarning.ineligible_plan,
+    CheckinWarning.overdue,
 )
 
 
@@ -311,6 +323,19 @@ class CheckinMemberGate:
             active
         )
         self._add_membership_reasons(evaluation.forced, eligible, evaluation)
+        # Overdue is MEMBER-level, not attribution-level: the question is
+        # "does this member owe money", so it tests EVERY covering
+        # membership rather than only the attribution target. Testing
+        # ``forced`` alone would silently miss the common case of an
+        # overdue recurring membership sitting behind a trial / one_time
+        # pack, which outranks it in the selector's priority order — the
+        # member would show Overdue on the members list yet check in with
+        # no warning at the counter.
+        if any(
+            is_membership_overdue(m.status, m.renew_date, m.gym_today)
+            for m in active
+        ):
+            evaluation.reasons.add(CheckinWarning.overdue)
         return evaluation
 
     @staticmethod
@@ -319,7 +344,7 @@ class CheckinMemberGate:
         eligible: set[UUID],
         evaluation: GateEvaluation,
     ) -> None:
-        """Flag ineligibility / depletion of the attribution target."""
+        """Flag ineligibility / depletion / past-due of the attribution target."""
         if forced is None:
             return
         if forced.plan_id not in eligible:

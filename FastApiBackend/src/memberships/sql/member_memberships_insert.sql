@@ -1,7 +1,9 @@
 -- Insert all membership rows atomically. RETURNING (item_id, member_id, price_id)
 -- lets the caller map generated ids back positionally (not by RETURNING order).
--- ON CONFLICT on idempotency_key (one-time/trial real-start only; NULL rows unaffected)
--- drops duplicates on retry; a shortfall vs expected count signals a stale replay.
+-- ON CONFLICT on idempotency_key (every real-start row -- one-time, trial AND recurring;
+-- NULL preview rows unaffected) drops duplicates on retry; a shortfall vs expected count
+-- signals a stale replay. This index is the only RACE-safe dedup: the recurring trigger
+-- trg_recurring_no_active_memberships is a SELECT COUNT that two concurrent inserts both pass.
 INSERT INTO member_memberships_unfiltered (
     member_id, paid_by_member_id, gym_id, plan_id, price_id,
     start_date, end_date, last_paid_date, next_due_date,

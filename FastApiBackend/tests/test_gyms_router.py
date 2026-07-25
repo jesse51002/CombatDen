@@ -6,7 +6,14 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
+from src.core.config import settings
 from src.gyms.schema.gyms_schema import GymCreateResponse
+
+# Every gym row the router maps to a GymResponse carries created_at (the
+# reports/exports month-picker floor) — `gyms_list_for_user.sql` selects it
+# and `update_gym.sql` RETURNINGs it, so a mock row that omits it fails
+# validation and 500s/400s where production would not.
+GYM_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_create_gym_returns_201_with_onboarding_url(client, auth_headers):
@@ -65,19 +72,24 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     rows = [
         {
             "gym_id": gym_a,
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
+            "stripe_account_id": "acct_aztec",
             "employee_type": "owner",
             "theme_preference": "dark",
         },
         {
             "gym_id": gym_b,
+            "created_at": GYM_CREATED_AT,
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
             "timezone": "America/New_York",
             "sub_rank_type": "div",
+            # Not onboarded yet — the id is NULL until onboarding completes.
+            "stripe_account_id": None,
             "employee_type": "admin",
             "theme_preference": "system",
         },
@@ -96,8 +108,11 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     # The caller's saved theme rides along so the CRM can hydrate at login.
     assert body[0]["theme_preference"] == "dark"
     assert body[1]["theme_preference"] == "system"
-    # GymResponse fields must not leak Stripe state.
-    assert "stripe_account_id" not in body[0]
+    # The connected-account id IS exposed on this authenticated staff read
+    # (client-safe; the CRM sets the Stripe.js connected-account context from
+    # it). It is NULL until the gym finishes Stripe onboarding.
+    assert body[0]["stripe_account_id"] == "acct_aztec"
+    assert body[1]["stripe_account_id"] is None
 
 
 def test_onboarding_status_403_when_not_owner(client, auth_mock, auth_headers):
@@ -186,6 +201,7 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -217,6 +233,7 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -249,6 +266,7 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
             "timezone": "America/Chicago",
@@ -361,3 +379,64 @@ def test_update_my_theme_422_on_unknown_value(client, auth_headers):
         headers=auth_headers,
     )
     assert response.status_code == 422
+
+
+# ── GET /{gym_id}/app-links (PUBLIC) ──────────────────────────
+
+
+def _app_links_session(db_pool_mock, row):
+    """Wire db_pool_mock.session() to yield a single-row read of ``row``."""
+    session = db_pool_mock.session.return_value
+    result = MagicMock()
+    result.mappings.return_value.fetchone.return_value = row
+    session.execute = AsyncMock(return_value=result)
+
+
+def test_app_links_returns_gym_links_when_set(client, db_pool_mock):
+    """A gym with its own white-label links gets them back verbatim.
+
+    No auth header is sent — the endpoint is PUBLIC (opened from a QR on
+    any phone), so it must resolve without a bearer token.
+    """
+    gym_id = uuid4()
+    _app_links_session(
+        db_pool_mock,
+        {
+            "gym_id": gym_id,
+            "app_store_url": "https://apps.apple.com/app/aztec-mma",
+            "play_store_url": "https://play.google.com/store/apps/details?id=com.aztec",
+        },
+    )
+
+    response = client.get(f"/api/v1/gyms/{gym_id}/app-links")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ios_url"] == "https://apps.apple.com/app/aztec-mma"
+    assert body["android_url"] == (
+        "https://play.google.com/store/apps/details?id=com.aztec"
+    )
+
+
+def test_app_links_falls_back_to_combatden_defaults_when_null(
+    client, db_pool_mock
+):
+    """A gym with NULL links resolves to the CombatDen default listing."""
+    gym_id = uuid4()
+    _app_links_session(
+        db_pool_mock,
+        {"gym_id": gym_id, "app_store_url": None, "play_store_url": None},
+    )
+
+    response = client.get(f"/api/v1/gyms/{gym_id}/app-links")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ios_url"] == settings.combatden_app_store_url
+    assert body["android_url"] == settings.combatden_play_store_url
+
+
+def test_app_links_404_when_gym_not_found(client, db_pool_mock):
+    """An unknown gym_id is a 404 — never a default-filled 200 for a bad QR."""
+    _app_links_session(db_pool_mock, None)
+
+    response = client.get(f"/api/v1/gyms/{uuid4()}/app-links")
+    assert response.status_code == 404, response.text

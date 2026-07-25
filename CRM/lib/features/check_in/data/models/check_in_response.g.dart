@@ -21,4 +21,9 @@ CheckInResponse _$CheckInResponseFromJson(Map<String, dynamic> json) =>
           : checkInWarningsFromJson(json['warnings'] as List?),
       requiresConfirmation: json['requires_confirmation'] as bool? ?? false,
       classStreakWeeks: (json['class_streak_weeks'] as num?)?.toInt() ?? 0,
+      currentWeekDays:
+          (json['current_week_days'] as List<dynamic>?)
+              ?.map((e) => e as bool)
+              .toList() ??
+          [false, false, false, false, false, false, false],
     );

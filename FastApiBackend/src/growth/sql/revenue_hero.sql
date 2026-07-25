@@ -39,9 +39,7 @@ overdue AS (
     FROM member_memberships_status mms
     CROSS JOIN bounds b
     WHERE mms.gym_id = CAST(:gym_id AS UUID)
-      AND mms.status = 'active'
-      AND mms.next_due_date IS NOT NULL
-      AND mms.next_due_date < b.today
+      AND ({is_overdue})
 ),
 expected AS (
     SELECT COALESCE(sum(mms.total_price), 0)::bigint AS cents

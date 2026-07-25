@@ -1,10 +1,15 @@
-"""Regression test for C-042.
+"""``PaymentsStripeMembersService.update_customer`` — the card-swap contract.
 
-``PaymentsStripeMembersService.update_customer`` must NOT detach the
-customer's previous default payment method when the caller passes that
-same payment method as the new ``payment_method_id``. Detaching it would
-strip the card that was just set as default, leaving the customer with
-no payment method.
+Regression test for C-042: it must NOT detach the customer's previous default
+payment method when the caller passes that same payment method as the new
+``payment_method_id``. Detaching it would strip the card that was just set as
+default, leaving the customer with no payment method.
+
+Plus the attach's IDEMPOTENCY KEY. Every external write carries a deterministic
+key so a retry cannot fire the write twice; this request carries no
+caller-supplied key, so it is derived from the (customer, payment method) pair —
+the two ids that fully identify the attach — suffixed ``:attach`` like the
+sibling ``attach_payment_method``'s callers build theirs.
 
 Pure unit test: the Stripe SDK and Connect client are mocked, no network.
 """
@@ -20,6 +25,7 @@ from src.payments.schema.metadata.stripe_customer_metadata import (
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerUpdateRequest,
 )
+from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_members_service import (
     PaymentsStripeMembersService,
 )
@@ -58,7 +64,9 @@ def _build_service(
 
     client = MagicMock()
     client.client = stripe
-    client.connect_opts.return_value = {}
+    # The REAL options builder, so the idempotency key the service derives is
+    # actually visible on the recorded call (a stubbed `{}` would hide it).
+    client.connect_opts = PaymentsStripeClient.connect_opts
 
     return PaymentsStripeMembersService(client), stripe
 
@@ -105,3 +113,47 @@ async def test_update_customer_no_detach_when_no_prior_default() -> None:
     await service.update_customer(_request("pm_new"), STRIPE_ACCOUNT_ID)
 
     stripe.v1.payment_methods.detach_async.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_customer_attach_carries_a_deterministic_key() -> None:
+    """The attach must carry a deterministic idempotency key.
+
+    Without one, a retried card update (a double-tapped Save, a client retry
+    after a timeout) fires a second unguarded attach against Stripe. The key is
+    derived from the (customer, payment method) pair — the two ids that fully
+    identify this write — with the ``:attach`` suffix the sibling
+    ``attach_payment_method``'s callers use, so the same card update dedups and a
+    genuinely different card still attaches.
+    """
+    service, stripe = _build_service(default_pm_id="pm_old")
+
+    await service.update_customer(_request("pm_new"), STRIPE_ACCOUNT_ID)
+
+    options = stripe.v1.payment_methods.attach_async.await_args.kwargs["options"]
+    assert options["stripe_account"] == STRIPE_ACCOUNT_ID
+    assert options["idempotency_key"] == f"{CUSTOMER_ID}:pm_new:attach"
+
+
+@pytest.mark.asyncio
+async def test_update_customer_attach_key_is_stable_across_retries() -> None:
+    """The same card update derives the SAME key twice — that is what dedups."""
+    keys = []
+    for _ in range(2):
+        service, stripe = _build_service(default_pm_id="pm_old")
+        await service.update_customer(_request("pm_new"), STRIPE_ACCOUNT_ID)
+        keys.append(
+            stripe.v1.payment_methods.attach_async.await_args.kwargs["options"][
+                "idempotency_key"
+            ]
+        )
+
+    assert keys[0] == keys[1]
+
+    # A DIFFERENT card is a different write and must not be deduped onto it.
+    service, stripe = _build_service(default_pm_id="pm_old")
+    await service.update_customer(_request("pm_other"), STRIPE_ACCOUNT_ID)
+    other_key = stripe.v1.payment_methods.attach_async.await_args.kwargs[
+        "options"
+    ]["idempotency_key"]
+    assert other_key != keys[0]

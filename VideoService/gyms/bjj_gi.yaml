@@ -922,7 +922,7 @@ rewards:
     price_label: "Free"
     points_cost: 1500
   - title: "BJJ gi"
-    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/32/Judo_orange_belt_%28Brusselsshrek%29.JPG"
+    image_url: "https://images.pexels.com/photos/8612489/pexels-photo-8612489.jpeg?auto=compress&cs=tinysrgb&w=1200"
     price_label: "25% off"
     points_cost: 2000
   - title: "1-on-1 PT session"

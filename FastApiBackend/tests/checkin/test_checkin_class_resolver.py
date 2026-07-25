@@ -1,23 +1,12 @@
 """Unit tests for ``CheckinClassResolver`` (no DB).
 
-Covers the effective-capacity resolution ``resolve`` folds into
-``ResolvedClass.max_capacity`` — ``class_instance_exceptions.new_max_capacity``
-overriding the class's ``max_capacity`` (NULL = unlimited) — the same
-resolution ``SignupService`` runs for the sign-up path
-(``test_signup_service.py``), mirrored here since it's the check-in capacity
-gate's actual input; the ``ValueError`` mapping around a ``None`` resolution
-(class not found / deleted / inactive / no real occurrence); and the
-early-check-in window gate.
-
-Occurrence resolution itself (the shared ``CheckinOccurrenceResolution`` —
-window-widening for a rescheduled occurrence, cancelled-day handling,
-exact-slot matching, etc.) is the canonical coverage of
-``test_checkin_occurrence_resolution.py``; this file builds a REAL
-``CheckinOccurrenceResolution`` (with its own internal ``CheckinQueries``
-mocked, the same pattern the old tests used) so the resolver is exercised
-against real production wiring rather than a stubbed seam, and keeps a
-couple of the reschedule cases here too since they're the resolver's actual
-input shape.
+Covers effective capacity (a per-occurrence ``new_max_capacity`` overriding the
+class default, NULL = unlimited), the TYPED rejection each failed condition
+raises, and the early-check-in window. The type -> status contract is owned by
+``test_checkin_error_mapping.py``, the occurrence-resolution algorithm by
+``test_checkin_occurrence_resolution.py``. A REAL ``CheckinOccurrenceResolution``
+(only its ``CheckinQueries`` mocked) is wired in, so the resolver runs against
+production wiring rather than a stubbed seam.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -27,6 +16,13 @@ from uuid import UUID, uuid4
 import pytest
 from schema.gym_class import RecurringUnit
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinNotOpenYetError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.service.checkin_class_resolver import CheckinClassResolver
 from src.checkin.service.checkin_occurrence_resolution import (
     CheckinOccurrenceResolution,
@@ -35,9 +31,8 @@ from src.classes.schema.classes_expander_schema import ClassSlot
 from src.classes.service.classes_expander import ClassesExpander
 from src.classes.service.classes_version_expander import ClassesVersionExpander
 
-# Well in the past, so the check-in-open window never blocks resolve()
-# regardless of when the test actually runs; still inside the daily
-# recurrence (start_date = this date - 1 day).
+# Well in the past, so the early-check-in window never blocks resolve()
+# whenever the test happens to run.
 _OCCURRENCE_DATE = date(2020, 1, 2)
 _OCCURRENCE_TIME = time(10, 0)
 _EFFECTIVE_FROM = datetime(2019, 1, 1, tzinfo=UTC)
@@ -75,9 +70,8 @@ def _version_row(
     slot_times: tuple[time, ...] = (_OCCURRENCE_TIME,),
     duration_minutes: int = 30,
 ) -> dict:
-    """A checkin_load_schedules.sql-shaped row: a daily-recurring class
-    covering ``_OCCURRENCE_DATE``. ``slot_times`` may hold several times so a
-    single day can carry multiple occurrences of the class."""
+    """A checkin_load_schedules.sql-shaped row: a daily class covering
+    ``_OCCURRENCE_DATE``. Several ``slot_times`` = several occurrences a day."""
     return {
         "schedule_id": uuid4(),
         "class_id": class_id,
@@ -126,9 +120,8 @@ def _occurrence_resolution(
     instances: list[dict] | None = None,
     ranges: list[dict] | None = None,
 ) -> CheckinOccurrenceResolution:
-    """A REAL ``CheckinOccurrenceResolution`` with its internal
-    ``CheckinQueries`` mocked — the shared, one-way ``checkin -> classes``
-    resolution seam ``CheckinClassResolver`` injects."""
+    """A REAL ``CheckinOccurrenceResolution`` with its ``CheckinQueries``
+    mocked — the one-way ``checkin -> classes`` seam the resolver injects."""
     resolution = CheckinOccurrenceResolution(
         MagicMock(), ClassesVersionExpander(ClassesExpander())
     )
@@ -239,7 +232,7 @@ async def test_class_not_found_raises() -> None:
     class_id, gym_id = uuid4(), uuid4()
     resolver = _resolver(None)
 
-    with pytest.raises(ValueError, match="Class not found"):
+    with pytest.raises(CheckinClassNotFoundError, match="Class not found"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -249,7 +242,7 @@ async def test_deleted_class_raises() -> None:
         _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
     )
 
-    with pytest.raises(ValueError, match="deleted"):
+    with pytest.raises(CheckinClassDeletedError, match="deleted"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -259,7 +252,7 @@ async def test_inactive_class_raises() -> None:
         _class_row(class_id=class_id, gym_id=gym_id, is_active=False)
     )
 
-    with pytest.raises(ValueError, match="not active"):
+    with pytest.raises(CheckinClassInactiveError, match="not active"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -270,7 +263,7 @@ async def test_no_versions_raises_no_occurrence() -> None:
         _class_row(class_id=class_id, gym_id=gym_id), versions=[]
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -287,7 +280,7 @@ async def test_non_recurrence_date_raises_no_occurrence() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
@@ -300,7 +293,7 @@ async def test_wrong_slot_time_raises_no_occurrence() -> None:
         versions=[_version_row(class_id=class_id, gym_id=gym_id)],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(
             class_id, gym_id, _OCCURRENCE_DATE, time(18, 30)
         )
@@ -320,14 +313,13 @@ async def test_cancelled_occurrence_raises_no_occurrence() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="No class occurrence"):
+    with pytest.raises(CheckinOccurrenceNotFoundError, match="No class occurrence"):
         await resolver.resolve(class_id, gym_id, _OCCURRENCE_DATE, _OCCURRENCE_TIME)
 
 
 async def test_two_same_day_slots_resolve_and_check_in_independently() -> None:
-    """A class with two slots on one day: each resolves to its OWN
-    ResolvedClass, keyed by its own exact original_time — checking into one
-    slot is fully independent of the other."""
+    """Two slots on one day each resolve to their OWN ResolvedClass, keyed by
+    the exact original_time — the two slots are fully independent."""
     class_id, gym_id = uuid4(), uuid4()
     morning, evening = time(6, 0), time(18, 30)
     resolver = _resolver(
@@ -353,9 +345,8 @@ async def test_two_same_day_slots_resolve_and_check_in_independently() -> None:
 
 async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
     """An occurrence rescheduled to a DIFFERENT date still resolves when
-    addressed by its ORIGINAL date — the window-widening fix. A bare
-    ``[occurrence_date, occurrence_date]`` expand window would silently drop
-    it (the reschedule's effective date falls outside that window)."""
+    addressed by its ORIGINAL date. The expand window must stay widened: a bare
+    ``[occurrence_date, occurrence_date]`` silently drops it."""
     class_id, gym_id = uuid4(), uuid4()
     new_date = _OCCURRENCE_DATE + timedelta(days=10)
     resolver = _resolver(
@@ -377,7 +368,7 @@ async def test_rescheduled_occurrence_resolves_by_original_date() -> None:
 
 
 async def test_rescheduled_to_the_past_resolves_by_original_date() -> None:
-    """The window-widening fix also handles a reschedule INTO the past."""
+    """The widened window covers a reschedule INTO the past too."""
     class_id, gym_id = uuid4(), uuid4()
     new_date = _OCCURRENCE_DATE - timedelta(days=1)
     resolver = _resolver(
@@ -418,5 +409,5 @@ async def test_checkin_too_far_in_future_is_rejected() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="not open yet"):
+    with pytest.raises(CheckinNotOpenYetError, match="not open yet"):
         await resolver.resolve(class_id, gym_id, far_future, _OCCURRENCE_TIME)

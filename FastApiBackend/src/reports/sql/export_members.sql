@@ -16,6 +16,7 @@ SELECT
     m.photo_url,
     m.phone,
     m.address,
+    m.date_of_birth,
     m.emergency_contact_name,
     m.emergency_contact_phone,
     m.emergency_contact_email,

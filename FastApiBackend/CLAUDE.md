@@ -239,8 +239,9 @@ src/
 - **A large domain MAY group a distinct sub-concern cluster into a subfolder** when that materially aids clarity — flat stays the *default*, but a domain that has grown big enough to hold a self-contained multi-file sub-concern can put it in its own `service/<sub-concern>/` folder. Reach for this only for a genuine multi-file cluster, **never for a single file**.
   - Good: `videos/service/video_agent/` holds the conversational-agent wrapper (`video_agent_service.py`), a self-contained sub-concern of the otherwise-flat `videos/service/`.
   - **The class system is versioned schedules + computed occurrences** (single source of truth: the `class-system-guide` skill). A class = a `gym_classes` IDENTITY row + append-only `gym_class_schedules` VERSIONS (each freezing its `timezone` at mint); occurrences are never stored — the pure `ClassesExpander` (one schedule shape; each candidate date FANS OUT over its `weekday_slots` slot list, so a class may occur several times per day) wrapped by `ClassesVersionExpander` (ownership windows by `effective_from`, first-version-owns-the-past, SLOT-level dedup at `(original_date, original_time)`) computes them for every read. An occurrence's identity is its ORIGINAL slot `(class_id, original_date, original_time)` — what `member_attendance`, `class_signups`, and `class_instance_exceptions` key (their UNIQUEs include `original_time`); every occurrence-addressed API call passes the date AND time; exceptions/reschedules never re-key anything. **`ClassesVersionsService`** (`classes_versions_service.py`) is the only writer of `gym_class_schedules`: a schedule edit mints a version effective NOW and, in the same transaction, wipes future-keyed sign-ups / early check-ins / instance exceptions whose original slot the new shape no longer produces (exact wall-clock matches survive); soft-delete wipes everything future; `remint_timezone` is the gym tz-change hook. `PUT /classes/{id}` splits `identity` (in-place) vs `schedule` (a complete shape → mint), the discounts identity/values precedent.
-  - The `checkin` domain decomposes its check-in into two DI-injected seams kept flat in `checkin/service/`: `checkin_class_resolver.py` (`CheckinClassResolver`, the one-way `checkin → classes` seam — loads the class identity + its schedule versions + the day's exceptions and resolves the occurrence via the injected `ClassesVersionExpander` into a `ResolvedClass`; purely a read, nothing written; a retroactive any-date check-in validates against whichever version owned that date; it also enforces the **early-check-in window** — an occurrence starting more than `settings.checkin_opens_hours_before_start` (2h) in the future is rejected, gating both single + batch check-in) and `checkin_member_gate.py` (the per-member gate: one evaluation feeds the `is_member` split — a kiosk (`is_member=True`) strict-gate **reject**, or a staff (`is_member=False`) path that records a **clean** check-in but returns **`requires_confirmation`** (nothing written, the reasons as `warnings`) for a warned one **unless `ignore_warnings`** overrides — which records with NULL/best-available attribution + the warnings surfaced), over `checkin_queries.py` / `checkin_writer.py` / `checkin_plan_selector.py`. There is deliberately **no facade**: the single-check-in router injects the resolver + gate directly (resolve, then gate), and `batch_checkin_service.py` injects the same two (resolve once, then loop the gate over a de-duped member list). Siblings `cycle_counts_service.py` / `streak_service.py` / `checkin_attendees_service.py` (read-only per-occurrence **combined roster** — see sign-ups below) round out the domain, all flat in `service/` — the attendance row's denormalized `occurred_at` feeds the streak / cycle-count / last-class window SQL; streak additionally joins `gyms` to bucket weeks in the gym's CURRENT-local timezone (not UTC — see the class-system-guide skill), the others stay join-free. Check-in **reversal** also lives here: `checkin_reverser.py` (`CheckinReverser`) is the reusable per-member reversal core — `reverse(session, member_id, gym_id, class_id, original_date, points_worth)` deletes that member's attendance row by key, claws back the points (floored at 0), drops one `class_attended` activity, and reverses the auto-end on the charged trial / one_time pack, all in the caller's OPEN transaction (no commit). It imports **nothing** from `src.classes`. `checkin_remover.py` (`CheckinRemover`) is the thin single-member wrapper the remove endpoint injects.
-  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_gym_employee_for_member` at `STAFF` (staff-only, same as check-in — the member cannot self-serve a reservation). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `ValueError("Class is full")` only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
+  - **A PAUSED class (`gym_classes.is_active=false`) is hidden SERVER-side, fail-closed:** `GET /api/v1/classes/instances` takes `include_inactive: bool = False` (mirroring `GET /api/v1/classes`) and by default emits none of its occurrences, so no client can offer one that check-in and sign-up would reject. The CRM classes page opts in (`include_inactive=true`) to show + un-pause them; `EffectiveClassInstanceResponse.is_active` flags each row so that one mixed response can mark the paused cards. The full contract lives in the `class-system-guide` skill — read it before changing anything paused-shaped.
+  - The `checkin` domain decomposes its check-in into two DI-injected seams kept flat in `checkin/service/`: `checkin_class_resolver.py` (`CheckinClassResolver`, the one-way `checkin → classes` seam — loads the class identity + its schedule versions + the day's exceptions and resolves the occurrence via the injected `ClassesVersionExpander` into a `ResolvedClass`; purely a read, nothing written; a retroactive any-date check-in validates against whichever version owned that date; it also enforces the **early-check-in window** — an occurrence starting more than `settings.checkin_opens_hours_before_start` (2h) in the future is rejected, gating both single + batch check-in) and `checkin_member_gate.py` (the per-member gate: one evaluation feeds the `is_member` split — a kiosk (`is_member=True`) strict-gate **reject**, or a staff (`is_member=False`) path that records a **clean** check-in but returns **`requires_confirmation`** (nothing written, the reasons as `warnings`) for a warned one **unless `ignore_warnings`** overrides — which records with NULL/best-available attribution + the warnings surfaced), over `checkin_queries.py` / `checkin_writer.py` / `checkin_plan_selector.py`. **What blocks a kiosk is `GateEvaluation.blocked`, not membership of `CheckinWarning`** — every current warning blocks, but the two stay separate so a future one can warn staff without rejecting a self-serve scan. That split, and the invariant every new warning must satisfy, live in the **`class-system-guide`** skill (the source of truth for the gate); don't restate them here. There is deliberately **no facade**: the single-check-in router injects the resolver + gate directly (resolve, then gate), and `batch_checkin_service.py` injects the same two (resolve once, then loop the gate over a de-duped member list). Siblings `cycle_counts_service.py` / `streak_service.py` / `checkin_attendees_service.py` (read-only per-occurrence **combined roster** — see sign-ups below) round out the domain, all flat in `service/` — the attendance row's denormalized `occurred_at` feeds the streak / cycle-count / last-class window SQL; streak additionally joins `gyms` to bucket weeks in the gym's CURRENT-local timezone (not UTC — see the class-system-guide skill), the others stay join-free. Check-in **reversal** also lives here: `checkin_reverser.py` (`CheckinReverser`) is the reusable per-member reversal core — `reverse(session, member_id, gym_id, class_id, original_date, points_worth)` deletes that member's attendance row by key, claws back the points (floored at 0), drops one `class_attended` activity, and reverses the auto-end on the charged trial / one_time pack, all in the caller's OPEN transaction (no commit). It imports **nothing** from `src.classes`. `checkin_remover.py` (`CheckinRemover`) is the thin single-member wrapper the remove endpoint injects.
+  - **Sign-ups (reservations)** also live in `checkin` (NOT a new domain): `signup_service.py` (`SignupService`) creates/removes a member's reservation for an occurrence — `POST /api/v1/signup` + `DELETE /api/v1/signup`, both gated by `verify_gym_employee_for_member` at `STAFF` (staff-only, same as check-in — the member cannot self-serve a reservation). A sign-up is a reservation, **not attendance** — `member_attendance` is still only written by a check-in; a signed-up member who never checks in is a no-show, never auto-counted. `create` validates the occurrence via the version expander, stamps `original_time` from the resolved slot, resolves the effective `max_capacity` (`gym_classes.max_capacity` overridden per-occurrence by `class_instance_exceptions.new_max_capacity`; NULL = unlimited, never blocks) then, when limited, reads `CheckinQueries.get_signup_or_attended_members` — the **DISTINCT signed-up-OR-attended union** (`class_signups` ∪ `member_attendance` by `(class_id, original_date, original_time)` — capacity pools are per exact SLOT, one SQL file `signup_capacity_count.sql`) — and rejects with `CheckinClassFullError("Class is full")` (`code = class_full`) only when this member ISN'T already in that set and the set is already at capacity. The write is idempotent (`ON CONFLICT (class_id, member_id, original_date, original_time) DO NOTHING` → `already_signed_up=true`, still 200). **The check-in capacity gate reads the same union.** **The combined roster** — `GET /api/v1/checkin/attendees` — returns everyone who signed up OR attended an occurrence, each flagged `signed_up` / `attended` (`Attendee.log_id`/`plan_id`/`item_id` NULL when not attended) (`roster_for_occurrence.sql`). The schedule board (`src/classes`) adds `signup_count` + `attendance_count` per occurrence via plain cross-domain table reads (`classes_signup_counts.sql` / `classes_attendance_counts.sql`) — sanctioned `classes → checkin`-table (not code) reads.
     - **Deliberate exception to the one-way seam (`classes → checkin`):** `ClassesUndoService` (in `src.classes`) depends on `CheckinReverser` — the OPPOSITE of the documented one-way `checkin → classes` direction — looping it per attendee inside its shared `teardown_occurrence` (reverse attendance + delete sign-ups for one date), which is itself the single teardown that BOTH cancel entry points, the future-reschedule path, and `ClassesVersionsService`'s version-change wipe route through. So the per-member reversal has a **single** implementation. It is cycle-free precisely because `CheckinReverser` imports nothing from `src.classes` (the DI container builds `checkin_reverser` before all consumers). Don't flag this `classes → checkin` edge as a layering violation — it is intentional.
     - **The `gyms → classes` edge:** `GymsService.update_gym` calls `ClassesVersionsService.remint_timezone` on every save that carries a `timezone` (deliberately not gated on "did it change" — the gym row commits before the per-class remint, so a changed-value gate would skip a retry after a partial failure forever; the per-class deep-equal skip makes a re-save a cheap self-heal). A same-shape version mint per live class; wall-clock matching keeps every future-keyed row. Documented, deliberate.
   - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder wrapping a *single* group / file.
@@ -286,11 +287,248 @@ src/
 - **Discounts are a deliberate variant of this rule, not a violation.** A discount is a two-table identity/version model (`gym_discounts` identity + immutable `gym_discount_values` versions), so `DiscountUpdateRequest` splits the mutable data **by destination** into two sub-models — `identity` (rename in place) and `values` (mint a new version) — instead of one flat `data`. The model shape itself encodes which table each field writes (no runtime field-partition set), while the service **still** runs the same `validate_mutable_columns(GYM_DISCOUNTS, …)` guard over the combined change keys. `discount_id`/`gym_id` stay top-level for the auth `gym_id` check. See `src/discounts/schema/discounts_schema.py` + `service/discounts/discounts_update.py` and the `discounts-guide` skill.
 
 **Error Handling**
-- Create custom exception hierarchy
-- Register exception handlers globally
-- Use specific exception types
-- Include meaningful error messages
-- Customize validation error responses
+- Create a custom exception hierarchy per domain, in
+  `src/<domain>/<domain>_exceptions.py` (the domain-prefix naming rule). Class
+  names carry the domain prefix too: `CheckinClassNotFoundError`,
+  `EmployeeNotFoundError`.
+- **A router must map an exception to its HTTP status BY TYPE — never by
+  matching words in the message.** Substring dispatch
+  (`if "not found" in str(exc).lower(): 404`) makes the message *prose* part of
+  the public API: rewording it silently moves the status code, and no test can
+  catch that structurally. This bit us live — the kiosk got an opaque 400 for
+  "Class is not active" because that string happens not to contain "not found".
+  Catch the specific types first, then the domain base, then the generic
+  fallback.
+- **When a client must branch on a specific error, add a machine-readable
+  `code` as a SIBLING of `detail` (a plain STRING).** The status alone is not
+  enough to branch on, and matching on prose client-side would just move the
+  fragility across the wire. `checkin` is the reference implementation — its
+  kiosk client switches on the `code` to show a real reason instead of a bare
+  400. This is opt-in per domain, not a universal shape: a domain whose clients
+  never branch past the status (most of them) needs only `detail` and no code
+  machinery. Where a code IS used, a typed domain rejection serializes as:
+
+  ```json
+  {"detail": "Class is not active", "code": "class_inactive"}
+  ```
+
+  - **Never declare a `code` you do not also put on the wire.** A code cannot
+    reach a client without the one global `app.add_exception_handler` formatter
+    in `src/main.py`; declaring the enum without registering that handler
+    test-locks a set of strings into the public contract while no caller can
+    ever read them — declared, invisible, and pure liability. `members` and
+    `waivers` both went through this state and both dropped the enum:
+    no CRM caller branches past the STATUS on either domain's rejections, so
+    each has typed exceptions carrying **only** `status_code`, and their
+    error-mapping tests assert positively that no `code` attribute exists.
+    If a client ever does need to branch, add the enum AND the formatter in the
+    SAME change.
+  - **`detail` is a plain string by default, and that default holds for every
+    ordinary endpoint.** The CRM's `lib/core/network/api_client.dart`
+    `_extractDetail` returns `data['detail']` **only** when it is a `String`
+    (yielding `null` otherwise), and `member_detail_bloc.dart` renders
+    `(e.detail ?? e.message)` — so an endpoint whose error is meant to be READ
+    as prose must keep `detail` a string, or its message silently degrades to
+    "Server error 400: Bad Request". This is *why* the sibling-`code` shape
+    exists: structure never has to go inside `detail`.
+  - **Two endpoints deliberately return an OBJECT `detail`, and they are
+    correct.** The duplicate-member **409** (`POST /members/` →
+    `{"code": "duplicate_member", "matches": [...]}`, raised at
+    `members_management_create.py:131`) and the waiver-gate **422**
+    (`{"message": …, "unsigned": [...]}`). Each has a purpose-built client
+    parser that reads the RAW response body, never `_extractDetail`:
+    `member_repository.dart` `_parseDuplicateMember` (`:153`, called from the
+    409 arm at `:141`) and `_parseWaiverGate` (`:469`). Both require `detail`
+    to be a `Map`, check their discriminator, and **return null on a shape
+    mismatch**, so a plain 409/422 from anywhere else still propagates
+    normally.
+  - **The invariant that keeps that safe: an object `detail` is allowed ONLY
+    when a purpose-built client parser owns that endpoint's body.** Absent
+    such a parser, the object is unreadable (`_extractDetail` yields null) and
+    the error renders as the bare status line. So: don't "fix" those two
+    endpoints to comply with the default, and don't copy their shape onto a
+    third endpoint without writing its parser in the same change. If a change
+    makes preserving a string impossible on an endpoint that has no parser,
+    stop and raise it — don't reshape the body.
+  - **`code` is the stable machine-readable discriminator** clients switch on;
+    `detail` is prose for humans and may be reworded freely.
+  - **Codes are part of the public contract. Renaming one is a BREAKING
+    change** for every client switching on it — add a new code instead of
+    repurposing an existing one.
+  - `code` is a `StrEnum` in the domain's exceptions module
+    (`CheckinErrorCode`), and each concrete exception declares **both**
+    `status_code` and `code` as class attributes — the type is the single
+    source of truth for the whole contract. In a domain with no code (the
+    common case) the type declares `status_code` alone.
+- **One global handler formats the body; routers only re-raise.** Register the
+  domain base with `app.add_exception_handler` in `src/main.py` (the
+  `_handle_lock_busy_error` template) — Starlette resolves a handler by walking
+  the raised type's MRO, so registering the base covers every subclass — and
+  have it read `exc.status_code` / `exc.code` off the instance. Then **the
+  hazard**: every router handler wraps its call in `try/except Exception → 500`,
+  which would swallow the domain error before it ever reached a global handler.
+  The fix is a typed arm that **re-raises**:
+
+  ```python
+  except CheckinError:
+      raise          # a `raise` inside an `except` clause propagates out of
+                     # the WHOLE try — the sibling `except Exception` below
+                     # cannot re-catch it
+  except ValueError as exc:   # foreign bad input → 400, no code
+      ...
+  except Exception:           # → 500, logged with exc_info=True
+      ...
+  ```
+
+  Prove it with a test, don't assume it: the parametrized type → status/code
+  tests flip to 500 the moment a re-raise stops working.
+  - **`LockBusyError` is the recurring victim of this hazard, in every router
+    that touches billing.** It subclasses `Exception` **directly**, the payer
+    lock is acquired INSIDE the service (so inside the handler's `try`), and
+    `_handle_lock_busy_error` in `src/main.py` maps it to a retryable **409** —
+    so a handler missing the re-raise arm reports ordinary contention (front
+    desk acting while a bulk reprice holds a lock) as a 500 outage. It bit
+    `memberships_router.py` across 14 handlers and then `members_router.py`'s
+    three authorized-payer handlers (`PUT /members/{id}/link`,
+    `POST /members/{id}/link/remove`, `.../remove/preview` — the preview locks
+    too, so its quoted figures can't be computed mid-converge). **Add the arm
+    ONLY where the service actually takes the lock** — `POST /link/check` is a
+    lock-free read, and a dead `except` there would read as coverage;
+    `tests/members/test_members_link_lock_guards.py` asserts that exclusion
+    against the service source so a future lock added there fails loudly.
+    Document the 409 with the shared **`BUSY_PAYER_409`** string
+    (`memberships_router.py`) — imported, never restated, so the route docs
+    cannot drift. Proof pattern:
+    `tests/memberships/test_billing_endpoint_guards.py` and
+    `tests/members/test_members_link_lock_guards.py` both parametrize
+    "the error ESCAPES the handler" over every locking handler.
+- **Declare the shape in OpenAPI.** Every `responses` entry a typed rejection
+  can produce carries `{"model": <Domain>ErrorResponse, …}` (`detail: str` +
+  `code: <Domain>ErrorCode | None`), so the contract is self-documenting and
+  client codegen sees the enum. `code` is nullable because the generic
+  `except ValueError` → 400 arm emits none — clients fall back to `detail` when
+  it is absent. Model: `src/checkin/schema/checkin_error_schema.py`. A domain
+  with no code has nothing to declare beyond its per-status descriptions.
+- **An INPUT-VALIDATION domain's exception base subclasses `ValueError`** so an
+  unmapped domain error lands as a 400 (bad input), not a 500 — the router's
+  existing `except ValueError` → 400 arm catches it, so a typed hierarchy is
+  additive, never a breaking sweep. Models: `src/checkin/checkin_exceptions.py`,
+  `src/employees/employees_exceptions.py`, `src/members/members_exceptions.py`,
+  `src/waivers/waivers_exceptions.py`.
+  This is **deliberately not universal**: the money / external-system domains
+  (`payments`, `memberships`, `tasks`, `stripe_webhooks`) base on `Exception` on
+  purpose, because their unmapped failures must map to 500 / retryable — never a
+  400 (see the Money & external-system rules). Do NOT "fix" one of those to
+  subclass `ValueError`; it would silently turn a billing 500 into a 400.
+- **`members` is the partial case, and the partiality is deliberate.**
+  `MembersError` + its four subclasses (`MemberNotFoundError` → 404; the
+  gym-has-no-Connect-account, member-has-no-Stripe-customer and
+  no-update-fields types → 400) cover the seven handlers backed by
+  `MembersManagementService` — the SIX that used substring dispatch (update
+  member, card update, unlink payment, payment-method-status, invoices,
+  upcoming-invoice) plus `POST /members/`, whose 400 was already right and now
+  comes off the type rather than by coincidence — **plus the two member-DETAIL
+  reads** (`GET /members/{id}`, `GET /members/{id}/billing`), whose blanket
+  `except ValueError` → 404 "Member not found" is now a typed arm (see the
+  pydantic-trap rule below; `MembersBillingDetailService` raises
+  `MemberNotFoundError`). The domain carries **no `code` enum** — no client
+  branches past the status, so declaring one would be four invisible strings
+  (see the never-declare-an-unwired-code rule above). One thing is still
+  knowingly unfinished, documented in the code, and should be picked up rather
+  than rediscovered:
+  - Two of the three linked-account handlers (`POST /members/{id}/link/check`
+    and `/link/remove`) **still dispatch on the message's prose**, because
+    their `ValueError`s are raised by `src/memberships/` — a members-side type
+    cannot classify an error members never raises. Fixing them means a typed
+    hierarchy in that domain; note `memberships` is a money domain, so per the
+    rule above its base must stay on `Exception` and each router arm maps its
+    types explicitly. `PUT /members/{id}/link` is now **half** converted on
+    purpose: a `WaiversError` arm above the prose arm handles its waiver half
+    (signing the payer-auth agreement) by type, and the prose arm below keeps
+    the `KNOWN GAP` comment for the memberships half. Its `"reload"` → 409
+    branch is **gone** — that conflict was exclusively the waivers version-lock
+    and the typed arm owns it now.
+- **`waivers` is fully typed, and it is the cautionary tale for prose
+  dispatch.** `WaiversError` + seven subclasses
+  (`src/waivers/waivers_exceptions.py`): the not-found family
+  (`WaiverNotFoundError`, `WaiverVersionNotFoundError`,
+  `WaiverSignerNotInGymError`, `WaiverPayerAuthMissingError`) → 404,
+  `WaiverNoCurrentVersionError` + `WaiverPayerAuthNotArchivableError` → 400,
+  `WaiverVersionStaleError` → 409. Two things are worth carrying forward:
+  - The 409 used to hang off `if "reload" in str(exc).lower()`. **Nothing about
+    the word "reload" says "conflict"**, so a copy edit to the signer-facing
+    message would have demoted a version-lock conflict to a 400 — telling a
+    client its request was malformed when the document had simply moved, which
+    invites it to re-submit the same stale version. This is the sharpest
+    example of why status-by-prose is banned.
+  - One raise (`get_payer_auth_waiver_for_member`) answered **404 on the read
+    route and 400 on the link route**, purely because its message happens not
+    to contain "not found". One type cannot keep both; it is 404 everywhere now
+    (the status the read path documents). Two of the seven statuses are
+    inherited from the prose dispatch rather than chosen — recorded in the
+    module docstring so nobody mistakes an accident for a decision.
+- **Keep the generic `except Exception` → 500 arm** (with
+  `logger.error(..., exc_info=True)`) below the typed arms. Add a generic
+  `except ValueError` → 400 arm between them **only on a handler whose service
+  actually raises a `ValueError` for bad input** — omit it where the service
+  raises none, or it becomes the catch-all bug described below.
+- **The type → status (and, where one exists, `code`) table belongs in a test,
+  not in a comment.** A parametrized test over that table, using deliberately
+  message-hostile strings (a 404 type whose message lacks "not found", a 400
+  type whose message contains it, a 409 type whose message contains neither the
+  409 nor the 404 trigger word), is what actually locks the contract — assert
+  the status, that `detail` is a `str`, and the exact `code` where there is one.
+  Add reflection tests so a new exception can't silently inherit a default:
+  every concrete subclass in the module must appear in the table and must
+  declare `status_code` (plus `code`, in a domain that has one) in its **own**
+  `vars()` (the base keeps safe fallbacks so a forgotten subclass can't 500 a
+  live request — the test is what fails loudly instead). In a
+  deliberately code-less domain, also assert **positively that no `code`
+  attribute exists**, so the half-wired state cannot creep back. Models:
+  `tests/checkin/test_checkin_error_mapping.py` (with codes),
+  `tests/members/test_members_error_mapping.py` and
+  `tests/waivers/test_waivers_error_mapping.py` (both without — each
+  parametrizes the same table across every one of its endpoints, and asserts
+  the body equals `{"detail": …}` exactly so nothing can quietly grow a second
+  key).
+- Include meaningful error messages; customize validation error responses.
+- **Status codes are a contract — don't "improve" one during a refactor.**
+  `checkin`'s "not an occurrence of this class" is a **400, not a 404**, because
+  occurrences are computed rather than stored (a bad slot is a bad address, not
+  a missing resource) and both endpoints' OpenAPI `responses` have documented
+  `400 Not a valid occurrence on that date` since they shipped. If a status
+  looks wrong, report it — changing it is a separate call.
+- **Beware `except ValueError` as a catch-all: pydantic `ValidationError`
+  subclasses `ValueError`.** A blanket arm can turn an internal validation
+  failure into a wrong 4xx with a raw validation dump as `detail` instead of a
+  500. Narrow such arms to the typed catches. **A blanket arm on a handler
+  whose service raises no `ValueError` at all is always the bug** — it can only
+  ever fire on an internal failure. `GET /checkin/attendees` (a pure read) and
+  `DELETE /checkin` (whose remover raises only `CheckinClassNotFoundError`)
+  both carried one mapping *any* `ValueError` to 404; both now catch only the
+  typed error, so a serialization failure is a logged 500. Same in `members`:
+  five of the six converted handlers (card update, unlink payment,
+  payment-method-status, invoices, upcoming-invoice) now catch only
+  `MembersError`, since their services raise nothing but typed errors;
+  `PUT /members/{id}` KEEPS its generic arm because the shared, domain-agnostic
+  `validate_mutable_columns` guard really does raise a plain `ValueError` for an
+  immutable column.
+  **The worst instance of this trap was the member-DETAIL read**, and it is
+  worth remembering as the pattern to look for: `GET /members/{id}` and
+  `GET /members/{id}/billing` both serve
+  `MembersBillingDetailService.get_member_billing_detail` — the largest response
+  model in the API (memberships grouped by plan, authorized payers,
+  who-pays-for-whom, payment history, rewards, pending redemptions, rank, card)
+  — behind a blanket `except ValueError` → 404 `"Member not found"`. So ONE bad
+  field anywhere in that payload reported a member who plainly exists as
+  missing: staff re-checked the id, and the 500 that should have paged someone
+  was indistinguishable from a typo. The bigger the payload behind a blanket
+  arm, the more likely it fires on our own bug rather than the caller's. Same
+  shape in `waivers`: `GET /waivers/{id}` mapped any `ValueError` to 404, so a
+  stored body that no longer fit `WaiverResponse` reported the document as
+  missing; and `GET /members/{id}/authorized-payer-waiver` did the same. All
+  three are typed arms now; `PUT /waivers/` keeps its generic arm for the same
+  `validate_mutable_columns` reason as `PUT /members/{id}`.
 
 **Logging and Exception Strategy**
 - **API/Router layer**: Use `logger.error()` with `exc_info=True` to log full stack traces
@@ -304,8 +542,24 @@ src/
   - Focus on clear, descriptive exception messages that help debugging
 - **Layer Separation**: API logs + handles, Services raise + describe
 
-**Billing / Stripe error status codes — never 502/503/504**
-- Stripe-or-upstream failures in billing endpoints always return **500 Internal Server Error**, never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. A partial batch result (some items succeeded, some failed) returns **207 Multi-Status** (a 2xx, also never auto-retried) with the per-item succeeded/failed split in the body; a total failure is 500.
+**Billing / Stripe error status codes — never 502/503/504, and a DEFINITIVE outcome is a RESULT**
+- **A system/upstream failure is a 500** — never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. This covers `PaymentsStripeError`, a lost subscription, a gateway/network failure, an unexpected exception — anything where OUR side or Stripe's malfunctioned.
+- **A DEFINITIVE ANSWER ABOUT THE MONEY is not a failure — it is a business OUTCOME, returned as a 2xx RESULT with the reason in the body, never a 500.** A bank saying no means the system worked; reporting it as a 500 misreports an ordinary decline as an outage and buries genuine outages in monitoring. 207 satisfies the no-auto-retry rule exactly as well as 500 (it is a 2xx, so no proxy replays a money-moving op). Two things reach that contract: a **card decline** (`stripe.CardError` — the bank refused) and a **definitive non-collection** (`PaymentsNotCollectedError` — nobody refused, but the money did not arrive either).
+  - **A non-collection is an ordinary CARD FAILURE on start and charge-card.** Founder decision: the front desk's answer is the same as for a refusal — that card did not work, use another — so a separate outcome bought nothing and is not offered. **Retry-card is the ONE place the distinction survives** (staff there are deliberately repairing one card), and it is why the `not_collected` enum value still exists.
+  - **Start** (`POST /api/v1/member_memberships/`) — `MemberMembershipsStart` catches `stripe.CardError` **and `PaymentsNotCollectedError`** and folds both into a per-item `failed` entry with the `card declined: ` reason; the router maps any failed item to **207**. Even an ALL-failed start is a 2xx. Both the 201 and the 207 declare `MemberMembershipsStartResponse` as their `model` — the 207 is the primary kiosk decline surface, so a generated client must see the `results[]` body, not just a description.
+  - **Retry-card** (`POST /api/v1/member_memberships/retry-card`) — the router turns `stripe.CardError` into a `MemberMembershipsRetryCardResponse` with `status=declined` + `decline_reason` on **207**; `PaymentsNotCollectedError` into the same model with `status=not_collected` + its own reason on **207**; a collected charge is `status=paid` on 200. Single-item, so no list. `PaymentsNotCollectedError` **subclasses** `PaymentsStripeError`, so its arm MUST sit above the base arm or the 500 wins.
+  - **Charge-card** (`POST /api/v1/member_memberships/charge-card`) — the ad-hoc charge; both non-collecting causes answer `status=declined` on **207** as `MemberMembershipsChargeCardResponse`, with `decline_reason` carrying Stripe's `user_message` on a refusal and `CARD_NOT_CHARGED_REASON` on a non-collection. **Success is untouched: 204, no body** — the 207 is declared in `responses` with its `model`, and because FastAPI forbids a response model on a 204 route the handler returns an explicit `Response`/`JSONResponse` instead. Arm order still matters: `PaymentsNotCollectedError` must stay above `PaymentsStripeError` (subclass) or a card failure 500s; `stripe.CardError` subclasses NEITHER, so it only has to sit above the blanket `except Exception` — which is exactly what it was falling through to, 500-ing an expired card and discarding the bank's reason.
+  - **A non-collection is detected in ONE place: `PaymentsStripePaymentService._require_collected`, and it still RAISES.** Only how the callers report it changed — a non-collection must never read as success. It guards BOTH pay paths — `pay_open_subscription_invoice_on_card` (retry-card) **and `create_invoice_payment`** (the itemized one-time / kiosk charge). The charge path had no such check, so a pay that returned `open` was assembled into a `status="open"` response nobody inspected, `PaymentSyncOneTime._writeback` stamped the rows `applied`, and a membership nobody paid for was booked as started on a **201**. The guard raises BEFORE the writeback, which is what keeps those rows un-billed (NULL `stripe_item_id`, `not_added`) so the start op's cleanup of them is correct rather than an un-billing. It fires **only on a positively-read non-`paid` status** — an unreadable status is "we do not know", never "nothing was collected", because on the charge path that answer DELETES rows.
+  - **Three** distinguishable start/settle reasons — the point is that a client and the front desk can tell whose fault it was:
+    - **`card declined: …`** (start `results[].error`) / `status=declined` + `decline_reason` (retry-card **and charge-card**) — the CARD did not collect. Offer another card. `decline_reason` is Stripe's `user_message` on a refusal (its own end-user wording: expired → Update Card; insufficient funds → tell the member) and `CARD_NOT_CHARGED_REASON` — *"The card could not be charged."* — on a non-collection, which start spells the same way after its prefix.
+    - **`system failure: …`** (start `results[].error`) — OUR side broke. Another card cannot help; staff must finish the job. Only reachable after an earlier charge in the same request collected (see the next bullet).
+    - **`status=not_collected`** + *"The card on file could not be charged automatically — the payment needs extra authorization the member has to complete. Collect payment another way."* (**retry-card only**) — the off-session PaymentIntent needs SCA / 3-D Secure. Never booked as a phantom success.
+  - **The two start prefixes are the contract** (`CARD_DECLINED_PREFIX` / `SYSTEM_FAILURE_PREFIX` in `memberships_start.py`): neither may be a prefix of the other, and the system-failure reason may never contain the word "declined" — clients switch on "starts with" and staff skim the prose. Test-locked in `tests/memberships/test_start_207_contract.py`.
+- **Nothing may convert a COMPLETED money movement into a failure or a deletion.** Once Stripe has taken (or returned) the money, every remaining step of ours is best-effort: `PaymentSyncOneTime._writeback` (C-025), `PaymentsStripePaymentService._response_after_collection` (the charge response), `_invoice_as_dict` (serializing a just-paid invoice for the record seam) and `_response_after_refunding` (the refund response) all log and degrade instead of raising. The recurring trap is that `json.JSONDecodeError` and `pydantic.ValidationError` both **subclass `ValueError`**, so a raise from any of them landed in a router's generic `except ValueError` arm and answered **400 "bad request"** over money that had already moved — telling staff nothing happened and inviting a second collection (or, for a refund, a second refund, since no row was written and the refundable balance still read full).
+- **A system failure AFTER money already moved is a 207, not a 500 — a 500 there would be a lie.** `start()` charges the one-time group BEFORE converging recurring, and `_verify_group(keep_unverified=True)` deliberately KEEPS billed one-time rows ("billed lines are never un-billed"). So once the one-time leg has charged, the 500's contract ("nothing created") is false: the recurring arm instead marks its items `failed` with the `system failure: ` reason → **207**. With **nothing** collected it still raises → 500, because then "nothing created" is literally true. The rule generalizes: *the response never claims less than what actually happened.*
+- **A partial batch result** (some items succeeded, some failed) also returns **207 Multi-Status** with the per-item succeeded/failed split in the body.
+- **`LockBusyError` (a busy payer lock) is a 409, and the router must RE-RAISE it.** The global handler in `src/main.py` maps the type, but the lock is acquired INSIDE each handler's `try` and `LockBusyError` subclasses `Exception` directly — so without a typed `except LockBusyError: raise` arm above the generic one, the handler's own `except Exception` → 500 swallows it and the front desk gets an opaque server error for a perfectly retryable conflict. **Every** handler in `memberships_router.py` whose service takes the lock carries that arm and documents the 409 (14 of them; `cancel-one-time`, `reprice-plan` and `refund` take no payer lock). Proven by `tests/memberships/test_billing_endpoint_guards.py::test_lock_busy_error_propagates_out_of_locking_handler`, parametrized over all 14 — never assume the re-raise works.
+- **Clients must branch on the RESULT, not on the status class.** A 2xx no longer implies the money moved — the CRM's `retryMembershipCard` returns the typed outcome and the bloc branches on `isPaid` (fail-closed: anything that is not explicitly `paid`, including an unrecognised new status, renders as not collected), so neither a decline nor an SCA non-collection can render as a collected payment. **Adding a 207 to a route whose client reads success from the 2xx alone is a REGRESSION unless the client is fixed in the same change** — dio accepts <300, so the CRM's `chargeCard` (a `Future<void>` that discarded the response) would have rendered a green "charged" over uncollected money. It now fails closed on any status but **204**, raising a `ServerException` whose `detail` is the backend's staff-facing reason.
 
 **Middleware**
 - CORS must be first in middleware stack
@@ -326,6 +580,15 @@ src/
   - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
   - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
   - This applies to `.sql` files **and** any SET/VALUES clause built dynamically in Python (e.g. an f-string `f"{col} = CAST(:{col} AS JSONB)"`, never `f"{col} = :{col}::jsonb"`). This bug has recurred — it bit the membership-plans update path.
+- **NEVER write a `{variable}` template placeholder inside a SQL `--` comment
+  either.** `load_sql` runs `str.format_map` over the WHOLE file, comments
+  included, so a comment that *names* a structural variable in braces (e.g.
+  "the predicate injected as `{is_incomplete}`") gets the entire injected SQL
+  spliced into the comment block — its first line stays commented, its later
+  lines land as bare SQL mid-file, and the query dies with an opaque
+  `syntax error at or near "..."` pointing at code that looks correct. Name the
+  variable without braces (`is_incomplete`, `the where-clause`). This bit
+  `incomplete_view.sql`.
 - **NEVER write a bare `:word` placeholder inside a SQL `--` comment.** `text()` scans the WHOLE statement — comment lines included — for `:name` bind markers, so a generic placeholder (`:col`, `:param`, `:x`) in a comment becomes an orphan bind param no code supplies, and the query 500s with `A value is required for bind parameter '<word>'`. Describe params in prose or a non-colon form (`the col column`, `<col>`) instead. (A real, always-bound param name in a comment is fine because it's supplied; `:col::type` is also safe — the trailing `::` suppresses it — but a standalone `:col` in a comment is not.) This bit `update_rank.sql`, whose comment used `:col` as a placeholder.
 
 **Repository Pattern**
@@ -387,6 +650,66 @@ The analytics side mirrors the same rule in
 `src/growth/sql/_dormant_members.sql` (which additionally treats
 all-memberships-terminal as lost, deliberately — see that file's header);
 the two must be kept in agreement.
+
+`incomplete` (the members list's Incomplete tab — signups that never
+finished) is the second fragment of that shape,
+`src/members/sql/crm_views/_member_incomplete.sql`. It is injected into the
+list (`incomplete_view.sql`) and the tally (`total_counts.sql`) so the tab and
+its count can never disagree; it binds no parameters, joins its own `members`
+row (like `_member_dormant.sql`), and unlike `dormant` it is never a row badge
+— there is no `CrmMemberStatus.incomplete`. **Four clauses, and every one is
+there to keep a specific wrong person OFF a staff follow-up list** (the file
+itself carries the full reasoning — read it before changing the rule):
+
+1. the row is **VALID** — it has a `stripe_customer_id`. A NULL means the
+   create never finished, so the row has no billing identity, is invisible to
+   `member_billing_profile`, and every next step staff could take against it is
+   rejected. Founder's ruling: *"customer id is required, without it the row is
+   invalid, it shouldn't be shown anywhere."*
+2. they hold no membership of their own, and
+3. they are not the payer on anyone else's (2 and 3 are one `NOT EXISTS` over
+   `member_memberships_status`; without the payer half a non-training parent
+   paying for their kid would sit in the list forever with nothing to finish);
+4. they hold no **billed-but-unconfirmed** non-recurring membership. When a
+   one-time group's invoice is PAID but the sync writeback fails,
+   `MemberMembershipsStart` deliberately KEEPS the row `'not_added'` ("billed
+   lines are never un-billed"), and the `member_memberships` view hides exactly
+   that status — so the member read as owning nothing and staff chased someone
+   whose card had already been charged. Scoped to non-recurring because that is
+   the only group the start op keeps: an unconfirmed recurring row is deleted,
+   so a surviving one is either in flight this second or a crash orphan the
+   reconciler removes. Reads `member_memberships_unfiltered`, since it is ABOUT
+   a row the filtered view hides.
+
+**`overdue` is the row-level sibling, and it is shared ACROSS domains — one
+file, no mirror.** A membership is overdue when it is **active** with a
+`next_due_date` behind the gym-local date (a frozen membership bills $0, and
+a cancelled/ended one is finished — none is collectable money). Because the
+check-in gate needs it too, and `src.members` already imports `src.checkin`
+(the member-detail cycle-counts bridge), housing it in `members` would create
+a package cycle — so it lives in **`src/shared/`**:
+
+- `src/shared/sql/membership_overdue.sql` — the predicate text, with `alias` /
+  `today` structural template variables.
+- `src/shared/membership_status.py` — `is_membership_overdue()` (the Python
+  twin) and `load_membership_overdue_sql()` (the SQL loader).
+
+Every surface loads that one text: the Overdue tab (`overdue_view.sql`), the
+tally (`total_counts.sql`), the members-list status filter **and its negation**
+(`members_crm_base_service.py` — the inverse is `NOT (<fragment>)`, never a
+second hand-written form), the member-detail badges, the growth revenue tiles
+(`revenue_hero.sql`, `revenue_quality_kpis.sql`, `membership_status_mix.sql`
+via `growth_registry.py`), and the check-in gate's `overdue` warning. Unlike
+`dormant`, there is **no second mirrored fragment to keep in agreement** —
+agreement is structural. Note the Overdue tab and its tally also share the
+same `DISTINCT ON (member_id, gym_id, plan_id)` dedup so the count equals the
+rows listed.
+
+> **Gotcha when writing a fragment:** `load_sql` runs `str.format_map` over the
+> WHOLE file, comments included — so never write a `{placeholder}` inside a
+> `--` comment. It gets substituted, spilling the fragment out of the comment
+> and into bare SQL. Name the variable without braces (`the is_overdue template
+> variable`), exactly as `_member_dormant.sql` does.
 
 ## Ranks domain
 

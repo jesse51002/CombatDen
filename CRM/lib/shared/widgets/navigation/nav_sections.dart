@@ -5,12 +5,25 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/auth/role_policy.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 
+/// A nav item that opens a flow instead of navigating to a route. Both these
+/// items carry `route: null` and are dispatched by [action] (see
+/// `onNavSectionTap`), not by a route push.
+enum NavSectionAction {
+  /// The "Add New Member" primary CTA opens the add-member flow.
+  addMember,
+
+  /// "Kiosk Mode" opens a confirm dialog, then enters kiosk (locks the iPad
+  /// to the member self-serve surface).
+  enterKiosk,
+}
+
 /// One entry in the app's primary navigation, shared by the desktop rail
 /// ([SectionsBar]) and the mobile dropdown ([SectionsMobileMenu]) so both
 /// render the exact same items in the same order — change the nav once, here.
 ///
-/// [route] is `null` only for the primary "Add New Member" CTA, which opens
-/// the add-member flow instead of navigating. Every other item navigates.
+/// [route] is `null` for the two flow-opening items ("Add New Member" and
+/// "Kiosk Mode"), which carry an [action] instead and open a flow rather than
+/// navigating. Every other item has a [route] and navigates.
 class NavSection {
   final IconData icon;
 
@@ -22,13 +35,17 @@ class NavSection {
   /// Falls back to [label] when the rail label is identical.
   final String? railLabel;
 
-  /// Target route, or `null` for the primary CTA (opens the add-member flow
-  /// rather than navigating to a route).
+  /// Target route, or `null` for a flow-opening item (which carries an
+  /// [action] instead of navigating to a route).
   final String? route;
 
   /// The always-sapphire primary CTA ("Add New Member") — painted like the
   /// active item but without the active accent bar.
   final bool isPrimary;
+
+  /// For a flow-opening item (`route == null`): which flow the tap opens.
+  /// `null` for ordinary route items.
+  final NavSectionAction? action;
 
   const NavSection({
     required this.icon,
@@ -36,6 +53,7 @@ class NavSection {
     this.railLabel,
     this.route,
     this.isPrimary = false,
+    this.action,
   });
 
   /// Label as shown in the rail (deliberate wrap if one was given).
@@ -50,6 +68,7 @@ const List<NavSection> kNavSections = [
     label: 'Add New Member',
     railLabel: 'Add\nNew Member',
     isPrimary: true,
+    action: NavSectionAction.addMember,
   ),
   NavSection(
     icon: Symbols.tv_sharp,
@@ -83,6 +102,12 @@ const List<NavSection> kNavSections = [
     route: AppRoutes.memberAppPreview,
   ),
   NavSection(
+    icon: Symbols.point_of_sale_sharp,
+    label: 'Kiosk Mode',
+    railLabel: 'Kiosk\nMode',
+    action: NavSectionAction.enterKiosk,
+  ),
+  NavSection(
     icon: Symbols.settings_sharp,
     label: 'Settings',
     route: AppRoutes.settings,
@@ -91,15 +116,25 @@ const List<NavSection> kNavSections = [
 
 /// [kNavSections] filtered to what [role] may see, driving both the desktop
 /// rail and the mobile dropdown so a role never renders a nav item it can't
-/// open. The "Add New Member" CTA (the only routeless entry) shows iff the
-/// role may create members; every routed entry shows iff the role may access
-/// its route. A null [role] (pre-activation) hides everything — nav renders
-/// only inside the activated workspace, where the role is always known.
+/// open. The two routeless flow-opening entries each gate on their OWN
+/// capability — "Add New Member" on [RolePolicy.canCreateMembers], "Kiosk Mode"
+/// on [RolePolicy.canOperateKiosk] (kept distinct so restricting one never
+/// hides the other); every routed entry shows iff the role may access its
+/// route. A null [role] (pre-activation) hides everything — nav renders only
+/// inside the activated workspace, where the role is always known.
 List<NavSection> visibleNavSections(EmployeeRole? role) {
   bool isVisible(NavSection section) {
     final route = section.route;
-    if (route == null) return role?.canCreateMembers ?? false;
-    return role != null && role.canAccessRoute(route);
+    if (route != null) return role != null && role.canAccessRoute(route);
+    // Routeless flow-opening item: gate on its action's own capability.
+    switch (section.action) {
+      case NavSectionAction.addMember:
+        return role?.canCreateMembers ?? false;
+      case NavSectionAction.enterKiosk:
+        return role?.canOperateKiosk ?? false;
+      case null:
+        return false;
+    }
   }
 
   return kNavSections.where(isVisible).toList();

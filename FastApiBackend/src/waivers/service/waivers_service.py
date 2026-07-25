@@ -29,6 +29,7 @@ from src.waivers.service.waivers_list import WaiversList
 from src.waivers.service.waivers_signatures import WaiversSignatures
 from src.waivers.service.waivers_update import WaiversUpdate
 from src.waivers.service.waivers_versions import WaiversVersions
+from src.waivers.waivers_exceptions import WaiverVersionNotFoundError
 
 
 class WaiversService:
@@ -141,14 +142,21 @@ class WaiversService:
         """Resolve a member's gym payer-auth waiver WITH its
         current body — what the front-desk sign dialog renders before a payer
         signs. Composes the id resolution (``get_payer_auth_waiver_for_member``)
-        with the body read (``get_waiver``)."""
+        with the body read (``get_waiver``).
+
+        Raises:
+            WaiverPayerAuthMissingError: The gym has no payer-auth waiver.
+            WaiverNotFoundError: The resolved waiver row is gone.
+            WaiverVersionNotFoundError: No readable current version, so there
+                is no body to display. All three are 404.
+        """
         info = await self._signatures.get_payer_auth_waiver_for_member(
             member_id
         )
         waiver = await self._list.get_waiver(info.waiver_id, info.gym_id)
         if waiver.current_version is None:
-            raise ValueError(
-                f"Payer-auth waiver has no current version: "
+            raise WaiverVersionNotFoundError(
+                f"Payer-auth waiver has no readable current version: "
                 f"waiver_id={info.waiver_id}"
             )
         return AuthorizedPayerWaiverResponse(

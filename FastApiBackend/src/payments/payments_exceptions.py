@@ -32,6 +32,31 @@ class PaymentsInvalidRequestError(PaymentsStripeError):
     """Invalid parameters sent to Stripe."""
 
 
+class PaymentsNotCollectedError(PaymentsStripeError):
+    """A card charge that definitively did NOT collect — with no decline raised.
+
+    ``invoices.pay`` raises ``stripe.CardError`` on an outright refusal, but an
+    off-session invoice whose PaymentIntent needs authentication (SCA / 3-D
+    Secure) comes back with the invoice still ``open`` and no exception. That is
+    a definitive business OUTCOME — "we could not collect on this card, staff
+    must act" — the same KIND of thing as a decline, so it belongs on the same
+    side of the contract: a 2xx RESULT carrying the reason, never a 500 that
+    would bury real outages in monitoring.
+
+    **What it must NEVER be is success** — that is the whole reason it is
+    raised. How a caller REPORTS it is the caller's call: start and charge-card
+    fold it into their ordinary card-failure result, because at a kiosk or a
+    front desk the answer is the same either way (the card did not work, use
+    another); retry-card keeps its own ``not_collected`` outcome, because there
+    staff are deliberately repairing one card and the distinction is actionable.
+
+    Deliberately a ``PaymentsStripeError`` subclass: any caller that has NOT
+    been taught the distinction keeps mapping it to the safe, non-retryable
+    500. A router that HAS must catch this type **above** its
+    ``except PaymentsStripeError`` arm, or the base arm wins.
+    """
+
+
 class StripeOrphanError(Exception):
     """Stripe resource created but DB update failed after retries.
 

@@ -13,10 +13,20 @@ flags, and the attendance / sign-up counts (all keyed by the occurrence's
 full identity, ``(class_id, original_date, original_time)`` — two same-day
 slots enrich independently).
 
-The one time-dependent rule: a soft-DELETED class emits only occurrences that
-have already ENDED (``occurred_at`` + duration at/before now) — its past is a
-permanent record, but a dead class produces no in-session or future
-occurrences.
+Two INDEPENDENT visibility rules sit on top of that — never entangle them:
+
+* **``is_deleted`` (soft-DELETED) — past-only, always.** A deleted class
+  emits only occurrences that have already ENDED: its past is a permanent
+  record (and staff's only route to correcting one of those check-ins), but a
+  dead class produces no live or future slots. ``include_inactive`` does not
+  affect it.
+* **``is_active = false`` (PAUSED, not deleted) — excluded ENTIRELY unless
+  ``include_inactive`` asks for it.** Fail-CLOSED by default because check-in
+  and sign-up both REJECT a paused class (``400 class_inactive``), so no
+  occurrence view may hand out an occurrence either would refuse, and a
+  caller cannot forget to filter. Only the CRM's class-MANAGEMENT surface
+  opts in — where a paused class is seen and un-paused — and every row
+  carries ``is_active`` so that one mixed response can mark those cards.
 """
 
 import asyncio
@@ -66,6 +76,7 @@ class ClassesScheduleReaderService:
         gym_id: UUID,
         start_date: date,
         end_date: date,
+        include_inactive: bool = False,
     ) -> EffectiveClassInstanceListResponse:
         """Return every effective occurrence in the window, board-shaped.
 
@@ -78,6 +89,11 @@ class ClassesScheduleReaderService:
         moved into this window renders here (and only here), while its
         counts (keyed by the out-of-window original date) still load via the
         same widened bounds.
+
+        Args:
+            include_inactive: When False (the default) a PAUSED class
+                contributes NO occurrences at all. Orthogonal to
+                ``is_deleted``, whose past-only rule applies either way.
 
         Raises:
             ValueError: if ``end_date`` is before ``start_date``, or the window
@@ -131,7 +147,9 @@ class ClassesScheduleReaderService:
 
         now = datetime.now(UTC)
         items: list[EffectiveClassInstanceResponse] = []
-        for class_row in classes:
+        # Drop paused classes BEFORE expanding — no work for a class the
+        # caller didn't ask for.
+        for class_row in self._visible_classes(classes, include_inactive):
             items.extend(
                 self._board_rows_for_class(
                     class_row,
@@ -148,6 +166,24 @@ class ClassesScheduleReaderService:
             )
         items.sort(key=lambda row: row.occurred_at)
         return EffectiveClassInstanceListResponse(items=items)
+
+    @staticmethod
+    def _visible_classes(
+        classes: list[dict],
+        include_inactive: bool,
+    ) -> list[dict]:
+        """The class rows this read may expand.
+
+        The test is ``is_active OR is_deleted``, never ``is_active`` alone:
+        ``classes_soft_delete.sql`` clears ``is_active`` in the SAME statement
+        that sets ``is_deleted``, so an ``is_active``-only test would also
+        swallow every deleted class's past. Do not "simplify" it.
+        """
+        if include_inactive:
+            return classes
+        return [
+            row for row in classes if row["is_active"] or row["is_deleted"]
+        ]
 
     @staticmethod
     def _validate_window(start_date: date, end_date: date) -> None:
@@ -190,7 +226,8 @@ class ClassesScheduleReaderService:
         date — a moved-out occurrence renders in its target window only. A
         soft-deleted class keeps only occurrences that already ENDED (its
         past is a record; a dead class has no live/future slots — the delete
-        path wiped their sign-ups and check-ins).
+        path wiped their sign-ups and check-ins). Independent of
+        ``include_inactive``, applied upstream in ``_visible_classes``.
         """
         expand_start, expand_end = self._widened_bounds(
             start_date, end_date, instance_rows
@@ -288,6 +325,7 @@ class ClassesScheduleReaderService:
             resolved_instructor_name=instructor_name,
             image_url=class_row["image_url"],
             points_worth=class_row["points_worth"],
+            is_active=class_row["is_active"],
             max_capacity=capacity_overrides.get(
                 slot_key, class_row["max_capacity"]
             ),

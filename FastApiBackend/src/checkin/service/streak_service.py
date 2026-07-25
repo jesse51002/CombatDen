@@ -1,11 +1,14 @@
 """Service for computing weekly class attendance streaks."""
 
+from collections.abc import Iterable
 from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
+from src.checkin.schema.checkin_schema import StreakResult
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
@@ -30,22 +33,65 @@ class StreakService:
         self._db_pool = db_pool
 
     async def get_streak(self, member_id: UUID, gym_id: UUID) -> int:
-        """Calculate the current weekly attendance streak."""
-        sql = load_sql(SQL_DIR / "streak_weeks.sql")
-        params = {
-            "member_id": str(member_id),
-            "gym_id": str(gym_id),
-        }
+        """Calculate the current weekly attendance streak (week count only).
+
+        The single-query path — a caller that doesn't need the per-day strip
+        doesn't pay for it. Use ``get_streak_details`` when it does.
+        """
+        params = {"member_id": str(member_id), "gym_id": str(gym_id)}
+        async with self._db_pool.session() as session:
+            timezone = await get_gym_timezone(session, gym_id)
+            current_monday = self._current_week_monday(timezone)
+            return await self._count_weeks(session, params, current_monday)
+
+    async def get_streak_details(
+        self, member_id: UUID, gym_id: UUID
+    ) -> StreakResult:
+        """Compute the streak week count AND the current-week per-day strip.
+
+        One session and ONE gym-local Monday anchor shared by both queries, so
+        the strip and the count agree by construction.
+        """
+        params = {"member_id": str(member_id), "gym_id": str(gym_id)}
+        days_sql = load_sql(SQL_DIR / "current_week_days.sql")
 
         async with self._db_pool.session() as session:
             timezone = await get_gym_timezone(session, gym_id)
-            rows = (await session.execute(text(sql), params)).all()
+            current_monday = self._current_week_monday(timezone)
+            weeks = await self._count_weeks(session, params, current_monday)
+            day_rows = (
+                await session.execute(
+                    text(days_sql),
+                    {**params, "current_week_monday": current_monday},
+                )
+            ).all()
 
-        week_starts: set[date] = {row[0] for row in rows}
-        return self._count_streak(week_starts, timezone)
+        return StreakResult(
+            weeks=weeks,
+            current_week_days=self._build_week_days(
+                row[0] for row in day_rows
+            ),
+        )
 
-    def _count_streak(self, week_starts: set[date], timezone: str) -> int:
-        current_monday = self._current_week_monday(timezone)
+    async def _count_weeks(
+        self,
+        session: AsyncSession,
+        params: dict[str, str],
+        current_monday: date,
+    ) -> int:
+        """Run the weeks query and count the streak.
+
+        Shared by both entry points so the week count cannot drift between
+        them. Runs against the caller's open session.
+        """
+        weeks_sql = load_sql(SQL_DIR / "streak_weeks.sql")
+        week_rows = (await session.execute(text(weeks_sql), params)).all()
+        week_starts: set[date] = {row[0] for row in week_rows}
+        return self._count_streak(week_starts, current_monday)
+
+    def _count_streak(
+        self, week_starts: set[date], current_monday: date
+    ) -> int:
         previous_monday = current_monday - timedelta(weeks=1)
 
         if current_monday in week_starts:
@@ -60,6 +106,17 @@ class StreakService:
             streak += 1
             cursor -= timedelta(weeks=1)
         return streak
+
+    @staticmethod
+    def _build_week_days(iso_dows: Iterable[int]) -> list[bool]:
+        """Build the strip from Postgres ``ISODOW`` values (1=Mon .. 7=Sun).
+
+        Result is indexed 0 = Monday .. 6 = Sunday.
+        """
+        days = [False] * 7
+        for iso_dow in iso_dows:
+            days[iso_dow - 1] = True
+        return days
 
     def _current_week_monday(self, timezone: str) -> date:
         today = gym_today(timezone)

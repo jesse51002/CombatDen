@@ -1,38 +1,22 @@
 """Unit tests for ``ClassesScheduleReaderService.list_effective_instances``
 (no DB) — the version-aware schedule board.
 
-There is no materializer and no past/live day-dedup in the versioned model:
-the board is pure version expansion (``ClassesVersionExpander``,
+The board is pure version expansion (``ClassesVersionExpander``,
 ``include_cancelled=True``) enriched with instructor names and attendance /
 sign-up counts, all keyed by the occurrence's FULL identity ``(class_id,
-original_date, original_time)`` — with several slots per day legal, a
-date-only key would conflate two same-day occurrences. These tests cover:
+original_date, original_time)`` — several slots per day are legal, so a
+date-only key would conflate two same-day occurrences.
 
-* a multi-version class renders its pre-mint days from the OLD version and
-  its post-mint days from the NEW version, in the same window;
-* a soft-deleted class renders only occurrences that have already ENDED
-  (no in-session/future rows);
-* attendance / sign-up counts are keyed by the occurrence's IDENTITY
-  ``(class_id, original_date, original_time)`` — a rescheduled occurrence's
-  counts follow its ORIGINAL slot, not its displayed ``class_date``;
-* every row carries ``original_date`` (distinct from ``class_date`` once
-  rescheduled);
-* a cancelled occurrence is still emitted, flagged;
-* an occurrence rescheduled INTO the window from an ORIGINAL date outside it
-  renders here (with its counts keyed by the out-of-window original date),
-  via the widened expand bounds;
-* an occurrence rescheduled OUT of the window (its original date inside, its
-  new_date outside) does not render in the source window — only its
-  unaffected sibling days do;
-* a class with TWO slots on one date renders TWO independent board rows,
-  each with its own ``original_time`` and independently-keyed counts;
-* an instance exception bound to ONE slot (e.g. cancelling the 06:00
-  occurrence) leaves a same-day SIBLING slot (18:00) completely untouched.
+Two visibility rules carry most of the weight, and they are INDEPENDENT: a
+PAUSED class (``is_active=False``) contributes nothing unless
+``include_inactive=True``, while a soft-deleted class stays past-only either
+way. Every deleted class here is therefore built the way the DB holds one —
+``is_active=False`` AND ``is_deleted=True``, the pairing
+``classes_soft_delete.sql`` writes — because that combination is exactly what
+an ``is_active``-only filter would wrongly drop.
 
-The DB reads (``_read_all``) are stubbed by sql-file name; the real
-``ClassesVersionExpander`` (wrapping the real ``ClassesExpander``) does the
-actual expansion; ``now`` is pinned via monkeypatching the module's
-``datetime`` (mirrors the pattern the deleted materializer test used).
+``_read_all`` is stubbed by sql-file name, the real expander does the
+expansion, and ``now`` is pinned by monkeypatching the module's ``datetime``.
 """
 
 from datetime import UTC, date, datetime, time
@@ -65,6 +49,7 @@ def _class_row(
     gym_id: UUID,
     class_name: str = "Test Class",
     max_capacity: int | None = None,
+    is_active: bool = True,
     is_deleted: bool = False,
 ) -> dict:
     """A ``classes_board_classes.sql``-shaped identity row."""
@@ -77,7 +62,7 @@ def _class_row(
         "allowed_plan_ids": None,
         "image_url": "https://example.test/class.jpg",
         "points_worth": 10,
-        "is_active": True,
+        "is_active": is_active,
         "is_deleted": is_deleted,
         "created_at": datetime.now(UTC),
     }
@@ -215,9 +200,8 @@ def _fixed_datetime(now: datetime) -> type[datetime]:
 async def test_multi_version_class_renders_old_past_new_future(
     monkeypatch,
 ) -> None:
-    """A schedule edit (mint) mid-window: days before the mint render from
-    the OLD version's time, days on/after the mint from the NEW version's —
-    no materialize, no stored-occurrence side."""
+    """A mint mid-window: days before it render from the OLD version's time,
+    days on/after it from the NEW version's."""
     class_id, gym_id = uuid4(), uuid4()
     mint = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
     monkeypatch.setattr(
@@ -254,27 +238,51 @@ async def test_multi_version_class_renders_old_past_new_future(
     assert by_date[date(2026, 6, 12)].resolved_class_time == time(18, 0)
 
 
+def _daily_service(
+    *,
+    class_id: UUID,
+    gym_id: UUID,
+    is_active: bool = True,
+    is_deleted: bool = False,
+) -> reader_module.ClassesScheduleReaderService:
+    """One 09:00-10:00 daily class, expandable over 2026-06-01..05.
+
+    Never build ``is_deleted=True`` with ``is_active=True``: that combination
+    does not exist in production, and asserting against it hides an
+    ``is_active``-only filter that drops the deleted past entirely.
+    """
+    return _service(
+        classes=[
+            _class_row(
+                class_id=class_id,
+                gym_id=gym_id,
+                is_active=is_active,
+                is_deleted=is_deleted,
+            )
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=class_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            )
+        ],
+    )
+
+
 async def test_deleted_class_renders_past_only(monkeypatch) -> None:
-    """A soft-deleted class's already-ENDED occurrences render; in-session /
-    future occurrences do not (the delete wipe already cleared their
-    sign-ups/check-ins, so there is nothing to show)."""
+    """A soft-deleted class's already-ENDED occurrences render; in-session and
+    future ones do not — the delete wipe cleared their sign-ups/check-ins, so
+    there is nothing behind them to show."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
     # 09:00-10:00 daily; "now" is day3 10:00 -> day3 has JUST ended.
     now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
-    version = _daily_version_row(
-        class_id=class_id,
-        gym_id=gym_id,
-        effective_from=datetime(2020, 1, 1, tzinfo=UTC),
-        class_time=time(9, 0),
-    )
-    service = _service(
-        classes=[
-            _class_row(class_id=class_id, gym_id=gym_id, is_deleted=True)
-        ],
-        versions=[version],
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False, is_deleted=True
     )
 
     resp = await service.list_effective_instances(gym_id, day1, day5)
@@ -285,18 +293,234 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     assert day5 not in rendered
 
 
+async def test_deleted_class_stays_past_only_with_include_inactive(
+    monkeypatch,
+) -> None:
+    """``include_inactive`` governs PAUSED only. Asking for inactive classes
+    must NOT resurrect a deleted class's future occurrences — they would be
+    offered with no rows behind them. The deleted past is identical with and
+    without the flag, which is what proves the two rules independent."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False, is_deleted=True
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
+
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day2, day3}
+    assert day4 not in rendered
+    assert day5 not in rendered
+
+
+async def test_default_read_keeps_deleted_past_and_drops_paused(
+    monkeypatch,
+) -> None:
+    """The discrimination the DEFAULT read has to make, on real DB rows.
+
+    Both classes are ``is_active = false`` on disk, so a filter reading that
+    flag alone cannot tell them apart — and would take the deleted class's
+    already-run occurrences (with their counts) off the staff board, which is
+    the record staff correct a check-in from. Keep the deleted PAST, emit
+    nothing at all for the paused class."""
+    deleted_id, paused_id, gym_id = uuid4(), uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _service(
+        classes=[
+            _class_row(
+                class_id=deleted_id,
+                gym_id=gym_id,
+                class_name="Retired Boxing",
+                is_active=False,
+                is_deleted=True,
+            ),
+            _class_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                class_name="Competition Team",
+                is_active=False,
+            ),
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=deleted_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            ),
+            _daily_version_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(18, 0),
+            ),
+        ],
+        attendance=[
+            {
+                "class_id": deleted_id,
+                "original_date": day2,
+                "original_time": time(9, 0),
+                "attendance_count": 4,
+            },
+        ],
+        signups=[
+            {
+                "class_id": deleted_id,
+                "original_date": day2,
+                "original_time": time(9, 0),
+                "signup_count": 5,
+            },
+        ],
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day5)
+
+    by_class: dict[UUID, set[date]] = {}
+    for row in resp.items:
+        by_class.setdefault(row.class_id, set()).add(row.original_date)
+    assert by_class == {deleted_id: {day1, day2, day3}}
+    assert paused_id not in by_class
+    assert day4 not in by_class[deleted_id]
+    assert day5 not in by_class[deleted_id]
+    # The counts are the reason the past has to stay reachable at all.
+    counted = next(
+        row for row in resp.items if row.original_date == day2
+    )
+    assert counted.attendance_count == 4
+    assert counted.signup_count == 5
+
+
+async def test_paused_class_excluded_by_default(monkeypatch) -> None:
+    """THE DEFAULT IS FAIL-CLOSED. A paused class contributes NO occurrences,
+    past or future, because check-in and sign-up both reject one with
+    ``400 {"code": "class_inactive"}``. Every client gets that safe answer
+    without filtering, so a new occurrence surface cannot forget."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day5)
+
+    assert resp.items == []
+
+
+async def test_paused_class_included_when_asked(monkeypatch) -> None:
+    """``include_inactive=True`` opts a paused class back in, and it expands
+    NORMALLY — whole window, past AND future (past-only belongs to
+    ``is_deleted``). This is the class MANAGEMENT view, the one surface a
+    paused class must stay visible on so it can be un-paused; every row is
+    flagged ``is_active=False`` so the CRM marks the card and routes its tap
+    to the editor instead of check-in."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _daily_service(
+        class_id=class_id, gym_id=gym_id, is_active=False
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
+
+    rendered = {row.original_date for row in resp.items}
+    assert rendered == {day1, day2, day3, day4, day5}
+    assert all(row.is_active is False for row in resp.items)
+
+
+async def test_mixed_response_flags_each_class_correctly(
+    monkeypatch,
+) -> None:
+    """Why ``is_active`` is on the wire: an ``include_inactive=True`` read is
+    the ONE response that mixes paused and live rows, so each row must carry
+    its own class's flag."""
+    live_id, paused_id, gym_id = uuid4(), uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _service(
+        classes=[
+            _class_row(class_id=live_id, gym_id=gym_id, class_name="Boxing"),
+            _class_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                class_name="Competition Team",
+                is_active=False,
+            ),
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=live_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            ),
+            _daily_version_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(18, 0),
+            ),
+        ],
+    )
+
+    resp = await service.list_effective_instances(
+        gym_id, day1, day5, include_inactive=True
+    )
+
+    by_class = {row.class_id: row.is_active for row in resp.items}
+    assert by_class == {live_id: True, paused_id: False}
+
+
+async def test_active_class_unaffected_by_include_inactive(
+    monkeypatch,
+) -> None:
+    """The flag only ever ADDS paused classes: a live class renders identically
+    either way, always flagged ``is_active=True``."""
+    class_id, gym_id = uuid4(), uuid4()
+    day1, day5 = date(2026, 6, 1), date(2026, 6, 5)
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    default = await _daily_service(
+        class_id=class_id, gym_id=gym_id
+    ).list_effective_instances(gym_id, day1, day5)
+    included = await _daily_service(
+        class_id=class_id, gym_id=gym_id
+    ).list_effective_instances(gym_id, day1, day5, include_inactive=True)
+
+    assert default.items
+    assert [row.original_date for row in default.items] == [
+        row.original_date for row in included.items
+    ]
+    assert all(row.is_active is True for row in default.items)
+
+
 async def test_counts_keyed_by_original_date_and_cancelled_included(
     monkeypatch,
 ) -> None:
-    """Attendance/sign-up counts key on the occurrence's identity
-    ``(class_id, original_date, original_time)``, not the displayed date —
-    a rescheduled occurrence's counts follow it from its original slot. A
-    cancelled occurrence is still emitted (flagged), and every row carries
-    ``original_date``."""
+    """Counts key on the occurrence's identity, not the displayed date, so a
+    rescheduled occurrence's counts follow it from its original slot. A
+    cancelled occurrence is still emitted, flagged."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3 = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3)
-    now = datetime(2026, 5, 1, tzinfo=UTC)  # well before the window: nothing
-    # has "ended" yet, so the deleted-class filter is moot (class is live).
+    now = datetime(2026, 5, 1, tzinfo=UTC)  # before the window: nothing ended
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
     version = _daily_version_row(
@@ -371,12 +595,10 @@ async def test_counts_keyed_by_original_date_and_cancelled_included(
 async def test_reschedule_into_window_from_outside_original_renders(
     monkeypatch,
 ) -> None:
-    """An occurrence whose ORIGINAL date is BEFORE the view window but whose
-    reschedule target (new_date) falls INSIDE it is rendered here — the
-    widened expand bounds enumerate it by its original date, then the
-    effective-date filter keeps it because its landing IS in-window. Its
-    counts are keyed by the out-of-window ORIGINAL date via the same
-    widened bounds."""
+    """An occurrence whose ORIGINAL date is before the window but whose
+    reschedule target lands inside it renders here: the widened expand bounds
+    enumerate it by its original date (which is also how its counts are
+    keyed), and the effective-date filter keeps it."""
     class_id, gym_id = uuid4(), uuid4()
     now = datetime(2020, 1, 1, tzinfo=UTC)  # well before anything here
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
@@ -436,10 +658,8 @@ async def test_reschedule_into_window_from_outside_original_renders(
 async def test_reschedule_out_of_window_does_not_render_in_source_window(
     monkeypatch,
 ) -> None:
-    """An occurrence whose ORIGINAL date is inside the view window but whose
-    reschedule target (new_date) falls OUTSIDE it is dropped from this
-    window entirely (the effective-date filter excludes it) — only its
-    unaffected sibling days render."""
+    """The mirror: an occurrence rescheduled OUT of the window is dropped from
+    it entirely — only its unaffected sibling days render."""
     class_id, gym_id = uuid4(), uuid4()
     now = datetime(2020, 1, 1, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
@@ -477,9 +697,9 @@ async def test_reschedule_out_of_window_does_not_render_in_source_window(
 async def test_cancelling_range_id_distinguishes_range_from_instance_cancel(
     monkeypatch,
 ) -> None:
-    """A range-cancelled day carries the governing range's exception_id on
-    the board row; an instance-cancelled day and a plain day both carry
-    None — the CRM's only way to tell the two cancel sources apart."""
+    """A range-cancelled day carries the governing range's exception_id;
+    instance-cancelled and plain days carry None. It is the CRM's only way to
+    tell the two cancel sources apart."""
     class_id, gym_id = uuid4(), uuid4()
     now = datetime(2020, 1, 1, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
@@ -534,9 +754,8 @@ async def test_cancelling_range_id_distinguishes_range_from_instance_cancel(
 async def test_two_slot_day_renders_two_independent_board_rows(
     monkeypatch,
 ) -> None:
-    """A class with two slots on the same date renders TWO board rows, each
-    carrying its own ``original_time`` and independently-keyed
-    attendance/sign-up counts."""
+    """Two slots on one date render TWO board rows, each with its own
+    ``original_time`` and independently-keyed counts."""
     class_id, gym_id = uuid4(), uuid4()
     now = datetime(2020, 1, 1, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
@@ -638,8 +857,7 @@ async def test_instance_exception_on_one_slot_leaves_sibling_untouched(
 
 
 def test_validate_window_accepts_a_window_up_to_the_max_span() -> None:
-    """A window exactly at the configured max span (default 2 months) is
-    allowed — the boundary is inclusive."""
+    """The max-span boundary (default 2 months) is inclusive."""
     start = date(2026, 3, 1)
     end = start + relativedelta(months=2)  # exactly the cap
     # Does not raise.

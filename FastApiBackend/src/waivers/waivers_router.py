@@ -10,6 +10,10 @@ version-locked on the echoed version). The authorized-payer link flow
 (memberships) does NOT sign — the payer signs the gym's default waiver through
 THIS endpoint first, then the link references that signature_id (signing and
 authorizing are decoupled).
+
+**Every status here comes off the exception TYPE** (``waivers_exceptions``),
+never off words in the message; the error-mapping test locks the whole
+type -> status table with message-hostile fixtures.
 """
 
 import logging
@@ -34,6 +38,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverVersionResponse,
 )
 from src.waivers.service.waivers_service import WaiversService
+from src.waivers.waivers_exceptions import WaiversError
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +99,12 @@ async def list_waivers(
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
+        404: {
+            "description": (
+                "The just-created waiver could not be re-read (a broken "
+                "invariant, not a normal outcome)"
+            )
+        },
     },
 )
 @inject
@@ -106,16 +117,20 @@ async def create_waiver(
     """Create a waiver.
 
     Raises:
-        HTTPException: 400/401/403/500 on respective errors.
+        HTTPException: 401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await waivers_service.create_waiver(request)
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status by TYPE. Input is pydantic-validated (a bad body is a 422
+        # before this runs), so the only rejection left is the re-read's 404.
+        # Deliberately no generic ValueError arm: it could only ever fire on
+        # our own failure, and pydantic's ValidationError is a ValueError.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:
@@ -165,16 +180,18 @@ async def update_waiver(
 
     try:
         return await waivers_service.update_waiver(request)
+    except WaiversError as exc:
+        # Status by TYPE — the message is free prose and never decides it.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+        # Kept because this service really does raise a bare ValueError: the
+        # shared ``validate_mutable_columns`` guard, on an immutable column.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error("Failed to update waiver %s", request.waiver_id, exc_info=True)
@@ -218,16 +235,17 @@ async def delete_waiver(
 
     try:
         await waivers_service.delete_waiver(waiver_id, gym_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except WaiversError as exc:
+        # Status BY TYPE: WaiverNotFoundError -> 404,
+        # WaiverPayerAuthNotArchivableError -> 400 (the documented "the
+        # payer-auth waiver cannot be archived"). Those two used to be told
+        # apart by whether the message happened to contain "not found", so
+        # rewording either one swapped the statuses. No generic
+        # ``except ValueError`` arm — ``delete_waiver`` raises nothing but
+        # typed errors, so one could only ever fire on an internal failure.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error("Failed to delete waiver %s", waiver_id, exc_info=True)
@@ -428,21 +446,14 @@ async def sign_waiver(
             user_agent=capture_user_agent(http_request),
             operator_employee_id=operator_employee_id,
         )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "reload" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=error_msg,
-            ) from None
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except WaiversError as exc:
+        # Status by TYPE, including the version-lock 409 — which must never go
+        # back to matching the word "reload" in the prose (see
+        # waivers_exceptions). No generic ValueError arm: sign_waiver raises
+        # nothing but typed errors, its input validation being pydantic's.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -487,9 +498,13 @@ async def get_waiver(
 
     try:
         return await waivers_service.get_waiver(waiver_id, gym_id)
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status by TYPE. Do not widen this back to a blanket
+        # ``except ValueError`` -> 404: a stored body that no longer fits
+        # WaiverResponse raises a ValidationError, which IS a ValueError, and
+        # would report the document as missing instead of surfacing the 500.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:

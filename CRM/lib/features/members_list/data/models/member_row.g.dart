@@ -48,3 +48,13 @@ OverdueViewRow _$OverdueViewRowFromJson(Map<String, dynamic> json) =>
       membershipText: json['membership_text'] as String,
       daysLate: (json['days_late'] as num).toInt(),
     );
+
+IncompleteViewRow _$IncompleteViewRowFromJson(Map<String, dynamic> json) =>
+    IncompleteViewRow(
+      memberId: json['member_id'] as String,
+      name: json['name'] as String,
+      avatarUrl: json['avatar_url'] as String?,
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+      daysWaiting: (json['days_waiting'] as num).toInt(),
+    );

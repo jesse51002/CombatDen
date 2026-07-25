@@ -21,9 +21,9 @@ from src.members.service.crm_member_services.members_crm_base_service import (
 )
 from src.members.service.members_status_mapping import (
     is_member_dormant,
-    is_membership_overdue,
 )
 from src.shared.formatters import format_price
+from src.shared.membership_status import is_membership_overdue
 from src.shared.sql_loader import load_sql
 
 PRIORITY_LOWEST = 99
@@ -80,7 +80,9 @@ class CrmAllViewService(CrmBaseViewService):
         """Group rows by member and keep the highest-priority.
 
         Priority (lowest number wins):
-            1. overdue (next_due_date < today, not cancelled)
+            1. overdue (an ACTIVE membership past its due date — the one
+               shared rule in src/shared/membership_status.py; a frozen /
+               cancelled / ended row is never overdue)
             2. active paid (status=active, plan_type != trial)
             3. trial (plan_type=trial, status=active)
             4. frozen
@@ -249,7 +251,11 @@ class CrmAllViewService(CrmBaseViewService):
                 return f"Cancelled (On {cancel.month}/{cancel.day}/{cancel.year})"
             return "Cancelled"
 
-        if next_due and next_due < today:
+        # The SAME shared rule the badge uses (_map_row), not a second
+        # hand-written date test — otherwise a frozen / ended row whose
+        # next_due_date is stale renders "Overdue since ..." text under a
+        # "Frozen" / "Ended" badge, contradicting itself on one row.
+        if is_membership_overdue(status, next_due, today):
             if last_paid:
                 return f"Overdue since {last_paid.month}/{last_paid.day}/{last_paid.year}"
             return f"Overdue ({price_str})"

@@ -168,6 +168,7 @@ class MembersManagementCreate(MembersManagementBase):
             "current_rank_id": (str(request.current_rank_id) if request.current_rank_id else None),
             "phone": request.phone,
             "address": request.address,
+            "date_of_birth": request.date_of_birth,
             "emergency_contact_name": request.emergency_contact_name,
             "emergency_contact_phone": request.emergency_contact_phone,
             "emergency_contact_email": request.emergency_contact_email,
