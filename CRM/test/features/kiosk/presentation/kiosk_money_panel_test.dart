@@ -23,7 +23,7 @@ import 'package:crm/features/member_details/data/models/payments_invoice_preview
 void main() {
   Future<void> pumpPanel(
     WidgetTester tester, {
-    required String receiptEmail,
+    required String contactEmail,
   }) async {
     await tester.binding.setSurfaceSize(const Size(1180, 820));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -33,7 +33,7 @@ void main() {
           body: SingleChildScrollView(
             child: KioskMoneyPanel(
               state: _state(),
-              receiptEmail: receiptEmail,
+              contactEmail: contactEmail,
             ),
           ),
         ),
@@ -44,7 +44,7 @@ void main() {
 
   testWidgets('a payer WITH an address is told where failure mail lands',
       (tester) async {
-    await pumpPanel(tester, receiptEmail: 'marcus.bell@gmail.com');
+    await pumpPanel(tester, contactEmail: 'marcus.bell@gmail.com');
 
     expect(
       find.text(
@@ -59,7 +59,7 @@ void main() {
 
   testWidgets('a payer with NO address gets no receipt line at all',
       (tester) async {
-    await pumpPanel(tester, receiptEmail: '');
+    await pumpPanel(tester, contactEmail: '');
 
     // Never a trailing blank, and never a promise nothing will keep.
     expect(find.textContaining("we'll email you at"), findsNothing);
@@ -73,7 +73,7 @@ void main() {
   });
 
   testWidgets('whitespace is not an address either', (tester) async {
-    await pumpPanel(tester, receiptEmail: '   ');
+    await pumpPanel(tester, contactEmail: '   ');
 
     expect(find.textContaining("we'll email you at"), findsNothing);
     expect(tester.takeException(), isNull);

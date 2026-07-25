@@ -13,7 +13,7 @@ import 'package:crm/features/member_details/data/models/payments_invoice_preview
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 
 /// The review's money half: what comes off the card today, itemised, on which
-/// card, to which receipt address — then what happens next month.
+/// card, to which address — then what happens next month.
 ///
 /// **Every figure here is a field of the preview response.** The only
 /// arithmetic is the due-today sum, and it lives on
@@ -31,17 +31,17 @@ class KioskMoneyPanel extends StatelessWidget {
   /// failure notice would reach, never a receipt. The unmasked address on a
   /// shared iPad is justified by exactly that: the payer confirming the address
   /// that has to work when a renewal fails.
-  final String receiptEmail;
+  final String contactEmail;
 
   const KioskMoneyPanel({
     super.key,
     required this.state,
-    required this.receiptEmail,
+    required this.contactEmail,
   });
 
   @override
   Widget build(BuildContext context) {
-    final receipt = receiptEmail.trim();
+    final contact = contactEmail.trim();
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -72,9 +72,9 @@ class KioskMoneyPanel extends StatelessWidget {
           // details step. A payer adopted from the gym's own records can still
           // carry none, so the line is DROPPED rather than printed with a
           // trailing empty address. The results panel drops it the same way.
-          if (receipt.isNotEmpty)
+          if (contact.isNotEmpty)
             Text(
-              'If a payment ever fails, we\'ll email you at $receipt.',
+              'If a payment ever fails, we\'ll email you at $contact.',
               style: DesignConstants.kioskCaption.copyWith(
                 color: DesignConstants.text2nd,
               ),

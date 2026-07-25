@@ -130,7 +130,7 @@ class _Panels extends StatelessWidget {
             Expanded(
               child: KioskMoneyPanel(
                 state: state,
-                receiptEmail: state.payer.email,
+                contactEmail: state.payer.email,
               ),
             ),
           ],

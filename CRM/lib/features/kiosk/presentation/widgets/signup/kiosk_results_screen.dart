@@ -186,7 +186,7 @@ class _ResultsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = kioskResultRowsInRosterOrder(state);
-    final receipt = state.payerOrNull?.email.trim() ?? '';
+    final contact = state.payerOrNull?.email.trim() ?? '';
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -222,9 +222,9 @@ class _ResultsPanel extends StatelessWidget {
           //
           // Unreachable blank: an email is required at the details step. If one
           // is ever missing the line is dropped rather than printed empty.
-          if (receipt.isNotEmpty)
+          if (contact.isNotEmpty)
             Text(
-              'If a payment ever fails, we\'ll email you at $receipt.',
+              'If a payment ever fails, we\'ll email you at $contact.',
               style: DesignConstants.kioskCaption.copyWith(
                 color: DesignConstants.text2nd,
               ),

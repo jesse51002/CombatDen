@@ -37,15 +37,19 @@ The kiosk is an unattended device that accepts card entry — a card-testing vec
 
 - **Dashboard → Radar → Rules** → enable the free canned rule **"Block if a card was tested at multiple merchants in a short window."**
 
-### Customer emails — Stripe owns receipts AND overdue notices — VERIFY
-CombatDen deliberately sends **no** payment receipt and **no** overdue/dunning email of its own. Every charge is a **direct charge** on the gym's own connected account (`PaymentsStripeClient.connect_opts` passes `stripe_account=<the gym's id>`, `FastApiBackend/src/payments/service/payments_stripe_client.py:39`) and each Stripe Customer is created with the **member's own email** (`FastApiBackend/src/members/service/management/members_management_create.py:200`) — so Stripe already mails the member a gym-branded receipt, a card-declined notice, and its Smart Retries dunning sequence, ending in the auto-cancel confirmed by probe (`past_due` at +10d and +20d, cancelled ~+30d). Ours would duplicate those, and would sometimes fire wrongly: `next_due_date` advances only on `invoice.paid`, so a webhook the reconciler has not yet swept leaves a member reading past-due while Stripe shows them fully paid.
+### Customer emails — Stripe owns the OVERDUE mail; nobody sends a receipt — VERIFY
+**A member is emailed only when a payment FAILS. No receipt is sent, by anyone.** CombatDen has no mailer at all, so every customer email a member receives is Stripe's: the card-declined notice and its Smart Retries dunning sequence, ending in the auto-cancel confirmed by probe (`past_due` at +10d and +20d, cancelled ~+30d). Every charge is a **direct charge** on the gym's own connected account (`PaymentsStripeClient.connect_opts` passes `stripe_account=<the gym's id>`, `FastApiBackend/src/payments/service/payments_stripe_client.py:39`) and each Stripe Customer is created with the **member's own email** (`FastApiBackend/src/members/service/management/members_management_create.py:200`), so that failure mail reaches the member directly and is gym-branded. A CombatDen-sent overdue email would duplicate it, and would sometimes fire wrongly: `next_due_date` advances only on `invoice.paid`, so a webhook the reconciler has not yet swept leaves a member reading past-due while Stripe shows them fully paid.
 
-**That makes Stripe's customer-email settings load-bearing product behaviour, not a detail — if they are off, the member gets nothing about their money from anyone.**
+**That makes Stripe's failed-payment emails load-bearing product behaviour, not a detail — if they are off, nobody tells the member their payment failed.**
 
-- **Dashboard → Settings (gear) → Business → Customer emails** → confirm **Successful payments** and **Refunds** are set the way you want them.
+Because no receipt goes out, **no surface may promise one.** The kiosk states where failure mail lands instead of claiming a receipt is coming (`kiosk_money_panel.dart`, `kiosk_results_screen.dart`), and its tests assert the word "receipt" appears on neither screen.
+
+- **These are two different screens, which is what makes the split possible** — receipts and failure mail are independent settings, so turning one off does not touch the other.
+  - **Failure mail — turn ON.** `dashboard.stripe.com/revenue_recovery/emails` (**Dashboard → Billing → Revenue recovery → Emails**) → **"Send emails when card payments fail"**. This is the only member-facing mail the product relies on.
+  - **Receipts — leave OFF.** `dashboard.stripe.com/settings/emails` (**Dashboard → Settings (gear) → Business → Customer emails**) → **Successful payments** and **Refunds**. This screen carries *only* those two; the failure toggle is not here. Off is a deliberate retention decision, not an oversight: a receipt every month is a monthly reminder that money is leaving, and a monthly prompt to reconsider the membership. Turning either on also breaks the no-receipt-promise rule above, and the kiosk copy has to change with it.
 - Who owns the toggle depends on the account type. For accounts with the full Dashboard the *connected account* owns it; for **Express** accounts — which is what CombatDen creates (`STRIPE_EXPRESS_ACCOUNT_TYPE = "express"`, `FastApiBackend/src/gyms/service/gyms_stripe_connect_service.py:18`) — the gym only gets the limited Express Dashboard and cannot reach that screen, so per Stripe's docs the **platform** configures it via `settings.branding`. Treat the exact lever as **unconfirmed** until probed — see *To confirm* below.
 - **Set in BOTH Test and Live mode.**
-- **Verify:** run one real test-mode charge against a connected account and confirm the email actually lands in the *member's* inbox — not yours, and not the gym owner's.
+- **Verify with a FAILING charge, not a successful one** — the failure mail is the only one that matters. Use `4000 0000 0000 0341` (attaches fine, fails on the first subscription invoice) against a connected account and confirm the decline notice lands in the *member's* inbox — not yours, and not the gym owner's. A successful charge proves nothing here, since no receipt is expected.
 
 ### Per-gym: Stripe Connect onboarding
 Each gym completes Stripe Connect onboarding (Stripe's hosted flow) before it can take payments. Until then the gym's `stripe_account_id` is null, and the kiosk/CRM correctly refuse card entry (payments unavailable) rather than erroring. This is completed by the gym owner, not the platform operator.
@@ -256,16 +260,18 @@ resolved:
   vestigial and should be dropped from `Settings` (so it stops being a required
   env var with no purpose).
 
-- **Which Stripe customer emails an Express gym's members actually receive, and
-  who controls them.** CombatDen ships no receipt email and no overdue email on
-  the basis that Stripe sends both (see *Stripe → Customer emails* above), so
-  this is a load-bearing assumption that has never been verified end to end.
-  Three things to settle on a live Express test account, ideally with a test
-  clock — the same method that confirmed the failed-payment end-action
-  auto-cancels at ~+30d:
-  1. What does a member actually receive today on a **successful** charge, and
-     on a **declined** one? (Confirm it reaches the member, not the platform.)
-  2. Can the **platform** turn those on or off for a connected account via
+- **Whether an Express gym's members actually receive the failed-payment email,
+  and who controls it.** CombatDen sends no mail at all and relies entirely on
+  Stripe for the overdue notice (see *Stripe → Customer emails* above), so this
+  is a load-bearing assumption that has never been verified end to end. A member
+  is told nothing when their payment fails if this is off. Three things to settle
+  on a live Express test account, ideally with a test clock — the same method
+  that confirmed the failed-payment end-action auto-cancels at ~+30d:
+  1. Does the **declined** charge actually mail the member, and does it reach
+     *them* rather than the platform or the gym owner? (No receipt is expected on
+     a successful charge — if one arrives, that is its own finding, because no
+     surface promises one.)
+  2. Can the **platform** turn it on or off for a connected account via
      `settings.branding`, or is the limited Express Dashboard genuinely the only
      lever — meaning each gym owner has to be walked through it at onboarding?
   3. **Does a member with no card on file — or one who pays cash via
