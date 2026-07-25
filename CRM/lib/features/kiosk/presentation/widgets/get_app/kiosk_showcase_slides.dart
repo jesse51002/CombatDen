@@ -7,31 +7,22 @@ import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
-/// Assemble the welcome showcase's slide list from whatever the kiosk already
-/// holds in memory. Nothing here fetches — every argument is a gym-wide
-/// catalogue the flow cubit warmed once at kiosk entry: the reward catalogue,
-/// the gym's next upcoming occurrences, its own video feed head, its rank
-/// ladder.
+/// Assemble the showcase's slide list from what the kiosk already holds —
+/// nothing here fetches; every argument is a gym-wide catalogue the flow cubit
+/// warmed once at kiosk entry.
 ///
-/// [classes] is `KioskFlowState.showcaseClasses` — the forward-looking list —
-/// and never the check-in flow's `classes`, which is per-member, narrowed to
-/// the check-in window, and empty both on the idle home and all evening.
+/// [classes] is `KioskFlowState.showcaseClasses`, the forward-looking list,
+/// and never the check-in flow's `classes` — that one is per-member, narrowed
+/// to the check-in window, and empty on the idle home and all evening.
 ///
-/// **Every slide is conditional on real data.** A slide whose list is empty is
-/// not added at all — no placeholder, no stand-in, no demo content. The gym's
-/// members would read anything on this screen as their gym's own schedule,
-/// catalogue, feed or belts, so a slide the kiosk cannot back up simply does
-/// not exist: the rotating title, the dots and the auto-rotate caption are all
-/// derived from this list, so none of them can advertise a missing slide
-/// either.
-///
-/// **The CONTENT of each slide is real too — with one deliberate exception.**
-/// "Book classes" draws the gym's real upcoming occurrences, "Earn rewards"
-/// the gym's real cached catalogue, "Watch videos" the gym's own curated feed.
-/// "Track rank" draws the gym's real ladder but features a MIDDLE rung over an
-/// illustrative progress bar, on purpose — see `KioskRankSlide` for the
-/// founder ruling behind it. Do not read that exception as licence to invent
-/// content on the other three.
+/// **Every slide is conditional on real data, and its content is the gym's
+/// own.** A slide whose list is empty is not added at all — no placeholder, no
+/// stand-in, no demo content — because members read anything here as their
+/// gym's actual schedule, catalogue, feed or belts. The rotating title, the
+/// dots and the auto-rotate caption all derive from this list, so none of them
+/// can advertise a missing slide either. The ONE exception is which rung
+/// "Track rank" features and how full its bar sits (see `KioskRankSlide`); it
+/// is not licence to invent content on the other three.
 List<KioskShowcaseSlide> kioskShowcaseSlides({
   required List<EffectiveClassInstance> classes,
   required List<RewardResponse> rewards,

@@ -52,18 +52,12 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// **The signup chrome: who a step is FOR, and whether it stays on screen.**
+/// The signup chrome: who a step is FOR, and whether it stays on screen.
 ///
-/// Every test here is a founder-reported failure of the same kind — the person
-/// this screen is about scrolled away, or was never named, or (worst) was the
-/// wrong person. On the plan and waiver steps the answer is the ACTIVE person;
-/// on the card step it is the PAYER, who in a family is somebody else
-/// entirely, and naming the child over a field that attaches a card to the
-/// parent's profile would be confidently wrong.
-///
-/// They also guard the layout at the real fold (1180x820): the shipped group
-/// render tests caught two real overflow bugs, so composition is asserted, not
-/// assumed.
+/// On the plan and waiver steps the answer is the ACTIVE person; on the card
+/// step it is the PAYER, who in a family is somebody else entirely — naming
+/// the child over a field that attaches a card to the parent's profile would
+/// be confidently wrong. Layout at both folds is asserted, never assumed.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -139,10 +133,9 @@ void main() {
     ).thenAnswer((_) async {});
   });
 
-  /// Build the lane's cubit. It is created inside the TEST BODY, never in
-  /// `setUp`: the constructor warms the plan catalogue, and a future started
-  /// in the enclosing zone is not drained by the widget test's fake clock —
-  /// the step would then render with an empty catalogue.
+  /// Built inside the TEST BODY, never `setUp`: the constructor warms the plan
+  /// catalogue, and a future started in the enclosing zone is not drained by
+  /// the widget test's fake clock.
   KioskSignupCubit newCubit() => KioskSignupCubit(
         memberRepository: member,
         membershipsRepository: memberships,
@@ -200,8 +193,6 @@ void main() {
       cubit.continueToPlans();
       await pump(tester, const KioskPlanPickStep());
 
-      // The payer's own turn is first, and it is NAMED — an unnamed screen in
-      // the middle of a run of named ones is the ambiguity this fixes.
       expect(cubit.state.activePersonIndex, 0);
       expect(find.text('Pick Marcus\'s membership'), findsOneWidget);
       expect(find.text('Pick your membership'), findsNothing);
@@ -211,8 +202,7 @@ void main() {
 
       cubit.selectPlan('plan-1');
       cubit.continueFromPlans();
-      // Two emits in one tick, so two frames: the pick, then the hand-over to
-      // the next person.
+      // Two emits in one tick: the pick, then the hand-over to the next person.
       await tester.pump();
       await tester.pump();
       expect(find.text('Pick Ella\'s membership'), findsOneWidget);
@@ -234,17 +224,14 @@ void main() {
 
     testWidgets('the GROUP rail scales instead of clipping on a short fold',
         (tester) async {
-      // The 7-rung group template is intrinsically wider than the 6-rung solo
-      // one and out-measures a 1024-wide fold's content rail. A clipped rail
-      // loses exactly the rungs the member has not reached yet — the half that
-      // says how much is left — so it scales as a SET instead.
+      // A clipped rail loses exactly the rungs not reached yet — the half that
+      // says how much is left — so the 7-rung group template scales instead.
       for (final size in const [Size(1180, 820), Size(1024, 700)]) {
         await createPayer();
         await addElla();
         cubit.continueToPlans();
         await pump(tester, const KioskPlanPickStep(), size: size);
 
-        // Every rung is still present and legible at either fold.
         for (final label in kKioskGroupFlowSteps) {
           expect(find.text(label), findsOneWidget, reason: '$label at $size');
         }
@@ -276,7 +263,6 @@ void main() {
       );
       await tester.pump();
 
-      // Pinned: the whole point. The grid moved; the answer did not.
       expect(find.byType(KioskWhoFor), findsOneWidget);
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -349,8 +335,7 @@ void main() {
       await addElla();
       cubit.continueToPlans();
       cubit.selectPlan('plan-1');
-      // Walking on makes the CHILD the active person — the inverted case, and
-      // the whole point of this test.
+      // Walking on makes the CHILD the active person — the inverted case.
       cubit.continueFromPlans();
       cubit.selectPlan('plan-1');
       expect(cubit.state.activePerson.firstName, 'Ella');
@@ -360,8 +345,6 @@ void main() {
       expect(find.text('CARD FOR'), findsOneWidget);
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(find.text('Ella Bell'), findsNothing);
-      // The card-replacement notice names the same profile, so "saved" and
-      // "to whom" are one sentence.
       expect(
         find.textContaining(
           'This card is saved to Marcus Bell\'s profile',
@@ -427,9 +410,8 @@ void main() {
       await pump(tester, const KioskReviewStep());
 
       expect(find.byType(KioskProrationNote), findsOneWidget);
-      // The date is the preview's own `next_payment_date`, rendered local —
-      // so the expectation is derived from the same instant rather than
-      // hard-coded against whatever zone the suite runs in.
+      // Derived from the preview's own `next_payment_date`, rendered local,
+      // rather than hard-coded against whatever zone the suite runs in.
       expect(
         find.textContaining('covers you up to $_anchorLabel'),
         findsOneWidget,
@@ -492,7 +474,7 @@ void main() {
       await pump(tester, const KioskReviewStep());
 
       expect(find.text('Sign Membership · \$149.00'), findsOneWidget);
-      // The button never says "Pay" any more, so the subtitle cannot name it.
+      // The button never says "Pay", so the subtitle cannot name it.
       expect(find.textContaining('until you tap Pay'), findsNothing);
       expect(
         find.text('Nothing is charged until you confirm.'),
@@ -517,8 +499,7 @@ void main() {
       await atReviewWith(tester, type: PlanType.trial, price: 0);
       await pump(tester, const KioskReviewStep());
 
-      // The BUTTON collapses to the bare verb; the money panel still states
-      // the honest \$0.00, which is a different sentence.
+      // Only the BUTTON collapses; the money panel still states \$0.00.
       expect(find.text('Sign Trial'), findsOneWidget);
       expect(find.text('Sign Trial · \$0.00'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -527,8 +508,6 @@ void main() {
 
     testWidgets('the LONGEST label does not overflow the foot at either fold',
         (tester) async {
-      // "Sign Membership · \$149.00" is the longest primary this foot has ever
-      // carried, and it sits beside Back with both gutters occupied.
       for (final size in const [Size(1180, 820), Size(1024, 700)]) {
         await atReviewWith(tester, type: PlanType.recurring, price: 14900);
         await pump(tester, const KioskReviewStep(), size: size);
@@ -657,7 +636,7 @@ MemberMembershipsStartPreview _proratedPlusOneTime() =>
       recurring: _invoice(14900, nextPaymentDate: _anchorEpoch),
     );
 
-/// A preview with one invoice due today and nothing recurring — the shape the
-/// CTA's amount is read off.
+/// One invoice due today, nothing recurring — the shape the CTA's amount is
+/// read off.
 MemberMembershipsStartPreview _invoiceOnly(int total) =>
     MemberMembershipsStartPreview(dueNow: _invoice(total));

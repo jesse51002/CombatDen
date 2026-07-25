@@ -14,18 +14,14 @@ const Duration kKioskShowcaseInterval = Duration(seconds: 5);
 /// The cross-fade between two slides.
 const Duration kKioskShowcaseFade = Duration(milliseconds: 450);
 
-/// The welcome screen's right panel: a fixed head
-/// (mono eyebrow + the current slide's title) over an auto-advancing slide
-/// stage, closed by the clickable dot pager and its caption.
+/// The app pitch's right panel (welcome screen and "Get the app" popup alike):
+/// a fixed head (mono eyebrow + the current slide's title) over an
+/// auto-advancing slide stage, closed by the dot pager and its caption.
 ///
-/// The rotation is pure local UI state — a plain [Timer], never the flow
-/// cubit, so it cannot touch the modal's own 60-second auto-close. Tapping a
-/// dot jumps and restarts the dwell. With reduced motion requested the
-/// rotation is off and the caption says so; the dots still work.
-///
-/// Every slide sits in ONE box (a [Stack], so the box is as tall as the
-/// tallest slide) and only its opacity changes, so the modal never resizes
-/// mid-rotation — the one-page welcome fit holds on every slide.
+/// The rotation is pure local UI state — a plain [Timer], never the flow cubit
+/// — so it cannot touch the modal's own 60-second auto-close. Tapping a dot
+/// jumps and restarts the dwell. Reduced motion turns rotation off and the
+/// caption says so; the dots still work.
 class KioskAppShowcase extends StatefulWidget {
   final List<KioskShowcaseSlide> slides;
 
@@ -43,9 +39,8 @@ class _KioskAppShowcaseState extends State<KioskAppShowcase> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Runs once right after initState (where MediaQuery isn't readable yet)
-    // and again whenever the accessibility setting changes; [_restart] is
-    // idempotent, so re-arming here is safe.
+    // MediaQuery isn't readable in initState, and this re-runs when the
+    // accessibility setting changes; [_restart] is idempotent.
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
     _restart();
   }
@@ -73,9 +68,8 @@ class _KioskAppShowcaseState extends State<KioskAppShowcase> {
   @override
   Widget build(BuildContext context) {
     final slides = widget.slides;
-    // A gym with nothing to show at all: the modal drops this panel entirely
-    // rather than rendering an empty one, so this is unreachable in practice —
-    // it is here so the widget is safe to hand any slide list.
+    // Unreachable: a gym with nothing to show drops this panel entirely. Here
+    // so the widget is safe to hand any slide list.
     if (slides.isEmpty) return const SizedBox.shrink();
     // Guard a shrinking list (a slide switching off between builds).
     final index = _index.clamp(0, slides.length - 1);
@@ -122,13 +116,10 @@ class _Head extends StatelessWidget {
 }
 
 /// All slides stacked in one box; only the active one is visible and
-/// hit-testable, so the panel keeps a stable height as they rotate.
-///
-/// Each slide is wrapped in a [ShrinkToFit]: the four slides are not the same
-/// natural height (a 2x2 reward grid is far taller than a belt strip), and the
-/// popup must never scroll, so a slide taller than the stage scales down as a
-/// whole rather than overflowing. That also keeps the promise the stage
-/// exists for — one fixed box, so the popup never resizes mid-rotation.
+/// hit-testable, so the panel holds a stable height and the surface never
+/// resizes mid-rotation. Each is wrapped in a [ShrinkToFit] — the slides are
+/// not the same natural height (a 2x2 reward grid vs a belt strip) and the
+/// surface must never scroll, so a tall slide scales down as a whole.
 class _SlideStage extends StatelessWidget {
   final List<KioskShowcaseSlide> slides;
   final int index;
@@ -155,9 +146,9 @@ class _SlideStage extends StatelessWidget {
   }
 }
 
-/// The caption under the dots — derived from the
-/// live slide list, so it never advertises a slide that isn't there (e.g. a
-/// no-ranks gym), and it tells the truth when rotation is off.
+/// The caption under the dots, derived from the live slide list so it never
+/// advertises a slide that isn't there, and telling the truth when rotation
+/// is off.
 class _Note extends StatelessWidget {
   final List<KioskShowcaseSlide> slides;
   final bool reduceMotion;

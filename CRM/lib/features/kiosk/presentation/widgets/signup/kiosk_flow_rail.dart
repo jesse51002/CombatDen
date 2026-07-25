@@ -14,12 +14,12 @@ const List<String> kKioskSoloFlowSteps = [
   'Pay',
 ];
 
-/// The GROUP template (ruling 8): the moment a second person joins the roster,
-/// "People" becomes a step of its own and the rail re-labels to seven.
+/// The GROUP template (founder ruling 8): a second person on the roster makes
+/// "People" a step of its own and re-labels the rail to seven.
 ///
-/// The rail always RENDERS — the people step is always visited, even solo
-/// ("It's just me" → Plans) — so what changes is the labelling, never whether
-/// the rail exists.
+/// The people step is ALWAYS visited, even solo ("It's just me" → Plans), so
+/// what a second person changes is the LABELLING, never whether the rail
+/// renders — mind that when mapping a step onto its rung index.
 const List<String> kKioskGroupFlowSteps = [
   'You',
   'Details',
@@ -31,26 +31,17 @@ const List<String> kKioskGroupFlowSteps = [
 ];
 
 /// "Where am I in the signup" — a horizontal numbered rail across the top of
-/// every step.
+/// every step, built from the `KioskAppSteps` disc laid on its side with
+/// hairline connectors. A completed step swaps its numeral for a check; the
+/// current step's disc carries a soft halo.
 ///
-/// Built from the shipped `KioskAppSteps` recipe (the sapphire numbered disc +
-/// its label), laid on its side with hairline connectors. A completed step
-/// swaps its numeral for a check; the current step's disc carries a soft halo
-/// so it reads as "here" from standing distance.
+/// [steps] is passed rather than derived so one widget serves both templates —
+/// [kKioskSoloFlowSteps] / [kKioskGroupFlowSteps].
 ///
-/// [steps] is passed rather than derived so the same widget serves both the
-/// solo and group templates — see [kKioskSoloFlowSteps] /
-/// [kKioskGroupFlowSteps].
-///
-/// **It SCALES rather than clips on a narrow fold.** The rungs are intrinsically
-/// sized, so the 7-rung group template is wider than the 6-rung solo one and can
-/// out-measure a short fold's content rail — and a clipped rail loses exactly
-/// the rungs a member has not reached yet, which is the half that tells them how
-/// much is left. The `BoxFit.scaleDown` is a NO-OP whenever the rail fits (the
-/// normal case) and otherwise shrinks the whole rail **as a set**, so the discs,
-/// labels and connectors keep their proportions to each other instead of one
-/// being singled out. This is the same "a short fold scales, never overflows"
-/// rule the get-app modal's `ShrinkToFit` applies vertically.
+/// It SCALES rather than clips on a narrow fold: the 7-rung group template can
+/// out-measure a short fold, and clipping would lose exactly the rungs the
+/// member has not reached yet. `BoxFit.scaleDown` is a no-op whenever the rail
+/// fits and otherwise shrinks discs, labels and connectors as a SET.
 class KioskFlowRail extends StatelessWidget {
   final List<String> steps;
 
@@ -112,10 +103,9 @@ class _RailStep extends StatelessWidget {
         Text(
           label,
           style: DesignConstants.kioskCaption.copyWith(
-            // A rail label is a muted WORD, so even the resting rung stays on
-            // the kiosk's AA floor (`text2nd`) rather than dropping to
-            // `text3rd`. Emphasis comes from ink + weight, not from contrast
-            // a member can't read at 2m.
+            // A rail label is a muted WORD, so even a resting rung stays on the
+            // kiosk's AA floor; emphasis comes from ink + weight, never from
+            // contrast a member can't read at 2m.
             color: now ? DesignConstants.text : DesignConstants.text2nd,
             fontWeight: now ? FontWeight.w600 : FontWeight.w500,
           ),
@@ -125,9 +115,9 @@ class _RailStep extends StatelessWidget {
   }
 }
 
-/// The numbered disc — the `KioskAppSteps` `_StepNumber` recipe, one size up
-/// (the rail is read at a glance across the whole stage, not inside a card)
-/// and with the done / now states the rail needs.
+/// The numbered disc — the `KioskAppSteps` `_StepNumber` recipe one size up
+/// (the rail is read across the whole stage, not inside a card), with the
+/// done / now states.
 class _RailDisc extends StatelessWidget {
   final int number;
   final bool done;
@@ -170,8 +160,7 @@ class _RailDisc extends StatelessWidget {
   }
 }
 
-/// The hairline connector between two rungs. It carries no words, so it stays
-/// on the non-text tokens.
+/// The hairline connector between two rungs.
 class _RailLink extends StatelessWidget {
   final bool done;
 

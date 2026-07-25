@@ -12,18 +12,14 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
 /// The signup's terminal front-desk handoff — the composition
 /// `KioskBlockedScreen` already ships (icon, one display line, a WHY box, the
-/// reassurance, one acknowledged action), plus the auto-return countdown a
-/// signup stop needs because it can be reached with nobody left standing
-/// there.
+/// reassurance, one acknowledged action), plus an auto-return countdown: this
+/// stop can be reached with nobody left standing there, and a terminal screen
+/// may never park forever on a shared iPad.
 ///
-/// **There is deliberately NO escape affordance.** A dead end already IS the
-/// exit: "Okay, got it" returns home, so a gutter "Start over" would be a
-/// second button doing the identical thing and would only make the member
-/// wonder which one is different. The escape pattern appears where a step can
-/// be corrected or abandoned — never on a terminal.
+/// There is deliberately NO escape affordance — a dead end already IS the exit,
+/// so a gutter "Start over" would be a second button doing the identical thing.
 ///
-/// Both exits (the button and the countdown) release the session's flow count
-/// exactly once — the cubit's `abandon()` runs the same latch either way.
+/// Both exits go through the cubit's one `abandon()` path.
 class KioskSignupStopScreen extends StatelessWidget {
   const KioskSignupStopScreen({super.key});
 
@@ -67,14 +63,12 @@ class KioskSignupStopScreen extends StatelessWidget {
   }
 }
 
-/// The stop's action row.
+/// The stop's action row: ONE button, because the dead end already IS the exit.
 ///
-/// A dead end gets ONE button, because the dead end already IS the exit. The
-/// two **retryable** reasons — a plan catalogue that wouldn't load, a total we
-/// couldn't work out — get a "Try again" primary in front of it, because a
-/// failed read is not a dead end and telling a member to fetch a coach for one
-/// is wrong. A money path never appears here: retrying a charge whose outcome
-/// is unknown is the one action that could take the money twice.
+/// The two retryable reasons — a plan catalogue that wouldn't load, a total we
+/// couldn't work out — get a "Try again" primary in front of it, since a failed
+/// read is not a dead end. A money path never appears here: retrying a charge
+/// whose outcome is unknown is the one action that could take the money twice.
 class _Actions extends StatelessWidget {
   final KioskSignupStopReason? reason;
 

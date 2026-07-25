@@ -3,14 +3,11 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The ticked reassurances under the card field.
-///
-/// **Everything here is good news, and that is what the green check means.**
-/// What HAPPENS to the card — it is saved to a named profile and it replaces
-/// whatever was there — is a consequence the member has to register, not a
-/// reassurance, so it rides the warm inline notice above this block instead.
-/// A green tick beside "we are replacing your card" would be actively
-/// misleading.
+/// The ticked reassurances under the card field — everything here is good
+/// news, which is what the green check means. What HAPPENS to the card (saved
+/// to a named profile, replacing what was there) is a consequence to register,
+/// not a reassurance, so it rides the warm inline notice above this block; a
+/// green tick beside it would be actively misleading.
 class KioskCardFacts extends StatelessWidget {
   /// Whether anything in the cart bills again after today. Only a thing that
   /// keeps billing can be cancelled, so the line is conditional on it.

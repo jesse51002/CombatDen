@@ -9,16 +9,13 @@ import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// The name-search results — the kiosk's ONE affordant [KioskNameRow]
-/// (contained, bordered, ripple + chevron, deliberately NO avatars/photos), so
-/// a check-in row and a payer-pick row read identically. Also renders the
-/// searching / no-match / failed states. Tapping a name hands off to the class
-/// pick via [KioskFlowCubit.selectMember].
+/// (deliberately NO avatars/photos), plus the searching / no-match / failed
+/// states. Tapping a name hands off to [KioskFlowCubit.selectMember].
 ///
 /// Every populated state carries its OWN top gap and the resting state is a
-/// true zero-height box, so an empty result list adds nothing to the search
-/// half — that is what keeps the field on the QR's optical centre at rest
-/// (see [KioskNameSearch]). Never re-introduce the gap as a parent column
-/// spacing: that would reserve it even when this renders nothing.
+/// true zero-height box, which is what keeps the search field on the QR's
+/// optical centre. Never re-introduce that gap as a parent column spacing — it
+/// would then be reserved even when this renders nothing.
 class KioskSearchResults extends StatelessWidget {
   const KioskSearchResults({super.key});
 
@@ -60,8 +57,7 @@ class _Results extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The populated state carries its OWN top gap (never a parent spacing), so
-    // an empty result list stays a zero-height box on the shared band centre.
+    // The populated state's OWN top gap — never a parent spacing.
     return Padding(
       padding: const EdgeInsets.only(top: DesignConstants.spacingLarge),
       child: Column(
@@ -71,9 +67,8 @@ class _Results extends StatelessWidget {
         children: [
           for (final row in rows)
             KioskNameRow(
-              // The member's FULL name — two members who share a first name +
-              // last initial must stay distinguishable at the moment they tap
-              // to check in (a first-initial abbreviation collides silently).
+              // The FULL name: two members sharing a first name must stay
+              // distinguishable — an abbreviation collides silently.
               name: row.name,
               onTap: () => context.read<KioskFlowCubit>().selectMember(row),
             ),

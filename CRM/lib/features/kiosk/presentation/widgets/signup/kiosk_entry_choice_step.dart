@@ -10,27 +10,21 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart'
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 
-/// The signup lane's first screen: brand new here, or already a member.
+/// The signup lane's first screen: brand new here, or already a member. The
+/// lane is self-serve for both — an existing member finds their own name and
+/// carries on rather than being sent to the desk — and either way types a
+/// fresh card at the end.
 ///
-/// **The lane is self-serve for both.** An existing member no longer has to be
-/// sent to the desk to start or change a membership — they say so here, find
-/// their own name, and carry on. The one thing that never changes is that they
-/// type a fresh card at the end.
+/// It reuses the kiosk home's two-way composition ([KioskHomeColumns] over two
+/// [KioskHomeHalf]s), so both binary choices this kiosk offers are drawn by
+/// the same object.
 ///
-/// It is the kiosk home's own two-way composition ([KioskHomeColumns] over two
-/// [KioskHomeHalf]s, split by the vertical "or" seam), so the two binary
-/// choices this kiosk offers are drawn by the same object: both heads
-/// top-aligned, both buttons on one optical centre, and the feet band dropped
-/// because neither half fills it.
-///
-/// **The two buttons are deliberately different tiers.** Two gradient primaries
-/// side by side break the kiosk button ladder and two outlines leave the screen
-/// with no primary, which reads flat at 2m. Primary goes to the new-member
-/// path: it is the majority case at a signup kiosk, and it is also the only one
-/// with no alternative — an existing member can always be handled at the desk,
-/// a walk-in with no account cannot. [KioskOutlineButton] is still a
-/// full-weight 17px control with a 2px ink border — never the ghost escape
-/// tier, so it cannot read as "leave".
+/// The two buttons are deliberately different tiers: two primaries break the
+/// kiosk button ladder, two outlines leave the screen with no primary and read
+/// flat at 2m. Primary goes to the new-member path — the majority case, and
+/// the only one with no alternative, since an existing member can always be
+/// handled at the desk. [KioskOutlineButton] is never the ghost escape tier,
+/// so it cannot read as "leave".
 class KioskEntryChoiceStep extends StatelessWidget {
   const KioskEntryChoiceStep({super.key});
 
@@ -44,15 +38,11 @@ class KioskEntryChoiceStep extends StatelessWidget {
           ? 'Welcome in'
           : 'Welcome to ${gym.trim()}',
       subtitle: 'Two ways in. Which one are you?',
-      // [KioskHomeColumns] wraps its bands in an `IntrinsicHeight` whose
-      // middle band is an `Expanded`, so it needs a BOUNDED height to resolve
-      // against — the scaffold's default scrolling body is unbounded. The
-      // screen is short and must never scroll anyway.
+      // [KioskHomeColumns] needs a BOUNDED height to resolve its `Expanded`
+      // band against; the scaffold's default scrolling body is unbounded.
       fillBody: true,
-      // The decision lives in the panel, so the middle column carries no
-      // primary — the precedent the match and picker steps already set. No
-      // Back either: this is step 1, and the escape answers where they came
-      // from.
+      // The decision lives in the panel, so no primary. No Back either: this
+      // is step 1, and the escape answers where they came from.
       foot: const KioskFlowFoot(onPrimary: null),
       child: KioskHomeColumns(
         left: KioskHomeHalf(

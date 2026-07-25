@@ -7,32 +7,16 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 /// One line of what HAPPENED: a square outcome mark, then who and which plan,
 /// with the consequence underneath.
 ///
-/// It is deliberately not `KioskBuyRow`, whose own doc scopes it to "this is
-/// what you are getting" — its thumb slot is the plan photo and its right slot
-/// is an amount. A result row makes a different statement and carries no
-/// amount, so bending the buy row to hold a status would blur the one thing
-/// that doc is explicit about. Every PART here is shipped, though: the created
-/// mark is `KioskBuyRow._Thumb`'s waiver square, the failed mark is
-/// `KioskDeclinedScreen`'s glyph and palette squared to match it, and the two
-/// text roles are the plan-name and rule roles the review already uses.
-///
-/// **Two rules this row holds, both against the CRM's own `StartResultRow`:**
-///
-/// * **No red.** Every kiosk failure surface is warm `yellowDark` / `okYellow`,
-///   because nothing is broken and nobody did anything wrong. A red row on a
-///   lobby iPad reads as a verdict on the person standing at it.
-/// * **No raw backend error.** `StartResultRow` renders `item.error` verbatim,
-///   which is right at a staff desk and wrong in a lobby: that string is Stripe
-///   or internal prose. This row states the CONSEQUENCE in the kiosk's own
-///   words instead.
-///
-/// There is also **no right-hand status word**: the mark and the sub-line
-/// already carry the outcome, and one screen saying the same two words twice
-/// teaches neither of them.
+/// Two rules hold here against the CRM's own `StartResultRow`. No RED — every
+/// kiosk failure surface is warm `yellowDark` / `okYellow`, because a red row
+/// on a lobby iPad reads as a verdict on the person standing at it. And no raw
+/// backend error: `StartResultRow` renders `item.error` verbatim, which is
+/// right at a staff desk and wrong in a lobby, so this row states the
+/// CONSEQUENCE in the kiosk's own words instead.
 class KioskResultRow extends StatelessWidget {
   /// The person this membership is for, then the plan — `Marcus Bell ·
-  /// Unlimited Monthly`. With no roster person to name it degrades to the plan
-  /// alone: a WRONG name on a member-facing screen is worse than none.
+  /// Unlimited Monthly`. With no roster person it degrades to the plan alone: a
+  /// WRONG name on a member-facing screen is worse than none.
   final String label;
 
   final MemberMembershipsStartStatus status;
@@ -45,10 +29,9 @@ class KioskResultRow extends StatelessWidget {
 
   /// The consequence, in the kiosk's own words.
   ///
-  /// `unknown` is the enum's forward-compatible fallback and is neither created
-  /// nor failed, so it claims nothing about money in either direction — saying
-  /// "nothing was charged" about a row the backend would not confirm is exactly
-  /// the guess this line refuses to make.
+  /// `unknown` (the enum's forward-compatible fallback) claims nothing about
+  /// money in either direction: "nothing was charged" about a row the backend
+  /// would not confirm is a guess this line refuses to make.
   String get _rule {
     return switch (status) {
       MemberMembershipsStartStatus.created => 'Started today',
@@ -93,8 +76,8 @@ class KioskResultRow extends StatelessWidget {
   }
 }
 
-/// The row's outcome square — the same geometry as the buy row's thumb, so a
-/// receipt reads at the same rhythm as the review it follows.
+/// The row's outcome square — the buy row's thumb geometry, so a receipt reads
+/// at the same rhythm as the review it follows.
 class _Mark extends StatelessWidget {
   final MemberMembershipsStartStatus status;
 

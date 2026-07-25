@@ -12,19 +12,14 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
-/// E2 — "Is this the same Ella?"
+/// E2 — "Is this the same Ella?" The PAYEE duplicate, offered back for
+/// confirmation: a payee pays nothing, so reusing their existing account is
+/// the right outcome rather than something to warn about. The payer's own
+/// duplicate is answered on its own step (`payerMatch`), never here.
 ///
-/// **The deliberate asymmetry with the payer.** A 409 on the PAYER is a
-/// terminal front-desk stop: the kiosk may only charge a card belonging to a
-/// member it created in this signup, so "that's me, use my account" cannot
-/// exist there and the 409's matches are never even rendered. A 409 on a
-/// PAYEE is an OFFER, because a payee pays nothing — reusing their existing
-/// account is the correct and desirable outcome.
-///
-/// Two decisions sit on this screen at different scales and read as different
-/// sentences: the panel's "No — different person" corrects WHO this is (the
-/// analogue of check-in's "Not Marcus?"), while the gutter's "Start over"
-/// leaves the signup entirely.
+/// Two decisions sit on this screen at different scales: the panel's "No —
+/// different person" corrects WHO this is (check-in's "Not Marcus?"), while
+/// the gutter's "Start over" leaves the signup entirely.
 class KioskMatchStep extends StatelessWidget {
   const KioskMatchStep({super.key});
 
@@ -51,10 +46,8 @@ class KioskMatchStep extends StatelessWidget {
               : 'We already train a ${match.fullName}. If it\'s them, we\'ll '
                   'use their account instead of making a second one.',
           foot: KioskFlowFoot(
-            // The decision lives in the panel, so the footer's middle column
-            // carries only the way BACK and the other route in — a primary
-            // here would compete with the two buttons that answer the actual
-            // question.
+            // The decision lives in the panel, so no primary here — it would
+            // compete with the two buttons that answer the actual question.
             onPrimary: null,
             onBack: busy ? null : cubit.back,
             onSkip: searching || busy ? null : cubit.openMatchSearch,
@@ -83,8 +76,8 @@ class _Decide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
-    // A Wrap, not a Row: at kiosk button scale the two answers are wider than
-    // the panel's measure, and neither may fall off the edge of the decision.
+    // A Wrap, not a Row: at kiosk button scale the two answers out-measure the
+    // panel, and neither may fall off the edge of the decision.
     return IntrinsicWrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,

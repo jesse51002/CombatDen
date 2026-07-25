@@ -30,26 +30,20 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// The full-viewport member surface mounted (in place of the admin workspace)
 /// while kiosk is active — no `AppShell`, no nav rail, no admin routes.
 ///
-/// It hosts the check-in lane: a persistent header, the swapping sub-screen
-/// ([KioskFlowCubit] drives which), and the flow-idle warning overlay. The
-/// whole surface listens for pointer activity — a tap resets the 5-minute idle
-/// guard everywhere except the retention glance, where a tap instead opens the
-/// Get-the-App modal (the app-adoption funnel), and while that modal is open a
-/// tap does neither.
-///
-/// The Phase C2 retention glance (streak + rewards) is live, and so is the
-/// Phase D signup lane's entry — `KioskView.signup` mounts `KioskSignupScreen`,
-/// which provides its OWN `KioskSignupCubit` (a sibling of [KioskFlowCubit])
-/// and runs its own 5-minute idle guard.
+/// Hosts the check-in lane: a persistent header, the swapping sub-screen
+/// ([KioskFlowCubit] drives which), and the flow-idle warning overlay. A tap
+/// anywhere resets the 5-minute idle guard — except on the retention glance,
+/// where it opens the Get-the-App modal instead, and while that modal is open,
+/// where it does neither. The signup lane runs its own sibling cubit and its
+/// own guard (see `KioskSignupScreen`).
 class KioskScreen extends StatelessWidget {
   const KioskScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Repositories follow the CRM convention: instantiated with a fresh
-    // `ApiClient()` at the point the cubit is built (they are not provided in
-    // the widget tree). The gym id is guaranteed non-null here — the auth gate
-    // only mounts the kiosk once a gym is active.
+    // Fresh `ApiClient()` per repository, built where the cubit is (they are
+    // not provided in the tree). The gym id is non-null: the auth gate only
+    // mounts the kiosk once a gym is active.
     return BlocProvider<KioskFlowCubit>(
       create: (context) => KioskFlowCubit(
         membersRepository: MembersListRepository(apiClient: ApiClient()),
@@ -96,12 +90,10 @@ class _KioskScreenBody extends StatelessWidget {
     );
   }
 
-  /// A pointer-down anywhere on the kiosk surface: resets the 5-minute flow-idle
-  /// guard ("I'm still here"). Harmless on the idle home and the retention
-  /// glance (neither runs the guard). While the "Get the app" modal is open it
-  /// is a no-op — the modal owns its own 60-second clock. The glance's
-  /// tap-to-open-the-modal is handled by the glance screen's own gesture (so
-  /// its Done button still wins its own taps), not here.
+  /// A pointer-down anywhere on the kiosk surface: resets the 5-minute
+  /// flow-idle guard. A no-op while the "Get the app" modal is open — the
+  /// modal owns its own clock. The glance's tap-to-open-the-modal is the
+  /// glance's own gesture, not this one.
   void _onSurfaceTap(BuildContext context) {
     final cubit = context.read<KioskFlowCubit>();
     if (cubit.state.appModalOpen) return;
@@ -111,20 +103,13 @@ class _KioskScreenBody extends StatelessWidget {
 
 /// The current kiosk sub-screen, cross-faded rather than hard-cut.
 ///
-/// The swap that mattered is "Checking you in…" → the glance: a hard cut there
-/// makes a recorded check-in feel like a page reload instead of a result, and
-/// it is the one moment the member is watching for an answer. The fade lets
-/// the spinner RESOLVE into the glance while the glance's own confirmation
-/// beat is already running underneath. The tap itself is acknowledged before
-/// any of this — `ClassCard` inks on press and the cubit emits the
-/// checking-in view synchronously.
+/// The swap that matters is "Checking you in…" → the glance: a hard cut there
+/// reads as a page reload at the one moment the member is watching for an
+/// answer, so the spinner RESOLVES into the glance. Reduced motion collapses
+/// it to an instant swap.
 ///
-/// [KioskRevealTimings.element] is the same duration every other kiosk
-/// entrance uses; reduced motion collapses it to an instant swap.
-///
-/// The layout builder mirrors AnimatedSwitcher's default but with
-/// [StackFit.passthrough] and a top-left alignment, so each screen is laid out
-/// under exactly the constraints it got before this wrapper existed — the
+/// The layout builder uses [StackFit.passthrough] and top-left alignment so
+/// each screen keeps the constraints it would have without this wrapper — the
 /// cross-fade is layout-transparent.
 class _ViewSwitcher extends StatelessWidget {
   const _ViewSwitcher();
@@ -141,10 +126,8 @@ class _ViewSwitcher extends StatelessWidget {
           KioskView.checkedIn => const KioskGlanceScreen(),
           KioskView.blocked => const KioskBlockedScreen(),
           KioskView.closing => const KioskClosingScreen(),
-          // The signup lane's own multi-step machine lives inside this
-          // screen, which provides its own `KioskSignupCubit` — leaving the
-          // view unmounts that subtree, so the typed PII (and later the card)
-          // is disposed structurally.
+          // Provides its own `KioskSignupCubit`, so leaving this view
+          // unmounts the subtree and disposes the typed PII structurally.
           KioskView.signup => const KioskSignupScreen(),
         };
         return AnimatedSwitcher(
@@ -182,21 +165,15 @@ class _IdleOverlay extends StatelessWidget {
   }
 }
 
-/// The "Get the CombatDen App" modal (UX-5), rendered over the current view
-/// (like the idle warning) whenever the cubit's [KioskFlowState.appModalOpen]
-/// is set — opened by a glance tap or the home adopt strip's "Get it"
-/// affordance.
+/// The "Get the app" modal, rendered over the current view whenever
+/// [KioskFlowState.appModalOpen] is set. Everything it shows comes from state
+/// the cubit already holds — the gym-wide catalogues warmed once at kiosk
+/// entry — so no fetch is fired to open it, which is what keeps it instant. An
+/// empty catalogue drops its slide.
 ///
-/// Everything it shows comes from state the cubit ALREADY holds: the four
-/// gym-wide catalogues warmed once at kiosk entry (rewards, the gym's upcoming
-/// classes, its own video feed, its rank ladder) plus the checked-in member's
-/// address. **No fetch is fired to open the modal** — that is what keeps it
-/// instant. A catalogue that came back empty simply drops its slide.
-///
-/// The classes it renders are `showcaseClasses`, NOT the check-in flow's
-/// `classes`: the flow's list is per-member and check-in-window filtered, so
-/// wiring it here is what left the "Book classes" slide missing from the home
-/// path (and would drop it every evening besides).
+/// It renders `showcaseClasses`, NOT the check-in flow's `classes`: that list
+/// is per-member and check-in-window filtered, so wiring it here drops the
+/// "Book classes" slide on the home path, and every evening besides.
 class _AppModalOverlay extends StatelessWidget {
   const _AppModalOverlay();
 

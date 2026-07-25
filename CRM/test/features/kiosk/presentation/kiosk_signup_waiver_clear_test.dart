@@ -41,18 +41,13 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// **A signature must be a fresh, deliberate act — the name field CLEARS on
-/// every new waiver.** (Founder ruling; legal-integrity invariant.)
+/// A signature must be a fresh, deliberate act: every time a new waiver body
+/// loads, the typed legal name and the consent tick are wiped. Founder ruling
+/// and a legal-integrity invariant — text carried over on a shared front-desk
+/// iPad would let someone "sign" a waiver they never typed their name on.
 ///
-/// The signer-name field carrying text from a previous waiver — the same
-/// person's last document, a republished version, or (worst, on a shared
-/// front-desk iPad) a *different* person's — would let someone "sign" a waiver
-/// they never actually typed their name on. So every time a new waiver body
-/// loads, the typed legal name (and the consent tick) is wiped.
-///
-/// These tests hold that invariant across the real transitions the group flow
-/// makes: the same person's next waiver, the next person's first waiver, and
-/// the payer signing consecutive payer-auth agreements.
+/// Held here across the real transitions: the same person's next waiver, the
+/// next person's first waiver, and consecutive payer-auth agreements.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -173,8 +168,8 @@ void main() {
     cubit.skipPersonDetails();
   }
 
-  /// The signer-name field's current text — the field's controller IS the
-  /// step's `_signerName`, so this is exactly what a member would see typed.
+  /// The signer-name field's current text — its controller IS the step's
+  /// `_signerName`, so this is exactly what a member would see typed.
   String signerText(WidgetTester tester) =>
       tester.widget<KioskFieldBox>(find.byType(KioskFieldBox)).controller.text;
 
@@ -200,7 +195,6 @@ void main() {
     expect(cubit.state.currentWaiverId, 'waiver-1');
     expect(find.byType(KioskFieldBox), findsOneWidget);
 
-    // The member types their legal name and signs.
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
     expect(signerText(tester), 'Marcus Bell');
@@ -242,7 +236,6 @@ void main() {
     expect(cubit.state.activePersonIndex, 1); // Ella
     expect(find.byType(KioskFieldBox), findsOneWidget);
 
-    // A name is typed on Ella's waiver.
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
     expect(signerText(tester), 'Marcus Bell');
@@ -285,7 +278,6 @@ void main() {
     expect(cubit.state.activePersonIndex, 1); // Ella
     expect(find.byType(KioskFieldBox), findsOneWidget);
 
-    // The payer types their name to authorise Ella.
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
     expect(signerText(tester), 'Marcus Bell');

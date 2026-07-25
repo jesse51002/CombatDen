@@ -17,20 +17,17 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_stat
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
-/// D4 — read the waiver, type your name, sign.
+/// D4 — read the waiver, type your name, sign. One waiver at a time in the
+/// order the plan lists them; the subtitle counts them so a member with three
+/// to sign is never surprised by the second.
 ///
-/// One waiver at a time, in the order the plan lists them; the subtitle counts
-/// them so a member with three to sign is never surprised by the second.
+/// The phase machine is `SignWaiverDialog`'s — loading → form → submitting →
+/// stale → error — with one deliberate difference: here an error is an INLINE
+/// retry, never a terminal stop. By this step the member row and Stripe
+/// customer already exist, so ending the whole signup over one failed read
+/// would orphan them; the escape is still in the gutter if they want out.
 ///
-/// **The phase machine is `SignWaiverDialog`'s** — loading → form →
-/// submitting → stale → error — with one deliberate difference: on this
-/// surface an error is an INLINE retry, never a terminal stop. By the time a
-/// member reaches this step their member row and Stripe customer already
-/// exist, so ending the whole signup over one failed read would orphan them
-/// for nothing. The escape is still in the gutter if they want out.
-///
-/// **Signed stays signed.** A signature is committed the moment it is
-/// recorded; walking Back and forward again skips it rather than presenting it
+/// Signed stays signed: a recorded signature is skipped rather than presented
 /// twice, and nothing on this screen can un-sign anything.
 class KioskWaiverStep extends StatefulWidget {
   const KioskWaiverStep({super.key});
@@ -58,10 +55,10 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
     super.dispose();
   }
 
-  /// Render the waiver body with the values the backend substitutes at sign
-  /// time: the member's name, the gym's name and today's date are filled, and
-  /// the signer line tracks what is being typed — starting as a literal blank
-  /// so the member can see exactly where their name will land.
+  /// Render the body with the values the backend substitutes at sign time:
+  /// member name, gym name and today's date are filled, and the signer line
+  /// tracks what is typed — starting as a literal blank so the member sees
+  /// exactly where their name will land.
   void _rebuildBody(KioskSignupState state) {
     final body = state.waiver?.currentVersion?.body;
     final old = _controller;
@@ -100,17 +97,13 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
       listenWhen: (prev, cur) => prev.waiver != cur.waiver,
       listener: (context, state) {
         setState(() {
-          // **Every time a new waiver body lands, BOTH the typed legal name and
-          // the consent tick are cleared — no exceptions.** A signature is a
-          // fresh, deliberate act, and a name (or tick) carried over would let
-          // someone "sign" a document they never actually typed their name on:
-          // the SAME person's next waiver, a republished version, or — worst, on
-          // a shared iPad — the NEXT person's. Cleared BEFORE the body is
-          // rebuilt so the document re-renders with the blank signer
-          // placeholder rather than the previous name. Legal invariant, guarded
-          // by kiosk_signup_waiver_clear_test.dart. (Every load path emits
-          // `waiver: null` before the new value, so this listener fires on each
-          // new body.)
+          // Every new waiver body clears BOTH the typed legal name and the
+          // consent tick — no exceptions. A carried-over name would let someone
+          // "sign" a document they never typed their name on: their own next
+          // waiver, a republished version, or on a shared iPad the NEXT
+          // person's. Cleared BEFORE the rebuild so the body re-renders with a
+          // blank signer placeholder. Legal invariant, guarded by
+          // kiosk_signup_waiver_clear_test.dart.
           if (state.waiver != null) {
             _signerName.clear();
             _consent = false;
@@ -125,10 +118,8 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
           title: _title(state),
           subtitle: _subtitle(state),
           // Pinned: a parent signing four documents in a row must never lose
-          // track of which child they are binding, and the document scrolls.
-          // "WAIVER FOR", not "SIGNING FOR": the panel beside the document
-          // already carries the latter for the person being bound, and one
-          // screen saying the same two words twice teaches neither.
+          // track of which child they are binding. "WAIVER FOR", not "SIGNING
+          // FOR" — the panel beside the document already carries the latter.
           identity: state.isGroup
               ? KioskWhoFor(
                   eyebrow: 'WAIVER FOR',
@@ -166,11 +157,9 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
     );
   }
 
-  /// Whose signature this screen is collecting. In a group the run is grouped
-  /// by PERSON, so the title names them on EVERY turn — the payer's own
-  /// included. The payer holding the iPad is signing on behalf of a child half
-  /// the time, and one unnamed screen in a run of named ones is exactly where
-  /// the wrong person gets bound.
+  /// Whose signature this screen is collecting. In a group the title names them
+  /// on EVERY turn, the payer's own included — one unnamed screen in a run of
+  /// named ones is exactly where the wrong person gets bound.
   String _title(KioskSignupState state) {
     if (!state.isGroup) return 'One signature and you\'re in';
     final first = state.activePerson.firstName.trim();
@@ -231,9 +220,9 @@ class _Body extends StatelessWidget {
             onRetry: onRetry,
           ),
         Expanded(
-          // Stretch, so both cards take the fold's full height: the document
-          // fills its reading box, and the signing column can scroll inside
-          // itself on a short fold rather than pushing the footer away.
+          // Stretch, so both cards take the fold: the document fills its
+          // reading box and the signing column scrolls inside itself rather
+          // than pushing the footer away.
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: DesignConstants.spacingLarge,

@@ -3,16 +3,10 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The kiosk's checkbox — a big, unmissable tick box beside a line of ink.
-///
-/// Built to the kiosk BUTTON vocabulary rather than Material's `Checkbox`:
-/// [DesignConstants.radiusSmall] corners, the resting hairline, and the
-/// sapphire fill + lift the primary tier uses when it is on. A stock checkbox
-/// is sized for a mouse; this one has to be found and hit with a thumb from
-/// standing distance, so the whole row is the target, not just the box.
-///
-/// Used by the waiver step's consent line and by every roster row's "getting a
-/// membership" check.
+/// The kiosk's checkbox — a big tick box beside a line of ink, built to the
+/// kiosk BUTTON vocabulary rather than Material's `Checkbox`: a stock checkbox
+/// is sized for a mouse, and this has to be found and hit with a thumb from
+/// standing distance, so the whole row is the target.
 class KioskConsentCheck extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
@@ -20,8 +14,7 @@ class KioskConsentCheck extends StatelessWidget {
   /// The line beside the box. It is the label AND the tap target.
   final String label;
 
-  /// An optional quieter second line under [label] (a waiver's "you are
-  /// signing this electronically" note).
+  /// An optional quieter second line under [label].
   final String? note;
 
   const KioskConsentCheck({

@@ -19,17 +19,16 @@ import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_ed
 
 /// E3 — the authorized-payer agreement, one per payee.
 ///
-/// **The signer is the PAYER every time.** This is not the payee's liability
-/// waiver (that is the next screen); it is the payer putting their name to "I
-/// am authorised to pay for this person". Same doc-beside-sign composition as
-/// D4 so the member learns the pattern once — what changes is the banner, and
-/// the progress line, which counts PEOPLE rather than documents.
+/// The signer is the PAYER every time: this is not the payee's liability waiver
+/// (that is the next screen), it is the payer putting their name to "I am
+/// authorised to pay for this person". The progress line counts PEOPLE rather
+/// than documents.
 ///
-/// "Sign and continue" is **one call**: `PUT /members/{payee}/link` signs and
-/// links together and commits immediately, with no group transaction behind
-/// it. A 409 means the gym republished the agreement between the read and the
-/// tap, so nothing is recorded against text nobody saw — the body reloads and
-/// the payer signs the new one.
+/// "Sign and continue" is ONE call — `PUT /members/{payee}/link` signs and
+/// links together and commits immediately, with no group transaction behind it.
+/// A 409 means the gym republished the agreement between the read and the tap,
+/// so nothing is recorded against text nobody saw: the body reloads and the
+/// payer signs the new one.
 class KioskPayerWaiverStep extends StatefulWidget {
   const KioskPayerWaiverStep({super.key});
 
@@ -57,8 +56,7 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
 
   /// Render the agreement with the values the backend substitutes at link
   /// time: the PAYER is `{{member_name}}` (they are the party agreeing), the
-  /// payee is `{{payee_name}}`, and the signer line tracks what is typed —
-  /// starting as a literal blank so the payer can see where it will land.
+  /// payee is `{{payee_name}}`, and the signer line tracks what is typed.
   void _rebuildBody(KioskSignupState state) {
     final body = state.payerAuthWaiver?.body;
     final old = _controller;
@@ -96,13 +94,12 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
       listenWhen: (prev, cur) => prev.payerAuthWaiver != cur.payerAuthWaiver,
       listener: (context, state) {
         setState(() {
-          // Every time a new agreement body lands, BOTH the typed legal name
-          // and the consent tick are cleared — no exceptions. A signature must
-          // be a fresh, deliberate act, so nothing carries from the payee just
-          // authorized to the next one, nor survives a republished version.
-          // Cleared BEFORE the body is rebuilt so the document re-renders with
-          // the blank signer placeholder. Legal invariant, guarded by
-          // kiosk_signup_waiver_clear_test.dart.
+          // Legal invariant (guarded by kiosk_signup_waiver_clear_test.dart):
+          // every new agreement body clears BOTH the typed legal name and the
+          // consent tick, so a signature is always a fresh, deliberate act —
+          // nothing carries to the next payee or survives a republished
+          // version. Cleared BEFORE the rebuild so the document re-renders with
+          // the blank signer placeholder.
           if (state.payerAuthWaiver != null) {
             _signerName.clear();
             _consent = false;
@@ -116,9 +113,8 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
           step: KioskSignupStep.waivers,
           title: 'You\'re paying for ${state.activePerson.firstName}',
           subtitle: _subtitle(state),
-          // The same pinned element the liability step wears, naming the
-          // payee this agreement is about — this run is always per person, so
-          // it is never omitted here.
+          // Names the payee this agreement is about. This run is always per
+          // person, so it is never omitted here.
           identity: KioskWhoFor(
             eyebrow: 'PAYING FOR',
             name: _name(state.activePerson),
@@ -154,8 +150,7 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
     );
   }
 
-  /// "Person 1 of 2 · Ella, then Theo" — the run counts PEOPLE, because that
-  /// is what the iPad is being passed around for.
+  /// "Person 1 of 2 · Ella, then Theo" — the run counts PEOPLE.
   String _subtitle(KioskSignupState state) {
     final queue = state.waiverPersonQueue;
     final total = queue.isEmpty ? 1 : queue.length;

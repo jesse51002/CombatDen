@@ -9,9 +9,8 @@ class KioskAppLine extends StatelessWidget {
   final String text;
 
   /// Cap on how tall the caption may grow as it wraps; it ellipsizes past it.
-  /// Null (the default) lets it wrap freely — the glance's panel footer, where
-  /// nothing sits beside it. The home's adopt strip caps it at two, because a
-  /// long gym name would otherwise grow the one-row strip back into a stack.
+  /// Null (the default) wraps freely. The home's adopt strip caps it at two so
+  /// a long gym name can't grow that one-row strip into a stack.
   final int? maxLines;
 
   const KioskAppLine({super.key, required this.text, this.maxLines});

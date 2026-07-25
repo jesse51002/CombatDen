@@ -2,13 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/presentation/kiosk_app_copy.dart';
 
-/// The member app is WHITE-LABELLED: a member downloads THEIR GYM's app, so
-/// every kiosk line that names it carries the gym's name and never the
-/// platform's (founder ruling).
-///
-/// The gym name comes from `selectedGym.gymName`, which is nullable and can be
-/// blank, so the load-bearing half of these is the fallback: a member-facing
-/// kiosk must never print an empty word, a doubled space, or a stand-in gym.
+/// The member app is WHITE-LABELLED: every kiosk line that names it carries
+/// the GYM's name and never the platform's (founder ruling). The name comes
+/// from `selectedGym.gymName`, which is nullable and can be blank, so the
+/// load-bearing half is the fallback — never an empty word, a doubled space,
+/// or a stand-in gym.
 void main() {
   const gym = 'Iron Den';
 

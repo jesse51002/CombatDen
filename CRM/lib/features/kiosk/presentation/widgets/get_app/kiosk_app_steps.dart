@@ -4,12 +4,10 @@ import 'package:crm/core/constants/design_constants.dart';
 
 /// The two numbered sign-in steps under the download QR.
 ///
-/// Step 2 shows the member's own address as a mono chip ONLY when the kiosk
-/// actually knows it ([memberEmail] non-empty) — i.e. after a check-in, where
-/// the modal opened off the glance. Opened from the idle home there is no
-/// member yet, so the step renders without an address rather than showing a
-/// stand-in one: a member-facing kiosk must never display an email that is not
-/// theirs.
+/// Step 2 shows the member's own address only when the kiosk actually knows it
+/// ([memberEmail] non-empty, i.e. after a check-in); with no member yet it
+/// renders without one rather than a stand-in. A member-facing kiosk must
+/// never display an email that is not theirs.
 class KioskAppSteps extends StatelessWidget {
   final String? memberEmail;
 
@@ -64,7 +62,6 @@ class _Step extends StatelessWidget {
   }
 }
 
-/// A small filled sapphire disc carrying the step number.
 class _StepNumber extends StatelessWidget {
   final int number;
 
@@ -90,8 +87,8 @@ class _StepNumber extends StatelessWidget {
   }
 }
 
-/// The member's own sign-in address, set apart as a mono chip so it reads as
-/// a literal value to copy, not prose.
+/// The member's own sign-in address, set apart as a mono chip so it reads as a
+/// literal value to type, not prose.
 class _EmailChip extends StatelessWidget {
   final String email;
 

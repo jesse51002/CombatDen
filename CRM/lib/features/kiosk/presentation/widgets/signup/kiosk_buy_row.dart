@@ -6,10 +6,9 @@ import 'package:crm/core/constants/design_constants.dart';
 /// One line of what is being bought or agreed to: a square thumb, a name with
 /// its rule underneath, and — for a priced row — the amount on the right.
 ///
-/// Two shapes, one row, because they are the same kind of statement: "this is
-/// what you are getting". A membership carries its plan photo and its price; a
-/// signed waiver carries a green tick and no amount at all, since agreeing to
-/// something costs nothing and a "$0.00" beside it would imply otherwise.
+/// A membership carries its plan photo and its price; a signed waiver carries
+/// a green tick and no amount, since agreeing costs nothing and a "$0.00"
+/// beside it would imply otherwise.
 class KioskBuyRow extends StatelessWidget {
   final String name;
   final String? rule;
@@ -68,8 +67,7 @@ class KioskBuyRow extends StatelessWidget {
   }
 }
 
-/// The row's square: the plan photo, or the green tick that marks something
-/// already signed.
+/// The row's square: the plan photo, or the tick that marks something signed.
 class _Thumb extends StatelessWidget {
   final String? imageUrl;
 

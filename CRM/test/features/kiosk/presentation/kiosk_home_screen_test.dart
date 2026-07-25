@@ -50,18 +50,15 @@ class _MockRanksRepository extends Mock implements RanksRepository {}
 
 class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 
-/// The kiosk home is a full-viewport, horizontal two-column composition
-/// (QR half | vertical "or" seam | name-search half) with a big title above, a
-/// sign-up entry below it, and a full-width app-adoption strip closing the
-/// screen. This proves it renders at iPad-landscape size with no layout
-/// exception — the seam + `IntrinsicHeight` + stretch interplay is the fragile
-/// part — and that the expected copy is on screen.
+/// The kiosk home: a full-viewport two-column composition (QR half | vertical
+/// "or" seam | name-search half) under a big title, with a sign-up entry and a
+/// full-width app-adoption strip closing the screen. The seam +
+/// `IntrinsicHeight` + stretch interplay is the fragile part.
 void main() {
   late KioskFlowCubit cubit;
 
   setUp(() {
-    // The home's app line is WHITE-LABELLED off the active gym, the same
-    // source the kiosk header names it from.
+    // The home's app line is WHITE-LABELLED off the active gym.
     selectedGym.setActiveGym(
       gymId: 'gym-1',
       displayName: 'Iron Den',
@@ -159,8 +156,7 @@ void main() {
         (tester) async {
       await pumpHome(tester);
 
-      // The fix must not push "Name search" down to chase the QR — the two
-      // halves' heads share a top edge.
+      // Neither head chases the other down: the two share a top edge.
       expect(
         tester.getTopLeft(find.text('Name search')).dy,
         tester.getTopLeft(find.text('Scan with app')).dy,
@@ -174,11 +170,8 @@ void main() {
       final qrCenter = tester.getRect(find.byType(KioskQrFrame)).center.dy;
       final fieldCenter = tester.getRect(find.byType(AppSearchBox)).center.dy;
 
-      // The founder-approved departure from an earlier layout: the two
-      // bodies share one flexible band, so they land on the SAME centre —
-      // the QR half's adoption footer no longer drags the field below the
-      // code. Exact, not a tolerance: nothing in the layout is measured or
-      // pixel-pinned.
+      // The two bodies share ONE flexible band, so they land on the SAME
+      // centre. Exact, not a tolerance — nothing here is pixel-pinned.
       expect(fieldCenter, moreOrLessEquals(qrCenter, epsilon: 0.5));
     });
 
@@ -198,14 +191,11 @@ void main() {
       final qrCenter = tester.getRect(find.byType(KioskQrFrame)).center.dy;
       final bandTop = headBottom + DesignConstants.spacingBig;
 
-      // Both bodies float in the middle band rather than stacking under their
+      // The bodies float in the middle band rather than stacking under their
       // heads...
       expect(qrCenter, greaterThan(bandTop));
-      // ...and that band runs from the heads all the way to the bottom of the
-      // composition, so the QR sits on its exact midpoint. Neither half carries
-      // a foot any more, and this is what proves the collapsed foot band costs
-      // nothing: a reserved band (or just the spacing above one) would lift
-      // this centre off the midpoint.
+      // ...and that band runs to the bottom of the composition, so the QR sits
+      // on its exact midpoint — a reserved foot band would lift it off.
       expect(
         qrCenter,
         moreOrLessEquals((bandTop + columns.bottom) / 2, epsilon: 0.5),
@@ -216,9 +206,8 @@ void main() {
         (tester) async {
       await pumpHome(tester);
 
-      // The resting results slot must be a true zero-height box: reserving a
-      // gap for it (a parent column spacing) would nudge the field off the
-      // shared centre asserted above.
+      // A true zero-height box: any gap reserved for it would nudge the field
+      // off the shared centre asserted above.
       expect(tester.getRect(find.byType(KioskSearchResults)).height, 0);
     });
 
@@ -229,8 +218,7 @@ void main() {
       final field = tester.getRect(find.byType(AppSearchBox));
       final column = tester.getRect(find.byType(KioskNameSearch));
 
-      // A field stretched across a whole half of an iPad reads as running off
-      // the screen; it is capped at the home measure and centred in its half.
+      // A field run across a whole half of an iPad reads as running off screen.
       expect(field.width, DesignConstants.kioskHomeMeasure);
       expect(field.width, lessThan(column.width));
       expect(
@@ -247,11 +235,9 @@ void main() {
     final button = tester.widget<AppPrimaryButton>(
       find.byType(AppPrimaryButton),
     );
-    // Short on purpose: the line beside it already says what and where, so
-    // the button only has to carry the verb.
+    // Short on purpose: the line beside it already says what and where.
     expect(button.text, 'Get it');
-    // The default AppPrimaryButton look IS the brand gradient — no solid
-    // override, so it carries the primary colour.
+    // No solid override: the default AppPrimaryButton look IS the gradient.
     expect(button.backgroundColor, isNull);
   });
 
@@ -273,14 +259,12 @@ void main() {
       final qr = tester.getRect(find.byType(KioskQrFrame));
       final field = tester.getRect(find.byType(AppSearchBox));
 
-      // Getting the app is a property of the whole screen, so the strip runs
-      // the full stage — the same width the two columns cover together.
+      // Getting the app is a property of the whole screen: the full stage.
       expect(strip.width, moreOrLessEquals(columns.width, epsilon: 0.5));
-      // Materially wider than the half it used to live in: a column (seam and
-      // gutters included) is under 55% of the composition.
+      // Materially wider than one column — seam and gutters included, a column
+      // is under 55% of the composition.
       expect(strip.width, greaterThan(columns.width * 0.55));
-      // Centred on the STAGE, not on the QR column it used to foot — it now
-      // reaches past the content of BOTH halves.
+      // Centred on the STAGE, reaching past the content of BOTH halves.
       expect(
         strip.center.dx,
         moreOrLessEquals(columns.center.dx, epsilon: 0.5),
@@ -298,9 +282,8 @@ void main() {
       final signup = tester.getRect(find.byType(AppOutlineButton));
       final strip = tester.getRect(find.byType(KioskAdoptStrip));
 
-      // Sign-up answers a person who is BLOCKED (no account yet); the strip is
-      // a nudge nobody is waiting on, so the strip's rule closes the screen
-      // rather than splitting the two ways in from the third.
+      // Sign-up answers someone BLOCKED (no account yet); the strip is a nudge
+      // nobody is waiting on, so it closes the screen rather than splitting it.
       expect(signup.top, greaterThan(columns.bottom));
       expect(strip.top, greaterThan(signup.bottom));
     });
@@ -312,9 +295,8 @@ void main() {
       final columns = tester.getRect(find.byType(KioskHomeColumns));
       final signup = tester.getRect(find.byType(AppOutlineButton));
 
-      // With neither half carrying a foot, the band collapses and hands its
-      // height to the shared middle: the only gap left below the columns is the
-      // home's own section spacing.
+      // With neither half carrying a foot the band collapses and hands its
+      // height to the shared middle, leaving only the section spacing.
       expect(
         signup.top - columns.bottom,
         moreOrLessEquals(DesignConstants.spacingBig, epsilon: 0.5),
@@ -330,8 +312,7 @@ void main() {
       final button = tester.getRect(find.byType(AppPrimaryButton));
       final pair = line.expandToInclude(button);
 
-      // The row holds them together at its own spacing — nothing in it pushes
-      // one to each end of a band this wide.
+      // The row holds them at its own spacing, never one at each end.
       expect(
         button.left - line.right,
         moreOrLessEquals(DesignConstants.spacingLarge, epsilon: 0.5),
@@ -354,12 +335,10 @@ void main() {
       final line = tester.getRect(find.byType(KioskAppLine));
       final button = tester.getRect(find.byType(AppPrimaryButton));
 
-      // Side by side, not stacked: the sentence sits LEFT of the button, and
-      // the two ride one centre line.
+      // Side by side, not stacked, riding one centre line.
       expect(line.right, lessThanOrEqualTo(button.left));
       expect(line.center.dy, moreOrLessEquals(button.center.dy, epsilon: 0.5));
-      // The line's whole box lies inside the button's band — the strip is one
-      // row tall, and the taller of the pair is what sets that height.
+      // The line's whole box lies inside the button's band: one row tall.
       expect(line.top, greaterThanOrEqualTo(button.top));
       expect(line.bottom, lessThanOrEqualTo(button.bottom));
     });
@@ -380,8 +359,7 @@ void main() {
       final line = tester.getRect(find.byType(KioskAppLine)).height;
       final button = tester.getRect(find.byType(AppPrimaryButton)).height;
 
-      // Stacked, the strip was rule + gap + line + gap + button. One row drops
-      // a whole line AND a gap out of the screen's foot.
+      // Stacked it would be rule + gap + line + gap + button.
       const gap = DesignConstants.spacingLarge;
       expect(strip, lessThan(rule + gap + line + gap + button));
       // Concretely: the row band is the TALLER of the pair, never their sum.
@@ -393,8 +371,7 @@ void main() {
 
     testWidgets('a long gym name narrows the sentence, never the button',
         (tester) async {
-      // The line is white-labelled, so the gym's own name decides how long it
-      // runs. It must never push the button out of the column or off screen.
+      // The gym's own name decides how long the line runs.
       selectedGym.setActiveGym(
         gymId: 'gym-1',
         displayName: 'Northside Brazilian Jiu-Jitsu & Fitness Academy',
@@ -431,11 +408,9 @@ void main() {
   group('every kiosk button runs at kiosk scale', () {
     testWidgets('the two home buttons are the SAME size as each other',
         (tester) async {
-      // The founder's balance complaint: a 19px/18x34 filled button beside a
-      // 17px/15x30 outline one made the QR column read far heavier than the
-      // search column. "Get it" keeps its filled primary treatment and drops
-      // to the secondary rung's metrics, so the pair reads as one set. This
-      // asserts they stay tied together rather than drifting apart again.
+      // Founder ruling: an outsized filled button beside a smaller outline one
+      // made the QR column read heavier. "Get it" keeps its filled treatment
+      // at the outline metrics, so the pair reads as one set.
       await pumpHome(tester);
 
       final primary = tester.widget<AppPrimaryButton>(

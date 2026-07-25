@@ -75,34 +75,20 @@ MainRank _rank(String name, int order) => MainRank(
       createdAt: DateTime.utc(2026),
     );
 
-/// The "Get the app" modal (UX-5) is the kiosk's app-adoption funnel: ONE
-/// solid popup surface holding two nested cards — the accent-soft app card
-/// (white-labelled title, benefit checks, a REAL scannable download QR, the
-/// sign-in steps) beside the auto-advancing "In the app" showcase — over the
-/// 60-second timer + Done foot, which sits INSIDE that surface too.
+/// The "Get the app" modal: ONE solid popup surface holding two nested cards —
+/// the app card (white-labelled title, benefit checks, a REAL scannable
+/// download QR, the sign-in steps) beside the auto-advancing "In the app"
+/// showcase — over the timer + Done foot, which sit inside that surface too.
 ///
-/// These prove the structure the founder asked for (one popup, two nested
-/// cards, Done inside, no "Welcome to {gym}" header), that it FITS an iPad
-/// landscape fold with nothing scrolling, that the app is named after the GYM
-/// and never the platform, that EVERY showcase slide is conditional on real
-/// data (present when the gym has it, omitted outright when it doesn't — never
-/// a stand-in), that the QR keeps its fixed dark-on-white contrast even under
-/// the dark theme, and that the modal's behaviour (timer label, Done → cubit)
-/// survives.
-///
-/// The classes the "Book classes" slide renders are `showcaseClasses` — the
-/// gym-wide UPCOMING list warmed at kiosk entry — so the slide is present on
-/// the HOME path (no member known) exactly as it is off the glance. Feeding it
-/// the check-in flow's per-member list instead is the founder-reported "only 3
-/// slides" bug.
-///
-/// "Track rank" is the one slide whose CONTENT is deliberately illustrative
-/// (founder ruling — see `KioskRankSlide` and `kiosk_rank_slide_test.dart`);
-/// it stays conditional on the gym really running ranks like every other
-/// slide, and it never claims a rung for the viewer.
+/// The load-bearing rules: it FITS an iPad landscape fold with nothing
+/// scrolling, the app is named after the GYM and never the platform, and every
+/// slide is conditional on real gym data — omitted outright, never a stand-in.
+/// The classes slide reads `showcaseClasses`, the gym-wide UPCOMING list warmed
+/// at kiosk entry, so it renders on the HOME path with no member known. "Track
+/// rank" alone is deliberately illustrative (founder ruling, see
+/// `kiosk_rank_slide_test.dart`) and never claims a rung for the viewer.
 void main() {
-  // The realistic populated case: every entry-warmed catalogue is in — which,
-  // for classes, is true from the idle home too.
+  // Every entry-warmed catalogue populated — true from the idle home too.
   final fullRewards = [_reward('Club t-shirt', 1500)];
   final fullClasses = [_occurrence('Muay Thai Fundamentals', '18:00:00')];
   final fullVideos = [_video('Clinch control fundamentals', views: 12000)];
@@ -181,8 +167,8 @@ void main() {
         rankLadder: fullLadder,
       );
 
-  /// The worst-case populated modal: every slide carries content and the
-  /// member is known, so nothing is omitted and every panel is at its tallest.
+  /// The worst case: every slide populated and the member known, so nothing is
+  /// omitted and every panel is at its tallest.
   Future<_MockKioskFlowCubit> pumpWorstCase(
     WidgetTester tester, {
     required Size surface,
@@ -300,9 +286,8 @@ void main() {
 
     testWidgets('there is no spanning "Welcome to {gym}" header any more',
         (tester) async {
-      // A deliberate reversal of an earlier decision: the gym is already named
-      // on the kiosk header and on the app card's own title, and the third
-      // naming only cost height on a screen that must not scroll.
+      // The gym is already named on the kiosk header and on the app card's own
+      // title; a third naming only costs height on a screen that can't scroll.
       await pumpFull(tester);
 
       expect(find.textContaining('Welcome'), findsNothing);
@@ -319,10 +304,8 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byType(QrImageView), findsOneWidget);
 
-        // A member standing at a kiosk never finds content below a fold, so
-        // nothing in this modal may scroll vertically. (The belt ladder's
-        // horizontal scroller is fine — it is a sideways strip, not hidden
-        // content.)
+        // Nothing here may scroll vertically — content below a fold is content
+        // a member at a kiosk never finds. Sideways strips are fine.
         for (final scrollable
             in tester.widgetList<Scrollable>(find.byType(Scrollable))) {
           expect(
@@ -385,9 +368,8 @@ void main() {
         (tester) async {
       await pumpFull(tester);
 
-      // One real qr_flutter code (not the home glyph placeholder); it is fed
-      // kioskAppDownloadUrl(gymId), whose output is asserted above —
-      // QrImageView keeps its payload private, so it can't be read back here.
+      // `QrImageView` keeps its payload private, so the URL is pinned by the
+      // unit test above; this only proves one real code, not the placeholder.
       expect(find.byType(QrImageView), findsOneWidget);
     });
 
@@ -442,9 +424,8 @@ void main() {
       // Videos — THIS gym's own curated feed, with its real view count.
       expect(find.text('Clinch control fundamentals'), findsOneWidget);
       expect(find.text('12K views'), findsOneWidget);
-      // Ranks — the gym's real belt names. WHICH rung is featured and how full
-      // its bar sits are illustrative by design (see `KioskRankSlide`), so
-      // nothing on that slide claims a rung for the person standing there.
+      // Ranks — the gym's real belt names; the featured rung is illustrative,
+      // so nothing claims it for the person standing there.
       expect(find.text('Blue'), findsOneWidget);
       expect(find.byType(KioskRankProgress), findsOneWidget);
       expect(find.text('You\'re here'), findsNothing);
@@ -507,10 +488,8 @@ void main() {
 
     testWidgets('present from the HOME path: the classes slide renders with '
         'no member known', (tester) async {
-      // The founder-reported regression: opened from the home QR panel the
-      // modal showed "only 3 slides instead of 4". The classes it renders are
-      // the gym-wide UPCOMING list warmed at kiosk entry, so the slide (and
-      // its dot, and its mention) is there before anyone has typed a name.
+      // The classes are the gym-wide UPCOMING list warmed at kiosk entry, so
+      // the slide is there before anyone has typed a name.
       await pumpFull(tester, memberEmail: null);
 
       expect(find.text('Muay Thai Fundamentals'), findsOneWidget);
@@ -533,8 +512,7 @@ void main() {
 
     testWidgets('absent: a gym that runs no classes loses the slide, its dot '
         'and its mention', (tester) async {
-      // The conditional is intact — a wider showcase window must not become a
-      // way to put a class on screen for a gym that has none.
+      // A wider showcase window must never invent a class for a gym with none.
       await pumpModal(
         tester,
         rewards: fullRewards,
@@ -560,8 +538,7 @@ void main() {
     testWidgets('the row states the class\'s REAL day, never a fixed "Today"',
         (tester) async {
       // The showcase looks a week ahead, so the day word is read off each
-      // occurrence's own date. A hard-coded "Today" beside tomorrow's class
-      // would be an invented fact on a member-facing screen.
+      // occurrence's own date — a fixed "Today" would be an invented fact.
       final today = DateTime.now();
       final tomorrow = DateTime(today.year, today.month, today.day + 1);
       await pumpModal(
@@ -582,14 +559,12 @@ void main() {
         (tester) async {
       await pumpModal(tester);
 
-      // Demo placeholder rows/rewards/videos/belts must never ship as if
-      // they were real, and no stand-in slide takes their place.
+      // No demo row, reward, video or belt ever ships as if it were real.
       expect(find.text('Muay Thai Fundamentals'), findsNothing);
       expect(find.text('Bring a friend'), findsNothing);
       expect(find.text('Clinch control fundamentals'), findsNothing);
       expect(find.byType(KioskRankProgress), findsNothing);
-      // With nothing to show, the showcase card is dropped outright and the
-      // app card carries the popup alone.
+      // With nothing to show the showcase card is dropped outright.
       expect(find.byType(KioskAppShowcase), findsNothing);
       expect(find.text('IN THE APP'), findsNothing);
       expect(find.text('Get the Iron Den App'), findsOneWidget);
@@ -598,9 +573,8 @@ void main() {
   });
 
   group('the showcase rotates', () {
-    // "Book classes" / "Earn rewards" each appear once as an app-card benefit;
-    // the ACTIVE slide adds a second copy as the showcase head's title. So a
-    // count of 2 means "this slide is showing".
+    // Each title appears once as an app-card benefit; the ACTIVE slide adds a
+    // second copy as the showcase head. A count of 2 means "showing".
     testWidgets('auto-advances to the next slide after the dwell',
         (tester) async {
       await pumpFull(tester);

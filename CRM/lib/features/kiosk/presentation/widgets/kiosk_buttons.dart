@@ -6,31 +6,16 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// The kiosk's button set — the shared [AppPrimaryButton] / [AppOutlineButton]
-/// wearing the kiosk display scale instead of the admin defaults, plus the
-/// kiosk-only ghost (escape) tier.
-///
-/// The kiosk is read and pressed from standing distance, so its labels and
-/// hit boxes run a step larger (19px / 18x34 primary, 17px / 15x30 outline,
-/// 17px / 13x18 ghost) than the 13px / 16x8 admin buttons. These wrappers
-/// are the ONLY place those tokens
-/// are applied: every kiosk button goes through them, so the whole set scales
-/// together and can never desync, and no kiosk call site ever restates a size.
-/// The admin surfaces keep the base buttons untouched.
-///
-/// The ladder, loudest first: [KioskPrimaryButton] (gradient) >
-/// [KioskOutlineButton] (2px ink) > [KioskGhostButton] (nothing). A primary
-/// may borrow the outline's SIZE (`compact: true`) without leaving its tier —
-/// see [KioskPrimaryButton].
+/// at the kiosk's larger standing-distance scale, plus the kiosk-only ghost
+/// (escape) tier. The ONLY place the kiosk button tokens are applied, so the
+/// whole set scales as one and no call site restates a size. Loudest first:
+/// [KioskPrimaryButton] > [KioskOutlineButton] > [KioskGhostButton].
 
 /// The kiosk's primary action — the brand gradient CTA at kiosk scale.
 ///
-/// Pass [compact] where a filled button has to sit BESIDE a secondary one and
-/// must not out-shout it (the home's "Get it", which shares a screen with
-/// "Start Trial / Membership"). Compact keeps the gradient — it is still the
-/// primary tier — and only drops to the OUTLINE button's own metrics, reusing
-/// that
-/// token rather than declaring a third size, so the two can never drift apart
-/// and the ramp still moves as one set.
+/// Pass [compact] where a filled button sits BESIDE a secondary one and must
+/// not out-shout it. It keeps the gradient and reuses the OUTLINE button's own
+/// metrics rather than declaring a third size, so the two can't drift apart.
 class KioskPrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
@@ -84,14 +69,10 @@ class KioskOutlineButton extends StatelessWidget {
   }
 }
 
-/// The kiosk's ESCAPE tier — no border, no fill, a muted label behind a
-/// back chevron. The quietest rung of the ladder, and the only
-/// one used for LEAVING a flow: an escape hatch must be findable without ever
-/// competing with the action the member came to take.
-///
-/// It is a bare [TextButton] rather than a wrapped [AppOutlineButton] on
-/// purpose — the whole point of the tier is that it has no chrome, so there is
-/// no border/fill to strip off a shared button.
+/// The kiosk's ESCAPE tier — the quietest rung, and the only one used for
+/// LEAVING a flow: an escape hatch must be findable without competing with the
+/// action the member came to take. A bare [TextButton], not a wrapped
+/// [AppOutlineButton], since the tier's point is having no chrome.
 class KioskGhostButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;

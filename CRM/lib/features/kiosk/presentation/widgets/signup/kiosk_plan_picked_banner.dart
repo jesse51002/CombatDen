@@ -3,18 +3,13 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The plain confirmation that a membership was picked, sat at the TOP of the
-/// plan step's body.
+/// The plain confirmation that a membership was picked, at the TOP of the plan
+/// step's body.
 ///
-/// It exists so the choice is unmistakable on an unattended kiosk: a member who
-/// taps a card low in a tall grid gets no signal otherwise, so after a pick the
-/// step scrolls back up and this names — in words — exactly which membership is
-/// now chosen. The pinned identity strip above already says WHO the choice is
-/// for (in a group), so this names only the plan and never repeats the person.
-///
-/// **It names the plan, never a price.** Money on this kiosk comes from the
-/// server preview on the review screen; here the member is confirming the plan
-/// identity, not a charge, so no amount is derived from a plan row.
+/// It names the plan and only the plan: the pinned identity strip above already
+/// says WHO the choice is for. It never names a PRICE — money on this kiosk
+/// comes from the server preview on the review screen, never derived from a
+/// plan row.
 class KioskPlanPickedBanner extends StatelessWidget {
   final String planName;
 
@@ -62,8 +57,7 @@ class KioskPlanPickedBanner extends StatelessWidget {
   }
 }
 
-/// The sapphire tick disc — the kiosk's own "chosen" idiom, matching the plan
-/// card's own selected mark.
+/// The sapphire tick disc, matching the plan card's selected mark.
 class _Check extends StatelessWidget {
   const _Check();
 

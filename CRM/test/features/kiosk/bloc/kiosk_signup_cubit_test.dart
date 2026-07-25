@@ -32,11 +32,10 @@ class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 class _MockManagementResponse extends Mock
     implements MembersManagementResponse {}
 
-/// The kiosk SIGNUP lane's cubit: it begins the session flow exactly once,
-/// writes the member with ONE create call carrying both detail steps, turns
-/// every failure into a terminal front-desk stop, runs its own 5-minute idle
-/// guard, and — ruling 11 — never fires a second create on the way forward
-/// from a committed step.
+/// The kiosk SIGNUP lane's cubit: begins the session flow exactly once, writes
+/// the member with ONE create call carrying both detail steps, turns every
+/// failure into a terminal front-desk stop, runs its own 5-minute idle guard,
+/// and (ruling 11) never fires a second create out of a committed step.
 void main() {
   const gymId = 'gym-1';
   final t0 = DateTime.utc(2026, 1, 1, 18);
@@ -109,8 +108,8 @@ void main() {
         email: 'marcus.bell@gmail.com',
       );
       await cubit.close();
-      // Exactly one endFlow per beginFlow, on EVERY exit path — a leak here
-      // means the kiosk never signs itself out at its T+11h45 lockout.
+      // Exactly one endFlow per beginFlow on EVERY exit path — a leak means
+      // the kiosk never signs itself out at its T+11h45 lockout.
       verify(() => session.beginFlow()).called(1);
       verify(() => session.endFlow()).called(1);
     });
@@ -136,7 +135,6 @@ void main() {
       final captured = verify(() => member.createMember(captureAny()))
           .captured
           .single as MembersManagementCreateRequest;
-      // One request carries every field the member gave across both screens.
       expect(captured.firstName, 'Marcus');
       expect(captured.email, 'marcus.bell@gmail.com');
       expect(captured.dateOfBirth, '1994-04-12');
@@ -168,8 +166,8 @@ void main() {
         lastName: 'Bell',
         email: 'marcus.bell@gmail.com',
       );
-      // Skip and Continue land on the identical call with the identical
-      // values — Skip is a permission label, never a discard.
+      // Skip is a permission label, never a discard: it lands on the identical
+      // call with the identical values.
       await cubit.submitExtraDetails(address: '18 Mill St');
 
       final captured = verify(() => member.createMember(captureAny()))
@@ -205,7 +203,6 @@ void main() {
       await fillAndCommit(cubit);
       clearInteractions(member);
 
-      // Back into details, fix the typo'd email, forward again.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.extraDetails);
       cubit.back();
@@ -247,17 +244,15 @@ void main() {
       final cubit = build();
       await fillAndCommit(cubit);
 
-      // The 409 is an OFFER first — the flow is still live and nothing has
-      // been released.
+      // The 409 is an OFFER first: the flow is still live, nothing released.
       expect(cubit.state.step, KioskSignupStep.payerMatch);
       verifyNever(() => session.endFlow());
 
       cubit.declinePayerMatch();
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
-      // The 409's matches are never carried onto the state as a LIST —
-      // rendering them would confirm accounts exist to whoever is at the
-      // shared iPad.
+      // The 409's matches never reach the state as a LIST: rendering them
+      // confirms accounts exist to whoever is at the shared iPad.
       expect(cubit.state.matches, isEmpty);
       expect(cubit.state.payer.memberId, isNull);
       verify(() => session.endFlow()).called(1);
@@ -322,8 +317,8 @@ void main() {
 
         async.elapse(kKioskSignupStopHold + const Duration(seconds: 1));
         expect(cubit.state.abandoned, isTrue);
-        // Still exactly once — the stop already released, and abandon()'s
-        // latch makes the pair exactly-once however many exits run.
+        // Still exactly once: the stop already released, and abandon()'s latch
+        // holds however many exits run.
         verify(() => session.endFlow()).called(1);
         cubit.close();
       });
@@ -393,9 +388,9 @@ void main() {
   });
 
   group('abandon', () {
-    // Plain tests, not `blocTest`: bloc_test closes the bloc before it runs
-    // `verify`, and `close()` legitimately releases the flow — which would
-    // mask exactly the "did NOT release" assertion these make.
+    // Plain tests, not `blocTest`: it closes the bloc before `verify`, and
+    // `close()` legitimately releases the flow — which would mask exactly the
+    // "did NOT release" assertion these make.
     test('the confirmation asks, and "Keep going" leaves the flow intact',
         () async {
       final cubit = build();
@@ -446,8 +441,7 @@ void main() {
       final cubit = build();
       await Future<void>.delayed(Duration.zero);
       expect(cubit.state.plansFailed, isTrue);
-      // The member is still on the lane's first fork; nothing about a failed
-      // warm moves them off it.
+      // A failed warm never moves the member off the lane's first fork.
       expect(cubit.state.step, KioskSignupStep.entry);
       await cubit.close();
     });

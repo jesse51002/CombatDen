@@ -3,12 +3,11 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// Monday-first day labels for the week strip:
-/// Mon Tue Wed Thu Fri Sat Sun.
+/// Monday-first day labels: Mon Tue Wed Thu Fri Sat Sun.
 const List<String> _kWeekLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-/// A week with no attendance — the fall-back when the passed list is not the
-/// expected length of seven, so a degraded response never indexes out of range.
+/// The fall-back for a list that isn't seven long, so a degraded response
+/// never indexes out of range.
 const List<bool> _kAllOpen = [
   false,
   false,
@@ -20,15 +19,12 @@ const List<bool> _kAllOpen = [
 ];
 
 /// A static, un-animated re-skin of the member app's streak week strip
-/// (`StreakWeekStrip` in `lib/showcase/`), rebuilt against `DesignConstants`
-/// for the kiosk glance: seven equal day badges, Monday→Sunday. A completed
-/// day fills with the brand accent-soft wash + a sapphire check; an open day
-/// sits on the muted ground with an open ring.
+/// (`StreakWeekStrip` in `lib/showcase/`) for the kiosk glance: seven equal
+/// day badges, Monday→Sunday.
 ///
 /// [daysCompleted] holds seven booleans, index 0 = Monday … 6 = Sunday — the
-/// check-in response's `current_week_days` (already Monday-first). Rendered
-/// **positionally with no reordering**. If it isn't exactly seven long the
-/// strip falls back to all-open (never indexes out of range).
+/// check-in response's `current_week_days`, already Monday-first and rendered
+/// positionally with NO reordering. Any other length falls back to all-open.
 class KioskStreakWeekStrip extends StatelessWidget {
   final List<bool> daysCompleted;
 
@@ -67,10 +63,8 @@ class _DayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The day LETTER is text: it holds the kiosk's AA contrast token. The dash
-    // glyph under it is decoration, so it keeps the quieter tint — that
-    // difference is what makes a missed day read as absent rather than as a
-    // second label.
+    // The day LETTER is text and holds the kiosk's AA contrast token; the
+    // glyph under it is decoration and keeps the quieter tint.
     final labelColor =
         completed ? DesignConstants.primaryColor : DesignConstants.text2nd;
     final iconColor =

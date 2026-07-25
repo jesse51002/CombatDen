@@ -52,11 +52,10 @@ class _MockManagementResponse extends Mock
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
 /// The kiosk signup's GROUP half — the roster, the existing-member match, the
-/// per-person link run, and the money path over more than one person.
-///
-/// Every test here exists because getting it wrong either charges the wrong
-/// people, hands the backend a member nobody authorized, or dead-ends a parent
-/// halfway through signing up their family.
+/// per-person link run, and the money path over more than one person. Getting
+/// one of these wrong charges the wrong people, hands the backend a member
+/// nobody authorized, or dead-ends a parent halfway through their family's
+/// signup.
 void main() {
   const gymId = 'gym-1';
   const soloPlan = 'plan-1';
@@ -120,8 +119,8 @@ void main() {
         signerName: any(named: 'signerName'),
       ),
     ).thenAnswer((_) async => _MockSignatureResponse());
-    // Distinct ids per create, so "which member ended up in the cart" is a
-    // real assertion rather than an artefact of a constant stub.
+    // Distinct ids per create, so "which member ended up in the cart" is a real
+    // assertion rather than an artefact of a constant stub.
     when(() => member.createMember(any()))
         .thenAnswer((_) async => 'mem-${++createSeq}');
     when(() => member.updateMember(any(), any()))
@@ -228,13 +227,13 @@ void main() {
         email: 'ella.bell@gmail.com',
       );
 
-      // An OFFER, not a stop: a payee pays nothing, so reusing their existing
-      // account is the right answer.
+      // An OFFER, not a stop: a payee pays nothing, so reusing their account is
+      // the right answer.
       expect(cubit.state.step, KioskSignupStep.match);
       expect(cubit.state.stopReason, isNull);
       expect(cubit.state.matchCandidate?.memberId, 'mem-ella-existing');
-      // Nothing is on the roster yet — the draft is held off it until the
-      // backend has made (or matched) them.
+      // The draft is held off the roster until the backend has made (or
+      // matched) them.
       expect(cubit.state.persons.length, 1);
       expect(cubit.state.pendingPayee?.firstName, 'Ella');
       await cubit.close();
@@ -248,11 +247,9 @@ void main() {
       );
       await payer.submitExtraDetails();
 
-      // ALSO an offer, through a DIFFERENT screen. A payee's match is the
-      // roster's "is this her?"; the payer's is "is this you?", confirming
-      // their own account back to them. Both routes reuse an existing account
-      // rather than making a second one — the lane is self-serve for existing
-      // members too, and whoever pays types a fresh card either way.
+      // ALSO an offer, through a DIFFERENT screen: the payee's match is the
+      // roster's "is this her?", the payer's is "is this you?". Both reuse an
+      // existing account rather than making a second one.
       expect(payer.state.step, KioskSignupStep.payerMatch);
       expect(payer.state.stopReason, isNull);
       expect(payer.state.matchCandidate?.memberId, 'mem-ella-existing');
@@ -294,8 +291,8 @@ void main() {
       expect(ella.detailsStatus, KioskSignupDetailsStatus.none);
       // Adopting creates nothing.
       verifyNever(() => member.createMember(any()));
-      // And there is no details pass for them at all: a form that can only
-      // ever ask for what the gym already has is not worth a screen.
+      // And no details pass at all — the kiosk can only ask for what the gym
+      // already has.
       expect(cubit.state.step, KioskSignupStep.people);
       verifyNever(() => member.updateMember(any(), any()));
       await cubit.close();
@@ -367,16 +364,14 @@ void main() {
       await addElla(cubit);
       expect(cubit.state.everyPayeeLinked, isFalse);
 
-      // Jump the card straight onto a roster that has not been through the
-      // link run: neither the preview nor the charge may be assembled.
+      // The card jumps onto a roster that never went through the link run.
       cubit.submitCard(paymentMethodId: 'pm_1');
       await _settle();
       verifyNever(() => member.previewStartMemberships(any()));
 
-      // **Never a permanent spinner.** The review renders its spinner off
-      // `preview == null`, so a request that cannot even be ASSEMBLED has to
-      // land on the same retryable stop a FAILED preview does — a kiosk screen
-      // with no figure, no countdown and no way on is fatal.
+      // The review renders its spinner off `preview == null`, so a request that
+      // cannot even be ASSEMBLED must land on the same retryable stop a FAILED
+      // preview does — never a permanent spinner.
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.previewFailed);
       expect(cubit.state.stopReason!.isRetryable, isTrue);
@@ -389,11 +384,9 @@ void main() {
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       );
-      // And Pay with nothing to send is a handoff WITH a clock, never a silent
-      // return: `retrySameCard` cancels the popup's own return countdown before
-      // it calls `pay()`, so a quiet return there parks a shared iPad on a
-      // popup with no countdown and no escape. Nothing was sent, so "nothing
-      // was charged" is exactly true.
+      // Pay with nothing to send is a handoff WITH a clock: `retrySameCard`
+      // cancels the popup's own countdown before calling `pay()`, so a quiet
+      // return would park a shared iPad with no countdown and no escape.
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.paymentFailed);
       expect(cubit.state.stopCountdown, kKioskSignupStopHold.inSeconds);
@@ -408,13 +401,11 @@ void main() {
       await addElla(cubit);
       await walkGroupToReview(cubit);
 
-      // The payer's membership was created; the child's came back with a status
-      // this client does not recognise, which `MemberMembershipsStartStatus`
-      // parses to `unknown` — **neither created nor failed.** A retry set keyed
-      // on FAILURES is therefore empty here, and an empty set that falls back
-      // to "then send everything" re-charges the membership that already
-      // started, under the fresh idempotency key every retry mints — which the
-      // backend's `ON CONFLICT (idempotency_key)` guard cannot dedupe.
+      // `unknown` is neither created NOR failed, so a retry set keyed on
+      // FAILURES is empty here — and an empty set that falls back to "send
+      // everything" re-charges the membership that already started, under the
+      // fresh key every retry mints, which the backend's
+      // `ON CONFLICT (idempotency_key)` guard cannot dedupe.
       when(
         () => member.startMemberships(
           any(),
@@ -423,7 +414,6 @@ void main() {
       ).thenAnswer((_) async => _startResponse(unknownMemberId: 'mem-2'));
       await cubit.pay();
 
-      // The partial receipt, where Retry is live.
       expect(cubit.state.step, KioskSignupStep.results);
       expect(cubit.state.allCreated, isFalse);
       // The display set and the retry set are deliberately NOT the same set:
@@ -448,7 +438,7 @@ void main() {
         ),
       ).captured.cast<MemberMembershipsStartRequest>();
       expect(sent.length, 2);
-      // **The double-charge guard.** One item, and not the payer's.
+      // The double-charge guard: one item, and not the payer's.
       expect(sent.last.memberships.map((m) => m.memberId).toList(), ['mem-2']);
       expect(sent.last.idempotencyKey, isNot(sent.first.idempotencyKey));
       // The same card, never re-typed, and nothing else re-executed.
@@ -464,7 +454,7 @@ void main() {
         ),
       ).called(1);
       // The merge folded the retry into the first response, so the receipt
-      // still lists both memberships — and now reads all-created.
+      // still lists both memberships.
       expect(cubit.state.startItems, hasLength(2));
       expect(cubit.state.allCreated, isTrue);
       await cubit.close();
@@ -484,9 +474,9 @@ void main() {
       final countdown = cubit.state.popupCountdown;
       final key = cubit.state.idempotencyKey;
 
-      // The all-created receipt offers `Next`, not Retry — but the CUBIT is
-      // the guard: re-firing the charge from a screen where every membership
-      // already started re-posted the WHOLE cart under a new key.
+      // The receipt offers Next, not Retry — but the CUBIT is the guard: from a
+      // screen where everything started, a re-fire would re-post the whole cart
+      // under a new key.
       cubit.retrySameCard();
       await _settle();
 
@@ -521,8 +511,7 @@ void main() {
 
       cubit.retrySameCard();
       // The full-cart figure is dropped the instant the retry starts: the
-      // paying screen states `dueTodayMinorUnits` as what is being taken, and
-      // this retry takes only the child's membership.
+      // paying screen states `dueTodayMinorUnits` as what is being taken.
       expect(cubit.state.preview, isNull);
       await _settle();
 
@@ -530,9 +519,7 @@ void main() {
         () => member.previewStartMemberships(captureAny()),
       ).captured.cast<MemberMembershipsStartRequest>();
       expect(previews, hasLength(2));
-      // The review priced BOTH memberships...
       expect(previews.first.memberships, hasLength(2));
-      // ...and the retry re-prices exactly what it re-sends.
       expect(
         previews.last.memberships.map((m) => m.memberId).toList(),
         ['mem-2'],
@@ -560,9 +547,8 @@ void main() {
       cubit.skipPlanForPerson();
       await _settle();
 
-      // **The run walks only the people in the cart.** Theo is not one of
-      // them, so asking him to authorize the payer for a membership he is not
-      // buying would be consent taken from the wrong person for nothing.
+      // The run walks only the people in the CART: asking Theo to authorize a
+      // membership he is not buying is consent taken for nothing.
       expect(cubit.state.waiverPersonQueue, [1, 0]);
       expect(cubit.state.payerAuthPending, isTrue);
       await cubit.signPayerAuth(signerName: 'Marcus Bell');
@@ -585,10 +571,9 @@ void main() {
       );
       expect(cubit.state.persons[2].linked, isFalse);
 
-      // And an unlinked SKIPPED payee no longer blocks the charge. The backend
-      // scopes the authorization rule to the request's own member ids
-      // (`_check_links` in `memberships_start_validation.py`), and Theo is not
-      // one of them — so demanding his link would dead-end the whole family.
+      // An unlinked SKIPPED payee does not block the charge: the backend scopes
+      // the authorization rule to the request's own member ids (`_check_links`
+      // in `memberships_start_validation.py`), and Theo is not one of them.
       expect(cubit.state.everyPayeeLinked, isTrue);
       cubit.submitCard(paymentMethodId: 'pm_1');
       await _settle();
@@ -613,7 +598,7 @@ void main() {
       expect(cubit.state.everyPayeeLinked, isTrue);
       cubit.setPersonTraining(1, true);
       // Back in the cart, back to needing authorization — one predicate drives
-      // both, so the two can never disagree.
+      // both, so they can never disagree.
       expect(cubit.state.everyPayeeLinked, isFalse);
       await cubit.close();
     });
@@ -642,8 +627,8 @@ void main() {
       final request = verify(() => member.previewStartMemberships(captureAny()))
           .captured
           .single as MemberMembershipsStartRequest;
-      // `payer_member_id` is identity-only server-side: the parent pays for
-      // the child without buying anything of their own.
+      // `payer_member_id` is identity-only server-side: the parent pays for the
+      // child without buying anything of their own.
       expect(request.payerMemberId, 'mem-1');
       expect(request.memberships.single.memberId, 'mem-2');
       expect(request.memberships.single.quantity, 1);
@@ -680,10 +665,9 @@ void main() {
         ),
       ).thenAnswer((_) async => _startResponse(failedMemberId: 'mem-2'));
       await cubit.pay();
-      // **A PARTIAL is the receipt, never the decline popup.** Money HAS moved
-      // for the group that cleared, so "you haven't been charged" would be a
-      // false statement about it — and the count stays HELD, because Retry is
-      // live on that screen and a live charge must never run unheld.
+      // A PARTIAL is the receipt, never the decline popup: money HAS moved, so
+      // "you haven't been charged" would be false — and the count stays HELD,
+      // because Retry is live there and a live charge must never run unheld.
       expect(cubit.state.step, KioskSignupStep.results);
       expect(cubit.state.allCreated, isFalse);
       verifyNever(() => session.endFlow());
@@ -706,8 +690,8 @@ void main() {
         ),
       ).captured.cast<MemberMembershipsStartRequest>();
       expect(sent.length, 2);
-      // Nothing already created is re-sent: re-charging the payer's own
-      // membership is exactly what a naive retry would do.
+      // Nothing already created is re-sent — re-charging the payer's own
+      // membership is what a naive retry would do.
       expect(sent.last.memberships.single.memberId, 'mem-2');
       expect(sent.last.idempotencyKey, isNot(sent.first.idempotencyKey));
       expect(sent.last.payment?.paymentMethodId, 'pm_2');
@@ -743,11 +727,9 @@ void main() {
       // The retry ladder is UNTOUCHED — Next is additional, never a
       // replacement (founder ruling).
       expect(cubit.state.canRetryStart, isTrue);
-      // Nothing released yet: Retry is live on that screen and a live charge
-      // must never run with no flow held.
+      // Nothing released yet — Retry is live on that screen.
       verifyNever(() => session.endFlow());
-      // Consume the one charge the receipt is the outcome of, so the check
-      // after Next is about what NEXT sent.
+      // Consume that charge, so the check after Next is about what NEXT sent.
       verify(
         () => member.startMemberships(
           any(),
@@ -757,9 +739,8 @@ void main() {
 
       cubit.nextFromResults();
 
-      // **Not gated on `allCreated`.** A partial with only a way back held a
-      // member who did not want to retry until the 60-second expiry, and the
-      // people whose memberships DID start never reached the app push.
+      // Not gated on `allCreated`: the people whose memberships DID start must
+      // still reach the welcome and its app push.
       expect(cubit.state.step, KioskSignupStep.welcome);
       // Nothing is re-sent by advancing: Next charges nothing at all.
       verifyNever(
@@ -768,9 +749,8 @@ void main() {
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       );
-      // The welcome screen's front-desk line hangs off this flag: its greeting
-      // is unconditional, so on a partial the screen would otherwise read as
-      // "you're all set".
+      // The welcome's front-desk line hangs off this flag — its greeting is
+      // unconditional, so a partial would otherwise read "you're all set".
       expect(cubit.state.welcomeAfterPartial, isTrue);
       // The receipt held the count; Next is what releases it, exactly once.
       verify(() => session.endFlow()).called(1);
@@ -785,8 +765,7 @@ void main() {
       final cubit = await atRoster();
       await addElla(cubit);
       expect(cubit.state.canRemovePerson(1), isTrue);
-      // The payer is removable too now, while nothing has committed against
-      // them — see the dedicated no-payer group for what deleting them does.
+      // The payer is removable too, while nothing has committed against them.
       expect(cubit.state.canRemovePerson(0), isTrue);
 
       cubit.removePerson(1);
@@ -805,7 +784,7 @@ void main() {
       await _settle();
 
       // There is no unlink call, so removal stops being offered — and the
-      // method is inert even if something calls it anyway.
+      // method is inert if something calls it anyway.
       expect(cubit.state.persons[1].linked, isTrue);
       expect(cubit.state.canRemovePerson(1), isFalse);
       // A linked payee locks the PAYER's own trash too: deleting the payer a
@@ -821,8 +800,7 @@ void main() {
       final cubit = await atRoster();
       cubit.setPersonTraining(0, false);
 
-      // A payer who is not training with nobody else on the roster would send
-      // `memberships: []` and take a 400.
+      // A solo payer who is not training would send `memberships: []` and 400.
       expect(cubit.state.anyoneTraining, isFalse);
       cubit.continueToPlans();
       expect(cubit.state.step, KioskSignupStep.people);
@@ -864,8 +842,8 @@ void main() {
       await _settle();
       expect(cubit.state.matches.single.name, 'Ella Bell');
 
-      // The older one lands late and is DISCARDED — otherwise a slow reply for
-      // "ell" would overwrite the results the member is already looking at.
+      // The older one lands late and is DISCARDED — a slow reply for "ell"
+      // must not overwrite what the member is already looking at.
       first.complete(_page([_row('mem-old', 'Elliot Stone')]));
       await _settle();
       expect(cubit.state.matches.single.name, 'Ella Bell');
@@ -910,8 +888,8 @@ void main() {
       expect(cubit.state.step, KioskSignupStep.waivers);
       await cubit.signWaiver(signerName: 'Marcus Bell');
 
-      // Keyed on the MEMBER: keying on the waiver id alone would silently skip
-      // the second person and hand the backend an unsigned member.
+      // Keyed on the MEMBER: keying on the waiver id alone would skip the
+      // second person and hand the backend an unsigned member.
       final signed = verify(
         () => memberships.recordWaiverSignature(
           waiverId: waiverId,
@@ -966,8 +944,7 @@ void main() {
       expect(cubit.state.isGroup, isFalse);
 
       // The control is not offered on a solo signup, and the cubit refuses it
-      // too: skipping the only person would send `memberships: []` and take a
-      // 400, and at least one person must get a membership.
+      // too: skipping the only person would send `memberships: []` and 400.
       cubit.skipPlanForPerson();
       expect(cubit.state.step, KioskSignupStep.plans);
       expect(cubit.state.payer.training, isTrue);
@@ -982,12 +959,11 @@ void main() {
       cubit.continueToPlans();
       expect(cubit.state.activePersonIndex, 0);
 
-      // The payer changes their mind: no membership for them, on to the child.
       cubit.skipPlanForPerson();
       expect(cubit.state.step, KioskSignupStep.plans);
       expect(cubit.state.activePersonIndex, 1);
       // It reuses `training` rather than a parallel "skipped" concept, so the
-      // cart, the waiver queue and the review all follow for free.
+      // cart, the waiver queue and the review all follow from one flag.
       expect(cubit.state.persons[0].training, isFalse);
       expect(cubit.state.persons[0].selectedPlanId, isNull);
       expect(cubit.state.trainingPersonIndexes, [1]);
@@ -1020,8 +996,7 @@ void main() {
       cubit.continueFromPlans();
       expect(cubit.state.activePersonIndex, 1);
 
-      // The child is skipped; the parent already picked, so there is nothing
-      // left to choose and the run begins.
+      // The parent already picked, so nothing is left to choose.
       cubit.skipPlanForPerson();
       await _settle();
       expect(cubit.state.step, KioskSignupStep.waivers);
@@ -1039,16 +1014,13 @@ void main() {
       expect(cubit.state.activePersonIndex, 1);
       cubit.skipPlanForPerson();
 
-      // **The founder's own resolution.** The roster is where a person can be
-      // ticked back on or taken off, and it already refuses to leave with an
-      // empty cart and says why — so the backend's empty-cart 400 stays
-      // unreachable by construction.
+      // Founder ruling: the roster is where a person is ticked back on, and it
+      // already refuses to leave with an empty cart and says why — so the
+      // backend's empty-cart 400 stays unreachable by construction.
       expect(cubit.state.step, KioskSignupStep.people);
       expect(cubit.state.anyoneTraining, isFalse);
-      // And Continue out of the roster is blocked while it holds.
       cubit.continueToPlans();
       expect(cubit.state.step, KioskSignupStep.people);
-      // Ticking anybody back on releases it immediately.
       cubit.setPersonTraining(1, true);
       cubit.continueToPlans();
       expect(cubit.state.step, KioskSignupStep.plans);
@@ -1169,10 +1141,10 @@ MemberMembershipsStartPreview _preview() => MemberMembershipsStartPreview(
       recurring: _invoice(23800),
     );
 
-/// The start breakdown. [failedMemberId] fails exactly that member's item;
-/// [unknownMemberId] gives that member the forward-compatible `unknown` status
-/// (neither created NOR failed — the shape a `[created, unknown]` partial
-/// takes); [only] narrows the results to one member (what a retry gets back).
+/// The start breakdown. [failedMemberId] fails that member's item;
+/// [unknownMemberId] gives it the forward-compatible `unknown` status (neither
+/// created NOR failed); [only] narrows the results to one member, which is what
+/// a retry gets back.
 MemberMembershipsStartResponse _startResponse({
   String? failedMemberId,
   String? unknownMemberId,

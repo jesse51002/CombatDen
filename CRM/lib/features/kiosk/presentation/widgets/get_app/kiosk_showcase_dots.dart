@@ -59,10 +59,8 @@ class _Dot extends StatelessWidget {
       selected: active,
       button: true,
       child: GestureDetector(
-        // Opaque over a taller-than-it-looks box: the dot itself is 8px, which
-        // is nowhere near a finger target on a touch kiosk. The extra height is
-        // hit area only — the painted dot is unchanged, and the row's
-        // horizontal rhythm is untouched.
+        // Opaque over a taller box: the painted dot is 8px, nowhere near a
+        // finger target. The extra height is hit area only.
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: SizedBox(

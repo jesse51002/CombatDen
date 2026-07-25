@@ -17,31 +17,19 @@ import 'package:crm/features/member_details/presentation/dialogs/card_field_box.
 
 /// D5 — the card, and the trust screen around it.
 ///
-/// **The field is the shipped [CardFieldBox]** (founder ruling): the app's one
-/// bordered Stripe element, a SINGLE combined line carrying number, expiry,
-/// CVC and postal code. The mockup draws four separate boxes; the single-line
-/// element wins, because introducing a second payment surface on the one
-/// screen that handles card data is exactly the kind of duplication that ends
-/// up diverging from the reviewed one.
+/// The FRESH-CARD LAW: the kiosk never charges a card already on file. It
+/// always collects a new one, which becomes the payer's Stripe default and
+/// replaces theirs — so a later front-desk "charge the card on file" bills
+/// whoever typed it here, and this step says so to the member. The card is
+/// tokenized on the GYM's Stripe Connect connected account (a platform `pm_…`
+/// cannot attach to a connected-account customer), and the kiosk holds only
+/// the `pm_…` id plus brand/last-four — never card data, never a saved-card
+/// list.
 ///
-/// **Nothing is charged here and no request is made here.** The footer's
-/// primary tokenizes against Stripe and hands the resulting `pm_…` to the
-/// cubit; the card number never reaches CombatDen at all. A tokenization
-/// failure is an INLINE message — a mistyped number is not a reason to end a
-/// signup.
-///
-/// **The screen names WHOSE profile the card lands on, pinned.** The entered
-/// card ALWAYS becomes that member's Stripe default and replaces whatever was
-/// on the profile, so a later front-desk "charge the card on file" bills
-/// whoever typed it here. That makes the payer's name a correctness control
-/// rather than decoration — and it is read off the roster's payer seat, never
-/// off the active person, who in a family is usually a child. The inline
-/// notice under the field says both halves of that out loud.
-///
-/// This is the first step whose escape CONFIRMS. A stray tap here destroys
-/// sixteen typed digits plus expiry, CVC and postal code — the most tedious
-/// thing to re-enter on a kiosk — so the confirmation is worth the extra tap
-/// here in a way it is not on the steps before it.
+/// The field is the shipped [CardFieldBox] (founder ruling) — one payment
+/// surface, not the mockup's four boxes. Nothing is charged here: the footer's
+/// primary tokenizes and hands the `pm_…` to the cubit, and a tokenization
+/// failure stays inline rather than ending the signup.
 class KioskCardStep extends StatefulWidget {
   const KioskCardStep({super.key});
 
@@ -51,8 +39,7 @@ class KioskCardStep extends StatefulWidget {
 
 class _KioskCardStepState extends State<KioskCardStep> {
   /// Stripe's own completeness signal — the primary stays inert until the
-  /// element says the card is whole, so "Review" can never fire a tokenize
-  /// that was always going to fail.
+  /// element says the card is whole, so "Review" never fires a doomed tokenize.
   bool _complete = false;
   bool _tokenizing = false;
   String? _error;
@@ -102,14 +89,10 @@ class _KioskCardStepState extends State<KioskCardStep> {
           step: KioskSignupStep.card,
           title: 'Your card',
           // In a group the "active person" is whoever signed last, so a plan
-          // name here would be a fact about somebody who may not even be
-          // paying. The panel's own lines carry the group's terms instead.
+          // name here would be a fact about somebody who may not be paying.
           subtitle: state.isGroup ? null : state.selectedPlan?.planName,
-          // **The PAYER, never the active person.** This card attaches to
-          // their Stripe customer and, on a recurring cart, becomes their
-          // default — so the account it lands on has to be named and pinned.
-          // In a family the active person is often a child; naming them here
-          // would be confidently wrong, which is worse than naming nobody.
+          // The PAYER, never the active person (in a family, usually a child):
+          // this is the profile the card lands on, so it has to be pinned.
           identity: payerName.isEmpty
               ? null
               : KioskWhoFor(eyebrow: 'CARD FOR', name: payerName),
@@ -123,11 +106,9 @@ class _KioskCardStepState extends State<KioskCardStep> {
             children: [
               KioskSecureStrip(gymName: gym),
               CardFieldBox(
-                // A fresh, empty Stripe iframe per attempt: after a decline
-                // `retryCard()` bumps `cardAttempt`, so returning here mounts a
-                // brand-new field instead of reusing the cached one that still
-                // holds the declined card (the member could not otherwise type
-                // a new number at all).
+                // A fresh, empty Stripe iframe per attempt: `retryCard()` bumps
+                // `cardAttempt` so this re-keys, otherwise the cached field
+                // still holds the declined card and cannot be retyped.
                 fieldKey: ValueKey('kiosk-card-${state.cardAttempt}'),
                 onComplete: (isComplete) {
                   if (isComplete != _complete) {
@@ -136,13 +117,9 @@ class _KioskCardStepState extends State<KioskCardStep> {
                 },
               ),
               if (_error != null) _CardError(message: _error!),
-              // Between the field and the ticked facts, and deliberately
-              // heavier than them: the member has to REGISTER this, not be
-              // reassured by it. See `KioskCardFacts` for why it is not a
-              // green tick, and `KioskSecureStrip` for why it is not up top
-              // (that strip answers "is it safe to type this here", which has
-              // to arrive before the box; this is a what-happens-afterwards
-              // fact).
+              // Deliberately heavier than the ticked facts below it: what
+              // happens to the card is something to REGISTER, not a
+              // reassurance.
               KioskInlineNotice(message: _savedCardNotice(payerName)),
               KioskCardFacts(hasRecurring: state.cartHasRecurring),
             ],
@@ -153,24 +130,17 @@ class _KioskCardStepState extends State<KioskCardStep> {
   }
 
   /// The person this card attaches to — read off the roster's payer seat, so
-  /// it is right whether the payer is the person standing there or an existing
-  /// member who was picked to pay.
+  /// it is right whether that is the person standing there or an existing
+  /// member picked to pay.
   String _payerName(KioskSignupState state) {
     final payer = state.payer;
     return '${payer.firstName} ${payer.lastName}'.trim();
   }
 
-  /// What happens to the card, in two plain sentences.
-  ///
-  /// **Naming the profile is not optional**: "saved" is only half the promise
-  /// and the other half is *to whom*, because that is the account a later
-  /// front-desk charge reads from. With no name to hand it degrades to the
-  /// unattributed wording rather than to a wrong one.
-  ///
-  /// **The second sentence is the one that has to be there.** The kiosk always
-  /// makes this card the payer's default, and an existing member may now pay
-  /// here — so a card already on that profile really is displaced. Saying so
-  /// is the whole reason this notice exists.
+  /// The fresh-card law, told to the member. Naming the profile is half the
+  /// promise — that is the account a later front-desk charge reads from — and
+  /// the replacement sentence is why the notice exists at all, since an
+  /// existing member may pay here and really does lose the card on file.
   String _savedCardNotice(String payerName) {
     final who = payerName.trim();
     final whose = who.isEmpty ? 'your profile' : '$who\'s profile';
@@ -179,8 +149,8 @@ class _KioskCardStepState extends State<KioskCardStep> {
   }
 }
 
-/// A tokenization failure, said inline and blame-free. It never becomes a
-/// stop: the member is one correction away from carrying on.
+/// A tokenization failure, said inline: never a stop, since the member is one
+/// correction away from carrying on.
 class _CardError extends StatelessWidget {
   final String message;
 

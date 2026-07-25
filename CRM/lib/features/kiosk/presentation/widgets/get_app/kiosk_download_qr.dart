@@ -9,12 +9,11 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_frame.dart';
 /// [data], framed in the shared [KioskQrFrame] with the brand glyph badged
 /// over its centre.
 ///
-/// The modules are pinned to [DesignConstants.kioskQrModule] on
-/// [DesignConstants.kioskQrQuietZone] — fixed dark-on-white in BOTH themes,
-/// because a scanner needs that polarity and an inverted code fails or stalls
-/// on many phones. The centre badge occludes ~4% of the symbol, comfortably
-/// inside level-M's 15% recovery budget and clear of the finder/timing
-/// patterns, so the code still scans with the glyph on it.
+/// Modules pin to [DesignConstants.kioskQrModule] on
+/// [DesignConstants.kioskQrQuietZone] — dark-on-white in EVERY theme, never
+/// resolved through theme tokens: an inverted code fails or stalls on many
+/// scanners. The centre badge occludes ~4% of the symbol, inside level-M's 15%
+/// recovery budget and clear of the finder/timing patterns, so it still scans.
 class KioskDownloadQr extends StatelessWidget {
   final String data;
 
@@ -29,11 +28,9 @@ class KioskDownloadQr extends StatelessWidget {
           accent: true,
           radius: DesignConstants.radiusBig,
           padding: DesignConstants.spacingMedium,
-          // A tight box around the code: `QrImageView` measures itself with an
-          // internal `LayoutBuilder`, which cannot answer an intrinsic query,
-          // and the welcome grid sizes its two panels with `IntrinsicHeight`.
-          // The tight SizedBox reports the size directly, so the grid never has
-          // to ask the QR's layout builder.
+          // `QrImageView` measures itself with an internal `LayoutBuilder`,
+          // which cannot answer the welcome grid's `IntrinsicHeight` query.
+          // The tight box reports the size directly instead.
           child: SizedBox(
             width: DesignConstants.kioskAppQrSize,
             height: DesignConstants.kioskAppQrSize,

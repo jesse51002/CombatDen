@@ -6,23 +6,15 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_label
 
 /// The plan block's member-facing words — the ONE place a
 /// [KioskPlanBlockReason] becomes a sentence, mirroring
-/// `kiosk_signup_stop_copy.dart`.
+/// `kiosk_signup_stop_copy.dart`. Every switch is exhaustive on purpose, so a
+/// new reason can never ship without words, and every line is blame-free.
 ///
-/// **Every switch here is exhaustive on purpose**: adding a reason means adding
-/// its lines in the same change, so a new reason can never ship without words.
-///
-/// Every line is blame-free and stops at the fact. Nothing here carries an
-/// error code, jargon, or any hint the member did something wrong — a plan they
-/// cannot buy again is not a mistake they made.
-///
-/// **One reason NAMES the plan and the other deliberately does not, and the
-/// inversion is the rule rather than a style drift.**
-/// [KioskPlanBlockReason.trialUsed] is per MEMBER — one trial in their history
-/// closes every trial plan on the grid — so naming one plan would describe a
-/// narrower rule than the grid is enforcing.
+/// One reason NAMES the plan and the other deliberately does not; that
+/// inversion is the rule, not style drift. [KioskPlanBlockReason.trialUsed] is
+/// per MEMBER — one trial closes every trial plan on the grid — so naming a
+/// plan would state a narrower rule than the grid enforces, while
 /// [KioskPlanBlockReason.alreadyOnPlan] is per PLAN (the backend conflicts on
-/// `plan_id = ANY(:plan_ids)`), so naming the plan describes the rule exactly.
-/// Do not "fix" one of the two to match the other.
+/// `plan_id = ANY(:plan_ids)`), so naming it is exact.
 
 /// The popup's title — what happened, in the member's own terms.
 String kioskPlanBlockTitle(KioskPlanBlockReason reason) {
@@ -32,12 +24,10 @@ String kioskPlanBlockTitle(KioskPlanBlockReason reason) {
   };
 }
 
-/// The popup's body.
-///
-/// The plan step is walked once per training person, so in a GROUP the body
-/// NAMES whoever it is about: an unnamed block in the middle of a run of named
-/// turns is ambiguous exactly when it matters most. A blank first name degrades
-/// to "they", never to a stand-in name.
+/// The popup's body. The plan step is walked once per training person, so in a
+/// GROUP it NAMES whoever it is about — an unnamed block in a run of named
+/// turns is ambiguous exactly when it matters most. A blank first name
+/// degrades to "they", never to a stand-in name.
 String kioskPlanBlockBody(
   KioskSignupState state,
   KioskPlanBlockReason reason,
@@ -50,13 +40,10 @@ String kioskPlanBlockBody(
   };
 }
 
-/// The warm disc's glyph.
-///
-/// `card_membership_sharp` names the OBJECT the member holds, which is the fact
-/// the already-on-plan popup states. The trial's `history_sharp` means "this
-/// already happened", which is wrong for a membership they hold right now — and
-/// a tick is never used on either, because on a plan card a tick reads as
-/// *selected*, the one thing these popups must not look like.
+/// The warm disc's glyph. `card_membership_sharp` names the OBJECT the member
+/// holds; `history_sharp` ("this already happened") is right for a spent trial
+/// and wrong for one they hold now. Never a tick — on a plan card a tick reads
+/// as *selected*, the one thing these popups must not look like.
 IconData kioskPlanBlockGlyph(KioskPlanBlockReason reason) {
   return switch (reason) {
     KioskPlanBlockReason.trialUsed => Symbols.history_sharp,
@@ -78,12 +65,9 @@ String _trialBody(bool isGroup, String firstName) {
       '$tail';
 }
 
-/// The held-plan body. The plan is NAMED (the rule is per plan), and with more
-/// than one held plan the natural list helper reads them out the way a person
-/// would say them.
-///
-/// With no name resolvable at all — a held plan the gym no longer offers — the
-/// body falls back to the unnamed form rather than printing a blank.
+/// The held-plan body — the plan is NAMED, because the rule is per plan. With
+/// no name resolvable at all (a held plan the gym no longer offers) it falls
+/// back to the unnamed form rather than printing a blank.
 String _heldBody(bool isGroup, String firstName, List<String> planNames) {
   final plans = kioskNameList(planNames);
   const soloTail = 'Anything else on the list is open — or the coach at the '
@@ -109,10 +93,9 @@ String _heldBody(bool isGroup, String firstName, List<String> planNames) {
       'again. $groupTail';
 }
 
-/// The tag pinned over a blocked plan card's hero.
-///
-/// "Already used" is right for a spent trial and wrong for a live membership:
-/// they have not used it up, they HAVE it.
+/// The tag pinned over a blocked plan card's hero. "Already used" is right for
+/// a spent trial and wrong for a live membership — they have not used it up,
+/// they HAVE it.
 String kioskPlanBlockTag(KioskPlanBlockReason reason) {
   return switch (reason) {
     KioskPlanBlockReason.trialUsed => 'Already used',
@@ -120,19 +103,16 @@ String kioskPlanBlockTag(KioskPlanBlockReason reason) {
   };
 }
 
-/// The plan step's inline notice — the member's current membership, STATED
-/// before they start picking, so the marked card has an answer above it rather
-/// than only behind a tap.
+/// The plan step's inline notice — the membership the ACTIVE person already
+/// holds, stated before they start picking so the marked card has an answer
+/// above it rather than only behind a tap. Self-gating: nothing held returns
+/// null, so a brand-new member never sees it.
 ///
-/// It is self-gating: with nothing held it returns null and a brand-new
-/// member — the majority case — never sees it.
-///
-/// **The privacy line.** It names the PLAN of a recurring membership the ACTIVE
-/// person holds, and nothing else: never a price they pay, never a date, never
-/// a status word ("frozen" is billing state about a person, printed in a lobby),
-/// never a one-time or trial pack (those stack, so surfacing them would be pure
+/// Privacy: it names the PLAN of a recurring membership and NOTHING else — no
+/// price, no date, no status word ("frozen" is billing state, printed in a
+/// lobby), no one-time or trial pack (those stack, so naming them is
 /// disclosure with no purchasing consequence), and never another member's
-/// memberships — the names come off `state.activePerson`, which is what makes a
+/// memberships — the names come off `state.activePerson`, which makes a
 /// cross-person leak unrepresentable.
 String? kioskHeldPlanNotice(KioskSignupState state) {
   final names = state.heldPlanNames;

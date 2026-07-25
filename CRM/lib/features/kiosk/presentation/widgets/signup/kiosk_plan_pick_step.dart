@@ -18,22 +18,17 @@ import 'package:crm/shared/widgets/fill_grid.dart';
 /// D3 — pick a membership.
 ///
 /// The grid is the shipped `KioskClassGrid` pattern (`FillGrid` over
-/// hero-topped cards), so the two things a member picks on this kiosk — a
-/// class and a plan — are picked from the same object at the same scale.
+/// hero-topped cards), so a class and a plan are picked from the same object.
 ///
-/// **One plan per person, single-select, always `quantity: 1`.** There is no
-/// stepper: a self-serve iPad sells one membership to one person, and a
-/// quantity control beside a price is a way to mis-tap into a bigger charge.
-///
-/// **After a pick, the step scrolls back to the top** so the confirmation
-/// banner, the pinned person, and Continue are all in view — a member who taps
-/// a card low in a tall grid otherwise gets no feedback and is stranded at the
-/// bottom. In a group each person's turn also starts at the top.
+/// One plan per person, single-select, always `quantity: 1`: there is no
+/// stepper, because a quantity control beside a price is a way to mis-tap into
+/// a bigger charge. In a group each person's turn starts at the top of the
+/// grid; a pick itself does not scroll (see `_toTop`).
 ///
 /// The step only ever renders a warmed catalogue or its spinner. An empty
 /// catalogue and a failed read are not empty states here — the cubit routes
-/// both to a stop, because "no memberships" on a screen headed "Pick your
-/// membership" is a dead end dressed as a choice.
+/// both to a stop, because "no memberships" under "Pick your membership" is a
+/// dead end dressed as a choice.
 class KioskPlanPickStep extends StatefulWidget {
   const KioskPlanPickStep({super.key});
 
@@ -50,19 +45,16 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
     super.dispose();
   }
 
-  /// Return the body to the top **when the person changes** — a group walks
-  /// person-by-person through this one step, and each new turn should START at
-  /// the top rather than inherit the previous person's scroll position. It
-  /// JUMPS rather than animating: nothing moved for the member, the screen is
-  /// simply new.
+  /// Return the body to the top when the PERSON changes, so each turn of a
+  /// group starts fresh rather than inheriting the last person's scroll. It
+  /// jumps rather than animates: nothing moved, the screen is simply new.
   ///
-  /// **A pick deliberately does NOT scroll** (founder). Returning to the top on
-  /// selection yanks the grid out from under someone who is still comparing
-  /// cards — the tap they just made is confirmed in place, so there is nothing
-  /// up there they need to be shown.
+  /// A pick deliberately does NOT scroll (founder ruling) — returning to the
+  /// top on selection yanks the grid out from under someone still comparing
+  /// cards, and their tap is already confirmed in place.
   void _toTop() {
     // Post-frame, so the scroll runs after the rebuild that swapped the
-    // person — a scroll issued against the old extent would be clamped short.
+    // person — against the old extent it would be clamped short.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       _scroll.jumpTo(0);
@@ -73,8 +65,6 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
     return BlocListener<KioskSignupCubit, KioskSignupState>(
-      // A group advances person-by-person through the same step; each new turn
-      // starts at the top.
       listenWhen: (prev, cur) =>
           prev.activePersonIndex != cur.activePersonIndex,
       listener: (_, _) => _toTop(),
@@ -93,11 +83,9 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
             title: _title(state),
             subtitle: _subtitle(state),
             bodyController: _scroll,
-            // Pinned, so it cannot scroll away behind the grid. In a group it
-            // is the whole point of the screen: a parent picking three
+            // Pinned so it cannot scroll away: a parent picking three
             // memberships in a row must never buy the wrong one for the wrong
-            // child. Solo there is only one person, and naming them would be an
-            // odd thing to tell someone about themselves.
+            // child. Solo has only one person to mean, so it is omitted.
             identity: state.isGroup
                 ? KioskWhoFor(
                     eyebrow: 'PICKING FOR',
@@ -107,14 +95,10 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
             foot: KioskFlowFoot(
               onPrimary: picked == null ? null : cubit.continueFromPlans,
               onBack: cubit.back,
-              // **The "Skip" gutter is GROUP-only** (founder ruling): somebody
-              // on a family signup may change their mind halfway through, but
-              // skipping the sole person of a solo signup would empty the cart,
-              // and at least one person must get a membership. Skipping
-              // everybody returns to the roster, where a person can be ticked
-              // back on — see `KioskSignupCubit.skipPlanForPerson`. The
-              // identity band above already names WHO is being skipped, so the
-              // label itself stays the bare verb.
+              // Skip is GROUP-only (founder ruling): skipping the sole person
+              // of a solo signup would empty the cart, and at least one person
+              // must get a membership. Skipping everybody returns to the
+              // roster — see `KioskSignupCubit.skipPlanForPerson`.
               onSkip: state.isGroup ? cubit.skipPlanForPerson : null,
               skipLabel: 'Skip',
             ),
@@ -132,15 +116,10 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
     );
   }
 
-  /// The step is walked once per TRAINING person, so in a GROUP it names whose
-  /// choice is on screen — **every turn, the payer's included.** An unnamed
-  /// screen in the middle of a run of named ones is ambiguous exactly when it
-  /// matters most, and the ambiguity is paid for with the wrong membership on
-  /// the wrong person.
-  ///
-  /// Solo keeps the warm second person: there is only one person it could
-  /// mean, and telling somebody their own name is a strange way to address
-  /// them.
+  /// The step is walked once per TRAINING person, so in a GROUP the title names
+  /// whose choice is on screen — every turn, the payer's included. An unnamed
+  /// turn in a run of named ones is paid for with the wrong membership on the
+  /// wrong person. Solo keeps the second person.
   String _title(KioskSignupState state) {
     if (!state.isGroup) return 'Pick your membership';
     final first = state.activePerson.firstName.trim();
@@ -178,9 +157,8 @@ class _Loading extends StatelessWidget {
 /// The confirmation banner, then the plans three across on the kiosk stage,
 /// over the one quiet pointer at the desk.
 ///
-/// The pointer is deliberately NOT the app-adoption line + glyph pair: that
-/// component means "get the app" everywhere else on this kiosk, and reusing it
-/// for "ask a coach" would teach a member the wrong thing about it.
+/// That pointer is deliberately NOT the app-adoption line + glyph pair, which
+/// means "get the app" everywhere else on this kiosk.
 class _PlanGrid extends StatelessWidget {
   final KioskSignupState state;
   final String? picked;
@@ -202,19 +180,15 @@ class _PlanGrid extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
-        // **Context first, then the confirmation of the action just taken**, in
-        // that fixed order. The notice STATES the membership this person already
-        // holds so the marked card below has an answer above it rather than only
-        // behind a tap; it is self-gating, so a brand-new member — the majority
-        // case — never sees it. It scrolls with the body on purpose: it is a
-        // read-once fact, not a correctness control like the pinned identity.
+        // Context first, then the pick just made. The notice NAMES the
+        // membership this person already holds, so a marked card has its answer
+        // above it and not only behind a tap; it is self-gating.
         if (held != null) KioskInlineNotice(message: held),
         if (pickedPlanName != null)
           KioskPlanPickedBanner(planName: pickedPlanName!),
         FillGrid(
-          // A floor of two columns and a 300px minimum lands three across on
-          // the kiosk stage while a narrower fold degrades to two, exactly as
-          // the class grid does.
+          // Three across on the kiosk stage, degrading to two on a narrower
+          // fold — the class grid's own numbers.
           minItemWidth: 300,
           minColumns: 2,
           children: [
@@ -240,10 +214,10 @@ class _PlanGrid extends StatelessWidget {
 }
 
 /// One plan card, carrying whichever block reason closes it for the person
-/// currently picking.
+/// currently picking (the rules live in `kiosk_plan_block.dart`).
 ///
-/// The reason drives BOTH the tag and (through the cubit's own tap branch) the
-/// popup behind it, from the one copy file — so a card can never wear a tag that
+/// The reason drives BOTH the tag and — through the cubit's tap branch — the
+/// popup behind it, from the one copy file, so a card can never wear a tag that
 /// disagrees with the answer the tap gives.
 class _PlanTile extends StatelessWidget {
   final KioskSignupState state;
@@ -264,8 +238,8 @@ class _PlanTile extends StatelessWidget {
     return KioskPlanCard(
       plan: plan,
       selected: selected,
-      // A plan closed to this person renders blocked and can never be
-      // selected; the cubit turns its tap into the explanation instead.
+      // A blocked plan can never be selected; the cubit turns its tap into the
+      // explanation instead.
       blocked: reason != null,
       blockedLabel: reason == null
           ? 'Already used'

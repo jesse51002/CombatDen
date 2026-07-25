@@ -13,14 +13,12 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 ///
 /// **There is no footer, no Back, no escape, and that absence is the feature.**
 /// A member who abandons mid-charge can end up paid with no membership record,
-/// so there is deliberately nothing safe to do here but wait. Do not "fix" the
-/// missing button. The 5-minute idle guard is suspended for the same reason,
-/// and the session's flow count stays HELD — a live Stripe charge is exactly
-/// the case the T+11h45 grace window exists for.
-///
-/// The bar is indeterminate on purpose. A fake percentage that stalls at 90%
-/// is worse than an honest shuttle: it invites the member to decide the iPad
-/// has frozen, which is precisely the moment they walk off or tap again.
+/// so there is deliberately nothing to do here but wait — never add a cancel or
+/// a back. The idle guard is suspended and the flow count stays HELD for the
+/// same reason. A response can take up to a minute; that wait is expected, not
+/// a hang, which is why the copy says so and the bar is indeterminate: a fake
+/// percentage stalling at 90% invites the member to decide the iPad has frozen
+/// and walk off or tap again.
 class KioskPayingScreen extends StatelessWidget {
   const KioskPayingScreen({super.key});
 
@@ -35,9 +33,8 @@ class KioskPayingScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingLarge,
             children: [
-              // The shipped kiosk in-flight scale, verbatim from
-              // `KioskCheckingIn` — the two "we're working on it" screens on
-              // this surface must not spin at two different sizes.
+              // `KioskCheckingIn`'s spinner verbatim: the two in-flight screens
+              // on this surface must not spin at two different sizes.
               const AppSpinner(),
               Text(
                 'Taking your payment',
@@ -72,13 +69,10 @@ class KioskPayingScreen extends StatelessWidget {
 /// What is being taken, and off which card — the two facts a member wants
 /// confirmed while they wait.
 ///
-/// **The amount renders only while a real preview stands behind it.**
-/// `dueTodayMinorUnits` falls back to 0 with no preview, and "$0.00" under copy
-/// that says this is what is being taken is a worse lie than saying nothing —
-/// a retry clears the full-cart preview and re-prices against the memberships
-/// that did not start (`KioskSignupCubit.retrySameCard`), so this screen can
-/// genuinely be entered before the figure exists. The card chip carries the
-/// wait on its own until it lands.
+/// The amount renders ONLY while a real preview stands behind it:
+/// `dueTodayMinorUnits` falls back to 0 with no preview, and a retry re-prices
+/// before the new figure lands, so "$0.00" under copy saying this is what is
+/// being taken is a worse lie than showing nothing.
 class _Amount extends StatelessWidget {
   final KioskSignupState state;
 
@@ -105,8 +99,8 @@ class _Amount extends StatelessWidget {
   }
 }
 
-/// The honest shuttle: an indeterminate track at the kiosk's own content bar
-/// thickness, capped to a readable measure so it does not run the whole stage.
+/// The indeterminate track, capped to a readable measure so it does not run the
+/// whole stage.
 class _IndeterminateBar extends StatelessWidget {
   const _IndeterminateBar();
 

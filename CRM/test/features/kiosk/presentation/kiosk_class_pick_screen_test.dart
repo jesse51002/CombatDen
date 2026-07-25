@@ -15,11 +15,10 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 class _MockKioskFlowCubit extends MockCubit<KioskFlowState>
     implements KioskFlowCubit {}
 
-/// The class pick is the screen the founder actually got stuck on: a member
-/// who taps the WRONG name on home lands here, and before the escape existed
-/// there was no way back — they were stranded until the 5-minute flow-idle
-/// guard fired. These prove the escape is present, worded off the member's own
-/// name, and routed through the ONE abandon path.
+/// The class pick is where a member who taps the WRONG name on home lands, so
+/// it carries an escape — otherwise they are stranded until the 5-minute
+/// flow-idle guard fires. These prove the escape is present, worded off the
+/// member's own name, and routed through the ONE abandon path.
 void main() {
   const member = AllViewRow(
     memberId: 'mem-1',
@@ -79,10 +78,8 @@ void main() {
       );
 
   testWidgets('the escape names the MEMBER, not the navigation', (tester) async {
-    // The head one line above asserts "Hi Marcus, pick your class". The escape
-    // has to answer that assertion, so it carries the member's FIRST name —
-    // a member who is not Marcus reads their own situation in the button,
-    // where "Back" would make them work out what "back" means.
+    // The escape answers the head's "Hi Marcus" with the same first name —
+    // "Back" would make a member work out what "back" means.
     await pumpPick(tester, pickState());
 
     expect(find.text('Hi Marcus, pick your class'), findsOneWidget);
@@ -104,9 +101,9 @@ void main() {
 
   testWidgets('tapping it routes through goHome — the ONE abandon path',
       (tester) async {
-    // goHome already IS the abandon contract (timers cancelled, in-flight
-    // fetches dropped by the seq bumps, endFlow balanced, fresh home emitted).
-    // A hand-rolled navigation here would leak the session's flow count.
+    // goHome IS the abandon contract (timers cancelled, in-flight fetches
+    // dropped, endFlow balanced); a hand-rolled navigation here would leak
+    // the session's flow count.
     final cubit = await pumpPick(tester, pickState());
 
     await tester.tap(find.text('Not Marcus?'));
@@ -117,10 +114,8 @@ void main() {
 
   testWidgets('the escape stays ON the fold — a tall class grid scrolls '
       'beneath it, never past it', (tester) async {
-    // The whole point of an escape hatch is that it is reachable without
-    // hunting. A stage that scrolled the foot away with the content would
-    // strand exactly the flustered member it exists for. The stage pins the
-    // foot and scrolls only the content beneath it.
+    // The stage pins the foot and scrolls only the content beneath it — a foot
+    // that scrolled away would strand the very member it exists for.
     final many = [
       for (var i = 0; i < 6; i++)
         EffectiveClassInstance(
@@ -151,8 +146,8 @@ void main() {
   testWidgets('the escape survives the empty and failed class states', (
     tester,
   ) async {
-    // The stranded member is MOST likely on a screen with nothing to tap: no
-    // classes open, or the load failed. The way out cannot depend on the grid.
+    // The stranded member is MOST likely on a screen with nothing to tap, so
+    // the way out cannot depend on the grid.
     await pumpPick(tester, pickState(classes: const []));
     expect(find.text('Not Marcus?'), findsOneWidget);
 

@@ -13,19 +13,15 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step
 
 /// D1 — who you are. First name, last name, email, phone.
 ///
-/// The field order and validation mirror the admin `MemberCreateForm`, so a
-/// member created at the kiosk and a member created at the desk are the same
-/// record made the same way. Two differences, both deliberate:
+/// Field order and validation mirror the admin `MemberCreateForm`, with two
+/// deliberate differences: email is REQUIRED for every person (ruling 12),
+/// payer and payee alike, which keeps the duplicate gate live for everyone and
+/// gives each person app sign-in; and there is no photo field, which a
+/// self-serve iPad has no business taking.
 ///
-/// * **Email is REQUIRED for every person** (ruling 12), payer and payee
-///   alike. It keeps the duplicate gate live for everyone and gives each
-///   person app sign-in.
-/// * **No photo field.** A member photo is a unique upload of the actual
-///   person; a self-serve iPad has no business taking one.
-///
-/// Nothing here is written. The member is created at the END of the next step
-/// so one request carries every field they gave — so abandoning from this
-/// screen writes nothing at all, and the footer's escape needs no confirm.
+/// Nothing here is written — the member is created at the END of the next step
+/// so one request carries every field they gave, which is why abandoning from
+/// this screen writes nothing and the footer's escape needs no confirm.
 class KioskSignupDetailsStep extends StatefulWidget {
   const KioskSignupDetailsStep({super.key});
 
@@ -40,15 +36,13 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
   late final TextEditingController _phone;
 
   /// Validation messages only appear after a failed Continue — a form that
-  /// turns red while a member is still typing their own address is scolding
-  /// them for being mid-word.
+  /// turns red mid-word scolds a member for still typing.
   bool _submitted = false;
 
   @override
   void initState() {
     super.initState();
-    // Seeded FROM state, so stepping Back into this screen shows what the
-    // member typed rather than an empty form.
+    // Seeded FROM state, so stepping Back shows what the member typed.
     final person = context.read<KioskSignupCubit>().state.activePerson;
     _firstName = TextEditingController(text: person.firstName);
     _lastName = TextEditingController(text: person.lastName);
@@ -143,9 +137,8 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
           KioskFieldBox(
             controller: _phone,
             label: 'Phone',
-            // Optional is the EXCEPTION on this step, so it is marked here.
-            // On the next step optional is the rule, so it is said once at
-            // the top instead of on every field.
+            // Optional is the EXCEPTION on this step, so it is marked here; on
+            // the next step it is the rule, said once at the top instead.
             labelNote: 'optional',
             hintText: '(555) 000-0000',
             icon: Symbols.call_sharp,

@@ -45,8 +45,7 @@ class _Identity extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        // The gym's uploaded logo when it has one, else the CombatDen mark —
-        // the same real-gym-identity treatment the admin nav chrome uses.
+        // The gym's uploaded logo when it has one, else the CombatDen mark.
         const GymLogo(size: DesignConstants.navMenuButtonSize),
         Flexible(
           child: Column(

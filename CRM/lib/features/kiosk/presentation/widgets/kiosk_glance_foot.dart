@@ -7,15 +7,12 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
-/// The glance's system footer: a hairline, the
-/// "Back to start in Ns" auto-return countdown over a draining track, and a
-/// visible Done button that returns home early. A tap anywhere else on the
-/// glance opens the "Get the app" modal (wired at the glance surface); Done is
-/// the explicit go-home affordance. The countdown [secondsLeft] is driven by
-/// the cubit's 10-second hold, which only starts once the reveal's last beat
-/// has landed — so the foot shows its full value (and a full drain bar) while
-/// the glance is still assembling itself. Done works throughout, including
-/// while the confirmation is still centred.
+/// The glance's system footer: a hairline, the auto-return countdown over a
+/// draining track, and a Done button home. A tap anywhere ELSE on the glance
+/// opens the "Get the app" modal, so Done is the only explicit go-home
+/// affordance — and it works throughout, including while the confirmation is
+/// still centred. [secondsLeft] is the cubit's hold, which only starts once
+/// the reveal's last beat lands.
 class KioskGlanceFoot extends StatelessWidget {
   final int secondsLeft;
 

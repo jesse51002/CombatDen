@@ -43,11 +43,9 @@ class _MockManagementResponse extends Mock
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
 /// The kiosk signup's MONEY path — plan pick, waivers, card, review, and the
-/// pay / declined / welcome terminals.
-///
-/// Every test here exists because getting it wrong charges a real card twice,
-/// takes money and shows a blank screen, or leaks the session's flow count so
-/// the iPad never signs itself out at its 12-hour lockout.
+/// pay / declined / welcome terminals. Getting one of these wrong charges a
+/// real card twice, takes money and shows a blank screen, or leaks the
+/// session's flow count so the iPad never signs itself out at its lockout.
 void main() {
   const gymId = 'gym-1';
   const planId = 'plan-1';
@@ -187,9 +185,8 @@ void main() {
         ),
       ).captured.single as MemberMembershipsStartRequest;
       final payment = request.payment!;
-      // The CRM wizard deliberately sends NO card for a recurring cart (it
-      // reuses the payer's saved default). The kiosk has no saved default to
-      // reuse — the backend rejects a recurring start without one.
+      // The CRM wizard sends no card for a recurring cart (it reuses the saved
+      // default); the kiosk has none to reuse and the backend rejects that.
       expect(payment.paymentMethodId, 'pm_1');
       expect(payment.setDefault, isTrue);
       expect(request.paidWithCash, isFalse);
@@ -198,10 +195,8 @@ void main() {
     });
 
     test('set_default is true on a ONE-TIME-ONLY cart too', () async {
-      // **It does not branch on the cart, and that is the point.** The kiosk
-      // always saves the entered card as the payer's default, replacing
-      // whatever was on the profile — which is what lets an existing member
-      // self-serve here at all. The card step says so in as many words.
+      // No branch on the cart: the kiosk always saves the entered card as the
+      // payer's default, replacing theirs. The card step says so.
       when(() => memberships.listPlans(any()))
           .thenAnswer((_) async => [_oneTimePlan()]);
       final cubit = await atReview();
@@ -248,8 +243,8 @@ void main() {
       await cubit.pay();
       expect(cubit.state.step, KioskSignupStep.stop);
 
-      // The outcome of that attempt is unknown, so a second pay must not
-      // re-post it: an auto-retry is the one action that could double-charge.
+      // The outcome is unknown, so a second pay must not re-post it — an
+      // auto-retry is the one action that could double-charge.
       await cubit.pay();
       verify(
         () => member.startMemberships(
@@ -272,20 +267,14 @@ void main() {
       verifyNever(() => session.endFlow());
       await cubit.pay();
 
-      // The receipt, not the welcome: the member reads what happened per
-      // person, then advances. Releasing here is EARLIER than the old
-      // welcome-only release, which is strictly better for the T+11h45 lockout.
       expect(cubit.state.step, KioskSignupStep.results);
       expect(cubit.state.allCreated, isTrue);
       verify(() => session.endFlow()).called(1);
 
-      // Next → welcome, and `_enterWelcome`'s own release is a latch no-op
-      // rather than a second decrement.
+      // `_enterWelcome`'s own release is a latch no-op, not a second decrement.
       cubit.nextFromResults();
       expect(cubit.state.step, KioskSignupStep.welcome);
-      // Nothing outstanding, so the welcome says nothing about the desk — a
-      // warning on a clean signup is the mirror image of the lie the flag
-      // exists to prevent.
+      // Nothing outstanding, so the welcome says nothing about the desk.
       expect(cubit.state.welcomeAfterPartial, isFalse);
       verifyNever(() => session.endFlow());
       await cubit.close();
@@ -320,15 +309,13 @@ void main() {
         // Every item created, so the count is released on ENTRY.
         verify(() => session.endFlow()).called(1);
 
-        // Halfway: still up, and visibly counting.
         async.elapse(const Duration(seconds: 30));
         expect(cubit.state.popupCountdown, 30);
         expect(cubit.state.abandoned, isFalse);
 
         async.elapse(kKioskSignupPopupHold);
-        // Expiry runs the ordinary abandon — and its own release is a latch
-        // no-op, so the pair stays exactly-once. An unbalanced count is what
-        // stops the kiosk signing itself out at its T+11h45 lockout.
+        // Expiry runs the ordinary abandon; its release is a latch no-op, so
+        // the pair stays exactly-once. An unbalanced count never signs out.
         expect(cubit.state.abandoned, isTrue);
         verifyNever(() => session.endFlow());
         cubit.close();
@@ -348,7 +335,6 @@ void main() {
       await cubit.pay();
 
       expect(cubit.state.step, KioskSignupStep.declined);
-      // And the member is still standing there, so the count is held.
       verifyNever(() => session.endFlow());
       await cubit.close();
     });
@@ -403,8 +389,8 @@ void main() {
 
       expect(cubit.state.step, KioskSignupStep.waivers);
       expect(cubit.state.waiverQueue, [waiverId]);
-      // The server is authoritative: a waiver it calls unsigned is dropped
-      // from our own signed set, or the step would skip it and loop.
+      // A waiver the server calls unsigned is dropped from our own signed set,
+      // or the step would skip it and loop.
       expect(cubit.state.signedWaiverIds, isEmpty);
       // The flow is still live — a gate is not a terminal.
       verifyNever(() => session.endFlow());
@@ -492,8 +478,7 @@ void main() {
       ).captured.single as MemberMembershipsStartRequest;
       expect(request.idempotencyKey, isNot(firstKey));
       expect(request.payment!.paymentMethodId, 'pm_2');
-      // Members, signatures and plans are already committed — a retry
-      // re-executes the CHARGE only.
+      // Everything else is committed — a retry re-executes the CHARGE only.
       verifyNever(() => member.createMember(any()));
       verifyNever(
         () => memberships.recordWaiverSignature(
@@ -517,15 +502,13 @@ void main() {
         ),
       ).thenAnswer((_) async => _startResponse(failed: true));
       final cubit = await atReview();
-      // First attempt is nonce 0 — the initial field.
       expect(cubit.state.cardAttempt, 0);
 
       await cubit.pay();
       expect(cubit.state.step, KioskSignupStep.declined);
       cubit.retryCard();
-      // A retry mints a NEW field identity: the widget keys off this nonce
-      // (`ValueKey('kiosk-card-$cardAttempt')`), so the returning card step
-      // mounts a brand-new iframe instead of the one still holding the decline.
+      // The widget keys off this nonce (`ValueKey('kiosk-card-$cardAttempt')`),
+      // so the returning card step mounts a brand-new iframe.
       expect(cubit.state.cardAttempt, 1);
 
       cubit.submitCard(paymentMethodId: 'pm_2', brand: 'visa', last4: '1881');
@@ -551,8 +534,7 @@ void main() {
       clearInteractions(member);
       clearInteractions(memberships);
       final keys = <String>[cubit.state.idempotencyKey!];
-      // A long run of same-card retries: every one fires immediately (there is
-      // no cooldown to gate it) and stays on `declined`, never a stop.
+      // Every retry fires immediately — there is no cooldown to gate it.
       for (var i = 2; i <= 8; i++) {
         expect(cubit.state.step, KioskSignupStep.declined);
         cubit.retrySameCard();
@@ -560,7 +542,6 @@ void main() {
         keys.add(cubit.state.idempotencyKey!);
       }
 
-      // Well past the old three-strike ending: still retryable, never a stop.
       expect(cubit.state.step, KioskSignupStep.declined);
       expect(cubit.state.stopReason, isNull);
       // Every retry is a genuinely new attempt.
@@ -579,8 +560,7 @@ void main() {
           signerName: any(named: 'signerName'),
         ),
       );
-      // The flow count is NOT released on `declined` — the member is standing
-      // right there and is not finished.
+      // The flow count is NOT released on `declined`.
       verifyNever(() => session.endFlow());
       await cubit.close();
     });
@@ -617,8 +597,8 @@ void main() {
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       ).captured.single as MemberMembershipsStartRequest;
-      // The SAME card — never re-entered — with a genuinely NEW key. Reusing
-      // the sent key would replay the decline through the latch.
+      // The SAME card with a genuinely NEW key: reusing the sent key would
+      // replay the decline through the latch.
       expect(request.payment!.paymentMethodId, 'pm_1');
       expect(request.idempotencyKey, isNot(firstKey));
       // Only the failed items are re-sent.
@@ -627,7 +607,6 @@ void main() {
       expect(cubit.state.cardAttempt, 0);
       // The retry cleared the failure, so the receipt now reads all-created.
       expect(cubit.state.failedItems, isEmpty);
-      // Nothing already committed is re-executed.
       verifyNever(() => member.createMember(any()));
       verifyNever(
         () => memberships.recordWaiverSignature(
@@ -654,9 +633,7 @@ void main() {
       expect(cubit.state.step, KioskSignupStep.declined);
       clearInteractions(member);
 
-      // Two taps in the same frame. `retrySameCard` re-fires `pay()`, which
-      // emits `paying` BEFORE its first await, so the second tap's step guard
-      // (and pay's own) sees the new step and drops it.
+      // `retrySameCard` re-fires `pay()`, whose guard drops the second tap.
       cubit.retrySameCard();
       cubit.retrySameCard();
       await _settle();
@@ -730,7 +707,7 @@ void main() {
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.plansUnavailable);
       expect(cubit.state.stopReason!.isRetryable, isTrue);
-      // The member is still standing there — the count is NOT released.
+      // A retryable stop holds the count.
       verifyNever(() => session.endFlow());
 
       when(() => memberships.listPlans(any()))
@@ -773,7 +750,6 @@ void main() {
 
       await cubit.signWaiver(signerName: 'Marcus Bell');
       await _settle();
-      // Still on the waiver, with the republished body reloaded and flagged.
       expect(cubit.state.step, KioskSignupStep.waivers);
       expect(cubit.state.waiverStale, isTrue);
       expect(cubit.state.signedWaiverIds, isEmpty);
@@ -788,8 +764,7 @@ void main() {
     test('a signed waiver is never presented (or signed) twice', () async {
       final cubit = await atReview();
       clearInteractions(memberships);
-      // Back to the plan, forward again: the queue is rebuilt but the
-      // signature is committed, so the step is skipped entirely.
+      // The queue is rebuilt, but the committed signature skips the step.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.card);
       cubit.back();
@@ -819,21 +794,16 @@ void main() {
 
       expect(cubit.state.step, KioskSignupStep.card);
       // The Stripe `CardField`'s web platform view is CACHED across mounts, so
-      // without a NEW key the returning step re-shows the card already typed
-      // while the step's own `_complete` flag resets to false — "Review" then
-      // never becomes tappable again and the member cannot type anything at
-      // all. Same bump `retryCard` does after a decline.
+      // without a NEW key the returning step re-shows the typed card while its
+      // `_complete` flag resets — leaving "Review" permanently untappable.
       expect(cubit.state.cardAttempt, 1);
-      // And state agrees with what is on the screen: no card, no key, no
-      // priced review behind it.
+      // And state agrees with the screen: no card, no key, no priced review.
       expect(cubit.state.paymentMethodId, isNull);
       expect(cubit.state.cardBrand, isNull);
       expect(cubit.state.cardLast4, isNull);
       expect(cubit.state.idempotencyKey, isNull);
       expect(cubit.state.preview, isNull);
 
-      // Re-entering the card carries the flow forward exactly as the first
-      // pass did — a fresh key, a fresh preview, nothing re-created.
       clearInteractions(member);
       cubit.submitCard(paymentMethodId: 'pm_2', brand: 'visa', last4: '1881');
       await _settle();
@@ -928,9 +898,8 @@ void main() {
       final cubit = await atReview();
 
       expect(cubit.state.dueTodayMinorUnits, 14900);
-      // The predicate tests the AMOUNTS: a $0 one-time invoice EXISTS but
-      // carries nothing, and calling that two charges would be a lie about
-      // the member's own statement.
+      // The predicate tests the AMOUNTS: a $0 one-time invoice exists but
+      // carries nothing, so calling it two charges would be a lie.
       expect(cubit.state.chargedTwiceToday, isFalse);
       await cubit.close();
     });
@@ -955,8 +924,8 @@ void main() {
 /// Let the cubit's `unawaited` reads settle.
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
-/// The recurring plan's one-time twin — same ids, same price, so only the
-/// plan TYPE differs and `set_default` is the only thing under test.
+/// The recurring plan's one-time twin — same ids and price, so only the plan
+/// TYPE differs.
 MembershipPlanResponse _oneTimePlan() => MembershipPlanResponse(
       planId: 'plan-1',
       gymId: 'gym-1',

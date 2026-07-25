@@ -22,33 +22,20 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// The signup's terminal — they're a member, and the next thing they need is
 /// the app.
 ///
-/// **It COMPOSES the shipped `get_app/` set** rather than reinventing it: the
-/// same app card (white-labelled title, benefit checks, the real scannable
-/// download QR, the two sign-in steps) beside the same auto-advancing
-/// showcase. The showcase's contents come from `KioskFlowState`'s four
-/// gym-wide catalogues, warmed once at kiosk entry — so this screen fires
-/// **zero** network calls and lands instantly on the frame after the charge.
+/// It COMPOSES the shipped `get_app/` set rather than reinventing it, and its
+/// showcase reads the gym-wide catalogues `KioskFlowState` warmed once at kiosk
+/// entry — so this screen fires ZERO network calls and lands instantly on the
+/// frame after the charge. It greets the PAYER by first name and names the gym:
+/// a member downloads *their gym's* app.
 ///
-/// **It greets the PAYER**, by first name, and it names the gym: a member
-/// downloads *their gym's* app, and "CombatDen" means nothing to the person
-/// standing at the iPad.
+/// That greeting is warm and unconditional by design, so after a PARTIAL it
+/// would be the screen's only claim about a mixed outcome. The fix is the
+/// lane's own inline notice naming the front desk — rendered only on
+/// [KioskSignupState.welcomeAfterPartial] — not a restyled greeting.
 ///
-/// **Reached from a PARTIAL receipt it says so, right under the greeting.** The
-/// greeting is warm and unconditional by design — a green check and "Welcome to
-/// {gym}, {name}!" — and on a partial that tick would be the screen's only
-/// claim about an outcome that was mixed, which reads as *you're all set*. The
-/// welcome itself stays true (they are a member of this gym, and the receipt
-/// they just read carried the per-person detail), so the fix is the lane's own
-/// inline notice naming the front desk, not a second celebration idiom and not
-/// a restyled greeting. It renders only on
-/// [KioskSignupState.welcomeAfterPartial]; every other route here — the
-/// all-created receipt, the 409 idempotent replay, a start with nothing to
-/// itemise — has nothing outstanding to state.
-///
-/// It does not scroll. The greeting and the foot are laid out first and the
-/// two cards take a bounded share of what is left, so a short fold scales the
-/// cards down (each carries its own `ShrinkToFit`) instead of hiding content a
-/// standing member would never discover.
+/// It does not scroll: the two cards take a bounded share of what the greeting
+/// and foot leave, so a short fold scales them down (each carries its own
+/// `ShrinkToFit`) instead of hiding content a standing member never discovers.
 class KioskWelcomeScreen extends StatelessWidget {
   const KioskWelcomeScreen({super.key});
 
@@ -73,10 +60,9 @@ class KioskWelcomeScreen extends StatelessWidget {
                 spacing: DesignConstants.spacingLarge,
                 children: [
                   _Greeting(firstName: kioskFirstName(payer.firstName)),
-                  // The one thing the greeting above cannot say on a partial:
-                  // somebody's membership is still outstanding, and the desk is
-                  // where it gets finished. Plain, blameless, and short enough
-                  // to read at 2m over a queue's shoulder.
+                  // What the greeting above cannot say on a partial: somebody's
+                  // membership is still outstanding, and the desk is where it
+                  // gets finished.
                   if (state.welcomeAfterPartial)
                     const KioskInlineNotice(
                       message: 'Some memberships didn\'t go through — ask the '
@@ -95,8 +81,7 @@ class KioskWelcomeScreen extends StatelessWidget {
 }
 
 /// The green check disc and the one welcome line — the glance's confirmation
-/// idiom, because this is the same beat: the thing worked, and here is what it
-/// was.
+/// idiom, because this is the same beat.
 class _Greeting extends StatelessWidget {
   final String firstName;
 
@@ -191,8 +176,8 @@ class _GetApp extends StatelessWidget {
   }
 }
 
-/// The auto-return countdown and Done — both go home, and both release the
-/// session's flow count through the cubit's one abandon path.
+/// The auto-return countdown and Done — both go home through the cubit's one
+/// abandon path.
 class _Foot extends StatelessWidget {
   final int secondsLeft;
 

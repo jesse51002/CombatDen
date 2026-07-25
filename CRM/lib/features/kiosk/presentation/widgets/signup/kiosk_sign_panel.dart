@@ -9,21 +9,16 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// The signing half of the waiver step: who this signature is FOR, the typed
 /// legal name, and the consent tick.
 ///
-/// **The signature model is a typed legal name plus an explicit consent
-/// acknowledgement** — exactly what the backend records and exactly what the
-/// desk's own `SignWaiverPanel` collects. There is no drawn signature: it
-/// would be a new stored artefact with no backend behind it, and a finger
-/// scrawl on a shared iPad is worse evidence than a typed name, not better.
+/// The signature captured is a typed legal name plus an explicit consent
+/// acknowledgement — exactly what the backend records and what the desk's own
+/// `SignWaiverPanel` collects. There is deliberately no drawn signature: a
+/// finger scrawl on a shared iPad is worse evidence than a typed name, not
+/// better.
 ///
-/// The "signing for" banner is `SignWaiverDialog`'s, at kiosk scale, and it
-/// keeps the guardian clause: a parent signing for a child is the normal case
-/// in a gym, and a line that only addresses the member would quietly make them
-/// wonder whether they may.
-/// The payer-auth variant passes its own [eyebrow] / [bannerNote] /
-/// [consentLabel]: the same three controls answer a different question there
-/// ("you are signing, authorising yourself to pay for X"), and a panel that
-/// still said "SIGNING FOR Ella" while the payer types their own name would be
-/// wrong about who is bound.
+/// The banner keeps the guardian clause, since a parent signing for a child is
+/// the normal case in a gym. The payer-auth variant passes its own [eyebrow] /
+/// [bannerNote] / [consentLabel] — a panel still reading "SIGNING FOR Ella"
+/// while the payer types their own name would be wrong about who is bound.
 class KioskSignPanel extends StatelessWidget {
   /// Whose signature this is — the person the waiver binds.
   final String memberName;

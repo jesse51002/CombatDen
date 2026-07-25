@@ -7,9 +7,8 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// mono eyebrow, the de-card treatment the kiosk uses for a group within a
 /// surface (a second white panel would read as a second, unrelated form).
 ///
-/// [eyebrow] is omitted for the first group, which needs no heading: the
-/// screen's own title already names it, and a heading repeating the title is
-/// one more thing to read on a screen a member is standing at.
+/// [eyebrow] is omitted for the first group: the screen's own title already
+/// names it.
 class KioskSignupDetailGroup extends StatelessWidget {
   final String? eyebrow;
   final List<Widget> children;

@@ -9,29 +9,24 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.d
 
 /// Every signup step wears the same bands: the step rail, the screen head (one
 /// title + one answering line), an optional "who is this for" strip, and the
-/// step's own content — between the header and footer `KioskStage` pins to the
-/// fold.
+/// step's own content.
 ///
-/// It exists so no step re-derives its own chrome. A step that laid out its
-/// own rail would be one refactor away from disagreeing with its neighbours
-/// about which rung is lit, and a member watching the rail jump around loses
-/// the one thing it is for.
+/// It exists so no step re-derives its own chrome — a step laying out its own
+/// rail is one refactor away from disagreeing with its neighbours about which
+/// rung is lit.
 ///
-/// **The whole top band is PINNED.** Rail, title and identity stay on the fold
-/// while the content scrolls beneath them, so the answer to "who am I doing
-/// this for" is on screen for the entire step rather than for as long as
-/// nobody scrolls. That is a correctness control on the plan, waiver and card
-/// steps, not decoration — the cost of losing it is the wrong plan bought for
-/// the wrong child, or a card attached to the wrong profile.
+/// The whole top band is PINNED: rail, title and identity stay on the fold
+/// while the content scrolls beneath them. That is a correctness control on the
+/// plan, waiver and card steps, not decoration — the cost of losing it is the
+/// wrong plan bought for the wrong child, or a card on the wrong profile.
 class KioskSignupStepScaffold extends StatelessWidget {
   /// Which step this is — the rail lights the matching rung.
   final KioskSignupStep step;
 
   final String title;
 
-  /// The one line under the title. It answers the question the member
-  /// actually has in front of this screen; it never apologises and never
-  /// sells.
+  /// The one line under the title — it answers the question the member
+  /// actually has in front of this screen, and never sells.
   final String? subtitle;
 
   /// The pinned `KioskWhoFor` strip, on the steps that are ABOUT one person.
@@ -49,9 +44,8 @@ class KioskSignupStepScaffold extends StatelessWidget {
   /// fill the fold and scroll inside itself.
   final bool fillBody;
 
-  /// Drives the scrolling body, so a step can return it to the top — the plan
-  /// step uses it to scroll back up after a plan is picked (and when the group
-  /// advances to the next person). See [KioskStage.bodyScrollController].
+  /// Drives the scrolling body so a step can return it to the top — the plan
+  /// step scrolls back up after a pick. See [KioskStage.bodyScrollController].
   final ScrollController? bodyController;
 
   const KioskSignupStepScaffold({
@@ -113,16 +107,14 @@ class _Rail extends StatelessWidget {
 /// Which rung of the rail a [KioskSignupStep] lights.
 ///
 /// The two templates differ by ONE rung (ruling 8): the solo rail has no
-/// "People" of its own, so the roster steps light the rung the member is
-/// heading INTO (Plan) rather than one they have already finished — a rail
-/// must never sit on a completed step.
+/// "People" of its own, so its roster steps light the rung the member is
+/// heading INTO rather than one already finished — a rail must never sit on a
+/// completed step.
 ///
-/// **The rail templates are fixed at 6 solo / 7 group and no step ever adds a
-/// rung to them.** A step that is still about WHO this person is shares the
-/// rung they are standing on rather than advertising progress they have not
-/// made — the entry fork, the identify search and the payer match are all that
-/// category. Adding an eighth rung for a binary tap would lengthen an already
-/// long rail and inflate progress.
+/// The templates are fixed at 6 solo / 7 group and no step adds a rung: a step
+/// still about WHO this person is (the entry fork, the identify search, the
+/// payer match) shares the rung they are standing on rather than advertising
+/// progress they have not made.
 int kioskFlowRailIndex(KioskSignupStep step, {required bool isGroup}) {
   return switch (step) {
     KioskSignupStep.entry ||
@@ -138,19 +130,17 @@ int kioskFlowRailIndex(KioskSignupStep step, {required bool isGroup}) {
     KioskSignupStep.plans => isGroup ? 3 : 2,
     KioskSignupStep.waivers => isGroup ? 4 : 3,
     KioskSignupStep.card => isGroup ? 5 : 4,
-    // Review / Paying / Results / Declined / Welcome all belong to the final
-    // "Pay" rung: they are one act from the member's side, and the rail must
-    // not imply a step exists between reviewing and paying. The results
-    // receipt IS the outcome of paying, so it joins that arm rather than
-    // lengthening the rail.
+    // Review / Paying / Results / Declined / Welcome are ONE act from the
+    // member's side, so they share the final "Pay" rung: the rail must not
+    // imply a step exists between reviewing and paying.
     KioskSignupStep.review ||
     KioskSignupStep.paying ||
     KioskSignupStep.results ||
     KioskSignupStep.declined ||
     KioskSignupStep.welcome =>
       isGroup ? 6 : 5,
-    // The stop screen renders no rail at all (a terminal is not a step), so
-    // this value is never drawn; it stays in range rather than throwing.
+    // The stop screen draws no rail (a terminal is not a step), so this value
+    // is never used; it stays in range rather than throwing.
     KioskSignupStep.stop => 0,
   };
 }

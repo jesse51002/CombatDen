@@ -5,17 +5,13 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 
 /// The signup lane's ONE inline notice: important, neutral, not the member's
-/// fault, and not a dead end.
+/// fault, and not a dead end. It wears the warm stop palette rather than red,
+/// and is the shape every "you should know this before you carry on" line
+/// takes — the waiver's republished-version warning, the payer picker's
+/// redirect, the card step's "this replaces the card on your profile".
 ///
-/// It wears the warm stop palette rather than the red one, and it is the shape
-/// every "you should know this before you carry on" line takes — the waiver's
-/// republished-version warning and its inline "that didn't go through", the
-/// payer picker's redirect, and the card step's "this replaces the card on
-/// your profile".
-///
-/// **Its weight is the point.** At [DesignConstants.kioskBody] (17px) on a warm
-/// fill with a 24px glyph it out-weighs the ticked facts below it and sits
-/// second only to the field it follows — prominent without alarm language, a
+/// Its weight is the point: [DesignConstants.kioskBody] on a warm fill
+/// out-weighs the ticked facts below it, prominent without alarm language, a
 /// red treatment, or a modal.
 class KioskInlineNotice extends StatelessWidget {
   final String message;

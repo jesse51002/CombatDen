@@ -11,28 +11,18 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// One person on the signup roster: who they are, whether they are getting a
 /// membership, and how to correct or remove them.
 ///
-/// **It is STACKED, not one line.** The identity and its controls sit on the
-/// top row; the membership check gets a line of its own underneath. Crammed
-/// inline it was a 15px label competing with an avatar, a pill and two icon
-/// buttons — unreadable at arm's length on an iPad, and the one control on the
-/// row that decides whether this person is charged.
+/// STACKED, not one line: the membership check decides whether this person is
+/// charged, so it gets a line of its own rather than a 15px label competing
+/// with an avatar, a pill and two icon buttons at arm's length on an iPad.
 ///
-/// **The membership check is on EVERY row and defaults ON** — payer, payee,
-/// created here or matched to an existing member. A payer-only special case
-/// was one more thing to explain on a screen that has to explain itself, and
-/// unchecking everybody is a legitimate registration-only signup rather than
-/// an error.
-///
-/// **Edit appears only for a person this signup CREATED.** An existing member
-/// is here by their id plus the two things that identify the row — their name
-/// and a MASKED address. The kiosk prints no other stored detail of theirs on a
-/// shared screen, so offering to "edit" fields it refuses to show would be an
-/// affordance that lies about what it opens.
-///
-/// **Remove is a trash control that ASKS first**, and only while removal is
-/// still free — there is no unlink call, so the moment this person's link or a
-/// signature of theirs commits it goes away rather than becoming a button that
-/// cannot do what it says.
+/// The check is on EVERY row and defaults ON — payer, payee, created here or
+/// matched — and unchecking everybody is a legitimate registration-only signup
+/// rather than an error. Edit appears only for a person this signup CREATED:
+/// the kiosk prints no stored detail of an existing member on a shared screen,
+/// so offering to edit fields it refuses to show would lie about what it opens.
+/// Remove ASKS first, and is offered only while removal is still free — there
+/// is no unlink call, so it goes away once this person's link or signature
+/// commits rather than becoming a button that cannot do what it says.
 class KioskRosterRow extends StatelessWidget {
   final KioskSignupPerson person;
 
@@ -63,8 +53,7 @@ class KioskRosterRow extends StatelessWidget {
   });
 
   /// The founder's line, with "as well" earned rather than assumed: it only
-  /// means something beside somebody else, so a roster of one drops it instead
-  /// of comparing a person to nobody.
+  /// means something beside somebody else, so a roster of one drops it.
   String get _checkLabel => isGroup
       ? '${person.firstName.trim().isEmpty ? 'This person' : person.firstName}'
           ' is getting a membership as well'
@@ -84,8 +73,7 @@ class KioskRosterRow extends StatelessWidget {
             InstructorAvatar(name: name, diameter: DesignConstants.iconSizeBig),
             Expanded(child: _Identity(name: name, person: person)),
             // A plain verb, not a status readout: what is or isn't on file is
-            // nobody's business at a glance on a shared iPad, and "None yet"
-            // beside a name only ever read as a nag.
+            // nobody's business at a glance on a shared iPad.
             if (!person.wasExisting)
               KioskRowAction(
                 semanticLabel: 'Edit $name',
@@ -113,15 +101,12 @@ class KioskRosterRow extends StatelessWidget {
 }
 
 /// The name over its one quiet second line: the person's address, MASKED
-/// through [kioskMaskedEmail] — the same form the match card and the payer
-/// picker print, so no screen in this lane prints an address in full.
+/// through [kioskMaskedEmail] — no screen in this lane prints one in full.
 ///
-/// **The roster is the screen a queue reads over the member's shoulder.** It
-/// lists everybody at once, including an adopted existing member whose address
-/// the kiosk pulled from the gym's records rather than from anyone standing
-/// there, so the line says enough to recognise ("that's mine") and never enough
-/// to copy. Nothing is lost by it: the address a member actually has to CHECK
-/// is the receipt one, and the review states that in full for the payer alone.
+/// The roster is the screen a queue reads over the member's shoulder, and it
+/// lists an adopted existing member whose address came from the gym's records
+/// rather than from anyone standing there, so the line says enough to recognise
+/// and never enough to copy.
 class _Identity extends StatelessWidget {
   final String name;
   final KioskSignupPerson person;
@@ -130,8 +115,7 @@ class _Identity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Null when there is nothing to mask — a person added seconds ago whose
-    // details step has not run yet.
+    // Null before their details step has run — hence "Added just now".
     final masked = kioskMaskedEmail(person.email);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

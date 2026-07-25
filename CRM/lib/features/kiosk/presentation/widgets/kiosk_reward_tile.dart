@@ -14,24 +14,19 @@ String formatKioskPoints(int n) => _points.format(n);
 /// The reward image's 3:2 ratio (mirrors the member app reward card's hero).
 const double _kRewardImageAspect = 1.5;
 
-/// The status ring's stroke as a fraction of its box — a ~4px stroke at the
-/// small trailing 24px ring size.
+/// The status ring's stroke as a fraction of its box (~4px at 24px).
 const double _kRingStrokeRatio = 0.16;
 
 /// One reward as the glance's image-first tile — a 1:1 rebuild of the member
-/// app reward card's anatomy (`RewardImageHero` + `RewardPriceTag` + the
-/// fixed two-line title slot + a brand points line) against
-/// `DesignConstants`, with the store card's Redeem CTA replaced by the kiosk
-/// STATUS row:
-///   * affordable (`balance >= cost`): "{cost} pts" + a filled ready disc, and
-///     the tile gains the brand accent border.
-///   * in progress (`balance < cost`): "{balance} / {cost}" + a progress ring.
-///   * balance unknown (billing fetch failed): cost only, no indicator.
+/// app reward card's anatomy against `DesignConstants`, with the store card's
+/// Redeem CTA replaced by the kiosk STATUS row: affordable shows "{cost} pts"
+/// + a ready disc and gains the accent border, in-progress shows
+/// "{balance} / {cost}" + a ring, and an unknown balance shows cost only.
 class KioskRewardTile extends StatelessWidget {
   final RewardResponse reward;
 
-  /// The member's points balance, or null when the billing fetch failed — the
-  /// tile then shows cost only (no ready/progress indicator).
+  /// The member's balance, or null when the billing fetch failed — the tile
+  /// then shows cost only, with no indicator.
   final int? balance;
 
   const KioskRewardTile({
@@ -140,8 +135,7 @@ class _ImagePlaceholder extends StatelessWidget {
     return ColoredBox(
       color: DesignConstants.backgroundAlt,
       child: Center(
-        // A decorative glyph, not words — the kiosk's AA text floor doesn't
-        // reach it, and it should stay quieter than the reward's own name.
+        // Decoration, not words: the kiosk's AA text floor doesn't reach it.
         child: Icon(
           Symbols.image_sharp,
           size: DesignConstants.iconSizeBig,
@@ -179,8 +173,8 @@ class _PriceTag extends StatelessWidget {
   }
 }
 
-/// The kiosk status row — the points line with its trailing indicator
-/// stacked below it (a fixed position across tiles).
+/// The kiosk status row — the points line over its indicator, at a fixed
+/// position across tiles.
 class _RewardStatus extends StatelessWidget {
   final int cost;
   final int? balance;

@@ -4,16 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// crash) resumes the same locked surface instead of dropping into the admin
 /// workspace.
 ///
-/// It writes to `shared_preferences`, which on Flutter web is **the same
-/// browser localStorage** that holds the Supabase session — a deliberate
-/// *fate-share*: if that storage is wiped the session goes too, so a stray
-/// kiosk flag can never outlive its session. The flag is only ever *honored*
-/// inside the authenticated subtree (see `auth_gate.dart`), so a flag without
-/// a session is inert and fails closed to the login screen.
+/// It writes to `shared_preferences`, which on Flutter web is the SAME browser
+/// localStorage that holds the Supabase session — a deliberate fate-share: wipe
+/// that storage and the session goes too, so a stray kiosk flag can never
+/// outlive its session. The flag is only ever honored inside the authenticated
+/// subtree (see `auth_gate.dart`), so a flag without a session is inert and
+/// fails closed to the login screen.
 ///
-/// Two keys: [_activeKey] (are we in kiosk?) and [_deadlineKey] (the absolute
-/// end of the 12-hour runway, epoch-ms UTC). Injectable via [prefs] so the
-/// cubit tests mock it.
+/// [prefs] is injectable so the cubit tests mock it.
 class KioskSessionStore {
   static const String _activeKey = 'kiosk_active';
   static const String _deadlineKey = 'kiosk_deadline';
@@ -34,10 +32,10 @@ class KioskSessionStore {
     );
   }
 
-  /// Read the persisted kiosk flag and deadline. Returns `(false, null)` when
-  /// nothing is stored. The deadline comes back as a UTC [DateTime]; instant
-  /// comparisons (`isBefore`) are timezone-agnostic so the caller compares it
-  /// against a local `now` directly.
+  /// Read the persisted kiosk flag and deadline; `(false, null)` when nothing
+  /// is stored. The deadline comes back UTC, and instant comparisons
+  /// (`isBefore`) are timezone-agnostic, so the caller may compare it against a
+  /// local `now` directly.
   Future<(bool active, DateTime? deadline)> read() async {
     final prefs = await _prefs;
     final active = prefs.getBool(_activeKey) ?? false;
@@ -48,9 +46,9 @@ class KioskSessionStore {
     return (active, deadline);
   }
 
-  /// Wipe the kiosk flag + deadline. Called only after a sign-out is confirmed
-  /// (the session is actually gone), never before — clearing early could strand
-  /// the iPad in the admin workspace on the next boot.
+  /// Wipe the kiosk flag + deadline. Called only after a sign-out is confirmed,
+  /// never before — clearing early could strand the iPad in the admin workspace
+  /// on the next boot.
   Future<void> clear() async {
     final prefs = await _prefs;
     await prefs.remove(_activeKey);

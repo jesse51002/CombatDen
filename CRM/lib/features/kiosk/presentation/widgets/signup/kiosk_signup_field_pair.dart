@@ -5,10 +5,9 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Two fields side by side, each taking half the panel — the mockup's 2-up
 /// field grid.
 ///
-/// It exists so both detail steps lay their pairs out identically: the
-/// keyboard state's whole fold budget depends on the grid staying 2-up, so
-/// which fields pair with which is a per-step decision but HOW they pair is
-/// not.
+/// Shared so both detail steps pair identically: WHICH fields pair is a
+/// per-step decision, HOW they pair is not — the keyboard state's whole fold
+/// budget depends on the grid staying 2-up.
 class KioskSignupFieldPair extends StatelessWidget {
   final List<Widget> children;
 

@@ -9,27 +9,19 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 /// "Take {name} off this signup?" — the confirmation the roster's trash
 /// control shows before it removes anybody.
 ///
-/// **Composition = the shipped `KioskIdleWarning` / `KioskAbandonConfirm`
-/// surface, reused whole**: the same ground-at-92% veil, the same popup card,
-/// the same accent-soft disc, the same type. The kiosk gets exactly ONE modal
-/// vocabulary, so a member who has seen either of the others knows this one is
-/// asking rather than telling.
-///
-/// **Button order and weight follow that pattern too: the SAFE choice is the
-/// primary, on the right.** Removal has no undo and the roster rows sit close
-/// together at kiosk scale, so a member reaching for the biggest, bluest thing
-/// on the screen must land on "keep them".
-///
-/// It names the person, because a roster of four all wearing the same trash
-/// glyph cannot otherwise say which one is about to go.
+/// The shipped `KioskIdleWarning` / `KioskAbandonConfirm` surface reused whole,
+/// including its button order: the SAFE choice is the primary, on the right.
+/// Removal has no undo and the roster rows sit close together at kiosk scale,
+/// so a member reaching for the biggest, bluest thing must land on "keep them".
+/// It names the person — four rows wearing the same trash glyph cannot
+/// otherwise say which one is going.
 class KioskRemoveConfirm extends StatelessWidget {
   /// Whose removal is being confirmed. Blank falls back to a neutral line
   /// rather than an empty gap in the sentence.
   final String name;
 
   /// This person is the current PAYER, so removing them clears the payer and
-  /// the next screen asks who pays. The body says so, because "you can add them
-  /// again" is not the whole story when the payer is the one leaving.
+  /// the next screen asks who pays — which the body has to say.
   final bool asksNextPayer;
 
   const KioskRemoveConfirm({
@@ -42,8 +34,8 @@ class KioskRemoveConfirm extends StatelessWidget {
   Widget build(BuildContext context) {
     final who = name.trim();
     return Positioned.fill(
-      // Opaque, so a tap on the veil is ABSORBED and never answers the
-      // question either way — exactly as the abandon confirm does.
+      // Opaque, so a tap on the veil is ABSORBED and never answers the question
+      // either way.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {},
@@ -54,10 +46,6 @@ class KioskRemoveConfirm extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: DesignConstants.dialogMaxWidth,
               ),
-              // The card's containment from the screen edge — a Padding, not a
-              // `margin`: a margin is a gap, and a gap belongs to the parent's
-              // `spacing:`. It is the idle warning's inset, like the rest of
-              // this surface.
               child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.paddingBig),
                 child: Container(

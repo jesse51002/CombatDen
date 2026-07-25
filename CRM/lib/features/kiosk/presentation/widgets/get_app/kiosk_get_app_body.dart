@@ -12,22 +12,13 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart'
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// Everything INSIDE the "Get the app" popup surface: the two nested cards
-/// side by side, over the popup's own timer + Done foot.
+/// side by side, over the popup's own timer + Done foot — the foot belongs to
+/// the surface, not floating under it (founder ruling).
 ///
-/// **One popup, two nested cards, and the foot lives inside it too** (founder
-/// ruling). The panels used to float straight on the veil with the foot
-/// dangling under them, which read as three loose objects rather than one thing
-/// that had opened. `KioskGetAppModal` supplies the single solid surface; this
-/// widget only lays out its contents.
-///
-/// **It never scrolls, by construction.** A kiosk member does not discover
-/// content below a fold, so the composition is *fitted* to the viewport rather
-/// than allowed to grow past it: the foot is laid out first and the two cards
-/// take an [Expanded] share of what is left, which bounds their height; inside
-/// each card a `ShrinkToFit` turns a fold too short for the content into one
-/// uniform scale-down of that whole card — the ramp, the artwork and the
-/// spacing keeping their proportions — instead of an overflow. Never add a
-/// scroll view here; a scrollbar on a kiosk is content nobody will ever see.
+/// It NEVER scrolls: the foot lays out first and the cards take an [Expanded]
+/// share of what is left, so each card's `ShrinkToFit` turns a too-short fold
+/// into one proportional scale-down instead of an overflow. Never add a
+/// scroll view here — a scrollbar on a kiosk is content nobody will see.
 class KioskGetAppBody extends StatelessWidget {
   final String gymId;
 
@@ -58,16 +49,10 @@ class KioskGetAppBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
-        // THE fit guarantee: the cards take whatever height is left after the
-        // foot, never more. Because that box is bounded, each card's content
-        // is bounded too, and `ShrinkToFit` inside them turns a short fold
-        // into a proportional scale-down instead of an overflow or a scroll.
         Expanded(
           child: slides.isEmpty
-              // A gym with nothing to show yet (no classes loaded, no rewards,
-              // no feed, no ranks): the app card carries the popup alone
-              // rather than an empty second card or a stand-in slide. Capped
-              // so it doesn't stretch across the full popup measure.
+              // A gym with nothing to show yet: the app card carries the popup
+              // alone rather than an empty second card or a stand-in slide.
               ? Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(
@@ -76,9 +61,6 @@ class KioskGetAppBody extends StatelessWidget {
                     child: card,
                   ),
                 )
-              // Two equal halves, like the glance's two panels — both stretched
-              // to the same bounded height, so neither can push the popup
-              // past the fold.
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: DesignConstants.spacingLarge,
@@ -97,11 +79,9 @@ class KioskGetAppBody extends StatelessWidget {
 /// The popup's own footer, INSIDE the surface: a hairline, the 60-second
 /// auto-close countdown, and Done.
 ///
-/// Done closes the overlay and hands the member back to whatever was underneath
-/// it — the glance they were reading, or the home they opened it from — while
-/// the countdown running out means nobody is standing there, which returns
-/// home. That split lives in [KioskFlowCubit.closeAppModal]; this button only
-/// asks for it.
+/// Done hands the member back to whatever the overlay covered; the countdown
+/// running out means nobody is there and goes home instead. That split is
+/// [KioskFlowCubit]'s — this button only asks for it.
 class _Foot extends StatelessWidget {
   final int secondsLeft;
 

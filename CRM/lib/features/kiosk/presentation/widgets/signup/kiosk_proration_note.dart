@@ -6,20 +6,12 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Why "due today" and "then $X each month" are different numbers.
 ///
 /// The kiosk pins `prorate_to_anchor`, so a member joining mid-cycle pays only
-/// the rest of that cycle up front and the full amount from the anchor. Two
-/// unexplained prices on a screen a member is about to tap Pay on is exactly
-/// the moment they cannot tell whether they are being overcharged, and this
-/// says which it is in one receipt-shaped line.
+/// the rest of that cycle up front and the full amount from the anchor.
 ///
-/// **It renders only when the preview's own lines say so** (`is_proration`),
-/// never because two figures happen to differ, and the date is the preview's
-/// `next_payment_date` rather than anything worked out here. Both rules exist
-/// because asserting "this is prorated" about a charge that isn't would be a
-/// false statement about someone's money.
-///
-/// It sits above the two-charges note, and the two never argue: this one is
-/// about what today's amount BUYS, that one about how many lines the
-/// statement shows.
+/// It renders ONLY when the preview's own lines say so (`is_proration`), never
+/// because two figures happen to differ, and the date is the preview's
+/// `next_payment_date` rather than anything worked out here: asserting "this is
+/// prorated" about a charge that isn't is a false statement about money.
 class KioskProrationNote extends StatelessWidget {
   /// The billing-period end today's part-period charge runs up to, and the day
   /// the full amount first bills. Null when the preview doesn't name one.

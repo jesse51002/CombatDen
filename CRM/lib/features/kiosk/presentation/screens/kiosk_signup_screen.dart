@@ -36,25 +36,22 @@ import 'package:crm/features/memberships/data/repositories/memberships_repositor
 /// The member-facing SELF-SERVE SIGNUP lane, mounted by `KioskScreen`'s view
 /// switcher when the home's "Start Trial / Membership" starts one.
 ///
-/// **It provides its own `KioskSignupCubit`, and that is load-bearing**: the
-/// cubit's lifetime is therefore exactly the flow's lifetime. Leaving the view
-/// (any `KioskFlowCubit.goHome()`) unmounts this subtree, `close()` runs, and
-/// every typed field — name, address, emergency contact, and later the card —
-/// is disposed structurally rather than by remembering to clear it. That is
-/// the shared-iPad privacy rule made a property of the tree.
+/// It provides its own `KioskSignupCubit`, and that is load-bearing: the
+/// cubit's lifetime is exactly the flow's, so leaving the view unmounts this
+/// subtree and disposes every typed field — name, address, emergency contact,
+/// card — structurally rather than by remembering to clear it. The shared-iPad
+/// privacy rule, made a property of the tree.
 ///
-/// It also hosts its OWN activity listener. `KioskScreen`'s body-level
-/// `Listener` reads `KioskFlowCubit`, which is provided ABOVE this subtree, so
-/// it cannot reach a cubit provided down here — a signup-lane tap has to be
-/// registered against the signup lane's own 5-minute guard.
+/// It hosts its OWN activity listener too: `KioskScreen`'s body-level
+/// `Listener` reads `KioskFlowCubit`, provided ABOVE this subtree, so a signup
+/// tap must answer the guard actually running down here.
 class KioskSignupScreen extends StatelessWidget {
   const KioskSignupScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Repositories follow the kiosk convention: instantiated with a fresh
-    // `ApiClient()` where the cubit is built. The gym id is guaranteed
-    // non-null — the auth gate only mounts the kiosk once a gym is active.
+    // Fresh `ApiClient()` per repository, as elsewhere in the kiosk. The gym
+    // id is non-null: the kiosk only mounts once a gym is active.
     return BlocProvider<KioskSignupCubit>(
       create: (context) => KioskSignupCubit(
         memberRepository: MemberRepository(apiClient: ApiClient()),
@@ -74,12 +71,10 @@ class _KioskSignupBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocListener<KioskSignupCubit, KioskSignupState>(
-      // The cubit cannot navigate — `goHome()` is `KioskFlowCubit`'s, and it
-      // is the kiosk's ONE abandon path. So every signup exit (the escape,
-      // the confirmed start-over, the idle timeout, both stop-screen exits)
-      // raises `abandoned` and lands here. The cubit has already released the
-      // session flow count by this point; `goHome()` re-releases nothing
-      // (its own latch is separate and was never started for a signup).
+      // The cubit cannot navigate — `goHome()` is `KioskFlowCubit`'s, and the
+      // kiosk's ONE abandon path — so every signup exit raises `abandoned`
+      // and lands here. The cubit has already released the session flow count
+      // by now; `goHome()`'s own latch is separate and re-releases nothing.
       listenWhen: (prev, cur) => !prev.abandoned && cur.abandoned,
       listener: (context, _) => context.read<KioskFlowCubit>().goHome(),
       child: Listener(
@@ -107,10 +102,10 @@ class _StepSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
-      // `payerAuthPending` splits ONE step across two screens: the waiver rung
-      // covers both the payer-auth link and the liability waivers, because to
-      // the member they are one act — signing — and a rail that grew a rung
-      // per payee would stop advertising an honest length for a family.
+      // `payerAuthPending` splits ONE step across two screens: to the member,
+      // the payer-auth link and the liability waivers are one act — signing —
+      // and a rail that grew a rung per payee would stop advertising an
+      // honest length for a family.
       buildWhen: (prev, cur) =>
           prev.step != cur.step ||
           prev.payerAuthPending != cur.payerAuthPending,
@@ -135,8 +130,8 @@ class _StepSwitcher extends StatelessWidget {
           KioskSignupStep.card => const KioskCardStep(),
           KioskSignupStep.review => const KioskReviewStep(),
           KioskSignupStep.paying => const KioskPayingScreen(),
-          // The landed start, itemised. It covers all-created AND a partial;
-          // an ALL-failed start goes to the decline popup instead, where
+          // The landed start, itemised — covers all-created AND a partial. An
+          // ALL-failed start goes to the decline popup instead, the one place
           // "nothing was charged" is true.
           KioskSignupStep.results => const KioskResultsScreen(),
           KioskSignupStep.declined => const KioskDeclinedScreen(),
@@ -147,12 +142,11 @@ class _StepSwitcher extends StatelessWidget {
   }
 }
 
-/// Why a plan card cannot be picked, over the plan grid that raised it — one
-/// popup for both reasons (a trial already used, a membership already held).
-///
-/// It is an OVERLAY rather than a step: the grid stays live behind it, so the
-/// primary is a dismiss with nothing to re-fetch and no scroll position to
-/// restore, and the rail keeps its honest length.
+/// Why a plan card cannot be picked, over the grid that raised it — one popup
+/// for both reasons (a trial already used, a membership already held). An
+/// OVERLAY rather than a step, so the grid stays live behind it: nothing to
+/// re-fetch, no scroll position to restore, and the rail keeps its honest
+/// length.
 class _PlanBlockOverlay extends StatelessWidget {
   const _PlanBlockOverlay();
 
@@ -168,9 +162,9 @@ class _PlanBlockOverlay extends StatelessWidget {
   }
 }
 
-/// The signup lane's idle warning. Same widget the check-in lane uses, routed
-/// to THIS cubit's `registerActivity` — the lane runs its own 5-minute guard,
-/// so "I'm still here" has to answer the clock that is actually running.
+/// The signup lane's idle warning — the check-in lane's widget routed to THIS
+/// cubit's `registerActivity`, so "I'm still here" answers the clock that is
+/// actually running.
 class _SignupIdleOverlay extends StatelessWidget {
   const _SignupIdleOverlay();
 

@@ -2,45 +2,31 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The centered, max-width content stage every kiosk sub-screen sits in — a
-/// centered column capped at a content width, on the kiosk ground. Scrolls
-/// when the content is taller than the viewport so nothing is ever clipped on
-/// a short iPad fold; otherwise [center] decides whether the content sits
-/// centered (result screens) or top-aligned (home / class pick).
+/// The centered, max-width content stage every kiosk sub-screen sits in. It
+/// scrolls when the content outgrows the viewport; [center] decides whether
+/// shorter content sits centered (result screens) or top-aligned.
 ///
 /// A [footer] is PINNED to the bottom of the fold while the content scrolls
-/// beneath it. That is the whole point for the escape hatch: a way out that a
-/// tall class grid can push below the fold is not a way out. A [header] is the
-/// mirror of it, pinned to the TOP for the same reason: whose plan / whose
-/// waiver / whose card this is must not scroll away mid-step. Without either
-/// the stage keeps its plain scroll-the-whole-thing behaviour, so no existing
-/// screen changes.
+/// beneath it — a way out a tall class grid can push below the fold is not a
+/// way out. A [header] pins to the TOP for the same reason: whose plan /
+/// waiver / card this is must not scroll away mid-step.
 class KioskStage extends StatelessWidget {
   final Widget child;
   final bool center;
 
-  /// Pinned to the bottom of the stage, inside the same content rail — the
-  /// escape foot on an in-progress flow. Ignores [center] (a pinned foot has
-  /// nothing to center against).
+  /// The escape foot on an in-progress flow. Ignores [center].
   final Widget? footer;
 
-  /// Pinned to the TOP of the stage, inside the same content rail — the step
-  /// rail, the screen head, and the "who is this for" strip.
+  /// The step rail, screen head, and "who is this for" strip.
   final Widget? header;
 
-  /// Lay [child] out at the height that is LEFT rather than scrolling it.
-  ///
-  /// A step that opts in gets a BOUNDED box, so it may use `Expanded`
-  /// internally and let its own panels scroll — which is how the waiver's
-  /// reading box fills the fold instead of sitting at a borrowed height. The
-  /// step is then responsible for its own overflow, so only steps that
-  /// genuinely scroll something inside themselves should ask for it.
+  /// Lay [child] out at the height that is LEFT rather than scrolling it: the
+  /// step gets a BOUNDED box it may use `Expanded` inside, and owns its own
+  /// overflow in exchange. Only for steps that scroll something internally.
   final bool fillBody;
 
-  /// Drives the pinned-body scroll view, so a step can return it to the top
-  /// itself — the plan step scrolls back up after a pick so the confirmation,
-  /// the pinned identity and Continue are all in view. Only honoured on the
-  /// pinned (header/footer) path, which is the only one a step controls.
+  /// Drives the pinned-body scroll view so a step can return it to the top
+  /// itself. Only honoured on the pinned header/footer path.
   final ScrollController? bodyScrollController;
 
   const KioskStage({
@@ -111,11 +97,9 @@ class _Railed extends StatelessWidget {
   }
 }
 
-/// The body, between whichever bands are held on the fold.
-///
-/// The two gaps are deliberately different sizes: the header and the content
-/// it heads are a title/content pair and take the section gap, while the
-/// footer rides the tighter one it already carries its own hairline above.
+/// The body, between whichever bands are held on the fold. Header→content
+/// takes the wider section gap; the footer rides tighter, since it carries its
+/// own hairline.
 class _Pinned extends StatelessWidget {
   final Widget body;
   final Widget? header;

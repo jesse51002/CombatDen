@@ -28,11 +28,9 @@ import 'package:crm/shared/widgets/progress_arc.dart';
 class _MockKioskFlowCubit extends MockCubit<KioskFlowState>
     implements KioskFlowCubit {}
 
-/// The post-check-in glance is the member-facing money screen. This proves it
-/// lays out at iPad-landscape size with no exception (the greeting + two
-/// `IntrinsicHeight` panels + reward grid + footer interplay is the fragile
-/// part), renders the expected copy, and splits reward tiles into READY (a
-/// filled disc) vs IN-PROGRESS (a ring) purely from the points balance.
+/// The post-check-in glance, the member-facing money screen. The fragile part
+/// is the greeting + two `IntrinsicHeight` panels + reward grid + footer
+/// interplay at iPad-landscape size.
 void main() {
   final createdAt = DateTime.utc(2026, 1, 1);
 
@@ -75,13 +73,9 @@ void main() {
       );
 
   /// Runs the whole choreography out and lets everything come to rest.
-  ///
-  /// `pumpAndSettle` alone is not enough: the beats are `Future.delayed`
-  /// timers, and between the confirmation's fade landing and the panels beat
-  /// firing there is a stretch with no animation running at all — no scheduled
-  /// frame, so `pumpAndSettle` would return mid-choreography and the test
-  /// would end on a pending timer. Jumping the clock past the last beat (and
-  /// the tile cascade behind it) closes that gap.
+  /// `pumpAndSettle` alone returns mid-choreography — the beats are
+  /// `Future.delayed` timers with a stretch where no frame is scheduled — so
+  /// the clock jumps past the last beat and the tile cascade behind it.
   Future<void> settleReveal(WidgetTester tester) async {
     await tester.pump(
       kKioskGlanceLastBeat + KioskRevealTimings.tileStagger * 4,
@@ -100,9 +94,8 @@ void main() {
     glanceCountdown: 10,
   );
 
-  /// Mounts the glance. [reduceMotion] drives the accessibility flag the whole
-  /// reveal keys off; [settle] pumps past the choreography (off for the tests
-  /// that inspect a beat mid-flight).
+  /// Mounts the glance. [reduceMotion] drives the accessibility flag the
+  /// reveal keys off; [settle] pumps past the choreography.
   Future<_MockKioskFlowCubit> pumpGlance(
     WidgetTester tester,
     KioskFlowState state, {
@@ -110,8 +103,7 @@ void main() {
     bool settle = true,
     Stream<KioskFlowState> states = const Stream<KioskFlowState>.empty(),
   }) async {
-    // The rewards panel's app nudge is WHITE-LABELLED off the active gym —
-    // the same source the kiosk header names it from.
+    // The rewards panel's app nudge is WHITE-LABELLED off the active gym.
     selectedGym.setActiveGym(
       gymId: 'gym-1',
       displayName: 'Iron Den',
@@ -145,15 +137,10 @@ void main() {
     return cubit;
   }
 
-  /// The opacity the reveal is currently holding [text] at. The reveal wrapper
-  /// is the nearest thing above a beat's own text that introduces an
-  /// [Opacity], so it IS that beat's entrance.
-  ///
-  /// `find.text(...).first` matters: while the confirmation is travelling it
-  /// exists twice (the slot copy reserving its space, and the copy in flight —
-  /// see `KioskGlanceLift`). Both carry the same `KioskReveal`, mounted on the
-  /// same frame, so either answers for the fade; naming the first keeps the
-  /// finder unambiguous.
+  /// The opacity the reveal is holding [text] at — the nearest [Opacity] above
+  /// a beat's own text IS that beat's entrance. `.first` because a travelling
+  /// confirmation exists twice (the slot copy reserving space and the copy in
+  /// flight), both on the same reveal, so either answers for the fade.
   double revealOpacity(WidgetTester tester, String text) {
     return tester
         .widget<Opacity>(
@@ -242,8 +229,7 @@ void main() {
   testWidgets('the confirmation is ONE line — a fact, with nothing under it',
       (tester) async {
     // Founder ruling: at this instant the member wants to know whether it
-    // worked and into what. A congratulatory second line adds no information
-    // and delays the answer; the celebration is the streak + rewards below.
+    // worked and into what; the celebration is the streak + rewards below.
     await pumpGlance(tester, glanceState);
 
     expect(find.textContaining('Nice one'), findsNothing);
@@ -265,9 +251,8 @@ void main() {
       (tester) async {
     await pumpGlance(tester, glanceState.copyWith(checkInResult: monWed));
 
-    // The strip's badges are the ONLY circle/check-circle icons on the glance.
-    // Widget-tree traversal walks the Row's children left-to-right, so the
-    // icon order is Mon..Sun — proving the render is Monday-first, no reorder.
+    // These badges are the ONLY circle icons on the glance, and tree traversal
+    // walks the Row left-to-right — so the icon order IS Mon..Sun.
     final strip = tester
         .widgetList<Icon>(
           find.byWidgetPredicate(
@@ -282,7 +267,6 @@ void main() {
       for (final icon in strip) icon.icon == Symbols.check_circle_sharp,
     ];
 
-    // Mon (0) + Wed (2) done; the other five open.
     expect(completed, [true, false, true, false, false, false, false]);
     expect(find.byIcon(Symbols.check_circle_sharp), findsNWidgets(2));
     expect(find.byIcon(Symbols.circle_sharp), findsNWidgets(5));
@@ -302,25 +286,21 @@ void main() {
 
     testWidgets('lands in two beats: the confirmation alone, then BOTH cards',
         (tester) async {
-      // The order IS the information hierarchy: "did it work, and into what?"
-      // is answered, alone, before anything is paid out — and then the payout
-      // arrives as one pair rather than a queue. Each assertion is taken one
-      // frame BEFORE the next beat is due, so it proves the later beat is
-      // still invisible rather than merely later in the widget tree.
+      // Each assertion is taken one frame BEFORE the next beat is due, so it
+      // proves the later beat is still invisible rather than merely later in
+      // the widget tree.
       await pumpGlance(tester, glanceState, settle: false);
 
       // One frame's worth of motion — a beat's controller only advances on the
       // frame AFTER its delay fires, so each crossing is pumped then ticked.
       const tick = Duration(milliseconds: 16);
 
-      // Beat 1 is already fading in; beat 2 has not started.
       await tester.pump(tick);
       expect(revealOpacity(tester, line), greaterThan(0));
       expect(revealOpacity(tester, 'week streak'), 0);
       expect(revealOpacity(tester, 'YOUR POINTS'), 0);
 
-      // A second and a half later the confirmation still has the screen to
-      // itself — the founder's centred hold, the beat this re-time exists for.
+      // A second and a half in — the founder's centred hold.
       await tester.pump(KioskRevealTimings.centredHold);
       expect(revealOpacity(tester, 'week streak'), 0);
       expect(revealOpacity(tester, 'YOUR POINTS'), 0);
@@ -330,9 +310,7 @@ void main() {
       expect(revealOpacity(tester, 'week streak'), 0);
       expect(revealOpacity(tester, 'YOUR POINTS'), 0);
 
-      // Beat 2 — and both cards cross together, to the frame. (A beat's
-      // controller only starts on the frame after its delay fires, so the
-      // crossing is pumped and then ticked.)
+      // Beat 2 — both cards cross together, to the frame.
       await tester.pump(tick * 2);
       await tester.pump(tick);
       final streak = revealOpacity(tester, 'week streak');
@@ -343,10 +321,8 @@ void main() {
 
     testWidgets('the two cards ride ONE reveal — they can never desync',
         (tester) async {
-      // The founder asked for both cards to pop at the same time. Two matching
-      // offsets would satisfy that until someone nudged one of them, so the
-      // row shares a single KioskReveal and this proves it: sampled through
-      // the entrance, the two panels hold the exact same opacity.
+      // Two matching offsets would satisfy "both at once" until someone nudged
+      // one of them, so the row shares a SINGLE KioskReveal (founder ruling).
       await pumpGlance(tester, glanceState, settle: false);
       await tester.pump(KioskRevealTimings.panels);
 
@@ -362,9 +338,8 @@ void main() {
 
     testWidgets('beat 1 is CENTRED and alone, and beat 2 only starts once it '
         'has landed at the top', (tester) async {
-      // The founder's ruling: the check-in confirmation owns the middle of the
-      // screen by itself, then travels up and hands over. Two things are
-      // proven here — where it sits during the hold, and where it sits after.
+      // Founder ruling: the confirmation owns the middle of the screen by
+      // itself, then travels up and hands over.
       await pumpGlance(tester, glanceState, settle: false);
       await tester.pump(const Duration(milliseconds: 16));
 
@@ -377,7 +352,6 @@ void main() {
         reason: 'the confirmation holds at the centre of the glance',
       );
 
-      // Still centred one frame before it is due to move.
       await tester.pump(
         KioskRevealTimings.centredHold - const Duration(milliseconds: 32),
       );
@@ -386,8 +360,7 @@ void main() {
         lessThan(1),
       );
 
-      // Mid-travel it is genuinely between the two positions — a real move,
-      // not a cut.
+      // Mid-travel it is genuinely between the two positions, not a cut.
       await tester.pump(
         const Duration(milliseconds: 32) + KioskRevealTimings.lift ~/ 4,
       );
@@ -395,8 +368,7 @@ void main() {
       expect(midFlight, lessThan(0), reason: 'it is on its way UP');
       expect(midFlight.abs(), greaterThan(1));
 
-      // Landed: the travelling copy is gone and the one confirmation left
-      // sits at the very top of the glance column.
+      // Landed: the travelling copy is gone and the survivor sits at the top.
       await tester.pump(KioskRevealTimings.lift);
       expect(find.byKey(kKioskGlanceTravellingConfirmation), findsNothing);
       expect(find.text(line), findsOneWidget);
@@ -412,19 +384,15 @@ void main() {
 
     testWidgets('the choreography does NOT replay when the "Get the app" modal '
         'closes back onto a settled glance', (tester) async {
-      // Done on the modal hands the member back to the glance with its hold
-      // restarted at full — but the glance itself must stay exactly where they
-      // left it. Replaying the confirmation lift (or re-rolling the streak)
-      // would make a member who pressed Done watch the whole screen assemble
-      // itself a second time.
+      // Closing the modal restarts the hold at full, but the glance itself
+      // must stay exactly where the member left it — never re-assemble.
       final states = StreamController<KioskFlowState>();
       addTearDown(states.close);
       await pumpGlance(tester, glanceState, states: states.stream);
 
       final greetingBefore = tester.getRect(find.byType(KioskGlanceGreeting));
 
-      // The cubit restarts the hold at full on close — the only thing that
-      // changes on the glance's own state.
+      // The only thing the close changes on the glance's own state.
       states.add(glanceState.copyWith(glanceCountdown: 10));
       await tester.pump();
 
@@ -444,10 +412,8 @@ void main() {
 
     testWidgets('the lift moves the confirmation ONLY — nothing else on the '
         'glance shifts', (tester) async {
-      // "Reserve the space" is the whole trick: the two cards and the footer
-      // are laid out from the first frame, invisible, so no beat can reflow
-      // the screen the member is reading — and Done never moves under a finger
-      // that is already on its way to it.
+      // The cards and the footer are laid out from the first frame, invisible,
+      // so no beat reflows the screen and Done never moves under a finger.
       await pumpGlance(tester, glanceState, settle: false);
       await tester.pump(const Duration(milliseconds: 16));
 
@@ -460,15 +426,12 @@ void main() {
 
       await settleReveal(tester);
 
-      // Not a pixel: had the cards not been holding their space, the column
-      // would have been short here and the footer would have jumped down when
-      // they arrived.
+      // Not a pixel: without the reserved space the footer would jump down.
       expect(tester.getRect(find.text('Done')), doneBefore);
       expect(tester.getRect(find.byType(KioskGlanceLift)), columnBefore);
 
-      // The cards themselves only ever travel their own entrance rise (the
-      // shared 12px `StaggeredReveal` slide, which is paint, not layout) —
-      // never a reflow, and never sideways.
+      // The cards only travel their own entrance rise (the shared 12px
+      // `StaggeredReveal` slide — paint, not layout), never sideways.
       final cardsAfter = [
         tester.getRect(find.text('week streak')),
         tester.getRect(find.text('YOUR POINTS')),
@@ -483,9 +446,8 @@ void main() {
 
     testWidgets('Done still works while the confirmation is centred',
         (tester) async {
-      // A member must be able to leave at any point in the ~12 seconds, not be
-      // held hostage by the choreography. The travelling copy covers the whole
-      // glance while it is in flight, so it must not eat the tap.
+      // The travelling copy covers the whole glance while it is in flight, so
+      // it must not eat the tap — a member leaves at any point they like.
       final cubit = await pumpGlance(tester, glanceState, settle: false);
       await tester.pump(KioskRevealTimings.centredHold ~/ 2);
       expect(find.byKey(kKioskGlanceTravellingConfirmation), findsOneWidget);
@@ -500,8 +462,6 @@ void main() {
 
     testWidgets('the confirmation FADES IN — it is never simply present',
         (tester) async {
-      // It was the one element with no entrance of its own, which is what made
-      // the glance read as a hard cut even with everything below it animating.
       await pumpGlance(tester, glanceState, settle: false);
 
       expect(revealOpacity(tester, line), lessThan(1));
@@ -515,8 +475,6 @@ void main() {
         (tester) async {
       await pumpGlance(tester, glanceState, settle: false);
 
-      // Mid-roll the reel is somewhere below the target; only at the end does
-      // the final number stand alone.
       await tester.pump(KioskRevealTimings.panels);
       expect(find.byType(CountUpText), findsOneWidget);
 
@@ -527,9 +485,9 @@ void main() {
 
     testWidgets('the beat sheet keeps the shape the founder set',
         (tester) async {
-      // Two beats: a second and a half of the confirmation alone, then both
-      // cards the moment it lands. Nothing here may quietly drift back into a
-      // one-at-a-time cascade or a longer wait.
+      // The order IS the information hierarchy: a second and a half of the
+      // confirmation alone, then both cards the moment it lands. Never a
+      // one-at-a-time cascade, never a longer wait.
       expect(
         KioskRevealTimings.centredHold,
         const Duration(milliseconds: 1500),
@@ -553,11 +511,9 @@ void main() {
 
     testWidgets('the 10-second hold starts at the LAST beat, and the reward '
         'cascade is over early inside it', (tester) async {
-      // The contract between the choreography and the cubit: the cubit waits
-      // out kKioskGlanceLastBeat before the hold clock ticks, so that constant
-      // has to BE the last beat. The tiles then cascade inside the hold's
-      // opening moments, leaving the bulk of it on a screen that has stopped
-      // moving.
+      // The contract with the cubit: it waits out kKioskGlanceLastBeat before
+      // the hold clock ticks, so that constant has to BE the last beat — and
+      // the tile cascade has to finish early inside the hold.
       expect(
         kKioskGlanceLastBeat,
         KioskRevealTimings.panels,
@@ -574,8 +530,7 @@ void main() {
       );
       // The count-up rides the same beat and must also land well inside it.
       expect(KioskRevealTimings.countUp, lessThan(kKioskGlanceHold ~/ 4));
-      // Slower than the old ripple: the tiles are meant to read as four
-      // separate arrivals.
+      // The tiles must read as four separate arrivals, not one ripple.
       expect(
         KioskRevealTimings.tileStagger,
         greaterThan(KioskRevealTimings.element ~/ 2),
@@ -584,10 +539,9 @@ void main() {
 
     testWidgets('the reward tiles cascade INSIDE their card, not behind it',
         (tester) async {
-      // The trap: a KioskReveal delay runs from mount, and the reward grid
+      // The trap: a KioskReveal delay runs from MOUNT, and the reward grid
       // mounts as soon as the catalog lands — long before the panels beat. A
-      // bare per-index stagger would therefore play out under a card that is
-      // still invisible, and the member would see four tiles simply present.
+      // bare per-index stagger plays out under a still-invisible card.
       await pumpGlance(tester, glanceState, settle: false);
 
       // The card has just landed; the second tile has NOT arrived yet.
@@ -611,10 +565,8 @@ void main() {
   group('reduced motion', () {
     testWidgets('shows the whole glance immediately — no stagger, no roll',
         (tester) async {
-      // Precedent: the kiosk showcase rotation already honors this flag. A
-      // viewer who asked for less motion must never sit in front of a screen
-      // that is half-empty for two seconds because a choreography they cannot
-      // see is still playing out.
+      // A viewer who asked for less motion must never sit in front of a
+      // half-empty screen while a choreography they can't see plays out.
       await pumpGlance(
         tester,
         glanceState,
@@ -622,7 +574,6 @@ void main() {
         settle: false,
       );
 
-      // One frame in, everything is on screen at full opacity.
       expect(
         find.text('Checked into Muay Thai Fundamentals'),
         findsOneWidget,
@@ -637,10 +588,8 @@ void main() {
 
     testWidgets('there is no centred hold — the confirmation is at its FINAL '
         'position on the first frame', (tester) async {
-      // The lift is motion too. A reduced-motion viewer gets the landed
-      // layout: no travelling copy, no centred hold at an off-position, and
-      // nothing to wait out — while the cubit's ten-second hold still applies,
-      // so there is time to read.
+      // The lift is motion too, so it collapses to the landed layout. The
+      // cubit's ten-second hold still applies, so there is time to read.
       await pumpGlance(
         tester,
         glanceState,
@@ -676,9 +625,9 @@ void main() {
 
   testWidgets('a tap on the glance opens the get-the-app modal (not goHome)',
       (tester) async {
-    // The founder's UX-5 ruling: the glance tap now funnels to the app modal
-    // instead of ejecting home. Tapping an inert glance element (the streak
-    // caption) routes to the glance's opaque gesture, not the Done button.
+    // Founder ruling: a glance tap funnels to the app modal rather than
+    // ejecting home. The streak caption is inert, so it routes to the glance's
+    // own opaque gesture and not to Done.
     final cubit = await pumpGlance(tester, glanceState);
 
     await tester.tap(find.text('week streak'));

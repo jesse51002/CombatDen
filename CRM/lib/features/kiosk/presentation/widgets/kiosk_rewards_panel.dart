@@ -14,15 +14,12 @@ import 'package:crm/shared/widgets/fill_grid.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The glance's right half — the member's points balance + the just-earned
-/// delta over the image-first reward tiles, always closing on a calm app
-/// nudge. The nudge never disappears: with rewards it points at
-/// redemption, without them (or a failed catalog fetch) it points at booking,
-/// so a no-rewards gym's glance isn't a lone "YOUR POINTS" eyebrow over empty
-/// space. Degrades gracefully otherwise: a null [pointsBalance] (billing fetch
-/// failed) drops the balance line and shows cost-only tiles; an empty [rewards]
-/// gym shows a points-only panel (no grid). On a repeat check-in
-/// ([alreadyCheckedIn]) the "+N pts" celebration chip is suppressed (it earned
-/// none).
+/// delta over the image-first reward tiles, always closing on an app nudge.
+/// That nudge never disappears: redemption with rewards, booking without them,
+/// so a no-rewards gym isn't left with a lone "YOUR POINTS" eyebrow over empty
+/// space. A null [pointsBalance] (billing fetch failed) drops the balance line
+/// and shows cost-only tiles; a repeat check-in suppresses the "+N pts" chip,
+/// since it earned none.
 class KioskRewardsPanel extends StatelessWidget {
   final int? pointsBalance;
   final int pointsAwarded;
@@ -53,9 +50,8 @@ class KioskRewardsPanel extends StatelessWidget {
           ),
           Expanded(child: _GridArea(rewards: rewards, balance: pointsBalance,
               loading: loading)),
-          // The app funnel always closes the panel — only hidden while the
-          // catalog is still loading (the grid shows a spinner and we don't yet
-          // know which nudge fits).
+          // Hidden only while the catalog loads — until it lands we don't
+          // know which nudge fits.
           if (!loading) _AppFooter(hasRewards: rewards.isNotEmpty),
         ],
       ),
@@ -150,20 +146,13 @@ class _EarnedChip extends StatelessWidget {
 }
 
 /// The vertically-centred tile grid — a spinner while loading, the 2x2 grid
-/// when rewards exist, or nothing (points-only) for a gym with no rewards.
+/// when rewards exist, or nothing for a gym with no rewards. The tiles arrive
+/// one by one so the payout reads as a payout.
 ///
-/// The tiles arrive ONE BY ONE ([KioskRevealTimings.tileStagger]) rather than
-/// as a block, so the payout reads as a payout.
-///
-/// **Each tile carries the panel's own beat offset, not just its stagger
-/// slot.** A `KioskReveal` delay runs from the widget's MOUNT, and this grid
-/// mounts whenever the catalog + balance land — which is long before the
-/// panels beat. A bare `tileStagger * index` would therefore cascade the tiles
-/// invisibly, behind a card that is still at zero opacity, and the member
-/// would see four tiles simply present. Starting each tile at
-/// [KioskRevealTimings.panels] puts the cascade back inside the beat that
-/// actually shows it; a slow fetch only pushes the tiles that fetch's own
-/// latency behind their card, never in front of it.
+/// Each tile's delay starts at [KioskRevealTimings.panels], not at a bare
+/// `tileStagger * index`: a `KioskReveal` delay runs from MOUNT, and this grid
+/// mounts when the catalog lands — long before the panels beat — so a stagger
+/// from mount would cascade invisibly behind a card at zero opacity.
 class _GridArea extends StatelessWidget {
   final List<RewardResponse> rewards;
   final int? balance;
@@ -202,8 +191,7 @@ class _GridArea extends StatelessWidget {
   }
 }
 
-/// The always-present app funnel under the grid: redemption when the gym has
-/// rewards, booking otherwise — so the nudge never vanishes.
+/// The always-present app funnel under the grid.
 class _AppFooter extends StatelessWidget {
   final bool hasRewards;
 
@@ -219,9 +207,7 @@ class _AppFooter extends StatelessWidget {
         const Hairline(),
         Center(
           child: KioskAppLine(
-            // White-labelled: it is the GYM's app, not the platform's — see
-            // `kiosk_app_copy.dart`. The gym is read straight off the global
-            // `selectedGym`, the same way the kiosk header names it.
+            // White-labelled: the GYM's app — see `kiosk_app_copy.dart`.
             text: hasRewards
                 ? kioskRedeemInAppLine(selectedGym.gymName)
                 : kioskBookInAppLine(selectedGym.gymName),

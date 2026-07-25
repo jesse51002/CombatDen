@@ -15,10 +15,9 @@ class KioskShowcaseSlide {
 /// A slide's centred stack: its content over the muted one-line caption.
 /// [caption] is optional — the rewards slide speaks for itself.
 ///
-/// Every slide's content is the gym's REAL data. There is deliberately no
-/// "nothing to show" variant here: a slide the kiosk cannot back up is never
-/// built (see `kioskShowcaseSlides`), because on a member-facing screen a
-/// stand-in would read as the gym's own schedule, catalogue, feed or belts.
+/// There is deliberately no "nothing to show" variant: a slide the kiosk
+/// cannot back up with the gym's real data is never built at all — see
+/// `kioskShowcaseSlides`.
 class KioskSlideBody extends StatelessWidget {
   final Widget content;
   final String? caption;
@@ -35,9 +34,9 @@ class KioskSlideBody extends StatelessWidget {
       children: [
         Flexible(child: content),
         if (line != null)
-          // MeasuredMaxWidth, not ConstrainedBox: the caption wraps at this
-          // measure inside the welcome grid's IntrinsicHeight, and a plain cap
-          // reports its height at the full panel width (see that widget).
+          // MeasuredMaxWidth, not ConstrainedBox: inside the welcome grid's
+          // IntrinsicHeight a plain cap reports its height at the full panel
+          // width (see that widget).
           MeasuredMaxWidth(
             maxWidth: DesignConstants.kioskGlanceMeasure,
             child: Text(

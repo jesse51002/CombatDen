@@ -2,16 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// A section heading, in two weights.
-///
-/// The default is the LOUD home head: a centred kiosk-scale title over a muted
-/// explanatory line — the primary thing on a home half.
-///
-/// [quiet] is the demoted variant for a screen whose PICKABLE ROWS are the
-/// dominant elements (the payer picker). There the head is a small, muted,
-/// left-aligned label that reads as a section marker, not a title competing
-/// with the rows beneath it — because a bold centred head that looked exactly
-/// like the tappable rows is what made the picker impossible to read.
+/// A section heading, in two weights. The default is the LOUD home head, the
+/// primary thing on a home half. [quiet] is the demoted variant for a screen
+/// whose PICKABLE ROWS dominate (the payer picker) — a small, muted,
+/// left-aligned label that doesn't compete with the rows beneath it.
 class KioskSectionHead extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -50,8 +44,7 @@ class KioskSectionHead extends StatelessWidget {
   }
 }
 
-/// The demoted head: a quiet, left-aligned label that sits above a group of
-/// pickable rows and lets them dominate.
+/// The demoted head, letting the pickable rows below it dominate.
 class _QuietHead extends StatelessWidget {
   final String title;
   final String subtitle;

@@ -10,12 +10,10 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
 /// The blame-free front-desk handoff shown when the kiosk gate rejects a
-/// check-in (or the call fails). It ALWAYS names a plain-language reason so
-/// the member isn't confused, then routes them to the desk.
-///
-/// The reason line comes from `kioskBlockedCopy` — a gate rejection keys off
-/// `skip_reason`, a failed call off the backend's stable
-/// `CheckInErrorCode`, never off the `detail` prose.
+/// check-in (or the call fails). It ALWAYS names a plain-language reason, then
+/// routes the member to the desk. The reason comes from `kioskBlockedCopy` —
+/// keyed off `skip_reason` or the backend's stable `CheckInErrorCode`, never
+/// off the `detail` prose.
 class KioskBlockedScreen extends StatelessWidget {
   const KioskBlockedScreen({super.key});
 

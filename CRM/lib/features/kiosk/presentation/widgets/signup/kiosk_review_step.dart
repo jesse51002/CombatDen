@@ -12,17 +12,15 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_side
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// D6 — the last screen before the money moves.
+/// D6 — the last screen before the money moves: what was picked, what was
+/// signed, what comes off the card today and what happens next month.
 ///
-/// It shows what was picked, what was signed, exactly what comes off the card
-/// today and what happens next month. The preview behind it is a real
-/// server-side staging of the whole request (it builds the rows and asks
-/// Stripe), which is why it can fail and why a failure gets its own retryable
-/// stop rather than a blank panel.
+/// The preview behind it is a real server-side staging of the whole request (it
+/// builds the rows and asks Stripe), which is why it can fail and why a failure
+/// gets its own retryable stop rather than a blank panel.
 ///
-/// The escape CONFIRMS here: the button sits beside a money button at the most
-/// anxious moment in the flow, and it says "Start over", never "Cancel" —
-/// beside `Sign Membership · $149.00`, "Cancel" reads as *cancel the payment*.
+/// The escape CONFIRMS here, and says "Start over", never "Cancel" — beside
+/// `Sign Membership · $149.00`, "Cancel" reads as *cancel the payment*.
 class KioskReviewStep extends StatelessWidget {
   const KioskReviewStep({super.key});
 
@@ -38,14 +36,11 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
-        // A decline routes to the decline popup — where the member retries the
-        // same card or another — never back through a gated primary here;
-        // there is no attempt cooldown.
         return KioskSignupStepScaffold(
           step: KioskSignupStep.review,
-          // **Button-agnostic.** The label below says what is being signed and
-          // for how much, so naming it here would tie one string to another
-          // and start lying the moment a trial cart changes the verb.
+          // Button-agnostic: the label below says what is being signed and for
+          // how much, so naming it here would start lying the moment a trial
+          // cart changes the verb.
           title: 'Check this over',
           subtitle: state.isGroup
               ? 'One card covers everyone. Nothing is charged until you '
@@ -54,8 +49,7 @@ class KioskReviewStep extends StatelessWidget {
           foot: KioskFlowFoot(
             primaryLabel: _primaryLabel(state, ready: ready),
             // The label carries the amount, so the button is inert until the
-            // amount is real — a member must never be able to commit before
-            // the screen can tell them what for.
+            // amount is real: never commit before the screen says what for.
             onPrimary: ready ? cubit.pay : null,
             onBack: cubit.back,
             confirmAbandon: true,
@@ -66,19 +60,15 @@ class KioskReviewStep extends StatelessWidget {
     );
   }
 
-  /// The committing button reads by WHAT is being bought, then by how much.
+  /// The committing button reads by WHAT is being bought, then by how much:
+  /// "Sign Trial" only when every training person's pick is a trial, "Sign
+  /// Membership" otherwise (a mixed group cart is a membership purchase taken
+  /// as a whole), pluralised when more than one person is buying.
   ///
-  /// The verb names the cart: "Sign Trial" only when every training person's
-  /// pick is a trial, "Sign Membership" otherwise — a mixed group cart is a
-  /// membership purchase taken as a whole. Both pluralise when more than one
-  /// person is buying.
-  ///
-  /// **The amount stays on the button**, which is the shipped safety property:
-  /// a trial is a plan CATEGORY, not a price — a gym can sell a paid two-week
-  /// trial — so a bare verb on a button that takes money would be a real
-  /// omission on the one screen where money moves. It collapses to the bare
-  /// verb exactly when there is nothing to say, where the old label read the
-  /// nonsensical "Pay $0.00".
+  /// The amount stays on the button because a trial is a plan CATEGORY, not a
+  /// price — a gym can sell a paid two-week trial — so a bare verb on a button
+  /// that takes money would be a real omission. It collapses to the bare verb
+  /// when there is nothing to charge.
   String _primaryLabel(KioskSignupState state, {required bool ready}) {
     final plural = state.trainingPersonIndexes.length > 1;
     final noun = state.cartAllTrial
@@ -120,9 +110,8 @@ class _Panels extends StatelessWidget {
           spacing: DesignConstants.spacingLarge,
           children: [
             Expanded(
-              // A group's left half is blocked BY PERSON (the solo panel's
-              // "YOU / YOUR MEMBERSHIP" reads as a single purchase and cannot
-              // answer "who costs what" for a family).
+              // A group is blocked BY PERSON — the solo panel reads as a single
+              // purchase and cannot answer "who costs what" for a family.
               child: state.isGroup
                   ? KioskReviewGroupPanel(state: state)
                   : KioskReviewSidePanel(state: state),

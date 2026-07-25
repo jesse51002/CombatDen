@@ -1,19 +1,13 @@
-/// Every kiosk line that names the MEMBER APP, in one place.
+/// Every kiosk line that names the MEMBER APP, in one place — no call site
+/// assembles them.
 ///
-/// **The member app is white-labelled.** Each gym's members download *their
-/// gym's* app, so a member-facing kiosk line names the GYM — never
-/// "CombatDen", which is the platform's name and means nothing to the person
-/// standing at the iPad. Founder ruling; it applies to the "Get the app" modal,
-/// the home's spanning adoption line, and the glance's redeem/book nudges
-/// alike.
-///
-/// The gym name comes from `selectedGym.gymName`, which is nullable (and can be
-/// blank for a gym that never set one), so every builder here degrades to
-/// naming the app generically — "Get the App" — rather than printing an empty
-/// word or a sentence with a hole in it. It never substitutes a stand-in gym
-/// name: on a member-facing screen a wrong gym name is worse than no gym name.
-///
-/// This is the ONE place these strings live; no kiosk call site assembles them.
+/// **The member app is white-labelled**: each gym's members download *their
+/// gym's* app, so a member-facing kiosk line names the GYM, never "CombatDen"
+/// (founder ruling — the platform's name means nothing to the person at the
+/// iPad). The name comes from `selectedGym.gymName`, which can be null or
+/// blank, so every builder degrades to the generic "the App" rather than
+/// printing a sentence with a hole in it — and never substitutes a stand-in
+/// name, since a wrong gym name is worse than none.
 library;
 
 /// The gym's name as it may be used inside copy, or null when the kiosk has

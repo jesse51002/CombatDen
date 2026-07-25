@@ -75,13 +75,9 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// The surfaces the founder called out, rendered at the real fold: the lane's
-/// front door offers both ways in and the identify search stays avatar-free,
-/// the payer picker's pickable rows read as controls, the payer is deletable
-/// and its absence blocks the flow legibly, the plan pick confirms the choice
-/// and marks a used trial, and the decline is a popup that stacks three live
-/// actions (Retry the same card, Try another card, Get help) over a visible
-/// return countdown, without overflow.
+/// The signup surfaces, rendered at both real folds (1180x820 and 1024x700).
+/// A layout throw on an unattended lobby iPad is a red screen a member is
+/// standing in front of, so composition is asserted, never assumed.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -254,12 +250,8 @@ void main() {
     await tester.pump();
   }
 
-  /// Walk a GROUP of [people] (the payer plus payees) all the way to a landed
-  /// start, and hand it [landed].
-  ///
-  /// It walks the real spine — create, roster, one plan each, the per-person
-  /// waiver run, the card — so the results screen is reached exactly as a member
-  /// reaches it, roster order and all.
+  /// Walk a GROUP of [people] down the real spine to a start landing as
+  /// [landed], so the results screen is reached as a member reaches it.
   Future<void> atGroupResults(
     WidgetTester tester, {
     required int people,
@@ -307,10 +299,8 @@ void main() {
   }
 
   /// Walk a solo signup to the review, then decline the charge [times] times.
-  ///
-  /// Uses `tester.pump()` (never `Future.delayed`) to flush the cubit's
-  /// unawaited reads — under the widget test's fake clock a zero-duration timer
-  /// never fires without a pump, so `Future.delayed(Duration.zero)` would hang.
+  /// Pumps rather than `Future.delayed`: under the fake clock a zero-duration
+  /// timer never fires without a pump.
   Future<void> declineTimes(WidgetTester tester, int times) async {
     await createPayer();
     cubit.continueToPlans();
@@ -388,8 +378,8 @@ void main() {
       expect(find.text('Find your name'), findsOneWidget);
       final row = find.widgetWithText(KioskNameRow, 'Marcus Bell');
       expect(row, findsOneWidget);
-      // **A shared lobby iPad never prints a face or an address here.** The
-      // masked email belongs to the confirm card, one step later.
+      // A shared lobby iPad prints no face and no address here; the masked
+      // email belongs to the confirm card, one step later.
       expect(
         find.descendant(of: row, matching: find.byType(InstructorAvatar)),
         findsNothing,
@@ -409,11 +399,8 @@ void main() {
       cubit.openPayerPick();
       await pump(tester, const KioskPayerPickStep());
 
-      // Ella is offered as ONE affordant row — contained, with a chevron —
-      // never a bare centred line.
       expect(find.byType(KioskNameRow), findsOneWidget);
       expect(find.byIcon(Symbols.chevron_right_sharp), findsWidgets);
-      // The section heads are the quiet variant (they still name the sections).
       expect(find.text('Already here'), findsOneWidget);
       expect(find.text('Someone else who trains here'), findsOneWidget);
       final head = tester.widget<KioskSectionHead>(
@@ -432,7 +419,6 @@ void main() {
       await addElla();
       await pump(tester, const KioskPeopleStep());
 
-      // Both the payer and the payee can be removed.
       expect(find.bySemanticsLabel('Remove Marcus Bell'), findsOneWidget);
       expect(find.bySemanticsLabel('Remove Ella Bell'), findsOneWidget);
       await cubit.close();
@@ -453,7 +439,6 @@ void main() {
         find.widgetWithText(KioskOutlineButton, 'Choose who\'s paying'),
         findsOneWidget,
       );
-      // Continue is disabled — and never a dead button, the reason is beside it.
       final primary = tester.widget<KioskPrimaryButton>(
         find.byType(KioskPrimaryButton),
       );
@@ -470,7 +455,6 @@ void main() {
       deletePayer();
       await pump(tester, const KioskPayerPickStep());
 
-      // No current payer to name, and the remaining person is selectable.
       expect(find.text('PAYING NOW'), findsNothing);
       expect(find.byType(KioskNameRow), findsOneWidget);
       expect(find.text('Ella Bell'), findsOneWidget);
@@ -488,7 +472,6 @@ void main() {
       await tester.pump();
       await pump(tester, const KioskPlanPickStep());
 
-      // No confirmation until something is picked.
       expect(find.byType(KioskPlanPickedBanner), findsNothing);
 
       await tester.tap(find.byType(KioskPlanCard).first);
@@ -497,7 +480,6 @@ void main() {
 
       expect(find.byType(KioskPlanPickedBanner), findsOneWidget);
       expect(find.text('YOU\'VE PICKED'), findsOneWidget);
-      // The plan is named (in the banner and on the card).
       expect(find.text('Unlimited'), findsWidgets);
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -512,14 +494,12 @@ void main() {
       );
       await pump(tester, const KioskPlanPickStep());
 
-      // The card wears its mark before anybody taps it.
       expect(find.text('Already used'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(KioskPlanCard, 'Two-week trial'));
       await tester.pump();
-      // The tap EXPLAINS and selects nothing — a blocked plan can never reach
-      // the review and fail at pay, and a greyed-out card with no answer is a
-      // worse dead end than the one it prevents.
+      // The tap EXPLAINS and selects nothing: a blocked plan must never reach
+      // the review and fail at pay.
       expect(cubit.state.activePerson.selectedPlanId, isNull);
       expect(
         cubit.state.planBlockActive,
@@ -546,9 +526,8 @@ void main() {
           find.textContaining('Trials are one to a member'),
           findsOneWidget,
         );
-        // The trial popup deliberately never names a PLAN: the rule is per
-        // member, so naming one would describe a narrower rule than the grid
-        // is enforcing.
+        // Never names a PLAN: the rule is per member, so naming one would
+        // describe a narrower rule than the grid enforces.
         expect(find.textContaining('Two-week trial'), findsNothing);
         expect(
           find.widgetWithText(KioskPrimaryButton, 'Pick a membership'),
@@ -578,11 +557,10 @@ void main() {
       );
       await pump(tester, const KioskPlanPickStep());
 
-      // The card wears the held label, never the spent-trial one.
       expect(find.text('You have this'), findsOneWidget);
       expect(find.text('Already used'), findsNothing);
-      // And the fact is STATED above the grid rather than living only behind a
-      // tap — the founder asked for the current membership to be named.
+      // Founder ruling: the current membership is NAMED above the grid, not
+      // left behind a tap.
       expect(
         find.textContaining('You\'re on Unlimited right now'),
         findsOneWidget,
@@ -598,11 +576,11 @@ void main() {
 
       await pump(tester, const KioskPlanBlock());
       expect(find.text('You already have this membership'), findsOneWidget);
-      // **This popup DOES name the plan** — the backend's rule is per plan, so
+      // This popup DOES name the plan — the backend's rule is per plan, so
       // naming it describes the rule exactly.
       expect(find.textContaining('You\'re on Unlimited right now'), findsWidgets);
-      // The lobby-privacy line: a plan NAME and nothing else. No price they
-      // pay, no dates, no status word.
+      // Lobby privacy: a plan NAME and nothing else — no price, no dates, no
+      // status word.
       expect(find.textContaining('frozen'), findsNothing);
       expect(find.textContaining('Frozen'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -619,8 +597,7 @@ void main() {
       await pump(tester, const KioskPlanPickStep());
 
       // The rule is PER PLAN: a member on one recurring plan may still buy a
-      // different one, and a false block at a kiosk turns away a paying
-      // customer with no staff override.
+      // different one, and a false block turns a paying customer away.
       await tester.tap(find.widgetWithText(KioskPlanCard, 'Two classes a week'));
       await tester.pump();
       expect(cubit.state.activePerson.selectedPlanId, 'plan-2');
@@ -639,8 +616,7 @@ void main() {
           tester.widget<CardFieldBox>(find.byType(CardFieldBox)).fieldKey;
       expect(key0, const ValueKey('kiosk-card-0'));
 
-      // A retry mounts a brand-new field identity. The emit reaches the
-      // builder on a microtask, so the frame after it carries the change.
+      // The emit lands on a microtask, so the NEXT frame carries the new key.
       cubit.retryCard();
       await tester.pump();
       await tester.pump();
@@ -659,9 +635,8 @@ void main() {
       await pump(tester, const KioskDeclinedScreen());
 
       expect(find.text('Your bank declined the payment'), findsOneWidget);
-      // **The countdown is a RETURN clock, not a cooldown.** It says how long
-      // a shared iPad may sit here unanswered; it never gates Retry, and
-      // there is no "you can try again in" anywhere.
+      // The countdown is a RETURN clock, not a cooldown: it never gates Retry,
+      // and no "you can try again in" exists anywhere.
       expect(find.byType(KioskReturnTimer), findsOneWidget);
       expect(
         find.text('Back to start in ${kKioskSignupPopupHold.inSeconds}s'),
@@ -669,9 +644,7 @@ void main() {
       );
       expect(find.textContaining('You can try again in'), findsNothing);
 
-      // Retry (the primary) re-attempts the SAME card; the two secondaries are
-      // "Try another card" and the desk handoff. All three are live from the
-      // first frame — no cooldown, no attempt cap.
+      // All three are live from the FIRST frame — no cooldown, no attempt cap.
       final retry = tester.widget<KioskPrimaryButton>(
         find.widgetWithText(KioskPrimaryButton, 'Retry'),
       );
@@ -684,8 +657,6 @@ void main() {
         find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
       );
       expect(help.onPressed, isNotNull);
-      // Three stacked buttons plus the countdown at the real fold (1180x820)
-      // must not overflow.
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
@@ -701,22 +672,19 @@ void main() {
         find.textContaining('You haven\'t been charged'),
         findsOneWidget,
       );
-      // But the fresh card HAS already replaced the payer's default by now (the
-      // start promotes it before charging and a decline reverts nothing), so the
-      // screen has to say so rather than reassure past it.
+      // The fresh card already replaced the payer's default (promoted before
+      // charging; a decline reverts nothing), so the screen says so.
       expect(
         find.textContaining(
           'The card you entered is now the one saved on your profile',
         ),
         findsOneWidget,
       );
-      // The retired sentence, whose "everything ELSE" invited the reading that
-      // nothing else about their account changed.
+      // Absent on purpose: "everything else" reads as "the card too".
       expect(
         find.textContaining('everything else you filled in is saved'),
         findsNothing,
       );
-      // Retrying is still the loudest thing on the screen.
       expect(
         find.widgetWithText(KioskPrimaryButton, 'Retry'),
         findsOneWidget,
@@ -742,27 +710,23 @@ void main() {
         expect(find.text('You\'re all set'), findsOneWidget);
         expect(find.text('Every membership below started today.'),
             findsOneWidget);
-        // Five rows, named person AND plan, all on the roster's order.
         expect(find.byType(KioskResultRow), findsNWidgets(5));
         expect(find.text('Marcus Bell · Unlimited'), findsOneWidget);
         expect(find.text('Started today'), findsNWidgets(5));
-        // It names where PAYMENT MAIL lands — and claims no receipt, because
-        // none is sent: CombatDen has no mailer and the connected account
-        // notifies a member on a FAILED payment only.
+        // Names where FAILURE mail lands; no receipt is promised because none
+        // is sent (see kiosk_money_panel_test.dart).
         expect(
           find.textContaining("we'll email you at marcus.bell@gmail.com"),
           findsOneWidget,
         );
         expect(find.textContaining('receipt'), findsNothing);
-        // ONE advance, and no escape: money has moved, so there is nothing to
-        // start over — the terminal rule every kiosk terminal follows.
+        // ONE advance, no escape: money has moved, so nothing to start over.
         expect(
           find.widgetWithText(KioskPrimaryButton, 'Next'),
           findsOneWidget,
         );
         expect(find.text('Start over'), findsNothing);
         expect(find.text('Retry the rest'), findsNothing);
-        // No screen may hold a shared iPad forever.
         expect(find.byType(KioskReturnTimer), findsOneWidget);
         // The card chip is noise once the money has landed.
         expect(find.byType(KioskCardChip), findsNothing);
@@ -790,7 +754,6 @@ void main() {
         await pump(tester, const KioskResultsScreen(), size: size);
 
         expect(find.text('Some of these didn\'t go through'), findsOneWidget);
-        // The one thing a member needs before deciding: what a retry touches.
         expect(
           find.textContaining('The ones marked Started are paid for'),
           findsOneWidget,
@@ -800,8 +763,6 @@ void main() {
           find.text('Not started — nothing was charged for this one.'),
           findsNWidgets(2),
         );
-        // The decline popup's ladder, at a narrower scope — "the rest", because
-        // rows above it visibly succeeded.
         expect(
           find.widgetWithText(KioskPrimaryButton, 'Retry the rest'),
           findsOneWidget,
@@ -814,17 +775,12 @@ void main() {
           find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
           findsOneWidget,
         );
-        // BOTH halves: the actions and the return countdown. Conflating the
-        // clock with a cooldown once took the countdown out with it.
         expect(find.byType(KioskReturnTimer), findsOneWidget);
         // Which card was used is the fact a member wants before retrying.
         expect(find.byType(KioskCardChip), findsOneWidget);
-        // **`Next` is live on a partial too** (founder ruling — this assertion
-        // used to be `findsNothing`). A partial with only a retry ladder held a
-        // member who did not want to retry until the 60-second expiry, and the
-        // people whose memberships DID start never reached the app push. It is
-        // additional, never a replacement: all three retry actions above are
-        // still here, and the notice names the desk as what finishes the rest.
+        // `Next` is live on a partial too (founder ruling): a retry-only
+        // ladder strands a member who does not want to retry. It is
+        // ADDITIONAL — the retry actions stay, and the desk finishes the rest.
         final next = tester.widget<KioskOutlineButton>(
           find.widgetWithText(KioskOutlineButton, 'Next'),
         );
@@ -941,8 +897,8 @@ MemberMembershipsStartResponse _startResponse({bool failed = false}) =>
       ],
     );
 
-/// One result item per member id, every one on the same plan. Ids in [failed]
-/// come back refused, so a partial is a real mixed response.
+/// One result item per member id, all on the same plan; ids in [failed] come
+/// back refused, so a partial is a real mixed response.
 MemberMembershipsStartResponse _multiResponse(
   List<String> memberIds, {
   Set<String> failed = const {},
@@ -971,7 +927,7 @@ CrmMembersListResponse _page(List<MemberRow> rows) => CrmMembersListResponse(
       data: rows,
     );
 
-/// A free trial, beside the recurring plan, so "which card is marked used" is a
+/// A free trial beside the recurring plan, so "which card is marked used" is a
 /// real assertion.
 MembershipPlanResponse _trialPlan() => MembershipPlanResponse(
       planId: 'plan-trial',
@@ -994,8 +950,8 @@ MembershipPlanResponse _trialPlan() => MembershipPlanResponse(
       ),
     );
 
-/// A second recurring plan, so "a DIFFERENT recurring plan is still on offer"
-/// is a real assertion rather than an absence.
+/// A second recurring plan, so "a DIFFERENT one is still on offer" is a real
+/// assertion rather than an absence.
 MembershipPlanResponse _secondRecurringPlan() => MembershipPlanResponse(
       planId: 'plan-2',
       gymId: 'gym-1',

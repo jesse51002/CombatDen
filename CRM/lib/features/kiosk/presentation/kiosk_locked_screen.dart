@@ -3,11 +3,10 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The fail-closed screen shown when a kiosk session has ended — its 12-hour
-/// runway elapsed, or the tab reopened past the deadline — while the admin
-/// session hasn't yet dropped to the login screen. Calm and terminal: it never
-/// exposes the admin workspace. Mirrors the restraint of the member-facing
-/// "sort this at the front desk" blocked screen.
+/// The fail-closed screen shown when a kiosk session has ended — its runway
+/// elapsed, or the tab reopened past the deadline — while the admin session
+/// hasn't yet dropped to login. Calm and terminal: it never exposes the admin
+/// workspace.
 class KioskLockedScreen extends StatelessWidget {
   const KioskLockedScreen({super.key});
 

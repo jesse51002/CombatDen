@@ -3,30 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/measured_max_width.dart';
 
-/// How full the showcase's rank bar sits. Obviously partial, comfortably past
-/// halfway: a nearly-empty bar makes the feature look like work and a nearly
-/// full one makes it look finished, and this panel is selling the climb.
+/// How full the showcase's rank bar sits: obviously partial, past halfway. A
+/// nearly-empty bar makes the feature look like work, a nearly full one makes
+/// it look finished, and this panel is selling the climb.
 const double _kShowcaseFill = 0.6;
 
-/// Denominator used when the featured rung carries no usable threshold (a gym
-/// that left `classes_to_next_major` at 0 or 1). Never shown when the gym's
-/// own number is usable.
+/// Denominator when the featured rung carries no usable threshold (a gym that
+/// left `classes_to_next_major` at 0 or 1).
 const int _kFallbackTarget = 20;
 
 /// The "Track rank" slide's progress bar — "{done} / {target} classes to
 /// {next belt}" over a sapphire rail.
 ///
-/// **The numerator is fabricated, deliberately.** This is marketing copy on a
-/// pitch surface, not a readout: see `KioskRankSlide` for the founder ruling
-/// and why wiring it to the real member is the thing to NOT do here. What is
-/// real is [target] — the gym's own `classes_to_next_major` for the featured
-/// rung — and [nextRankName], the next belt on the gym's own ladder, so a gym
-/// owner watching the pitch sees their own requirement and their own belts.
-/// The fill is [_kShowcaseFill] of that target, held one class short of full
-/// and at least one class in, so the bar always reads as mid-climb.
-///
-/// No word here is second person about anybody's standing. The line is a label
-/// on a diagram; the slide's caption is what addresses the reader.
+/// The numerator is fabricated, deliberately (see `KioskRankSlide`). Real are
+/// [target] — the featured rung's own `classes_to_next_major` — and
+/// [nextRankName], so a gym owner watching the pitch sees their own
+/// requirement and their own belts. No word here is second person about
+/// anybody's standing; the line is a label on a diagram.
 class KioskRankProgress extends StatelessWidget {
   /// The featured rung's real `classes_to_next_major`.
   final int target;
@@ -62,7 +55,7 @@ class KioskRankProgress extends StatelessWidget {
 }
 
 /// "15 / 25 classes to Brown" — the count in the accent so the eye ties it to
-/// the rail below, the rest muted.
+/// the rail below.
 class _Line extends StatelessWidget {
   final int done;
   final int total;
@@ -101,9 +94,9 @@ class _Line extends StatelessWidget {
   }
 }
 
-/// The rail itself, at the kiosk's CONTENT bar weight — the same anatomy the
-/// admin `RankProgressBar` uses (a clipped determinate bar on a hairline
-/// track), one step thicker because it is read from ~2m.
+/// The rail itself: the admin `RankProgressBar`'s anatomy (a clipped
+/// determinate bar on a hairline track), one step thicker because the kiosk is
+/// read from ~2m.
 class _Rail extends StatelessWidget {
   final double fraction;
 

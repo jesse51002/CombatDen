@@ -7,16 +7,12 @@ import 'package:crm/features/schedule/data/models/effective_class_instance.dart'
 import 'package:crm/shared/widgets/class_row/class_card.dart';
 import 'package:crm/shared/widgets/fill_grid.dart';
 
-/// The today's-classes grid on the kiosk class pick — the exact
-/// `FillGrid` + `ClassCard` pattern the member-detail check-in dialog uses
+/// The today's-classes grid on the kiosk class pick — the same
+/// `FillGrid` + `ClassCard` pattern as the member-detail check-in dialog
 /// (`CheckInOccurrenceCardGrid`), so a lone class stays a half-width card
 /// instead of its image ballooning. Tapping a card checks the member in
-/// directly (one-tap, no drill-in).
-///
-/// The cards run at the card's KIOSK type scale (`kiosk: true`), not the
-/// admin `large` one: they sit under a 40px kiosk screen title on an iPad read
-/// from ~2m, so admin-scale card text there would leave the screen's own
-/// subtitle bigger than the class names.
+/// directly, one tap, no drill-in. The cards run at the card's KIOSK type
+/// scale so class names stay larger than the screen's own subtitle at ~2m.
 class KioskClassGrid extends StatelessWidget {
   final List<EffectiveClassInstance> classes;
 

@@ -39,13 +39,10 @@ class _MockManagementResponse extends Mock
     implements MembersManagementResponse {}
 
 /// The three GROUP screens render at iPad-landscape size with no layout
-/// exception.
-///
-/// They are the fragile ones: the roster row packs an avatar, a name pair, a
-/// chip, an intrinsic-width toggle, a pill and a remove button onto one line,
-/// and the match step swaps its whole body between a confirm card and a live
-/// search. A layout throw on an unattended lobby iPad is a red screen a member
-/// is standing in front of, so this is the guard that they compose at all.
+/// exception. They are the fragile ones — the roster row packs an avatar, a
+/// name pair, a chip, an intrinsic-width toggle, a pill and a remove button
+/// onto one line — and a layout throw on an unattended lobby iPad is a red
+/// screen a member is standing in front of.
 void main() {
   late KioskSignupCubit cubit;
   late _MockMemberRepository member;
@@ -87,9 +84,8 @@ void main() {
     );
   });
 
-  // The cubit owns a 5-minute idle Timer from its constructor, and the test
-  // binding asserts no timer outlives the tree — so every test closes it
-  // inside the body, before that invariant runs.
+  // The cubit owns a 5-minute idle Timer, and the binding asserts no timer
+  // outlives the tree — so every test closes it inside the body.
 
   Future<void> pump(WidgetTester tester, Widget child) async {
     await tester.binding.setSurfaceSize(const Size(1180, 820));
@@ -129,7 +125,7 @@ void main() {
     await pump(tester, const KioskPeopleStep());
 
     expect(find.byType(KioskRosterRow), findsNWidgets(2));
-    // The membership check is on EVERY row now, not just the payer's.
+    // The membership check is on EVERY row, not just the payer's.
     expect(find.byType(KioskConsentCheck), findsNWidgets(2));
     expect(find.text('Paying'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
@@ -162,7 +158,6 @@ void main() {
 
     expect(find.byType(KioskRosterRow), findsNWidgets(2));
     expect(find.text('Member'), findsOneWidget);
-    // Only the payer, who this signup created, may be edited.
     expect(find.text('Edit'), findsOneWidget);
     await cubit.close();
   });
@@ -170,9 +165,8 @@ void main() {
   testWidgets('the roster prints every address MASKED, the gym\'s own record '
       'included', (tester) async {
     await createPayer();
-    // Ella is an EXISTING member, and the address on her row is the one the
-    // GYM holds — a different one from what was typed at the iPad, so this
-    // asserts against her stored record rather than against an echo of input.
+    // Ella's row carries the address the GYM holds, deliberately different
+    // from what was typed, so this asserts her record, not an echo of input.
     when(() => member.createMember(any())).thenThrow(
       const DuplicateMemberException([
         DuplicateMemberMatch(
@@ -191,10 +185,8 @@ void main() {
     cubit.confirmMatch();
     await pump(tester, const KioskPeopleStep());
 
-    // **The privacy guard for the one screen that lists EVERYBODY at once.**
-    // A lobby queue reads this roster over the member's shoulder, so a stored
-    // address must never be printed here in full — and neither is anyone
-    // else's.
+    // Privacy on the one screen that lists EVERYBODY at once: a lobby queue
+    // reads it over the member's shoulder, so no address is printed in full.
     expect(find.byType(KioskRosterRow), findsNWidgets(2));
     expect(find.text('m•••••@gmail.com'), findsOneWidget);
     expect(find.text('e•••••@icloud.com'), findsOneWidget);
@@ -230,7 +222,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Ella is getting a membership as well'), findsOneWidget);
-    // Default ON for everybody, payer included.
     expect(cubit.state.persons.every((p) => p.training), isTrue);
     // The check sits on its OWN line under the identity row, not inline.
     final row = tester.getRect(find.byType(KioskRosterRow).first);
@@ -267,8 +258,7 @@ void main() {
 
     // Ticking anybody releases it.
     cubit.setPersonTraining(0, true);
-    // The emit reaches the builder on a microtask, so the frame after it is
-    // the one that carries the change.
+    // The emit lands on a microtask, so the NEXT frame carries the change.
     await tester.pump();
     await tester.pump();
     expect(

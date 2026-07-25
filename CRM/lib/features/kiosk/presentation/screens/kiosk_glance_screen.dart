@@ -13,29 +13,22 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_rewards_panel.dart
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_streak_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
-/// The post-check-in retention "glance" — the member-facing money screen
-/// shown once a check-in is recorded. A one-line
-/// confirmation over two panels — the streak (left) and the points + reward
-/// tiles (right) — with an auto-return timer + Done below. A tap anywhere
-/// returns home (wired at the kiosk surface). Its data (streak + earned points
-/// from the check-in response; balance + reward catalog fetched by the cubit)
-/// rides on [KioskFlowState]; it degrades gracefully when a fetch fails.
+/// The post-check-in retention "glance" — the member-facing money screen shown
+/// once a check-in is recorded: a one-line confirmation over two panels, the
+/// streak (left) and the points + reward tiles (right), with an auto-return
+/// timer + Done below. A tap anywhere opens the "Get the app" modal. Its data
+/// (streak + points from the check-in response; balance + reward catalog
+/// fetched by the cubit) rides on [KioskFlowState] and degrades gracefully
+/// when a fetch fails.
 ///
-/// **It arrives in two beats, and the order is the hierarchy**
-/// ([KioskRevealTimings]): the CONFIRMATION fades in first and does it CENTRED
-/// on the stage, alone (the check disc popping in beside the named class — the
-/// answer to "did it work, and into what?"), holds there, then travels up into
-/// its slot at the top ([KioskGlanceLift]); BOTH cards — the streak with its
-/// numeral rolling up, and the rewards with its tiles cascading in one by one
-/// — then land together under one reveal. Everything arriving at once was
-/// cognitive overload (founder ruling), so the answer gets the screen to
-/// itself first and the payout follows as a pair. The footer's ten-second hold
-/// clock only starts at the LAST beat (`kKioskGlanceLastBeat`) so the reveal
-/// never eats the reading time. A reduced-motion viewer gets every beat at
-/// once, already landed.
+/// It arrives in TWO beats — the confirmation alone, then both cards together
+/// — choreographed by [KioskRevealTimings], which owns that ordering and why.
+/// The footer's hold clock only starts at the LAST beat so the reveal never
+/// eats the reading time; a reduced-motion viewer gets every beat at once,
+/// already landed.
 ///
-/// The week strip reads `current_week_days` (Monday-first, index 0 = Monday)
-/// off the check-in response — one badge per weekday attended this week.
+/// The week strip reads `current_week_days` (Monday-first, index 0 = Monday) —
+/// one badge per weekday attended this week.
 class KioskGlanceScreen extends StatelessWidget {
   const KioskGlanceScreen({super.key});
 
@@ -52,20 +45,18 @@ class KioskGlanceScreen extends StatelessWidget {
       builder: (context, state) {
         final result = state.checkInResult;
         final alreadyCheckedIn = result?.alreadyCheckedIn ?? false;
-        // A tap ANYWHERE on the glance opens the "Get the app" modal (the
-        // founder's UX-5 ruling — the glance tap now funnels to the app instead
-        // of ejecting home). The Done button + reward tiles are interactive
-        // children that win their own taps in the gesture arena, so this only
-        // fires on the glance's inert areas. Opaque so the whole glance surface
-        // is tappable.
+        // A tap ANYWHERE opens the "Get the app" modal (founder ruling: the
+        // glance tap funnels to the app rather than ejecting home). Done and
+        // the reward tiles win their own taps, so this fires only on the
+        // glance's inert areas.
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => context.read<KioskFlowCubit>().openAppModal(),
           child: KioskStage(
             child: KioskGlanceLift(
               spacing: DesignConstants.spacingBig,
-              // Beat 1 — did it work, and which class. Centred and alone for
-              // three seconds, then lifted into this slot by KioskGlanceLift.
+              // Beat 1 — did it work, and which class. Centred and alone,
+              // then lifted into this slot by KioskGlanceLift.
               confirmation: KioskReveal(
                 delay: KioskRevealTimings.confirmation,
                 duration: KioskRevealTimings.confirmationFade,
@@ -74,17 +65,17 @@ class KioskGlanceScreen extends StatelessWidget {
                   alreadyCheckedIn: alreadyCheckedIn,
                 ),
               ),
-              // Laid out in full from the first frame — invisible, but holding
-              // every pixel it will hold at the end, so the two panels arriving
-              // later reflow nothing and Done never moves.
+              // Laid out in full from the first frame — invisible, but already
+              // holding every pixel it will hold, so the panels arriving later
+              // reflow nothing and Done never moves.
               rest: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 spacing: DesignConstants.spacingMedium,
                 children: [
-                  // Beat 2 — the payout. ONE reveal around BOTH cards, so the
-                  // streak and the rewards land together by construction
-                  // rather than by two offsets that happen to agree.
+                  // Beat 2 — the payout. ONE reveal around BOTH cards, so they
+                  // land together by construction, not by two offsets that
+                  // happen to agree.
                   KioskReveal(
                     delay: KioskRevealTimings.panels,
                     child: IntrinsicHeight(
@@ -92,7 +83,6 @@ class KioskGlanceScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         spacing: DesignConstants.spacingLarge,
                         children: [
-                          // The streak — its numeral counts up as it lands.
                           Expanded(
                             child: KioskStreakPanel(
                               weeks: result?.classStreakWeeks ?? 0,
@@ -100,7 +90,6 @@ class KioskGlanceScreen extends StatelessWidget {
                                   result?.currentWeekDays ?? _kEmptyWeek,
                             ),
                           ),
-                          // The rewards — its tiles cascading inside.
                           Expanded(
                             child: KioskRewardsPanel(
                               pointsBalance: state.pointsBalance,

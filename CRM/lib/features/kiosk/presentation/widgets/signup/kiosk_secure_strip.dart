@@ -6,14 +6,15 @@ import 'package:crm/core/constants/design_constants.dart';
 /// The card step's trust strip: a padlock disc beside two lines that say who
 /// does and does not see the card number.
 ///
-/// It sits ABOVE the field on purpose. A member is deciding whether to type
-/// sixteen digits into a lobby iPad, and the answer to that has to arrive
-/// before the box does, not underneath it.
+/// It promises exactly two things — the number is encrypted straight to Stripe,
+/// and neither the named gym nor this iPad sees it. It sits ABOVE the field,
+/// because a member deciding whether to type sixteen digits into a lobby iPad
+/// needs that answer before the box, not underneath it.
 ///
-/// The second line names the GYM, because "CombatDen never sees it" means
-/// nothing to someone standing in Iron Den. With no gym name known it degrades
-/// to naming the gym generically rather than inventing one — a wrong gym name
-/// on a member-facing screen is worse than none.
+/// The second line names the GYM ("CombatDen never sees it" means nothing to
+/// someone standing in Iron Den) and degrades to "This gym" rather than
+/// inventing one: a wrong gym name on a member-facing screen is worse than
+/// none.
 class KioskSecureStrip extends StatelessWidget {
   final String? gymName;
 

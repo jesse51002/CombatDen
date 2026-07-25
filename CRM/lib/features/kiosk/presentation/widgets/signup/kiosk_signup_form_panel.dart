@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The white lifted panel a signup step's fields sit on — the same object
-/// card the rest of the app uses (surface fill,
-/// [DesignConstants.radiusCard] corners, hairline, `cardShadow`), capped at a
-/// readable measure and centred on the wide kiosk stage.
+/// The white lifted panel a signup step's fields sit on — the same object card
+/// the rest of the app uses, capped at a readable measure and centred on the
+/// wide kiosk stage.
 ///
 /// One panel per step. A step that needs internal grouping uses
-/// [KioskSignupDetailGroup] inside it rather than a second panel — two panels
-/// read as two unrelated forms.
+/// [KioskSignupDetailGroup] inside it — two panels read as two unrelated forms.
 class KioskSignupFormPanel extends StatelessWidget {
   final List<Widget> children;
 

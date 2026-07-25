@@ -1,33 +1,21 @@
 import 'package:crm/features/check_in/data/models/check_in_error_code.dart';
 import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 
-/// The blocked screen's one-line "WHY" copy.
+/// The blocked screen's one-line "WHY" copy. Two sources feed it: a gate
+/// rejection (HTTP 200 with a `skip_reason` — [CheckInWarning]) and a failed
+/// call (a thrown error carrying the backend's stable [CheckInErrorCode]).
 ///
-/// Two sources feed it, and they are different shapes:
-/// * a **gate rejection** — HTTP 200 with a `skip_reason` ([CheckInWarning]);
-/// * a **failed call** — a thrown error carrying the backend's stable
-///   [CheckInErrorCode] (the `code` sibling of `detail`).
+/// **Never match on the `detail` prose** — the backend may reword it at will;
+/// the `code` is the contract. Every line is blame-free and stops at the fact,
+/// since the screen itself supplies the front-desk handoff; anything
+/// unrecognised — unknown code, foreign 400, 5xx, dropped network — lands on
+/// the same calm generic line.
 ///
-/// **Never match on the `detail` prose.** The backend states plainly that the
-/// message text is for humans and may be reworded at will, while the `code` is
-/// the contract — matching on prose here would recreate exactly the fragility
-/// the typed backend errors removed.
-///
-/// Every line is blame-free and stops at the fact: the screen itself supplies
-/// the front-desk handoff ("Nothing's wrong. The coach at the desk can sort
-/// it…"), so no line here may carry an error code, jargon, or any hint the
-/// member did something wrong. Anything unrecognised — an unknown code, a
-/// foreign 400, a 5xx, a dropped network — lands on the same calm generic line.
-///
-/// **The overdue line is deliberately discreet, and that is not squeamishness.**
-/// This screen faces a LOBBY with a queue behind it, so it is read by people who
-/// are not the member. The staff label for the same gate condition is "Payment
-/// overdue" (`CheckInWarning.overdue.displayLabel`) and that is right for a
-/// desk-side surface, but announcing a failed renewal to a room is a different
-/// act from telling a member. "A billing detail" still names the domain — so
-/// they know to bring a card to the desk rather than arriving puzzled — without
-/// publishing that they are behind on money. Do not "clarify" it back to
-/// "overdue" or "unpaid".
+/// The overdue line is deliberately discreet: this screen faces a LOBBY with a
+/// queue behind it, so it is read by people who are not the member. "A billing
+/// detail" still names the domain — bring a card to the desk — without
+/// publishing to a room that they are behind on money. Do not "clarify" it
+/// back to "overdue" or "unpaid" (the staff-side label rightly is).
 String kioskBlockedCopy({
   CheckInWarning? reason,
   bool failed = false,

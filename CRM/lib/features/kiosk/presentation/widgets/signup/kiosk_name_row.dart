@@ -3,26 +3,16 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// One pickable person, as a CONTAINED, unmistakably tappable row.
+/// One pickable person, as a CONTAINED, unmistakably tappable row — the
+/// kiosk's ONE "choose a person from a list" affordance (the home check-in
+/// search, the payer picker's roster, the payer/payee name search). The
+/// border, fill, ripple and trailing chevron are what make it read as a
+/// control rather than as a heading.
 ///
-/// It is the kiosk's ONE "choose a person from a list" affordance: the home
-/// check-in search, the payer picker's roster, and the payer/payee name search
-/// all render their rows with it, so every "tap a member" surface looks and
-/// behaves the same. A bordered, filled row with a press ripple and a trailing
-/// chevron reads as a control at a glance — the same signal the search box
-/// carries — rather than as a heading a member cannot tell apart from a section
-/// label. That distinction is the whole point: a centred bold line looked
-/// identical to the quiet titles above it, so nothing on the picker read as
-/// pressable.
-///
-/// **Avatar-free, and that is deliberate**: a shared lobby iPad showing member
-/// faces beside searchable names is a directory of everyone who trains here.
-/// The FULL name is shown because two members sharing a first name and last
-/// initial must stay distinguishable at the moment somebody taps one of them.
-///
-/// Rows carry no top hairline of their own — each is a self-contained control,
-/// so the parent list spaces them with its own `spacing:` rather than a rule
-/// between them.
+/// Avatar-free, deliberately: a shared lobby iPad showing member faces beside
+/// searchable names is a directory of everyone who trains here. The FULL name
+/// is shown because two members sharing a first name and last initial must
+/// stay distinguishable at the moment somebody taps one of them.
 class KioskNameRow extends StatelessWidget {
   final String name;
 

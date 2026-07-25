@@ -6,34 +6,24 @@ import 'package:crm/features/kiosk/presentation/widgets/get_app/kiosk_showcase_s
 import 'package:crm/features/schedule/data/class_time_format.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
-/// The showcase's `.bc-list` fits two rows before it crowds the slide box.
+/// Two rows is what fits before the list crowds the slide box.
 const int _kMaxRows = 2;
 
 /// The row thumbnail's width; its height follows the 16:9 class-image ratio.
 const double _kThumbWidth = 96.0;
 const double _kThumbAspect = 16 / 9;
 
-/// Slide 1 — "Book classes": an illustration of the member app's booking row.
+/// Slide 1 — "Book classes": the gym's next upcoming occurrences drawn as the
+/// member app's booking row.
 ///
-/// **Data source: the gym's REAL classes.** The rows render
-/// [EffectiveClassInstance]s from `KioskFlowState.showcaseClasses` — the gym's
-/// next UPCOMING occurrences, warmed once at kiosk entry — with real class
-/// names, real gym-local start times and real class images. Nothing here is
-/// invented: demo placeholder class names ("Muay Thai Fundamentals" / "Boxing
-/// Conditioning") would, on a member-facing kiosk, read as this gym's actual
-/// schedule.
+/// [classes] is the warmed `showcaseClasses`, never the check-in flow's list —
+/// that one is narrowed to the check-in window and empties every evening, so a
+/// slide driven by it would vanish at the hour the gym is busiest (see
+/// `KioskFlowCubit._warmShowcaseClasses`).
 ///
-/// **Not the check-in flow's class list.** That one is narrowed to the check-in
-/// window and empties every evening; a slide driven by it would vanish at the
-/// exact hour the gym is busiest. See `KioskFlowCubit._warmShowcaseClasses`.
-///
-/// The slide is only built when the kiosk really holds upcoming classes — a
-/// gym that runs none has an empty list and the slide is omitted entirely (see
-/// `kioskShowcaseSlides`), so [classes] here is always populated.
-///
-/// The row anatomy is the MOBILE APP's booking row (thumb, name, when, Book
-/// pill), not a CRM list row — it is a picture of the app being marketed, so
-/// it does not reuse `ClassRow`/`ClassCard`, which are admin surfaces.
+/// The row anatomy is the MOBILE APP's booking row, not a CRM list row: this
+/// is a picture of the app being marketed, so it does not reuse
+/// `ClassRow`/`ClassCard`, which are admin surfaces.
 class KioskClassesSlide extends StatelessWidget {
   final List<EffectiveClassInstance> classes;
 
@@ -105,10 +95,9 @@ class _BookRow extends StatelessWidget {
   }
 }
 
-/// "**Today** · 6:00 PM" — the day word READ OFF the occurrence's own date
-/// ("Today" / "Tomorrow" / "Thu"), never assumed. The showcase looks a week
-/// ahead, so a fixed "Today" would state something untrue about a real class
-/// on a member-facing screen.
+/// "Today · 6:00 PM" — the day word is read off the occurrence's own date,
+/// never assumed: the showcase looks a week ahead, so a fixed "Today" would
+/// state something untrue about a real class on a member-facing screen.
 class _WhenLine extends StatelessWidget {
   final DateTime date;
   final String time;
@@ -172,8 +161,7 @@ class _ThumbPlaceholder extends StatelessWidget {
     return ColoredBox(
       color: DesignConstants.backgroundAlt,
       child: Center(
-        // A decorative glyph, not words — the kiosk's AA text floor doesn't
-        // reach it, and it should stay quieter than the class name beside it.
+        // Decorative, not words, so the kiosk's AA text floor doesn't apply.
         child: Icon(
           Symbols.image_sharp,
           size: DesignConstants.iconSizeMedium,
@@ -185,8 +173,7 @@ class _ThumbPlaceholder extends StatelessWidget {
   }
 }
 
-/// The app's Book affordance, shown as art — inert here (the kiosk books
-/// nothing; the member books in the app).
+/// The app's Book affordance as art — inert (the member books in the app).
 class _BookPill extends StatelessWidget {
   const _BookPill();
 

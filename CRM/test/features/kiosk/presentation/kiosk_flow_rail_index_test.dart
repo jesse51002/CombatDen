@@ -4,19 +4,16 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 
-/// **The step rail's mapping, pinned.**
+/// The step rail's mapping, pinned.
 ///
-/// `kioskFlowRailIndex` is the only thing that decides which rung a member
-/// sees lit, and getting it wrong is SILENT: nothing throws, the rail just
-/// advertises progress that has not happened (or sits on a step already
-/// finished). Adding a step to the spine without adding it here is the exact
-/// mistake this file exists to catch, so every enum value is asserted by name
-/// and both templates are asserted to still be 6 solo / 7 group.
+/// `kioskFlowRailIndex` alone decides which rung a member sees lit, and getting
+/// it wrong is SILENT: nothing throws, the rail just advertises progress that
+/// has not happened. So every enum value is asserted by name, and both
+/// templates are asserted to still be 6 solo / 7 group.
 ///
-/// The mapping's own rule: **a step that is still about WHO this person is
-/// shares the rung they are standing on rather than adding a rung of its own.**
-/// The entry fork, the identify search and the payer match are all that
-/// category, which is why the rail never grew for them.
+/// The mapping's own rule: a step still about WHO this person is shares the
+/// rung they are standing on rather than adding one — the entry fork, the
+/// identify search and the payer match are all that category.
 void main() {
   /// Every step, and the rung it lights in each template.
   const expected = <KioskSignupStep, (int solo, int group)>{
@@ -36,9 +33,8 @@ void main() {
     KioskSignupStep.plans: (2, 3),
     KioskSignupStep.waivers: (3, 4),
     KioskSignupStep.card: (4, 5),
-    // One act from the member's side: the rail must not imply a step exists
-    // between reviewing and paying — and the results receipt IS the outcome of
-    // paying, so it joins that arm rather than lengthening the rail.
+    // One act from the member's side: no rung may sit between reviewing and
+    // paying, and the results receipt is the OUTCOME of paying, not a step.
     KioskSignupStep.review: (5, 6),
     KioskSignupStep.paying: (5, 6),
     KioskSignupStep.results: (5, 6),

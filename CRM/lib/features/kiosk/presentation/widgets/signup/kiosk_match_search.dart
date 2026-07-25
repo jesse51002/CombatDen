@@ -12,22 +12,13 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// Find an existing member by name — the other route into the E2 payee offer,
 /// and the whole of the payer picker.
 ///
-/// It is the shipped kiosk-home composition — `AppSearchBox` at kiosk scale
-/// over plain, centred, avatar-free name rows — pointed at the SIGNUP cubit
-/// instead of the check-in one, and driving the ONE debounced,
-/// sequence-guarded search the cubit owns. There is no second search anywhere.
-///
-/// Avatar-free is not an oversight: a shared lobby iPad showing member faces
-/// beside searchable names is a directory of everyone who trains here.
+/// It is the kiosk-home composition (`AppSearchBox` over [KioskNameRow]s)
+/// pointed at the SIGNUP cubit, driving the ONE debounced, sequence-guarded
+/// search that cubit owns. There is no second search anywhere on the kiosk.
 ///
 /// [forPayer] switches only what a picked row MEANS — the payer seat rather
 /// than a payee on the roster — and the one line of copy that would otherwise
 /// offer the wrong way out of an empty result.
-///
-/// [noMatchMessage] overrides that empty line for a screen where neither
-/// shipped variant is true. The identify step is the case: nothing is seated
-/// there yet, so "you can keep paying yourself" names a person who does not
-/// exist.
 class KioskMatchSearch extends StatefulWidget {
   /// Pick a PAYER rather than a payee.
   final bool forPayer;
@@ -58,10 +49,9 @@ class _KioskMatchSearchState extends State<KioskMatchSearch> {
   @override
   void initState() {
     super.initState();
-    // Seeded FROM state, so a screen re-entered with a query still standing
-    // (the identify step after "no, that's not me") shows the box and the rows
-    // agreeing with each other. Every route that OPENS a search clears the
-    // query first, so this can never carry the previous person's typing.
+    // Seeded FROM state so a re-entered screen shows the box and the rows
+    // agreeing. Every route that OPENS a search clears the query first, so
+    // this can never carry the previous person's typing.
     _controller = TextEditingController(
       text: context.read<KioskSignupCubit>().state.matchQuery,
     );
@@ -85,7 +75,7 @@ class _KioskMatchSearchState extends State<KioskMatchSearch> {
           controller: _controller,
           hintText: widget.hintText,
           textStyle: DesignConstants.kioskFieldText,
-          // The kiosk lifts muted WORDS off `text3rd` for contrast at 2m.
+          // The kiosk lifts muted WORDS for contrast at 2m.
           hintColor: DesignConstants.text2nd,
           onChanged: cubit.searchExistingPeople,
         ),
@@ -121,9 +111,7 @@ class _Results extends StatelessWidget {
             children: [
               for (final match in state.matches)
                 KioskNameRow(
-                  // The FULL name: two members sharing a first name and last
-                  // initial must stay distinguishable at the moment somebody
-                  // taps one of them.
+                  // The FULL name — see `KioskNameRow` for why.
                   name: match.name,
                   onTap: () => forPayer
                       ? context.read<KioskSignupCubit>().pickPayerRow(match)

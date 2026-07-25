@@ -6,38 +6,25 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 
-/// "Start over?" — the confirmation an escape shows on the steps where real
-/// work would die (the card step and the review steps). Every earlier step
-/// abandons on the first tap.
+/// "Start over?" — the confirmation the escape shows on the steps where real
+/// work would die (card and review); every earlier step abandons on the first
+/// tap.
 ///
-/// **Composition = the shipped `KioskIdleWarning`, reused whole**: the same
-/// ground-at-92% veil, the same popup card, the same accent-soft disc, the
-/// same type. That is the point — the kiosk gets exactly ONE modal
-/// vocabulary, so a member who has already seen the idle warning knows what
-/// this surface is and that it is asking, not telling. The disc keeps the
-/// accent-soft tint rather than the warm/warn treatment the front-desk stops
-/// wear: this is a reversible question, not a dead end, and the palette must
-/// not accuse.
+/// It reuses `KioskIdleWarning` whole, so the kiosk keeps exactly ONE modal
+/// vocabulary, and keeps that modal's accent-soft disc rather than the warm
+/// treatment the front-desk stops wear: this is a reversible question, not a
+/// dead end, and the palette must not accuse.
 ///
-/// **Button order and weight:** the SAFE choice is the primary and sits on the
-/// right, where the primary sits on every other kiosk screen. Leaving is the
-/// quiet outline on the left. A member panicking about a mis-tap should be
-/// able to hit the biggest, bluest thing on the screen and have that be the
-/// harmless answer.
-///
-/// **The 5-minute clock keeps running behind it.** If it expires while this is
-/// up, the idle path wins and abandons — the member has demonstrably walked
-/// away, and an unanswered dialog must never pin half-typed card details on a
-/// lobby iPad indefinitely.
+/// The SAFE answer is the primary, on the right. A member panicking about a
+/// mis-tap must be able to hit the biggest, bluest thing on the screen and
+/// have that be the harmless one.
 class KioskAbandonConfirm extends StatelessWidget {
   const KioskAbandonConfirm({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // An opaque gesture detector so a tap on the veil is ABSORBED here and
-    // never leaks through to the step behind it. Unlike the idle warning, a
-    // veil tap does not answer the question: this dialog asks something, and
-    // a stray tap must not answer it either way.
+    // Opaque so a veil tap is ABSORBED, never leaking to the step behind and
+    // — unlike the idle warning — never answering the question either way.
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -49,10 +36,7 @@ class KioskAbandonConfirm extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: DesignConstants.dialogMaxWidth,
               ),
-              // The card's containment from the screen edge — a Padding, not a
-              // `margin`: a margin is a gap, and a gap belongs to the parent's
-              // `spacing:`. It is the idle warning's inset, like the rest of
-              // this surface.
+              // The idle warning's inset, like the rest of this surface.
               child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.paddingBig),
                 child: Container(

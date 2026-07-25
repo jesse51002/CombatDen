@@ -37,9 +37,8 @@ class KioskExitLock extends StatelessWidget {
     );
   }
 
-  /// Read the cubit before the await (never touch a `BuildContext` across the
-  /// async gap — this widget's element can be torn down when the sign-out swaps
-  /// the tree), confirm, then exit.
+  /// Reads the cubit BEFORE the await: sign-out swaps the tree, so this
+  /// widget's element can be gone on the far side of the async gap.
   Future<void> _confirmExit(BuildContext context) async {
     final cubit = context.read<KioskSessionCubit>();
     final confirmed = await ConfirmationModal.show(

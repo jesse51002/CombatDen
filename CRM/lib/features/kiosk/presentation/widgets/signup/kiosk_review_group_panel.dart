@@ -7,24 +7,15 @@ import 'package:crm/shared/widgets/hairline.dart';
 
 /// E4's left half: who is joining, one block per person.
 ///
-/// A non-training payer still appears — they are on this screen because they
-/// are paying for everyone on it, and a family review that silently dropped
-/// the parent would read as though somebody had been forgotten. Their block
-/// simply carries no membership row.
+/// The panel lists EVERYBODY, always. A non-training payer appears with no
+/// membership row (they are paying for everyone here), and after a partial
+/// failure an already-charged person stays listed and is MARKED
+/// ([KioskSignupState.alreadyStarted]) rather than dropped — removing a row is
+/// indistinguishable from forgetting them, and "the next card is not charged
+/// for this one" is a fact the panel must state, not imply by absence.
 ///
-/// **After a PARTIAL failure the panel still lists everybody, and marks the
-/// ones whose membership already started.** Re-entering the review through
-/// "Try another card" re-shows the whole roster, and the same rule that keeps a
-/// non-training payer on it keeps an already-charged person on it: removing a
-/// row is indistinguishable from forgetting them. So
-/// [KioskSignupState.alreadyStarted] MARKS instead — the next card is not
-/// charged for them, which is a fact the panel has to state rather than imply
-/// by absence.
-///
-/// The mark says **STARTED** because the receipt one screen back has just
-/// defined that word for this member ("The ones marked Started are paid for"),
-/// so the panel is re-using a vocabulary they already read rather than teaching
-/// a second one.
+/// The mark says STARTED because the receipt one screen back has just defined
+/// that word for this member.
 class KioskReviewGroupPanel extends StatelessWidget {
   final KioskSignupState state;
 

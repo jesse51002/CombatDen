@@ -6,16 +6,10 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_or_seam.dart';
 /// One half of the kiosk home, expressed as the vertical slots
 /// [KioskHomeColumns] lays out: the [head] (section title + sub-text), the
 /// [body] that floats in the flexible middle (the QR tile / the search field),
-/// and an optional [foot] pinned under it.
-///
-/// **Neither home half carries a foot today, and that is the point.** Getting
-/// the app is a property of the whole screen, not of the QR column, so the
-/// adopt strip that used to sit in this slot now spans BOTH halves below the
-/// composition (`kiosk_home_screen.dart`). With no foot on either side the two
-/// columns balance by construction rather than by tuning one down. The slot
-/// stays because the band structure is general — a screen that really does need
-/// a per-column foot gets one, and [KioskHomeColumns] drops the band entirely
-/// when neither half fills it.
+/// and an optional [foot] pinned under it. Neither live half uses that foot —
+/// the adopt strip spans both halves below the composition instead, so the
+/// columns balance by construction — but the slot stays for a screen that
+/// genuinely needs one.
 class KioskHomeHalf {
   final Widget head;
   final Widget body;
@@ -31,34 +25,18 @@ class KioskHomeHalf {
   });
 }
 
-/// The kiosk home's two-column composition — split by a vertical "or" seam
-/// — and the one thing it guarantees: the two bodies are **co-centred**.
+/// The kiosk home's two-column composition, split by a vertical "or" seam. The
+/// one thing it guarantees: the two bodies are co-centred.
 ///
-/// The halves are not laid out as two independent columns. They are laid out
-/// as shared horizontal BANDS — heads, bodies, and an optional feet band — so
-/// the QR tile and the search field float in the *same* flexible band and
-/// therefore land on the *same* optical centre, no matter what either half
-/// carries below it. That is a deliberate, founder-approved departure from an
-/// earlier two-column design, whose left column reserved an app-adopt block
-/// the right column had nothing to answer with.
-///
-/// Three properties fall out of the band structure rather than from any
-/// measured height, so nothing here is pinned to a pixel value:
-///  * both heads sit in the first band, top-aligned to each other — the fix
-///    never pushes one heading down to chase the other column;
-///  * both bodies sit in the (single, flexible) middle band, centred in it;
-///  * the feet band is OMITTED, not emptied, when neither half fills it — an
-///    empty band still costs the column's spacing above it, which would leave a
-///    reserved gap under the bodies and steal that height from the flexible
-///    middle the bodies are centred in. Today neither half has a foot (the
-///    adopt strip spans the screen instead), so the band is always absent on
-///    the live home; it exists for any future screen that needs one.
-///
-/// The "or" seam is drawn ONCE across all three bands as a decorative
-/// overlay — an absolutely-positioned rule — so the rule spans the whole
-/// composition and its badge lands on the block's centre. Each band reserves
-/// the seam's exact width in its middle, so the overlay's centred rule sits
-/// precisely in that reserved gutter.
+/// The halves are laid out as shared horizontal BANDS (heads, bodies, an
+/// optional feet band), not as independent columns, so the QR tile and the
+/// search field float in the SAME flexible band and land on the same optical
+/// centre whatever either half carries — nothing is pinned to a measured
+/// height (founder-approved). The feet band is OMITTED, not emptied, when
+/// neither half fills it: an empty band still costs the column's spacing above
+/// it, stealing height from the middle the bodies are centred in. The seam is
+/// one decorative overlay across all three bands, and each band reserves its
+/// exact width so the overlay lands in that gutter.
 class KioskHomeColumns extends StatelessWidget {
   final KioskHomeHalf left;
   final KioskHomeHalf right;
@@ -80,8 +58,8 @@ class KioskHomeColumns extends StatelessWidget {
         // Pass the tight height straight through, so the band column can flex.
         fit: StackFit.passthrough,
         children: [
-          // Decoration only, and painted first so no content ever sits under
-          // it; IgnorePointer keeps the gutter from swallowing taps.
+          // Painted first, and non-hit-testing, so the gutter never swallows
+          // a tap.
           const Positioned.fill(child: IgnorePointer(child: _Seam())),
           Column(
             spacing: DesignConstants.spacingBig,
@@ -94,8 +72,7 @@ class KioskHomeColumns extends StatelessWidget {
                   align: CrossAxisAlignment.center,
                 ),
               ),
-              // Omitted, never emptied — a zero-height band still costs the
-              // column's spacing above it. See the class doc.
+              // Omitted, never emptied — see the class doc.
               if (leftFoot != null || rightFoot != null)
                 _Band(
                   left: leftFoot ?? const SizedBox.shrink(),
@@ -136,10 +113,8 @@ class _Band extends StatelessWidget {
   }
 }
 
-/// The full-height "or" seam, centred over the gutter every band reserves.
-/// Equal-flex spacers put it on the block's horizontal centre — which is
-/// exactly where the bands' reserved gap sits, since their two halves carry
-/// equal flex and equal gaps.
+/// The full-height "or" seam. Equal-flex spacers put it on the block's
+/// horizontal centre, which is exactly the gutter every band reserves.
 class _Seam extends StatelessWidget {
   const _Seam();
 

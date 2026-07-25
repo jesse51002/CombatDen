@@ -35,87 +35,50 @@ const int kKioskSearchResultCount = 8;
 const Duration kKioskSearchDebounce = Duration(milliseconds: 300);
 
 /// Inactivity on an in-progress flow page before the warning modal pops. Never
-/// runs on the idle home screen (home is the rest state) NOR on the retention
-/// glance (which has its own [kKioskGlanceHold]). Distinct from the
-/// Phase B 12h runway.
+/// runs on the idle home nor the glance (its own [kKioskGlanceHold]).
 const Duration kKioskIdleTimeout = Duration(minutes: 5);
 
 /// The visible countdown on the idle warning before it abandons the draft and
-/// returns to home. Confirmed 30s — this one line is the switch.
+/// returns home.
 const Duration kKioskIdleCountdown = Duration(seconds: 30);
 
-/// How long the post-check-in retention glance HOLDS once its last beat has
-/// landed, before auto-returning to home so the next member gets a clean home.
-/// A member can also leave early (Done / a tap anywhere). This is the glance's
-/// OWN clock — it is not the 5-minute flow-idle guard (the flow has already
-/// ended by the glance).
-///
-/// Ten seconds is the founder's number, and it is time to READ a finished
-/// screen: it deliberately does NOT start on screen entry (see
-/// [kKioskGlanceLastBeat]).
+/// How long the post-check-in glance HOLDS once its last beat has landed
+/// ([kKioskGlanceLastBeat]) before auto-returning home. The founder's number,
+/// and it is time to READ a finished screen — not the flow-idle guard.
 const Duration kKioskGlanceHold = Duration(seconds: 10);
 
-/// When the glance's LAST beat lands — the streak + rewards cards, which
-/// arrive together. The [kKioskGlanceHold] clock is waited out from here, not
-/// from screen entry.
-///
-/// The reveal is a deliberate two-beat choreography (the confirmation centred
-/// and alone for 1.5s, then a lift, then both cards), so a hold measured from
-/// ENTRY would spend its opening seconds watching the screen assemble itself.
-/// The hold is time to read something finished, so it starts when the last
-/// thing arrives; the glance's total life is therefore this plus the ten, by
-/// design. The full countdown value is shown from the first frame (the footer
-/// never reads "0s" mid-reveal); only the decrementing starts late.
-///
-/// It must equal the last beat of `KioskRevealTimings` — the glance test
-/// asserts exactly that, and also that the reward cascade inside that beat
-/// finishes early enough to leave most of the hold on a settled screen. Under
-/// reduced motion everything is on screen at once and the member simply gets
-/// this much extra hold, which is the safe direction to err.
+/// When the glance's LAST beat lands. [kKioskGlanceHold] is waited out from
+/// HERE, not from screen entry, so the reveal never spends the member's reading
+/// time assembling the screen. Must equal the last beat of
+/// `KioskRevealTimings` — the glance test asserts exactly that.
 const Duration kKioskGlanceLastBeat = Duration(milliseconds: 2220);
 
-/// The glance's 2x2 tile grid shows at most this many rewards (cheapest-first);
-/// a gym with more rewards surfaces the nearest few, the rest live in the app.
+/// The glance's 2x2 tile grid shows at most this many rewards (cheapest-first).
 const int kKioskGlanceRewardCount = 4;
 
-/// How many of this gym's own videos the "Watch videos" showcase slide
-/// shows — a two-card row. Only this many are fetched.
+/// How many of this gym's own videos the "Watch videos" slide shows.
 const int kKioskShowcaseVideoCount = 2;
 
-/// How far ahead the "Book classes" showcase slide looks, counted in days from
-/// today (so the board is read over an inclusive `[today, today + 7]` window).
-///
-/// Seven days forward is the smallest range that CANNOT go empty by time of
-/// day for a gym running a weekly schedule: every weekday recurs at least once
-/// inside it even after today's own occurrences have all finished, so a member
-/// reading the kiosk at 10pm still sees real classes they could book. A
-/// today-only range is what emptied the slide every evening.
+/// How far ahead the "Book classes" showcase slide looks, in days from today.
+/// Seven is the smallest range that CANNOT go empty by time of day on a weekly
+/// schedule — a today-only range empties the slide every evening.
 const int kKioskShowcaseClassDays = 7;
 
-/// How many upcoming occurrences the "Book classes" showcase slide shows — a
-/// two-row list, mirroring the video slide's two cards. Only this many are
-/// kept on the state.
+/// How many upcoming occurrences the "Book classes" slide shows.
 const int kKioskShowcaseClassCount = 2;
 
-/// How long the "Get the app" modal (UX-5) stays open before it auto-closes
-/// back to home, so the next member gets a clean home. A member can also leave
-/// early with Done — which returns them to the view underneath instead, see
-/// [KioskFlowCubit.closeAppModal]. It is the modal's OWN clock — a plain
-/// countdown that member interaction does NOT reset (unlike the 5-minute idle
-/// guard); the modal is a self-dismissing overlay, not an in-progress draft.
+/// How long the "Get the app" modal stays open before auto-closing home. Its
+/// OWN clock, which member interaction does NOT reset (unlike the idle guard):
+/// a self-dismissing overlay, not an in-progress draft.
 const Duration kKioskAppModalTimeout = Duration(seconds: 60);
 
 /// Drives the kiosk check-in lane's internal navigation: the current
 /// [KioskView], the in-progress member/occurrence draft, live name search, the
-/// `is_member: true` check-in, and the 5-minute flow-idle guard.
-///
-/// It sits BELOW the app-root [KioskSessionCubit] (the security runway) and
-/// leans on it for three things: gate a new flow on
-/// [KioskSessionState.canStartFlow], mark a started flow with
-/// [KioskSessionCubit.beginFlow], and clear it with
-/// [KioskSessionCubit.endFlow] — so a lockout landing mid-check-in grants the
-/// grace window. Any back / cancel / idle-timeout returns to home and abandons
-/// the draft.
+/// `is_member: true` check-in, and the flow-idle guard. It sits below the
+/// app-root [KioskSessionCubit] (the security runway), gating each new flow on
+/// [KioskSessionState.canStartFlow] and bracketing it with
+/// [KioskSessionCubit.beginFlow] / [KioskSessionCubit.endFlow]. Any back /
+/// cancel / idle-timeout returns home and abandons the draft.
 class KioskFlowCubit extends Cubit<KioskFlowState> {
   KioskFlowCubit({
     required MembersListRepository membersRepository,
@@ -137,13 +100,11 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         _gymId = gymId,
         _now = now,
         super(const KioskFlowState.home()) {
-    // Warm the four GYM-WIDE catalogues once, here at kiosk entry, and cache
-    // them for the whole session: they are identical for every member, and the
-    // member-facing screens that render them (the glance, the "Get the app"
-    // showcase) must open instantly — the modal in particular fires no fetch
-    // of its own. Each is independent and each failure is non-fatal: the
-    // glance degrades to points-only, and a showcase slide with no data is
-    // simply omitted rather than showing an error on a member-facing screen.
+    // Warm the four GYM-WIDE catalogues once and cache them for the session:
+    // identical for every member, and the screens rendering them must open
+    // instantly. Each failure is deliberately non-fatal — the glance degrades
+    // to points-only, a dataless slide is omitted, never an error on a member
+    // screen.
     unawaited(_warmRewards());
     unawaited(_warmShowcaseClasses());
     unawaited(_warmVideos());
@@ -160,8 +121,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   final String _gymId;
   final DateTime Function() _now;
 
-  /// Backend `occurrence_date` is a bare gym-local `YYYY-MM-DD` (mirrors
-  /// `ScheduleRepository`).
+  /// Backend `occurrence_date` is a bare gym-local `YYYY-MM-DD`.
   static final DateFormat _dateParam = DateFormat('yyyy-MM-dd');
 
   Timer? _searchDebounce;
@@ -173,34 +133,29 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   int _classesSeq = 0;
   int _glanceSeq = 0;
 
-  /// The gym-wide reward catalog, fetched ONCE and reused for every member's
-  /// glance. Null until the first successful fetch; a failed fetch leaves it
-  /// null so a later glance retries. [_rewardsInFlight] dedups concurrent
-  /// fetches (the eager warm + a fast first check-in).
+  /// The gym-wide reward catalog, fetched ONCE and reused for every glance. A
+  /// failed fetch leaves it null so a later glance retries; [_rewardsInFlight]
+  /// dedups concurrent fetches (the eager warm + a fast first check-in).
   List<RewardResponse>? _rewardsCache;
   Future<List<RewardResponse>>? _rewardsInFlight;
 
-  /// The gym's next upcoming occurrences, its own curated video feed head, and
-  /// its main-rank ladder — the other three gym-wide catalogues, likewise
-  /// fetched once at entry. Unlike the rewards catalog nothing re-attempts
-  /// these mid-session: they feed showcase slides only, and an absent slide is
-  /// the designed degradation. They are held here (not only on the state) so
-  /// [goHome] can re-seed a fresh home without re-fetching.
-  ///
-  /// [_showcaseClassesCache] is NOT the check-in flow's class list and must
-  /// never be substituted for it (or the reverse) — see [_warmShowcaseClasses].
+  /// The other three gym-wide catalogues, fetched once at entry and never
+  /// re-attempted (an absent slide is the designed degradation). Held here, not
+  /// only on the state, so [goHome] re-seeds home without re-fetching.
+  /// [_showcaseClassesCache] is NOT the check-in flow's class list — see
+  /// [_warmShowcaseClasses].
   List<EffectiveClassInstance> _showcaseClassesCache = const [];
   List<Video> _videosCache = const [];
   List<MainRank> _rankLadderCache = const [];
 
-  /// Whether this flow has told the session it started (so end is balanced —
-  /// exactly one [KioskSessionCubit.endFlow] per [KioskSessionCubit.beginFlow]).
+  /// Whether this flow told the session it started, so exactly one
+  /// [KioskSessionCubit.endFlow] balances each [KioskSessionCubit.beginFlow].
   bool _flowStarted = false;
 
   // ── Name search (home) ──
 
   /// Debounced live name search. Reflects the query immediately (for the idle
-  /// guard + a stale-response check), then fetches after [kKioskSearchDebounce].
+  /// guard + a stale-response check), then fetches after the debounce.
   void search(String query) {
     _searchDebounce?.cancel();
     final trimmed = query.trim();
@@ -248,8 +203,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   // ── Member → class pick ──
 
   /// Advance to the class pick for [member] — but only while the session can
-  /// start a flow. Past the lockout mark, show the calm closing message
-  /// instead and never begin the flow.
+  /// start a flow. Past the lockout mark, show the calm closing message and
+  /// never begin the flow.
   void selectMember(MemberRow member) {
     registerActivity();
     if (!_session.state.canStartFlow) {
@@ -270,14 +225,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     unawaited(_loadClasses(seq));
   }
 
-  /// Open the member-facing SELF-SERVE SIGNUP lane — but only while the
-  /// session can start a flow, exactly like [selectMember]. Past the lockout
-  /// mark, show the calm closing message instead.
-  ///
-  /// It deliberately does NOT call [_startFlow]: the signup lane owns its own
-  /// `beginFlow` latch (in `KioskSignupCubit`'s constructor), so calling it
-  /// here too would double-count the session's in-progress flows and stop the
-  /// kiosk ever signing itself out at its T+11h45 lockout.
+  /// Open the member-facing SELF-SERVE SIGNUP lane, gated on the session like
+  /// [selectMember]. It deliberately does NOT call [_startFlow]: that lane owns
+  /// its own `beginFlow` latch, and double-counting in-progress flows would
+  /// stop the kiosk ever signing itself out at lockout.
   void startSignup() {
     registerActivity();
     if (!_session.state.canStartFlow) {
@@ -290,9 +241,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   }
 
   /// The CHECK-IN flow's class list: TODAY's occurrences, narrowed to the ones
-  /// this member can check into right now. Read fresh per member — never
-  /// served from the entry-time showcase cache, whose window is a week wide and
-  /// deliberately unfiltered by the check-in gate (see [_warmShowcaseClasses]).
+  /// this member can check into right now. Read fresh per member, never from
+  /// the showcase cache (see [_warmShowcaseClasses]).
   Future<void> _loadClasses(int seq) async {
     final n = _now();
     final today = DateTime(n.year, n.month, n.day);
@@ -301,13 +251,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
           await _scheduleRepo.listEffectiveInstances(_gymId, today, today);
       if (isClosed || seq != _classesSeq) return;
       final now = _now();
-      // Genuinely checkinable RIGHT NOW: in-session or starting within the 2h
-      // early window (occurrenceCheckInOpen), AND not already ended — so this
-      // morning's finished classes are dropped instead of being offered at
-      // 6pm (the backend would silently accept a past occurrence). Kiosk-local:
-      // the tighter end-bound lives here, not in the shared predicate the staff
-      // check-in dialog reuses. Ordered current/soonest first — ascending start
-      // instant puts an in-session class before an upcoming one.
+      // Checkinable RIGHT NOW: in session or inside the 2h early window, AND
+      // not already ended — so this morning's finished classes aren't offered
+      // at 6pm (the backend would silently accept a past occurrence). That
+      // tighter end-bound is kiosk-local, not in the shared predicate.
       final open = all
           .where((i) =>
               !i.isCancelled &&
@@ -327,22 +274,17 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   // ── Record the check-in ──
 
   /// Record the member into [occ] via the kiosk gate (`is_member: true`). A
-  /// recorded or already-checked-in result (a non-null `log_id`) hands off to
-  /// the glance stub; a gate rejection (`skip_reason`) or a failed call routes
-  /// to the blame-free blocked screen — a failure carrying its reason as the
-  /// backend's [CheckInErrorCode]. Either terminal ends the flow.
+  /// non-null `log_id` hands off to the glance; a rejection (`skip_reason`) or
+  /// a failed call routes to the blocked screen. Either terminal ends the flow.
   Future<void> selectClass(EffectiveClassInstance occ) async {
     registerActivity();
     final member = state.selectedMember;
     if (member == null || state.view == KioskView.checkingIn) return;
-    // Guard the async check-in with the class-flow seq (bumped by goHome /
-    // selectMember): a response arriving after the member walked away must not
-    // emit the prior member's glance/blocked over the next person. Mirrors the
-    // stale-drop the search / class-load / glance fetches already do.
+    // The class-flow seq (bumped by goHome / selectMember) stops a response
+    // arriving after the member walked away painting over the next person.
     final seq = _classesSeq;
-    // The picked class's NAME rides along from here: the check-in response
-    // carries only a `class_id`, and the glance has to confirm WHICH class the
-    // member is now checked into.
+    // The picked class's NAME rides along: the response carries only a
+    // `class_id`, and the glance must confirm WHICH class.
     emit(state.copyWith(
       view: KioskView.checkingIn,
       selectedClassName: occ.className,
@@ -368,9 +310,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         ));
         _syncIdleTimer();
       } else {
-        // The retention glance: render the streak + earned points from the
-        // response immediately, then fetch the balance + reward catalog. Its
-        // own hold clock (not the 5-min idle) governs the return home.
+        // Render the streak + earned points from the response immediately,
+        // then fetch the balance + reward catalog.
         emit(state.copyWith(
           view: KioskView.checkedIn,
           checkInResult: resp,
@@ -388,12 +329,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       emit(state.copyWith(
         view: KioskView.blocked,
         checkInFailed: true,
-        // The backend's stable rejection `code` (the sibling of `detail`) is
-        // what the blocked screen switches on — NEVER the `detail` prose,
-        // which is free to be reworded. A non-[ServerException] failure (a
-        // network drop) or a body without a usable `code` passes null
-        // explicitly, clearing any prior code so the screen falls back to its
-        // generic line rather than inheriting the last member's reason.
+        // The blocked screen switches on the backend's stable `code`, never
+        // the `detail` prose, which is free to be reworded. A failure without
+        // one passes null explicitly, so the screen shows its generic line
+        // instead of inheriting the last member's reason.
         checkInErrorCode: e is ServerException
             ? CheckInErrorCode.fromErrorBody(e.data)
             : null,
@@ -404,12 +343,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   // ── Retention glance (data + auto-return) ──
 
-  /// Fetch the glance's per-member data: the cached reward catalog + the
-  /// member's live points balance (AFTER the just-awarded points). A
-  /// [_glanceSeq] guard drops a stale result if the member has already left.
-  /// Either fetch failing is non-fatal — the glance still shows the streak +
-  /// earned points from the check-in response; a null [pointsBalance] degrades
-  /// the tiles to cost-only, empty [rewards] to a points-only panel.
+  /// Fetch the glance's per-member data: the cached reward catalog + the live
+  /// points balance (AFTER the just-awarded points). [_glanceSeq] drops a stale
+  /// result if the member already left; either fetch failing is non-fatal.
   Future<void> _loadGlanceData(MemberRow member) async {
     final seq = ++_glanceSeq;
     final rewards = await _ensureRewards();
@@ -428,8 +364,7 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     ));
   }
 
-  /// The gym-wide reward catalog, fetched once and cached. Concurrent callers
-  /// (the eager warm + a fast first glance) share the one in-flight future.
+  /// The cached catalog, or the one shared in-flight fetch.
   Future<List<RewardResponse>> _ensureRewards() {
     final cached = _rewardsCache;
     if (cached != null) return Future.value(cached);
@@ -455,36 +390,22 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   // ── Gym-wide showcase catalogues (warmed once at kiosk entry) ──
 
-  /// Publish the warmed reward catalog onto the state, so the "Get the app"
-  /// modal can show this gym's real rewards from the IDLE HOME too — not only
-  /// after a check-in has populated the glance.
+  /// Publish the warmed catalog onto the state, so the "Get the app" modal
+  /// shows real rewards from the IDLE HOME too, not only after a check-in.
   Future<void> _warmRewards() async {
     final rewards = await _ensureRewards();
     if (isClosed || rewards.isEmpty) return;
     emit(state.copyWith(rewards: rewards));
   }
 
-  /// The gym's next few UPCOMING occurrences — the "Book classes" showcase
-  /// slide's own list, read ONCE at entry over `[today, today + N days]`
-  /// (`kKioskShowcaseClassDays`) and kept for the session.
+  /// The gym's next few UPCOMING occurrences — the "Book classes" slide's own
+  /// list, read ONCE at entry over `[today, today + N days]`.
   ///
-  /// **This is a SECOND, separate class list, and it must stay that way.** The
-  /// check-in flow's [_loadClasses] is filtered to the CHECK-IN WINDOW (in
-  /// session or within the 2h early window, and not yet ended) because a kiosk
-  /// must never offer a class the member cannot actually check into. That
-  /// filter is correct there and wrong here: late in the evening nothing is in
-  /// the check-in window, so driving the marketing slide from it would empty it
-  /// exactly when the gym is busiest — the same "only 3 slides" bug the founder
-  /// hit from the idle home, moved to a different hour. Never collapse the two
-  /// into one list.
-  ///
-  /// This one looks FORWARD instead: occurrences that have not started yet,
-  /// soonest first, capped at [kKioskShowcaseClassCount]. Every row therefore
-  /// reads as something a member could really book, which is what the inert
-  /// Book pill beside it depicts — an already-finished class under a Book pill
-  /// would not. A gym that genuinely runs no classes still ends up with an
-  /// empty list, so the slide and its dot are still omitted; the conditional
-  /// is intact.
+  /// A SECOND, separate class list on purpose: never collapse it into
+  /// [_loadClasses], whose check-in-window filter would empty this marketing
+  /// slide every evening. This one looks FORWARD — not yet started, soonest
+  /// first, capped — so every row is genuinely bookable, which is what the
+  /// inert Book pill beside it depicts.
   Future<void> _warmShowcaseClasses() async {
     final n = _now();
     final today = DateTime(n.year, n.month, n.day);
@@ -492,8 +413,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       final all = await _scheduleRepo.listEffectiveInstances(
         _gymId,
         today,
-        // Calendar arithmetic (not a Duration) so a DST shift inside the
-        // window can't land the end date a day short.
+        // Calendar arithmetic (not a Duration) so a DST shift inside the window
+        // can't land the end date a day short.
         DateTime(n.year, n.month, n.day + kKioskShowcaseClassDays),
       );
       if (isClosed) return;
@@ -508,15 +429,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       if (upcoming.isEmpty) return;
       emit(state.copyWith(showcaseClasses: upcoming));
     } catch (e, st) {
-      // Non-fatal: the slide is omitted, never an error on a member screen.
       log('Kiosk showcase class load failed', error: e, stackTrace: st);
     }
   }
 
-  /// The head of THIS gym's own curated feed (`GET /gyms/{id}/videos`) — the
-  /// only per-gym feed the CRM can read. Deliberately not `selectedGym.detail`:
-  /// that showcase belongs to a DEFAULT content gym, so rendering it here would
-  /// put another gym's videos on a member-facing screen.
+  /// The head of THIS gym's own curated feed. Deliberately not
+  /// `selectedGym.detail`: that showcase belongs to a DEFAULT content gym, so
+  /// it would put another gym's videos on a member-facing screen.
   Future<void> _warmVideos() async {
     try {
       final page = await _contentRepo.fetchVideos(
@@ -528,16 +447,13 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       if (page.videos.isEmpty) return;
       emit(state.copyWith(videos: page.videos));
     } catch (e, st) {
-      // Non-fatal: the slide is omitted, never an error on a member screen.
       log('Kiosk video feed load failed', error: e, stackTrace: st);
     }
   }
 
-  /// The gym's main-rank ladder — but only when the gym actually runs ranks.
-  /// The enabled flag is a separate gym setting from the ladder rows, so a gym
-  /// that configured belts and then switched ranks off must NOT see them; both
-  /// reads happen here, once, and either falling short leaves the ladder empty
-  /// (the slide and its dot are then omitted).
+  /// The gym's main-rank ladder — but only when the gym actually runs ranks:
+  /// the enabled flag is a separate setting from the ladder rows, so a gym that
+  /// configured belts then switched ranks off must NOT see them.
   Future<void> _warmRankLadder() async {
     try {
       final enabled = await _ranksRepo.getRankEnabled(_gymId);
@@ -548,19 +464,14 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
       if (ladder.ranks.isEmpty) return;
       emit(state.copyWith(rankLadder: ladder.ranks));
     } catch (e, st) {
-      // Non-fatal: the slide is omitted, never an error on a member screen.
       log('Kiosk rank ladder load failed', error: e, stackTrace: st);
     }
   }
 
-  /// A fresh idle home that KEEPS the gym-wide catalogues (rewards, the
-  /// showcase's upcoming classes, videos, rank ladder) — they are identical for
-  /// every member and were paid for once at entry — while dropping every
-  /// per-member field the plain [KioskFlowState.home] constant clears.
-  ///
-  /// Note which class list is re-seeded: the SHOWCASE's, never the check-in
-  /// flow's, which is per-member and must be re-read fresh for the next person.
-  /// [_pruneShowcaseClasses] runs first so the re-seeded list is still honest.
+  /// A fresh idle home that KEEPS the gym-wide catalogues (paid for once at
+  /// entry) while dropping every per-member field [KioskFlowState.home] clears.
+  /// The class list re-seeded here is the SHOWCASE's, never the check-in
+  /// flow's, which is per-member.
   KioskFlowState get _freshHome => const KioskFlowState.home().copyWith(
         rewards: _rewardsCache ?? const [],
         showcaseClasses: _showcaseClassesCache,
@@ -568,14 +479,9 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         rankLadder: _rankLadderCache,
       );
 
-  /// Drop showcase occurrences that have STARTED since the entry-time warm.
-  ///
-  /// A kiosk session runs for up to twelve hours on one warm, so without this
-  /// a class that finished at 7am would still sit under a Book pill at 8pm,
-  /// labelled "Today" — wrong content on a member-facing screen, which the
-  /// showcase's whole design forbids. Nothing re-fetches: when the cache
-  /// drains, the slide and its dot are omitted, which is the designed
-  /// degradation everywhere else in this showcase.
+  /// Drop showcase occurrences that have STARTED since the entry-time warm: a
+  /// session runs up to twelve hours on one warm, so without this a class that
+  /// finished at 7am still sits under a Book pill at 8pm labelled "Today".
   void _pruneShowcaseClasses() {
     if (_showcaseClassesCache.isEmpty) return;
     final now = _now();
@@ -584,17 +490,11 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
         .toList();
   }
 
-  /// Start the glance's 10-second hold — but only once the reveal's LAST beat
-  /// has landed ([kKioskGlanceLastBeat]). The full countdown value is emitted
-  /// immediately so the footer reads "Back to start in 10s" with a full drain
-  /// bar from the first frame; what waits is the DECREMENT, so the reveal
-  /// never eats the member's reading time. After the last beat one per-second
-  /// countdown drives the visible timer and, at zero, returns home (mirrors
-  /// the idle countdown).
-  ///
-  /// Both timers share [_glanceTimer], so every existing cancel site (goHome,
-  /// openAppModal, close) still kills the auto-return whichever phase it is
-  /// in — cancelling during the reveal simply means the periodic never starts.
+  /// Start the glance's hold — but only once the reveal's LAST beat has landed
+  /// ([kKioskGlanceLastBeat]). The full countdown value is emitted immediately;
+  /// what waits is the DECREMENT, so the reveal never eats reading time. Both
+  /// phases share [_glanceTimer], so every cancel site kills the auto-return
+  /// whichever phase it is in.
   void _startGlanceReturn() {
     _glanceTimer?.cancel();
     emit(state.copyWith(glanceCountdown: kKioskGlanceHold.inSeconds));
@@ -606,8 +506,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   /// The hold itself — one per-second countdown that returns home at zero.
   /// Split out of [_startGlanceReturn] because closing the "Get the app" modal
-  /// restarts the hold on a glance that has ALREADY finished revealing, and
-  /// that path must not wait out [kKioskGlanceLastBeat] a second time.
+  /// restarts the hold on an already-revealed glance, which must not wait out
+  /// the last beat again.
   void _startGlanceCountdown() {
     _glanceTimer?.cancel();
     _glanceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -622,14 +522,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     });
   }
 
-  /// Give the glance its WHOLE hold back after the modal closes over it.
-  ///
-  /// The member spent their read-time inside the modal, so handing them the
-  /// two seconds that happened to be left when they opened it would eject them
-  /// mid-sentence. The countdown is reset to [kKioskGlanceHold] in full and
-  /// starts draining immediately — the glance behind the modal is settled, so
-  /// there is no reveal left to wait for (and the glance screen never
-  /// re-mounts, so its choreography does not replay either).
+  /// Give the glance its WHOLE hold back after the modal closes over it — the
+  /// member spent their read-time in the modal, so handing back the seconds
+  /// that were left would eject them mid-sentence. It drains immediately: the
+  /// glance behind the modal is settled, no reveal left to wait for.
   void _restartGlanceHold() {
     emit(state.copyWith(glanceCountdown: kKioskGlanceHold.inSeconds));
     _startGlanceCountdown();
@@ -637,23 +533,15 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   // ── "Get the app" modal (UX-5) ──
 
-  /// Open the member-facing "Get the app" modal — opened by a tap on the
-  /// retention glance (the founder's UX-5 ruling: the glance tap now offers
-  /// the app instead of ejecting home) or the home adopt strip's "Get it"
-  /// affordance. Opening it PAUSES the glance's auto-return — in EITHER phase,
-  /// the pre-hold reveal window or the running 10-second hold, since both ride
-  /// the one [_glanceTimer] — and any flow-idle guard, and starts the modal's
-  /// OWN 60-second auto-close. It is a pure informational overlay — it does
-  /// NOT begin a member flow (no
-  /// [KioskSessionCubit.beginFlow]) — so it never touches the grace-window
-  /// bookkeeping. Idempotent while already open.
-  ///
-  /// The paused glance timer is not resumed on close, it is RESTARTED at full
-  /// ([closeAppModal]) — the modal ate the member's reading time.
+  /// Open the "Get the app" modal — from a tap on the glance (a founder ruling:
+  /// the glance tap offers the app rather than ejecting home) or the home adopt
+  /// strip. It pauses the glance's auto-return in EITHER phase plus any idle
+  /// guard, and starts the modal's own clock. A pure informational overlay: it
+  /// does NOT begin a member flow (no [KioskSessionCubit.beginFlow]), so it
+  /// never touches the grace-window bookkeeping. Idempotent while open.
   void openAppModal() {
     if (state.appModalOpen) return;
-    // Pause the glance auto-return + suppress the idle guard: the modal's own
-    // 60s clock is the sole timer while it is up.
+    // The modal's own 60s clock is the sole timer while it is up.
     _glanceTimer?.cancel();
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
@@ -666,15 +554,10 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     _startAppModalTimer();
   }
 
-  /// The modal's 60-second auto-close. One per-second countdown drives the
-  /// visible timer and, at zero, returns home (mirrors the glance/idle timers).
-  ///
-  /// **Expiry goes HOME, unlike Done.** Sixty seconds of no interaction means
-  /// nobody is standing at the kiosk, and dropping back onto a glance would
-  /// leave a member's name, streak and points on a shared iPad for the next
-  /// person to read. So the timer running out is treated as "they walked away"
-  /// and clears the surface, while Done — a deliberate press by someone still
-  /// there — hands them back what they were looking at ([closeAppModal]).
+  /// The modal's 60-second auto-close, which goes HOME unlike Done: a minute of
+  /// no interaction means nobody is standing at the kiosk, and dropping back
+  /// onto a glance would leave a member's name, streak and points on a shared
+  /// iPad for the next person to read.
   void _startAppModalTimer() {
     _appModalTimer?.cancel();
     _appModalTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -689,23 +572,12 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
     });
   }
 
-  /// Close the modal (Done) and return to WHATEVER WAS UNDERNEATH IT.
-  ///
-  /// The modal is an overlay, so dismissing it reveals the view it opened over
-  /// — the retention glance when it was opened by a glance tap, the idle home
-  /// when it came from the home adopt strip's "Get it". It used to call
-  /// [goHome] unconditionally, which ejected a member out of their own
-  /// check-in result the moment they pressed Done (founder-reported bug).
-  ///
-  /// Returning to the glance RESTARTS its hold at full [kKioskGlanceHold]: the
-  /// member spent their reading time in the modal, so they get the whole ten
-  /// seconds again rather than the few that were left. The glance's reveal
-  /// choreography does NOT replay — the screen stayed mounted behind the
-  /// overlay, so only its countdown is restarted. Returning to home simply
-  /// re-arms the 5-minute flow-idle guard the modal suppressed.
-  ///
-  /// Idempotent when the modal isn't open, and it always cancels the modal's
-  /// own 60-second timer so no late tick can fire a [goHome] afterwards.
+  /// Close the modal (Done) and return to WHATEVER WAS UNDERNEATH IT — calling
+  /// [goHome] here instead ejects a member out of their own check-in result.
+  /// Returning to the glance restarts its hold at full (the reveal does not
+  /// replay — the screen stayed mounted behind the overlay); returning home
+  /// re-arms the idle guard. Idempotent when closed, and it always cancels the
+  /// modal's timer so no late tick can fire a [goHome].
   void closeAppModal() {
     if (!state.appModalOpen) return;
     _appModalTimer?.cancel();
@@ -719,16 +591,14 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   // ── Return to home (Done / cancel / idle timeout) ──
 
-  /// Abandon any in-progress draft and return to the idle home screen. Ends
-  /// the flow if one was started; cancels the search + idle timers.
+  /// Abandon any in-progress draft and return to the idle home.
   ///
   /// This is the ONE abandon path — the glance's Done, the idle timeout, the
-  /// app modal's EXPIRY (never its Done, which returns to the view underneath)
-  /// and the class-pick escape ("Not Marcus?", `KioskEscapeFoot`) all come
-  /// through here. Never hand-roll another: dropping [_endFlowIfStarted]
-  /// leaks the session's in-progress flow count and the kiosk then never signs
-  /// itself out at the T+11h45 lockout, and dropping the sequence bumps lets a
-  /// late fetch paint the previous member's data over the next person's home.
+  /// app modal's EXPIRY (never its Done) and the class-pick escape all come
+  /// through here. Never hand-roll another: dropping [_endFlowIfStarted] leaks
+  /// the session's in-progress flow count and the kiosk then never signs itself
+  /// out at lockout, and dropping the sequence bumps lets a late fetch paint
+  /// the previous member's data over the next person's home.
   void goHome() {
     _searchDebounce?.cancel();
     _glanceTimer?.cancel();
@@ -744,9 +614,8 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
 
   // ── Flow-idle guard ──
 
-  /// Any member interaction: dismiss the idle warning if showing and reset the
-  /// 5-minute clock. Wired to a pointer listener over the whole flow surface
-  /// AND called by the interactive methods above.
+  /// Any member interaction: dismiss the idle warning and reset the clock.
+  /// Wired to a pointer listener over the whole flow surface.
   void registerActivity() {
     if (state.idleWarningActive) {
       emit(state.copyWith(idleWarningActive: false, idleCountdown: 0));
@@ -762,16 +631,12 @@ class KioskFlowCubit extends Cubit<KioskFlowState> {
   void _syncIdleTimer() {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
-    // The retention glance is governed by its own hold clock, never the
-    // 5-minute flow-idle guard (the flow has already ended by then).
+    // The glance and the modal each run their own clock.
     if (state.view == KioskView.checkedIn) return;
-    // The "Get the app" modal runs its own 60s clock — suppress the idle guard
-    // beneath it (it can sit over an engaged home draft).
     if (state.appModalOpen) return;
-    // The signup lane runs its OWN 5-minute guard inside `KioskSignupCubit`
-    // (same constants), because only that cubit knows which of its steps may
-    // be interrupted. Two guards over one surface would race: this one would
-    // abandon to home mid-signup without releasing the signup's flow count.
+    // The signup lane runs its OWN guard inside `KioskSignupCubit` — only that
+    // cubit knows which of its steps may be interrupted. A second guard would
+    // race it, abandoning to home mid-signup without releasing its flow count.
     if (state.view == KioskView.signup) return;
     if (_engaged && !state.idleWarningActive) {
       _idleTimer = Timer(kKioskIdleTimeout, _onIdle);

@@ -5,13 +5,11 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 
 /// The home's band structure has a second job beyond co-centring the two
-/// bodies: it must not reserve height for a foot no half fills.
-///
-/// Both halves are footless on the live home now that the app-adoption strip
-/// spans the whole screen instead of sitting in the QR column, so the feet band
-/// has to disappear entirely — band AND the column spacing above it — and hand
-/// that height to the flexible middle the bodies float in. It still has to work
-/// for any screen that does give a half a foot, which is why the slot survives.
+/// bodies: it must not reserve height for a foot no half fills. Both halves
+/// are footless on the live home (the app-adoption strip spans the whole
+/// screen), so the band AND the spacing above it collapse and hand that height
+/// to the flexible middle — while the slot survives for any half that does
+/// carry a foot.
 void main() {
   const headKey = ValueKey<String>('head');
   const bodyKey = ValueKey<String>('body');
@@ -80,8 +78,8 @@ void main() {
     final body = tester.getRect(find.byKey(bodyKey));
     final foot = tester.getRect(find.byKey(footKey));
 
-    // The band comes back with the column's own spacing above it, and closes
-    // the composition — the structure is general, it is only unused today.
+    // The band comes back with the column's own spacing above it and closes
+    // the composition.
     expect(
       foot.top - body.bottom,
       moreOrLessEquals(DesignConstants.spacingBig, epsilon: 0.5),
@@ -106,8 +104,7 @@ void main() {
       foot: const SizedBox(key: footKey, height: footHeight),
     );
 
-    // The band structure's first guarantee: a foot on ONE half never drags
-    // that half's body off the centre the other half's body sits on.
+    // A foot on ONE half never drags its body off the shared centre.
     final left = tester.getRect(find.byKey(bodyKey));
     final right = tester.getRect(
       find.byWidgetPredicate(

@@ -2,35 +2,23 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// **The fresh-card law, executable.**
+/// The fresh-card law, executable: the kiosk never charges a PRE-EXISTING
+/// card. Every card it charges is one entered during the current signup, and
+/// it becomes that payer's default — which is why an existing member may
+/// self-serve here at all.
 ///
-/// The law is one sentence: **the kiosk never charges a PRE-EXISTING card.**
-/// Every card it charges is one entered during the current signup, every time,
-/// and it becomes that payer's default — replacing whatever was on their
-/// profile. That is why an existing member may self-serve here at all: there
-/// is no stored card the kiosk could reach for, because it never reads one.
+/// This is the law's STRUCTURAL half. No kiosk file may import the CRM's
+/// saved-card or payer-selection modules, or any module that reduces a price:
+/// they offer a card the kiosk did not take and a price it may not set. An
+/// import ban rather than a `showDiscounts: false` flag, which is one wrong
+/// default away from a member discounting their own membership. The kiosk's
+/// own payer picker is fine — it only names WHO pays, and whoever it names
+/// still types a fresh card (`kiosk_signup_payer_test.dart` is that
+/// behavioural half). A FRONTEND guard, accepted given the supervised iPad +
+/// Guided Access.
 ///
-/// **This file is the structural half of the law**, and it is what makes
-/// "never" true in CI instead of true by convention. No kiosk file may reach
-/// into the CRM's own payer-selection or saved-card modules, or any module
-/// that reduces a price. Those surfaces offer a card the kiosk did not take
-/// and a price the kiosk may not set, so the kiosk's own screens are the only
-/// ones it may compose. A `showDiscounts: false` parameter is one wrong
-/// default, one flipped boolean, or one new call site away from a member
-/// discounting their own membership — so the rule is an import ban rather than
-/// a flag.
-///
-/// The kiosk HAS a payer picker of its own, and that is fine: it only ever
-/// names WHO pays, and whoever it names still types a fresh card at the end.
-/// `kiosk_signup_payer_test.dart` holds that behavioural half.
-///
-/// This is a FRONTEND guard, accepted given the supervised iPad + Guided
-/// Access.
-///
-/// Each banned name is a real file that exists today (asserted below, so the
-/// test can never quietly pass because a module was renamed and the ban went
-/// stale). If one of them is legitimately renamed, rename it here in the same
-/// change — do not delete the entry.
+/// Each banned name is asserted below to still exist, so a rename can never
+/// leave the ban silently stale — rename the entry, never delete it.
 void main() {
   /// Import-path fragments no file under `lib/features/kiosk/` may reference.
   /// Fragments, not full paths, so a moved file stays banned.
@@ -46,11 +34,9 @@ void main() {
     'added_discount_chip',
     'custom_discount_',
     'live_discounted_price',
-    // The CRM's own payer-selection surfaces. The kiosk has a payer picker of
-    // its own and it carries NO eligibility gate — anyone it names types a
-    // fresh card at the end, which replaces the one on their profile. These
-    // are the desk ones, which offer payers whose saved card would then be
-    // chargeable.
+    // The CRM's own DESK payer-selection surfaces — they offer payers whose
+    // saved card would then be chargeable. The kiosk's own picker doesn't:
+    // it carries no eligibility gate, and whoever it names types a fresh card.
     'start_payer_step',
     'choose_payer_view',
     'payer_radio_tile',

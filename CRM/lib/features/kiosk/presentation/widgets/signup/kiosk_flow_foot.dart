@@ -6,28 +6,17 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
-/// Every signup step's system footer: a hairline band over THREE columns —
-/// the escape exiled to the far LEFT, the Back / primary pair centred, and an
+/// Every signup step's system footer: a hairline band over THREE columns — the
+/// escape exiled to the far LEFT, the Back / primary pair centred, and an
 /// optional Skip in the mirror gutter on the right.
 ///
-/// The hairline + gutter come from `KioskEscapeFoot` and the band itself from
-/// `KioskGlanceFoot`, so the kiosk keeps its one rule: **the way out is along
-/// the bottom hairline, bottom-left.** The middle pair holds the flow's
-/// rhythm and must keep its exact optical centre on every step, which is why
-/// Skip cannot join it — the two gutters are different verbs at different
-/// scales (leave the FLOW / skip this STEP) and are a full stage apart, so
-/// neither can be mis-tapped for the other or for the primary.
+/// It keeps the kiosk's one rule: the way out is along the bottom hairline,
+/// bottom-left. Skip cannot join the middle pair — the two gutters are
+/// different verbs at different scales (leave the FLOW / skip this STEP) and
+/// stay a full stage apart so neither can be mis-tapped for the other.
 ///
-/// **Skip is never a discard.** It carries whatever was typed forward exactly
-/// as Continue does; it exists to tell the member who typed nothing that they
-/// may move on. A destructive control one gutter from the primary is precisely
-/// the mis-tap the whole abandon contract avoids.
-///
-/// [confirmAbandon] decides whether the escape asks first. Confirmation is
-/// proportional to what is lost: the early steps abandon on the first tap (at
-/// most ~20 seconds of retyping, and a confirm is a second trap for a member
-/// who already mis-tapped), while the card and review steps — where real work
-/// dies — pass `true`.
+/// Skip is never a discard: it carries whatever was typed forward exactly as
+/// Continue does, for the member who typed nothing.
 class KioskFlowFoot extends StatelessWidget {
   /// The middle column's primary. Null disables it (an incomplete form).
   final VoidCallback? onPrimary;
@@ -42,6 +31,9 @@ class KioskFlowFoot extends StatelessWidget {
   final String skipLabel;
 
   /// Ask "Start over?" before abandoning, instead of leaving on first tap.
+  /// Proportional to what is lost: only the card and review steps pass `true`,
+  /// since a confirm on an early step is a second trap for a member who
+  /// already mis-tapped.
   final bool confirmAbandon;
 
   const KioskFlowFoot({
@@ -62,15 +54,10 @@ class KioskFlowFoot extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         const Hairline(),
-        // **A STACK, not a three-way Row, and that is a robustness property.**
-        // The decision pair is centred on the WHOLE band rather than on
-        // whatever a Row's leftover flex works out to, so its optical centre is
-        // exact on every step regardless of what either gutter carries (a step
-        // with a Skip and a step without land the pair in the identical
-        // place). It also means the longest primary the foot ever carries —
-        // `Sign Memberships · $149.00` beside Back — can never squeeze a
-        // gutter into an overflow on a short fold: the gutters keep their
-        // intrinsic size and the band simply gets tight.
+        // A Stack, not a three-way Row: the decision pair is centred on the
+        // WHOLE band, so its optical centre is identical on every step whatever
+        // the gutters carry, and the longest primary the foot ever carries can
+        // never squeeze a gutter into an overflow on a short fold.
         Stack(
           alignment: Alignment.center,
           children: [
@@ -98,11 +85,10 @@ class KioskFlowFoot extends StatelessWidget {
   }
 }
 
-/// The far-left escape. Ghost tier, and the ONLY tier used for leaving a flow.
-///
+/// The far-left escape. Ghost tier, the ONLY tier used for leaving a flow.
 /// The wording answers the SCREEN, not the navigation: beside a
 /// `Sign Membership · $149.00` button "Cancel" would read as *cancel the
-/// payment*, so the kiosk's signup escape is always "Start over".
+/// payment*, so the signup escape is always "Start over".
 class _EscapeGutter extends StatelessWidget {
   final bool confirm;
 
@@ -110,10 +96,8 @@ class _EscapeGutter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pulled left by exactly the button's own horizontal padding so the GLYPH
-    // lands on the step's content rail rather than a pad-width inside it — the
-    // same optical correction `KioskEscapeFoot` makes. The tap target keeps
-    // its full padded width.
+    // Pulled left by the button's own horizontal padding so the GLYPH lands on
+    // the step's content rail; the tap target keeps its full padded width.
     return Transform.translate(
       offset: Offset(-DesignConstants.kioskButtonGhostPadding.left, 0),
       child: KioskGhostButton(
@@ -131,8 +115,7 @@ class _EscapeGutter extends StatelessWidget {
   }
 }
 
-/// The centred decision pair — the flow's rhythm, in the same slot on every
-/// step.
+/// The centred decision pair — the same slot on every step.
 class _Decisions extends StatelessWidget {
   final VoidCallback? onPrimary;
   final String primaryLabel;
@@ -158,15 +141,10 @@ class _Decisions extends StatelessWidget {
   }
 }
 
-/// The mirror gutter. Quieter than the gradient primary by a full tier (per
-/// "skipping is the quieter option") but never the ghost escape tier, which
-/// the kiosk reserves for leaving a flow and nothing else — so it rides
-/// `KioskOutlineButton`, exactly like Back.
-///
-/// It goes through the kiosk button wrapper rather than styling an
-/// `AppOutlineButton` at the call site: those wrappers are the ONE place the
-/// kiosk button tokens are applied, so the whole set scales together and no
-/// call site ever restates a size.
+/// The mirror gutter. Quieter than the primary by a tier but never the ghost
+/// escape tier, which the kiosk reserves for leaving a flow — so it rides
+/// `KioskOutlineButton`, the wrapper that is the ONE place the kiosk button
+/// tokens are applied.
 class _SkipGutter extends StatelessWidget {
   final VoidCallback? onSkip;
   final String label;

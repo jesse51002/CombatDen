@@ -7,10 +7,8 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// The waiver step with no body on screen yet: the read is in flight, or it
 /// failed and can simply be tried again.
 ///
-/// **A failed read is never a stop here.** A member row and a Stripe customer
-/// already exist by this point, so ending the signup over one flaky call would
-/// orphan them; the escape in the footer's left gutter remains the way out if
-/// the member does want one.
+/// A failed read is a retry, never a stop — see `KioskWaiverStep`. The escape
+/// in the footer's left gutter remains the way out if the member wants one.
 class KioskWaiverStatus extends StatelessWidget {
   final bool loading;
   final bool failed;

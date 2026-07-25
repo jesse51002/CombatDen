@@ -54,11 +54,10 @@ class _MockMemberDetail extends Mock implements MemberDetailResponse {}
 
 class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 
-/// The kiosk check-in lane's flow cubit: it gates a new flow on the session's
-/// [KioskSessionState.canStartFlow], marks it with begin/endFlow (grace-window
-/// bookkeeping), records the `is_member: true` check-in, and abandons a stale
-/// draft after 5 minutes of inactivity. The repositories are mocked; a fixed
-/// clock + `fakeAsync` drive the idle timer deterministically.
+/// The kiosk check-in lane's flow cubit: gates a new flow on the session's
+/// [KioskSessionState.canStartFlow], brackets it with begin/endFlow, records
+/// the check-in, and abandons a stale draft after 5 minutes idle. A fixed
+/// clock + `fakeAsync` drive every timer deterministically.
 void main() {
   const gymId = 'gym-1';
   final t0 = DateTime.utc(2026, 1, 1, 18);
@@ -239,7 +238,6 @@ void main() {
         data: rows,
       );
 
-  // A minimal occurrence at [occurredAt] for the checkinable-now filter test.
   EffectiveClassInstance occAt(
     String id,
     DateTime occurredAt, {
@@ -306,10 +304,8 @@ void main() {
       setUp: () => when(() => session.state).thenReturn(lockedState),
       build: build,
       act: (cubit) => cubit.selectMember(member1),
-      // Asserted on the settled state, not the emitted list: the three
-      // gym-wide catalogues warmed at construction land asynchronously and
-      // each publishes its own emit, so the stream carries entries this test
-      // has no opinion about.
+      // Asserted on the settled state, not the emitted list: the entry-time
+      // catalogue warms each land with their own emit.
       verify: (cubit) {
         expect(cubit.state.view, KioskView.closing);
         verifyNever(() => session.beginFlow());
@@ -325,8 +321,8 @@ void main() {
       act: (cubit) => cubit.startSignup(),
       verify: (cubit) {
         expect(cubit.state.view, KioskView.signup);
-        // Double-counting here would leave the session permanently "busy" and
-        // the kiosk would never sign itself out at its T+11h45 lockout.
+        // Double-counting would leave the session permanently "busy" and the
+        // kiosk would never sign itself out at its T+11h45 lockout.
         verifyNever(() => session.beginFlow());
       },
     );
@@ -418,11 +414,9 @@ void main() {
   });
 
   group('rejection code off a thrown check-in error', () {
-    // The backend emits a stable machine-readable `code` as a SIBLING of the
-    // prose `detail` (`checkin_exceptions.py`). The kiosk carries the CODE —
-    // never the prose, which is free to be reworded — so the blocked screen
-    // can name a real reason. Anything unusable parses to null and the screen
-    // keeps its generic line.
+    // The kiosk carries the backend's machine-readable `code` (a sibling of
+    // the prose `detail` in `checkin_exceptions.py`), never the prose, which
+    // is free to be reworded. Anything unusable parses to null.
     Future<KioskFlowCubit> failWith(Object error) async {
       when(() => member.checkInMember(any())).thenThrow(error);
       final cubit = build();
@@ -441,7 +435,6 @@ void main() {
         );
 
     test('parses every backend code onto the state', () async {
-      // The full CheckinErrorCode table, wire value -> enum member.
       const table = {
         'class_not_found': CheckInErrorCode.classNotFound,
         'class_deleted': CheckInErrorCode.classDeleted,
@@ -503,10 +496,8 @@ void main() {
       );
       expect(cubit.state.checkInErrorCode, CheckInErrorCode.classFull);
 
-      // Same cubit, a second attempt that fails with NO code: the stale reason
-      // must not survive onto the new blocked screen. (`copyWith` keeps a
-      // nullable outcome field by default — the catch passes null explicitly
-      // for exactly this reason.)
+      // `copyWith` keeps a nullable outcome field by default, so the catch
+      // passes null explicitly — otherwise the stale reason survives.
       when(() => member.checkInMember(any()))
           .thenThrow(const NetworkException('Network error'));
       cubit.selectMember(member1);
@@ -517,8 +508,7 @@ void main() {
   });
 
   group('class pick — checkinable-now filter (kiosk-local)', () {
-    // Fixed now = t0 = 18:00. The filter keeps in-session + early-window
-    // occurrences and drops already-ended, out-of-window, and cancelled ones.
+    // Fixed now = t0 = 18:00 throughout.
     blocTest<KioskFlowCubit, KioskFlowState>(
       'drops ended / out-of-window / cancelled classes and orders the rest '
       'current-then-soonest',
@@ -607,7 +597,6 @@ void main() {
         expect(cubit.state.idleWarningActive, isFalse);
         expect(cubit.state.view, KioskView.classPick); // draft kept
 
-        // The clock is reset: elapsing just under the timeout does not re-warn.
         async.elapse(kKioskIdleTimeout - const Duration(seconds: 1));
         expect(cubit.state.idleWarningActive, isFalse);
         cubit.close();
@@ -632,7 +621,6 @@ void main() {
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.glanceLoading, isFalse);
         expect(cubit.state.pointsBalance, 2150);
-        // Sorted cheapest-first (fixtures were pricey-first).
         expect(
           cubit.state.rewards.map((r) => r.rewardId).toList(),
           ['r-cheap', 'r-pricey'],
@@ -661,7 +649,6 @@ void main() {
         expect(cubit.state.checkInResult?.pointsAwarded, 15);
         expect(cubit.state.glanceLoading, isFalse);
         expect(cubit.state.pointsBalance, isNull);
-        // The catalog still loaded — only the balance fetch failed.
         expect(cubit.state.rewards, isNotEmpty);
       },
     );
@@ -682,7 +669,6 @@ void main() {
 
         async.elapse(kKioskGlanceLastBeat); // the reveal plays out
 
-        // Halfway the glance is still up (the 5-minute idle never fired).
         async.elapse(const Duration(seconds: 5));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.idleWarningActive, isFalse);
@@ -697,11 +683,8 @@ void main() {
 
     test('the 10-second hold starts AFTER the LAST beat, not on entry — the '
         'member gets the full ten seconds on a finished screen', () {
-      // The bug this guards: starting the countdown on screen entry lets the
-      // reveal choreography eat the hold — and the choreography is now 6.7s
-      // long, so a member would be left barely three seconds of finished
-      // screen. The full value is on screen from the first frame (the footer
-      // never shows a drained "0s" mid-reveal); only the DECREMENT waits.
+      // Counting from entry would let the 6.7s reveal eat most of the hold.
+      // The full value shows from the first frame; only the DECREMENT waits.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -713,20 +696,16 @@ void main() {
         async.flushMicrotasks();
         expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
-        // Through the whole reveal window the countdown has NOT moved.
         async.elapse(kKioskGlanceLastBeat);
         expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds);
 
-        // The first tick lands one second AFTER the last beat, not one second
-        // after entry.
         async.elapse(const Duration(seconds: 1));
         expect(
           cubit.state.glanceCountdown,
           kKioskGlanceHold.inSeconds - 1,
         );
 
-        // A full ten seconds of hold measured from the last beat, no sooner:
-        // at lastBeat + 9s the glance is still up with a second to go.
+        // At lastBeat + 9s the glance is still up with a second to go.
         async.elapse(const Duration(seconds: 8));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.glanceCountdown, 1);
@@ -740,8 +719,7 @@ void main() {
     test('the glance lives for the reveal PLUS the hold, and every second of '
         'the hold is on a screen that has stopped moving', () {
       // The founder's shape: ~0s confirmation (centred) -> 3s lift + streak ->
-      // 6.7s rewards -> +10s hold -> home. Nothing may return home early, and
-      // nothing may hold the member past that.
+      // 6.7s rewards -> +10s hold -> home. Not a second either side.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -789,9 +767,6 @@ void main() {
 
     test('Done during the CENTRED HOLD leaves immediately and cancels the '
         'pending auto-return', () {
-      // The member must never be held hostage by the choreography: the first
-      // three seconds are the longest stretch where nothing but the
-      // confirmation is on screen, and Done has to work through all of it.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -816,9 +791,8 @@ void main() {
     });
 
     test('closing the cubit mid-reveal kills the pending auto-return', () {
-      // close() cancels _glanceTimer in EITHER phase. A leaked pre-hold timer
-      // would fire goHome() on a closed cubit (an emit-after-close throw) once
-      // the reveal window elapsed.
+      // close() cancels _glanceTimer in EITHER phase; a leaked pre-hold timer
+      // would fire goHome() on a closed cubit (emit-after-close throw).
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -830,7 +804,6 @@ void main() {
         async.flushMicrotasks();
 
         cubit.close();
-        // Past the last beat AND the whole hold: nothing fires, nothing throws.
         async.elapse(kKioskGlanceLastBeat + kKioskGlanceHold);
         expect(async.pendingTimers, isEmpty);
       });
@@ -838,10 +811,8 @@ void main() {
   });
 
   group('the class-pick escape ("Not Marcus?")', () {
-    // The founder-reported gap: a member taps the WRONG name on home, lands on
-    // class pick, and without an escape is stranded until the 5-minute idle
-    // guard fires. The escape button is wired to goHome() — which is already
-    // the whole abandon contract — and these prove it stays that way.
+    // The escape is wired to goHome() — the kiosk's ONE abandon contract —
+    // rather than its own path. These prove it stays that way.
     blocTest<KioskFlowCubit, KioskFlowState>(
       'returns to a clean home and BALANCES beginFlow/endFlow',
       build: build,
@@ -852,9 +823,8 @@ void main() {
       },
       verify: (cubit) {
         expect(cubit.state.view, KioskView.home);
-        // Exactly one end per begin. An escape that skipped endFlow would leak
-        // the session's in-progress flow count permanently, and the kiosk
-        // would then never sign itself out at the T+11h45 lockout.
+        // Exactly one end per begin — an escape that skipped endFlow leaks the
+        // flow count and the kiosk never signs itself out.
         verify(() => session.beginFlow()).called(1);
         verify(() => session.endFlow()).called(1);
       },
@@ -870,8 +840,8 @@ void main() {
         cubit.goHome();
       },
       verify: (cubit) {
-        // The same privacy rule the idle guard enforces: no name, no query, no
-        // results, no picked class may survive on a shared lobby kiosk.
+        // Privacy on a shared lobby kiosk: no name, no query, no results, no
+        // picked class may survive an abandon.
         expect(cubit.state.selectedMember, isNull);
         expect(cubit.state.searchQuery, isEmpty);
         expect(cubit.state.searchResults, isEmpty);
@@ -881,8 +851,8 @@ void main() {
     );
 
     test('a second escape does not double-end the flow', () {
-      // _flowStarted is the latch; a double tap on the escape (or an escape
-      // then an idle timeout) must not decrement the session's count twice.
+      // _flowStarted is the latch: a double tap (or an escape then an idle
+      // timeout) must not decrement the session's count twice.
       fakeAsync((async) {
         final cubit = build();
         cubit.selectMember(member1);
@@ -899,9 +869,9 @@ void main() {
   group('get-the-app modal (UX-5)', () {
     test('opening the modal DURING THE REVEAL pauses the pending auto-return; '
         'its own 60s clock returns home', () {
-      // The tap lands while the confirmation is still centred — the pre-hold
-      // phase of _glanceTimer. Cancelling there must stop the auto-return
-      // dead, not merely postpone the periodic that phase would have started.
+      // The tap lands in _glanceTimer's PRE-HOLD phase: cancelling there must
+      // stop the auto-return dead, not just postpone the periodic it would
+      // have started.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -919,13 +889,11 @@ void main() {
         expect(cubit.state.appModalCountdown, kKioskAppModalTimeout.inSeconds);
         expect(cubit.state.view, KioskView.checkedIn); // glance still behind it
 
-        // Past the point the glance would have gone home on its own — it
-        // stays put behind the modal.
+        // Past the point the glance would have gone home on its own.
         async.elapse(const Duration(seconds: 30));
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.appModalOpen, isTrue);
 
-        // The modal's OWN 60s clock reaches zero and returns to a fresh home.
         async.elapse(const Duration(seconds: 30)); // total 60s
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.appModalOpen, isFalse);
@@ -935,8 +903,7 @@ void main() {
     });
 
     test('opening the modal DURING THE HOLD pauses the running countdown', () {
-      // The other phase of the same timer: the per-second countdown is already
-      // draining. Cancelling it must freeze the glance behind the modal.
+      // The timer's other phase: the per-second countdown is already draining.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -947,7 +914,6 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks();
 
-        // Into the hold: the countdown has started draining.
         async.elapse(kKioskGlanceLastBeat + const Duration(seconds: 3));
         expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 3);
 
@@ -962,11 +928,9 @@ void main() {
 
     test('Done returns to the GLANCE it opened over, not home, and gives the '
         'member the WHOLE hold back', () {
-      // The founder-reported bug: Done ejected the member out of their own
-      // check-in result. The modal is an overlay, so closing it must reveal
-      // what was underneath — and because the member spent their reading time
-      // inside the modal, the ten seconds start again from full rather than
-      // handing back the few that were left.
+      // The modal is an overlay, so Done reveals what was underneath. The hold
+      // restarts from FULL because the member spent their reading time inside
+      // the modal (founder ruling).
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -977,7 +941,6 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks();
 
-        // Burn most of the hold, then open the modal over it.
         async.elapse(kKioskGlanceLastBeat + const Duration(seconds: 8));
         expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 8);
         cubit.openAppModal();
@@ -986,7 +949,6 @@ void main() {
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.appModalOpen, isFalse);
         expect(cubit.state.appModalCountdown, 0);
-        // The member's own result is still there — nothing was abandoned.
         expect(cubit.state.selectedMember, member1);
         expect(cubit.state.checkInResult, recorded);
         // Reset to FULL, not the two seconds that were left.
@@ -997,7 +959,6 @@ void main() {
         async.elapse(const Duration(seconds: 1));
         expect(cubit.state.glanceCountdown, kKioskGlanceHold.inSeconds - 1);
 
-        // Ten full seconds from Done, then home on the glance's own clock.
         async.elapse(const Duration(seconds: 8));
         expect(cubit.state.view, KioskView.checkedIn);
         async.elapse(const Duration(seconds: 1));
@@ -1020,9 +981,8 @@ void main() {
     });
 
     test('Done cancels the modal\'s own 60s timer', () {
-      // A surviving timer would fire a goHome long after the member had moved
-      // on — off the glance they were handed back to, or over the next
-      // person's flow.
+      // A surviving timer would fire goHome over the glance the member was
+      // handed back to — or over the next person's flow.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -1035,8 +995,7 @@ void main() {
         cubit.openAppModal();
         cubit.closeAppModal();
 
-        // The glance's own 10s hold takes it home; nothing at the 60s mark
-        // re-fires, and no pending-timer crash.
+        // The glance's own 10s hold takes it home; nothing re-fires at 60s.
         async.elapse(const Duration(seconds: 120));
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.appModalOpen, isFalse);
@@ -1045,9 +1004,8 @@ void main() {
     });
 
     test('EXPIRY goes home even off the glance — nobody is standing there', () {
-      // The deliberate split from Done: sixty seconds of no interaction means
-      // the member walked away, and leaving their name + streak up on a shared
-      // iPad for the next person is the wrong default.
+      // Deliberately split from Done: sixty idle seconds means they walked
+      // away, and their name + streak must not sit there for the next person.
       fakeAsync((async) {
         when(() => member.checkInMember(any()))
             .thenAnswer((_) async => recorded);
@@ -1090,9 +1048,8 @@ void main() {
 
     test('opening the modal fires NO network call — every slide input is '
         'already in memory', () {
-      // The modal must open instantly on a supervised iPad, so it is fed
-      // entirely from the catalogues warmed at entry. A per-open fetch would
-      // put a spinner (or a blank slide) in front of a member.
+      // It is fed entirely from the catalogues warmed at entry; a per-open
+      // fetch would put a spinner (or a blank slide) in front of a member.
       fakeAsync((async) {
         final cubit = build();
         async.flushMicrotasks(); // the entry warms all land
@@ -1120,19 +1077,16 @@ void main() {
 
   group('the showcase\'s OWN class list (warmed at kiosk ENTRY)', () {
     // Fixed now = t0 = 2026-01-01 18:00. TWO class lists exist on purpose:
-    //  · the CHECK-IN flow's — today only, narrowed to the check-in window,
-    //    read per member (it must never offer an unbookable class);
-    //  · the SHOWCASE's — a week-wide FORWARD window, read once at entry (it
-    //    must not empty itself at 9pm, which is how the founder's "only 3
-    //    slides" bug would come back at a different hour).
-    // Collapsing them into one list re-introduces one bug or the other.
+    // the CHECK-IN flow's is today-only, narrowed to the check-in window, read
+    // per member (never offer an unbookable class); the SHOWCASE's is a
+    // week-wide FORWARD window read once at entry (it must not empty itself at
+    // 9pm). Collapsing them re-introduces one bug or the other.
     final showcaseStart = DateTime(2026, 1, 1);
     final showcaseEnd = DateTime(2026, 1, 1 + kKioskShowcaseClassDays);
 
     // 19:00 tonight: upcoming AND inside the 2h check-in window.
     final soon = occAt('soon', t0.add(const Duration(hours: 1)));
-    // Tomorrow evening: upcoming, but far outside the check-in window — it can
-    // only ever reach the SHOWCASE.
+    // Outside the check-in window — can only ever reach the SHOWCASE.
     final tomorrow = occAt('tomorrow', t0.add(const Duration(days: 1)));
     // Finished two hours ago: never bookable, never shown.
     final ended = occAt('ended', t0.subtract(const Duration(hours: 2)));
@@ -1149,17 +1103,16 @@ void main() {
 
     test('warms the gym\'s next upcoming classes at ENTRY, so the modal opened '
         'from the HOME has its "Book classes" slide', () {
-      // The founder-reported bug: from the home QR panel the modal showed
-      // "only 3 slides instead of 4", because nothing warmed classes and
-      // `state.classes` is only filled once a member has been picked.
+      // `state.classes` only fills once a member is picked, so without this
+      // warm the home's modal is a slide short.
       fakeAsync((async) {
         stubShowcase([tomorrow, ended, soon, cancelled]);
         final cubit = build();
         async.flushMicrotasks();
 
         expect(cubit.state.view, KioskView.home);
-        // Soonest first; the finished and cancelled ones are dropped — a Book
-        // pill beside a class that already ended is not a real affordance.
+        // Soonest first; finished and cancelled are dropped — a Book pill
+        // beside an ended class is not a real affordance.
         expect(
           cubit.state.showcaseClasses.map((c) => c.classId).toList(),
           ['soon', 'tomorrow'],
@@ -1207,14 +1160,11 @@ void main() {
         async.flushMicrotasks();
 
         // The class pick offers ONLY what this member can check into right
-        // now — tomorrow's class and the finished one are both dropped. This
-        // filter is a live wrong-check-in guard; the showcase must never
-        // loosen it.
+        // now — a live wrong-check-in guard the showcase must never loosen.
         expect(
           cubit.state.classes.map((c) => c.classId).toList(),
           ['class-1'],
         );
-        // And the showcase keeps looking forward, untouched by the flow.
         expect(
           cubit.state.showcaseClasses.map((c) => c.classId).toList(),
           ['soon', 'tomorrow'],
@@ -1248,10 +1198,8 @@ void main() {
 
     test('drops a cached class once it has STARTED — a kiosk runs for hours '
         'on one warm and must not advertise this morning\'s class tonight', () {
-      // The staleness this guards: one warm covers a 12-hour session, so
-      // without a prune a 7pm class would still sit under a Book pill at 10pm,
-      // labelled "Today". No re-fetch — the cache just drains, and an empty
-      // list omits the slide (the designed degradation).
+      // One warm covers a 12-hour session, so the cache PRUNES rather than
+      // re-fetching; draining it to empty just omits the slide.
       fakeAsync((async) {
         stubShowcase([soon, tomorrow]);
         var clock = t0;
@@ -1318,8 +1266,7 @@ void main() {
     });
 
     test('a failed showcase warm leaves the CHECK-IN flow working', () {
-      // The two reads are independent: a broken forward window must not cost a
-      // member their check-in.
+      // A broken forward window must not cost a member their check-in.
       fakeAsync((async) {
         when(() => schedule.listEffectiveInstances(
             gymId, showcaseStart, showcaseEnd)).thenThrow(
@@ -1349,8 +1296,8 @@ void main() {
         final cubit = build();
         async.flushMicrotasks();
 
-        // All three land on the IDLE HOME, so the "Get the app" modal opened
-        // from the home adopt strip already has them and fires no fetch.
+        // All three land on the IDLE HOME, so the modal opened from the home
+        // adopt strip already has them and fires no fetch.
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.rewards, [rewardCheap, rewardPricey]);
         expect(cubit.state.videos, [video1]);
@@ -1422,7 +1369,6 @@ void main() {
         final cubit = build();
         async.flushMicrotasks();
 
-        // No error view, no thrown state — the slides are simply omitted.
         expect(cubit.state.view, KioskView.home);
         expect(cubit.state.videos, isEmpty);
         expect(cubit.state.rankLadder, isEmpty);
@@ -1444,11 +1390,9 @@ void main() {
         cubit.selectClass(occ1);
         async.flushMicrotasks();
 
-        // The glance's member fetch still lands — it pays for the points
-        // balance — but nothing rank-shaped is taken off it. The "Track rank"
-        // slide features a MIDDLE rung over an illustrative bar in every
-        // state (see `KioskRankSlide`), so there is no per-member rank field
-        // that could follow the next person home.
+        // The glance's member fetch lands (it pays for the points balance) but
+        // nothing rank-shaped comes off it: `KioskRankSlide` is illustrative
+        // in every state, so no per-member rank can follow the next person.
         expect(cubit.state.view, KioskView.checkedIn);
         expect(cubit.state.pointsBalance, 2150);
         expect(cubit.state.rankLadder, ladderAtEntry);

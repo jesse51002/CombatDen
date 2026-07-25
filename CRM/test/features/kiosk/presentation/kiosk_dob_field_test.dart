@@ -6,20 +6,17 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_dob_field.dart';
 
-/// **An UNTOUCHED wheel may not commit a date of birth.**
+/// An UNTOUCHED wheel may not commit a date of birth.
 ///
 /// The sheet has to open the wheel somewhere, and with no value yet that
-/// somewhere is today. A Done that committed the opening position would write
-/// today's date into a member's record on a tap that chose nothing — a wrong
-/// value nothing on screen ever states afterwards, so nobody would think to
-/// correct it. This suite is the guard that Done stays inert until the wheel
-/// actually reports a date, and that Clear remains the way to say "no date".
+/// somewhere is today — so a Done that committed the opening position would
+/// silently write today's date into a member's record on a tap that chose
+/// nothing. Done stays inert until the wheel reports a date, and Clear is how
+/// "no date" is said.
 void main() {
-  /// The field wired to a value that lives outside it, like the real details
-  /// step's — so what a tap COMMITS is observed rather than inferred.
-  ///
-  /// Returns the list of every value the field reported, in order (a Clear
-  /// reports null).
+  /// The field wired to a value living outside it, like the real details
+  /// step's, so what a tap COMMITS is observed rather than inferred. Returns
+  /// every value the field reported, in order (a Clear reports null).
   Future<List<DateTime?>> pumpField(
     WidgetTester tester, {
     DateTime? initial,
@@ -47,8 +44,8 @@ void main() {
     return changes;
   }
 
-  /// Opens the sheet by its own box — the calendar glyph is inside the tappable
-  /// area in both the empty and the filled state.
+  /// Opens the sheet by its own box — the glyph is inside the tappable area in
+  /// both the empty and the filled state.
   Future<void> openSheet(WidgetTester tester) async {
     await tester.tap(find.byIcon(Symbols.calendar_month_sharp));
     await tester.pumpAndSettle();
@@ -65,14 +62,12 @@ void main() {
     final changes = await pumpField(tester);
     await openSheet(tester);
 
-    // Nothing has been chosen, so there is nothing to commit.
     expect(done(tester).onPressed, isNull);
 
     await tester.tap(doneButton());
     await tester.pumpAndSettle();
 
-    // No value written and the sheet is still up: the member has not been
-    // silently given today's date as their date of birth.
+    // No value written, sheet still up — nobody was handed today's date.
     expect(changes, isEmpty);
     expect(find.byType(CupertinoDatePicker), findsOneWidget);
     expect(find.text('MM / DD / YYYY'), findsOneWidget);
@@ -96,10 +91,8 @@ void main() {
     expect(changes, hasLength(1));
     final picked = changes.single;
     expect(picked, isNotNull);
-    // The committed date is the one the wheel reported, never the opening
-    // position it was seeded with.
+    // The wheel's reported date, never the opening position it was seeded with.
     expect(picked!.year, lessThan(today.year));
-    // And the box reads it back.
     expect(find.text(KioskDobField.display(picked)), findsOneWidget);
   });
 

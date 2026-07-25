@@ -17,14 +17,11 @@ MainRank _rank(String name, int order, {int classesToNextMajor = 25}) =>
       createdAt: DateTime.utc(2026),
     );
 
-/// The "Track rank" showcase slide.
-///
-/// Its featured rung and its progress numbers are ILLUSTRATIVE ON PURPOSE
-/// (founder ruling): kiosk users skew new, so wiring it to the real member
-/// pinned the highlight to the first rung with an empty bar — the least
-/// compelling thing the feature can look like. These tests pin that decision
-/// down so nobody "fixes" it back: always a MIDDLE rung, always a partly
-/// filled bar, never a claim that either belongs to the person standing there.
+/// The "Track rank" showcase slide. Its featured rung and progress numbers are
+/// ILLUSTRATIVE ON PURPOSE (founder ruling): kiosk users skew new, so a slide
+/// wired to the real member is the least compelling thing the feature can look
+/// like. Always a MIDDLE rung, always a partly filled bar, never a claim that
+/// either belongs to the person standing there — nobody "fixes" this back.
 void main() {
   Future<void> pumpSlide(
     WidgetTester tester,
@@ -60,7 +57,7 @@ void main() {
       ]);
 
       expect(featuredBelt(tester).imageUrl, isNull);
-      // Exactly one rung is large + un-dimmed; the rest rest at belt-XSmall.
+      // Exactly one rung is large; the rest sit at belt-XSmall.
       final belts = tester.widgetList<RankBeltImage>(
         find.byType(RankBeltImage),
       );
@@ -100,8 +97,6 @@ void main() {
         _rank('Purple', 3),
       ]);
 
-      // The old member-linked tag is gone, and no second-person claim about
-      // anybody's standing replaced it.
       expect(find.text('You\'re here'), findsNothing);
       expect(find.textContaining('You\'re'), findsNothing);
       expect(find.textContaining('Your'), findsNothing);
@@ -134,8 +129,7 @@ void main() {
 
     testWidgets('the denominator is the gym\'s OWN threshold and the belt it '
         'names is the gym\'s next one', (tester) async {
-      // White / Blue / Purple -> Blue is featured, Blue's own
-      // classes_to_next_major is 30, and Purple is what comes next.
+      // Blue is featured, its own classes_to_next_major is 30, Purple is next.
       await pumpSlide(tester, [
         _rank('White', 1),
         _rank('Blue', 2, classesToNextMajor: 30),

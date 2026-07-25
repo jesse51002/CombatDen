@@ -9,48 +9,23 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 
-/// D8 — the card was refused, as a POPUP acknowledgement over the flow.
+/// D8 — the card was refused, as a popup acknowledgement over the flow.
 ///
-/// **Three stacked actions, Retry first.** The most common decline is
-/// insufficient funds, so the primary is a single clear "Retry" that re-attempts
-/// the SAME card the member already entered (see `retrySameCard`) — a member who
-/// just moved money doesn't re-type their card. Below it, "Try another card"
-/// (secondary) drops them back on the card step with a fresh, empty, working
-/// field (see `retryCard`) for a genuinely different card. "Get help at the
-/// desk" is the always-available handoff at the bottom — it `_stop`s to
-/// `cardDeclined`, holding every committed row for the staff incomplete-signups
-/// list.
+/// Only an ALL-FAILED start reaches this popup, which is exactly why "you
+/// haven't been charged" is true here. The account is not untouched, though:
+/// the start attaches the fresh card and promotes it to the payer's Stripe
+/// default before it charges, and a decline reverts neither (founder ruling) —
+/// so the copy states that card fact rather than implying nothing changed.
 ///
-/// **There is no cooldown and no attempt limit.** Retry is live from the first
-/// frame and a member may use it as many times as they like — attempt-velocity
-/// throttling rides entirely on the platform Stripe Radar rule (a founder
-/// decision), never a client-side wait or strike count. The member row, Stripe
-/// customer and signatures are all committed and are never re-run.
-///
-/// **It does carry a 60-second RETURN countdown, inside the popup.** That is a
-/// different thing from a cooldown: it decides how long a shared community
-/// iPad may sit on this screen with nobody answering it, not how soon Retry may
-/// be tapped. Expiry runs the ordinary abandon, which is what finally releases
-/// the session flow count this step deliberately holds while the member is
-/// still standing there.
-///
-/// **The copy blames the bank, never the member.** "Your bank declined the
-/// payment" is true and blameless; "your card was rejected" reads as a verdict
-/// on the person standing in a lobby. The reassurance is warm and UNCOUNTED —
-/// a tally beside a refusal reads as a countdown to being cut off, which is not
-/// what happens here.
-///
-/// **The reassurance is scoped to what is actually still true.** A decline
-/// leaves the CHARGE untaken, so "you haven't been charged" stands — but the
-/// start attaches the fresh card and promotes it to the payer's Stripe default
-/// (detaching whatever was there) BEFORE it charges, and a decline reverts
-/// neither (founder ruling: accepted, because the member is about to pick a card
-/// anyway). So this screen may not imply their account is untouched. It says the
-/// card fact plainly instead — the same consequence the card step already made
-/// them read — and keeps the form-data reassurance narrowed to the form. The
-/// earlier "everything else you filled in is saved" was the sentence that
-/// collided with it: "everything ELSE" invites the reading that nothing else
-/// changed.
+/// No cooldown and no attempt limit (founder ruling). Retry is live from the
+/// first frame and re-attempts the SAME card (`retrySameCard`) because the
+/// common decline is insufficient funds; velocity throttling rides on the
+/// platform Stripe Radar rule, never a client-side wait or strike count. "Try
+/// another card" (`retryCard`) re-keys the field for a different one, and "Get
+/// help at the desk" holds every committed row for the staff
+/// incomplete-signups list. The 60-second countdown is not a cooldown — it
+/// decides how long a shared iPad may sit here unanswered before the ordinary
+/// abandon runs.
 class KioskDeclinedScreen extends StatelessWidget {
   const KioskDeclinedScreen({super.key});
 
@@ -73,10 +48,7 @@ class KioskDeclinedScreen extends StatelessWidget {
                 ),
                 // A tighter inset than the other kiosk modals: this popup
                 // carries more (reason + chip + three stacked buttons), so it
-                // needs the extra vertical room to sit whole on a short kiosk
-                // fold. It is the card's containment from the screen edge — a
-                // Padding, never a `margin`: a margin is a gap, and a gap
-                // belongs to the parent's `spacing:`.
+                // needs the extra room to sit whole on a short kiosk fold.
                 child: Padding(
                   padding: const EdgeInsets.all(DesignConstants.spacingLarge),
                   child: Container(
@@ -133,10 +105,9 @@ class KioskDeclinedScreen extends StatelessWidget {
   }
 }
 
-/// Retry the same card (the primary — the common insufficient-funds case),
-/// then "Try another card" for a different one, then the always-open desk
-/// handoff below both — stacked because three kiosk-scale labels do not fit
-/// side by side in a [DesignConstants.dialogMaxWidth] popup.
+/// Retry the same card first, then a different card, then the always-open desk
+/// handoff — stacked because three kiosk-scale labels do not fit side by side
+/// in a [DesignConstants.dialogMaxWidth] popup.
 class _Actions extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onTryAnother;
@@ -163,7 +134,7 @@ class _Actions extends StatelessWidget {
 }
 
 /// The warm disc the kiosk's other handoffs wear, carrying a struck-through
-/// card. Warm, not red: nothing here is broken and nobody did anything wrong.
+/// card. Warm, not red: nobody did anything wrong.
 class _DeclinedIcon extends StatelessWidget {
   const _DeclinedIcon();
 

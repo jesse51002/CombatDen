@@ -10,14 +10,8 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form
 /// The optional block's five fields — date of birth, address, and an
 /// emergency contact — in the ONE layout used for everyone on the roster.
 ///
-/// It is deliberately a single widget rather than a per-person copy: the payer
-/// fills it once for themselves and already knows it by the time they add a
-/// first child, so the second and third time it costs a glance and one tap.
-/// That sameness is what keeps a family signup short.
-///
-/// **Nothing here marks an empty field as a problem** — no red, no badge, no
-/// count of what is missing. Partial is the normal case. The optionality is
-/// stated once, in the screen's subtitle, where it is read.
+/// Nothing here marks an empty field as a problem: partial is the normal case,
+/// and the optionality is stated once, in the screen's subtitle.
 class KioskOptionalFields extends StatelessWidget {
   final DateTime? dob;
   final ValueChanged<DateTime?> onDobChanged;

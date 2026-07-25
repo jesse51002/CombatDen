@@ -11,26 +11,19 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart'
 /// The answer behind a plan card the member cannot pick — ONE popup, whichever
 /// reason closed it.
 ///
-/// Two reasons ride it today: a trial they have already had (a kiosk-only rule,
-/// one trial to a member, and the desk is still the override) and a RECURRING
-/// plan they already hold (the backend's own per-plan conflict, which would
-/// otherwise dead-end the whole signup on the review). A second modal for the
-/// second reason would fork the kiosk's one modal vocabulary, so the reason —
-/// not the popup — is what varies; every string and the glyph come from
-/// `kiosk_plan_block_copy.dart`.
+/// Two client-side rules close a card, both read off the member's own history:
+/// a trial they have already had (kiosk-only, one trial to a member — staff can
+/// still grant a repeat from the CRM) and a RECURRING plan they already hold
+/// (per plan, mirroring the backend's own conflict guard, which would otherwise
+/// dead-end the signup at the review). The reason varies, never the popup:
+/// every string and the glyph come from `kiosk_plan_block_copy.dart`.
 ///
-/// It is the kiosk's one modal vocabulary — the veil + centred popup card the
-/// decline screen wears — over the warm [DesignConstants.yellowDark] disc every
-/// handoff uses. Warm, never red: nothing is broken and nobody did anything
-/// wrong.
-///
-/// **The plan grid stays live behind it**, so "Pick a membership" is a dismiss
-/// rather than a navigation — nothing re-fetches and no scroll position is
-/// lost. The blocked plan was never selected, so nothing has to be undone.
-///
-/// **The countdown is inside the popup, and it is not a cooldown.** This is a
-/// shared community iPad: no screen may hold it forever, and a timer drawn
-/// behind a popup sneaks the surface away without the member seeing it go.
+/// Warm [DesignConstants.yellowDark], never red — nothing is broken and nobody
+/// did anything wrong. The grid stays live behind it, so "Pick a membership"
+/// dismisses rather than navigates; the blocked plan was never selected, so
+/// nothing has to be undone. The countdown sits INSIDE the popup and is not a
+/// cooldown: no screen may hold a shared iPad forever, and a timer drawn behind
+/// a popup would take the surface away unseen.
 class KioskPlanBlock extends StatelessWidget {
   const KioskPlanBlock({super.key});
 
@@ -55,10 +48,6 @@ class KioskPlanBlock extends StatelessWidget {
                 constraints: const BoxConstraints(
                   maxWidth: DesignConstants.dialogMaxWidth,
                 ),
-                // The card's containment from the screen edge — a Padding,
-                // never a `margin`: a margin is a gap, and a gap belongs to the
-                // parent's `spacing:`. It matches the decline popup's inset,
-                // which is the surface this one is composed from.
                 child: Padding(
                   padding: const EdgeInsets.all(DesignConstants.spacingLarge),
                   child: Container(
@@ -108,9 +97,9 @@ class KioskPlanBlock extends StatelessWidget {
   }
 }
 
-/// The constructive route first, the desk under it — stacked, matching the
-/// decline popup: two kiosk-scale labels of this length do not sit comfortably
-/// side by side in a [DesignConstants.dialogMaxWidth] popup.
+/// The constructive route first, the desk under it — stacked, because two
+/// kiosk-scale labels this long do not fit side by side in a
+/// [DesignConstants.dialogMaxWidth] popup.
 class _Actions extends StatelessWidget {
   final VoidCallback onPick;
   final VoidCallback onHelp;
@@ -130,8 +119,7 @@ class _Actions extends StatelessWidget {
   }
 }
 
-/// The warm disc the kiosk's other handoffs wear, carrying the reason's own
-/// glyph.
+/// The warm disc the kiosk's handoffs wear, carrying the reason's own glyph.
 class _BlockIcon extends StatelessWidget {
   final KioskPlanBlockReason reason;
 

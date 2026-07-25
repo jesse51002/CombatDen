@@ -3,30 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// The kiosk's labeled text input: a label above, an optional leading glyph
-/// inside the box, and an optional hint (or error line) below.
+/// inside the box, and an optional hint (or error line) below. The box is
+/// `KioskNameSearch`'s geometry verbatim, so the signup's fields and the
+/// home's search read as one control, plus the focus / error border pair the
+/// search box has no need of.
 ///
-/// The BOX geometry is `KioskNameSearch`'s, verbatim — the shipped kiosk
-/// field, so the signup's fields and the home's search read as the same
-/// control at the same size: [DesignConstants.card] fill,
-/// [DesignConstants.radiusBig] corners, [DesignConstants.kioskFieldText] value
-/// type, and a hint lifted to [DesignConstants.text2nd] (the kiosk's AA floor
-/// applies to every muted WORD). What the search box has no need of, and this
-/// adds, is the focus / error border pair the mockup draws: sapphire on focus,
-/// [DesignConstants.badRed] in error, over the resting hairline.
-///
-/// **No `autofillHints`, and never add any.** This is a SHARED front-desk
-/// iPad: browser/OS autofill would offer the PREVIOUS member's address (or
-/// card) to the next person standing at it. The absence is load-bearing —
-/// see the kiosk-guide skill.
+/// No `autofillHints`, and never add any: this is a SHARED front-desk iPad, so
+/// autofill would offer the PREVIOUS member's address (or card) to the next
+/// person standing at it. The absence is load-bearing — see the kiosk-guide
+/// skill.
 class KioskFieldBox extends StatefulWidget {
   final TextEditingController controller;
 
   /// The label above the box.
   final String label;
 
-  /// The muted word beside the label ("optional"). Used only where optional
-  /// is the EXCEPTION among required fields; a panel where optional is the
-  /// rule says so once at the top instead of five times down the form.
+  /// The muted word beside the label ("optional"). Only where optional is the
+  /// EXCEPTION; a panel where optional is the rule says so once at the top.
   final String? labelNote;
 
   final String hintText;

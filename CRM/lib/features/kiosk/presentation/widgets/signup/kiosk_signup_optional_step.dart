@@ -10,25 +10,21 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_optional_fi
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 
-/// D1a **and** E1a — the optional block: date of birth, address, and an
-/// emergency contact, for whoever the roster is currently about.
+/// D1a and E1a — the optional block: date of birth, address, and an emergency
+/// contact, for whoever the roster is currently about. Always shown, never
+/// hidden behind an "add details" button (founder-locked): a member who has to
+/// opt in fills none of it in.
 ///
-/// **It is always shown, never hidden behind an "add details" button**
-/// (founder-locked). A member who is never asked to opt in fills most of it
-/// in; a member who has to opt in fills none of it in.
+/// One screen, two people, and the asymmetry is real. For the PAYER
+/// (`extraDetails`) nothing has been written yet, so Continue and Skip both
+/// fire the single `createMember` carrying this step's fields and the previous
+/// step's; for a PAYEE (`personDetails`) the person already exists, so Continue
+/// is a partial `updateMember` of only what was typed and Skip fires NOTHING —
+/// which keeps the roster chip honest about what is actually on file.
 ///
-/// **One screen, two people, and the asymmetry is real.** For the PAYER
-/// (`extraDetails`) nothing has been written yet, so Continue and Skip fire
-/// the single `createMember` call carrying this step's fields and the previous
-/// step's — abandoning anywhere earlier writes nothing at all. For a PAYEE
-/// (`personDetails`) the person already exists (the adder's Next created
-/// them), so Continue is a partial `updateMember` of only what was typed and
-/// **Skip fires nothing at all** — which is what keeps the roster chip honest
-/// about what is actually on file.
-///
-/// **A matched EXISTING member gets this screen with every field BLANK.** A
-/// lobby iPad never prints another member's stored address, and a write built
-/// from a form that never showed a value cannot be used to wipe it.
+/// A matched EXISTING member gets this screen with every field BLANK: a lobby
+/// iPad never prints another member's stored details, and a write built from a
+/// form that never showed a value cannot be used to wipe it.
 class KioskSignupOptionalStep extends StatefulWidget {
   const KioskSignupOptionalStep({super.key});
 
@@ -48,9 +44,8 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
   void initState() {
     super.initState();
     final person = context.read<KioskSignupCubit>().state.activePerson;
-    // Seeded FROM state so a member who steps Back and forward again sees what
-    // they typed — except for a matched existing member, whose stored details
-    // this screen never held and must never print.
+    // Seeded FROM state so Back-and-forward shows what they typed — except for
+    // a matched existing member, whose stored details this must never print.
     final seed = person.wasExisting ? const KioskSignupPerson() : person;
     _dob = seed.dob;
     _address = TextEditingController(text: seed.address ?? '');
@@ -69,8 +64,6 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
   }
 
   /// Continue AND Skip both land here for the PAYER — same values, same call.
-  /// The only difference between the two buttons is which member they give
-  /// permission to.
   void _commitPayer() {
     context.read<KioskSignupCubit>().submitExtraDetails(
           dob: _dob,
@@ -102,9 +95,9 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
       builder: (context, state) {
         final person = state.activePerson;
         final payee = state.step == KioskSignupStep.personDetails;
-        // A call is in flight: the whole footer goes inert so a second tap
-        // can't fire a second write. The cubit latches this too — the UI is
-        // the courtesy, the latch is the guarantee.
+        // A call in flight makes the whole footer inert so a second tap can't
+        // fire a second write. The cubit latches this too — the UI is the
+        // courtesy, the latch is the guarantee.
         final busy = state.submitting;
         final commit = payee ? _commitPayee : _commitPayer;
         return KioskSignupStepScaffold(

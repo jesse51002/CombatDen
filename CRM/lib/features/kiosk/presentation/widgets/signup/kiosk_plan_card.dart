@@ -9,26 +9,16 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels
 /// One plan, as a card: the 16:9 hero the whole app draws a plan with, then
 /// the name, the one rule line, and the price.
 ///
-/// **It is the shipped `ClassCard` recipe at kiosk scale**, not a new object:
-/// the same clipped `card` fill and `radiusSmall` corners, the same bleeding
-/// 16:9 image over padded details, and the same overlay treatment for a
-/// selected card (a primary outline and a check disc painted OVER the content,
-/// so picking one can never shift the grid under a finger).
+/// The shipped `ClassCard` recipe at kiosk scale, with the selected state
+/// painted OVER the content so picking one can never shift the grid under a
+/// finger.
 ///
-/// The check disc is the kiosk's own "selected" idiom — sapphire filled with
-/// the `onAccent` tick, resting as a quiet ring so an unpicked card still
-/// invites the tap.
-///
-/// **A [blocked] card is closed, not missing.** It is dimmed, carries a tag
-/// over its hero and drops the select mark entirely — it can never become the
-/// pick. It stays TAPPABLE on purpose: a greyed-out plan with no explanation is
-/// a worse dead end than the one it prevents, so the tap opens the answer
-/// instead of setting the selection.
-///
-/// **ONE blocked visual, two labels.** [blockedLabel] is the only thing that
-/// varies by reason ("Already used" for a spent trial, "You have this" for a
-/// membership they currently hold) — a second blocked treatment would teach a
-/// member two things where the consequence is identical.
+/// A [blocked] card is closed, not missing: dimmed, tagged over its hero, and
+/// with no select mark — it can never become the pick. It stays TAPPABLE on
+/// purpose, so the tap opens the answer instead of a greyed-out dead end (the
+/// two block rules live in `kiosk_plan_block.dart`). ONE blocked visual, two
+/// labels: only [blockedLabel] varies by reason, because the consequence is
+/// identical either way.
 class KioskPlanCard extends StatelessWidget {
   final MembershipPlanResponse plan;
   final bool selected;
@@ -37,9 +27,9 @@ class KioskPlanCard extends StatelessWidget {
   /// explains rather than selects.
   final bool blocked;
 
-  /// The tag pinned over a blocked card's hero. Comes from
-  /// `kiosk_plan_block_copy.dart`'s reason switch at the call site, so the tag
-  /// and the popup behind it can never disagree about why.
+  /// The tag pinned over a blocked card's hero. It comes from
+  /// `kiosk_plan_block_copy.dart` at the call site, so the tag and the popup
+  /// behind it can never disagree about why.
   final String blockedLabel;
 
   final VoidCallback onTap;
@@ -86,12 +76,10 @@ class KioskPlanCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Overlaid rather than laid out, so toggling the pick never
-            // reflows the card.
+            // Overlaid, not laid out: toggling the pick never reflows the card.
             if (selected)
               const Positioned.fill(child: _SelectedBorder()),
-            // Top-LEFT: the top-right corner is the select mark's, and the two
-            // must never argue over the same pixel.
+            // Top-LEFT: the top-right corner belongs to the select mark.
             if (blocked)
               Positioned(
                 top: DesignConstants.spacingMedium,
@@ -111,13 +99,11 @@ class KioskPlanCard extends StatelessWidget {
   }
 }
 
-/// How far a blocked card is faded. Enough to read as spent at 2m, not so far
-/// that its name and price stop being legible — the member still has to see
-/// WHICH plan is the one they already used.
+/// How far a blocked card is faded: enough to read as spent at 2m, not so far
+/// that its name and price stop being legible.
 const double _blockedOpacity = 0.45;
 
-/// The blocked mark, on a scrim so it survives any hero photo. It rides the
-/// ramp's smallest role, which is the one reserved for a tag pinned on artwork.
+/// The blocked mark, on a scrim so it survives any hero photo.
 class _BlockedTag extends StatelessWidget {
   final String label;
 
@@ -141,10 +127,9 @@ class _BlockedTag extends StatelessWidget {
   }
 }
 
-/// The plan's own catalogue image, at the app-wide 16:9 card ratio so a plan
-/// with a portrait photo can never make its card taller than its neighbours.
-/// A missing or broken URL degrades to the neutral placeholder rather than
-/// collapsing the card.
+/// The plan's catalogue image, pinned to 16:9 so a portrait photo can never
+/// make its card taller than its neighbours. A missing or broken URL degrades
+/// to the placeholder rather than collapsing the card.
 class _Hero extends StatelessWidget {
   final String imageUrl;
 
@@ -184,8 +169,7 @@ class _PlaceholderHero extends StatelessWidget {
   }
 }
 
-/// Name, rule, price — in that order, because that is the order the question
-/// is asked in: what is it, what do I get, what does it cost.
+/// Name, rule, price — the order the question is asked in.
 class _Body extends StatelessWidget {
   final MembershipPlanResponse plan;
 
@@ -218,8 +202,8 @@ class _Body extends StatelessWidget {
   }
 }
 
-/// The price, rendered ONLY through the shared money helper — the amount is
-/// signed minor units end to end and is never divided at a call site.
+/// The price, rendered only through the shared money helper — minor units are
+/// never divided at a call site.
 class _Price extends StatelessWidget {
   final MembershipPlanResponse plan;
 
@@ -269,9 +253,9 @@ class _SelectedBorder extends StatelessWidget {
   }
 }
 
-/// The picked-state mark: a filled sapphire disc with the tick, or a quiet
-/// ring on a card that has not been picked. It sits on the photo, so the ring
-/// carries the `onAccent` ink that stays legible over any image.
+/// The picked-state mark: a filled sapphire disc with the tick, or a quiet ring
+/// when unpicked. It sits on the photo, so the ring carries `onAccent` ink that
+/// stays legible over any image.
 class _SelectMark extends StatelessWidget {
   final bool selected;
 

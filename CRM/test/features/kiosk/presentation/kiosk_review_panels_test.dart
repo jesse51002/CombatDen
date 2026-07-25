@@ -13,20 +13,15 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 
 /// The review's left half, on the two things it must not get wrong.
 ///
-/// **1 · No screen in this lane prints a stored address in full for
-/// IDENTIFICATION.** The solo review's "YOU" row is an identification line —
-/// it exists so the member can tell "that's my account" — and a lobby iPad has
-/// a queue reading over the member's shoulder, so it masks like the roster row,
-/// the payer picker and the match card do. The deliberate exceptions are the two
-/// RECEIPT lines (the money panel's "Your receipt goes to …" and the results
-/// receipt's), which exist so the payer can verify where a receipt lands and
-/// therefore need the real address.
+/// 1 · The solo review's "YOU" row is an IDENTIFICATION line on a screen a
+/// lobby queue reads over the member's shoulder, so the address is masked like
+/// the roster row's and the match card's. The two payment-mail lines (money
+/// panel, results screen) are the deliberate exceptions — they exist so the
+/// payer can check where a failure notice lands, and need the real address.
 ///
-/// **2 · After a PARTIAL failure the group panel MARKS the people whose
-/// membership already started; it never drops their row.** The panel lists
-/// everybody on purpose (a non-training payer included), so hiding a row would
-/// read as "we forgot them" — while leaving it unmarked would imply the card
-/// about to be entered is charged for them again.
+/// 2 · After a PARTIAL failure the group panel MARKS whoever already started
+/// and never drops their row: hiding one would read as "we forgot them", and
+/// leaving it unmarked would imply the next card is charged for them again.
 void main() {
   Future<void> pumpPanel(WidgetTester tester, Widget panel) async {
     await tester.binding.setSurfaceSize(const Size(1180, 820));
@@ -61,7 +56,6 @@ void main() {
         KioskReviewSidePanel(state: _soloState(email: '')),
       );
 
-      // Nothing to mask means nothing to print, never an empty line.
       expect(find.textContaining('•'), findsNothing);
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -76,15 +70,12 @@ void main() {
         KioskReviewGroupPanel(state: _groupStateAfterPartial()),
       );
 
-      // Everybody is still listed — the panel marks, it never filters.
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(find.text('Ella Bell'), findsOneWidget);
       expect(find.text('Sam Bell'), findsOneWidget);
-      // Ella's membership landed on the earlier attempt; the other two are what
-      // the next card is charged for.
+      // Ella's landed earlier; the other two are what the next card pays for.
       expect(find.text('STARTED'), findsOneWidget);
-      // The role labels survive alongside it: the payer is still marked PAYING,
-      // which is the fact that explains the whole screen.
+      // The role labels survive alongside it — the payer is still PAYING.
       expect(find.text('PAYING'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -95,18 +86,16 @@ void main() {
         KioskReviewGroupPanel(state: _groupState()),
       );
 
-      // A first attempt carries the whole cart, so no row has "already paid"
-      // to say — the mark is derived from a landed response, never from a
-      // person who simply is not being charged.
+      // The mark is derived from a LANDED response, never from a person who
+      // simply is not being charged.
       expect(find.text('STARTED'), findsNothing);
       expect(find.text('PAYING'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('a NON-training payer is never marked started', (tester) async {
-      // They are not in the cart at all, so `isBeingCharged` is false for them
-      // for a completely different reason. Marking them STARTED would claim a
-      // membership they never bought.
+      // `isBeingCharged` is false for them for a different reason entirely —
+      // marking them STARTED would claim a membership they never bought.
       await pumpPanel(
         tester,
         KioskReviewGroupPanel(state: _groupStateAfterPartial(payerTrains: false)),
@@ -123,8 +112,7 @@ MembershipPlanResponse _plan() => MembershipPlanResponse(
       planId: 'plan-1',
       gymId: 'gym-1',
       planName: 'Unlimited',
-      // Empty so the row draws the shipped tick square rather than reaching for
-      // a network image in a widget test.
+      // Empty so the row draws the tick square instead of a network image.
       imageUrl: '',
       planType: PlanType.recurring,
       durationAmount: 1,

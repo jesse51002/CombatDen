@@ -11,11 +11,9 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// The chosen member's today-classes screen: a greeting head over the grid of
-/// classes open for check-in right now, closed by the escape foot.
-///
-/// The escape is load-bearing, not decoration: a member who taps the WRONG
-/// name on home lands here, and without it there is no way back — they are
-/// stranded until the 5-minute flow-idle guard fires. See [KioskEscapeFoot].
+/// classes open for check-in right now, closed by [KioskEscapeFoot]. The
+/// escape is load-bearing — a member who taps the WRONG name on home lands
+/// here, and without it is stranded until the 5-minute idle guard fires.
 class KioskClassPickScreen extends StatelessWidget {
   const KioskClassPickScreen({super.key});
 

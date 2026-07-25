@@ -10,30 +10,21 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_name_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_qr_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
 
-/// The kiosk idle home: a centered "Check in" title over a horizontal
-/// two-column composition — the "Scan with app" QR half and the "Name search"
-/// half, split by a vertical "or" seam — then the lower-emphasis "Start Trial
-/// / Membership" entry, and last the full-width [KioskAdoptStrip].
-/// Full-viewport on the iPad, so it fills the kiosk stage's width rather than a
-/// narrow dialog measure.
+/// The kiosk idle home: a centred "Check in" title over a two-column
+/// composition — the "Scan with app" QR half and the "Name search" half, split
+/// by a vertical "or" seam — then the lower-emphasis "Start Trial /
+/// Membership" entry, and last the full-width [KioskAdoptStrip]. Full-viewport
+/// on the iPad, so it fills the stage rather than a narrow dialog measure.
 ///
-/// [KioskHomeColumns] lays the two halves out as shared head / body bands, so
-/// the QR and the search field are co-centred while the two headings stay
-/// top-aligned — see its doc for why that departs from an earlier design.
+/// The adopt strip SPANS both columns rather than living in the QR half:
+/// getting the app is a property of the whole screen, and inside one column
+/// only that half had a foot and read heavier however small the strip got
+/// (founder ruling). Spanning it leaves neither column with a foot.
 ///
-/// **The adopt strip SPANS both columns instead of sitting inside one.**
-/// Getting the app is a property of the whole screen, so it never belonged in
-/// the QR half; while it lived there only the left column had a foot and that
-/// half read heavier no matter how small the strip got (founder). Spanning it
-/// leaves neither column with a foot, and the two balance by construction.
-///
-/// **Order: sign-up above, adopt strip last.** Both are footer-weight bands, so
-/// only one may own the terminal slot. The strip's hairline is the screen's one
-/// categorical boundary: above it, every way to get in RIGHT NOW (scan, search,
-/// buy); below it, the single thing that is about later. Somebody standing here
-/// with nothing to train on is blocked at the kiosk and outranks a nudge nobody
-/// is waiting on, so the entry keeps the higher slot. It is also the only order
-/// in which emphasis and urgency both fall monotonically down the screen.
+/// Order — sign-up above, adopt strip LAST (founder ruling). Both are
+/// footer-weight, so only one may own the terminal slot; the strip's hairline
+/// is the screen's one categorical boundary, with every way to get in RIGHT
+/// NOW above it and the single thing that is about later below.
 class KioskHomeScreen extends StatelessWidget {
   const KioskHomeScreen({super.key});
 
@@ -57,10 +48,10 @@ class KioskHomeScreen extends StatelessWidget {
           Center(
             child: KioskOutlineButton(
               text: 'Start Trial / Membership',
-              // Gated exactly like `selectMember`: past the T+11h45 lockout
-              // this shows the calm closing screen instead of starting a
-              // flow. It does NOT begin the session flow — `KioskSignupCubit`
-              // owns that latch.
+              // Gated exactly like `selectMember`: past the lockout this
+              // shows the closing screen instead of starting a flow. It does
+              // NOT begin the session flow — `KioskSignupCubit` owns that
+              // latch.
               onPressed: () => context.read<KioskFlowCubit>().startSignup(),
             ),
           ),

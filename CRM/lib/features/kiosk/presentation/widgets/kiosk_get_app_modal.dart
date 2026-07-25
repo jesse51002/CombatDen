@@ -8,82 +8,51 @@ import 'package:crm/features/members/data/video_feed.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
-/// The app-download page base URL a member's kiosk QR points at. The per-gym
-/// download page (`/get-app/<gymId>`) is a separate workstream; the kiosk only
-/// points at it. The canonical host/path is still being finalized, so this one
-/// named constant is the single switch — never inline the URL at a call site.
+/// The app-download page base URL a member's kiosk QR points at. The host/path
+/// is not final, so this is the single switch — never inline it at a call site.
 const String kKioskAppDownloadBaseUrl = 'https://www.combatden.net/get-app';
 
 /// Build the app-download URL the QR encodes for [gymId].
 String kioskAppDownloadUrl(String gymId) => '$kKioskAppDownloadBaseUrl/$gymId';
 
-/// The one solid popup surface the whole modal sits on. Named so a test can
-/// assert the founder's structural rule — ONE popup, with the two cards and
-/// the Done foot nested INSIDE it, nothing floating on the veil.
+/// The popup surface, named so a test can assert the structural rule below.
 const Key kKioskGetAppPopup = Key('kiosk-get-app-popup');
 
-/// The member-facing "Get the app" modal (founder feature UX-5) — the kiosk's
-/// app-adoption funnel, opened by a tap on the retention glance or by the
-/// home adopt strip's "Get it" button.
+/// The member-facing "Get the app" modal — the kiosk's app-adoption funnel,
+/// opened from the glance or the home adopt strip's "Get it".
 ///
-/// **It is ONE solid popup carrying two nested cards** (founder ruling): a
-/// single lifted surface over the veil, holding the accent-soft app card
-/// (white-labelled title, the book/earn/watch checks, the real scannable
-/// download QR, the two sign-in steps) beside the auto-advancing "In the app"
-/// showcase — with the countdown and Done INSIDE that surface, not dangling
-/// under it. There is deliberately no spanning "Welcome to {gym}" header: the
-/// gym is already named on the persistent kiosk header and on the app card's
-/// own title, so a third naming only cost height on a screen that must not
-/// scroll.
-///
-/// **Nothing here scrolls.** A member standing at a kiosk never discovers what
-/// sits below a fold, so the whole composition fits the iPad landscape viewport
-/// outright — see [KioskGetAppBody].
-///
-/// The veil absorbs taps so an accidental touch doesn't dismiss it: only Done
-/// or the 60-second timer closes it. Done returns the member to whatever was
-/// underneath (the glance, or the home); expiry means nobody is standing there
-/// and returns home — both live in `KioskFlowCubit.closeAppModal`.
-/// [secondsLeft] is the cubit's modal countdown; [gymId] scopes the QR.
-///
-/// Every showcase input — the reward catalogue, the upcoming classes, the
-/// video feed head, the rank ladder — is a gym-wide catalogue the flow cubit
-/// fetched ONCE at kiosk entry and cached, so **this modal never fetches**,
-/// which is why it opens instantly and why it renders identically from the
-/// idle home and from the glance. See `kioskShowcaseSlides` for what each slide
-/// renders and why a slide whose data is absent is omitted outright.
+/// ONE solid popup carrying two nested cards (founder ruling), countdown and
+/// Done INSIDE that surface. Nothing scrolls and there is deliberately no
+/// spanning "Welcome to {gym}" header — the gym is already named twice, and
+/// the whole composition must fit the iPad viewport (see [KioskGetAppBody]).
+/// The veil absorbs taps; only Done or the timer ([secondsLeft]) closes it.
+/// Every showcase input was warmed ONCE at kiosk entry, so this modal never
+/// fetches, and a slide whose data is absent is omitted.
 class KioskGetAppModal extends StatelessWidget {
   final String gymId;
   final int secondsLeft;
 
-  /// The gym's real name, which white-labels the app card's title. Null /
-  /// empty (no active gym name) falls back to naming the app generically
-  /// rather than inventing a stand-in gym.
+  /// White-labels the app card's title. Null / empty names the app
+  /// generically rather than inventing a stand-in gym.
   final String? gymName;
 
-  /// The checked-in member's sign-in address, when one is known (the glance
-  /// path). Null from the idle home — step 2 then omits the address.
+  /// The checked-in member's sign-in address, when known (the glance path).
+  /// Null from the idle home, where step 2 then omits the address.
   final String? memberEmail;
 
   /// The gym's cached reward catalogue — the "Earn rewards" slide.
   final List<RewardResponse> rewards;
 
-  /// The gym's next upcoming occurrences — the "Book classes" slide. This is
-  /// `KioskFlowState.showcaseClasses` (warmed once at kiosk entry, a week-wide
-  /// forward window), **never** the check-in flow's `classes`: that list is
-  /// narrowed to the check-in window and is empty on the idle home and every
-  /// evening, which is exactly how this slide went missing. Empty only for a
-  /// gym that runs no classes at all, which omits the slide and its dot.
+  /// The "Book classes" slide. Must be `KioskFlowState.showcaseClasses` (a
+  /// warmed week-wide window), NEVER the check-in flow's `classes`, which is
+  /// empty on the idle home and every evening. Empty omits the slide.
   final List<EffectiveClassInstance> showcaseClasses;
 
-  /// The head of the gym's OWN curated video feed — the "Watch videos" slide.
-  /// Empty for a gym with no feed (or a failed fetch), which omits the slide.
+  /// The head of the gym's OWN curated feed — the "Watch videos" slide.
   final List<Video> videos;
 
-  /// The gym's belt ladder — the "Track rank" slide. Carries no member link:
-  /// that slide features a MIDDLE rung and an illustrative bar by design (see
-  /// `KioskRankSlide`). Empty when the gym doesn't run ranks, which omits the
-  /// slide and its dot.
+  /// The gym's belt ladder — the "Track rank" slide. No member link: that
+  /// slide is illustrative by design (`KioskRankSlide`). Empty omits it.
   final List<KioskRankStep> rankLadder;
 
   const KioskGetAppModal({
@@ -102,8 +71,7 @@ class KioskGetAppModal extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: GestureDetector(
-        // Opaque so a tap on the veil is swallowed (never leaks to the glance
-        // behind it); intentionally does nothing — Done / the 60s timer close.
+        // Opaque so a veil tap is swallowed, never leaking to the glance.
         behavior: HitTestBehavior.opaque,
         onTap: () {},
         child: ColoredBox(
@@ -116,10 +84,8 @@ class KioskGetAppModal extends StatelessWidget {
                   constraints: const BoxConstraints(
                     maxWidth: DesignConstants.dialogMaxWidthWide,
                   ),
-                  // The popup takes the whole veiled area rather than
-                  // shrink-wrapping: a bounded height is what lets the body
-                  // lay the foot out first and give the cards the rest, which
-                  // is how this composition guarantees it never scrolls.
+                  // Bounded, not shrink-wrapped: the body lays the foot out
+                  // first and gives the cards the rest, so it never scrolls.
                   child: SizedBox.expand(
                     child: _Popup(
                       child: KioskGetAppBody(
@@ -146,14 +112,9 @@ class KioskGetAppModal extends StatelessWidget {
   }
 }
 
-/// The single solid surface the whole modal lives on — the same popup chrome
-/// the kiosk's idle warning already uses (`popup` fill, the object-card radius,
-/// a hairline border, the soft layered `cardShadow`), just at welcome-screen
-/// width.
-///
-/// It is what makes the modal read as ONE thing that opened rather than two
-/// panels floating on a veil, and it is the surface the two nested cards and
-/// the Done foot all sit inside.
+/// The single solid surface the whole modal lives on — the kiosk idle
+/// warning's popup chrome at welcome-screen width. It is what makes the modal
+/// read as ONE thing that opened, not two panels floating on a veil.
 class _Popup extends StatelessWidget {
   final Widget child;
 

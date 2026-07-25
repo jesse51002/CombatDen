@@ -7,19 +7,14 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 
 /// The flow-idle warning — a veil over the in-progress flow with a visible
-/// countdown. Any interaction anywhere dismisses it and resets the 5-minute
-/// clock (the whole kiosk surface listens for pointer activity); on expiry the
-/// cubit abandons the draft and returns home. Shown only while a flow is in
-/// progress, never on the idle home screen.
+/// countdown. Any interaction dismisses it and resets the clock; on expiry the
+/// cubit abandons the draft and returns home. Shown only DURING a flow, never
+/// on the idle home.
 ///
-/// **One warning surface, two lanes.** The check-in lane's guard lives on
-/// [KioskFlowCubit] and the signup lane runs its own (same constants, its own
-/// cubit, because only that cubit knows which of its steps may be
-/// interrupted). [onStillHere] is how the signup lane routes "I'm still here"
-/// to the clock that is actually running — without it the button would answer
-/// a timer that isn't ticking and the member would still be ejected. Omitted,
-/// it defaults to the check-in lane's `registerActivity`, so no existing call
-/// site changes.
+/// One warning surface, two lanes: the check-in lane's guard lives on
+/// [KioskFlowCubit], the signup lane runs its own. [onStillHere] routes "I'm
+/// still here" to whichever clock is actually running — without it the button
+/// answers a timer that isn't ticking and the member is ejected anyway.
 class KioskIdleWarning extends StatelessWidget {
   final int seconds;
 
@@ -34,9 +29,6 @@ class KioskIdleWarning extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // An opaque gesture detector so a tap on the veil dismisses the warning
-    // AND is absorbed here — it must never leak through to a class card behind
-    // it and trigger a check-in.
     void stillHere() {
       final answer = onStillHere;
       if (answer != null) {
@@ -48,6 +40,8 @@ class KioskIdleWarning extends StatelessWidget {
 
     return Positioned.fill(
       child: GestureDetector(
+        // Opaque so a veil tap is absorbed here and can't leak through to a
+        // class card behind it and trigger a check-in.
         behavior: HitTestBehavior.opaque,
         onTap: stillHere,
         child: ColoredBox(
@@ -57,9 +51,6 @@ class KioskIdleWarning extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: DesignConstants.dialogMaxWidth,
               ),
-              // The card's containment from the screen edge — a Padding, not a
-              // `margin`: a margin is a gap, and a gap belongs to the parent's
-              // `spacing:`.
               child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.paddingBig),
                 child: Container(

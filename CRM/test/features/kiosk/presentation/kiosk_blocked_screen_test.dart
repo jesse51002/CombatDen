@@ -12,11 +12,10 @@ import 'package:crm/features/kiosk/presentation/screens/kiosk_blocked_screen.dar
 class _MockKioskFlowCubit extends MockCubit<KioskFlowState>
     implements KioskFlowCubit {}
 
-/// The blocked screen is the member's only explanation of a refused check-in,
-/// so its WHY line must name a real reason. It picks that line off the
-/// backend's stable `code` (`CheckInErrorCode`) — never the free-text `detail`
-/// prose — and falls back to the calm generic line for anything it doesn't
-/// recognise. Every line stays blame-free and the front-desk handoff is always
+/// The blocked screen is the member's only explanation of a refused check-in.
+/// Its WHY line comes off the backend's stable `code` (`CheckInErrorCode`) —
+/// never the free-text `detail` prose — and falls back to the calm generic
+/// line for anything it doesn't recognise, with the front-desk handoff always
 /// on screen underneath.
 void main() {
   const generic = 'We couldn\'t complete your check-in just now.';

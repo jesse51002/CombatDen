@@ -2,16 +2,13 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 
 /// The signup stop screen's member-facing words — the ONE place a
 /// [KioskSignupStopReason] becomes a sentence, mirroring `kiosk_blocked_copy`.
+/// Every line is blame-free and stops at the fact; the screen itself supplies
+/// the front-desk handoff and the charge reassurance.
 ///
-/// Every line is **blame-free and stops at the fact**: the screen itself
-/// supplies the front-desk handoff and the "nothing has been charged"
-/// reassurance, so no line here may carry an error code, jargon, or any hint
-/// the member did something wrong.
-///
-/// **The duplicate line never names or confirms the matched account.** The
-/// 409 body carries the matches; rendering them would confirm to whoever is
-/// standing at a shared iPad that a given person banks here, and it would be
-/// useless anyway — the answer is the same either way.
+/// The duplicate line never names or confirms the matched account: the 409
+/// body carries the matches, but rendering them would confirm to whoever is
+/// standing at a shared iPad that a given person trains here — and the answer
+/// is the same either way.
 String kioskSignupStopReasonCopy(KioskSignupStopReason? reason) {
   return switch (reason) {
     KioskSignupStopReason.duplicateMember =>
@@ -42,12 +39,11 @@ String kioskSignupStopReasonCopy(KioskSignupStopReason? reason) {
 /// axis — what the desk can DO about it — because "the coach can pull up your
 /// account" is a promise the gym can only keep for a duplicate.
 ///
-/// **The money reasons say what happened to the money, first.** That is the
-/// only question a member has after tapping Pay, and a stop screen that makes
-/// them wonder is worse than no screen at all. The one case the kiosk cannot
-/// answer ([KioskSignupStopReason.paymentUnconfirmed]) says so plainly rather
-/// than guessing — and it never offers a retry, because retrying is the one
-/// action that could take the money twice.
+/// The money reasons say what happened to the money FIRST — the only question
+/// a member has after tapping Pay. The one case the kiosk cannot answer
+/// ([KioskSignupStopReason.paymentUnconfirmed]) says so plainly rather than
+/// guessing, and never offers a retry: retrying is the one action that could
+/// take the money twice.
 String kioskSignupStopReassurance(KioskSignupStopReason? reason) {
   return switch (reason) {
     KioskSignupStopReason.duplicateMember =>
@@ -69,11 +65,11 @@ String kioskSignupStopReassurance(KioskSignupStopReason? reason) {
       'We won\'t try that payment again in case it already went through. '
           'Please see the coach at the desk — they can check and finish this '
           'off for you.',
-    // The decline screen's twin, and it carries the same correction: the charge
-    // did not happen, but the fresh card HAS already replaced the payer's
-    // default (the start promotes it before charging, and a decline reverts
-    // nothing), so neither surface may imply the account is untouched. This stop
-    // is only ever reached FROM that popup, so the two must say the same thing.
+    // The decline screen's twin, reached only FROM that popup, so both must
+    // say the same thing: the charge did not happen, but the fresh card HAS
+    // already replaced the payer's default (the start promotes it before
+    // charging, and a decline reverts nothing). Neither surface may imply the
+    // account is untouched.
     KioskSignupStopReason.cardDeclined =>
       'You haven\'t been charged, and nothing you filled in is lost. The card '
           'you entered is now the one saved on your profile, and the coach at '

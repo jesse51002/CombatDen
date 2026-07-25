@@ -50,30 +50,19 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// **A waiver the gym already holds a compliant signature for is not asked
-/// for again.**
-///
-/// The signal is `meets_floor` on
+/// A waiver the gym already holds a compliant signature for is not asked for
+/// again. The signal is `meets_floor` on
 /// `GET /api/v1/waivers/signatures/by-member/{member_id}` — the SERVER's
-/// verdict that the member's latest signature sits at or above that waiver's
-/// re-sign floor, the same rule the 422 purchase gate and the check-in gate
-/// apply. The kiosk never re-derives the floor.
+/// verdict, the same rule the 422 purchase gate applies; the kiosk never
+/// re-derives the floor.
 ///
-/// **The read FAILS CLOSED, and every test here is about one shade of that.**
-/// It is the deliberate inverse of the two plan-block reads, which fail OPEN
-/// because turning a paying customer away is worse than a rare free week.
-/// Waivers invert the cost: a needless signature costs the member twenty
-/// seconds, a MISSING one voids the gym's legal protection. So:
-///  * a read that threw → nothing skipped;
-///  * a waiver ABSENT from the response → asked (the response is
-///    `required ∪ ever-signed` over their CURRENT memberships, so a waiver on
-///    the plan they are about to BUY and never signed simply isn't in it);
-///  * signed BELOW the floor → asked;
-///  * only a positive `signed && meets_floor` takes a signature off the queue.
-///
-/// The queue's LENGTH is the other half: it holds exactly what the person will
-/// be asked to sign, so "waiver 1 of 2" counts real signatures rather than
-/// promising two and showing one.
+/// The read FAILS CLOSED, the deliberate inverse of the two plan-block reads:
+/// a needless signature costs the member twenty seconds, a MISSING one voids
+/// the gym's legal protection. Only a positive `signed && meets_floor` takes a
+/// waiver off the queue — a throw, a signature below the floor, and an absence
+/// (the response is `required ∪ ever-signed` over their CURRENT memberships,
+/// so a waiver on the plan they are about to BUY simply isn't in it) are all
+/// asked for. The queue's LENGTH is what "waiver 1 of 2" counts.
 void main() {
   const gymId = 'gym-1';
   const planId = 'plan-1';
@@ -134,8 +123,8 @@ void main() {
         signerName: any(named: 'signerName'),
       ),
     ).thenAnswer((_) async => _MockSignatureResponse());
-    // The default answer is the fail-closed one: nothing is known, so nothing
-    // is skipped. Each test states its own history.
+    // The fail-closed default: nothing known, so nothing is skipped. Each test
+    // states its own history.
     when(() => memberships.listMemberWaiverStatus(any(), any()))
         .thenAnswer((_) async => const []);
     when(() => member.createMember(any())).thenAnswer((_) async => 'mem-new');
@@ -194,8 +183,7 @@ void main() {
       final cubit = await atWaiversAsExisting();
 
       expect(cubit.state.step, KioskSignupStep.waivers);
-      // Dropped, not stepped over: the subtitle reads "waiver 1 of 1", which is
-      // exactly how many signatures they are about to give.
+      // Dropped, not stepped over — the subtitle counts real signatures.
       expect(cubit.state.waiverQueue, [waiverB]);
       expect(cubit.state.waiverIndex, 0);
       expect(cubit.state.currentWaiverId, waiverB);
@@ -210,8 +198,6 @@ void main() {
               ]);
       final cubit = await atWaiversAsExisting();
 
-      // Nothing left to sign anywhere on the roster, so the run falls through
-      // to the card — no waiver screen is drawn at all.
       expect(cubit.state.step, KioskSignupStep.card);
       verifyNever(() => memberships.getWaiver(any(), any()));
       await cubit.close();
@@ -230,14 +216,13 @@ void main() {
       verify(() => memberships.listMemberWaiverStatus('mem-old', gymId))
           .called(1);
 
-      // Back to the plans and forward again re-derives the queue from the
-      // cached answer — never a second request, and never a different queue.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.plans);
       cubit.continueFromPlans();
       await _settle();
       expect(cubit.state.step, KioskSignupStep.waivers);
       expect(cubit.state.waiverQueue, [waiverB]);
+      // The earlier `verify` consumed that call, so this covers a SECOND one.
       verifyNever(() => memberships.listMemberWaiverStatus(any(), any()));
       await cubit.close();
     });
@@ -247,8 +232,7 @@ void main() {
     test('signed BELOW the floor is the re-sign case — asked', () async {
       when(() => memberships.listMemberWaiverStatus('mem-old', gymId))
           .thenAnswer((_) async => [
-                // Signed, but at v1 while the floor has moved to v2: exactly
-                // the state the founder's report is about NOT skipping.
+                // Signed at v1 while the floor has moved to v2.
                 _status(waiverA, signed: true, meetsFloor: false),
                 _status(waiverB, signed: true, meetsFloor: true),
               ]);
@@ -260,9 +244,6 @@ void main() {
     });
 
     test('a waiver ABSENT from the response is asked (fail closed)', () async {
-      // The response is `required ∪ ever-signed` over the member's CURRENT
-      // memberships, so a waiver on the plan they are about to buy and never
-      // signed is simply not in it. Absence must never read as "no need".
       when(() => memberships.listMemberWaiverStatus('mem-old', gymId))
           .thenAnswer((_) async => [
                 _status(waiverA, signed: true, meetsFloor: true),
@@ -287,9 +268,6 @@ void main() {
           .thenThrow(Exception('down'));
       final cubit = await atWaiversAsExisting();
 
-      // The opposite posture to the two plan-block reads, deliberately: a
-      // needless signature costs twenty seconds, a missing one costs the gym
-      // its legal protection.
       expect(cubit.state.waiverQueue, [waiverA, waiverB]);
       expect(cubit.state.currentWaiverId, waiverA);
       await cubit.close();
@@ -297,8 +275,8 @@ void main() {
 
     test('a 422 gate item is NEVER skipped, however compliant the read says '
         'it is', () async {
-      // The server is authoritative and the gate is the backstop that makes a
-      // client-side skip safe at all — so if the gate names it, the gate wins.
+      // The gate is the backstop that makes a client-side skip safe at all, so
+      // if the gate names it, the gate wins.
       when(() => memberships.listMemberWaiverStatus('mem-old', gymId))
           .thenAnswer((_) async => [
                 _status(waiverA, signed: true, meetsFloor: true),
@@ -330,28 +308,19 @@ void main() {
     });
   });
 
-  /// The two plans-step reads run CONCURRENTLY — one `Future.wait` per read,
-  /// over the roster, both fired from `continueToPlans` — because the waiver run
-  /// is two taps away and a family of four used to serialise eight round trips
-  /// on that path.
-  ///
-  /// **`Future.wait` propagates the FIRST error and cancels nothing**, so the
-  /// hazard the concurrency introduces is one failure discarding answers that
-  /// already landed. Every one of these tests is one shape of that, and each
-  /// asserts BOTH postures at once, because the two reads' asymmetries are
-  /// deliberate opposites: the plan gates fail OPEN (refusing a paying customer
-  /// is worse than a rare free week) and the waiver read fails CLOSED (a needless
-  /// signature costs twenty seconds, a missing one voids the gym's legal
-  /// protection). A gathered failure that leaked across would flip one of them.
+  /// The two plans-step reads run CONCURRENTLY — one `Future.wait` per read
+  /// over the roster, both fired from `continueToPlans` — and `Future.wait`
+  /// propagates the FIRST error while cancelling nothing, so the hazard is one
+  /// failure discarding answers that already landed. Each test asserts BOTH
+  /// postures at once, because they are deliberate opposites: the plan gates
+  /// fail OPEN, the waiver read fails CLOSED.
   group('the two reads are concurrent, and neither can move the other\'s '
       'posture', () {
     test('a roster\'s per-member reads are IN FLIGHT together, not one after '
         'another', () async {
-      // The waiver run is two taps from here (pick a plan, Continue), so a
-      // family of existing members used to serialise one round trip per person
-      // per read on the hot path. Both gathers are held open on one gate so the
-      // PEAK in-flight count is observable: 2 per read means both members' calls
-      // were open at once, 1 means they were awaited in turn.
+      // Both gathers are held open on one gate so the PEAK in-flight count is
+      // observable: 2 per read means both members' calls were open at once, 1
+      // means they were awaited in turn.
       final gate = Completer<void>();
       var detailInFlight = 0;
       var detailPeak = 0;
@@ -414,12 +383,9 @@ void main() {
               ]);
       final cubit = await atWaiversAsExisting();
 
-      // The waiver answer LANDED: A is compliant and is dropped from the queue.
-      // Before the reads were gathered independently, the sibling's throw could
-      // have taken this answer with it and asked for a signature the gym holds.
+      // The waiver answer LANDED despite the sibling throwing.
       expect(cubit.state.waiverQueue, [waiverB]);
-      // And the plan side kept its own fail-OPEN posture: nothing is known, so
-      // nothing is blocked.
+      // And the plan side kept its own fail-OPEN posture.
       expect(cubit.state.persons.first.hadTrial, isFalse);
       expect(cubit.state.persons.first.heldRecurringPlanIds, isEmpty);
       await cubit.close();
@@ -427,8 +393,8 @@ void main() {
 
     test('a THROWN waiver read leaves the plan history intact — and still fails '
         'CLOSED itself', () async {
-      // A trial in their history and a DIFFERENT recurring plan held, so both
-      // plan facts are observable without closing the plan this walk picks.
+      // A trial and a DIFFERENT recurring plan held, so both plan facts are
+      // observable without closing the plan this walk picks.
       when(() => member.getMemberDetail(any())).thenAnswer(
         (_) async => _detailWith(
           const [
@@ -441,9 +407,8 @@ void main() {
           .thenThrow(Exception('down'));
       final cubit = await atWaiversAsExisting();
 
-      // The waiver side kept its fail-CLOSED posture: every waiver is asked for.
       expect(cubit.state.waiverQueue, [waiverA, waiverB]);
-      // And the plan history LANDED despite the sibling throwing.
+      // The plan history LANDED despite the sibling throwing.
       expect(cubit.state.persons.first.hadTrial, isTrue);
       expect(cubit.state.persons.first.heldRecurringPlanIds, ['plan-other']);
       await cubit.close();
@@ -451,10 +416,8 @@ void main() {
 
     test('one MEMBER\'s failed reads never discard another member\'s answers',
         () async {
-      // The payer's two reads both fail; the adopted payee's both land. Under a
-      // naive gather the payer's throw would have thrown away Ella's answers —
-      // re-asking her for a signature the gym already holds AND losing her own
-      // history.
+      // The payer's two reads both fail; the adopted payee's both land. A naive
+      // gather would discard Ella's answers along with the payer's throw.
       when(() => member.getMemberDetail('mem-payer'))
           .thenThrow(Exception('down'));
       when(() => member.getMemberDetail('mem-ella')).thenAnswer(
@@ -493,11 +456,9 @@ void main() {
 
       cubit.continueToPlans();
       await _settle();
-      // Ella's trial history landed even though the payer's read threw — the
-      // per-member half of the same guarantee.
+      // Ella's history landed even though the payer's read threw.
       expect(cubit.state.persons[1].hadTrial, isTrue);
-      // The payer's own failed read still fails OPEN rather than inheriting
-      // hers.
+      // The payer's own failed read fails OPEN rather than inheriting hers.
       expect(cubit.state.persons.first.hadTrial, isFalse);
 
       cubit.selectPlan(planId);
@@ -511,11 +472,9 @@ void main() {
       await cubit.signPayerAuth(signerName: 'Marcus Bell');
       await _settle();
 
-      // Her liability waivers are skipped outright — her answer survived the
-      // payer's failure.
+      // Her waivers are skipped — her answer survived the payer's failure.
       expect(cubit.state.activePersonIndex, 0);
-      // And the payer, whose read threw, is asked for BOTH: fail closed, and
-      // never covered by hers.
+      // And the payer, whose read threw, is asked for BOTH.
       expect(cubit.state.waiverQueue, [waiverA, waiverB]);
       await cubit.close();
     });
@@ -547,9 +506,8 @@ void main() {
 
   group('the group walk asks each person for what THEY owe', () {
     test('one person\'s compliance never covers the other\'s', () async {
-      // The payer is compliant on A; the adopted payee on B. Neither answer may
-      // leak across — a state-root map would be one stale read away from
-      // skipping a child's signature because their parent had signed it.
+      // The payer is compliant on A, the payee on B. Neither answer may leak
+      // across: a state-root map would skip a child's signature for a parent's.
       when(() => memberships.listMemberWaiverStatus('mem-payer', gymId))
           .thenAnswer((_) async => [
                 _status(waiverA, signed: true, meetsFloor: true),
@@ -602,8 +560,7 @@ void main() {
       await cubit.signWaiver(signerName: 'Marcus Bell');
       await _settle();
 
-      // Marcus owes only B — his A signature is compliant and his B one sits
-      // below the floor.
+      // Marcus owes only B — his A is compliant, his B sits below the floor.
       expect(cubit.state.step, KioskSignupStep.waivers);
       expect(cubit.state.activePersonIndex, 0);
       expect(cubit.state.waiverQueue, [waiverB]);
@@ -611,8 +568,7 @@ void main() {
       await _settle();
 
       expect(cubit.state.step, KioskSignupStep.card);
-      // Exactly two signatures for the whole family, each against the right
-      // person and the right document.
+      // Exactly two signatures for the family, each against the right person.
       final signed = cubit.state.signedWaivers;
       expect(signed.length, 2);
       expect(signed[0].memberId, 'mem-ella');
@@ -704,8 +660,7 @@ AuthorizedPayerWaiver _payerAuthWaiver() => const AuthorizedPayerWaiver(
     );
 
 /// A member whose history carries [rows] — one `(planId, planType, status)` per
-/// membership. Only the three fields the two plan gates actually read carry any
-/// meaning here; everything else is filler.
+/// membership; every other field is filler.
 MemberDetailResponse _detailWith(
   List<(String, String, MembershipStatus)> rows,
 ) =>

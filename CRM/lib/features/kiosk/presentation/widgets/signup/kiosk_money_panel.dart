@@ -15,22 +15,19 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 /// The review's money half: what comes off the card today, itemised, on which
 /// card, to which address — then what happens next month.
 ///
-/// **Every figure here is a field of the preview response.** The only
-/// arithmetic is the due-today sum, and it lives on
-/// [KioskSignupState.dueTodayMinorUnits] with its reasoning; nothing on this
-/// screen derives a price from a plan row.
+/// Every figure here is a field of the preview response, in minor units,
+/// formatted only at render. The one piece of arithmetic is the due-today sum
+/// on [KioskSignupState.dueTodayMinorUnits]; nothing here derives a price from
+/// a plan row.
 class KioskMoneyPanel extends StatelessWidget {
   final KioskSignupState state;
 
-  /// Where payment mail reaches the payer — their own address. Empty when the
-  /// payer carries none, which drops the line entirely.
+  /// Where payment mail reaches the payer. Empty drops the line entirely.
   ///
-  /// **No receipt is emailed.** CombatDen sends no mail at all (there is no
-  /// mailer in the backend), and the connected account is set to notify a member
-  /// on a FAILED payment only — so this line states the address a
-  /// failure notice would reach, never a receipt. The unmasked address on a
-  /// shared iPad is justified by exactly that: the payer confirming the address
-  /// that has to work when a renewal fails.
+  /// No receipt is emailed — CombatDen has no mailer, and the connected
+  /// account notifies on a FAILED payment only — so this line may only promise
+  /// a failure notice. That is also what justifies an unmasked address on a
+  /// shared iPad: the payer confirming what has to work when a renewal fails.
   final String contactEmail;
 
   const KioskMoneyPanel({
@@ -68,10 +65,9 @@ class KioskMoneyPanel extends StatelessWidget {
             KioskProrationNote(until: state.prorationUntil),
           if (state.chargedTwiceToday) const KioskTwoChargesNote(),
           KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
-          // Unreachable blank in the ordinary flow: an email is required at the
-          // details step. A payer adopted from the gym's own records can still
-          // carry none, so the line is DROPPED rather than printed with a
-          // trailing empty address. The results panel drops it the same way.
+          // An email is required at the details step, but a payer adopted from
+          // the gym's own records can carry none — so the line is DROPPED
+          // rather than printed with a trailing empty address.
           if (contact.isNotEmpty)
             Text(
               'If a payment ever fails, we\'ll email you at $contact.',
@@ -89,14 +85,10 @@ class KioskMoneyPanel extends StatelessWidget {
 /// The itemisation, so the one big number is visibly its parts — the one-time
 /// invoice's lines first, then whatever is due now on the recurring side.
 ///
-/// The line amount read is the invoice line's own `amount`. That is the same
-/// figure the backend charges here, because a kiosk cart carries nothing that
-/// could reduce a line below it.
-///
-/// **A group's lines are labelled BY PERSON** ("Ella · Kids Program"),
-/// attributed through the line's own `stripe_price_id`. The amount stays the
-/// preview's — a price is never derived from a plan row, and a shared price is
-/// named for everyone on it rather than split.
+/// Each amount is the invoice line's own `amount` — exactly what the backend
+/// charges, since nothing in a kiosk cart can ever reduce a line below it. A
+/// group's lines are labelled BY PERSON through `kioskLineLabel`; only the
+/// label is derived, never the money.
 class _Lines extends StatelessWidget {
   final KioskSignupState state;
 
@@ -141,9 +133,9 @@ class _Lines extends StatelessWidget {
   }
 }
 
-/// What happens after today — the steady-state per-cycle amount and the date
-/// it first bills, both straight off the preview's recurring half. A purely
-/// one-time cart has no recurring half, so nothing is claimed at all.
+/// What happens after today — the per-cycle amount and the date it first
+/// bills, straight off the preview's recurring half. A purely one-time cart
+/// has no recurring half, so nothing is claimed at all.
 class _Then extends StatelessWidget {
   final KioskSignupState state;
 
@@ -178,8 +170,7 @@ class _Then extends StatelessWidget {
   }
 
   /// Who recurs and from when. In a group the names matter: a one-off pack
-  /// does not recur for the child who got it, and letting the parent assume it
-  /// does is the small lie that produces a phone call.
+  /// does not recur for the child who got it.
   String _detail(DateTime? at) {
     const tail = 'On the same card. Cancel any time at the front desk — no '
         'notice period.';
@@ -196,8 +187,8 @@ class _Then extends StatelessWidget {
 
   /// The recurring plan's own billing unit, so "each month" is never asserted
   /// about a weekly or yearly plan. It reads the FIRST recurring plan in the
-  /// cart rather than the active person's — at the review nobody is "active",
-  /// and a non-training payer has no plan of their own at all.
+  /// cart, not the active person's — at the review nobody is active, and a
+  /// non-training payer has no plan at all.
   String _cycleWord(KioskSignupState state) {
     final plan = _recurringPlan(state);
     if (plan == null) return 'cycle';

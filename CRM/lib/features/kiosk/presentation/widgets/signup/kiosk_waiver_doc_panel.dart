@@ -9,17 +9,13 @@ import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_ed
 ///
 /// The body renders through the SHIPPED [WaiverMarkdownEditor] — the same
 /// read-only Markdown surface `SignWaiverPanel` uses at the desk — so the
-/// member and the staff member read byte-identical text. The kiosk adds only
-/// the chrome: the object-card panel, the head (waiver name + version), and
-/// the fade, which is the one honest signal that there is more below the fold
-/// on a screen nobody scrolls by instinct.
+/// member and the staff member read BYTE-IDENTICAL text. The kiosk adds only
+/// the chrome: the object-card panel, the head (waiver name + version), and the
+/// fade that signals there is more below the fold.
 ///
-/// **The panel REQUIRES a bounded height and takes all of it.** The kiosk
-/// stage is a full screen, not an admin dialog: a legal document a member is
-/// being asked to sign gets the whole fold rather than a letterbox borrowed
-/// from a dialog token, and more of the agreement visible at once is the
-/// better outcome legally as well as visually. A long body scrolls INSIDE the
-/// editor; a short one simply fills. The waiver steps give it that bound by
+/// It REQUIRES a bounded height and takes all of it: a legal document a member
+/// is being asked to sign gets the whole fold rather than a letterbox, and a
+/// long body scrolls INSIDE the editor. The waiver steps give it that bound by
 /// asking `KioskSignupStepScaffold` for a filled body.
 class KioskWaiverDocPanel extends StatelessWidget {
   /// The waiver's name — the panel's title.
@@ -102,8 +98,8 @@ class _Head extends StatelessWidget {
 }
 
 /// A short wash from the panel's own fill up to nothing, so a body that
-/// continues past the fold LOOKS like it continues. It carries no words and
-/// no gesture, so it is `IgnorePointer` and stays on the surface token.
+/// continues past the fold LOOKS like it does. No words and no gesture, so it
+/// is `IgnorePointer`.
 class _BottomFade extends StatelessWidget {
   const _BottomFade();
 

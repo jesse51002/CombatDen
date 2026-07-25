@@ -9,16 +9,13 @@ import 'package:crm/shared/widgets/measured_max_width.dart';
 
 /// The glance's left half — a replica of the member app's resting streak
 /// state: the big sapphire week numeral over "week streak", a keep-it-alive
-/// note, and the Monday→Sunday week strip. Vertically centred in
-/// its panel like the app's resting composition.
+/// note, and the Monday→Sunday week strip.
 ///
 /// The numeral ROLLS UP to [weeks] on the member app's own odometer
-/// ([CountUpText], ease-out-expo, at the app's own celebration length) rather
-/// than a curve invented here — the kiosk celebrates in the same language the
-/// app does. This is the payoff beat of the glance, so it is the longest thing
-/// on the screen and deliberately unhurried; it starts on the same beat the
-/// panel fades in on, so the number is already moving as the panel lands. A
-/// reduced-motion viewer gets the final number immediately, no roll.
+/// ([CountUpText], at the app's celebration length) rather than a curve
+/// invented here, so the kiosk celebrates in the same language. It starts on
+/// the beat the panel fades in on, so the number is already moving as the
+/// panel lands. Reduced motion gets the final number immediately.
 class KioskStreakPanel extends StatelessWidget {
   final int weeks;
   final List<bool> daysCompleted;
@@ -38,10 +35,8 @@ class KioskStreakPanel extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           _StreakStack(weeks: weeks),
-          // MeasuredMaxWidth, not ConstrainedBox: the note wraps at this
-          // measure, and the glance equalizes its two panels with an
-          // IntrinsicHeight — a plain cap would report the note's height at
-          // the full panel width (one line) and overflow once it really wraps.
+          // MeasuredMaxWidth, not ConstrainedBox: the glance's IntrinsicHeight
+          // would measure this note as one line and overflow once it wraps.
           MeasuredMaxWidth(
             maxWidth: DesignConstants.kioskGlanceMeasure,
             child: Text(

@@ -8,15 +8,14 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
 /// The E2 offer: what was typed, and the ONE existing member it may be.
 ///
-/// It is `add_member/duplicate_member_panel.dart`'s match row at kiosk scale,
+/// It is `add_member/duplicate_member_panel.dart`'s match row at kiosk scale
 /// with the desk's warning callout deliberately dropped — at the desk a
-/// duplicate is a mistake to warn about; here it is a normal, good outcome
-/// that the parent is being asked to confirm.
+/// duplicate is a mistake to warn about; here it is the good outcome being
+/// confirmed.
 ///
-/// **Privacy is the whole design.** A full name (a first name plus an initial
-/// collides silently) and a MASKED email are the only disambiguators. Never a
-/// phone, never a photo, never a membership status: whoever is standing at a
-/// shared lobby iPad must not be able to read a stranger's details off it.
+/// The full name (a first name plus an initial collides silently) and a MASKED
+/// email are the only disambiguators — never a phone, never a membership
+/// status: nobody at a shared lobby iPad may read a stranger's details off it.
 class KioskMatchCard extends StatelessWidget {
   /// The typed draft this offer answers. Null on the search route, where
   /// nothing was typed to compare against.

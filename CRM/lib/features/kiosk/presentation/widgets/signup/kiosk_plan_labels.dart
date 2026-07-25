@@ -1,17 +1,11 @@
-/// The plan card's words — **a copy of the CRM's own `planAllowanceLabel`
-/// vocabulary** (`start_memberships/start_memberships_labels.dart`), not an
+/// The plan card's words — a COPY of the CRM's own `planAllowanceLabel`
+/// vocabulary (`start_memberships/start_memberships_labels.dart`), not an
 /// import of it.
 ///
-/// The wording is deliberately identical to what staff read in the admin
-/// wizard: a gym that writes "8 classes / month" on the desk's screen must not
-/// find "Two a week" on the member's. What is dropped is everything the kiosk
-/// cannot have — the quantity stepper (one plan, one person, always
-/// `quantity: 1`) and anything price-reducing.
-///
-/// It is a copy rather than a shared import on purpose: the kiosk is
-/// deliberately decoupled from `start_memberships/`, which is about to change
-/// under it, and a self-serve iPad must never be dragged along by a change to
-/// a staff-only wizard.
+/// The wording is deliberately identical to the admin wizard's: a gym that
+/// writes "8 classes / month" at the desk must not find "Two a week" on the
+/// member's screen. It stays a copy so a change to that staff-only wizard can
+/// never drag the self-serve iPad along with it.
 library;
 
 import 'package:crm/features/member_details/data/models/duration_unit.dart';

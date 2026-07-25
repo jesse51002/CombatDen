@@ -50,19 +50,15 @@ class _MockManagementResponse extends Mock
 
 class _MockSignatureResponse extends Mock implements WaiverSignatureResponse {}
 
-/// **Who pays, and how they get into the lane.**
+/// Who pays, and how they get into the lane. Three ways a payer is seated: the
+/// ordinary create, the "is this you?" confirm on a duplicate 409, and the
+/// identify search. All three end at the SAME confirm-or-seat shape, and none
+/// may quietly insert a second row for one member.
 ///
-/// The kiosk is self-serve for existing members as well as new ones, so there
-/// are three ways a payer is seated: the ordinary create, the "is this you?"
-/// confirm on a duplicate 409, and the identify search where the member names
-/// themselves. All three end at the SAME confirm-or-seat shape, and none of
-/// them may quietly insert a second row for one member.
-///
-/// **There is no card check on any of them, deliberately.** An existing member
-/// with a card on file is a perfectly good kiosk payer: they still type a
-/// fresh card, and it replaces the one on their profile. What the kiosk never
-/// does is CHARGE a card it did not just take — that half of the fresh-card law
-/// is structural and lives in `kiosk_forbidden_imports_test.dart`.
+/// There is no card check on any of them, deliberately: an existing member
+/// still types a fresh card and it replaces the one on their profile. That the
+/// kiosk never CHARGES a card it did not just take is structural and lives in
+/// `kiosk_forbidden_imports_test.dart`.
 void main() {
   const gymId = 'gym-1';
   const planId = 'plan-1';
@@ -149,8 +145,8 @@ void main() {
     ).thenAnswer((_) async => _startResponse());
     when(() => membersList.getMembersList(any()))
         .thenAnswer((_) async => _page(const []));
-    // The plan step reads an adopted member's history to decide whether a
-    // trial is still on offer; nobody here has had one.
+    // The plan step reads an adopted member's history for the trial rule;
+    // nobody here has had one.
     when(() => member.getMemberDetail(any()))
         .thenAnswer((_) async => _detail());
   });
@@ -199,8 +195,6 @@ void main() {
 
       cubit.startAsNewMember();
       expect(cubit.state.step, KioskSignupStep.details);
-      // Back off either branch lands on the fork — nothing was typed on the
-      // way in, so it is a safe destination.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.entry);
 
@@ -265,8 +259,7 @@ void main() {
       await cubit.pickPayerRow(_row('mem-someone-else', 'Marcus Bellamy'));
       cubit.declinePayerMatch();
 
-      // Nothing committed and they simply mis-tapped, so this is not the
-      // terminal stop the duplicate route takes.
+      // A mis-tap with nothing committed, so not the duplicate route's stop.
       expect(cubit.state.step, KioskSignupStep.identify);
       expect(cubit.state.stopReason, isNull);
       expect(cubit.state.matchCandidate, isNull);
@@ -293,8 +286,6 @@ void main() {
       payerIsADuplicate();
       await submitPayer(cubit);
 
-      // No card check stands between the 409 and the offer any more: whoever
-      // is adopted types a fresh card, and it replaces theirs.
       expect(cubit.state.step, KioskSignupStep.payerMatch);
       expect(cubit.state.stopReason, isNull);
       expect(cubit.state.payerMatchFromIdentify, isFalse);
@@ -328,8 +319,7 @@ void main() {
       await submitPayer(cubit);
       cubit.declinePayerMatch();
 
-      // The create has already been refused, so there is nothing left the
-      // kiosk can do with this name.
+      // The create was already refused: nothing is left to do with this name.
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.duplicateMember);
       await cubit.close();
@@ -366,19 +356,15 @@ void main() {
 
       expect(cubit.state.step, KioskSignupStep.people);
       expect(cubit.state.persons, hasLength(2));
-      // Only the PAYER role moved.
       expect(cubit.state.payer.memberId, 'mem-dad');
       expect(cubit.state.payer.wasExisting, isTrue);
       expect(cubit.state.payer.isPayer, isTrue);
-      // The membership check defaults ON for everybody, adopted included —
-      // they can untick it on the roster if they are only paying.
+      // The membership check defaults ON for everybody, adopted included.
       expect(cubit.state.payer.training, isTrue);
       expect(cubit.state.persons[1].memberId, 'mem-1');
       expect(cubit.state.persons[1].firstName, 'Marcus');
       expect(cubit.state.persons[1].isPayer, isFalse);
       expect(cubit.state.persons[1].training, isTrue);
-      // Seated straight away: no card check gates the pick, and the adopted
-      // payer is never created.
       expect(cubit.state.payerAlreadyInSignup, isFalse);
       verify(() => member.createMember(any())).called(1);
       await cubit.close();
@@ -389,8 +375,8 @@ void main() {
       final cubit = await atPicker();
       await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
 
-      // The person who started the signup is a payee now, so the
-      // link-before-start invariant covers them.
+      // The person who started the signup is a payee now, so link-before-start
+      // covers them.
       expect(cubit.state.everyPayeeLinked, isFalse);
 
       cubit.continueToPlans();
@@ -452,8 +438,8 @@ void main() {
 
       // A redirect, not a rejection: they are pickable from the roster list.
       expect(cubit.state.payerAlreadyInSignup, isTrue);
-      // And crucially NOT inserted a second time — two cart items for one
-      // member is a double charge waiting to happen.
+      // And NOT inserted a second time — two cart items for one member is a
+      // double charge waiting to happen.
       expect(cubit.state.persons, hasLength(2));
       expect(cubit.state.payer.memberId, 'mem-1');
       await cubit.close();
@@ -463,9 +449,8 @@ void main() {
       final cubit = await submitPayer(build());
       cubit.openPayerPick();
 
-      // Not offered by the roster list...
       expect(cubit.state.payerCandidateIndexes, isEmpty);
-      // ...and picking them anyway is a no-op.
+      // Picking them anyway is a no-op, from either list.
       await cubit.pickPayerFromRoster(0);
       await cubit.pickPayerRow(_row('mem-1', 'Marcus Bell'));
       expect(cubit.state.payer.memberId, 'mem-1');
@@ -504,10 +489,8 @@ void main() {
       cubit.openPayerPick();
       await cubit.pickPayerRow(_row('mem-dad', 'Rick Bell'));
 
-      // The first swap adopted an outsider (wasExisting). Changing who pays is
-      // freely repeatable while nothing has committed, so the swap is still on
-      // offer — the demoted former payer is just an unlinked roster payee, and
-      // nobody is stranded.
+      // Changing who pays is freely repeatable while nothing has committed:
+      // the demoted payer is just an unlinked roster payee.
       expect(cubit.state.payer.memberId, 'mem-dad');
       expect(cubit.state.payer.wasExisting, isTrue);
       expect(cubit.state.canSwitchPayer, isTrue);
@@ -537,8 +520,7 @@ void main() {
       expect(cubit.state.payer.memberId, 'mem-1');
       expect(cubit.state.canSwitchPayer, isTrue);
 
-      // Authorize the payee — a link pins the payer, and ONLY then does the
-      // swap offer close.
+      // A link pins the payer, and ONLY then does the swap offer close.
       cubit.continueToPlans();
       cubit.selectPlan(planId);
       cubit.continueFromPlans();
@@ -578,12 +560,10 @@ void main() {
 
       expect(cubit.state.step, KioskSignupStep.people);
       expect(cubit.state.persons, hasLength(2));
-      // A straight swap: promoted to the head, the old payer takes their seat.
       expect(cubit.state.payer.memberId, 'mem-2');
       expect(cubit.state.payer.firstName, 'Ella');
       expect(cubit.state.payer.isPayer, isTrue);
-      // Promotion moves the PAYER role and nothing else — they were getting a
-      // membership before and they still are.
+      // Promotion moves the PAYER role and nothing else.
       expect(cubit.state.payer.training, isTrue);
       expect(cubit.state.persons[1].memberId, 'mem-1');
       expect(cubit.state.persons[1].isPayer, isFalse);
@@ -632,8 +612,7 @@ void main() {
       expect(cubit.state.anyoneTraining, isFalse);
 
       cubit.continueToPlans();
-      // Blocked, not skipped: there is no path past this that sends an empty
-      // cart, and nothing downstream is touched.
+      // Blocked, not skipped — nothing downstream is touched.
       expect(cubit.state.step, KioskSignupStep.people);
       verifyNever(() => member.previewStartMemberships(any()));
       verifyNever(
@@ -643,7 +622,6 @@ void main() {
         ),
       );
 
-      // Ticking anybody releases it immediately.
       cubit.setPersonTraining(0, true);
       expect(cubit.state.anyoneTraining, isTrue);
       cubit.continueToPlans();
@@ -756,8 +734,8 @@ void main() {
       );
       cubit.confirmMatch();
 
-      // Straight back to the roster: there is no blank-field pass, because
-      // the kiosk can neither show nor overwrite their stored details.
+      // No blank-field pass: the kiosk can neither show nor overwrite their
+      // stored details.
       expect(cubit.state.step, KioskSignupStep.people);
       expect(cubit.state.persons[1].wasExisting, isTrue);
       // And Edit is refused for them even if something routed one in.
@@ -814,8 +792,7 @@ void main() {
       expect(cubit.state.removeConfirmIndex, 0);
       cubit.confirmRemovePerson();
 
-      // Nothing is auto-assigned: the signup has NO payer, and the flow is
-      // parked on the picker to choose one.
+      // Nothing is auto-assigned — the flow parks on the picker.
       expect(cubit.state.step, KioskSignupStep.payerPick);
       expect(cubit.state.hasPayer, isFalse);
       expect(cubit.state.payerOrNull, isNull);
@@ -831,8 +808,7 @@ void main() {
       final cubit = await withElla();
       cubit.askRemovePerson(0);
       cubit.confirmRemovePerson();
-      // Back out of the picker without choosing: the People step is reached
-      // with no payer, and it cannot advance.
+      // Back out without choosing.
       cubit.back();
       expect(cubit.state.step, KioskSignupStep.people);
       expect(cubit.state.hasPayer, isFalse);
@@ -855,7 +831,6 @@ void main() {
       cubit.confirmRemovePerson();
       await cubit.pickPayerFromRoster(0);
 
-      // Ella is the payer now, at the head, and the flow can advance again.
       expect(cubit.state.hasPayer, isTrue);
       expect(cubit.state.payer.memberId, 'mem-2');
       expect(cubit.state.payer.isPayer, isTrue);
@@ -871,14 +846,11 @@ void main() {
       cubit.askRemovePerson(0);
       cubit.confirmRemovePerson();
       expect(cubit.state.hasPayer, isFalse);
-      // Ella is the only person left and now sits at index 0 — a legitimate
-      // candidate, because nobody is paying.
+      // Ella now sits at index 0 — a legitimate candidate, nobody is paying.
       expect(cubit.state.payerCandidateIndexes, [0]);
 
-      // Tapping her CRM row must answer with "she's on the roster above", not
-      // drop the tap on the floor: the index-0 refusal is about whoever is
-      // ALREADY paying, and there is nobody paying here. Silently ignoring it
-      // left her unseatable from the search AND unexplained.
+      // The index-0 refusal is about whoever is ALREADY paying, and nobody is:
+      // the tap must answer "she's on the roster above", not vanish.
       await cubit.pickPayerRow(_row('mem-2', 'Ella Bell'));
       expect(cubit.state.payerAlreadyInSignup, isTrue);
       // Still never inserted a second time — one member is one cart item.

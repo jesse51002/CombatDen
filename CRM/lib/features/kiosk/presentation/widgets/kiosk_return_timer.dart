@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
-/// The "Back to start in Ns" auto-return countdown over a thin draining
-/// track — shared by the retention glance's 10-second footer and the "Get
-/// the app" modal's 60-second footer. [total] is the full duration in
-/// seconds (sets the drain fraction); [secondsLeft] is the live countdown. The
-/// track width matches the label so the bar reads as its underline.
+/// The "Back to start in Ns" auto-return countdown over a thin draining track
+/// — shared by the glance's 10-second footer and the "Get the app" modal's
+/// 60-second one. [total] is the full duration in seconds (it sets the drain
+/// fraction); [secondsLeft] is the live countdown.
 class KioskReturnTimer extends StatelessWidget {
   final int total;
   final int secondsLeft;
@@ -40,11 +39,10 @@ class KioskReturnTimer extends StatelessWidget {
   }
 }
 
-/// A thin track that drains left-to-right over the countdown. Each 1-second
-/// step slides smoothly via [TweenAnimationBuilder]. The fill keeps
-/// [DesignConstants.text3rd]: it is the one part of this widget that carries no
-/// words, so the kiosk's AA text floor doesn't apply and the quieter tint keeps
-/// the bar reading as the label's underline rather than a second line of ink.
+/// A thin track that drains left-to-right over the countdown. The fill stays
+/// on [DesignConstants.text3rd]: it carries no words, so the kiosk's AA text
+/// floor doesn't apply and the quieter tint keeps it reading as the label's
+/// underline rather than a second line of ink.
 class _DrainBar extends StatelessWidget {
   final double fraction;
 

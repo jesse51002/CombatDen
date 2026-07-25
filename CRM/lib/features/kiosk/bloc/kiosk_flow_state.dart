@@ -9,10 +9,9 @@ import 'package:crm/features/memberships/data/models/main_rank.dart';
 import 'package:crm/features/rewards/data/models/reward_response.dart';
 import 'package:crm/features/schedule/data/models/effective_class_instance.dart';
 
-/// The kiosk check-in lane's sub-view — the screen the member surface is
-/// currently showing INSIDE `KioskScreen` (which itself replaces the admin
-/// workspace while kiosk is active). Distinct from the Phase B
-/// `KioskStatus`, which is the security runway, not the flow.
+/// The kiosk check-in lane's sub-view — the screen the member surface shows
+/// inside `KioskScreen`, which replaces the admin workspace while kiosk is
+/// active. Distinct from `KioskStatus`, the security runway.
 enum KioskView {
   /// Idle rest state: title + QR placeholder + name search + signup.
   home,
@@ -20,17 +19,15 @@ enum KioskView {
   /// The chosen member's today-classes grid, ready to pick + check in.
   classPick,
 
-  /// The member-facing SELF-SERVE SIGNUP lane (Phase D/E). A single arm here,
-  /// because the whole multi-step flow lives behind `KioskSignupCubit` — the
-  /// signup's own steps are a separate state machine, not more [KioskView]
-  /// values, and `KioskSignupScreen` provides that cubit so its lifetime is
-  /// the flow's lifetime.
+  /// The member-facing SELF-SERVE SIGNUP lane. One arm only: its multi-step
+  /// flow is a separate state machine behind `KioskSignupCubit`, not more
+  /// [KioskView] values.
   signup,
 
   /// The check-in request is in flight (spinner).
   checkingIn,
 
-  /// Recorded (or already-checked-in) — the Phase C2 glance stub.
+  /// Recorded (or already checked in) — the retention glance.
   checkedIn,
 
   /// The kiosk gate rejected the check-in, or the call failed — the
@@ -42,13 +39,9 @@ enum KioskView {
   closing,
 }
 
-/// Immutable state of the [KioskFlowCubit]. One flat state carries the current
-/// [view] plus everything each view renders (search results, the chosen
-/// member/occurrence outcome, the idle-warning countdown). Nullable outcome
-/// fields ([selectedMember], [checkInResult], [blockedReason],
-/// [checkInErrorCode]) reset to null only via [KioskFlowState.home];
-/// [copyWith] never nulls them implicitly (sentinel) — an explicit `null`
-/// argument does clear one, which is how a fresh failure drops a stale code.
+/// Immutable state of the [KioskFlowCubit]: the current [view] plus everything
+/// each view renders. [copyWith] keeps the nullable outcome fields by sentinel,
+/// but an explicit `null` clears one — how a fresh failure drops a stale code.
 class KioskFlowState extends Equatable {
   final KioskView view;
 
@@ -62,14 +55,10 @@ class KioskFlowState extends Equatable {
   final MemberRow? selectedMember;
   final bool classesLoading;
 
-  /// The occurrences the CHECK-IN FLOW may offer this member: today's,
-  /// filtered to the check-in window (in session or within the 2h early
-  /// window, and not yet ended). Loaded per member by
-  /// [KioskFlowCubit.selectMember] and cleared on the way home.
-  ///
-  /// **Never render this on the "Get the app" showcase** — that slide has its
-  /// own [showcaseClasses]. The two lists answer different questions and are
-  /// deliberately separate; see [showcaseClasses].
+  /// The occurrences the CHECK-IN FLOW may offer this member: today's, filtered
+  /// to the check-in window, loaded per member and cleared on the way home.
+  /// Never render this on the "Get the app" showcase — that slide has its own
+  /// [showcaseClasses], and the two answer different questions.
   final List<EffectiveClassInstance> classes;
   final bool classesFailed;
 
@@ -77,10 +66,8 @@ class KioskFlowState extends Equatable {
   final CheckInResponse? checkInResult;
   final CheckInWarning? blockedReason;
 
-  /// The name of the class the member just tapped, carried from the picked
-  /// occurrence so the glance can CONFIRM which class they are checked into
-  /// (the check-in response carries only a `class_id`). Null before a class is
-  /// picked; cleared on the way home like every other per-member field.
+  /// The class the member just tapped, carried so the glance can confirm WHICH
+  /// class (the check-in response carries only a `class_id`).
   final String? selectedClassName;
 
   /// The check-in call itself failed (network / 5xx) — distinct from a gate
@@ -88,78 +75,54 @@ class KioskFlowState extends Equatable {
   final bool checkInFailed;
 
   /// The backend's stable machine-readable rejection code off a FAILED call
-  /// (the `code` sibling of `detail` — see [CheckInErrorCode]), which picks the
-  /// blocked screen's copy. Null when the failure carried none: a network drop,
-  /// a 5xx, or a foreign 4xx body — the screen then shows its generic line.
-  /// Only meaningful alongside [checkInFailed].
+  /// (the `code` sibling of `detail`), which picks the blocked screen's copy.
+  /// Null when the failure carried none — the screen then shows its generic
+  /// line. Only meaningful alongside [checkInFailed].
   final CheckInErrorCode? checkInErrorCode;
 
-  // ── Retention glance (Phase C2) ──
-  /// The member's live points balance AFTER the just-awarded points, fetched
-  /// on the glance. Null while loading OR when the billing fetch failed — the
-  /// glance then degrades gracefully (no balance number, reward tiles show
-  /// cost only). Distinct from [checkInResult]'s per-check-in points delta.
+  // ── Retention glance ──
+  /// The live points balance AFTER the just-awarded points. Null while loading
+  /// or when the fetch failed — the tiles then show cost only. Distinct from
+  /// [checkInResult]'s per-check-in points delta.
   final int? pointsBalance;
 
-  /// The gym-wide reward catalog (active, cheapest-first, capped) shown as the
-  /// glance's tiles and the "Earn rewards" showcase slide. Fetched ONCE at
-  /// kiosk entry and reused for every member (it survives [goHome]); empty
-  /// when the gym has no rewards, or when the catalog fetch failed.
+  /// The gym-wide reward catalog (active, cheapest-first, capped) — the
+  /// glance's tiles and the "Earn rewards" slide. Empty when the gym has no
+  /// rewards or the fetch failed.
   final List<RewardResponse> rewards;
 
-  // ── Gym-wide showcase catalogues (fetched once at kiosk entry) ──
-  /// The gym's next few UPCOMING occurrences — the "Book classes" showcase
-  /// slide, and a SEPARATE list from the check-in flow's [classes] on purpose.
-  ///
-  /// [classes] is filtered to the check-in window because the kiosk must never
-  /// offer a class a member cannot actually check into; this one looks a week
-  /// FORWARD, because a marketing slide must not empty itself at 9pm when
-  /// nothing is in the check-in window any more. Fetched once at kiosk entry
-  /// and reused (it survives [KioskFlowCubit.goHome]); empty for a gym that
-  /// runs no classes, or on a failed fetch — the slide (and its dot) is then
-  /// omitted, like every other showcase catalogue.
+  // ── Gym-wide showcase catalogues (fetched once at kiosk entry, surviving
+  // goHome; an empty one omits its slide and dot) ──
+  /// The gym's next few UPCOMING occurrences — the "Book classes" slide, and a
+  /// SEPARATE list from the check-in flow's [classes] on purpose (the rule
+  /// lives on `KioskFlowCubit._warmShowcaseClasses`).
   final List<EffectiveClassInstance> showcaseClasses;
 
-  /// The head of this gym's OWN curated video feed — the "Watch videos"
-  /// showcase slide. Fetched once at kiosk entry and reused (it survives
-  /// [goHome]); empty when the gym's feed is empty or the fetch failed, and
-  /// the slide is then omitted rather than showing anything invented.
+  /// The head of this gym's OWN curated video feed — the "Watch videos" slide.
   final List<Video> videos;
 
-  /// The gym's ordered main-rank ladder — the "Track rank" showcase slide.
-  /// Fetched once at kiosk entry and reused (it survives [goHome]). EMPTY
-  /// when the gym has ranks switched off, has configured none, or the fetch
-  /// failed; the slide (and its dot) is then omitted.
-  ///
-  /// There is deliberately NO member-rank field beside it: the rank slide
-  /// features a middle rung and an illustrative bar in every state, so it
-  /// needs no member data at all (see `KioskRankSlide`).
+  /// The gym's ordered main-rank ladder — the "Track rank" slide. Also empty
+  /// when the gym has ranks switched off. Deliberately no member-rank field
+  /// beside it: the slide is illustrative in every state (`KioskRankSlide`).
   final List<MainRank> rankLadder;
 
   /// The per-glance data fetch (rewards + balance) is in flight.
   final bool glanceLoading;
 
-  /// Seconds left on the glance's hold before it returns home
-  /// ([kKioskGlanceHold], which starts AFTER the reveal's last beat, not on
-  /// entry). Drives the "Back to start in Ns" label + the drain bar. 0 off
-  /// the glance.
+  /// Seconds left on the glance's hold ([kKioskGlanceHold], which starts AFTER
+  /// the reveal's last beat). Drives the label + drain bar; 0 off the glance.
   final int glanceCountdown;
 
   // ── Flow-idle warning ──
   final bool idleWarningActive;
   final int idleCountdown;
 
-  // ── "Get the app" modal (UX-5) ──
-  /// Whether the member-facing "Get the app" modal is open — an overlay funnel
-  /// opened from a glance tap or the home adopt strip. While open it pauses the
-  /// glance's auto-return and runs its OWN 60-second timer
-  /// ([appModalCountdown]). Done clears it and reveals the view underneath
-  /// (restarting the glance hold at full); the 60 seconds running out means
-  /// nobody is there and returns home.
+  // ── "Get the app" modal ──
+  /// Whether the "Get the app" overlay is open. While open it pauses the
+  /// glance's auto-return and runs its OWN timer ([appModalCountdown]).
   final bool appModalOpen;
 
-  /// Seconds left on the app modal's 60-second auto-close. Drives its "Back to
-  /// start in Ns" label + drain bar. 0 when the modal is closed.
+  /// Seconds left on the modal's auto-close; 0 when it is closed.
   final int appModalCountdown;
 
   const KioskFlowState({
@@ -190,13 +153,10 @@ class KioskFlowState extends Equatable {
     this.appModalCountdown = 0,
   });
 
-  /// The idle rest state — every field cleared. Returning here abandons any
-  /// in-progress draft (privacy: no half-entered name left on screen).
-  ///
-  /// It clears the gym-wide catalogues too, because it is a plain "everything
-  /// off" constant. [KioskFlowCubit.goHome] re-seeds them from its entry-time
-  /// caches, so the showcase never re-fetches on the way home — see
-  /// `KioskFlowCubit._freshHome`.
+  /// The idle rest state — every field cleared, so returning here abandons any
+  /// in-progress draft (privacy: no half-entered name left on screen). It
+  /// clears the gym-wide catalogues too; `KioskFlowCubit._freshHome` re-seeds
+  /// them from its caches so the showcase never re-fetches.
   const KioskFlowState.home() : this(view: KioskView.home);
 
   static const Object _keep = Object();

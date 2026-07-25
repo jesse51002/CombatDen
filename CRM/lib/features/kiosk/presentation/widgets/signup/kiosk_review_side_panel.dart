@@ -11,19 +11,14 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// The review's left half: who this is, what they picked, and what they have
 /// already signed.
 ///
-/// The signed row is the reason this panel exists at all. A member who typed
-/// their name into a legal document two screens ago should see it acknowledged
-/// before they hand over a card — `Signed today by <name>` is the receipt for
-/// the thing that has no receipt.
+/// `Signed today by <name>` is the receipt for the thing that has no receipt —
+/// a member who typed their name into a legal document two screens ago sees it
+/// acknowledged before handing over a card.
 ///
-/// **The address here is MASKED, like every other identity line in this lane**
-/// (the roster row, the payer picker, the match card). This is an
-/// identification line — it exists so the member can tell "that's my account"
-/// — and a lobby iPad has a queue reading over their shoulder, so it says
-/// enough to recognise and never enough to copy. The one address a member
-/// genuinely has to CHECK is the receipt one, and the money panel beside this
-/// states that in full ("Your receipt goes to …"), as does the results receipt;
-/// those two are deliberately unmasked and this one deliberately is not.
+/// The address here is MASKED, like every identity line in this lane: a lobby
+/// iPad has a queue reading over the member's shoulder. The one address they
+/// must CHECK is the receipt one, which the money panel beside this states in
+/// full.
 class KioskReviewSidePanel extends StatelessWidget {
   final KioskSignupState state;
 
@@ -50,8 +45,7 @@ class KioskReviewSidePanel extends StatelessWidget {
           Text('YOU', style: DesignConstants.kioskEyebrow),
           _WhoRow(
             name: '${person.firstName} ${person.lastName}'.trim(),
-            // Null when there is nothing to mask, which drops the line rather
-            // than printing an empty one.
+            // Null when there is nothing to mask, which drops the line.
             email: kioskMaskedEmail(person.email),
           ),
           Text('YOUR MEMBERSHIP', style: DesignConstants.kioskEyebrow),

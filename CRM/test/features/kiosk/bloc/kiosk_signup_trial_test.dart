@@ -39,24 +39,15 @@ class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 class _MockManagementResponse extends Mock
     implements MembersManagementResponse {}
 
-/// **One trial to a member, at the KIOSK.**
+/// One trial to a member, at the KIOSK — a self-serve product rule, not a
+/// backend one (staff can still grant a repeat trial from the CRM), enforced
+/// entirely here off the member's own membership history.
 ///
-/// This is a self-serve product rule, not a backend one — staff can still
-/// grant a repeat trial from the CRM — so it is enforced entirely here, and
-/// the signal is derived from the member's own membership history rather than
-/// from any dedicated endpoint.
-///
-/// Three properties, and every test is one of them:
-///  * **ANY prior trial closes EVERY trial plan** for that person, not just the
-///    one they took;
-///  * a blocked plan can NEVER become the selection, so it can never reach the
-///    review and fail at pay — the dead end the whole surface exists to
-///    prevent — but its tap still EXPLAINS, because a greyed-out card with no
-///    answer is a worse dead end;
-///  * the read **fails OPEN**. This is a convenience gate, not a money-safety
-///    one: a second trial slipping through costs a free week the desk can
-///    undo, while blocking a legitimate first-timer on a failed read sends a
-///    paying customer away.
+/// ANY prior trial closes EVERY trial plan for that person; a blocked plan can
+/// never become the selection (it would reach the review and fail at pay) but
+/// its tap still explains; and the history read fails OPEN — a second trial
+/// costs a free week the desk can undo, while turning away a legitimate
+/// first-timer costs a paying customer.
 void main() {
   const gymId = 'gym-1';
   const trialPlan = 'plan-trial';
@@ -163,7 +154,6 @@ void main() {
             .firstWhere((p) => p.planId == secondTrialPlan)),
         KioskPlanBlockReason.trialUsed,
       );
-      // Everything that is not a trial is untouched.
       expect(
         cubit.state.planBlockReason(cubit.state.plans
             .firstWhere((p) => p.planId == monthlyPlan)),
@@ -173,8 +163,7 @@ void main() {
     });
 
     test('a CANCELLED or long-finished trial still counts', () async {
-      // The backend applies no lifecycle filter, and neither does the kiosk:
-      // a trial taken and finished a year ago is still a trial they had.
+      // No lifecycle filter here, matching the backend.
       final cubit = await atPlansAsExisting([
         _membership(
           trialPlan,
@@ -192,10 +181,9 @@ void main() {
           await atPlansAsExisting([_membership(monthlyPlan, 'recurring')]);
 
       expect(cubit.state.payer.hadTrial, isFalse);
-      // The two block reasons are independent rules over different plan types:
-      // no trial in their history leaves every TRIAL plan open, while the
-      // recurring plan they hold is closed by the other rule (see
-      // `kiosk_signup_plan_block_test.dart`).
+      // Two independent rules: no trial in their history leaves every TRIAL
+      // plan open, while the recurring plan they hold is closed by the other
+      // one (see `kiosk_signup_plan_block_test.dart`).
       for (final plan in cubit.state.plans) {
         if (plan.planId == monthlyPlan) continue;
         expect(cubit.state.planBlockReason(plan), isNull);
@@ -236,8 +224,6 @@ void main() {
       cubit.continueToPlans();
       await Future<void>.delayed(Duration.zero);
 
-      // The opposite of the money-path reads, deliberately: turning a
-      // legitimate first-timer away is worse than a rare second trial.
       expect(cubit.state.payer.hadTrial, isFalse);
       cubit.selectPlan(trialPlan);
       expect(cubit.state.payer.selectedPlanId, trialPlan);
@@ -251,11 +237,9 @@ void main() {
       final cubit = await atPlansAsExisting([_membership(trialPlan, 'trial')]);
       cubit.selectPlan(trialPlan);
 
-      // It can never become the pick, so it can never reach the review and
-      // fail at pay.
       expect(cubit.state.payer.selectedPlanId, isNull);
       expect(cubit.state.planBlockActive, KioskPlanBlockReason.trialUsed);
-      // And it is never a silent no-op — the answer is one tap away.
+      // Never a silent no-op — the answer is one tap away.
       expect(cubit.state.popupCountdown, kKioskSignupPopupHold.inSeconds);
       await cubit.close();
     });
@@ -268,7 +252,6 @@ void main() {
 
       expect(cubit.state.planBlockActive, isNull);
       expect(cubit.state.popupCountdown, 0);
-      // Nothing blocked survives the dismissal.
       expect(cubit.state.payer.selectedPlanId, isNull);
 
       cubit.selectPlan(monthlyPlan);
@@ -294,9 +277,8 @@ void main() {
 
     test('a trial picked before the answer landed is dropped with it',
         () async {
-      // The read is in flight while the member taps: the pick lands, then the
-      // answer arrives and takes it back off. Without this the blocked plan
-      // would ride to the review and fail at pay.
+      // The history read is in flight while the member taps: the pick lands,
+      // then the answer arrives and must take it back off.
       when(() => member.getMemberDetail(any())).thenAnswer(
         (_) async => _detail([_membership(trialPlan, 'trial')]),
       );
@@ -338,8 +320,8 @@ void main() {
         expect(cubit.state.abandoned, isFalse);
 
         async.elapse(kKioskSignupPopupHold);
-        // The ordinary abandon path — `KioskSignupScreen` turns `abandoned`
-        // into `goHome()`, and the flow count is released by the ONE latch.
+        // The ordinary abandon path: `KioskSignupScreen` turns `abandoned`
+        // into `goHome()`, and the ONE latch releases the flow count.
         expect(cubit.state.abandoned, isTrue);
         expect(cubit.state.planBlockActive, isNull);
         verify(() => session.endFlow()).called(1);

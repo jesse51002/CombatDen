@@ -5,22 +5,14 @@ import 'package:crm/core/constants/design_constants.dart';
 
 /// Structural guards on the kiosk type ramp.
 ///
-/// The bug these exist to catch: a pass that re-scales SOME kiosk roles and
-/// leaves the rest on the admin ramp. That is how the "Get it" button's
-/// label ended up bigger than the copy around it — the buttons had been
-/// lifted to kiosk sizes while the labels stayed at admin scale. The ramp is
-/// internally proportional; it only stays proportional if the whole ladder
-/// moves as a SET, so these tests assert the ORDER rather than any one
-/// number, and a half-finished future change fails here instead of on a
-/// kiosk in a gym.
+/// The ramp is internally proportional and stays that way only if the whole
+/// ladder moves as a SET — a pass that re-scales SOME kiosk roles and leaves
+/// the rest on the admin ramp is what these catch, so they assert the ORDER
+/// rather than any one number. The ladder itself, and what each role is for,
+/// is documented on the ramp comment in `design_constants.dart`.
 ///
-/// The ladder itself, and what each role is for, is documented on the ramp
-/// comment in `design_constants.dart`.
-///
-/// These are `testWidgets` rather than plain `test`s only because the tokens
-/// resolve their family through `GoogleFonts.geist()`: the widget-test binding
-/// is what absorbs that font fetch, exactly as the rest of the kiosk suite
-/// does. Nothing here pumps a widget.
+/// `testWidgets` only because the tokens resolve their family through
+/// `GoogleFonts.geist()` and the binding absorbs that fetch; nothing pumps.
 void main() {
   double size(TextStyle style) {
     final value = style.fontSize;
@@ -28,10 +20,9 @@ void main() {
     return value!;
   }
 
-  /// The full ladder, largest first — the same order documented on the ramp in
-  /// `design_constants.dart`. Built lazily inside each test: reading a token
-  /// at suite-load time resolves `GoogleFonts` outside any test zone, which
-  /// strands the whole file.
+  /// The full ladder, largest first. Built lazily inside each test: reading a
+  /// token at suite-load time resolves `GoogleFonts` outside any test zone,
+  /// which strands the whole file.
   Map<String, TextStyle> ladder() => <String, TextStyle>{
         'kioskStreakNum': DesignConstants.kioskStreakNum,
         'kioskDisplay': DesignConstants.kioskDisplay,
@@ -59,9 +50,8 @@ void main() {
     testWidgets(
       'section head > subtitle > outline button label > app line',
       (tester) async {
-        // The exact chain the founder called out: a heading must out-size
-        // the copy under it, and a BUTTON must never out-size either:
-        // section head 21 / subtitle 18 / outline button 17 / app line 15.
+        // Founder ruling: a heading out-sizes the copy under it and a BUTTON
+        // out-sizes neither — head 21 / subtitle 18 / outline 17 / app 15.
         final head = size(DesignConstants.kioskTitle);
         final subtitle = size(DesignConstants.kioskSubtitle);
         final outlineLabel = size(DesignConstants.kioskButtonOutlineLabel);
@@ -93,10 +83,9 @@ void main() {
 
     testWidgets('the escape tier is DEMOTED by weight, not by shrinking',
         (tester) async {
-      // The ghost is the quietest button in the ladder, but a member has to
-      // find it from ~2m. It keeps the outline's 17px (the kiosk interactive
-      // floor) and drops a weight instead — shrinking it below the floor is
-      // the failure mode this guards.
+      // A member still has to find the quietest button from ~2m, so the ghost
+      // keeps the outline's 17px (the kiosk interactive floor) and drops a
+      // weight instead; shrinking below the floor is the failure guarded here.
       final outline = DesignConstants.kioskButtonOutlineLabel;
       final ghost = DesignConstants.kioskButtonGhostLabel;
 
@@ -130,10 +119,8 @@ void main() {
     testWidgets('every kiosk role clears the admin one it replaced', (
       tester,
     ) async {
-      // The half-finished state this suite guards against left the smaller
-      // roles on admin tokens. Each kiosk role below is the counterpart of an
-      // admin one and must read LARGER — otherwise a kiosk screen has quietly
-      // slid back to desk scale.
+      // Each kiosk role below is the counterpart of an admin one and must read
+      // LARGER, or a kiosk screen has quietly slid back to desk scale.
       expect(
         size(DesignConstants.kioskDisplay),
         greaterThan(size(DesignConstants.h1)),
@@ -158,8 +145,7 @@ void main() {
         size(DesignConstants.kioskSubtitle),
         greaterThan(size(DesignConstants.pBig)),
       );
-      // The kiosk's own secondary button label clears the admin button label
-      // (`h3`) — the rung the founder's "Get it" complaint landed on.
+      // The kiosk secondary button label clears the admin one (`h3`).
       expect(
         size(DesignConstants.kioskButtonOutlineLabel),
         greaterThan(size(DesignConstants.h3)),

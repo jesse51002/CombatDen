@@ -40,31 +40,18 @@ class _MockKioskSessionCubit extends Mock implements KioskSessionCubit {}
 class _MockManagementResponse extends Mock
     implements MembersManagementResponse {}
 
-/// **A recurring membership the member already holds is BLOCKED at pick.**
+/// A recurring membership the member already holds is BLOCKED at pick — the
+/// backend's per-plan conflict guard would otherwise 400, which the kiosk can
+/// only surface as a generic retryable stop (and in a group, one held plan
+/// kills the whole family's signup).
 ///
-/// It is not a nicety. The charge preview runs the SAME `validate()` as the real
-/// start, including the per-plan duplicate-recurring check, and that raises a
-/// plain 400 — which the kiosk turns into the RETRYABLE `previewFailed` stop.
-/// So without this block a member who picks a plan they already hold is told
-/// "We couldn't work out your total just now" and handed a "Try again" that
-/// returns to a preview which can never succeed. In a GROUP it is worse: the
-/// check runs per member inside one `validate()`, so one child's held plan kills
-/// the whole family's signup with that same generic message.
-///
-/// Four properties, and every test is one of them:
-///  * the rule mirrors the backend's conflict guard **exactly** — `recurring` at
-///    the view's `{active, frozen}`, keyed on the PLAN — so it can neither miss a
-///    real conflict nor invent one. Mirroring those two SQL strings takes THREE
-///    client statuses, because the CRM's `overdue` is a Python-derived DISPLAY
-///    status masking a raw `active`/`frozen` row that the guard still rejects;
-///  * the CRM's own `disabledPlanReasons` was aligned to the same guard, so both
-///    clients derive ONE rule from ONE backend source. A divergence either way is
-///    a bug: at a desk a false block is at least visible and overridable, while
-///    at a kiosk it silently turns away a paying customer;
-///  * the held set lives on the PERSON, so a group cannot leak one member's
-///    membership onto another's turn;
-///  * the read **FAILS OPEN**: on a failure the kiosk does not know which plan
-///    anybody holds, so failing closed would have to block the whole grid.
+/// The rule mirrors that guard exactly — `recurring` at the view's
+/// `{active, frozen}`, keyed on the PLAN — which takes THREE client statuses,
+/// because `overdue` is a Python-derived DISPLAY status masking a raw `active`
+/// row the guard still rejects. The held set lives on the PERSON, so a group
+/// cannot leak one member's membership onto another's turn, and the read FAILS
+/// OPEN: on a failure the kiosk knows nobody's plans, so failing closed would
+/// block the whole grid.
 void main() {
   const gymId = 'gym-1';
   const unlimited = 'plan-unlimited';
@@ -170,10 +157,8 @@ void main() {
         cubit.state.planBlockReason(planOf(cubit, unlimited)),
         KioskPlanBlockReason.alreadyOnPlan,
       );
-      // **The over-block guard.** The conflict is per PLAN
-      // (`plan_id = ANY(:plan_ids)`), so a member on one recurring plan may
-      // freely buy another — refusing that sale at a kiosk turns away a paying
-      // customer with nobody to override it.
+      // The conflict is per PLAN (`plan_id = ANY(:plan_ids)`): a member on one
+      // recurring plan may freely buy another.
       expect(cubit.state.planBlockReason(planOf(cubit, kids)), isNull);
       cubit.selectPlan(kids);
       expect(cubit.state.payer.selectedPlanId, kids);
@@ -192,9 +177,8 @@ void main() {
         cubit.state.planBlockReason(planOf(cubit, unlimited)),
         KioskPlanBlockReason.alreadyOnPlan,
       );
-      // Billing state about a person is never printed in a lobby: a frozen plan
-      // is blocked and labelled identically to an active one. The member learns
-      // THAT they hold it, never how it is doing.
+      // Billing state is never printed in a lobby: a frozen plan is blocked and
+      // labelled identically to an active one.
       final notice = kioskHeldPlanNotice(cubit.state)!;
       expect(notice, contains('Unlimited'));
       expect(notice.toLowerCase(), isNot(contains('frozen')));
@@ -211,23 +195,16 @@ void main() {
         _membership(unlimited, 'recurring', status: MembershipStatus.overdue),
       ]);
 
-      // **This assertion used to be the inverse, and it encoded a bug.**
-      // `overdue` is not a database status at all: the
-      // `member_memberships_status` view emits only
-      // `cancelled / ended / frozen / active`, and a past-due row falls through
-      // to `active`. The CRM DISPLAY status is derived in Python
-      // (`is_membership_overdue`) and masks that raw `active` on the way out —
-      // so the client enum SPLITS the backend's `active`, and matching only the
-      // SQL's two literal strings under-blocked: the guard rejects this sale, so
-      // a member in arrears was offered the plan they already hold, typed a card
-      // and ate the 400 (in a group, killing the whole family's signup).
+      // `overdue` is not a DB status: the `member_memberships_status` view
+      // emits only cancelled/ended/frozen/active and a past-due row falls
+      // through to `active`, which the guard rejects. The client enum SPLITS
+      // that `active`, so matching only the SQL's two literals under-blocks.
       expect(cubit.state.payer.heldRecurringPlanIds, [unlimited]);
       expect(
         cubit.state.planBlockReason(planOf(cubit, unlimited)),
         KioskPlanBlockReason.alreadyOnPlan,
       );
-      // And the notice states the membership without ever saying "overdue":
-      // money owed is the desk's conversation, not a lobby iPad's.
+      // Money owed is the desk's conversation, not a lobby iPad's.
       final notice = kioskHeldPlanNotice(cubit.state)!;
       expect(notice, contains('Unlimited'));
       expect(notice.toLowerCase(), isNot(contains('overdue')));
@@ -241,13 +218,12 @@ void main() {
         _membership(kids, 'trial'),
       ]);
 
-      // `plan_type = 'recurring'` is the SQL's own filter: one_time and trial
-      // packs are allowed to STACK, so surfacing them would be pure disclosure
-      // with no purchasing consequence.
+      // `plan_type = 'recurring'` is the SQL's own filter — one_time and trial
+      // packs are allowed to STACK.
       expect(cubit.state.payer.heldRecurringPlanIds, isEmpty);
       expect(cubit.state.planBlockReason(planOf(cubit, pack)), isNull);
-      // The held TRIAL still closes every TRIAL plan through the other rule —
-      // but `kids` is a recurring plan here, so it stays open.
+      // The held trial closes every TRIAL plan through the other rule, but
+      // `kids` is recurring, so it stays open.
       expect(cubit.state.payer.hadTrial, isTrue);
       expect(cubit.state.planBlockReason(planOf(cubit, kids)), isNull);
       await cubit.close();
@@ -262,8 +238,6 @@ void main() {
       cubit.continueToPlans();
       await Future<void>.delayed(Duration.zero);
 
-      // On a read error the kiosk does not know WHICH plan they hold, so a
-      // fail-closed posture would have to block the whole grid.
       expect(cubit.state.payer.heldRecurringPlanIds, isEmpty);
       for (final plan in cubit.state.plans) {
         expect(cubit.state.planBlockReason(plan), isNull);
@@ -287,9 +261,8 @@ void main() {
         KioskPlanBlockReason.alreadyOnPlan,
       );
       expect(cubit.state.popupCountdown, kKioskSignupPopupHold.inSeconds);
-      // **This popup NAMES the plan** — the rule genuinely IS per plan, so
-      // naming it describes the rule exactly (the trial popup deliberately does
-      // not, because its rule is per member).
+      // The popup NAMES the plan because this rule is per plan (the trial popup
+      // deliberately does not — its rule is per member).
       final body = kioskPlanBlockBody(
         cubit.state,
         KioskPlanBlockReason.alreadyOnPlan,
@@ -329,8 +302,7 @@ void main() {
       expect(cubit.state.payer.selectedPlanId, unlimited);
 
       await Future<void>.delayed(Duration.zero);
-      // Without this the blocked plan rides to the review and dead-ends the
-      // signup on a stop that can never succeed.
+      // Otherwise the blocked plan rides to the review and dead-ends there.
       expect(cubit.state.payer.selectedPlanId, isNull);
       await cubit.close();
     });
@@ -339,8 +311,7 @@ void main() {
   group('the group guard is structural', () {
     test('advancing the active person changes BOTH the notice and the blocked '
         'set', () async {
-      // The parent holds Unlimited; the child holds Kids Program. Both are
-      // existing members, so both histories are read.
+      // The parent holds Unlimited; the child holds Kids Program.
       when(() => member.getMemberDetail('mem-old')).thenAnswer(
         (_) async => _detail('mem-old', 'Marcus', [
           _membership(unlimited, 'recurring'),
@@ -376,8 +347,7 @@ void main() {
       cubit.continueToPlans();
       await Future<void>.delayed(Duration.zero);
 
-      // The parent's turn: their plan is closed, the child's is open, and the
-      // notice names only theirs.
+      // The parent's turn.
       expect(cubit.state.activePersonIndex, 0);
       expect(
         cubit.state.planBlockReason(planOf(cubit, unlimited)),
@@ -392,9 +362,8 @@ void main() {
       cubit.continueFromPlans();
       expect(cubit.state.activePersonIndex, 1);
 
-      // The child's turn: the sets FLIP, and the parent's membership is nowhere
-      // on the screen. Storing the held ids on the PERSON is what makes that
-      // leak unrepresentable rather than merely avoided.
+      // The child's turn: the sets FLIP. Storing the held ids on the PERSON is
+      // what makes that leak unrepresentable rather than merely avoided.
       expect(cubit.state.planBlockReason(planOf(cubit, kids)),
           KioskPlanBlockReason.alreadyOnPlan);
       expect(cubit.state.planBlockReason(planOf(cubit, unlimited)), isNull);

@@ -2,52 +2,27 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/features/kiosk/presentation/kiosk_reveal_timings.dart';
 
-/// The key on the confirmation copy that is actually PAINTED while the
-/// confirmation is in flight. Two copies exist during the move (see
-/// [KioskGlanceLift]) and only this one is on screen, so a test that asks
-/// "where is the confirmation right now?" has to name it.
+/// The confirmation copy that is actually PAINTED while it is in flight. Two
+/// copies exist during the move, so a test has to name this one.
 const Key kKioskGlanceTravellingConfirmation =
     Key('kiosk-glance-travelling-confirmation');
 
 /// The glance's opening move: [confirmation] arrives CENTRED on the stage,
-/// alone, holds there for [KioskRevealTimings.centredHold], then travels UP
-/// into its slot at the top of [rest].
+/// alone, holds for [KioskRevealTimings.centredHold], then travels UP into its
+/// slot at the top of [rest]. One element moving, not two swapping (founder
+/// ruling) — a fade-out here and a fade-in there reads as a cut.
 ///
-/// **It is one element moving, not two elements swapping.** A fade-out here
-/// and a fade-in there would read as a cut; the founder asked for the
-/// confirmation itself to go up, so the same widget is carried from the centre
-/// of the stage to the top on [Curves.easeOutQuart] — the app's motion law,
-/// the curve `StaggeredReveal` and `ScaleReveal` already ride (ease-out, no
-/// bounce), stretched to [KioskRevealTimings.lift] so the travel is unhurried
-/// enough to follow.
+/// The layout never moves: [rest] is laid out in full from frame one,
+/// invisible but occupying its final pixels, so later beats can't reflow
+/// anything and Done never shifts under the member's finger. The travel is a
+/// paint-time alignment inside a [Stack] the settled column sizes, so centre
+/// and top are exact by construction. Its cost is a second copy in flight: the
+/// slot copy sits at zero opacity (which also drops it from semantics) and the
+/// flying copy ignores pointers, so Done keeps working throughout.
 ///
-/// **The layout never moves.** [rest] — the two panels and the glance footer —
-/// is laid out in full from the very first frame, invisible but occupying
-/// every pixel it will occupy at the end, so the streak and rewards appearing
-/// later cannot reflow anything and the footer's Done button never shifts
-/// under the member's finger. The confirmation's travel is a paint-time
-/// alignment, so it moves nothing either.
-///
-/// **How the centring is computed:** the travelling copy is a [Positioned.fill]
-/// child of a [Stack] the settled column sizes, so [Alignment.center] is
-/// literally the centre of the finished glance and [Alignment.topCenter] is
-/// literally the confirmation's own slot — no measurement, no magic distance,
-/// and the two ends of the move are exact by construction. The cost is that
-/// the confirmation is built twice while it travels: once in the column, held
-/// at zero opacity purely to reserve its slot, and once in flight. The hidden
-/// copy is dropped from semantics by its zero opacity (so a screen reader hears
-/// the confirmation exactly once), the flying copy ignores pointers (so Done
-/// and the glance's tap-to-open-the-app gesture keep working throughout), and
-/// the moment the travel lands the flying copy is removed and the slot copy
-/// becomes visible in the same position — an invisible handover.
-///
-/// Under reduced motion there is no hold, no travel and no second copy: the
-/// settled column is returned directly, the same precedent `KioskReveal` and
-/// `KioskAppShowcase` set.
+/// Under reduced motion there is no hold, no travel and no second copy.
 class KioskGlanceLift extends StatelessWidget {
-  /// The one-line check-in confirmation. Whatever entrance it carries of its
-  /// own (its [KioskReveal] fade, the check disc's pop) runs while it is
-  /// centred.
+  /// The one-line check-in confirmation. Its own entrance runs while centred.
   final Widget confirmation;
 
   /// Everything below the confirmation — the streak/rewards row and the
@@ -82,9 +57,8 @@ class KioskGlanceLift extends StatelessWidget {
 }
 
 /// The finished layout — the confirmation in its slot, everything else under
-/// it. This is what the glance looks like once the move has landed, and it is
-/// laid out (invisibly, where [hideConfirmation] applies) from frame one, so
-/// it is also what reserves the space the whole choreography needs.
+/// it. Laid out from frame one (invisibly, where [hideConfirmation] applies),
+/// so it also reserves the space the whole choreography needs.
 class _SettledGlance extends StatelessWidget {
   final Widget confirmation;
   final Widget rest;
@@ -116,9 +90,8 @@ class _SettledGlance extends StatelessWidget {
 }
 
 /// Drives the hold-then-travel with ONE controller: a single run spanning
-/// [KioskRevealTimings.centredHold] + [KioskRevealTimings.lift], with an
-/// [Interval] pinning the value at 0 through the hold. A second timer for the
-/// hold could drift out of step with the travel; one clock cannot.
+/// hold + lift, with an [Interval] pinning the value at 0 through the hold. A
+/// separate timer for the hold could drift out of step with the travel.
 class _LiftingGlance extends StatefulWidget {
   final Widget confirmation;
   final Widget rest;
@@ -136,8 +109,8 @@ class _LiftingGlance extends StatefulWidget {
 
 class _LiftingGlanceState extends State<_LiftingGlance>
     with SingleTickerProviderStateMixin {
-  /// Hold + travel, run as one pass. Not `const` because `Duration`'s `+` is
-  /// not a const expression — the beat sheet stays the only source of truth.
+  /// Hold + travel as one pass. Not `const` because `Duration`'s `+` isn't a
+  /// const expression, and the beat sheet stays the only source of truth.
   static final Duration _span =
       KioskRevealTimings.centredHold + KioskRevealTimings.lift;
 

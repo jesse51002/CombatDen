@@ -16,27 +16,17 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dar
 
 /// "Who's paying?" — pick the member who pays for this signup.
 ///
-/// It serves TWO situations through one screen:
+/// Two situations through one screen. Changing payer: the current one is named
+/// in the pinned `PAYING NOW` strip and is NOT offered as a row (picking
+/// whoever already pays is a no-op dressed as a choice). Choosing one after the
+/// previous payer was DELETED: no strip, everyone selectable, and the flow
+/// cannot continue until one is chosen (see the People step's block).
 ///
-/// * **Changing** who pays, while a payer already exists. The current payer is
-///   named in the pinned `PAYING NOW` strip and is NOT offered as a row (picking
-///   whoever already pays is a no-op dressed as a choice).
-/// * **Choosing** a payer after the previous one was DELETED. There is no payer
-///   yet, so the strip is gone and every remaining person is selectable — the
-///   flow cannot continue until one is chosen (see the People step's block).
-///
-/// **The people already on this roster come FIRST.** They are standing right
-/// there, so the roster is listed and directly pickable, with the CRM search
-/// underneath for anyone not on it yet. Both lists render through the same
-/// affordant [KioskNameRow] — bordered, ripple, chevron — so a pickable member
-/// reads unmistakably as pressable, and the section heads are demoted to quiet
-/// labels so the rows dominate.
-///
-/// **Whoever is picked types a fresh card at the end**, and it replaces
-/// whatever is on their profile — so an existing member with a card on file is
-/// a perfectly good payer here. The one thing this screen answers inline is a
-/// CRM hit who is already on the roster: a redirect to the list above, never a
-/// refusal, because nothing on this screen has committed anything.
+/// The roster comes first — those people are standing right there — with the
+/// CRM search under it for anyone not on it yet. Both lists render through the
+/// same affordant [KioskNameRow] so a pickable member reads as pressable. An
+/// existing member with a card on file is a fine payer here (the fresh-card
+/// law; see `kiosk_card_step.dart`).
 class KioskPayerPickStep extends StatelessWidget {
   const KioskPayerPickStep({super.key});
 
@@ -59,8 +49,7 @@ class KioskPayerPickStep extends StatelessWidget {
                   'the end, and everyone on the list is on it.'
               : 'Pick anyone here, or find another member. They enter their '
                   'card at the end, and everyone on the list is on it.',
-          // Who it is changing FROM, pinned so the answer does not scroll. With
-          // no payer yet (the previous one was deleted) there is nothing to pin.
+          // Who it is changing FROM, pinned so the answer does not scroll.
           identity: payer == null
               ? null
               : KioskWhoFor(
@@ -68,15 +57,14 @@ class KioskPayerPickStep extends StatelessWidget {
                   name: '${payer.firstName} ${payer.lastName}'.trim(),
                 ),
           foot: KioskFlowFoot(
-            // The decision is a row in a list, so the footer carries only the
-            // way back.
+            // The decision is a row in the list, so the foot has no primary.
             onPrimary: null,
             onBack: state.submitting ? null : cubit.back,
           ),
           child: KioskSignupFormPanel(
             children: [
-              // A REDIRECT, not a rejection — and the ONE line this screen
-              // has to say, so it lives here rather than in a copy map of one.
+              // A CRM hit already on the roster is a REDIRECT, not a rejection:
+              // nothing on this screen has committed anything.
               if (state.payerAlreadyInSignup)
                 const KioskInlineNotice(
                   message: 'They\'re already on this signup — pick them from '
@@ -106,8 +94,7 @@ class KioskPayerPickStep extends StatelessWidget {
 
 /// The roster candidates — everyone the picker offers, in roster order.
 ///
-/// The second line is each person's own masked email — the same treatment the
-/// CRM results and the match card wear, so a shared iPad never prints an
+/// The second line is each person's MASKED email: a shared iPad never prints an
 /// address in full anywhere on this flow.
 class _RosterOptions extends StatelessWidget {
   final KioskSignupState state;

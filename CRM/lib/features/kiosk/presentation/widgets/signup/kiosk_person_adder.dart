@@ -12,19 +12,16 @@ import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// "Add someone new" — three fields on one row, and the two ways out of them.
 ///
-/// **Its Cancel closes the ADDER, never the flow.** Two cancels live on this
-/// screen at different scales: the flow-wide "Start over" is alone in the
-/// footer's left gutter, a full stage away, and this one sits inside the panel
-/// it belongs to. Neither can be mis-read for the other.
+/// Its Cancel closes the ADDER, never the flow: the flow-wide "Start over"
+/// lives a full stage away in the footer's left gutter.
 ///
-/// Next is not "Add Theo": adding a person is two screens and this is the
+/// Next is not "Add Theo" — adding a person is two screens and this is the
 /// first. It creates them (a duplicate becomes the match offer, never a stop)
-/// and hands off to their own details screen, which is where the add finishes.
+/// and hands off to their own details screen, where the add finishes.
 ///
-/// **Email is required for every person** (ruling 12), payee included — it
+/// Email is REQUIRED for every person (founder ruling 12), payee included: it
 /// keeps the duplicate gate live for everyone and gives each person app
-/// sign-in. The note under the fields says why without making it feel like a
-/// demand: receipts still go to the payer.
+/// sign-in.
 class KioskPersonAdder extends StatefulWidget {
   final VoidCallback onCancel;
 
@@ -40,7 +37,7 @@ class _KioskPersonAdderState extends State<KioskPersonAdder> {
   final TextEditingController _email = TextEditingController();
 
   /// Validation appears only after a failed Next — a form that turns red
-  /// mid-word is scolding someone for typing.
+  /// mid-word scolds someone for typing.
   bool _submitted = false;
 
   @override
@@ -115,8 +112,9 @@ class _KioskPersonAdderState extends State<KioskPersonAdder> {
           controller: _email,
           label: 'Email',
           hintText: 'theo.bell@example.com',
-          helperText: 'Their email is only needed if they want the app. Your '
-              'receipt still comes to you.',
+          // Required, and the helper has to say so: the field gates Next, and
+          // an "optional" hint over a disabled button reads as a broken screen.
+          helperText: 'Each person needs their own — it\'s how they sign in.',
           errorText: show ? _emailError() : null,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
@@ -155,9 +153,6 @@ class _Head extends StatelessWidget {
         Expanded(
           child: Text('Add someone new', style: DesignConstants.kioskTitle),
         ),
-        // The SECONDARY tier, not the ghost one: finding an existing member
-        // is an alternative way IN, not a way out of the flow, and the ghost
-        // tier is reserved for leaving.
         KioskOutlineButton(
           text: 'or find an existing member',
           onPressed: onFindExisting,

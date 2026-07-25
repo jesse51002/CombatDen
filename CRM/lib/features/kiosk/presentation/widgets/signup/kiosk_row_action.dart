@@ -3,12 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// A quiet trailing control on a roster row — the Edit that reopens somebody's
-/// details, and the trash that takes them off it.
-///
-/// One widget for both, because they are the same object: a padded tap target
-/// carrying a muted glyph and, optionally, a muted word. Two hand-rolled
-/// copies is how one of them ends up a different size from the other on a
-/// screen where they sit side by side.
+/// details, and the trash that takes them off it. One widget for both, so the
+/// two never drift to different sizes on a row where they sit side by side.
 ///
 /// [semanticLabel] names the PERSON as well as the verb ("Edit Ella Bell"),
 /// since a screen reader hearing four bare "Edit"s down a family roster learns
